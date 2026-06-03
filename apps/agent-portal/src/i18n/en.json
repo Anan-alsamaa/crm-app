@@ -2,6 +2,18 @@
   "brandName": "YIJI CRM",
   "portalName": "Agent",
   "portalFullName": "YIJI CRM · Agent",
+  "ai": {
+    "title": "AI assistance",
+    "running": "Working…",
+    "action": {
+      "summarize": "Summarize",
+      "suggestReply": "Suggest reply",
+      "sentiment": "Sentiment",
+      "intent": "Intent",
+      "entities": "Entities",
+      "scoreLead": "Score lead"
+    }
+  },
   "login": {
     "title": "Sign in to YIJI CRM",
     "submit": "Sign in",

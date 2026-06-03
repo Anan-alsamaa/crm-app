@@ -2,6 +2,18 @@
   "brandName": "YIJI CRM",
   "portalName": "وكيل",
   "portalFullName": "YIJI CRM · وكيل",
+  "ai": {
+    "title": "المساعدة بالذكاء الاصطناعي",
+    "running": "جارٍ التنفيذ…",
+    "action": {
+      "summarize": "تلخيص",
+      "suggestReply": "اقتراح ردّ",
+      "sentiment": "المشاعر",
+      "intent": "النيّة",
+      "entities": "الكيانات",
+      "scoreLead": "تقييم العميل المحتمل"
+    }
+  },
   "login": {
     "title": "تسجيل الدخول إلى بوابة الوكيل",
     "submit": "تسجيل الدخول",

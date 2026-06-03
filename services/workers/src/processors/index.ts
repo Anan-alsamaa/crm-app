@@ -1,10 +1,11 @@
 import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
-import { QUEUES, type QueueName, type NotificationJob, type SlaJob } from '@yiji/shared-types';
+import { QUEUES, type QueueName, type NotificationJob, type SlaJob, type AiJob } from '@yiji/shared-types';
 import type { MailTransport } from '../mail/index.js';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import { processSlaJob, type SlaDeps } from './sla.js';
 import { processNotificationJob, type NotifDeps } from './notifications.js';
+import { processAiJob, type AiDeps } from './ai.js';
 import { createTicketRepo, createNotificationsRepo } from './directus-repos.js';
 
 /**
@@ -18,6 +19,8 @@ export interface ProcessorDeps {
   mail: MailTransport;
   queues: Record<QueueName, Queue>;
   onInAppNotification?: (n: { id: string; recipient: string; type: string }) => void;
+  /** AI gateway URL + service token — used by the `ai` processor. */
+  ai?: { gatewayUrl: string; gatewayToken: string; workerUserId: string };
 }
 
 export type Processor = (job: Job, deps: ProcessorDeps) => Promise<void>;
@@ -50,7 +53,20 @@ export const processors: Record<QueueName, Processor> = {
     };
     await processNotificationJob(job as Job<NotificationJob>, notifDeps);
   },
-  [QUEUES.ai]: notImplemented(QUEUES.ai),
+  [QUEUES.ai]: async (job, deps) => {
+    if (!deps.ai) {
+      deps.logger.warn({ jobId: job.id }, 'ai processor invoked without AI deps configured');
+      return;
+    }
+    const aiDeps: AiDeps = {
+      directus: deps.directus,
+      gatewayUrl: deps.ai.gatewayUrl,
+      gatewayToken: deps.ai.gatewayToken,
+      workerUserId: deps.ai.workerUserId,
+      logger: deps.logger,
+    };
+    await processAiJob(job as Job<AiJob>, aiDeps);
+  },
   [QUEUES.automation]: notImplemented(QUEUES.automation),
   [QUEUES.imports]: notImplemented(QUEUES.imports),
   [QUEUES.reports]: notImplemented(QUEUES.reports),

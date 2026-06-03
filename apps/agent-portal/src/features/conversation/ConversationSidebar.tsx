@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Avatar, Pill, Spinner } from '@yiji/ui';
 import { useConversation, useLinkedTickets } from '../inbox/api.js';
+import { AiPanel } from '../ai/AiPanel.js';
 
 interface Props {
   conversationId: string;
@@ -106,6 +107,19 @@ export function ConversationSidebar({ conversationId }: Props) {
           </div>
         </section>
       )}
+
+      {/* AI assistance */}
+      <section className="px-6 py-4">
+        <AiPanel
+          conversationId={conversationId}
+          vendorId={
+            (c as unknown as { vendor?: string | { id: string } }).vendor &&
+            typeof (c as unknown as { vendor?: string | { id: string } }).vendor === 'object'
+              ? ((c as unknown as { vendor: { id: string } }).vendor.id)
+              : ((c as unknown as { vendor?: string }).vendor ?? 'unknown')
+          }
+        />
+      </section>
 
       {/* Linked tickets — borderless rows with hover lift, not stacked cards. */}
       <section className="px-6 py-4 pb-8">

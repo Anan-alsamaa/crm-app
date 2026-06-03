@@ -4,6 +4,7 @@ import {
   Avatar,
   ClockIcon,
   cn,
+  SettingsIcon,
   SignOutIcon,
   TeamIcon,
   Toaster,
@@ -17,6 +18,7 @@ import { Login } from './pages/Login.js';
 import { UsersPage } from './features/users/UsersPage.js';
 import { TeamsPage } from './features/teams/TeamsPage.js';
 import { SlaPoliciesPage } from './features/sla/SlaPoliciesPage.js';
+import { AiConfigPage } from './features/ai-config/AiConfigPage.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
 
@@ -202,6 +204,10 @@ function Shell({ children }: { children: React.ReactNode }) {
       heading: t('nav.policies', { defaultValue: 'Policies' }),
       items: [{ to: '/sla', label: t('nav.sla'), icon: ClockIcon }],
     },
+    {
+      heading: t('nav.intelligence', { defaultValue: 'Intelligence' }),
+      items: [{ to: '/ai-config', label: t('nav.aiConfig', { defaultValue: 'AI assistance' }), icon: SettingsIcon }],
+    },
   ];
   return (
     <div className="flex h-full text-foreground">
@@ -247,6 +253,16 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <SlaPoliciesPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ai-config"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <AiConfigPage />
                 </Shell>
               </ProtectedRoute>
             }

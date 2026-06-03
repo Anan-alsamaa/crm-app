@@ -5,7 +5,10 @@ const schema = z.object({
   DIRECTUS_INTERNAL_URL: z.string().url().default('http://localhost:8055'),
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
   SVC_WORKERS_TOKEN: z.string().min(1, 'SVC_WORKERS_TOKEN is required'),
+  SVC_AI_TOKEN: z.string().optional().default(''),
   AI_GATEWAY_URL: z.string().url().default('http://localhost:8081'),
+  /** Identity the worker presents to the gateway for rate-limit scoping. */
+  AI_WORKER_USER_ID: z.string().default('svc:workers'),
   HEALTH_PORT: numericEnv(8090),
   LOG_LEVEL: z.string().default('info'),
   // SMTP (MailTransport). When SMTP_HOST is empty the dev no-op transport is used.

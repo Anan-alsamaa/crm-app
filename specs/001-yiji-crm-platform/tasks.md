@@ -201,20 +201,20 @@ description: "Task list for Yiji CRM implementation"
 
 ### Tests for User Story 5
 
-- [ ] T082 [P] [US5] Vitest: PII redaction (email/phone/address/card-Luhn/IBAN) covers all categories before provider call in `services/ai-gateway/tests/redaction.test.ts`
-- [ ] T083 [P] [US5] Vitest contract tests for all 7 endpoints per ai-gateway.openapi.yaml in `services/ai-gateway/tests/endpoints.test.ts`
-- [ ] T084 [P] [US5] Vitest: rate limit (per-user + global) + monthly cap + cache-hit behavior in `services/ai-gateway/tests/limits.test.ts`
+- [x] T082 [P] [US5] Vitest: PII redaction (email/phone/address/card-Luhn/IBAN) covers all categories before provider call in `services/ai-gateway/tests/redaction.test.ts` (21 tests)
+- [x] T083 [P] [US5] Vitest contract tests for all 7 endpoints per ai-gateway.openapi.yaml in `services/ai-gateway/tests/endpoints.test.ts` (16 tests, incl. admin config)
+- [x] T084 [P] [US5] Vitest: rate limit (per-user + global) + monthly cap + cache-hit behavior in `services/ai-gateway/tests/limits.test.ts` (10 tests)
 
 ### Implementation for User Story 5
 
-- [ ] T085 [US5] Implement PII redaction layer (typed placeholders, Luhn-aware) in `services/ai-gateway/src/redaction/index.ts`
-- [ ] T086 [US5] Implement `AIProvider` interface + Gemini implementation (swappable) in `services/ai-gateway/src/provider/`
-- [ ] T087 [US5] Implement Redis sliding-window rate limit (per-user + global) + monthly usage caps + content-hash response cache in `services/ai-gateway/src/{ratelimit,cache}/`
-- [ ] T088 [US5] Implement the 7 endpoints (summarize, suggest-reply, analyze-sentiment, detect-intent, extract-entities, semantic-search, score-lead) with Directus context fetch in `services/ai-gateway/src/routes/`
-- [ ] T089 [US5] Implement admin AI config (feature toggles + monthly cap) settings read by gateway in `services/ai-gateway/src/config.ts` + `apps/admin-portal/src/features/ai-config/`
-- [ ] T090 [US5] Implement `ai` worker queue processor (summary on conversation close, scheduled lead scoring) in `services/workers/src/processors/ai.ts`
-- [ ] T091 [P] [US5] Agent Portal AI panel: 7 actions on a conversation with results UI in `apps/agent-portal/src/features/ai/`
-- [ ] T092 [US5] EN/AR + RTL for AI panel and admin AI config
+- [x] T085 [US5] Implement PII redaction layer (typed placeholders, Luhn-aware) in `services/ai-gateway/src/redaction/index.ts` — email, phone, address (incl. PO Box + 13 street suffixes), Luhn-validated card, IBAN mod-97 checksum, US-style SSN; `redactDeep` walks JSON trees with a shared counter so placeholders stay monotonic across strings; `unredact` round-trips
+- [x] T086 [US5] Implement `AIProvider` interface + Gemini implementation (swappable) in `services/ai-gateway/src/provider/` — `AIProvider.run()` is single-method by design; `AiProviderError` maps quota/auth/upstream to typed codes for clean HTTP translation
+- [x] T087 [US5] Implement Redis sliding-window rate limit (per-user + global) + monthly usage caps + content-hash response cache in `services/ai-gateway/src/{ratelimit,cache}/` — sliding window via ZSET + Lua atomic check-and-add; monthly cap is INCR-then-DECR-on-overflow so rejected calls don't consume budget; cache key = `sha256(redacted_input)`
+- [x] T088 [US5] Implement the 7 endpoints (summarize, suggest-reply, analyze-sentiment, detect-intent, extract-entities, semantic-search, score-lead) with Directus context fetch in `services/ai-gateway/src/routes.ts` — every endpoint runs auth → body parse → directus context → feature flag → cache → rate limits → cap → redact → provider → parse → cache. Markdown fences stripped before JSON parse
+- [x] T089 [US5] Implement admin AI config (feature toggles + monthly cap) settings read by gateway in `services/ai-gateway/src/aiconfig/index.ts` + `services/ai-gateway/src/routes.ts` (`/admin/config` + `/admin/usage`) + `apps/admin-portal/src/features/ai-config/AiConfigPage.tsx` — Redis-backed singleton, `x-yiji-admin: 1` header required, toggle UI with rolled-pill switches + monthly cap input
+- [x] T090 [US5] Implement `ai` worker queue processor (summary on conversation close, scheduled lead scoring) in `services/workers/src/processors/ai.ts` — calls back into the gateway as a trusted service caller; persists `ai_summary` / `ai_lead_score` / `ai_lead_signals` on the conversation
+- [x] T091 [P] [US5] Agent Portal AI panel: 7 actions on a conversation with results UI in `apps/agent-portal/src/features/ai/AiPanel.tsx` — mounted in `ConversationSidebar`; each action runs an independent mutation; rate-limit / cap / disabled-feature errors render as a soft toast inside the panel
+- [x] T092 [US5] EN/AR + RTL for AI panel and admin AI config — agent-portal `ai.*` keys, admin-portal `aiConfig.*` + `nav.aiConfig` + `nav.intelligence` keys
 
 **Checkpoint**: US5 functional — AI assistance with guaranteed PII redaction (Phase 4 deliverable)
 

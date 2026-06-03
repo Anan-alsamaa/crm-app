@@ -13,7 +13,23 @@
     "users": "Users",
     "teams": "Teams",
     "sla": "SLA",
+    "aiConfig": "AI assistance",
+    "intelligence": "Intelligence",
     "signedInAs": "Signed in as {{name}}"
+  },
+  "aiConfig": {
+    "title": "AI assistance",
+    "subtitle": "Toggle features and set a monthly call budget.",
+    "saved": "AI settings saved.",
+    "saveError": "Could not save AI settings.",
+    "usage": "This month",
+    "calls": "calls",
+    "unlimited": "unlimited",
+    "features": "Features",
+    "featuresHint": "Disabled features return a clean error to the caller — no provider hit, no usage charge.",
+    "budget": "Monthly budget",
+    "budgetHint": "Max provider calls per calendar month, across all features. 0 = unlimited.",
+    "cap": "Monthly cap"
   },
   "sla": {
     "title": "SLA policies",

@@ -44,7 +44,19 @@ async function main(): Promise<void> {
   await scheduleReconcile(queues[QUEUES.sla], 60_000);
   logger.info('SLA reconcile sweep scheduled (every 60s)');
 
-  const deps: ProcessorDeps = { logger, directus, mail, queues };
+  const deps: ProcessorDeps = {
+    logger,
+    directus,
+    mail,
+    queues,
+    ai: config.SVC_AI_TOKEN
+      ? {
+          gatewayUrl: config.AI_GATEWAY_URL,
+          gatewayToken: config.SVC_AI_TOKEN,
+          workerUserId: config.AI_WORKER_USER_ID,
+        }
+      : undefined,
+  };
   const workers = queueNames.map(
     (queue) =>
       new Worker(
