@@ -391,6 +391,89 @@
   transform: scaleX(-1);
 }
 
+/* ───── CSAT ───── */
+.yiji-csat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 18px 16px;
+  border-top: 1px solid var(--yiji-border);
+  background: var(--yiji-surface);
+}
+.yiji-csat-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--yiji-ink);
+}
+.yiji-csat-sub {
+  margin: 0;
+  font-size: 12px;
+  color: var(--yiji-muted);
+}
+.yiji-csat-stars {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+.yiji-csat-star {
+  appearance: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 22px;
+  line-height: 1;
+  color: color-mix(in oklab, var(--yiji-muted) 50%, transparent);
+  transition: color 120ms var(--yiji-ease), transform 120ms var(--yiji-ease);
+}
+.yiji-csat-star:hover {
+  color: var(--yiji-primary);
+  transform: scale(1.08);
+}
+.yiji-csat-star.filled {
+  color: var(--yiji-primary);
+}
+.yiji-csat-comment {
+  width: 100%;
+  resize: none;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  background: var(--yiji-surface-2);
+  color: var(--yiji-ink);
+  max-height: 80px;
+  box-shadow: inset 0 0 0 1px var(--yiji-border);
+}
+.yiji-csat-comment:focus {
+  outline: none;
+  background: var(--yiji-surface);
+  box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--yiji-primary) 45%, transparent);
+}
+.yiji-csat-submit {
+  align-self: flex-start;
+  border: none;
+  border-radius: 999px;
+  background: var(--yiji-primary);
+  color: #fff;
+  padding: 8px 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 160ms var(--yiji-ease), opacity 160ms var(--yiji-ease);
+}
+.yiji-csat-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.yiji-csat-submit:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--yiji-primary) 90%, black);
+}
+
 /* ───── Footer attribution ───── */
 .yiji-footer {
   padding: 6px 14px 10px;

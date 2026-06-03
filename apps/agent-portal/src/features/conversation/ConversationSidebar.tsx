@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Avatar, Pill, Spinner } from '@yiji/ui';
 import { useConversation, useLinkedTickets } from '../inbox/api.js';
 import { AiPanel } from '../ai/AiPanel.js';
+import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 
 interface Props {
   conversationId: string;
@@ -107,6 +108,11 @@ export function ConversationSidebar({ conversationId }: Props) {
           </div>
         </section>
       )}
+
+      {/* Custom fields (per-conversation) */}
+      <section className="px-6 py-4">
+        <CustomFieldsSection entityType="conversation" entityId={conversationId} />
+      </section>
 
       {/* AI assistance */}
       <section className="px-6 py-4">

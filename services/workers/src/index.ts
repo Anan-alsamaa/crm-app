@@ -56,6 +56,10 @@ async function main(): Promise<void> {
           workerUserId: config.AI_WORKER_USER_ID,
         }
       : undefined,
+    imports: {
+      directusUrl: config.DIRECTUS_INTERNAL_URL,
+      directusToken: config.SVC_WORKERS_TOKEN,
+    },
   };
   const workers = queueNames.map(
     (queue) =>

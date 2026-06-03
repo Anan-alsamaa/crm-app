@@ -20,6 +20,8 @@ export interface SocketCallbacks {
   onMessage: (msg: WidgetMessage) => void;
   onTyping: (isTyping: boolean) => void;
   onStatus: (status: 'connecting' | 'connected' | 'reconnecting' | 'error') => void;
+  /** Fires when the agent marks the conversation closed/resolved. Triggers CSAT. */
+  onClosed?: (info: { conversationId: string; status: 'closed' | 'resolved' }) => void;
 }
 
 export function connectWidget(url: string, token: string, cb: SocketCallbacks): Socket {
@@ -40,6 +42,9 @@ export function connectWidget(url: string, token: string, cb: SocketCallbacks): 
   socket.on('message:new', (msg: WidgetMessage) => cb.onMessage(msg));
   socket.on('typing:update', (e: { isTyping: boolean; who: string }) => {
     if (e.who === 'agent') cb.onTyping(e.isTyping);
+  });
+  socket.on('conversation:closed', (e: { conversationId: string; status: 'closed' | 'resolved' }) => {
+    cb.onClosed?.(e);
   });
   return socket;
 }

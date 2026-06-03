@@ -95,6 +95,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
   const [draft, setDraft] = useState('');
   const [branding, setBranding] = useState<Branding>({});
   const [ready, setReady] = useState(false);
+  const [csat, setCsat] = useState<{ score: number; comment: string; submitted: boolean } | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const convoRef = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -146,6 +147,11 @@ export function Widget({ config }: { config: WidgetConfig }) {
         if (msg.senderType !== 'customer' && !open) setUnread((u) => u + 1);
       },
       onTyping: setAgentTyping,
+      onClosed: () => {
+        // Open the panel + show CSAT — but only once per conversation.
+        setOpen(true);
+        setCsat((cur) => cur ?? { score: 0, comment: '', submitted: false });
+      },
     });
     socketRef.current = socket;
     return () => {
@@ -295,29 +301,85 @@ export function Widget({ config }: { config: WidgetConfig }) {
             )}
           </div>
 
-          <div className="yiji-input">
-            <textarea
-              ref={textareaRef}
-              value={draft}
-              placeholder={tr.placeholder}
-              onInput={onInput}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  send();
-                }
-              }}
-              rows={1}
-            />
-            <button
-              className="yiji-send"
-              onClick={send}
-              aria-label={tr.send}
-              disabled={!ready || draft.trim().length === 0}
-            >
-              <SendIcon />
-            </button>
-          </div>
+          {csat ? (
+            <div className="yiji-csat">
+              {csat.submitted ? (
+                <>
+                  <p className="yiji-csat-title">{tr.csatThanks}</p>
+                  <p className="yiji-csat-sub">{tr.csatThanksSub}</p>
+                </>
+              ) : (
+                <>
+                  <p className="yiji-csat-title">{tr.csatTitle}</p>
+                  <p className="yiji-csat-sub">{tr.csatSub}</p>
+                  <div className="yiji-csat-stars" role="radiogroup" aria-label={tr.csatTitle}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        role="radio"
+                        aria-checked={csat.score === n}
+                        className={`yiji-csat-star ${n <= csat.score ? 'filled' : ''}`}
+                        onClick={() => setCsat({ ...csat, score: n })}
+                        aria-label={`${n}`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    className="yiji-csat-comment"
+                    placeholder={tr.csatCommentPlaceholder}
+                    value={csat.comment}
+                    onInput={(e) =>
+                      setCsat({ ...csat, comment: (e.target as HTMLTextAreaElement).value })
+                    }
+                    rows={2}
+                  />
+                  <button
+                    type="button"
+                    className="yiji-csat-submit"
+                    disabled={csat.score === 0}
+                    onClick={() => {
+                      if (!convoRef.current || !socketRef.current) return;
+                      socketRef.current.emit('csat:submit', {
+                        conversationId: convoRef.current,
+                        score: csat.score,
+                        comment: csat.comment,
+                      });
+                      setCsat({ ...csat, submitted: true });
+                    }}
+                  >
+                    {tr.csatSubmit}
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="yiji-input">
+              <textarea
+                ref={textareaRef}
+                value={draft}
+                placeholder={tr.placeholder}
+                onInput={onInput}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    send();
+                  }
+                }}
+                rows={1}
+              />
+              <button
+                className="yiji-send"
+                onClick={send}
+                aria-label={tr.send}
+                disabled={!ready || draft.trim().length === 0}
+              >
+                <SendIcon />
+              </button>
+            </div>
+          )}
 
           <p className="yiji-footer">
             <strong>{tr.poweredBy}</strong>

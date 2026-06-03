@@ -18,6 +18,13 @@ export interface WidgetStrings {
   emptySub: string;
   /** Footer attribution. */
   poweredBy: string;
+  /** CSAT (post-close survey). */
+  csatTitle: string;
+  csatSub: string;
+  csatCommentPlaceholder: string;
+  csatSubmit: string;
+  csatThanks: string;
+  csatThanksSub: string;
 }
 
 const strings: Record<WidgetLocale, WidgetStrings> = {
@@ -36,6 +43,12 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     emptyTitle: 'Say hello to start the chat',
     emptySub: 'A real teammate will reply. Typical reply time is a few minutes.',
     poweredBy: 'Powered by YIJI CRM',
+    csatTitle: 'How was your experience?',
+    csatSub: 'Your feedback helps us improve.',
+    csatCommentPlaceholder: 'Anything else you want to share? (optional)',
+    csatSubmit: 'Submit',
+    csatThanks: 'Thanks for the feedback!',
+    csatThanksSub: 'We appreciate you taking the time.',
   },
   ar: {
     title: 'الدعم',
@@ -52,6 +65,12 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     emptyTitle: 'ابدأ المحادثة بقول مرحبًا',
     emptySub: 'سيردّ عليك أحد أعضاء الفريق. عادةً ما يستجيب خلال دقائق.',
     poweredBy: 'مدعوم بواسطة YIJI CRM',
+    csatTitle: 'كيف كانت تجربتك؟',
+    csatSub: 'ملاحظاتك تساعدنا على التحسين.',
+    csatCommentPlaceholder: 'هل ترغب بإضافة شيء؟ (اختياري)',
+    csatSubmit: 'إرسال',
+    csatThanks: 'شكرًا لك على ملاحظاتك!',
+    csatThanksSub: 'نقدّر الوقت الذي خصصته.',
   },
 };
 

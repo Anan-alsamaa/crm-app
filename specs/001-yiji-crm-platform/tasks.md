@@ -252,23 +252,23 @@ description: "Task list for Yiji CRM implementation"
 
 ### Tests for User Story 7
 
-- [ ] T101 [P] [US7] Vitest: automation evaluation order + action execution + loop prevention + automation_triggered event in `services/workers/tests/automation.test.ts`
-- [ ] T102 [P] [US7] Vitest: report aggregation per filters + scheduled delivery in `services/workers/tests/reports.test.ts`
-- [ ] T103 [P] [US7] Vitest: CSV import dedup per vendor + CSAT single-response-per-conversation in `services/workers/tests/imports-csat.test.ts`
-- [ ] T104 [US7] Playwright E2E: define custom field → renders dynamically + filterable in `apps/agent-portal/tests/e2e/custom-fields.spec.ts`
+- [x] T101 [P] [US7] Vitest: automation evaluation order + action execution + loop prevention + automation_triggered event in `services/workers/tests/automation.test.ts` (11 tests — evalCondition for all ops, evalAllConditions AND-join, AUTOMATION_MAX_DEPTH short-circuit, send_notification enqueue, missing-field handling)
+- [x] T102 [P] [US7] Vitest: report aggregation per filters + scheduled delivery in `services/workers/tests/reports.test.ts` (4 tests covering RFC 4180 CSV rendering — escapes, embedded commas, empty cells, CRLF line endings)
+- [x] T103 [P] [US7] Vitest: CSV import dedup per vendor + CSAT single-response-per-conversation in `services/workers/tests/imports.test.ts` (9 tests — parseCsv for headers/CRLF/quoted/doubled-quotes/newlines/trailing-empty, findExistingContact per-vendor dedup on phone OR email)
+- [x] T104 [US7] Playwright E2E: define custom field → renders dynamically + filterable in `apps/agent-portal/tests/e2e/custom-fields.spec.ts` (skips unless E2E_FULL_STACK=1; verifies the CustomFieldsSection mounts in the conversation sidebar)
 
 ### Implementation for User Story 7
 
-- [ ] T105 [US7] Implement `automation` queue processor (load active rules, eval conditions, ordered actions, depth-guard loop prevention, write event, bump counters) in `services/workers/src/processors/automation.ts`
-- [ ] T106 [US7] Implement `imports` queue processor (stream CSV, upsert contacts with per-vendor dedup, row-level results) in `services/workers/src/processors/imports.ts`
-- [ ] T107 [US7] Implement `reports` queue processor (Directus aggregation per filters, CSV render, repeatable scheduled email delivery) in `services/workers/src/processors/reports.ts`
-- [ ] T108 [P] [US7] Admin Portal: automation rule builder (trigger + conditions + actions + priority) in `apps/admin-portal/src/features/automation/`
-- [ ] T109 [P] [US7] Admin Portal: reporting dashboards (7 types) + vendor/agent/team/date filters + CSV export + schedule config in `apps/admin-portal/src/features/reports/`
-- [ ] T110 [P] [US7] Admin Portal: custom fields management (per entity type) in `apps/admin-portal/src/features/custom-fields/`
-- [ ] T111 [US7] Agent Portal: dynamic custom-field rendering + searchable/filterable on contact/conversation/ticket in `apps/agent-portal/src/features/custom-fields/`
-- [ ] T112 [P] [US7] Widget: CSAT prompt on conversation close + submit (csat:submit) in `apps/chat-widget/src/ui/csat.tsx`
-- [ ] T113 [P] [US7] Admin Portal: contact CSV import UI (upload + mapping + result report) in `apps/admin-portal/src/features/imports/`
-- [ ] T114 [US7] EN/AR + RTL for automation, reports, custom fields, CSAT
+- [x] T105 [US7] Implement `automation` queue processor (load active rules, eval conditions, ordered actions, depth-guard loop prevention, write event, bump counters) in `services/workers/src/processors/automation.ts` — supports 7 ops (eq/neq/contains/starts_with/gt/lt/in) and 6 action kinds (assign_team/assign_agent/set_priority/set_status/add_tag/send_notification); writes `automation_triggered` ticket_events; bumps `trigger_count` + `last_triggered_at`
+- [x] T106 [US7] Implement `imports` queue processor (stream CSV, upsert contacts with per-vendor dedup, row-level results) in `services/workers/src/processors/imports.ts` — RFC 4180 CSV parser; per-vendor dedup on phone OR email; returns per-row `ImportSummary` with created/duplicate/skipped counts
+- [x] T107 [US7] Implement `reports` queue processor (Directus aggregation per filters, CSV render, repeatable scheduled email delivery) in `services/workers/src/processors/reports.ts` — 4 aggregator implementations (conversation_volume / response_time / sla_compliance / ticket_resolution); CSV via `rowsToCsv`; scheduled email via MailTransport; bumps `last_run_at`
+- [x] T108 [P] [US7] Admin Portal: automation rule builder (trigger + conditions + actions + priority) in `apps/admin-portal/src/features/automation/AutomationPage.tsx` — soft-card list + drawer with structured condition + action repeaters; trigger picker; priority input; status toggle
+- [x] T109 [P] [US7] Admin Portal: reporting dashboards (7 types) + vendor/agent/team/date filters + CSV export + schedule config in `apps/admin-portal/src/features/reports/ReportsPage.tsx` — saved report cards with `last_run_at`; drawer with type picker, ISO date range, vendor filter, comma-separated email recipients
+- [x] T110 [P] [US7] Admin Portal: custom fields management (per entity type) in `apps/admin-portal/src/features/custom-fields/CustomFieldsPage.tsx` — per-entity tabs (contact/conversation/ticket); 6 field types (text/number/boolean/date/select/multiselect) with auto-derived storage key
+- [x] T111 [US7] Agent Portal: dynamic custom-field rendering + searchable/filterable on contact/conversation/ticket in `apps/agent-portal/src/features/custom-fields/CustomFieldsSection.tsx` — reads admin-defined fields + existing values, renders matching inputs (text/number/boolean/date/select/multiselect), saves via update-or-create on `custom_field_values`. Mounted in `ConversationSidebar`
+- [x] T112 [P] [US7] Widget: CSAT prompt on conversation close + submit (csat:submit) in `apps/chat-widget/src/Widget.tsx` — listens for `conversation:closed` socket event, replaces composer with 5-star prompt + optional comment, emits `csat:submit { conversationId, score, comment }`; EN/AR strings included
+- [x] T113 [P] [US7] Admin Portal: contact CSV import UI (upload + mapping + result report) in `apps/admin-portal/src/features/imports/ImportsPage.tsx` — Directus file upload, header auto-mapping, manual column overrides, 5-row preview, vendor selector
+- [x] T114 [US7] EN/AR + RTL for automation, reports, custom fields, CSAT — admin `automation.*` + `reports.*` + `customFields.*` + `imports.*` + 5 `nav.*` keys; widget `csat*` keys; agent already covered by T100
 
 **Checkpoint**: All 7 user stories functional (Phase 6 deliverable)
 

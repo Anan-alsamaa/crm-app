@@ -19,6 +19,10 @@ import { UsersPage } from './features/users/UsersPage.js';
 import { TeamsPage } from './features/teams/TeamsPage.js';
 import { SlaPoliciesPage } from './features/sla/SlaPoliciesPage.js';
 import { VendorsPage } from './features/vendors/VendorsPage.js';
+import { AutomationPage } from './features/automation/AutomationPage.js';
+import { ReportsPage } from './features/reports/ReportsPage.js';
+import { CustomFieldsPage } from './features/custom-fields/CustomFieldsPage.js';
+import { ImportsPage } from './features/imports/ImportsPage.js';
 import { AiConfigPage } from './features/ai-config/AiConfigPage.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
@@ -205,7 +209,18 @@ function Shell({ children }: { children: React.ReactNode }) {
     },
     {
       heading: t('nav.policies', { defaultValue: 'Policies' }),
-      items: [{ to: '/sla', label: t('nav.sla'), icon: ClockIcon }],
+      items: [
+        { to: '/sla', label: t('nav.sla'), icon: ClockIcon },
+        { to: '/automation', label: t('nav.automation', { defaultValue: 'Automation' }), icon: SettingsIcon },
+        { to: '/custom-fields', label: t('nav.customFields', { defaultValue: 'Custom fields' }), icon: SettingsIcon },
+      ],
+    },
+    {
+      heading: t('nav.data', { defaultValue: 'Data' }),
+      items: [
+        { to: '/reports', label: t('nav.reports', { defaultValue: 'Reports' }), icon: ClockIcon },
+        { to: '/imports', label: t('nav.imports', { defaultValue: 'Import contacts' }), icon: UsersIcon },
+      ],
     },
     {
       heading: t('nav.intelligence', { defaultValue: 'Intelligence' }),
@@ -276,6 +291,46 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <AiConfigPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/automation"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <AutomationPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <ReportsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/custom-fields"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <CustomFieldsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/imports"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <ImportsPage />
                 </Shell>
               </ProtectedRoute>
             }
