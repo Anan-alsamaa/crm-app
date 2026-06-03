@@ -1,0 +1,36 @@
+{
+  "app": {
+    "name": "يجي CRM"
+  },
+  "actions": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "create": "إنشاء",
+    "search": "بحث",
+    "send": "إرسال",
+    "close": "إغلاق",
+    "loading": "جارٍ التحميل"
+  },
+  "auth": {
+    "signIn": "تسجيل الدخول",
+    "signOut": "تسجيل الخروج",
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "forgotPassword": "هل نسيت كلمة المرور؟"
+  },
+  "status": {
+    "open": "مفتوح",
+    "pending": "قيد الانتظار",
+    "resolved": "تم الحل",
+    "closed": "مغلق",
+    "new": "جديد"
+  },
+  "priority": {
+    "low": "منخفض",
+    "medium": "متوسط",
+    "high": "مرتفع",
+    "urgent": "عاجل"
+  }
+}

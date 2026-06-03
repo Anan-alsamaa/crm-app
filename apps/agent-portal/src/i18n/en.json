@@ -1,0 +1,113 @@
+{
+  "brandName": "YIJI CRM",
+  "portalName": "Agent",
+  "portalFullName": "YIJI CRM · Agent",
+  "login": {
+    "title": "Sign in to YIJI CRM",
+    "submit": "Sign in",
+    "error": "Invalid email or password",
+    "emailPlaceholder": "you@company.com"
+  },
+  "nav": {
+    "inbox": "Inbox",
+    "tickets": "Tickets",
+    "preferences": "Preferences",
+    "signedInAs": "Signed in as {{name}}"
+  },
+  "inbox": {
+    "title": "Shared Inbox",
+    "empty": "No conversations yet.",
+    "unknownContact": "Unknown contact",
+    "selectPrompt": "Select a conversation to view messages.",
+    "results": "results",
+    "search": "Search by contact name, email, or phone…",
+    "allStatuses": "All statuses",
+    "allPriorities": "All priorities",
+    "sortRecent": "Most recent",
+    "sortOldest": "Oldest",
+    "sortPriority": "By priority",
+    "selectAll": "Select all",
+    "bulkSelected": "{{count}} selected",
+    "bulkSetStatus": "Set status…",
+    "bulkAddTag": "Add tag…",
+    "bulkClear": "Clear"
+  },
+  "conversation": {
+    "replyPlaceholder": "Type a reply…",
+    "notePlaceholder": "Internal note — visible only to agents…",
+    "customerTyping": "Customer is typing…",
+    "internalNote": "Internal note",
+    "internalNoteToggle": "Internal note",
+    "mentionHint": "Type @ to mention an agent",
+    "status": "Status",
+    "priority": "Priority",
+    "agent": "Agent",
+    "team": "Team",
+    "unassigned": "Unassigned",
+    "noTeam": "No team",
+    "addTag": "Tag"
+  },
+  "sidebar": {
+    "contact": "Contact",
+    "tags": "Tags",
+    "linkedTickets": "Linked tickets",
+    "noTickets": "No linked tickets."
+  },
+  "tickets": {
+    "title": "Tickets",
+    "empty": "No tickets yet.",
+    "selectPrompt": "Select a ticket to view details.",
+    "createTitle": "Create ticket",
+    "create": "Create",
+    "createError": "Could not create ticket",
+    "subject": "Subject",
+    "description": "Description",
+    "history": "History",
+    "noEvents": "No events yet.",
+    "firstResponseDue": "First response due",
+    "resolutionDue": "Resolution due",
+    "respondedAt": "Responded at",
+    "markResponded": "Mark first response sent",
+    "event": {
+      "created": "Ticket created",
+      "status_changed": "Status changed",
+      "assigned": "Assigned",
+      "commented": "Comment added",
+      "sla_warning": "SLA warning",
+      "sla_breached": "SLA breached",
+      "resolved": "Resolved",
+      "closed": "Closed",
+      "reopened": "Reopened",
+      "automation_triggered": "Automation triggered"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications.",
+    "markRead": "Mark read",
+    "type": {
+      "sla_warning": "SLA warning",
+      "sla_breach": "SLA breach",
+      "assignment": "Assignment",
+      "mention": "Mention",
+      "ticket_update": "Ticket update",
+      "reminder": "Reminder",
+      "escalation": "Escalation",
+      "automation": "Automation"
+    }
+  },
+  "preferences": {
+    "title": "Notification preferences",
+    "description": "Choose how you want to be notified for each type.",
+    "type": "Type",
+    "channel": "Channel",
+    "channels": {
+      "in_app": "In-app only",
+      "email": "Email only",
+      "both": "Both",
+      "none": "None"
+    },
+    "saved": "Preferences saved.",
+    "error": "Could not save preferences."
+  }
+}

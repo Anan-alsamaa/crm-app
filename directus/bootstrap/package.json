@@ -1,0 +1,24 @@
+{
+  "name": "@yiji/directus-bootstrap",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "apply": "tsx src/apply.ts",
+    "verify": "tsx src/verify.ts",
+    "validate-compose": "node scripts/validate-compose.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@directus/sdk": "^17.0.0",
+    "@yiji/shared-types": "workspace:*",
+    "js-yaml": "^4.1.0",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "yiji-crm",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Yiji CRM — centralized internal customer support & CRM platform",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "lint": "eslint . --ext .ts,.tsx",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md,yaml,yml}\"",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "build": "pnpm -r --if-present build",
+    "test": "vitest run && pnpm -r --if-present test",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "dev": "pnpm -r --parallel --if-present dev"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@typescript-eslint/eslint-plugin": "^8.18.2",
+    "@typescript-eslint/parser": "^8.18.2",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

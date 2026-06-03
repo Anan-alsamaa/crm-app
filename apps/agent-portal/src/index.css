@@ -1,0 +1,189 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * YIJI CRM — single brand palette.
+ *
+ * Brand color: #0F8D8F — a deep, calm teal. Translates to OKLCH ≈
+ * `0.58 0.097 196`. This is the ONE accent that carries identity across
+ * the system: the rail surface, the brand wordmark, the primary subtle
+ * fill, the focus ring, the brand-accent word in display headlines.
+ *
+ * CTAs default to near-black (the host-page discipline). Coral
+ * `--secondary-brand` carries "new / eyebrow" moments alongside.
+ * Semantic state colors (success/warning/destructive) stay separate.
+ *
+ * Tokens follow shadcn naming so primitives slot directly into community
+ * patterns. Values are OKLCH per impeccable.
+ */
+
+:root,
+[data-theme='light'] {
+  --radius: 0.5rem;
+
+  /* Surface ramp — tinted canvas → pure white card → tinted popover. */
+  --background: 0.985 0.002 230;
+  --foreground: 0.20 0.005 250;
+  --card: 1 0 0;
+  --card-foreground: 0.20 0.005 250;
+  --popover: 1 0 0;
+  --popover-foreground: 0.20 0.005 250;
+
+  /* YIJI teal — #0F8D8F. Brand color. */
+  --primary: 0.58 0.097 196;
+  --primary-foreground: 1 0 0;
+  --primary-subtle: 0.58 0.097 196 / 0.12;
+
+  --secondary: 0.96 0.005 230;
+  --secondary-foreground: 0.20 0.005 250;
+
+  --muted: 0.96 0.005 230;
+  --muted-foreground: 0.46 0.010 250;
+
+  --accent: 0.58 0.097 196;
+  --accent-foreground: 1 0 0;
+
+  --destructive: 0.56 0.22 25;
+  --destructive-foreground: 1 0 0;
+  --success: 0.58 0.15 155;
+  --success-foreground: 1 0 0;
+  --warning: 0.70 0.16 70;
+  --warning-foreground: 0.22 0.005 250;
+
+  --border: 0.22 0.005 250 / 0.12;
+  --border-strong: 0.22 0.005 250 / 0.20;
+  --input: 0.96 0.005 230;
+  --ring: 0.58 0.097 196;
+  --shadow-color: 0.22 0.005 250;
+
+  /* Rail — a darker, deeper YIJI teal. Same hue as --primary so the
+   * brand reads as one family from the rail through to the accent. */
+  --rail: 0.22 0.045 196;
+  --rail-foreground: 0.92 0.03 196;
+  --rail-active: 0.28 0.07 196;
+  --rail-active-foreground: 1 0 0;
+  --rail-border: 0.16 0.04 196;
+
+  /* Second brand color — coral/pink. Used for `live`, `new`, and bold CTA
+   * surfaces alongside the teal primary. tawk.to uses two; one feels lonely. */
+  --secondary-brand: 0.66 0.22 0;
+  --secondary-brand-foreground: 1 0 0;
+
+  /* Display ink — punchier than --foreground for hero typography. */
+  --display: 0.16 0.01 250;
+}
+
+[data-theme='dark'] {
+  --background: 0.17 0.005 250;
+  --foreground: 0.96 0 0;
+  --card: 0.20 0.005 250;
+  --card-foreground: 0.96 0 0;
+  --popover: 0.22 0.005 250;
+  --popover-foreground: 0.96 0 0;
+  /* Lighter YIJI teal on dark so it pops against the deep canvas. */
+  --primary: 0.66 0.11 196;
+  --primary-foreground: 0.16 0.005 250;
+  --primary-subtle: 0.66 0.11 196 / 0.18;
+  --secondary: 0.24 0.005 250;
+  --secondary-foreground: 0.96 0 0;
+  --muted: 0.24 0.005 250;
+  --muted-foreground: 0.66 0.008 250;
+  --accent: 0.66 0.11 196;
+  --accent-foreground: 0.16 0.005 250;
+  --destructive: 0.68 0.21 25;
+  --destructive-foreground: 1 0 0;
+  --success: 0.70 0.14 155;
+  --success-foreground: 0.17 0 0;
+  --warning: 0.78 0.14 70;
+  --warning-foreground: 0.17 0 0;
+  --border: 0.96 0 0 / 0.10;
+  --border-strong: 0.96 0 0 / 0.18;
+  --input: 0.24 0.005 250;
+  --ring: 0.66 0.11 196;
+  --shadow-color: 0 0 0;
+  --rail: 0.14 0.04 196;
+  --rail-foreground: 0.88 0.03 196;
+  --rail-active: 0.20 0.06 196;
+  --rail-active-foreground: 1 0 0;
+  --rail-border: 0.10 0.04 196;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  /*
+   * Soft mesh canvas — same vibe as the host page hero. Mint-teal halo top-left,
+   * coral halo bottom-right, washed near-white in between. Stays subtle enough
+   * that dense content surfaces (list rows, tables) read cleanly on top.
+   */
+  background:
+    radial-gradient(at 8% 10%, oklch(var(--primary) / 0.07) 0%, transparent 38%),
+    radial-gradient(at 90% 92%, oklch(var(--secondary-brand) / 0.06) 0%, transparent 42%),
+    oklch(var(--background));
+  background-attachment: fixed;
+  color: oklch(var(--foreground));
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+[dir='rtl'] body {
+  font-family: 'Noto Sans Arabic', Tahoma, sans-serif;
+}
+
+/* Hairline scrollbars that match the lacquer surface. */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: oklch(0.78 0 0 / 0.16);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.78 0 0 / 0.28);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Selection in the brand tone. */
+::selection {
+  background: oklch(var(--primary) / 0.28);
+  color: oklch(var(--foreground));
+}
+
+/* Focus visible — one consistent ring everywhere. */
+:where(button, a, [role='button'], input, select, textarea):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px oklch(var(--background)),
+    0 0 0 4px oklch(var(--ring) / 0.55);
+  border-radius: var(--radius);
+}
+
+@layer components {
+  .input {
+    @apply block w-full rounded-md border border-border-strong bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-ring text-start;
+  }
+}

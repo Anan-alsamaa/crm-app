@@ -1,0 +1,67 @@
+openapi: 3.0.3
+info:
+  title: Yiji CRM AI Gateway
+  version: 1.0.0
+  description: >
+    HTTP service called by the agent portal and workers. Every endpoint fetches
+    context from Directus, redacts PII before any external (Gemini) call, applies
+    per-user + global rate limits and content-hash response caching, and enforces
+    admin-configured feature toggles + monthly usage caps. The provider is behind
+    a swappable AIProvider interface.
+servers:
+  - url: http://ai-gateway:8081
+security:
+  - bearerAuth: []   # Directus access token (agent) or service token (workers)
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  responses:
+    RateLimited: { description: Rate limit or monthly usage cap exceeded }
+    FeatureDisabled: { description: Feature disabled by admin configuration }
+    ProviderError: { description: Upstream AI provider unavailable or errored }
+  schemas:
+    ConversationRef: { type: object, required: [conversationId], properties: { conversationId: { type: string, format: uuid } } }
+    Summary: { type: object, properties: { summary: { type: string }, cached: { type: boolean } } }
+    SuggestReplyReq:
+      type: object
+      required: [conversationId]
+      properties: { conversationId: { type: string, format: uuid }, draft: { type: string }, locale: { type: string, enum: [en, ar] } }
+    Sentiment: { type: object, properties: { label: { type: string, enum: [positive, neutral, negative] }, score: { type: number } } }
+    Intent: { type: object, properties: { intent: { type: string }, confidence: { type: number } } }
+    Entities: { type: object, properties: { entities: { type: array, items: { type: object, properties: { type: { type: string }, value: { type: string } } } } } }
+    SearchReq: { type: object, required: [query], properties: { query: { type: string }, vendorId: { type: string }, limit: { type: integer, default: 10 } } }
+    SearchResults: { type: object, properties: { results: { type: array, items: { type: object, properties: { conversationId: { type: string }, score: { type: number }, snippet: { type: string } } } } } }
+    LeadScore: { type: object, properties: { score: { type: number }, signals: { type: array, items: { type: string } } } }
+paths:
+  /health: { get: { security: [], responses: { '200': { description: liveness } } } }
+  /ready:  { get: { security: [], responses: { '200': { description: Redis+Directus reachable }, '503': { description: not ready } } } }
+  /summarize-conversation:
+    post:
+      summary: Summarize a conversation (PII redacted pre-call)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationRef' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Summary' } } } }, '403': { $ref: '#/components/responses/FeatureDisabled' }, '429': { $ref: '#/components/responses/RateLimited' }, '502': { $ref: '#/components/responses/ProviderError' } }
+  /suggest-reply:
+    post:
+      summary: Suggest an agent reply (optionally refine a draft)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SuggestReplyReq' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, properties: { reply: { type: string } } } } } }, '403': { $ref: '#/components/responses/FeatureDisabled' }, '429': { $ref: '#/components/responses/RateLimited' }, '502': { $ref: '#/components/responses/ProviderError' } }
+  /analyze-sentiment:
+    post:
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationRef' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Sentiment' } } } }, '429': { $ref: '#/components/responses/RateLimited' } }
+  /detect-intent:
+    post:
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationRef' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Intent' } } } }, '429': { $ref: '#/components/responses/RateLimited' } }
+  /extract-entities:
+    post:
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationRef' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Entities' } } } }, '429': { $ref: '#/components/responses/RateLimited' } }
+  /semantic-search:
+    post:
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SearchReq' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/SearchResults' } } } }, '429': { $ref: '#/components/responses/RateLimited' } }
+  /score-lead:
+    post:
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationRef' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/LeadScore' } } } }, '429': { $ref: '#/components/responses/RateLimited' } }

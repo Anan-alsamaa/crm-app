@@ -1,0 +1,12 @@
+{
+  "name": "directus-extension-lock-project-owner",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Prevents anyone (including admins) from changing directus_settings.project_owner once set.",
+  "directus:extension": {
+    "type": "hook",
+    "path": "index.js",
+    "source": "index.js",
+    "host": "^11.0.0"
+  }
+}

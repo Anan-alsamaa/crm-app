@@ -1,0 +1,58 @@
+{
+  "brandName": "YIJI CRM",
+  "portalName": "Admin",
+  "portalFullName": "YIJI CRM · Admin",
+  "login": {
+    "title": "Sign in to YIJI CRM Admin",
+    "submit": "Sign in",
+    "error": "Invalid email or password",
+    "notAdmin": "Your account does not have administrator access.",
+    "emailPlaceholder": "you@company.com"
+  },
+  "nav": {
+    "users": "Users",
+    "teams": "Teams",
+    "sla": "SLA",
+    "signedInAs": "Signed in as {{name}}"
+  },
+  "sla": {
+    "title": "SLA policies",
+    "empty": "No SLA policies yet.",
+    "create": "Create policy",
+    "created": "Policy created.",
+    "createError": "Could not create policy.",
+    "name": "Name",
+    "description": "Description",
+    "priorities": "Priorities",
+    "firstResponse": "First response",
+    "resolution": "Resolution",
+    "threshold": "Warning threshold",
+    "active": "Active",
+    "atLeastOnePriority": "Select at least one priority."
+  },
+  "users": {
+    "title": "Users",
+    "create": "Create user",
+    "email": "Email",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "role": "Role",
+    "team": "Team",
+    "locale": "Locale",
+    "status": "Status",
+    "noTeam": "No team",
+    "created": "User created",
+    "createError": "Could not create user",
+    "empty": "No users yet."
+  },
+  "teams": {
+    "title": "Teams",
+    "create": "Create team",
+    "name": "Name",
+    "description": "Description",
+    "members": "Members",
+    "created": "Team created",
+    "createError": "Could not create team",
+    "empty": "No teams yet."
+  }
+}

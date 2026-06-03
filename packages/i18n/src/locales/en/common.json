@@ -1,0 +1,36 @@
+{
+  "app": {
+    "name": "Yiji CRM"
+  },
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "send": "Send",
+    "close": "Close",
+    "loading": "Loading"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot password?"
+  },
+  "status": {
+    "open": "Open",
+    "pending": "Pending",
+    "resolved": "Resolved",
+    "closed": "Closed",
+    "new": "New"
+  },
+  "priority": {
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "urgent": "Urgent"
+  }
+}

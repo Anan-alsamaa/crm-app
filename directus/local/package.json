@@ -1,0 +1,14 @@
+{
+  "name": "yiji-directus-local",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local Directus dev instance (SQLite) — run without Docker. Not part of the pnpm workspace.",
+  "scripts": {
+    "bootstrap": "directus bootstrap",
+    "start": "directus start"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "directus": "^11.17.4"
+  }
+}

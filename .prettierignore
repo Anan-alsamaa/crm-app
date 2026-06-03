@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+coverage
+pnpm-lock.yaml
+directus/snapshot
+playwright-report
+test-results
+
+# Generated / tooling docs (not hand-maintained source)
+specs/
+.specify/
+.claude/
+CLAUDE.md

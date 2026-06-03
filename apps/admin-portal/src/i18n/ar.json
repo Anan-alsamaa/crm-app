@@ -1,0 +1,58 @@
+{
+  "brandName": "YIJI CRM",
+  "portalName": "إدارة",
+  "portalFullName": "YIJI CRM · إدارة",
+  "login": {
+    "title": "تسجيل الدخول إلى بوابة الإدارة",
+    "submit": "تسجيل الدخول",
+    "error": "البريد الإلكتروني أو كلمة المرور غير صحيحة",
+    "notAdmin": "حسابك لا يملك صلاحية المسؤول.",
+    "emailPlaceholder": "you@company.com"
+  },
+  "nav": {
+    "users": "المستخدمون",
+    "teams": "الفرق",
+    "sla": "اتفاقيات الخدمة",
+    "signedInAs": "مسجّل الدخول باسم {{name}}"
+  },
+  "sla": {
+    "title": "اتفاقيات الخدمة",
+    "empty": "لا توجد اتفاقيات بعد.",
+    "create": "إنشاء اتفاقية",
+    "created": "تم إنشاء الاتفاقية.",
+    "createError": "تعذّر إنشاء الاتفاقية.",
+    "name": "الاسم",
+    "description": "الوصف",
+    "priorities": "الأولويات",
+    "firstResponse": "الرد الأول",
+    "resolution": "الحل",
+    "threshold": "عتبة التحذير",
+    "active": "مُفعّلة",
+    "atLeastOnePriority": "اختر أولوية واحدة على الأقل."
+  },
+  "users": {
+    "title": "المستخدمون",
+    "create": "إنشاء مستخدم",
+    "email": "البريد الإلكتروني",
+    "firstName": "الاسم الأول",
+    "lastName": "اسم العائلة",
+    "role": "الدور",
+    "team": "الفريق",
+    "locale": "اللغة",
+    "status": "الحالة",
+    "noTeam": "بدون فريق",
+    "created": "تم إنشاء المستخدم",
+    "createError": "تعذّر إنشاء المستخدم",
+    "empty": "لا يوجد مستخدمون بعد."
+  },
+  "teams": {
+    "title": "الفرق",
+    "create": "إنشاء فريق",
+    "name": "الاسم",
+    "description": "الوصف",
+    "members": "الأعضاء",
+    "created": "تم إنشاء الفريق",
+    "createError": "تعذّر إنشاء الفريق",
+    "empty": "لا توجد فرق بعد."
+  }
+}

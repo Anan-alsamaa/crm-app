@@ -1,0 +1,405 @@
+/*
+ * Customer-facing chat widget styling. Matches the portals' Neo Kinpaku
+ * direction: tawk teal primary, coral secondary, mesh-gradient header,
+ * soft modern shadows, hand-drawn illustrations in idle/empty states.
+ *
+ * Hosted on third-party sites — must not collide with the host page's CSS,
+ * so every rule is `.yiji-*` scoped and CSS variables live on the wrapper.
+ */
+
+.yiji-widget {
+  --yiji-primary: var(--brand-primary, #0f8d8f);
+  --yiji-secondary: var(--brand-secondary, #ec4899);
+  --yiji-ink: #1d2129;
+  --yiji-muted: #6b7280;
+  --yiji-surface: #ffffff;
+  --yiji-surface-2: #f8fafc;
+  --yiji-border: rgba(17, 24, 39, 0.10);
+  --yiji-shadow: 0 16px 48px -12px rgba(17, 24, 39, 0.30),
+    0 4px 12px -2px rgba(17, 24, 39, 0.10);
+  --yiji-ease: cubic-bezier(0.23, 1, 0.32, 1);
+
+  position: fixed;
+  bottom: 20px;
+  inset-inline-end: 20px;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  z-index: 2147483000;
+  color: var(--yiji-ink);
+  line-height: 1.45;
+}
+
+/* ───── Launcher ───── */
+.yiji-launcher {
+  width: 60px;
+  height: 60px;
+  border-radius: 999px;
+  border: none;
+  background: var(--yiji-primary);
+  color: #fff;
+  cursor: pointer;
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-shadow:
+    0 12px 28px -6px rgba(4, 184, 156, 0.55),
+    0 4px 12px -2px rgba(17, 24, 39, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition:
+    transform 160ms var(--yiji-ease),
+    box-shadow 160ms var(--yiji-ease);
+}
+.yiji-launcher:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 18px 36px -8px rgba(4, 184, 156, 0.65),
+    0 6px 16px -2px rgba(17, 24, 39, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30);
+}
+.yiji-launcher:active {
+  transform: scale(0.95);
+}
+.yiji-launcher svg {
+  width: 26px;
+  height: 26px;
+}
+.yiji-badge {
+  position: absolute;
+  top: -4px;
+  inset-inline-end: -4px;
+  background: var(--yiji-secondary);
+  color: #fff;
+  border-radius: 999px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 6px rgba(236, 72, 153, 0.45);
+  border: 2px solid #fff;
+}
+
+/* ───── Panel ───── */
+.yiji-panel {
+  position: absolute;
+  bottom: 76px;
+  inset-inline-end: 0;
+  width: 360px;
+  height: 560px;
+  background: var(--yiji-surface);
+  border-radius: 24px;
+  box-shadow: var(--yiji-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: yiji-enter 220ms var(--yiji-ease) both;
+  transform-origin: bottom right;
+}
+[dir='rtl'] .yiji-panel {
+  transform-origin: bottom left;
+}
+@keyframes yiji-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ───── Header — mesh gradient brand surface ───── */
+.yiji-header {
+  position: relative;
+  padding: 20px 18px 18px;
+  color: #fff;
+  background:
+    radial-gradient(at 0% 0%, color-mix(in oklab, var(--yiji-secondary) 60%, transparent) 0%, transparent 55%),
+    radial-gradient(at 100% 100%, color-mix(in oklab, var(--yiji-primary) 90%, black) 0%, transparent 60%),
+    var(--yiji-primary);
+  overflow: hidden;
+}
+.yiji-header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 80% 30%, rgba(255, 255, 255, 0.15) 0%, transparent 35%);
+  pointer-events: none;
+}
+.yiji-header-row {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.yiji-header-text {
+  min-width: 0;
+}
+.yiji-header-text-with-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.yiji-header-logo {
+  display: block;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 4px;
+  flex-shrink: 0;
+}
+.yiji-header-greeting {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  margin: 0;
+}
+.yiji-header-sub {
+  margin-top: 2px;
+  font-size: 13px;
+  opacity: 0.88;
+}
+.yiji-header-team {
+  position: relative;
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: -8px;
+}
+.yiji-header-team-avatars {
+  display: flex;
+}
+.yiji-header-team-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 2px solid var(--yiji-primary);
+  margin-inline-start: -8px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(2px);
+}
+.yiji-header-team-avatar:first-child {
+  margin-inline-start: 0;
+}
+.yiji-header-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: 10px;
+  font-size: 12px;
+  opacity: 0.92;
+}
+.yiji-header-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #4ade80;
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.25);
+}
+.yiji-close {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.16);
+  border: none;
+  color: #fff;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background-color 160ms var(--yiji-ease), transform 160ms var(--yiji-ease);
+}
+.yiji-close:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+.yiji-close:active {
+  transform: scale(0.94);
+}
+.yiji-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ───── Connection banner ───── */
+.yiji-status {
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-bottom: 1px solid #fde68a;
+}
+
+/* ───── Messages ───── */
+.yiji-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--yiji-surface);
+}
+.yiji-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+.yiji-empty-illu {
+  width: 120px;
+  height: 120px;
+}
+.yiji-empty-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.yiji-empty-sub {
+  font-size: 13px;
+  color: var(--yiji-muted);
+  margin: 0;
+  max-width: 240px;
+}
+.yiji-msg {
+  max-width: 78%;
+  padding: 9px 12px;
+  border-radius: 14px;
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  animation: yiji-bubble-in 200ms var(--yiji-ease) both;
+}
+@keyframes yiji-bubble-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.yiji-msg.mine {
+  align-self: flex-end;
+  background: var(--yiji-primary);
+  color: #fff;
+  border-bottom-end-radius: 4px;
+}
+.yiji-msg.theirs {
+  align-self: flex-start;
+  background: var(--yiji-surface-2);
+  color: var(--yiji-ink);
+  border-bottom-start-radius: 4px;
+}
+.yiji-typing {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--yiji-surface-2);
+  border-radius: 14px;
+  border-bottom-start-radius: 4px;
+}
+.yiji-typing-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--yiji-muted);
+  animation: yiji-pulse 1.4s ease-in-out infinite;
+}
+.yiji-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.yiji-typing-dot:nth-child(3) { animation-delay: 0.30s; }
+@keyframes yiji-pulse {
+  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+
+/* ───── Input ───── */
+.yiji-input {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  background: var(--yiji-surface);
+}
+.yiji-input textarea {
+  flex: 1;
+  resize: none;
+  border: none;
+  border-radius: 16px;
+  padding: 11px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  background: var(--yiji-surface-2);
+  color: var(--yiji-ink);
+  max-height: 90px;
+  box-shadow: inset 0 0 0 1px var(--yiji-border);
+  transition: background-color 160ms var(--yiji-ease), box-shadow 160ms var(--yiji-ease);
+}
+.yiji-input textarea:focus {
+  outline: none;
+  background: var(--yiji-surface);
+  box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--yiji-primary) 45%, transparent);
+}
+.yiji-input textarea::placeholder {
+  color: var(--yiji-muted);
+}
+.yiji-send {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: none;
+  background: var(--yiji-primary);
+  color: #fff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: transform 160ms var(--yiji-ease), background-color 160ms var(--yiji-ease), opacity 160ms var(--yiji-ease);
+}
+.yiji-send:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--yiji-primary) 90%, black);
+}
+.yiji-send:active:not(:disabled) {
+  transform: scale(0.92);
+}
+.yiji-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.yiji-send svg {
+  width: 16px;
+  height: 16px;
+}
+[dir='rtl'] .yiji-send svg {
+  transform: scaleX(-1);
+}
+
+/* ───── Footer attribution ───── */
+.yiji-footer {
+  padding: 6px 14px 10px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--yiji-muted);
+  background: var(--yiji-surface);
+}
+.yiji-footer strong {
+  color: var(--yiji-ink);
+  font-weight: 600;
+}

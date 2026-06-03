@@ -1,0 +1,113 @@
+{
+  "brandName": "YIJI CRM",
+  "portalName": "وكيل",
+  "portalFullName": "YIJI CRM · وكيل",
+  "login": {
+    "title": "تسجيل الدخول إلى بوابة الوكيل",
+    "submit": "تسجيل الدخول",
+    "error": "البريد الإلكتروني أو كلمة المرور غير صحيحة",
+    "emailPlaceholder": "you@company.com"
+  },
+  "nav": {
+    "inbox": "صندوق الوارد",
+    "tickets": "التذاكر",
+    "preferences": "التفضيلات",
+    "signedInAs": "مسجّل الدخول باسم {{name}}"
+  },
+  "inbox": {
+    "title": "صندوق الوارد المشترك",
+    "empty": "لا توجد محادثات بعد.",
+    "unknownContact": "جهة اتصال غير معروفة",
+    "selectPrompt": "اختر محادثة لعرض الرسائل.",
+    "results": "نتيجة",
+    "search": "ابحث بالاسم أو البريد أو الهاتف…",
+    "allStatuses": "كل الحالات",
+    "allPriorities": "كل الأولويات",
+    "sortRecent": "الأحدث",
+    "sortOldest": "الأقدم",
+    "sortPriority": "حسب الأولوية",
+    "selectAll": "اختر الكل",
+    "bulkSelected": "{{count}} مُحدَّد",
+    "bulkSetStatus": "تعيين الحالة…",
+    "bulkAddTag": "إضافة وسم…",
+    "bulkClear": "مسح"
+  },
+  "conversation": {
+    "replyPlaceholder": "اكتب ردًا…",
+    "notePlaceholder": "ملاحظة داخلية — مرئية للوكلاء فقط…",
+    "customerTyping": "العميل يكتب…",
+    "internalNote": "ملاحظة داخلية",
+    "internalNoteToggle": "ملاحظة داخلية",
+    "mentionHint": "اكتب @ للإشارة إلى وكيل",
+    "status": "الحالة",
+    "priority": "الأولوية",
+    "agent": "الوكيل",
+    "team": "الفريق",
+    "unassigned": "غير معيّن",
+    "noTeam": "بدون فريق",
+    "addTag": "وسم"
+  },
+  "sidebar": {
+    "contact": "جهة الاتصال",
+    "tags": "الوسوم",
+    "linkedTickets": "التذاكر المرتبطة",
+    "noTickets": "لا توجد تذاكر مرتبطة."
+  },
+  "tickets": {
+    "title": "التذاكر",
+    "empty": "لا توجد تذاكر بعد.",
+    "selectPrompt": "اختر تذكرة لعرض التفاصيل.",
+    "createTitle": "إنشاء تذكرة",
+    "create": "إنشاء",
+    "createError": "تعذّر إنشاء التذكرة",
+    "subject": "الموضوع",
+    "description": "الوصف",
+    "history": "السجل",
+    "noEvents": "لا توجد أحداث بعد.",
+    "firstResponseDue": "موعد الرد الأول",
+    "resolutionDue": "موعد الحل",
+    "respondedAt": "تم الرد في",
+    "markResponded": "وضع علامة بأن الرد الأول أُرسل",
+    "event": {
+      "created": "تم إنشاء التذكرة",
+      "status_changed": "تغيّرت الحالة",
+      "assigned": "تم التعيين",
+      "commented": "تم إضافة تعليق",
+      "sla_warning": "تحذير اتفاقية الخدمة",
+      "sla_breached": "خرق اتفاقية الخدمة",
+      "resolved": "تم الحل",
+      "closed": "مغلق",
+      "reopened": "أُعيد فتحه",
+      "automation_triggered": "تم تشغيل الأتمتة"
+    }
+  },
+  "notifications": {
+    "title": "التنبيهات",
+    "empty": "لا توجد تنبيهات.",
+    "markRead": "وضع علامة كمقروء",
+    "type": {
+      "sla_warning": "تحذير اتفاقية الخدمة",
+      "sla_breach": "خرق اتفاقية الخدمة",
+      "assignment": "تعيين",
+      "mention": "إشارة",
+      "ticket_update": "تحديث تذكرة",
+      "reminder": "تذكير",
+      "escalation": "تصعيد",
+      "automation": "أتمتة"
+    }
+  },
+  "preferences": {
+    "title": "تفضيلات التنبيهات",
+    "description": "اختر طريقة إعلامك لكل نوع.",
+    "type": "النوع",
+    "channel": "القناة",
+    "channels": {
+      "in_app": "داخل التطبيق فقط",
+      "email": "البريد فقط",
+      "both": "كلاهما",
+      "none": "لا شيء"
+    },
+    "saved": "تم حفظ التفضيلات.",
+    "error": "تعذّر حفظ التفضيلات."
+  }
+}

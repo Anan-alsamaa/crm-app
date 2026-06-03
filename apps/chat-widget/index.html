@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YIJI CRM — Live demo</title>
+    <meta name="theme-color" content="#0F8D8F" />
+    <link rel="icon" type="image/png" href="/yiji-logo.png" />
+    <link rel="apple-touch-icon" href="/yiji-logo.png" />
+    <meta name="description" content="YIJI CRM — every conversation, ticket, and SLA in one place. Live demo." />
+    <style>
+      :root {
+        --bg: oklch(0.985 0.002 230);
+        --card: #ffffff;
+        --ink: oklch(0.20 0.005 250);
+        --muted: oklch(0.46 0.010 250);
+        --border: oklch(0.22 0.005 250 / 0.10);
+        --border-strong: oklch(0.22 0.005 250 / 0.18);
+        --primary: oklch(0.58 0.097 196);     /* YIJI #0F8D8F */
+        --secondary: oklch(0.66 0.22 0);
+        --rail: oklch(0.22 0.045 196);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        background:
+          radial-gradient(at 8% 10%, oklch(0.58 0.097 196 / 0.10) 0%, transparent 38%),
+          radial-gradient(at 90% 92%, oklch(0.66 0.22 0 / 0.08) 0%, transparent 42%),
+          var(--bg);
+        background-attachment: fixed;
+        color: var(--ink);
+        line-height: 1.5;
+        min-height: 100vh;
+      }
+      a { color: inherit; text-decoration: none; }
+
+      /* ───── Nav ───── */
+      .nav {
+        position: sticky; top: 0; z-index: 10;
+        background: rgba(255, 255, 255, 0.78);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--border);
+        padding: 14px 32px;
+        display: flex; align-items: center; justify-content: space-between;
+      }
+      .brand {
+        display: flex; align-items: center; gap: 10px;
+      }
+      .brand-mark {
+        width: 32px; height: 32px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.96);
+        display: grid; place-items: center;
+        flex-shrink: 0;
+        box-shadow: 0 1px 2px oklch(0.22 0.005 250 / 0.06);
+      }
+      .brand-mark img {
+        width: 26px; height: 26px;
+        display: block;
+      }
+      .brand-word {
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-size: 13px;
+      }
+      .nav-links {
+        display: flex; gap: 28px;
+        font-size: 13.5px; color: var(--muted);
+      }
+      .nav-links span { transition: color 160ms; cursor: pointer; }
+      .nav-links span:hover { color: var(--ink); }
+      .nav-actions { display: flex; gap: 10px; align-items: center; }
+      .nav-cta {
+        padding: 9px 18px;
+        border-radius: 999px;
+        background: var(--ink);
+        color: #fff;
+        font-size: 13.5px; font-weight: 600;
+        display: inline-flex; align-items: center; gap: 6px;
+        transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      .nav-cta:active { transform: scale(0.97); }
+      .nav-cta-secondary {
+        font-size: 13.5px; color: var(--ink); font-weight: 500;
+      }
+
+      /* ───── Hero ───── */
+      .hero {
+        position: relative;
+        padding: 96px 32px 60px;
+        max-width: 1200px;
+        margin: 0 auto;
+        text-align: start;
+      }
+      .eyebrow {
+        display: inline-flex; align-items: center; gap: 8px;
+        background: oklch(0.66 0.22 0 / 0.12);
+        color: oklch(0.50 0.20 0);
+        padding: 7px 14px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .eyebrow-dot {
+        width: 6px; height: 6px; border-radius: 999px;
+        background: oklch(0.66 0.22 0);
+      }
+      h1 {
+        font-size: clamp(2.75rem, 6vw, 5.25rem);
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        line-height: 0.98;
+        margin: 22px 0 0;
+        max-width: 20ch;
+        text-wrap: balance;
+      }
+      h1 .accent { color: var(--primary); }
+      .lede {
+        margin-top: 24px;
+        font-size: clamp(1rem, 1.4vw, 1.18rem);
+        color: var(--muted);
+        max-width: 60ch;
+        line-height: 1.55;
+      }
+      .cta-row {
+        margin-top: 34px;
+        display: flex; gap: 12px; flex-wrap: wrap;
+      }
+      .btn-primary {
+        background: var(--ink);
+        color: #fff;
+        padding: 13px 24px;
+        border-radius: 14px;
+        border: none;
+        font-weight: 600;
+        font-size: 15px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex; align-items: center; gap: 8px;
+        transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      .btn-primary:active { transform: scale(0.97); }
+      .btn-ghost {
+        background: transparent;
+        color: var(--ink);
+        padding: 13px 24px;
+        border-radius: 14px;
+        border: 1px solid var(--border-strong);
+        font-weight: 600;
+        font-size: 15px;
+        cursor: pointer;
+        display: inline-flex; align-items: center; gap: 8px;
+      }
+      .btn-ghost:hover { background: oklch(0.96 0.005 230); }
+
+      /* ───── Stats strip ───── */
+      .stats {
+        margin-top: 56px;
+        display: flex; flex-wrap: wrap; gap: 0;
+        border-top: 1px solid var(--border);
+        padding-top: 28px;
+      }
+      .stat {
+        flex: 1; min-width: 180px;
+      }
+      .stat-num {
+        font-size: clamp(1.75rem, 3vw, 2.5rem);
+        font-weight: 800; letter-spacing: -0.025em;
+        color: var(--ink);
+        font-variant-numeric: tabular-nums;
+      }
+      .stat-num .accent { color: var(--primary); }
+      .stat-label {
+        margin-top: 4px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      /* ───── Features grid ───── */
+      .features {
+        margin: 100px auto 60px;
+        max-width: 1200px;
+        padding: 0 32px;
+      }
+      .features-head {
+        display: flex; flex-direction: column; gap: 12px;
+        margin-bottom: 36px;
+      }
+      .features-eyebrow {
+        font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+        font-weight: 700; color: var(--primary);
+      }
+      .features-title {
+        font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+        font-weight: 700; letter-spacing: -0.025em;
+        line-height: 1.05;
+        max-width: 28ch;
+      }
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 18px;
+      }
+      .feature {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        transition: border-color 160ms, transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      .feature:hover {
+        border-color: var(--border-strong);
+        transform: translateY(-2px);
+      }
+      .feature-icon {
+        width: 38px; height: 38px;
+        display: grid; place-items: center;
+        border-radius: 10px;
+        background: oklch(0.58 0.097 196 / 0.12);
+        color: var(--primary);
+        margin-bottom: 14px;
+      }
+      .feature-title {
+        font-size: 16px; font-weight: 600; letter-spacing: -0.01em;
+        margin: 0 0 4px;
+      }
+      .feature-body {
+        font-size: 13.5px; color: var(--muted); margin: 0; line-height: 1.55;
+      }
+
+      /* ───── Footer ───── */
+      .footer {
+        margin: 80px 0 0;
+        border-top: 1px solid var(--border);
+        padding: 28px 32px;
+        max-width: 1200px;
+        margin-inline: auto;
+        display: flex; justify-content: space-between; align-items: center;
+        font-size: 13px; color: var(--muted);
+        flex-wrap: wrap; gap: 12px;
+      }
+      .footer .brand-word { color: var(--ink); }
+
+      /* ───── Widget hint arrow ───── */
+      .widget-hint {
+        position: fixed;
+        bottom: 100px;
+        inset-inline-end: 100px;
+        z-index: 5;
+        display: flex; align-items: center; gap: 8px;
+        font-size: 13px; color: var(--muted);
+        background: var(--card);
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--border-strong);
+        box-shadow: 0 4px 16px -4px oklch(0.22 0.005 250 / 0.12);
+        animation: hint-pulse 3s ease-in-out infinite;
+      }
+      .widget-hint::after {
+        content: '→';
+        font-size: 16px; color: var(--primary); font-weight: 700;
+        transform: rotate(45deg);
+      }
+      @keyframes hint-pulse {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-3px); }
+      }
+      @media (max-width: 640px) {
+        .widget-hint { display: none; }
+        .nav-links { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="nav">
+      <a class="brand" href="#">
+        <span class="brand-mark"><img src="/yiji-logo.png" alt="YIJI" /></span>
+        <span class="brand-word">YIJI CRM</span>
+      </a>
+      <div class="nav-links">
+        <span>Product</span>
+        <span>Pricing</span>
+        <span>Docs</span>
+        <span>Customers</span>
+      </div>
+      <div class="nav-actions">
+        <a class="nav-cta-secondary" href="http://localhost:5173" target="_blank" rel="noopener">Agent portal</a>
+        <a class="nav-cta" href="http://localhost:5174" target="_blank" rel="noopener">
+          Admin
+          <span aria-hidden>→</span>
+        </a>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <span class="eyebrow">
+        <span class="eyebrow-dot"></span>
+        Live demo · talk to a real agent
+      </span>
+      <h1>
+        Every conversation.<br />
+        Every channel.<br />
+        <span class="accent">One calm inbox.</span>
+      </h1>
+      <p class="lede">
+        YIJI CRM brings shared inbox, tickets, SLAs, internal notes, and a real-time widget
+        together in one workspace. This page is a live demo — tap the chat bubble below to start
+        a real conversation that lands in the agent inbox at <code>localhost:5173</code>.
+      </p>
+      <div class="cta-row">
+        <a class="btn-primary" href="#features">
+          See what's inside
+          <span aria-hidden>→</span>
+        </a>
+        <button class="btn-ghost" type="button" onclick="document.querySelector('.yiji-launcher')?.click()">
+          Open the widget
+        </button>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-num">120<span class="accent">ms</span></div>
+          <div class="stat-label">avg. message round-trip</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">8h<span class="accent">/day</span></div>
+          <div class="stat-label">built for shift-long use</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">EN<span class="accent"> · AR</span></div>
+          <div class="stat-label">RTL out of the box</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">99.9<span class="accent">%</span></div>
+          <div class="stat-label">message delivery target</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" id="features">
+      <div class="features-head">
+        <span class="features-eyebrow">Inside YIJI CRM</span>
+        <h2 class="features-title">The whole support workspace, in one place.</h2>
+      </div>
+      <div class="feature-grid">
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/></svg>
+          </div>
+          <h3 class="feature-title">Shared inbox</h3>
+          <p class="feature-body">Every channel feeds one queue. Filter by status, priority, or assignee. Real-time updates without refresh.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2M13 17v2M13 11v2"/></svg>
+          </div>
+          <h3 class="feature-title">Tickets &amp; SLA</h3>
+          <p class="feature-body">Promote any conversation to a ticket. First-response and resolution deadlines tracked automatically with warnings + breaches.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"/></svg>
+          </div>
+          <h3 class="feature-title">Live widget</h3>
+          <p class="feature-body">Drop the JWT-signed widget on any host site. Real-time bubbles, typing indicators, multi-locale, branded per tenant.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3 class="feature-title">Teams &amp; roles</h3>
+          <p class="feature-body">Route conversations and tickets by team or skill. Audit-logged role changes. Service accounts for system integrations.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div>
+        <span class="brand-word">© YIJI CRM</span> · Demo host for the chat widget
+      </div>
+      <div>
+        Embed the widget on your site · gateway <code>:8080</code> · widget host <code>:5175</code>
+      </div>
+    </footer>
+
+    <div class="widget-hint">Tap the chat bubble</div>
+
+    <script type="module" src="/src/demo.ts"></script>
+  </body>
+</html>

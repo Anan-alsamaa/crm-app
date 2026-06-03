@@ -1,0 +1,137 @@
+# Full local dev stack for Yiji CRM.
+# Frontends (agent-portal, admin-portal, chat-widget) run via `pnpm dev`, not here.
+# Service Dockerfiles under services/* are added in Phase 2; until then those
+# service blocks build once their Dockerfile exists.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-yiji_crm}
+      POSTGRES_USER: ${DB_USER:-directus}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-directus}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-directus} -d ${DB_DATABASE:-yiji_crm}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  directus:
+    image: directus/directus:11
+    restart: unless-stopped
+    ports:
+      - '${DIRECTUS_PORT:-8055}:8055'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      KEY: ${DIRECTUS_KEY}
+      SECRET: ${DIRECTUS_SECRET}
+      ADMIN_EMAIL: ${DIRECTUS_ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${DIRECTUS_ADMIN_PASSWORD}
+      PUBLIC_URL: ${DIRECTUS_PUBLIC_URL:-http://localhost:8055}
+      DB_CLIENT: pg
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_DATABASE: ${DB_DATABASE:-yiji_crm}
+      DB_USER: ${DB_USER:-directus}
+      DB_PASSWORD: ${DB_PASSWORD:-directus}
+      REDIS: ${REDIS_URL:-redis://redis:6379}
+      CACHE_ENABLED: 'true'
+      CACHE_STORE: redis
+      WEBSOCKETS_ENABLED: 'true'
+      STORAGE_LOCATIONS: local
+      STORAGE_LOCAL_DRIVER: local
+      STORAGE_LOCAL_ROOT: /directus/uploads
+    volumes:
+      - directus_uploads:/directus/uploads
+      - ./directus/extensions:/directus/extensions
+      - ./directus/snapshot:/directus/snapshot
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:8055/server/health']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  socket-gateway:
+    build:
+      context: .
+      dockerfile: services/socket-gateway/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '${SOCKET_GATEWAY_PORT:-8080}:8080'
+    depends_on:
+      directus:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      DIRECTUS_URL: ${DIRECTUS_PUBLIC_URL:-http://directus:8055}
+      DIRECTUS_INTERNAL_URL: http://directus:8055
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      YIJI_JWT_SECRET: ${YIJI_JWT_SECRET}
+      SVC_GATEWAY_TOKEN: ${SVC_GATEWAY_TOKEN}
+
+  workers:
+    build:
+      context: .
+      dockerfile: services/workers/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      directus:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DIRECTUS_INTERNAL_URL: http://directus:8055
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      SVC_WORKERS_TOKEN: ${SVC_WORKERS_TOKEN}
+      AI_GATEWAY_URL: http://ai-gateway:8081
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+
+  ai-gateway:
+    build:
+      context: .
+      dockerfile: services/ai-gateway/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '${AI_GATEWAY_PORT:-8081}:8081'
+    depends_on:
+      directus:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 8081
+      DIRECTUS_INTERNAL_URL: http://directus:8055
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      SVC_AI_TOKEN: ${SVC_AI_TOKEN}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+
+volumes:
+  postgres_data:
+  redis_data:
+  directus_uploads:
