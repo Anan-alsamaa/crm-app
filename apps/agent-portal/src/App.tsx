@@ -9,6 +9,7 @@ import {
   TicketIcon,
   Toaster,
   useResizable,
+  UsersIcon,
   YijiLogo,
 } from '@yiji/ui';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
@@ -18,6 +19,8 @@ import { Inbox } from './pages/Inbox.js';
 import { TicketsPage } from './features/tickets/TicketsPage.js';
 import { NotificationBell } from './features/notifications/NotificationBell.js';
 import { PreferencesPage } from './features/notifications/PreferencesPage.js';
+import { ContactsPage } from './features/contacts/ContactsPage.js';
+import { ContactProfilePage } from './features/contacts/ContactProfilePage.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
 
@@ -63,11 +66,12 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
       >
         <YijiLogo variant="tile" size={32} className="bg-background/95 shadow-sm shrink-0" />
         {!isCollapsed && (
-          <div className="min-w-0">
-            <div className="text-xs font-bold uppercase tracking-[0.14em] text-rail-active-foreground leading-tight">
-              YIJI CRM
+          <div className="min-w-0 leading-tight">
+            <div className="flex items-baseline gap-1.5 text-[15px] font-semibold tracking-[-0.015em] text-rail-active-foreground">
+              <span>Yiji</span>
+              <span className="text-rail-foreground/45 font-normal">CRM</span>
             </div>
-            <div className="text-2xs text-rail-foreground/70 leading-tight">Agent workspace</div>
+            <div className="text-2xs text-rail-foreground/55 mt-0.5">Agent workspace</div>
           </div>
         )}
       </div>
@@ -205,6 +209,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         { to: '/', end: true, label: t('nav.inbox'), icon: InboxIcon },
         { to: '/tickets', label: t('nav.tickets'), icon: TicketIcon },
+        { to: '/contacts', label: t('nav.contacts', { defaultValue: 'Contacts' }), icon: UsersIcon },
       ],
     },
     {
@@ -258,6 +263,26 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <PreferencesPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contacts"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <ContactsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contacts/:id"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <ContactProfilePage />
                 </Shell>
               </ProtectedRoute>
             }

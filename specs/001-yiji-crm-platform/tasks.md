@@ -228,17 +228,17 @@ description: "Task list for Yiji CRM implementation"
 
 ### Tests for User Story 6
 
-- [ ] T093 [P] [US6] Vitest: MockYijiClient + env-based client selection (mock vs http) in `packages/shared-types/tests/yiji-client.test.ts`
-- [ ] T094 [P] [US6] Playwright E2E: contact profile + commerce side panel + graceful unavailable state in `apps/agent-portal/tests/e2e/contact-profile.spec.ts`
+- [x] T093 [P] [US6] Vitest: MockYijiClient + env-based client selection (mock vs http) in `packages/shared-types/tests/yiji-client.test.ts` (19 tests — factory selection, mock fixtures, HTTP 404/500/network/timeout/limit-query)
+- [x] T094 [P] [US6] Playwright E2E: contact profile + commerce side panel + graceful unavailable state in `apps/agent-portal/tests/e2e/contact-profile.spec.ts` (skips unless E2E_FULL_STACK=1; covers list+CSV download, profile+commerce panel, route-mocked unavailable state)
 
 ### Implementation for User Story 6
 
-- [ ] T095 [P] [US6] Implement `MockYijiClient` (seeded fixtures) and `HttpYijiClient` (timeout + graceful failure) selected by env in `packages/yiji-client/src/` (or shared-types) per contract
-- [ ] T096 [US6] Agent Portal: contact profile timeline (conversations/tickets/events) + full history + tags in `apps/agent-portal/src/features/contacts/profile.tsx`
-- [ ] T097 [US6] Agent Portal: commerce side panel (orders/payment/shipment/purchase activity) consuming YijiClient in `apps/agent-portal/src/features/contacts/commerce-panel.tsx` (depends on T095)
-- [ ] T098 [P] [US6] Contact search/filter + CSV export in `apps/agent-portal/src/features/contacts/list.tsx`
-- [ ] T099 [P] [US6] Admin Portal: vendor management + branding editor (logo/colors/theme) in `apps/admin-portal/src/features/vendors/`
-- [ ] T100 [US6] EN/AR + RTL for contact profile, commerce panel, vendor screens
+- [x] T095 [P] [US6] Implement `MockYijiClient` (seeded fixtures) and `HttpYijiClient` (timeout + graceful failure) selected by env in `packages/shared-types/src/yiji-impl.ts` — `createYijiClient({ apiUrl })` factory; Mock has demo-vendor / demo-customer-1 fixtures matching the chat widget demo; Http has 6s default timeout + null-on-failure semantics (never throws)
+- [x] T096 [US6] Agent Portal: contact profile timeline (conversations/tickets/events) + full history + tags in `apps/agent-portal/src/features/contacts/ContactProfilePage.tsx` — identity card + chronologically merged conversation+ticket timeline + linked vendor info
+- [x] T097 [US6] Agent Portal: commerce side panel (orders/payment/shipment/purchase activity) consuming YijiClient in `apps/agent-portal/src/features/contacts/CommercePanel.tsx` — lifetime activity card + per-order soft cards with inline payment+shipment status; graceful "unavailable" state when YijiClient returns null
+- [x] T098 [P] [US6] Contact search/filter + CSV export in `apps/agent-portal/src/features/contacts/ContactsPage.tsx` — case-insensitive multi-field search; RFC 4180 CSV with UTF-8 BOM; dated filename
+- [x] T099 [P] [US6] Admin Portal: vendor management + branding editor (logo/colors/theme) in `apps/admin-portal/src/features/vendors/VendorsPage.tsx` — soft card grid with live brand swatches, drawer-based create/edit, hex color inputs with swatch previews, live mesh-gradient brand preview, active/inactive toggle
+- [x] T100 [US6] EN/AR + RTL for contact profile, commerce panel, vendor screens (agent `contacts.*` + `commerce.*` + `nav.contacts`; admin `vendors.*` + `nav.vendors`)
 
 **Checkpoint**: US6 functional — enriched profiles + branding (Phase 5 deliverable)
 

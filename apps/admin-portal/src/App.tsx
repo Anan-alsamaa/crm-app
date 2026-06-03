@@ -18,6 +18,7 @@ import { Login } from './pages/Login.js';
 import { UsersPage } from './features/users/UsersPage.js';
 import { TeamsPage } from './features/teams/TeamsPage.js';
 import { SlaPoliciesPage } from './features/sla/SlaPoliciesPage.js';
+import { VendorsPage } from './features/vendors/VendorsPage.js';
 import { AiConfigPage } from './features/ai-config/AiConfigPage.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
@@ -64,11 +65,12 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
       >
         <YijiLogo variant="tile" size={32} className="bg-background/95 shadow-sm shrink-0" />
         {!isCollapsed && (
-          <div className="min-w-0">
-            <div className="text-xs font-bold uppercase tracking-[0.14em] text-rail-active-foreground leading-tight">
-              YIJI CRM
+          <div className="min-w-0 leading-tight">
+            <div className="flex items-baseline gap-1.5 text-[15px] font-semibold tracking-[-0.015em] text-rail-active-foreground">
+              <span>Yiji</span>
+              <span className="text-rail-foreground/45 font-normal">CRM</span>
             </div>
-            <div className="text-2xs text-rail-foreground/70 leading-tight">Admin console</div>
+            <div className="text-2xs text-rail-foreground/55 mt-0.5">Admin console</div>
           </div>
         )}
       </div>
@@ -198,6 +200,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         { to: '/users', label: t('nav.users'), icon: UsersIcon },
         { to: '/teams', label: t('nav.teams'), icon: TeamIcon },
+        { to: '/vendors', label: t('nav.vendors', { defaultValue: 'Vendors' }), icon: TeamIcon },
       ],
     },
     {
@@ -253,6 +256,16 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <SlaPoliciesPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/vendors"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <VendorsPage />
                 </Shell>
               </ProtectedRoute>
             }

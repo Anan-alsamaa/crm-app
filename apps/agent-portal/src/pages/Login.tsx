@@ -104,8 +104,8 @@ export function Login() {
       {/* Top-start wordmark */}
       <div className="absolute start-6 top-5 z-10 flex items-center gap-2">
         <YijiLogo size={28} />
-        <span className="text-xs font-bold uppercase tracking-[0.14em] text-display">
-          {t('brandName', { defaultValue: 'YIJI CRM' })}
+        <span className="text-[15px] font-semibold tracking-[-0.015em] text-display">
+          Yiji <span className="text-muted-foreground font-normal">CRM</span>
         </span>
       </div>
 
