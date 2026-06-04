@@ -21,6 +21,7 @@ jobs:
   quality:
     name: Lint, typecheck & unit tests (+ coverage)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -71,6 +72,9 @@ jobs:
   e2e:
     name: Playwright E2E
     runs-on: ubuntu-latest
+    # Hard ceiling so a hung dev server / unresponsive Directus fails the job in
+    # minutes instead of burning the 6-hour GitHub default.
+    timeout-minutes: 25
 
     services:
       postgres:

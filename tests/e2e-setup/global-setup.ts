@@ -14,10 +14,19 @@ async function json<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * fetch with a hard timeout. A Directus that accepts the TCP connection but
+ * never responds would otherwise leave the request pending forever, hanging
+ * globalSetup (and the whole E2E job) with no per-test timeout to rescue it.
+ */
+async function fetchT(url: string, init: RequestInit = {}, ms = 15_000): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(ms) });
+}
+
 export default async function globalSetup(): Promise<void> {
   // 1. Sign in as the project owner.
   const login = await json<{ data: { access_token: string } }>(
-    await fetch(`${DIRECTUS}/auth/login`, {
+    await fetchT(`${DIRECTUS}/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email: OWNER_EMAIL, password: OWNER_PASSWORD }),
@@ -28,21 +37,21 @@ export default async function globalSetup(): Promise<void> {
 
   // 2. Resolve the Agent role.
   const roles = await json<{ data: Array<{ id: string; name: string }> }>(
-    await fetch(`${DIRECTUS}/roles?filter[name][_eq]=Agent&fields=id,name&limit=1`, { headers }),
+    await fetchT(`${DIRECTUS}/roles?filter[name][_eq]=Agent&fields=id,name&limit=1`, { headers }),
   );
   const agentRoleId = roles.data[0]?.id;
   if (!agentRoleId) throw new Error('Agent role not found in Directus — run the bootstrap first.');
 
   // 3. Ensure a test agent user exists with the known creds.
   const found = await json<{ data: Array<{ id: string }> }>(
-    await fetch(
+    await fetchT(
       `${DIRECTUS}/users?filter[email][_eq]=${encodeURIComponent(AGENT_EMAIL)}&fields=id&limit=1`,
       { headers },
     ),
   );
   if (!found.data[0]) {
     await json(
-      await fetch(`${DIRECTUS}/users`, {
+      await fetchT(`${DIRECTUS}/users`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -58,7 +67,7 @@ export default async function globalSetup(): Promise<void> {
     console.log(`[e2e-setup] created agent user ${AGENT_EMAIL}`);
   } else {
     await json(
-      await fetch(`${DIRECTUS}/users/${found.data[0].id}`, {
+      await fetchT(`${DIRECTUS}/users/${found.data[0].id}`, {
         method: 'PATCH',
         headers,
         body: JSON.stringify({ password: AGENT_PASSWORD, role: agentRoleId, status: 'active' }),
@@ -72,7 +81,7 @@ export default async function globalSetup(): Promise<void> {
   const agentSession = await json<{
     data: { access_token: string; refresh_token: string; expires: number };
   }>(
-    await fetch(`${DIRECTUS}/auth/login`, {
+    await fetchT(`${DIRECTUS}/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email: AGENT_EMAIL, password: AGENT_PASSWORD }),
