@@ -186,6 +186,18 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   const { io, directus, producer, logger } = deps;
   const data = socket.data as SocketData;
 
+  // Explicit logout signal from an agent. We mirror the disconnect cleanup
+  // up-front so the host-page "agents online" pill flips immediately —
+  // before the transport close even reaches us (which on some networks is
+  // delayed by tens of seconds, especially if the browser is in the middle
+  // of navigating away from the route). Then we close the socket ourselves
+  // so further events from this socket are dropped.
+  socket.on(SOCKET_EVENTS.agentLogout, () => {
+    if (data.kind !== 'agent') return;
+    if (removeAgentSocket(socket.id)) broadcastAgentPresence(io);
+    socket.disconnect(true);
+  });
+
   socket.on(SOCKET_EVENTS.messageSend, async (raw: unknown) => {
     const parsed = MessageSend.safeParse(raw);
     if (!parsed.success)

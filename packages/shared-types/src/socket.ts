@@ -98,6 +98,9 @@ export const SOCKET_EVENTS = {
   messageSend: 'message:send',
   noteAdd: 'note:add',
   noteDelete: 'note:delete',
+  /** Client → server. Explicit "I'm logging out" signal from an agent so the
+   * gateway can drop their presence record before the transport closes. */
+  agentLogout: 'agent:logout',
   typingStart: 'typing:start',
   typingStop: 'typing:stop',
   readAck: 'read:ack',

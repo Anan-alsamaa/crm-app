@@ -1,4 +1,5 @@
 import { io, type Socket } from 'socket.io-client';
+import { SOCKET_EVENTS } from '@yiji/shared-types';
 import { auth } from './directus.js';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:8080';
@@ -40,8 +41,28 @@ export async function getSocket(): Promise<Socket> {
 }
 
 export function disconnectSocket(): void {
-  globalThis.__yijiAgentSocket?.disconnect();
+  const s = globalThis.__yijiAgentSocket;
+  // Drop the global reference first so any subsequent getSocket() call
+  // mints a fresh connection rather than handing back this stale one.
   globalThis.__yijiAgentSocket = undefined;
+  if (!s) return;
+  try {
+    if (s.connected) s.emit(SOCKET_EVENTS.agentLogout);
+  } catch {
+    // Best-effort — if emit throws (socket already half-torn) the fallback
+    // below still runs.
+  }
+  // Socket.IO gotcha (documented): calling disconnect() immediately after
+  // emit() can tear the transport down before the in-flight packet is
+  // flushed, so the server never receives agent:logout. The gateway's
+  // handler disconnects us anyway after processing the event, so we just
+  // need a short-deferred local disconnect as a fallback for the case
+  // where the server never processes the emit (network drop, gateway
+  // bounce mid-flight). 500ms is plenty for the packet to leave on a
+  // healthy connection.
+  setTimeout(() => {
+    if (s.connected) s.disconnect();
+  }, 500);
 }
 
 // Vite HMR: when this module is about to be replaced, kill the old socket
