@@ -34,7 +34,10 @@ describe('ai-client happy paths', () => {
 
   it('routes each helper to its endpoint', async () => {
     const cases: Array<[() => Promise<unknown>, string]> = [
-      [() => ai.suggestReply(caller, 'c', { draft: 'hi', locale: 'en' }), AI_ENDPOINTS.suggestReply],
+      [
+        () => ai.suggestReply(caller, 'c', { draft: 'hi', locale: 'en' }),
+        AI_ENDPOINTS.suggestReply,
+      ],
       [() => ai.sentiment(caller, 'c'), AI_ENDPOINTS.analyzeSentiment],
       [() => ai.intent(caller, 'c'), AI_ENDPOINTS.detectIntent],
       [() => ai.entities(caller, 'c'), AI_ENDPOINTS.extractEntities],

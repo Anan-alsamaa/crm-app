@@ -28,6 +28,21 @@ Existing: 130 passing unit tests across 15 files.
 Bootstrap `index.ts` files (server wiring) are intentionally low-value to unit test;
 exclude from coverage denominator rather than chase them.
 
+## Final coverage (after new tests)
+
+| Area                    | Lines                         | Target | Tests               |
+| ----------------------- | ----------------------------- | ------ | ------------------- |
+| services/socket-gateway | **82%**                       | 70% ✅ | —                   |
+| services/workers        | **77%**                       | 70% ✅ | —                   |
+| services/ai-gateway     | **81%**                       | 70% ✅ | 211 (services+pkgs) |
+| apps/agent-portal       | **65.2%** (br 71.7 / fn 70.4) | 60% ✅ | 96                  |
+| apps/admin-portal       | **76.2%** (br 72.5 / fn 57.1) | 60% ✅ | 71                  |
+
+Thresholds enforced: services via root `vitest.config.ts` per-service globs (70%);
+apps via per-app `vitest.config.ts` (lines 60 / branches 70 / functions 55).
+Apps use a single-fork pool + `afterEach(cleanup)` so the whole suite runs in one
+memory-frugal process without DOM bleed.
+
 ## Environment notes
 
 - chat-widget `vitest run` fails locally on Windows (broken `@preact/preset-vite`

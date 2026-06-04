@@ -7,7 +7,9 @@ import React from 'react';
 
 // i18n: return the provided defaultValue so labels render deterministically.
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (_k: string, o?: { defaultValue?: string }) => o?.defaultValue ?? _k }),
+  useTranslation: () => ({
+    t: (_k: string, o?: { defaultValue?: string }) => o?.defaultValue ?? _k,
+  }),
 }));
 // Auth: a stable signed-in agent.
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
@@ -28,11 +30,15 @@ vi.mock('../src/lib/ai-client.js', () => ({ ai }));
 import { AiPanel } from '../src/features/ai/AiPanel.js';
 
 function renderPanel(props: Partial<React.ComponentProps<typeof AiPanel>> = {}) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return render(<AiPanel conversationId="conv-1" vendorId="v-1" {...props} />, { wrapper: Wrapper });
+  return render(<AiPanel conversationId="conv-1" vendorId="v-1" {...props} />, {
+    wrapper: Wrapper,
+  });
 }
 
 beforeEach(() => {
