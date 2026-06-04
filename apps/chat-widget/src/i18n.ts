@@ -25,6 +25,11 @@ export interface WidgetStrings {
   csatSubmit: string;
   csatThanks: string;
   csatThanksSub: string;
+  /** Agent-offline fallback shown when no agent is connected. */
+  offlineTitle: string;
+  offlineBody: string;
+  offlineCallLabel: string;
+  offlineEmailLabel: string;
 }
 
 const strings: Record<WidgetLocale, WidgetStrings> = {
@@ -49,6 +54,10 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     csatSubmit: 'Submit',
     csatThanks: 'Thanks for the feedback!',
     csatThanksSub: 'We appreciate you taking the time.',
+    offlineTitle: 'Our agents are offline right now',
+    offlineBody: 'Unfortunately, our agents are offline now. Please contact us directly and we will get back to you as soon as possible.',
+    offlineCallLabel: 'Call us',
+    offlineEmailLabel: 'Email us',
   },
   ar: {
     title: 'الدعم',
@@ -71,6 +80,10 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     csatSubmit: 'إرسال',
     csatThanks: 'شكرًا لك على ملاحظاتك!',
     csatThanksSub: 'نقدّر الوقت الذي خصصته.',
+    offlineTitle: 'فريق الدعم غير متاح حاليًا',
+    offlineBody: 'للأسف، وكلاؤنا غير متصلين في الوقت الحالي. يرجى التواصل معنا مباشرةً وسنعاود التواصل في أقرب وقت.',
+    offlineCallLabel: 'اتصل بنا',
+    offlineEmailLabel: 'راسلنا بالبريد',
   },
 };
 

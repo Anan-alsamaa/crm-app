@@ -106,6 +106,9 @@ export const SOCKET_EVENTS = {
   agentAssigned: 'agent:assigned',
   conversationStatusChanged: 'conversation:status_changed',
   presenceUpdate: 'presence:update',
+  /** Server → client. Agent-presence pulse broadcast to every vendor room
+   * so customer widgets can render an "agents offline" fallback. */
+  agentsPresence: 'agents:presence',
   notificationPushed: 'notification:pushed',
   error: 'error',
 } as const;

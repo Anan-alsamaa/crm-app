@@ -7,7 +7,20 @@ export interface WidgetConfig {
   gatewayUrl: string;
   token: string;
   locale?: WidgetLocale;
+  /**
+   * Fallback contact details surfaced when no support agent is online.
+   * Host pages can override per vendor; defaults match the Yiji CS desk.
+   */
+  fallback?: {
+    phone?: string;
+    email?: string;
+  };
 }
+
+const DEFAULT_FALLBACK = {
+  phone: '+966 55 598 0402',
+  email: 'cs@anan.sa',
+};
 
 interface Branding {
   primary?: string;
@@ -58,6 +71,23 @@ function SendIcon() {
   );
 }
 
+function PhoneIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92Z" />
+    </svg>
+  );
+}
+
+function MailIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
+      <path d="m3 6 9 7 9-7" />
+    </svg>
+  );
+}
+
 /* Greeting illustration (in-bubble brand mark + dots). */
 function EmptyArt() {
   return (
@@ -96,6 +126,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
   const [branding, setBranding] = useState<Branding>({});
   const [ready, setReady] = useState(false);
   const [csat, setCsat] = useState<{ score: number; comment: string; submitted: boolean } | null>(null);
+  const [agentsOnline, setAgentsOnline] = useState<number>(0);
   const socketRef = useRef<Socket | null>(null);
   const convoRef = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -131,11 +162,13 @@ export function Widget({ config }: { config: WidgetConfig }) {
   useEffect(() => {
     const socket = connectWidget(config.gatewayUrl, config.token, {
       onStatus: setStatus,
-      onReady: ({ conversationId, branding: b }) => {
+      onReady: ({ conversationId, branding: b, agentsOnline: count }) => {
         convoRef.current = conversationId;
         if (b && typeof b === 'object') setBranding(b as Branding);
+        setAgentsOnline(count);
         setReady(true);
       },
+      onAgentsPresence: (count) => setAgentsOnline(count),
       onMessage: (msg) => {
         setMessages((prev) => {
           if (msg.clientMsgId && prev.some((m) => m.clientMsgId === msg.clientMsgId)) {
@@ -267,7 +300,11 @@ export function Widget({ config }: { config: WidgetConfig }) {
                   +
                 </span>
               </div>
-              <span className="yiji-header-status">{tr.online}</span>
+              <span
+                className={`yiji-header-status${agentsOnline === 0 ? ' offline' : ''}`}
+              >
+                {agentsOnline === 0 ? tr.offlineTitle : tr.online}
+              </span>
             </div>
           </header>
 
@@ -358,6 +395,41 @@ export function Widget({ config }: { config: WidgetConfig }) {
                   </button>
                 </>
               )}
+            </div>
+          ) : ready && agentsOnline === 0 ? (
+            <div className="yiji-offline" role="region" aria-label={tr.offlineTitle}>
+              <p className="yiji-offline-title">{tr.offlineTitle}</p>
+              <p className="yiji-offline-body">{tr.offlineBody}</p>
+              <div className="yiji-offline-actions">
+                <a
+                  href={`tel:${(config.fallback?.phone ?? DEFAULT_FALLBACK.phone).replace(/\s+/g, '')}`}
+                  className="yiji-offline-link"
+                >
+                  <span className="yiji-offline-link-icon" aria-hidden>
+                    <PhoneIcon />
+                  </span>
+                  <span className="yiji-offline-link-text">
+                    <span className="yiji-offline-link-label">{tr.offlineCallLabel}</span>
+                    <span className="yiji-offline-link-value">
+                      {config.fallback?.phone ?? DEFAULT_FALLBACK.phone}
+                    </span>
+                  </span>
+                </a>
+                <a
+                  href={`mailto:${config.fallback?.email ?? DEFAULT_FALLBACK.email}`}
+                  className="yiji-offline-link"
+                >
+                  <span className="yiji-offline-link-icon" aria-hidden>
+                    <MailIcon />
+                  </span>
+                  <span className="yiji-offline-link-text">
+                    <span className="yiji-offline-link-label">{tr.offlineEmailLabel}</span>
+                    <span className="yiji-offline-link-value">
+                      {config.fallback?.email ?? DEFAULT_FALLBACK.email}
+                    </span>
+                  </span>
+                </a>
+              </div>
             </div>
           ) : (
             <div className="yiji-input">

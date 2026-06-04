@@ -16,10 +16,12 @@ export interface WidgetMessage {
 }
 
 export interface SocketCallbacks {
-  onReady: (info: { conversationId: string; branding: unknown }) => void;
+  onReady: (info: { conversationId: string; branding: unknown; agentsOnline: number }) => void;
   onMessage: (msg: WidgetMessage) => void;
   onTyping: (isTyping: boolean) => void;
   onStatus: (status: 'connecting' | 'connected' | 'reconnecting' | 'error') => void;
+  /** Live agent-presence updates from the gateway. */
+  onAgentsPresence?: (count: number) => void;
   /** Fires when the agent marks the conversation closed/resolved. Triggers CSAT. */
   onClosed?: (info: { conversationId: string; status: 'closed' | 'resolved' }) => void;
 }
@@ -38,11 +40,16 @@ export function connectWidget(url: string, token: string, cb: SocketCallbacks): 
   socket.on('connect', () => cb.onStatus('connected'));
   socket.io.on('reconnect_attempt', () => cb.onStatus('reconnecting'));
   socket.on('connect_error', () => cb.onStatus('error'));
-  socket.on('ready', (info: { conversationId: string; branding: unknown }) => cb.onReady(info));
+  socket.on(
+    'ready',
+    (info: { conversationId: string; branding: unknown; agentsOnline?: number }) =>
+      cb.onReady({ ...info, agentsOnline: info.agentsOnline ?? 0 }),
+  );
   socket.on('message:new', (msg: WidgetMessage) => cb.onMessage(msg));
   socket.on('typing:update', (e: { isTyping: boolean; who: string }) => {
     if (e.who === 'agent') cb.onTyping(e.isTyping);
   });
+  socket.on('agents:presence', (e: { count: number }) => cb.onAgentsPresence?.(e.count));
   socket.on('conversation:closed', (e: { conversationId: string; status: 'closed' | 'resolved' }) => {
     cb.onClosed?.(e);
   });

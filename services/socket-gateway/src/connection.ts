@@ -47,6 +47,17 @@ function removePresence(vendorId: string, id: string): string[] {
   return set ? [...set] : [];
 }
 
+/**
+ * Agent presence — global across vendors. Agents serve every vendor in this
+ * release, so a single count is enough. When count transitions to/from 0
+ * we broadcast to every connected socket so customer widgets can show an
+ * "agents offline" fallback.
+ */
+const agentSockets = new Set<string>();
+function broadcastAgentPresence(io: import('socket.io').Server): void {
+  io.emit(SOCKET_EVENTS.agentsPresence, { count: agentSockets.size });
+}
+
 export function registerConnection(deps: ConnectionDeps): void {
   const { io, directus, directusUrl, verifier, logger } = deps;
 
@@ -86,7 +97,11 @@ export function registerConnection(deps: ConnectionDeps): void {
   io.on('connection', (socket) => {
     const data = socket.data as SocketData;
     if (data.kind === 'customer') void onCustomerConnect(socket, deps);
-    else void onAgentConnect(socket, deps);
+    else {
+      void onAgentConnect(socket, deps);
+      agentSockets.add(socket.id);
+      broadcastAgentPresence(io);
+    }
 
     registerHandlers(socket, deps);
 
@@ -97,6 +112,10 @@ export function registerConnection(deps: ConnectionDeps): void {
           vendorId: data.vendorId,
           online,
         });
+      } else if (data.kind === 'agent') {
+        if (agentSockets.delete(socket.id)) {
+          broadcastAgentPresence(io);
+        }
       }
     });
   });
@@ -113,10 +132,13 @@ async function onCustomerConnect(socket: Socket, { io }: ConnectionDeps): Promis
     vendorId: data.vendorId,
     online,
   });
-  // Tell the widget which conversation it is attached to + vendor branding.
+  // Tell the widget which conversation it is attached to + vendor branding,
+  // plus the current agent-online count so it can render the offline
+  // fallback on connect without waiting for the next agents:presence pulse.
   socket.emit('ready', {
     conversationId: data.conversationId,
     branding: data.vendorColors ?? null,
+    agentsOnline: agentSockets.size,
   });
 }
 

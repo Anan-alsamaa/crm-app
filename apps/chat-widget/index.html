@@ -3,488 +3,360 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>YIJI CRM — Live demo</title>
+    <title>Yiji Support — we&rsquo;re here to help</title>
     <meta name="theme-color" content="#0F8D8F" />
     <link rel="icon" type="image/png" href="/yiji-logo.png" />
     <link rel="apple-touch-icon" href="/yiji-logo.png" />
-    <meta name="description" content="YIJI CRM — every conversation, ticket, and SLA in one place. Live demo." />
+    <meta
+      name="description"
+      content="Yiji customer support. Chat with our team, or reach us directly by phone or email."
+    />
     <style>
       :root {
         --bg: oklch(0.985 0.002 230);
         --card: #ffffff;
-        --ink: oklch(0.20 0.005 250);
+        --ink: oklch(0.18 0.005 250);
         --muted: oklch(0.46 0.010 250);
         --border: oklch(0.22 0.005 250 / 0.10);
         --border-strong: oklch(0.22 0.005 250 / 0.18);
         --primary: oklch(0.58 0.097 196);     /* YIJI #0F8D8F */
-        --secondary: oklch(0.66 0.22 0);
-        --rail: oklch(0.22 0.045 196);
+        --primary-soft: oklch(0.58 0.097 196 / 0.08);
+        --primary-ink: oklch(0.42 0.097 196);
       }
       * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
       body {
-        margin: 0;
-        font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        font-family:
+          'SF Pro Text', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+          Roboto, 'Helvetica Neue', Arial, sans-serif;
         background:
-          radial-gradient(at 8% 10%, oklch(0.58 0.097 196 / 0.10) 0%, transparent 38%),
-          radial-gradient(at 90% 92%, oklch(0.66 0.22 0 / 0.08) 0%, transparent 42%),
+          radial-gradient(at 8% 0%, oklch(0.58 0.097 196 / 0.08) 0%, transparent 45%),
+          radial-gradient(at 92% 100%, oklch(0.66 0.18 30 / 0.06) 0%, transparent 50%),
           var(--bg);
         background-attachment: fixed;
         color: var(--ink);
-        line-height: 1.5;
+        line-height: 1.55;
         min-height: 100vh;
+        font-feature-settings: 'cv11', 'ss01';
+        -webkit-font-smoothing: antialiased;
       }
       a { color: inherit; text-decoration: none; }
 
-      /* ───── Nav ───── */
-      .nav {
+      /* ───── Top bar ───── */
+      .top {
         position: sticky; top: 0; z-index: 10;
-        background: rgba(255, 255, 255, 0.78);
-        backdrop-filter: blur(8px);
+        background: rgba(255, 255, 255, 0.82);
+        backdrop-filter: blur(10px);
         border-bottom: 1px solid var(--border);
-        padding: 14px 32px;
-        display: flex; align-items: center; justify-content: space-between;
+        padding: 14px 28px;
+        display: flex; align-items: center; gap: 12px;
       }
       .brand {
         display: flex; align-items: center; gap: 10px;
       }
       .brand-mark {
-        width: 32px; height: 32px;
-        border-radius: 8px;
+        width: 34px; height: 34px;
+        border-radius: 9px;
         background: rgba(255, 255, 255, 0.96);
         display: grid; place-items: center;
         flex-shrink: 0;
-        box-shadow: 0 1px 2px oklch(0.22 0.005 250 / 0.06);
+        box-shadow: 0 1px 3px oklch(0.22 0.005 250 / 0.08);
       }
-      .brand-mark img {
-        width: 26px; height: 26px;
-        display: block;
+      .brand-mark img { width: 26px; height: 26px; display: block; }
+      .brand-name {
+        font-weight: 600;
+        font-size: 15.5px;
+        letter-spacing: -0.015em;
       }
-      .brand-word {
-        font-weight: 800;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        font-size: 13px;
-      }
-      .nav-links {
-        display: flex; gap: 28px;
-        font-size: 13.5px; color: var(--muted);
-      }
-      .nav-links span { transition: color 160ms; cursor: pointer; }
-      .nav-links span:hover { color: var(--ink); }
-      .nav-actions { display: flex; gap: 10px; align-items: center; }
-      .nav-cta {
-        padding: 9px 18px;
-        border-radius: 999px;
-        background: var(--ink);
-        color: #fff;
-        font-size: 13.5px; font-weight: 600;
+      .brand-name span { color: var(--muted); font-weight: 400; }
+      .top-spacer { flex: 1; }
+      .top-status {
         display: inline-flex; align-items: center; gap: 6px;
-        transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+        font-size: 12.5px; color: var(--muted);
+        padding: 6px 11px;
+        background: rgba(74, 222, 128, 0.1);
+        color: oklch(0.45 0.15 145);
+        border-radius: 999px;
+        font-weight: 500;
       }
-      .nav-cta:active { transform: scale(0.97); }
-      .nav-cta-secondary {
-        font-size: 13.5px; color: var(--ink); font-weight: 500;
+      .top-status::before {
+        content: '';
+        width: 6px; height: 6px; border-radius: 999px;
+        background: oklch(0.55 0.18 145);
+        box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.18);
       }
 
       /* ───── Hero ───── */
-      .hero {
-        position: relative;
-        padding: 96px 32px 60px;
-        max-width: 1200px;
+      .page {
+        max-width: 980px;
         margin: 0 auto;
+        padding: 56px 28px 80px;
+      }
+      .hero {
         text-align: start;
+        max-width: 720px;
       }
-      .eyebrow {
-        display: inline-flex; align-items: center; gap: 8px;
-        background: oklch(0.66 0.22 0 / 0.12);
-        color: oklch(0.50 0.20 0);
-        padding: 7px 14px;
-        border-radius: 999px;
-        font-size: 13px;
+      .hero-eyebrow {
+        font-size: 12.5px;
         font-weight: 600;
-      }
-      .eyebrow-dot {
-        width: 6px; height: 6px; border-radius: 999px;
-        background: oklch(0.66 0.22 0);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--primary-ink);
+        background: var(--primary-soft);
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 999px;
       }
       h1 {
-        font-size: clamp(2.75rem, 6vw, 5.25rem);
-        font-weight: 800;
-        letter-spacing: -0.04em;
-        line-height: 0.98;
-        margin: 22px 0 0;
-        max-width: 20ch;
+        font-size: clamp(2rem, 5vw, 3.25rem);
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        line-height: 1.1;
+        margin: 18px 0 0;
+        max-width: 18ch;
         text-wrap: balance;
       }
-      h1 .accent { color: var(--primary); }
-      .lede {
-        margin-top: 24px;
-        font-size: clamp(1rem, 1.4vw, 1.18rem);
+      .hero-lede {
+        margin-top: 18px;
+        font-size: clamp(1rem, 1.4vw, 1.15rem);
         color: var(--muted);
-        max-width: 60ch;
-        line-height: 1.55;
+        max-width: 56ch;
       }
-      .cta-row {
-        margin-top: 34px;
-        display: flex; gap: 12px; flex-wrap: wrap;
+      .hero-cta {
+        margin-top: 28px;
+        display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
       }
-      .btn-primary {
+      .hero-cta-primary {
         background: var(--ink);
         color: #fff;
-        padding: 13px 24px;
-        border-radius: 14px;
-        border: none;
         font-weight: 600;
-        font-size: 15px;
+        font-size: 14.5px;
+        padding: 12px 22px;
+        border-radius: 12px;
+        border: none;
         cursor: pointer;
-        text-decoration: none;
         display: inline-flex; align-items: center; gap: 8px;
         transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
       }
-      .btn-primary:active { transform: scale(0.97); }
-      .btn-ghost {
-        background: transparent;
-        color: var(--ink);
-        padding: 13px 24px;
-        border-radius: 14px;
-        border: 1px solid var(--border-strong);
-        font-weight: 600;
-        font-size: 15px;
-        cursor: pointer;
-        display: inline-flex; align-items: center; gap: 8px;
-      }
-      .btn-ghost:hover { background: oklch(0.96 0.005 230); }
+      .hero-cta-primary:active { transform: scale(0.97); }
+      .hero-cta-hint { font-size: 13px; color: var(--muted); }
 
-      /* ───── Stats strip ───── */
-      .stats {
-        margin-top: 56px;
-        display: flex; flex-wrap: wrap; gap: 0;
-        border-top: 1px solid var(--border);
-        padding-top: 28px;
+      /* ───── Direct contact cards ───── */
+      .contacts-head {
+        margin-top: 60px;
+        display: flex; flex-direction: column; gap: 6px;
       }
-      .stat {
-        flex: 1; min-width: 180px;
-      }
-      .stat-num {
-        font-size: clamp(1.75rem, 3vw, 2.5rem);
-        font-weight: 800; letter-spacing: -0.025em;
-        color: var(--ink);
-        font-variant-numeric: tabular-nums;
-      }
-      .stat-num .accent { color: var(--primary); }
-      .stat-label {
-        margin-top: 4px;
+      .contacts-eyebrow {
         font-size: 12px;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: var(--muted);
         font-weight: 600;
+        color: var(--muted);
       }
-
-      /* ───── Features grid ───── */
-      .features {
-        margin: 100px auto 60px;
-        max-width: 1200px;
-        padding: 0 32px;
+      .contacts-title {
+        font-size: clamp(1.4rem, 2.5vw, 1.75rem);
+        font-weight: 600;
+        letter-spacing: -0.015em;
+        line-height: 1.2;
+        max-width: 32ch;
       }
-      .features-head {
-        display: flex; flex-direction: column; gap: 12px;
-        margin-bottom: 36px;
-      }
-      .features-eyebrow {
-        font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
-        font-weight: 700; color: var(--primary);
-      }
-      .features-title {
-        font-size: clamp(1.75rem, 3.5vw, 2.75rem);
-        font-weight: 700; letter-spacing: -0.025em;
-        line-height: 1.05;
-        max-width: 28ch;
-      }
-      .feature-grid {
+      .contacts-grid {
+        margin-top: 20px;
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        gap: 18px;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 14px;
       }
-      .feature {
+      .contact {
         background: var(--card);
         border: 1px solid var(--border);
         border-radius: 16px;
-        padding: 24px;
+        padding: 20px 22px;
+        text-decoration: none;
+        color: inherit;
+        display: flex; flex-direction: column; gap: 6px;
         transition: border-color 160ms, transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
       }
-      .feature:hover {
+      .contact:hover {
         border-color: var(--border-strong);
         transform: translateY(-2px);
       }
-      .feature-icon {
-        width: 38px; height: 38px;
-        display: grid; place-items: center;
+      .contact-icon {
+        width: 36px; height: 36px;
         border-radius: 10px;
-        background: oklch(0.58 0.097 196 / 0.12);
-        color: var(--primary);
-        margin-bottom: 14px;
+        display: grid; place-items: center;
+        background: var(--primary-soft);
+        color: var(--primary-ink);
+        margin-bottom: 8px;
       }
-      .feature-title {
-        font-size: 16px; font-weight: 600; letter-spacing: -0.01em;
+      .contact-icon svg { width: 18px; height: 18px; }
+      .contact-label {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      .contact-value {
+        font-size: 17px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
+        font-variant-numeric: tabular-nums;
+      }
+      [dir='rtl'] .contact-value { unicode-bidi: plaintext; }
+      .contact-meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+      /* ───── FAQ teaser ───── */
+      .faq {
+        margin-top: 56px;
+        display: flex; flex-direction: column; gap: 12px;
+      }
+      .faq-item {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 16px 20px;
+      }
+      .faq-q {
+        font-size: 14.5px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
         margin: 0 0 4px;
       }
-      .feature-body {
-        font-size: 13.5px; color: var(--muted); margin: 0; line-height: 1.55;
+      .faq-a {
+        font-size: 13.5px;
+        color: var(--muted);
+        margin: 0;
+        line-height: 1.55;
       }
 
       /* ───── Footer ───── */
       .footer {
-        margin: 80px 0 0;
+        margin-top: 56px;
+        padding-top: 24px;
         border-top: 1px solid var(--border);
-        padding: 28px 32px;
-        max-width: 1200px;
-        margin-inline: auto;
-        display: flex; justify-content: space-between; align-items: center;
-        font-size: 13px; color: var(--muted);
-        flex-wrap: wrap; gap: 12px;
+        font-size: 12.5px; color: var(--muted);
+        display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        justify-content: space-between;
       }
-      .footer .brand-word { color: var(--ink); }
+      .footer-brand { color: var(--ink); font-weight: 600; }
 
-      /* ───── Identity card (proves customer data is wired) ───── */
-      .identity-card {
-        position: fixed;
-        top: 80px;
-        inset-inline-end: 24px;
-        z-index: 6;
-        width: 280px;
-        background: var(--card);
-        border: 1px solid var(--border-strong);
-        border-radius: 14px;
-        box-shadow: 0 8px 24px -8px oklch(0.22 0.005 250 / 0.18);
-        padding: 14px 16px;
-        font-size: 12.5px;
-        line-height: 1.45;
-        animation: identity-in 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
-      }
-      .identity-card-head {
-        display: flex; align-items: center; gap: 8px;
-        font-weight: 600;
-        color: var(--ink);
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        margin-bottom: 10px;
-      }
-      .identity-card-pill {
-        width: 7px; height: 7px; border-radius: 999px;
-        background: oklch(0.65 0.18 145);
-        box-shadow: 0 0 0 3px oklch(0.65 0.18 145 / 0.18);
-      }
-      .identity-card dl {
-        display: grid;
-        grid-template-columns: max-content 1fr;
-        gap: 4px 12px;
-        margin: 0;
-      }
-      .identity-card dt {
-        color: var(--muted);
-        font-weight: 500;
-        font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
-        font-size: 11.5px;
-      }
-      .identity-card dd {
-        margin: 0;
-        color: var(--ink);
-        font-weight: 500;
-        overflow-wrap: anywhere;
-      }
-      .identity-card-foot {
-        margin: 12px 0 0;
-        padding-top: 10px;
-        border-top: 1px solid var(--border);
-        color: var(--muted);
-        font-size: 11.5px;
-        line-height: 1.5;
-      }
-      .identity-card-foot code {
-        background: oklch(0.96 0.005 230);
-        padding: 1px 5px;
-        border-radius: 4px;
-        font-size: 11px;
-      }
-      @keyframes identity-in {
-        from { opacity: 0; transform: translateY(-6px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-
-      /* ───── Widget hint arrow ───── */
-      .widget-hint {
-        position: fixed;
-        bottom: 100px;
-        inset-inline-end: 100px;
-        z-index: 5;
-        display: flex; align-items: center; gap: 8px;
-        font-size: 13px; color: var(--muted);
-        background: var(--card);
-        padding: 8px 14px;
-        border-radius: 999px;
-        border: 1px solid var(--border-strong);
-        box-shadow: 0 4px 16px -4px oklch(0.22 0.005 250 / 0.12);
-        animation: hint-pulse 3s ease-in-out infinite;
-      }
-      .widget-hint::after {
-        content: '→';
-        font-size: 16px; color: var(--primary); font-weight: 700;
-        transform: rotate(45deg);
-      }
-      @keyframes hint-pulse {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-3px); }
-      }
       /* ───── Mobile ───── */
       @media (max-width: 640px) {
-        .widget-hint { display: none; }
-        .nav-links { display: none; }
-        /* Identity card sits inline above the hero on mobile so it
-           doesn't fight the nav for vertical space. */
-        .identity-card {
-          position: static;
-          width: auto;
-          inset: auto;
-          margin: 12px 16px 0;
-        }
-        .nav { padding: 12px 16px; }
-        .nav-actions { gap: 6px; }
-        .nav-cta { padding: 8px 14px; font-size: 12.5px; }
-        .hero { padding: 40px 18px 30px; }
-        h1 { font-size: clamp(2rem, 9vw, 3rem); margin-top: 16px; }
-        .lede { margin-top: 18px; font-size: 0.97rem; }
-        .cta-row { margin-top: 22px; gap: 8px; }
-        .btn-primary, .btn-ghost { padding: 11px 18px; font-size: 14px; }
-        .stats { margin-top: 32px; padding-top: 20px; flex-direction: column; gap: 16px; }
-        .stat { min-width: 0; }
-        .features { margin: 56px auto 40px; padding: 0 18px; }
-        .features-title { font-size: clamp(1.4rem, 6vw, 2rem); }
-        .feature { padding: 18px; }
+        .top { padding: 12px 16px; }
+        .top-status { padding: 5px 10px; font-size: 12px; }
+        .page { padding: 32px 18px 56px; }
+        .hero-cta-primary { padding: 11px 18px; font-size: 14px; }
+        .contacts-head { margin-top: 40px; }
+        .contacts-grid { grid-template-columns: 1fr; gap: 10px; }
+        .contact { padding: 16px 18px; }
+        .faq { margin-top: 40px; gap: 10px; }
         .footer {
-          padding: 20px 18px;
           flex-direction: column;
           align-items: flex-start;
-          gap: 8px;
-          font-size: 12.5px;
+          margin-top: 40px;
         }
       }
     </style>
   </head>
   <body>
-    <nav class="nav">
+    <header class="top">
       <a class="brand" href="#">
-        <span class="brand-mark"><img src="/yiji-logo.png" alt="YIJI" /></span>
-        <span class="brand-word">YIJI CRM</span>
+        <span class="brand-mark"><img src="/yiji-logo.png" alt="Yiji" /></span>
+        <span class="brand-name">Yiji <span>· Support</span></span>
       </a>
-      <div class="nav-links">
-        <span>Product</span>
-        <span>Pricing</span>
-        <span>Docs</span>
-        <span>Customers</span>
-      </div>
-      <div class="nav-actions">
-        <a class="nav-cta-secondary" href="http://localhost:5173" target="_blank" rel="noopener">Agent portal</a>
-        <a class="nav-cta" href="http://localhost:5174" target="_blank" rel="noopener">
-          Admin
-          <span aria-hidden>→</span>
-        </a>
-      </div>
-    </nav>
+      <span class="top-spacer"></span>
+      <span class="top-status" id="status-badge">We&rsquo;re online now</span>
+    </header>
 
-    <section class="hero">
-      <span class="eyebrow">
-        <span class="eyebrow-dot"></span>
-        Live demo · talk to a real agent
-      </span>
-      <h1>
-        Every conversation.<br />
-        Every channel.<br />
-        <span class="accent">One calm inbox.</span>
-      </h1>
-      <p class="lede">
-        YIJI CRM brings shared inbox, tickets, SLAs, internal notes, and a real-time widget
-        together in one workspace. This page is a live demo — tap the chat bubble below to start
-        a real conversation that lands in the agent inbox at <code>localhost:5173</code>.
-      </p>
-      <div class="cta-row">
-        <a class="btn-primary" href="#features">
-          See what's inside
-          <span aria-hidden>→</span>
-        </a>
-        <button class="btn-ghost" type="button" onclick="document.querySelector('.yiji-launcher')?.click()">
-          Open the widget
-        </button>
-      </div>
+    <main class="page">
+      <section class="hero">
+        <span class="hero-eyebrow">Customer support</span>
+        <h1>We&rsquo;re here to help with anything Yiji.</h1>
+        <p class="hero-lede">
+          Chat with our team, or reach out directly by phone or email — your message
+          goes straight to the same support desk either way. Most replies arrive within
+          a few minutes during business hours.
+        </p>
+        <div class="hero-cta">
+          <button
+            class="hero-cta-primary"
+            type="button"
+            onclick="document.querySelector('.yiji-launcher')?.click()"
+          >
+            Start a chat
+            <span aria-hidden>→</span>
+          </button>
+          <span class="hero-cta-hint">Or call · email below</span>
+        </div>
+      </section>
 
-      <div class="stats">
-        <div class="stat">
-          <div class="stat-num">120<span class="accent">ms</span></div>
-          <div class="stat-label">avg. message round-trip</div>
+      <section>
+        <div class="contacts-head">
+          <span class="contacts-eyebrow">Reach the support desk</span>
+          <h2 class="contacts-title">Prefer phone or email? We answer on every channel.</h2>
         </div>
-        <div class="stat">
-          <div class="stat-num">8h<span class="accent">/day</span></div>
-          <div class="stat-label">built for shift-long use</div>
+        <div class="contacts-grid">
+          <a class="contact" href="tel:+966555980402">
+            <span class="contact-icon" aria-hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92Z" />
+              </svg>
+            </span>
+            <span class="contact-label">Call us</span>
+            <span class="contact-value">+966 55 598 0402</span>
+            <span class="contact-meta">Sunday – Thursday · 8 AM – 6 PM</span>
+          </a>
+          <a class="contact" href="mailto:cs@anan.sa">
+            <span class="contact-icon" aria-hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/>
+                <path d="m3 6 9 7 9-7"/>
+              </svg>
+            </span>
+            <span class="contact-label">Email us</span>
+            <span class="contact-value">cs@anan.sa</span>
+            <span class="contact-meta">We aim to reply within one business day</span>
+          </a>
+          <a class="contact" href="#" onclick="event.preventDefault(); document.querySelector('.yiji-launcher')?.click();">
+            <span class="contact-icon" aria-hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"/>
+              </svg>
+            </span>
+            <span class="contact-label">Live chat</span>
+            <span class="contact-value">Open chat now</span>
+            <span class="contact-meta">Real teammates · typical reply in minutes</span>
+          </a>
         </div>
-        <div class="stat">
-          <div class="stat-num">EN<span class="accent"> · AR</span></div>
-          <div class="stat-label">RTL out of the box</div>
-        </div>
-        <div class="stat">
-          <div class="stat-num">99.9<span class="accent">%</span></div>
-          <div class="stat-label">message delivery target</div>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="features" id="features">
-      <div class="features-head">
-        <span class="features-eyebrow">Inside YIJI CRM</span>
-        <h2 class="features-title">The whole support workspace, in one place.</h2>
-      </div>
-      <div class="feature-grid">
-        <div class="feature">
-          <div class="feature-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/></svg>
-          </div>
-          <h3 class="feature-title">Shared inbox</h3>
-          <p class="feature-body">Every channel feeds one queue. Filter by status, priority, or assignee. Real-time updates without refresh.</p>
+      <section class="faq">
+        <div class="faq-item">
+          <p class="faq-q">When are agents available?</p>
+          <p class="faq-a">Sunday – Thursday, 8 AM – 6 PM (KSA). Outside these hours you can still
+            send a message — we&rsquo;ll pick it up first thing the next business day.</p>
         </div>
-        <div class="feature">
-          <div class="feature-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2M13 17v2M13 11v2"/></svg>
-          </div>
-          <h3 class="feature-title">Tickets &amp; SLA</h3>
-          <p class="feature-body">Promote any conversation to a ticket. First-response and resolution deadlines tracked automatically with warnings + breaches.</p>
+        <div class="faq-item">
+          <p class="faq-q">Will my conversation be saved?</p>
+          <p class="faq-a">Yes. Every chat is attached to your account so any teammate can pick
+            up where the previous one left off — you never have to repeat yourself.</p>
         </div>
-        <div class="feature">
-          <div class="feature-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"/></svg>
-          </div>
-          <h3 class="feature-title">Live widget</h3>
-          <p class="feature-body">Drop the JWT-signed widget on any host site. Real-time bubbles, typing indicators, multi-locale, branded per tenant.</p>
+        <div class="faq-item">
+          <p class="faq-q">Is my information secure?</p>
+          <p class="faq-a">All chat is over an encrypted connection and your identity is verified
+            by your Yiji account before the conversation starts. No third-party trackers.</p>
         </div>
-        <div class="feature">
-          <div class="feature-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          </div>
-          <h3 class="feature-title">Teams &amp; roles</h3>
-          <p class="feature-body">Route conversations and tickets by team or skill. Audit-logged role changes. Service accounts for system integrations.</p>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <footer class="footer">
-      <div>
-        <span class="brand-word">© YIJI CRM</span> · Demo host for the chat widget
-      </div>
-      <div>
-        Embed the widget on your site · gateway <code>:8080</code> · widget host <code>:5175</code>
-      </div>
-    </footer>
-
-    <div class="widget-hint">Tap the chat bubble</div>
+      <footer class="footer">
+        <div>
+          <span class="footer-brand">© Yiji</span> · Customer support
+        </div>
+        <div>
+          <a href="https://yiji-app.com" target="_blank" rel="noopener">yiji-app.com</a>
+        </div>
+      </footer>
+    </main>
 
     <script type="module" src="/src/demo.ts"></script>
   </body>

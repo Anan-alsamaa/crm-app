@@ -210,6 +210,10 @@
   background: #4ade80;
   box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.25);
 }
+.yiji-header-status.offline::before {
+  background: #fbbf24;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.25);
+}
 .yiji-close {
   appearance: none;
   background: rgba(255, 255, 255, 0.16);
@@ -485,6 +489,89 @@
 .yiji-footer strong {
   color: var(--yiji-ink);
   font-weight: 600;
+}
+
+/* ───── Agent-offline fallback ─────
+ * Replaces the composer when no support agent is connected. The two CTAs
+ * are real `tel:` / `mailto:` links so the customer can act in one tap.
+ */
+.yiji-offline {
+  padding: 18px 18px 22px;
+  background: var(--yiji-surface);
+  border-top: 1px solid var(--yiji-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.yiji-offline-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--yiji-ink);
+  line-height: 1.4;
+}
+.yiji-offline-body {
+  margin: 0;
+  font-size: 13px;
+  color: var(--yiji-muted);
+  line-height: 1.5;
+}
+.yiji-offline-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.yiji-offline-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: var(--yiji-surface-2);
+  text-decoration: none;
+  color: var(--yiji-ink);
+  transition: background-color 160ms var(--yiji-ease);
+}
+.yiji-offline-link:hover {
+  background: color-mix(in oklab, var(--yiji-primary) 8%, var(--yiji-surface-2));
+}
+.yiji-offline-link-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--yiji-primary) 12%, transparent);
+  color: var(--yiji-primary);
+  display: grid;
+  place-items: center;
+}
+.yiji-offline-link-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.yiji-offline-link-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.yiji-offline-link-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--yiji-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.yiji-offline-link-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--yiji-ink);
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+}
+[dir='rtl'] .yiji-offline-link-value {
+  unicode-bidi: plaintext;
 }
 
 /* ───── Mobile responsive ─────

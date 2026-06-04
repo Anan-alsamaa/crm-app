@@ -98,7 +98,11 @@ function escapeHtml(s: string): string {
 }
 
 const identity = resolveIdentity();
-renderIdentityCard(identity);
+// Identity card is dev-only — surface it via `?debug=1` so the customer-facing
+// page stays clean. Useful for verifying the JWT payload chain.
+if (new URL(window.location.href).searchParams.get('debug') === '1') {
+  renderIdentityCard(identity);
+}
 void mintDevToken(identity).then((token) => {
   YijiChat.init({ gatewayUrl: GATEWAY_URL, token, locale: 'en' });
 });
