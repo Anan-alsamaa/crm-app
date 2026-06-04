@@ -1,13 +1,17 @@
 name: CI
 
 on:
+  # Direct pushes to the long-lived branches, plus every PR. Stream/feature
+  # branches get CI through their PR (one run per push) rather than a second
+  # push-triggered run — avoids running the whole workflow twice per push.
   push:
-    branches: ['**']
+    branches: [main, 001-yiji-crm-platform]
   pull_request:
 
-# Newer pushes cancel in-flight runs on the same ref — saves CI minutes.
+# Newer pushes cancel in-flight runs for the same branch. Keying on head_ref
+# (set on PRs) collapses a branch's push+PR runs into one group.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
