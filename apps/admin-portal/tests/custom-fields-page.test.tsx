@@ -72,7 +72,7 @@ describe('CustomFieldsPage', () => {
   it('opens the create drawer', async () => {
     api.useCustomFields.mockReturnValue({ data: [], isLoading: false });
     renderPage();
-    await userEvent.click(screen.getAllByText('New field')[0]);
+    await userEvent.click(screen.getAllByText('New field')[0]!);
     expect(screen.getByText('Entity')).toBeInTheDocument();
   });
 });

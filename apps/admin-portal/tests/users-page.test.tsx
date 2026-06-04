@@ -65,7 +65,7 @@ describe('UsersPage', () => {
   it('opens the create drawer on button click', async () => {
     usersApi.useUsers.mockReturnValue({ data: [], isLoading: false });
     renderPage();
-    await userEvent.click(screen.getAllByText('users.create')[0]);
+    await userEvent.click(screen.getAllByText('users.create')[0]!);
     expect(screen.getByText('users.email')).toBeInTheDocument();
   });
 });

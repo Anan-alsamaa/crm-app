@@ -54,7 +54,7 @@ describe('TeamsPage', () => {
   it('opens the create drawer', async () => {
     teamsApi.useTeams.mockReturnValue({ data: [], isLoading: false });
     renderPage();
-    await userEvent.click(screen.getAllByText('teams.create')[0]);
+    await userEvent.click(screen.getAllByText('teams.create')[0]!);
     expect(screen.getByText('teams.name')).toBeInTheDocument();
   });
 });

@@ -71,7 +71,7 @@ describe('ReportsPage', () => {
   it('opens the create drawer', async () => {
     api.useReports.mockReturnValue({ data: [], isLoading: false });
     renderPage();
-    await userEvent.click(screen.getAllByText('New report')[0]);
+    await userEvent.click(screen.getAllByText('New report')[0]!);
     expect(screen.getByText('Recipients')).toBeInTheDocument();
   });
 });

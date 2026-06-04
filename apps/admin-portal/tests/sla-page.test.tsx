@@ -60,7 +60,7 @@ describe('SlaPoliciesPage', () => {
     request.mockResolvedValueOnce([]);
     renderPage();
     await waitFor(() => expect(screen.getByText('sla.empty')).toBeInTheDocument());
-    await userEvent.click(screen.getAllByText('sla.create')[0]);
+    await userEvent.click(screen.getAllByText('sla.create')[0]!);
     expect(screen.getByText('sla.name')).toBeInTheDocument();
   });
 });

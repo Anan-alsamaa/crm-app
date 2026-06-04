@@ -18,7 +18,7 @@ describe('aiAdmin client', () => {
     fetchMock.mockResolvedValueOnce(ok({ summarize: true }));
     const res = await aiAdmin.getConfig({ userId: 'admin-1' });
     expect(res).toEqual({ summarize: true });
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0]!;
     expect(String(url)).toContain('/admin/config');
     const headers = (init as RequestInit).headers as Record<string, string>;
     expect(headers['x-yiji-user']).toBe('admin-1');
@@ -30,7 +30,7 @@ describe('aiAdmin client', () => {
     fetchMock.mockResolvedValueOnce(ok({ summarize: false }));
     const res = await aiAdmin.putConfig({ userId: 'admin-1' }, { summarize: false });
     expect(res).toEqual({ summarize: false });
-    const [, init] = fetchMock.mock.calls[0];
+    const [, init] = fetchMock.mock.calls[0]!;
     expect((init as RequestInit).method).toBe('PUT');
     expect((init as RequestInit).body).toBe(JSON.stringify({ summarize: false }));
   });
@@ -53,7 +53,7 @@ describe('aiAdmin client', () => {
   it('uses the provided vendorId when given', async () => {
     fetchMock.mockResolvedValueOnce(ok({}));
     await aiAdmin.getConfig({ userId: 'x', vendorId: 'v-9' });
-    const [, init] = fetchMock.mock.calls[0];
+    const [, init] = fetchMock.mock.calls[0]!;
     const headers = (init as RequestInit).headers as Record<string, string>;
     expect(headers['x-yiji-vendor']).toBe('v-9');
   });

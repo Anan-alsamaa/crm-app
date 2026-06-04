@@ -73,7 +73,7 @@ describe('ai-client error mapping', () => {
       json: async () => {
         throw new Error('not json');
       },
-    } as Response);
+    } as unknown as Response);
     await expect(ai.sentiment(caller, 'c')).rejects.toMatchObject({ status: 500 });
   });
 });

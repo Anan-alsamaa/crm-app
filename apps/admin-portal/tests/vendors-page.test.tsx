@@ -65,7 +65,7 @@ describe('VendorsPage', () => {
   it('opens the new vendor drawer', async () => {
     vendorsApi.useVendors.mockReturnValue({ data: [], isLoading: false });
     renderPage();
-    await userEvent.click(screen.getAllByText('New vendor')[0]);
+    await userEvent.click(screen.getAllByText('New vendor')[0]!);
     expect(screen.getByText('Name')).toBeInTheDocument();
   });
 });

@@ -74,7 +74,7 @@ describe('AutomationPage', () => {
   it('opens the create drawer', async () => {
     api.useAutomationRules.mockReturnValue({ data: [], isLoading: false });
     renderPage();
-    await userEvent.click(screen.getAllByText('New rule')[0]);
+    await userEvent.click(screen.getAllByText('New rule')[0]!);
     expect(screen.getByText('Trigger')).toBeInTheDocument();
   });
 });

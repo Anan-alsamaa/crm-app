@@ -35,7 +35,7 @@ describe('agent socket singleton', () => {
     expect(result).toBe(sock);
     expect(getToken).toHaveBeenCalledTimes(1);
     expect(ioMock).toHaveBeenCalledTimes(1);
-    const [, opts] = ioMock.mock.calls[0];
+    const [, opts] = ioMock.mock.calls[0]!;
     expect(opts.auth).toEqual({ kind: 'agent', token: 'tok-123' });
   });
 
