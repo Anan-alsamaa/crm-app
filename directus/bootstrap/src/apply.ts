@@ -477,7 +477,14 @@ async function main(): Promise<void> {
   console.log(`Done. Directus reports ${cols.length} collections.`);
 }
 
-main().catch((err) => {
-  console.error('Bootstrap failed:', err);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    // Force a clean exit: the Directus SDK (undici) and pg can leave keep-alive
+    // sockets open, which otherwise keeps the event loop alive and hangs the
+    // process — stalling CI's bootstrap step + the idempotence check.
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error('Bootstrap failed:', err);
+    process.exit(1);
+  });
