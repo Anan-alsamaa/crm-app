@@ -116,6 +116,11 @@ services:
       YIJI_JWT_SECRET: ${YIJI_JWT_SECRET:?set a strong YIJI_JWT_SECRET}
       SVC_GATEWAY_TOKEN: ${SVC_GATEWAY_TOKEN:?set SVC_GATEWAY_TOKEN}
       CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal hostnames}
+      # Inbound webhook signature secret (empty => endpoint disabled/503).
+      YIJI_WEBHOOK_SECRET: ${YIJI_WEBHOOK_SECRET:-}
+      WEBHOOK_TOLERANCE_SEC: ${WEBHOOK_TOLERANCE_SEC:-300}
+      ATTACHMENT_MAX_BYTES: ${ATTACHMENT_MAX_BYTES:-10485760}
+      ATTACHMENT_ALLOWED_MIME: ${ATTACHMENT_ALLOWED_MIME:-image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain}
       OTEL_SERVICE_NAME: socket-gateway
 
   workers:

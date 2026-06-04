@@ -1,7 +1,8 @@
-import { readItems, createItem, updateItem, deleteItem } from '@directus/sdk';
+import { readItems, readFiles, createItem, updateItem, deleteItem } from '@directus/sdk';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
 import type { SenderType } from '@yiji/shared-types';
 import type { CustomerClaims } from './auth/customer-jwt.js';
+import type { AttachmentMeta } from './attachments.js';
 
 /**
  * Gateway persistence via the Directus service account. The gateway is the sole
@@ -126,6 +127,28 @@ export class GatewayDirectus {
     if (!rows[0] || !rows[0].is_internal_note) return false;
     await this.client.request(deleteItem('messages', messageId));
     return true;
+  }
+
+  /**
+   * Resolve metadata for the given Directus file UUIDs (for attachment
+   * MIME/size validation). Missing ids simply aren't returned, so the caller
+   * treats "not found" as a rejection.
+   */
+  async getFilesMeta(ids: string[]): Promise<AttachmentMeta[]> {
+    if (ids.length === 0) return [];
+    const rows = (await this.client.request(
+      readFiles({
+        filter: { id: { _in: ids } },
+        fields: ['id', 'type', 'filesize'],
+        limit: ids.length,
+      }),
+    )) as Array<{ id: string; type: string | null; filesize: number | string | null }>;
+    return rows.map((r) => ({
+      id: r.id,
+      type: r.type ?? null,
+      // Directus returns filesize as a bigint string; coerce to number.
+      filesize: r.filesize === null || r.filesize === undefined ? null : Number(r.filesize),
+    }));
   }
 
   /** Conversations an agent may see (assigned to them or unassigned). */

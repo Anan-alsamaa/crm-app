@@ -20,6 +20,8 @@ import { createHs256Verifier } from './auth/customer-jwt.js';
 import { createProducer } from './queue.js';
 import { registerConnection, getAgentPresenceSnapshot } from './connection.js';
 import { Registry } from './metrics.js';
+import { parseAttachmentPolicy } from './attachments.js';
+import { verifyWebhookSignature } from './webhook.js';
 
 /** Reachability ping to Directus /server/health with a hard timeout. */
 async function pingDirectus(url: string, timeoutMs = 2000): Promise<boolean> {
@@ -105,10 +107,27 @@ async function main(): Promise<void> {
     verifier,
     producer,
     logger,
+    attachmentPolicy: parseAttachmentPolicy(
+      config.ATTACHMENT_MAX_BYTES,
+      config.ATTACHMENT_ALLOWED_MIME,
+    ),
   });
 
   const app = Fastify({ loggerInstance: logger as unknown as FastifyBaseLogger });
   applySecurityHeaders(app);
+
+  // Capture the raw JSON body so the webhook HMAC can be computed over the exact
+  // bytes the sender signed. The other endpoints are GETs with no body, so a
+  // global parser is safe here.
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body: string, done) => {
+    (req as { rawBody?: string }).rawBody = body;
+    try {
+      done(null, body ? JSON.parse(body) : {});
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
+
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/ready', async (_req, reply) => {
     const checks: Record<string, string> = {};
@@ -137,6 +156,30 @@ async function main(): Promise<void> {
   app.get('/metrics', async (_req, reply) => {
     reply.header('content-type', metrics.contentType);
     return metrics.render();
+  });
+  // Inbound webhook receiver (e.g. Yiji platform events). Rejects anything
+  // without a valid HMAC signature + fresh timestamp. Disabled (503) until a
+  // secret is configured, so it is never an unauthenticated open endpoint.
+  app.post('/webhooks/yiji', async (req, reply) => {
+    if (!config.YIJI_WEBHOOK_SECRET) {
+      return reply.code(503).send({ status: 'webhooks-not-configured' });
+    }
+    const result = verifyWebhookSignature({
+      secret: config.YIJI_WEBHOOK_SECRET,
+      rawBody: (req as { rawBody?: string }).rawBody ?? '',
+      signature: req.headers['x-yiji-signature'] as string | undefined,
+      timestamp: req.headers['x-yiji-timestamp'] as string | undefined,
+      toleranceSec: config.WEBHOOK_TOLERANCE_SEC,
+    });
+    if (!result.valid) {
+      logger.warn({ reason: result.reason }, 'webhook signature rejected');
+      return reply.code(401).send({ status: 'invalid-signature' });
+    }
+    const event = (req.body as { type?: string } | undefined)?.type ?? 'unknown';
+    logger.info({ event }, 'webhook accepted');
+    // Signature verified. Downstream processing (fan-out / enqueue) is wired by
+    // the consuming pipeline; we acknowledge receipt here.
+    return reply.code(202).send({ status: 'accepted', event });
   });
   // Diagnostic: inspect which agents the gateway thinks are currently
   // online (and how many sockets each is holding). Useful for chasing the

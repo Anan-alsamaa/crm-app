@@ -21,6 +21,16 @@ const schema = z
     // Production refuses `*`.
     CORS_ORIGIN: z.string().default('*'),
     LOG_LEVEL: z.string().default('info'),
+    // Inbound webhook HMAC secret. When empty, POST /webhooks/yiji returns 503
+    // (not configured) so the endpoint is never an unauthenticated open door.
+    YIJI_WEBHOOK_SECRET: z.string().default(''),
+    // Replay-protection window for webhook timestamps (seconds).
+    WEBHOOK_TOLERANCE_SEC: numericEnv(300),
+    // Attachment validation: max size + allowed MIME types (comma-separated).
+    ATTACHMENT_MAX_BYTES: numericEnv(10 * 1024 * 1024),
+    ATTACHMENT_ALLOWED_MIME: z
+      .string()
+      .default('image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain'),
   })
   .superRefine((cfg, ctx) => {
     if (cfg.NODE_ENV !== 'production') return;

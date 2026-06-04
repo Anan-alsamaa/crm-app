@@ -16,6 +16,7 @@ import { CustomerTokenError } from './auth/customer-jwt.js';
 import { validateAgentToken } from './auth/agent-jwt.js';
 import type { SideEffectProducer } from './queue.js';
 import { createAgentPresence } from './agent-presence.js';
+import { validateAttachments, type AttachmentPolicy } from './attachments.js';
 
 interface SocketData {
   kind: 'customer' | 'agent';
@@ -33,6 +34,7 @@ export interface ConnectionDeps {
   verifier: CustomerVerifier;
   producer: SideEffectProducer;
   logger: Logger;
+  attachmentPolicy: AttachmentPolicy;
 }
 
 /** In-memory presence per vendor room (per gateway instance). */
@@ -161,7 +163,7 @@ async function onAgentConnect(socket: Socket, { directus }: ConnectionDeps): Pro
 }
 
 function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
-  const { io, directus, producer, logger } = deps;
+  const { io, directus, producer, logger, attachmentPolicy } = deps;
   const data = socket.data as SocketData;
 
   // Explicit logout signal from an agent. We mirror the disconnect cleanup
@@ -203,6 +205,18 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       return socket.emit(SOCKET_EVENTS.error, { code: 'bad_payload', message: 'invalid message' });
     const { conversationId, content, attachments, clientMsgId } = parsed.data;
     try {
+      // Attachment validation (MIME allow-list + size cap) before persisting.
+      if (attachments && attachments.length > 0) {
+        const metas = await directus.getFilesMeta(attachments);
+        const check = validateAttachments(attachments, metas, attachmentPolicy);
+        if (!check.ok) {
+          logger.warn({ conversationId, reason: check.reason }, 'attachment rejected');
+          return socket.emit(SOCKET_EVENTS.error, {
+            code: 'attachment_rejected',
+            message: check.reason ?? 'attachment not allowed',
+          });
+        }
+      }
       const senderType = data.kind === 'agent' ? 'agent' : 'customer';
       const saved = await directus.persistMessage({
         conversationId,

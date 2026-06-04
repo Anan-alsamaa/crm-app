@@ -335,6 +335,10 @@ compose files and verifies bootstrap idempotence on a fresh DB.
 - [ ] Postgres on a private network, distinct service user.
 - [ ] File storage uses signed-URL access for uploads.
 - [ ] PII redaction enabled on the AI gateway (default in shipped code).
+- [ ] `YIJI_WEBHOOK_SECRET` set if inbound webhooks are used (HMAC-SHA256 +
+      timestamp replay window verified at `POST /webhooks/yiji`; empty = 503).
+- [ ] Attachment policy tuned: `ATTACHMENT_MAX_BYTES` + `ATTACHMENT_ALLOWED_MIME`
+      (enforced on `message:send` against Directus file metadata).
 - [ ] Monthly AI cap + per-user/global rate limits tuned to budget.
 - [ ] Append-only `ticket_events` permission intact (no UPDATE/DELETE for Agent/Admin).
 - [ ] Secrets injected from a secret store, never baked into images/compose.
