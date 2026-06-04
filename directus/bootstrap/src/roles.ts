@@ -165,6 +165,7 @@ export const roles: RoleSpec[] = [
       { collection: 'messages', action: 'create' },
       { collection: 'messages', action: 'read' },
       { collection: 'messages', action: 'update' },
+      { collection: 'messages', action: 'delete' },
       { collection: 'csat_responses', action: 'create' },
       { collection: 'csat_responses', action: 'read' },
       ...readOnly('directus_users'),

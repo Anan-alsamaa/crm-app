@@ -72,18 +72,36 @@
       .top-spacer { flex: 1; }
       .top-status {
         display: inline-flex; align-items: center; gap: 6px;
-        font-size: 12.5px; color: var(--muted);
+        font-size: 12.5px;
         padding: 6px 11px;
-        background: rgba(74, 222, 128, 0.1);
-        color: oklch(0.45 0.15 145);
         border-radius: 999px;
         font-weight: 500;
+        background: rgba(74, 222, 128, 0.1);
+        color: oklch(0.45 0.15 145);
+        transition: background-color 200ms ease, color 200ms ease;
       }
       .top-status::before {
         content: '';
         width: 6px; height: 6px; border-radius: 999px;
         background: oklch(0.55 0.18 145);
         box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.18);
+        transition: background-color 200ms ease, box-shadow 200ms ease;
+      }
+      .top-status.is-offline {
+        background: rgba(234, 179, 8, 0.12);
+        color: oklch(0.46 0.15 70);
+      }
+      .top-status.is-offline::before {
+        background: oklch(0.62 0.16 70);
+        box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.18);
+      }
+      .top-status.is-pending {
+        background: oklch(0.22 0.005 250 / 0.06);
+        color: var(--muted);
+      }
+      .top-status.is-pending::before {
+        background: var(--muted);
+        box-shadow: 0 0 0 3px oklch(0.22 0.005 250 / 0.08);
       }
 
       /* ───── Hero ───── */
@@ -265,7 +283,7 @@
         <span class="brand-name">Yiji <span>· Support</span></span>
       </a>
       <span class="top-spacer"></span>
-      <span class="top-status" id="status-badge">We&rsquo;re online now</span>
+      <span class="top-status is-pending" id="status-badge">Checking team availability…</span>
     </header>
 
     <main class="page">
@@ -358,6 +376,28 @@
       </footer>
     </main>
 
+    <script>
+      // Mirror the gateway's live agent-presence onto the top-bar status
+      // pill. The widget dispatches `yiji:agents-presence` on `window` every
+      // time the count changes (and once on initial connect via the `ready`
+      // event). Until the first event arrives, the badge stays in its
+      // neutral "Checking…" state so we don't lie either direction.
+      (function () {
+        var badge = document.getElementById('status-badge');
+        if (!badge) return;
+        window.addEventListener('yiji:agents-presence', function (e) {
+          var count = (e && e.detail && typeof e.detail.count === 'number') ? e.detail.count : 0;
+          badge.classList.remove('is-pending');
+          if (count > 0) {
+            badge.classList.remove('is-offline');
+            badge.textContent = 'We’re online now';
+          } else {
+            badge.classList.add('is-offline');
+            badge.textContent = 'Our team is offline right now';
+          }
+        });
+      })();
+    </script>
     <script type="module" src="/src/demo.ts"></script>
   </body>
 </html>

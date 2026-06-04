@@ -99,7 +99,10 @@
     "contact": "Contact",
     "tags": "Tags",
     "linkedTickets": "Linked tickets",
-    "noTickets": "No linked tickets."
+    "noTickets": "No linked tickets.",
+    "internalNotes": "Internal notes",
+    "noNotes": "No internal notes yet.",
+    "removeNote": "Remove note"
   },
   "tickets": {
     "title": "Tickets",

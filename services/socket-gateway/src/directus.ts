@@ -1,4 +1,4 @@
-import { readItems, createItem, updateItem } from '@directus/sdk';
+import { readItems, createItem, updateItem, deleteItem } from '@directus/sdk';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
 import type { SenderType } from '@yiji/shared-types';
 import type { CustomerClaims } from './auth/customer-jwt.js';
@@ -107,6 +107,25 @@ export class GatewayDirectus {
       } as never),
     );
     return { id: created.id, createdAt: now };
+  }
+
+  /**
+   * Delete an internal note. Guarded server-side: we re-read the message and
+   * verify it is in the claimed conversation and IS an internal note before
+   * touching it, so a malformed client cannot delete a real customer/agent
+   * message by ID. Returns true on delete, false if not found / not a note.
+   */
+  async deleteInternalNote(conversationId: string, messageId: string): Promise<boolean> {
+    const rows = (await this.client.request(
+      readItems('messages', {
+        filter: { id: { _eq: messageId }, conversation: { _eq: conversationId } },
+        fields: ['id', 'is_internal_note'],
+        limit: 1,
+      }),
+    )) as Array<{ id: string; is_internal_note: boolean }>;
+    if (!rows[0] || !rows[0].is_internal_note) return false;
+    await this.client.request(deleteItem('messages', messageId));
+    return true;
   }
 
   /** Conversations an agent may see (assigned to them or unassigned). */

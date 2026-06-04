@@ -29,6 +29,12 @@ export const NoteAdd = z.object({
 });
 export type NoteAdd = z.infer<typeof NoteAdd>;
 
+export const NoteDelete = z.object({
+  conversationId: idSchema,
+  noteId: idSchema,
+});
+export type NoteDelete = z.infer<typeof NoteDelete>;
+
 export const TypingSignal = z.object({ conversationId: z.string() });
 export type TypingSignal = z.infer<typeof TypingSignal>;
 
@@ -91,6 +97,7 @@ export const SOCKET_EVENTS = {
   // client → server
   messageSend: 'message:send',
   noteAdd: 'note:add',
+  noteDelete: 'note:delete',
   typingStart: 'typing:start',
   typingStop: 'typing:stop',
   readAck: 'read:ack',
@@ -102,6 +109,7 @@ export const SOCKET_EVENTS = {
   conversationChanged: 'conversation:changed',
   messageNew: 'message:new',
   noteNew: 'note:new',
+  noteDeleted: 'note:deleted',
   typingUpdate: 'typing:update',
   agentAssigned: 'agent:assigned',
   conversationStatusChanged: 'conversation:status_changed',

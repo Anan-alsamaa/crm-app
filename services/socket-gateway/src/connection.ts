@@ -5,6 +5,7 @@ import {
   rooms,
   MessageSend,
   NoteAdd,
+  NoteDelete,
   TypingSignal,
   ReadAck,
   type MessageNew,
@@ -49,13 +50,41 @@ function removePresence(vendorId: string, id: string): string[] {
 
 /**
  * Agent presence — global across vendors. Agents serve every vendor in this
- * release, so a single count is enough. When count transitions to/from 0
- * we broadcast to every connected socket so customer widgets can show an
- * "agents offline" fallback.
+ * release, so a single count is enough. We count DISTINCT logged-in agents,
+ * not raw sockets: one agent with three tabs open is still "one online".
+ * That matches the operational rule the host page advertises — even a single
+ * logged-in agent with the app open in any tab = online.
+ *
+ * - `agentSocketUser[socketId]` records which user a given socket belongs to,
+ *   so on disconnect we know whose count to decrement without re-reading
+ *   socket.data.
+ * - `agentRefCount[userId]` is the number of live sockets for that agent.
+ * - distinctAgentCount() = number of keys with refCount > 0.
  */
-const agentSockets = new Set<string>();
+const agentSocketUser = new Map<string, string>();
+const agentRefCount = new Map<string, number>();
+function distinctAgentCount(): number {
+  return agentRefCount.size;
+}
+function addAgentSocket(socketId: string, userId: string): void {
+  agentSocketUser.set(socketId, userId);
+  agentRefCount.set(userId, (agentRefCount.get(userId) ?? 0) + 1);
+}
+/** Returns true if this drop changed the distinct-user count (someone went offline). */
+function removeAgentSocket(socketId: string): boolean {
+  const userId = agentSocketUser.get(socketId);
+  if (!userId) return false;
+  agentSocketUser.delete(socketId);
+  const next = (agentRefCount.get(userId) ?? 1) - 1;
+  if (next <= 0) {
+    agentRefCount.delete(userId);
+    return true;
+  }
+  agentRefCount.set(userId, next);
+  return false;
+}
 function broadcastAgentPresence(io: import('socket.io').Server): void {
-  io.emit(SOCKET_EVENTS.agentsPresence, { count: agentSockets.size });
+  io.emit(SOCKET_EVENTS.agentsPresence, { count: distinctAgentCount() });
 }
 
 export function registerConnection(deps: ConnectionDeps): void {
@@ -97,10 +126,13 @@ export function registerConnection(deps: ConnectionDeps): void {
   io.on('connection', (socket) => {
     const data = socket.data as SocketData;
     if (data.kind === 'customer') void onCustomerConnect(socket, deps);
-    else {
+    else if (data.agentId) {
       void onAgentConnect(socket, deps);
-      agentSockets.add(socket.id);
-      broadcastAgentPresence(io);
+      const before = distinctAgentCount();
+      addAgentSocket(socket.id, data.agentId);
+      // Only broadcast when DISTINCT count changed (first tab from this
+      // agent). Subsequent tabs from the same agent don't move the dial.
+      if (distinctAgentCount() !== before) broadcastAgentPresence(io);
     }
 
     registerHandlers(socket, deps);
@@ -113,9 +145,8 @@ export function registerConnection(deps: ConnectionDeps): void {
           online,
         });
       } else if (data.kind === 'agent') {
-        if (agentSockets.delete(socket.id)) {
-          broadcastAgentPresence(io);
-        }
+        // True only when the LAST tab for this agent closed (they went offline).
+        if (removeAgentSocket(socket.id)) broadcastAgentPresence(io);
       }
     });
   });
@@ -138,7 +169,7 @@ async function onCustomerConnect(socket: Socket, { io }: ConnectionDeps): Promis
   socket.emit('ready', {
     conversationId: data.conversationId,
     branding: data.vendorColors ?? null,
-    agentsOnline: agentSockets.size,
+    agentsOnline: distinctAgentCount(),
   });
 }
 
@@ -189,6 +220,26 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
         code: 'persist_failed',
         message: 'could not send message',
       });
+    }
+  });
+
+  // Delete an internal note: agents only. The directus helper re-checks the
+  // message is in this conversation AND is actually an internal note, so a
+  // crafted payload can't wipe a real customer message.
+  socket.on(SOCKET_EVENTS.noteDelete, async (raw: unknown) => {
+    if (data.kind !== 'agent') return;
+    const parsed = NoteDelete.safeParse(raw);
+    if (!parsed.success) return;
+    const { conversationId, noteId } = parsed.data;
+    try {
+      const ok = await directus.deleteInternalNote(conversationId, noteId);
+      if (!ok) return;
+      io.to(rooms.conversation(conversationId)).emit(SOCKET_EVENTS.noteDeleted, {
+        conversationId,
+        noteId,
+      });
+    } catch (err) {
+      logger.error({ err }, 'note:delete failed');
     }
   });
 

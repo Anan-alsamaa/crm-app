@@ -31,6 +31,18 @@ interface Branding {
 let msgSeq = 0;
 const clientId = () => `c${Date.now()}_${msgSeq++}`;
 
+/**
+ * Surface gateway agent-presence to the host page via a window CustomEvent.
+ * Host pages can subscribe with:
+ *   window.addEventListener('yiji:agents-presence', (e) => e.detail.count)
+ * to mirror live status in their own UI (e.g. a top-bar online/offline pill)
+ * without having to talk to the gateway directly.
+ */
+function broadcastPresenceToHost(count: number): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('yiji:agents-presence', { detail: { count } }));
+}
+
 /* Inline icons — no library, no emoji. Keep the bundle small. */
 function ChatIcon() {
   return (
@@ -185,8 +197,12 @@ export function Widget({ config }: { config: WidgetConfig }) {
         if (b && typeof b === 'object') setBranding(b as Branding);
         setAgentsOnline(count);
         setReady(true);
+        broadcastPresenceToHost(count);
       },
-      onAgentsPresence: (count) => setAgentsOnline(count),
+      onAgentsPresence: (count) => {
+        setAgentsOnline(count);
+        broadcastPresenceToHost(count);
+      },
       onMessage: (msg) => {
         setMessages((prev) => {
           if (msg.clientMsgId && prev.some((m) => m.clientMsgId === msg.clientMsgId)) {

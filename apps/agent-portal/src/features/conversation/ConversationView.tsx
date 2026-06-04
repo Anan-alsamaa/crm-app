@@ -141,13 +141,20 @@ export function ConversationView({ conversationId }: { conversationId: string })
         if (e.conversationId !== conversationId) return;
         void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       };
+      const onNoteDeleted = (e: { conversationId: string; noteId: string }) => {
+        if (e.conversationId !== conversationId) return;
+        setLive((prev) => prev.filter((m) => m.id !== e.noteId));
+        void qc.invalidateQueries({ queryKey: ['messages', conversationId] });
+      };
       socket.on(SOCKET_EVENTS.messageNew, onNew);
       socket.on(SOCKET_EVENTS.noteNew, onNoteNew);
+      socket.on(SOCKET_EVENTS.noteDeleted, onNoteDeleted);
       socket.on(SOCKET_EVENTS.typingUpdate, onTyping);
       socket.on(SOCKET_EVENTS.conversationChanged, onChanged);
       return () => {
         socket.off(SOCKET_EVENTS.messageNew, onNew);
         socket.off(SOCKET_EVENTS.noteNew, onNoteNew);
+        socket.off(SOCKET_EVENTS.noteDeleted, onNoteDeleted);
         socket.off(SOCKET_EVENTS.typingUpdate, onTyping);
         socket.off(SOCKET_EVENTS.conversationChanged, onChanged);
       };
@@ -163,7 +170,17 @@ export function ConversationView({ conversationId }: { conversationId: string })
     return [...base, ...live.filter((m) => !seen.has(m.id))];
   }, [messagesQuery.data, live]);
 
-  const grouped = useMemo(() => groupRuns(all), [all]);
+  // Internal notes live in the sidebar, not the conversation thread.
+  const threadMessages = useMemo(() => all.filter((m) => !m.is_internal_note), [all]);
+  const notes = useMemo(() => all.filter((m) => m.is_internal_note), [all]);
+  const grouped = useMemo(() => groupRuns(threadMessages), [threadMessages]);
+
+  const deleteNote = (noteId: string) => {
+    if (!socketRef.current) return;
+    // Optimistic local removal — gateway broadcast will confirm + refetch.
+    setLive((prev) => prev.filter((m) => m.id !== noteId));
+    socketRef.current.emit(SOCKET_EVENTS.noteDelete, { conversationId, noteId });
+  };
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -467,7 +484,11 @@ export function ConversationView({ conversationId }: { conversationId: string })
         </div>
       </div>
 
-      <ConversationSidebar conversationId={conversationId} />
+      <ConversationSidebar
+        conversationId={conversationId}
+        notes={notes}
+        onDeleteNote={deleteNote}
+      />
     </div>
   );
 }

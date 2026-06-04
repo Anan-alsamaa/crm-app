@@ -1,11 +1,13 @@
 import { useTranslation } from 'react-i18next';
-import { Avatar, Pill, Spinner } from '@yiji/ui';
-import { useConversation, useLinkedTickets } from '../inbox/api.js';
+import { Avatar, Pill, Spinner, formatRelative } from '@yiji/ui';
+import { useConversation, useLinkedTickets, type ConversationMessage } from '../inbox/api.js';
 import { AiPanel } from '../ai/AiPanel.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 
 interface Props {
   conversationId: string;
+  notes?: ConversationMessage[];
+  onDeleteNote?: (noteId: string) => void;
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -24,7 +26,7 @@ const TICKET_TONE: Record<string, 'success' | 'warning' | 'muted' | 'primary' | 
   reopened: 'neutral',
 };
 
-export function ConversationSidebar({ conversationId }: Props) {
+export function ConversationSidebar({ conversationId, notes, onDeleteNote }: Props) {
   const { t } = useTranslation();
   const convo = useConversation(conversationId);
   const tickets = useLinkedTickets(conversationId);
@@ -125,6 +127,58 @@ export function ConversationSidebar({ conversationId }: Props) {
               : ((c as unknown as { vendor?: string }).vendor ?? 'unknown')
           }
         />
+      </section>
+
+      {/* Internal notes — agent-only side conversation. Authored by the team,
+          rendered out of the customer thread so they can't bleed in visually. */}
+      <section className="px-6 py-4">
+        <SectionLabel>
+          {t('sidebar.internalNotes', { defaultValue: 'Internal notes' })}
+        </SectionLabel>
+        {notes && notes.length > 0 ? (
+          <ul className="space-y-2.5">
+            {notes.map((n) => (
+              <li
+                key={n.id}
+                className="group relative rounded-lg bg-warning/10 px-3 py-2.5 ring-1 ring-warning/20"
+              >
+                <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
+                  {n.content}
+                </p>
+                <div className="mt-1.5 flex items-center justify-between gap-2 text-2xs text-muted-foreground">
+                  <span className="tabular-nums">
+                    {n.date_created ? formatRelative(n.date_created) : ''}
+                  </span>
+                  {onDeleteNote && (
+                    <button
+                      type="button"
+                      onClick={() => onDeleteNote(n.id)}
+                      aria-label={t('sidebar.removeNote', { defaultValue: 'Remove note' })}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity duration-fast hover:bg-warning/20 hover:text-warning focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-warning/50 group-hover:opacity-100"
+                    >
+                      <svg
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-3.5 w-3.5"
+                        aria-hidden
+                      >
+                        <path d="M3 4h10M6.5 4V2.5h3V4M5 4l.5 9a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1L11 4M7 7v4M9 7v4" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {t('sidebar.noNotes', { defaultValue: 'No internal notes yet.' })}
+          </p>
+        )}
       </section>
 
       {/* Linked tickets — borderless rows with hover lift, not stacked cards. */}
