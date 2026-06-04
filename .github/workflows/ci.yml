@@ -39,6 +39,58 @@ jobs:
     name: Playwright E2E
     runs-on: ubuntu-latest
     needs: quality
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: yiji_crm
+          POSTGRES_USER: directus
+          POSTGRES_PASSWORD: directus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U directus -d yiji_crm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      # Directus
+      DIRECTUS_KEY: ci-test-directus-key-not-secret-32c
+      DIRECTUS_SECRET: ci-test-directus-secret-not-secret
+      DIRECTUS_ADMIN_EMAIL: e.habibi@anan.sa
+      DIRECTUS_ADMIN_PASSWORD: '123456'
+      DIRECTUS_PUBLIC_URL: http://localhost:8055
+      DIRECTUS_URL: http://localhost:8055
+      # Postgres (the service container exposes itself on localhost)
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_DATABASE: yiji_crm
+      DB_USER: directus
+      DB_PASSWORD: directus
+      # Redis
+      REDIS_URL: redis://localhost:6379
+      # Customer JWT secret (matches the widget demo harness)
+      YIJI_JWT_SECRET: dev-yiji-secret
+      # Service-account tokens — gateway only for these specs
+      SVC_GATEWAY_TOKEN: dev-gateway-token-for-local-only
+      SVC_WORKERS_TOKEN: dev-workers-token-for-local-only
+      SVC_AI_TOKEN: dev-ai-token-for-local-only
+      # Frontend public vars
+      VITE_DIRECTUS_URL: http://localhost:8055
+      VITE_SOCKET_URL: http://localhost:8080
+      VITE_AI_GATEWAY_URL: http://localhost:8081
+
     steps:
       - uses: actions/checkout@v4
 
@@ -56,5 +108,127 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Start Directus
+        # The Directus container needs the bootstrap extensions (e.g.
+        # lock-project-owner) mounted from the repo. --network=host so the
+        # container can reach the postgres/redis service containers on
+        # localhost, and so the test runner can reach Directus on :8055.
+        run: |
+          docker run -d --name directus --network=host \
+            -e KEY=$DIRECTUS_KEY \
+            -e SECRET=$DIRECTUS_SECRET \
+            -e ADMIN_EMAIL=$DIRECTUS_ADMIN_EMAIL \
+            -e ADMIN_PASSWORD=$DIRECTUS_ADMIN_PASSWORD \
+            -e PUBLIC_URL=$DIRECTUS_PUBLIC_URL \
+            -e DB_CLIENT=pg \
+            -e DB_HOST=localhost -e DB_PORT=5432 \
+            -e DB_DATABASE=$DB_DATABASE \
+            -e DB_USER=$DB_USER -e DB_PASSWORD=$DB_PASSWORD \
+            -e REDIS=$REDIS_URL \
+            -e CACHE_ENABLED=true -e CACHE_STORE=redis \
+            -e WEBSOCKETS_ENABLED=true \
+            -e STORAGE_LOCATIONS=local -e STORAGE_LOCAL_DRIVER=local \
+            -e STORAGE_LOCAL_ROOT=/directus/uploads \
+            -v ${{ github.workspace }}/directus/extensions:/directus/extensions \
+            -v ${{ github.workspace }}/directus/snapshot:/directus/snapshot \
+            directus/directus:11
+
+      - name: Wait for Directus to be healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8055/server/health > /dev/null; then
+              echo "Directus is up after ${i} attempts"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Directus failed to become healthy"
+          docker logs directus | tail -100
+          exit 1
+
+      - name: Bootstrap Directus schema + roles + owner
+        # SVC_GATEWAY_TOKEN/SVC_WORKERS_TOKEN/SVC_AI_TOKEN are in env, so
+        # bootstrap creates each service user with its static token set —
+        # no follow-up PATCH needed for those.
+        run: pnpm --filter @yiji/directus-bootstrap apply
+
+      - name: Seed demo vendor
+        # The widget chat spec sends vendor_id=demo-vendor in its JWT; the
+        # gateway then looks up vendors where yiji_vendor_id=demo-vendor.
+        # That row is created by hand via the admin portal locally — seed
+        # it here so the spec works headless.
+        run: |
+          TOKEN=$(curl -sf -X POST http://localhost:8055/auth/login \
+            -H 'content-type: application/json' \
+            -d "{\"email\":\"$DIRECTUS_ADMIN_EMAIL\",\"password\":\"$DIRECTUS_ADMIN_PASSWORD\"}" \
+            | jq -r .data.access_token)
+          EXISTING=$(curl -sf -H "authorization: Bearer $TOKEN" \
+            'http://localhost:8055/items/vendors?filter[yiji_vendor_id][_eq]=demo-vendor&fields=id&limit=1' \
+            | jq -r '.data[0].id // empty')
+          if [ -z "$EXISTING" ]; then
+            curl -sf -X POST http://localhost:8055/items/vendors \
+              -H "authorization: Bearer $TOKEN" \
+              -H 'content-type: application/json' \
+              -d '{"yiji_vendor_id":"demo-vendor","name":"Demo Vendor","status":"active"}' > /dev/null
+            echo "Seeded demo-vendor"
+          else
+            echo "demo-vendor already present (id=$EXISTING)"
+          fi
+
+      - name: Start socket-gateway + dev servers
+        # REDIS_ENABLED=false runs the gateway in single-instance mode; we
+        # don't need the Redis adapter for a one-runner E2E job.
+        run: |
+          REDIS_ENABLED=false PORT=8080 \
+            pnpm --filter @yiji/socket-gateway dev > gateway.log 2>&1 &
+          pnpm --filter @yiji/agent-portal dev > agent-portal.log 2>&1 &
+          pnpm --filter @yiji/admin-portal dev > admin-portal.log 2>&1 &
+          pnpm --filter @yiji/chat-widget dev > chat-widget.log 2>&1 &
+          echo "background services launched"
+
+      - name: Wait for services
+        run: |
+          for entry in "8081:gateway-health" "5173:agent-portal" "5174:admin-portal" "5175:chat-widget"; do
+            port="${entry%%:*}"
+            name="${entry##*:}"
+            up=0
+            for i in $(seq 1 60); do
+              if curl -sf http://localhost:$port > /dev/null 2>&1; then
+                echo "${name} (:${port}) is up"
+                up=1; break
+              fi
+              sleep 2
+            done
+            if [ $up -ne 1 ]; then
+              echo "${name} (:${port}) failed to come up"
+              tail -80 *.log || true
+              exit 1
+            fi
+          done
+
       - name: Run E2E
         run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Upload service logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-logs
+          path: |
+            gateway.log
+            agent-portal.log
+            admin-portal.log
+            chat-widget.log
+          retention-days: 7
+
+      - name: Dump Directus logs on failure
+        if: failure()
+        run: docker logs directus | tail -200 || true
