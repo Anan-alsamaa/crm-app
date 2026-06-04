@@ -23,6 +23,7 @@ import { Login } from './pages/Login.js';
 import { NotificationBell } from './features/notifications/NotificationBell.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
+import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
 
 // Route pages are code-split so the initial bundle stays lean; each loads on
 // first navigation behind the shared Suspense fallback below.
@@ -247,6 +248,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         </ErrorBoundary>
       </AppShell>
       <AppCommandPalette />
+      <AppKeyboardShortcuts />
       <Toaster position="bottom" />
     </>
   );

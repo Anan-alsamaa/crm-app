@@ -255,5 +255,13 @@
     "users": "المستخدمون",
     "teams": "الفرق",
     "actions": "إجراءات سريعة"
+  },
+  "shortcuts": {
+    "title": "اختصارات لوحة المفاتيح",
+    "navigation": "التنقل",
+    "general": "عام",
+    "commandPalette": "لوحة الأوامر",
+    "showShortcuts": "عرض هذه المساعدة",
+    "closeDialogs": "إغلاق النوافذ"
   }
 }

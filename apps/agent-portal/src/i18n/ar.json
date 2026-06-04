@@ -236,5 +236,13 @@
     "saved": "تم حفظ الحقول المخصّصة.",
     "saveError": "تعذّر الحفظ.",
     "title": "حقول مخصّصة"
+  },
+  "shortcuts": {
+    "title": "اختصارات لوحة المفاتيح",
+    "navigation": "التنقل",
+    "general": "عام",
+    "commandPalette": "لوحة الأوامر",
+    "showShortcuts": "عرض هذه المساعدة",
+    "closeDialogs": "إغلاق النوافذ"
   }
 }

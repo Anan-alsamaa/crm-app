@@ -22,6 +22,7 @@ import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
+import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
 
 // Route pages are code-split so the initial bundle stays lean.
 const UsersPage = lazy(() =>
@@ -278,6 +279,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         </ErrorBoundary>
       </AppShell>
       <AppCommandPalette />
+      <AppKeyboardShortcuts />
       <Toaster position="bottom" />
     </>
   );

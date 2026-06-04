@@ -255,5 +255,13 @@
     "users": "Users",
     "teams": "Teams",
     "actions": "Quick actions"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "navigation": "Navigation",
+    "general": "General",
+    "commandPalette": "Command palette",
+    "showShortcuts": "Show this help",
+    "closeDialogs": "Close dialogs"
   }
 }

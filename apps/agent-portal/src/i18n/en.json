@@ -236,5 +236,13 @@
     "saved": "Custom fields saved.",
     "saveError": "Could not save.",
     "title": "Custom fields"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "navigation": "Navigation",
+    "general": "General",
+    "commandPalette": "Command palette",
+    "showShortcuts": "Show this help",
+    "closeDialogs": "Close dialogs"
   }
 }
