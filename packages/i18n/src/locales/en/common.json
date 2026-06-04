@@ -11,7 +11,8 @@
     "search": "Search",
     "send": "Send",
     "close": "Close",
-    "loading": "Loading"
+    "loading": "Loading",
+    "remove": "Remove"
   },
   "auth": {
     "signIn": "Sign in",

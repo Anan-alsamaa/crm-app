@@ -54,7 +54,13 @@
     "title": "Sign in to YIJI CRM",
     "submit": "Sign in",
     "error": "Invalid email or password",
-    "emailPlaceholder": "you@company.com"
+    "emailPlaceholder": "you@company.com",
+    "subtitle": "Continue helping your customers.",
+    "forgot": "Forgot password?",
+    "hidePassword": "Hide",
+    "showPassword": "Reveal",
+    "secure": "Secured by JWT + TLS",
+    "help": "Trouble signing in? Talk to your administrator."
   },
   "nav": {
     "inbox": "Inbox",
@@ -64,7 +70,9 @@
     "primary": "Primary navigation",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
-    "signedInAs": "Signed in as {{name}}"
+    "signedInAs": "Signed in as {{name}}",
+    "work": "Work",
+    "account": "Account"
   },
   "inbox": {
     "title": "Shared Inbox",
@@ -84,7 +92,14 @@
     "bulkAddTag": "Add tag…",
     "bulkClear": "Clear",
     "bulkStatusDone": "Updated {{count}} conversation(s).",
-    "bulkTagDone": "Tagged {{count}} conversation(s)."
+    "bulkTagDone": "Tagged {{count}} conversation(s).",
+    "stats": {
+      "open": "open",
+      "urgent": "urgent",
+      "unread": "unread"
+    },
+    "emptyHint": "New conversations from your widget land here in real time.",
+    "welcomeHint": "Pick the next thread on the left, or use the stats above to filter by what needs attention first."
   },
   "conversation": {
     "replyPlaceholder": "Type a reply…",
@@ -101,7 +116,14 @@
     "noTeam": "No team",
     "addTag": "Tag",
     "backToInbox": "Back to inbox",
-    "details": "Conversation details"
+    "details": "Conversation details",
+    "you": "You",
+    "tab": {
+      "reply": "Reply",
+      "note": "Internal note"
+    },
+    "sendHint": "to send",
+    "newlineHint": "for newline"
   },
   "sidebar": {
     "contact": "Contact",
@@ -139,7 +161,14 @@
       "closed": "Closed",
       "reopened": "Reopened",
       "automation_triggered": "Automation triggered"
-    }
+    },
+    "created": "Ticket created",
+    "createHint": "Capture the work as a ticket so it can be tracked against an SLA.",
+    "filterAll": "All",
+    "overdue": "overdue",
+    "emptyHint": "Tickets are created from conversations that need follow-up.",
+    "selectHint": "Pick a ticket on the left to see its workflow, SLA timeline, and history.",
+    "slaSection": "SLA"
   },
   "notifications": {
     "title": "Notifications",
@@ -154,7 +183,16 @@
       "reminder": "Reminder",
       "escalation": "Escalation",
       "automation": "Automation"
-    }
+    },
+    "allRead": "All caught up",
+    "markAllRead": "Mark all read",
+    "emptyHint": "New SLA warnings, mentions, and assignments land here.",
+    "emptyAllHint": "You have no notifications yet.",
+    "today": "Today",
+    "earlier": "Earlier",
+    "view": "View",
+    "managePreferences": "Manage notification preferences",
+    "unreadCount": "{{count}} unread"
   },
   "preferences": {
     "title": "Notification preferences",
@@ -169,5 +207,16 @@
     },
     "saved": "Preferences saved.",
     "error": "Could not save preferences."
+  },
+  "cmd": {
+    "pages": "Pages",
+    "conversations": "Conversations",
+    "tickets": "Tickets",
+    "actions": "Quick actions"
+  },
+  "customFields": {
+    "saved": "Custom fields saved.",
+    "saveError": "Could not save.",
+    "title": "Custom fields"
   }
 }

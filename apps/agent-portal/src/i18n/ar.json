@@ -18,7 +18,13 @@
     "title": "تسجيل الدخول إلى بوابة الوكيل",
     "submit": "تسجيل الدخول",
     "error": "البريد الإلكتروني أو كلمة المرور غير صحيحة",
-    "emailPlaceholder": "you@company.com"
+    "emailPlaceholder": "you@company.com",
+    "subtitle": "واصل مساعدة عملائك.",
+    "forgot": "هل نسيت كلمة المرور؟",
+    "hidePassword": "إخفاء",
+    "showPassword": "إظهار",
+    "secure": "محمي بـ JWT و TLS",
+    "help": "تواجه مشكلة في تسجيل الدخول؟ تواصل مع المسؤول."
   },
   "nav": {
     "inbox": "صندوق الوارد",
@@ -28,7 +34,9 @@
     "primary": "التنقل الرئيسي",
     "openMenu": "فتح القائمة",
     "closeMenu": "إغلاق القائمة",
-    "signedInAs": "مسجّل الدخول باسم {{name}}"
+    "signedInAs": "مسجّل الدخول باسم {{name}}",
+    "work": "العمل",
+    "account": "الحساب"
   },
   "contacts": {
     "title": "جهات الاتصال",
@@ -84,7 +92,14 @@
     "bulkAddTag": "إضافة وسم…",
     "bulkClear": "مسح",
     "bulkStatusDone": "تم تحديث {{count}} محادثة.",
-    "bulkTagDone": "تم وسم {{count}} محادثة."
+    "bulkTagDone": "تم وسم {{count}} محادثة.",
+    "stats": {
+      "open": "مفتوحة",
+      "urgent": "عاجلة",
+      "unread": "غير مقروءة"
+    },
+    "emptyHint": "تصل المحادثات الجديدة من الأداة هنا فورًا.",
+    "welcomeHint": "اختر المحادثة التالية من القائمة، أو استخدم الإحصاءات أعلاه للتصفية حسب ما يحتاج الانتباه أولًا."
   },
   "conversation": {
     "replyPlaceholder": "اكتب ردًا…",
@@ -101,7 +116,14 @@
     "noTeam": "بدون فريق",
     "addTag": "وسم",
     "backToInbox": "العودة إلى صندوق الوارد",
-    "details": "تفاصيل المحادثة"
+    "details": "تفاصيل المحادثة",
+    "you": "أنت",
+    "tab": {
+      "reply": "رد",
+      "note": "ملاحظة داخلية"
+    },
+    "sendHint": "للإرسال",
+    "newlineHint": "لسطر جديد"
   },
   "sidebar": {
     "contact": "جهة الاتصال",
@@ -139,7 +161,14 @@
       "closed": "مغلق",
       "reopened": "أُعيد فتحه",
       "automation_triggered": "تم تشغيل الأتمتة"
-    }
+    },
+    "created": "تم إنشاء التذكرة",
+    "createHint": "سجّل العمل كتذكرة ليُتابَع وفق اتفاقية الخدمة.",
+    "filterAll": "الكل",
+    "overdue": "متأخرة",
+    "emptyHint": "تُنشأ التذاكر من المحادثات التي تحتاج إلى متابعة.",
+    "selectHint": "اختر تذكرة من القائمة لعرض سير عملها وجدول اتفاقية الخدمة وسجلّها.",
+    "slaSection": "اتفاقية الخدمة"
   },
   "notifications": {
     "title": "التنبيهات",
@@ -154,7 +183,16 @@
       "reminder": "تذكير",
       "escalation": "تصعيد",
       "automation": "أتمتة"
-    }
+    },
+    "allRead": "لا جديد لديك",
+    "markAllRead": "تعليم الكل كمقروء",
+    "emptyHint": "تظهر هنا تنبيهات اتفاقية الخدمة والإشارات والتعيينات الجديدة.",
+    "emptyAllHint": "لا توجد لديك إشعارات بعد.",
+    "today": "اليوم",
+    "earlier": "سابقًا",
+    "view": "عرض",
+    "managePreferences": "إدارة تفضيلات الإشعارات",
+    "unreadCount": "{{count}} غير مقروءة"
   },
   "preferences": {
     "title": "تفضيلات التنبيهات",
@@ -169,5 +207,16 @@
     },
     "saved": "تم حفظ التفضيلات.",
     "error": "تعذّر حفظ التفضيلات."
+  },
+  "cmd": {
+    "pages": "الصفحات",
+    "conversations": "المحادثات",
+    "tickets": "التذاكر",
+    "actions": "إجراءات سريعة"
+  },
+  "customFields": {
+    "saved": "تم حفظ الحقول المخصّصة.",
+    "saveError": "تعذّر الحفظ.",
+    "title": "حقول مخصّصة"
   }
 }
