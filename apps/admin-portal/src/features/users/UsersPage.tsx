@@ -81,9 +81,7 @@ export function UsersPage() {
     <div className="flex h-full flex-col overflow-hidden">
       {/* Dense toolbar — title + inline stat pills + search + create */}
       <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('users.title')}
-        </h1>
+        <h1 className="text-sm font-semibold tracking-tight text-foreground">{t('users.title')}</h1>
         <span className="hidden text-xs text-muted-foreground sm:inline-flex items-center gap-2.5">
           <span className="opacity-50">·</span>
           <span className="tabular-nums">
@@ -92,13 +90,11 @@ export function UsersPage() {
           </span>
           <span className="opacity-30">·</span>
           <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{activeCount}</strong>{' '}
-            active
+            <strong className="font-semibold text-foreground">{activeCount}</strong> active
           </span>
           <span className="opacity-30">·</span>
           <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{adminCount}</strong>{' '}
-            admin
+            <strong className="font-semibold text-foreground">{adminCount}</strong> admin
           </span>
           {teamlessCount > 0 && (
             <>
@@ -140,96 +136,103 @@ export function UsersPage() {
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-3">
-
-      {users.isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-lg px-2 py-3">
-              <Skeleton className="h-8 w-8 rounded-full" />
-              <Skeleton className="h-3 w-1/3" />
-              <Skeleton className="ms-auto h-3 w-16" />
-            </div>
-          ))}
-        </div>
-      ) : !users.data || users.data.length === 0 ? (
-        <EmptyState
-          title={t('users.empty')}
-          description={t('users.emptyHint', {
-            defaultValue: 'Invite your first teammate by clicking Create user.',
-          })}
-          action={
-            <Button type="button" onClick={() => setOpen(true)} iconStart={<PlusIcon />}>
-              {t('users.create')}
-            </Button>
-          }
-        />
-      ) : filtered.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">
-          {t('users.noMatch', {
-            defaultValue: 'No accounts match your search.',
-          })}
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((u, i) => {
-            const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
-            const isAdmin = u.role?.name?.toLowerCase() === 'administrator';
-            return (
-              <button
-                key={u.id}
-                type="button"
-                style={{ animationDelay: `${Math.min(i * 22, 220)}ms` }}
-                className={cn(
-                  'group relative flex items-center gap-4 rounded-2xl bg-card/70 px-5 py-4 text-start',
-                  'shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04]',
-                  'transition-[box-shadow,transform,background-color] duration-fast ease-out',
-                  'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px',
-                  'motion-safe:animate-fade-in',
-                )}
-              >
-                <Avatar name={fullName} email={u.email} size="md" />
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex items-baseline gap-2">
-                    <div className="truncate text-sm font-medium text-foreground">
-                      {fullName || u.email}
-                    </div>
-                    {u.status === 'active' ? (
-                      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" title="active" />
-                    ) : (
-                      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" title={u.status} />
-                    )}
-                  </div>
-                  {fullName && (
-                    <div className="truncate text-xs text-muted-foreground">{u.email}</div>
+        {users.isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-lg px-2 py-3">
+                <Skeleton className="h-8 w-8 rounded-full" />
+                <Skeleton className="h-3 w-1/3" />
+                <Skeleton className="ms-auto h-3 w-16" />
+              </div>
+            ))}
+          </div>
+        ) : !users.data || users.data.length === 0 ? (
+          <EmptyState
+            title={t('users.empty')}
+            description={t('users.emptyHint', {
+              defaultValue: 'Invite your first teammate by clicking Create user.',
+            })}
+            action={
+              <Button type="button" onClick={() => setOpen(true)} iconStart={<PlusIcon />}>
+                {t('users.create')}
+              </Button>
+            }
+          />
+        ) : filtered.length === 0 ? (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            {t('users.noMatch', {
+              defaultValue: 'No accounts match your search.',
+            })}
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {filtered.map((u, i) => {
+              const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
+              const isAdmin = u.role?.name?.toLowerCase() === 'administrator';
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  style={{ animationDelay: `${Math.min(i * 22, 220)}ms` }}
+                  className={cn(
+                    'group relative flex items-center gap-4 rounded-2xl bg-card/70 px-5 py-4 text-start',
+                    'shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04]',
+                    'transition-[box-shadow,transform,background-color] duration-fast ease-out',
+                    'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px',
+                    'motion-safe:animate-fade-in',
                   )}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    <span
-                      className={cn(
-                        'inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium',
-                        isAdmin
-                          ? 'bg-primary-subtle text-primary'
-                          : 'bg-secondary text-muted-foreground',
+                >
+                  <Avatar name={fullName} email={u.email} size="md" />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-baseline gap-2">
+                      <div className="truncate text-sm font-medium text-foreground">
+                        {fullName || u.email}
+                      </div>
+                      {u.status === 'active' ? (
+                        <span
+                          aria-hidden
+                          className="h-1.5 w-1.5 rounded-full bg-success"
+                          title="active"
+                        />
+                      ) : (
+                        <span
+                          aria-hidden
+                          className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50"
+                          title={u.status}
+                        />
                       )}
-                    >
-                      {u.role?.name ?? '—'}
-                    </span>
-                    <span
-                      className={cn(
-                        'inline-flex items-center rounded-full px-2 py-0.5 text-2xs',
-                        u.team
-                          ? 'bg-secondary text-muted-foreground'
-                          : 'bg-warning/20 text-warning-foreground',
-                      )}
-                    >
-                      {u.team?.name ?? t('users.noTeam')}
-                    </span>
+                    </div>
+                    {fullName && (
+                      <div className="truncate text-xs text-muted-foreground">{u.email}</div>
+                    )}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span
+                        className={cn(
+                          'inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium',
+                          isAdmin
+                            ? 'bg-primary-subtle text-primary'
+                            : 'bg-secondary text-muted-foreground',
+                        )}
+                      >
+                        {u.role?.name ?? '—'}
+                      </span>
+                      <span
+                        className={cn(
+                          'inline-flex items-center rounded-full px-2 py-0.5 text-2xs',
+                          u.team
+                            ? 'bg-secondary text-muted-foreground'
+                            : 'bg-warning/20 text-warning-foreground',
+                        )}
+                      >
+                        {u.team?.name ?? t('users.noTeam')}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <Drawer
@@ -273,7 +276,8 @@ export function UsersPage() {
           <DrawerSection
             title={t('users.sectionAccess', { defaultValue: 'Access' })}
             description={t('users.sectionAccessHint', {
-              defaultValue: 'Role decides what they can do. Team decides where conversations route.',
+              defaultValue:
+                'Role decides what they can do. Team decides where conversations route.',
             })}
           >
             <FormField label={t('users.role')} error={errors.role?.message}>
@@ -328,7 +332,15 @@ export function UsersPage() {
 
 function PlusIcon() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5" aria-hidden>
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      className="h-3.5 w-3.5"
+      aria-hidden
+    >
       <path d="M8 3v10M3 8h10" />
     </svg>
   );

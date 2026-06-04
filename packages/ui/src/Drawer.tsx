@@ -105,9 +105,7 @@ export function Drawer({
         <div className="shrink-0 px-8 pt-10 pb-6">
           <div className="min-w-0">
             {typeof title === 'string' ? (
-              <h2 className="text-2xl font-semibold tracking-[-0.02em] text-foreground">
-                {title}
-              </h2>
+              <h2 className="text-2xl font-semibold tracking-[-0.02em] text-foreground">{title}</h2>
             ) : (
               title
             )}
@@ -124,9 +122,7 @@ export function Drawer({
 
         {/* Optional sticky footer — borderless, sits on a faded fade */}
         {footer && (
-          <div className="flex shrink-0 items-center justify-end gap-2 px-8 py-5">
-            {footer}
-          </div>
+          <div className="flex shrink-0 items-center justify-end gap-2 px-8 py-5">{footer}</div>
         )}
       </div>
     </div>

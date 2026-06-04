@@ -40,18 +40,19 @@ export function connectWidget(url: string, token: string, cb: SocketCallbacks): 
   socket.on('connect', () => cb.onStatus('connected'));
   socket.io.on('reconnect_attempt', () => cb.onStatus('reconnecting'));
   socket.on('connect_error', () => cb.onStatus('error'));
-  socket.on(
-    'ready',
-    (info: { conversationId: string; branding: unknown; agentsOnline?: number }) =>
-      cb.onReady({ ...info, agentsOnline: info.agentsOnline ?? 0 }),
+  socket.on('ready', (info: { conversationId: string; branding: unknown; agentsOnline?: number }) =>
+    cb.onReady({ ...info, agentsOnline: info.agentsOnline ?? 0 }),
   );
   socket.on('message:new', (msg: WidgetMessage) => cb.onMessage(msg));
   socket.on('typing:update', (e: { isTyping: boolean; who: string }) => {
     if (e.who === 'agent') cb.onTyping(e.isTyping);
   });
   socket.on('agents:presence', (e: { count: number }) => cb.onAgentsPresence?.(e.count));
-  socket.on('conversation:closed', (e: { conversationId: string; status: 'closed' | 'resolved' }) => {
-    cb.onClosed?.(e);
-  });
+  socket.on(
+    'conversation:closed',
+    (e: { conversationId: string; status: 'closed' | 'resolved' }) => {
+      cb.onClosed?.(e);
+    },
+  );
   return socket;
 }

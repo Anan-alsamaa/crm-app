@@ -305,10 +305,7 @@ export function Inbox() {
           {conversations.isLoading ? (
             <ul className="px-2 pt-2 space-y-1">
               {Array.from({ length: 6 }).map((_, i) => (
-                <li
-                  key={i}
-                  className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5"
-                >
+                <li key={i} className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5">
                   <Skeleton className="h-7 w-7 rounded-full" />
                   <div className="flex-1 space-y-2">
                     <Skeleton className="h-3 w-2/3" />

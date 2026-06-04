@@ -76,12 +76,9 @@ export function AppCommandPalette() {
           label: c.contact?.name || c.contact?.email || t('inbox.unknownContact'),
           meta: c.contact?.email || c.contact?.phone || undefined,
           icon: <Avatar name={c.contact?.name} email={c.contact?.email} size="xs" />,
-          keywords: [
-            c.contact?.email ?? '',
-            c.contact?.phone ?? '',
-            c.status,
-            c.priority,
-          ].filter(Boolean) as string[],
+          keywords: [c.contact?.email ?? '', c.contact?.phone ?? '', c.status, c.priority].filter(
+            Boolean,
+          ) as string[],
           onSelect: () => navigate(`/?conv=${c.id}`),
         })),
       });
@@ -96,9 +93,7 @@ export function AppCommandPalette() {
           label: tk.subject,
           meta: tk.contact?.name || tk.contact?.email || undefined,
           icon: <TicketIcon size={14} />,
-          keywords: [tk.status, tk.priority, tk.contact?.email ?? ''].filter(
-            Boolean,
-          ) as string[],
+          keywords: [tk.status, tk.priority, tk.contact?.email ?? ''].filter(Boolean) as string[],
           onSelect: () => navigate(`/tickets?id=${tk.id}`),
         })),
       });

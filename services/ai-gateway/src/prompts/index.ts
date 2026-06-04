@@ -36,7 +36,7 @@ export const prompts = {
     return {
       system:
         'You draft helpful, concise customer-support replies on behalf of an agent. ' +
-        'Match the customer\'s language. Be specific, never invent facts. ' +
+        "Match the customer's language. Be specific, never invent facts. " +
         'No greetings or sign-offs unless the existing thread sets that tone. ' +
         `${locale ? `Reply in: ${locale}.` : ''}`,
       user:
@@ -58,7 +58,7 @@ export const prompts = {
   detectIntent(ctx: ConversationContext): { system: string; user: string } {
     return {
       system:
-        'You detect the customer\'s primary intent in a support conversation. ' +
+        "You detect the customer's primary intent in a support conversation. " +
         'Respond with EXACTLY one JSON object: {"intent":"<short lowercase tag>","confidence":0..1}. ' +
         'Use generic intents (refund, shipping_issue, account_access, product_question, billing, complaint, other). ' +
         'No prose.',
@@ -76,7 +76,10 @@ export const prompts = {
     };
   },
 
-  semanticSearch(query: string, snippets: Array<{ id: string; text: string }>): { system: string; user: string } {
+  semanticSearch(
+    query: string,
+    snippets: Array<{ id: string; text: string }>,
+  ): { system: string; user: string } {
     return {
       system:
         'You rank conversation snippets by semantic relevance to a query. ' +

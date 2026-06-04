@@ -16,11 +16,7 @@ export class GeminiProvider implements AIProvider {
 
   constructor(apiKey: string, model = 'gemini-1.5-flash') {
     if (!apiKey) {
-      throw new AiProviderError(
-        'GEMINI_API_KEY is not configured',
-        'not_configured',
-        503,
-      );
+      throw new AiProviderError('GEMINI_API_KEY is not configured', 'not_configured', 503);
     }
     this.client = new GoogleGenerativeAI(apiKey);
     this.model = model;

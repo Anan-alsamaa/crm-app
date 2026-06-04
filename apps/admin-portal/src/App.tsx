@@ -120,9 +120,7 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
                           />
                         )}
                         <it.icon size={16} />
-                        {!isCollapsed && (
-                          <span className="flex-1 truncate">{it.label}</span>
-                        )}
+                        {!isCollapsed && <span className="flex-1 truncate">{it.label}</span>}
                       </>
                     )}
                   </NavLink>
@@ -186,9 +184,7 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
           aria-hidden
           className={cn(
             'h-12 w-0.5 rounded-full transition-colors duration-fast ease-out',
-            dragging
-              ? 'bg-primary'
-              : 'bg-transparent group-hover/handle:bg-primary/40',
+            dragging ? 'bg-primary' : 'bg-transparent group-hover/handle:bg-primary/40',
           )}
         />
       </div>
@@ -211,20 +207,38 @@ function Shell({ children }: { children: React.ReactNode }) {
       heading: t('nav.policies', { defaultValue: 'Policies' }),
       items: [
         { to: '/sla', label: t('nav.sla'), icon: ClockIcon },
-        { to: '/automation', label: t('nav.automation', { defaultValue: 'Automation' }), icon: SettingsIcon },
-        { to: '/custom-fields', label: t('nav.customFields', { defaultValue: 'Custom fields' }), icon: SettingsIcon },
+        {
+          to: '/automation',
+          label: t('nav.automation', { defaultValue: 'Automation' }),
+          icon: SettingsIcon,
+        },
+        {
+          to: '/custom-fields',
+          label: t('nav.customFields', { defaultValue: 'Custom fields' }),
+          icon: SettingsIcon,
+        },
       ],
     },
     {
       heading: t('nav.data', { defaultValue: 'Data' }),
       items: [
         { to: '/reports', label: t('nav.reports', { defaultValue: 'Reports' }), icon: ClockIcon },
-        { to: '/imports', label: t('nav.imports', { defaultValue: 'Import contacts' }), icon: UsersIcon },
+        {
+          to: '/imports',
+          label: t('nav.imports', { defaultValue: 'Import contacts' }),
+          icon: UsersIcon,
+        },
       ],
     },
     {
       heading: t('nav.intelligence', { defaultValue: 'Intelligence' }),
-      items: [{ to: '/ai-config', label: t('nav.aiConfig', { defaultValue: 'AI assistance' }), icon: SettingsIcon }],
+      items: [
+        {
+          to: '/ai-config',
+          label: t('nav.aiConfig', { defaultValue: 'AI assistance' }),
+          icon: SettingsIcon,
+        },
+      ],
     },
   ];
   return (

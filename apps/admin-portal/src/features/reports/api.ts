@@ -40,8 +40,7 @@ export function useReports() {
 export function useCreateReport() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: ReportInput) =>
-      directus.request(createItem('reports', input as never)),
+    mutationFn: (input: ReportInput) => directus.request(createItem('reports', input as never)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reports'] }),
   });
 }

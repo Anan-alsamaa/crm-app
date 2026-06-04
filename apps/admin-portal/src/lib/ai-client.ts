@@ -8,7 +8,8 @@ import type { AiFeatureConfig } from '@yiji/shared-types';
  * the error directly.
  */
 
-const GATEWAY_URL = (import.meta.env.VITE_AI_GATEWAY_URL as string | undefined) ?? 'http://localhost:8081';
+const GATEWAY_URL =
+  (import.meta.env.VITE_AI_GATEWAY_URL as string | undefined) ?? 'http://localhost:8081';
 const SVC_TOKEN = (import.meta.env.VITE_AI_SVC_TOKEN as string | undefined) ?? '';
 
 interface CallerHeaders {
@@ -45,7 +46,10 @@ export const aiAdmin = {
   async getConfig(c: CallerHeaders): Promise<typeof AiFeatureConfig._type> {
     return fetchJson(`${GATEWAY_URL}/admin/config`, { headers: headers(c) });
   },
-  async putConfig(c: CallerHeaders, next: Partial<typeof AiFeatureConfig._type>): Promise<typeof AiFeatureConfig._type> {
+  async putConfig(
+    c: CallerHeaders,
+    next: Partial<typeof AiFeatureConfig._type>,
+  ): Promise<typeof AiFeatureConfig._type> {
     return fetchJson(`${GATEWAY_URL}/admin/config`, {
       method: 'PUT',
       headers: headers(c),

@@ -75,7 +75,8 @@ export function CommercePanel({ yijiVendorId, externalCustomerId }: Props) {
   });
 
   const loading = activity.isLoading || orders.isLoading;
-  const unavailable = !activity.data && !loading && !orders.isLoading && (orders.data?.length ?? 0) === 0;
+  const unavailable =
+    !activity.data && !loading && !orders.isLoading && (orders.data?.length ?? 0) === 0;
 
   if (!yijiVendorId || !externalCustomerId) {
     return (
@@ -124,11 +125,7 @@ export function CommercePanel({ yijiVendorId, externalCustomerId }: Props) {
           <ul className="space-y-2">
             {orders.data.map((o) => (
               <li key={o.orderId}>
-                <OrderCard
-                  order={o}
-                  client={client}
-                  yijiVendorId={yijiVendorId}
-                />
+                <OrderCard order={o} client={client} yijiVendorId={yijiVendorId} />
               </li>
             ))}
           </ul>
@@ -253,7 +250,9 @@ function PaymentShipmentRow({
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-1 text-2xs">
       {payment ? (
         <span className="inline-flex items-center gap-1.5">
-          <span className="text-muted-foreground">{t('commerce.payment', { defaultValue: 'payment' })}:</span>
+          <span className="text-muted-foreground">
+            {t('commerce.payment', { defaultValue: 'payment' })}:
+          </span>
           <Pill tone={PAYMENT_TONE[payment.status] ?? 'neutral'} size="sm">
             {payment.status}
           </Pill>

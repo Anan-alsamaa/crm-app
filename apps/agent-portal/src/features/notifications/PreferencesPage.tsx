@@ -15,11 +15,7 @@ import {
   UsersIcon,
 } from '@yiji/ui';
 import type { JSX } from 'react';
-import {
-  CHANNELS,
-  useNotificationPreferences,
-  useUpdateNotificationPreferences,
-} from './api.js';
+import { CHANNELS, useNotificationPreferences, useUpdateNotificationPreferences } from './api.js';
 
 interface RowMeta {
   icon: (props: { size?: number; className?: string }) => JSX.Element;
@@ -196,9 +192,7 @@ export function PreferencesPage() {
                     <Select
                       className="h-8 w-full sm:w-44 text-xs"
                       value={draft[type] ?? 'both'}
-                      onChange={(e) =>
-                        setDraft((d) => ({ ...d, [type]: e.target.value }))
-                      }
+                      onChange={(e) => setDraft((d) => ({ ...d, [type]: e.target.value }))}
                       aria-label={type}
                     >
                       {CHANNELS.map((c) => (

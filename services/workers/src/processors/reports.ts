@@ -148,18 +148,22 @@ async function reportSlaCompliance(
     resolution_due_at: string | null;
     resolved_at: string | null;
   }>;
-  const rows: string[][] = [['ticket_id', 'subject', 'priority', 'first_response_met', 'resolution_met']];
+  const rows: string[][] = [
+    ['ticket_id', 'subject', 'priority', 'first_response_met', 'resolution_met'],
+  ];
   for (const t of tickets) {
-    const firstMet = t.first_responded_at && t.first_response_due_at
-      ? new Date(t.first_responded_at).getTime() <= new Date(t.first_response_due_at).getTime()
-        ? 'yes'
-        : 'no'
-      : 'pending';
-    const resMet = t.resolved_at && t.resolution_due_at
-      ? new Date(t.resolved_at).getTime() <= new Date(t.resolution_due_at).getTime()
-        ? 'yes'
-        : 'no'
-      : 'pending';
+    const firstMet =
+      t.first_responded_at && t.first_response_due_at
+        ? new Date(t.first_responded_at).getTime() <= new Date(t.first_response_due_at).getTime()
+          ? 'yes'
+          : 'no'
+        : 'pending';
+    const resMet =
+      t.resolved_at && t.resolution_due_at
+        ? new Date(t.resolved_at).getTime() <= new Date(t.resolution_due_at).getTime()
+          ? 'yes'
+          : 'no'
+        : 'pending';
     rows.push([t.id, t.subject, t.priority, firstMet, resMet]);
   }
   return { rows, rowCount: rows.length - 1 };
@@ -210,9 +214,7 @@ const AGGREGATORS: Record<
 /* ── CSV rendering ────────────────────────────────────────────────── */
 
 export function rowsToCsv(rows: string[][]): string {
-  return rows
-    .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
-    .join('\r\n');
+  return rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
 }
 
 /* ── Processor ───────────────────────────────────────────────────── */

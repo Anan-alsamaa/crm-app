@@ -51,11 +51,7 @@ export { Toolbar, ToolbarSpacer } from './Toolbar.js';
 export { PageHeader } from './PageHeader.js';
 export type { PageHeaderProps } from './PageHeader.js';
 export { CommandPalette, useCommandPaletteShortcut } from './CommandPalette.js';
-export type {
-  CommandPaletteProps,
-  CommandGroup,
-  CommandItem,
-} from './CommandPalette.js';
+export type { CommandPaletteProps, CommandGroup, CommandItem } from './CommandPalette.js';
 export { Toaster, toast } from './Toast.js';
 export type { ToastInput, ToastTone } from './Toast.js';
 export { Drawer } from './Drawer.js';

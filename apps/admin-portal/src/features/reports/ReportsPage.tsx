@@ -43,7 +43,15 @@ const TYPES: ReportType[] = [
 
 function PlusIcon() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5" aria-hidden>
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      className="h-3.5 w-3.5"
+      aria-hidden
+    >
       <path d="M8 3v10M3 8h10" />
     </svg>
   );
@@ -202,7 +210,10 @@ export function ReportsPage() {
                     setDrawerOpen(true);
                   }}
                   onDelete={async () => {
-                    if (!confirm(t('reports.confirmDelete', { defaultValue: 'Delete this report?' }))) return;
+                    if (
+                      !confirm(t('reports.confirmDelete', { defaultValue: 'Delete this report?' }))
+                    )
+                      return;
                     await remove.mutateAsync(r.id);
                   }}
                 />
@@ -224,7 +235,8 @@ export function ReportsPage() {
             : t('reports.create', { defaultValue: 'New report' })
         }
         description={t('reports.drawerHint', {
-          defaultValue: 'Filters scope the data; the email schedule runs the report and sends a CSV.',
+          defaultValue:
+            'Filters scope the data; the email schedule runs the report and sends a CSV.',
         })}
         footer={
           <>
@@ -252,10 +264,16 @@ export function ReportsPage() {
             })}
           >
             <FormField label={t('reports.name', { defaultValue: 'Name' })}>
-              <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+              <Input
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              />
             </FormField>
             <FormField label={t('reports.description', { defaultValue: 'Description' })}>
-              <Input value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+              <Input
+                value={draft.description}
+                onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+              />
             </FormField>
             <FormField label={t('reports.type', { defaultValue: 'Type' })}>
               <select
@@ -306,7 +324,8 @@ export function ReportsPage() {
           <DrawerSection
             title={t('reports.sectionSchedule', { defaultValue: 'Email schedule' })}
             description={t('reports.sectionScheduleHint', {
-              defaultValue: 'Comma-separated email addresses to receive the CSV when the report runs.',
+              defaultValue:
+                'Comma-separated email addresses to receive the CSV when the report runs.',
             })}
           >
             <FormField label={t('reports.recipients', { defaultValue: 'Recipients' })}>
@@ -323,7 +342,15 @@ export function ReportsPage() {
   );
 }
 
-function ReportCard({ r, onEdit, onDelete }: { r: ReportRow; onEdit: () => void; onDelete: () => void }) {
+function ReportCard({
+  r,
+  onEdit,
+  onDelete,
+}: {
+  r: ReportRow;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const { t } = useTranslation();
   return (
     <div
@@ -335,7 +362,9 @@ function ReportCard({ r, onEdit, onDelete }: { r: ReportRow; onEdit: () => void;
       <div className="space-y-1">
         <h3 className="text-sm font-semibold tracking-tight text-foreground">{r.name}</h3>
         <p className="text-2xs font-mono text-muted-foreground">{r.type}</p>
-        {r.description && <p className="line-clamp-2 text-xs text-muted-foreground">{r.description}</p>}
+        {r.description && (
+          <p className="line-clamp-2 text-xs text-muted-foreground">{r.description}</p>
+        )}
       </div>
       <div className="flex items-baseline justify-between gap-2 text-2xs text-muted-foreground tabular-nums">
         <span>
@@ -345,7 +374,8 @@ function ReportCard({ r, onEdit, onDelete }: { r: ReportRow; onEdit: () => void;
         </span>
         {(r.schedule?.email?.length ?? 0) > 0 && (
           <span>
-            ✉ {r.schedule!.email!.length} {t('reports.recipientsShort', { defaultValue: 'recipients' })}
+            ✉ {r.schedule!.email!.length}{' '}
+            {t('reports.recipientsShort', { defaultValue: 'recipients' })}
           </span>
         )}
       </div>

@@ -172,7 +172,10 @@ export class MockYijiClient implements YijiClient {
     return this.fixtures.paymentsByOrder.get(key(vendorId, orderId)) ?? null;
   }
 
-  async getShipmentTracking(vendorId: string, orderId: string): Promise<YijiShipmentTracking | null> {
+  async getShipmentTracking(
+    vendorId: string,
+    orderId: string,
+  ): Promise<YijiShipmentTracking | null> {
     return this.fixtures.shipmentsByOrder.get(key(vendorId, orderId)) ?? null;
   }
 

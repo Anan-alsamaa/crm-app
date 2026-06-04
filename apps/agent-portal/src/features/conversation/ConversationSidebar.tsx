@@ -121,7 +121,7 @@ export function ConversationSidebar({ conversationId }: Props) {
           vendorId={
             (c as unknown as { vendor?: string | { id: string } }).vendor &&
             typeof (c as unknown as { vendor?: string | { id: string } }).vendor === 'object'
-              ? ((c as unknown as { vendor: { id: string } }).vendor.id)
+              ? (c as unknown as { vendor: { id: string } }).vendor.id
               : ((c as unknown as { vendor?: string }).vendor ?? 'unknown')
           }
         />

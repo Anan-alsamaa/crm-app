@@ -120,9 +120,7 @@ export function SlaPoliciesPage() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('sla.title')}
-        </h1>
+        <h1 className="text-sm font-semibold tracking-tight text-foreground">{t('sla.title')}</h1>
         <span className="hidden text-xs text-muted-foreground sm:inline-flex items-center gap-2.5">
           <span className="opacity-50">·</span>
           <span className="tabular-nums">
@@ -134,8 +132,7 @@ export function SlaPoliciesPage() {
           </span>
           <span className="opacity-30">·</span>
           <span className="tabular-nums">
-            avg first reply{' '}
-            <strong className="font-semibold text-foreground">{avgFirst}m</strong>
+            avg first reply <strong className="font-semibold text-foreground">{avgFirst}m</strong>
           </span>
         </span>
         <ToolbarSpacer />
@@ -145,109 +142,111 @@ export function SlaPoliciesPage() {
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-3">
-
-      {policies.isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-lg px-2 py-3">
-              <Skeleton className="h-3 w-1/4" />
-              <Skeleton className="h-3 w-32" />
-              <Skeleton className="ms-auto h-4 w-12" />
-            </div>
-          ))}
-        </div>
-      ) : !policies.data || policies.data.length === 0 ? (
-        <EmptyState
-          title={t('sla.empty')}
-          description={t('sla.emptyHint', {
-            defaultValue: 'Create your first SLA policy to start tracking response times.',
-          })}
-          action={
-            <Button type="button" onClick={() => setOpen(true)} iconStart={<PlusIcon />}>
-              {t('sla.create')}
-            </Button>
-          }
-        />
-      ) : (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {policies.data.map((p) => (
-            <div
-              key={p.id}
-              className="group relative flex flex-col gap-4 rounded-2xl bg-card/70 px-5 py-5 shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04] transition-[box-shadow,transform,background-color] duration-fast ease-out hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                      {p.name}
-                    </h3>
-                    {p.active ? (
-                      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" />
-                    ) : (
-                      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+        {policies.isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-lg px-2 py-3">
+                <Skeleton className="h-3 w-1/4" />
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="ms-auto h-4 w-12" />
+              </div>
+            ))}
+          </div>
+        ) : !policies.data || policies.data.length === 0 ? (
+          <EmptyState
+            title={t('sla.empty')}
+            description={t('sla.emptyHint', {
+              defaultValue: 'Create your first SLA policy to start tracking response times.',
+            })}
+            action={
+              <Button type="button" onClick={() => setOpen(true)} iconStart={<PlusIcon />}>
+                {t('sla.create')}
+              </Button>
+            }
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {policies.data.map((p) => (
+              <div
+                key={p.id}
+                className="group relative flex flex-col gap-4 rounded-2xl bg-card/70 px-5 py-5 shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04] transition-[box-shadow,transform,background-color] duration-fast ease-out hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                        {p.name}
+                      </h3>
+                      {p.active ? (
+                        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" />
+                      ) : (
+                        <span
+                          aria-hidden
+                          className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40"
+                        />
+                      )}
+                    </div>
+                    {p.description && (
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                        {p.description}
+                      </p>
                     )}
                   </div>
-                  {p.description && (
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                      {p.description}
-                    </p>
-                  )}
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 text-2xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={p.active}
+                      onChange={(e) =>
+                        void toggleActive.mutateAsync({ id: p.id, active: e.target.checked })
+                      }
+                      className="h-3.5 w-3.5 rounded-sm border-border-strong bg-input accent-primary"
+                      aria-label={t('sla.active')}
+                    />
+                    <span>{t('sla.active')}</span>
+                  </label>
                 </div>
-                <label className="inline-flex cursor-pointer items-center gap-1.5 text-2xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={p.active}
-                    onChange={(e) =>
-                      void toggleActive.mutateAsync({ id: p.id, active: e.target.checked })
-                    }
-                    className="h-3.5 w-3.5 rounded-sm border-border-strong bg-input accent-primary"
-                    aria-label={t('sla.active')}
-                  />
-                  <span>{t('sla.active')}</span>
-                </label>
-              </div>
 
-              <div className="flex flex-wrap gap-1.5">
-                {p.applies_to_priority?.map((pr) => (
-                  <span
-                    key={pr}
-                    className="inline-flex items-center rounded-full bg-primary-subtle px-2 py-0.5 text-xs font-semibold text-[oklch(0.42_0.10_196)]"
-                  >
-                    {t(`priority.${pr}`, { ns: 'common' })}
-                  </span>
-                ))}
-              </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {p.applies_to_priority?.map((pr) => (
+                    <span
+                      key={pr}
+                      className="inline-flex items-center rounded-full bg-primary-subtle px-2 py-0.5 text-xs font-semibold text-[oklch(0.42_0.10_196)]"
+                    >
+                      {t(`priority.${pr}`, { ns: 'common' })}
+                    </span>
+                  ))}
+                </div>
 
-              <div className="grid grid-cols-3 gap-4 pt-1">
-                <div>
-                  <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
-                    first reply
+                <div className="grid grid-cols-3 gap-4 pt-1">
+                  <div>
+                    <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                      first reply
+                    </div>
+                    <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
+                      {p.first_response_minutes}m
+                    </div>
                   </div>
-                  <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
-                    {p.first_response_minutes}m
+                  <div>
+                    <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                      resolution
+                    </div>
+                    <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
+                      {p.resolution_minutes}m
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
-                    resolution
-                  </div>
-                  <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
-                    {p.resolution_minutes}m
-                  </div>
-                </div>
-                <div>
-                  <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
-                    warn at
-                  </div>
-                  <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
-                    {p.warning_threshold_percent}%
+                  <div>
+                    <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                      warn at
+                    </div>
+                    <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
+                      {p.warning_threshold_percent}%
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
       </div>
 
       <Drawer
@@ -343,7 +342,15 @@ export function SlaPoliciesPage() {
 
 function PlusIcon() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5" aria-hidden>
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      className="h-3.5 w-3.5"
+      aria-hidden
+    >
       <path d="M8 3v10M3 8h10" />
     </svg>
   );

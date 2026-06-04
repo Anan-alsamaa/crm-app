@@ -36,11 +36,6 @@ export class ResponseCache {
   }
 
   async set<T>(endpoint: string, input: string, value: T): Promise<void> {
-    await this.redis.set(
-      this.key(endpoint, input),
-      JSON.stringify(value),
-      'EX',
-      this.ttlSeconds,
-    );
+    await this.redis.set(this.key(endpoint, input), JSON.stringify(value), 'EX', this.ttlSeconds);
   }
 }

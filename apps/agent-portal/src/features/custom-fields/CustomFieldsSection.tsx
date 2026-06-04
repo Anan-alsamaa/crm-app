@@ -123,7 +123,13 @@ export function CustomFieldsSection({ entityType, entityId }: Props) {
         <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {t('customFields.title', { defaultValue: 'Custom fields' })}
         </h3>
-        <Button type="button" size="sm" variant="outline" loading={save.isPending} onClick={() => save.mutate()}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          loading={save.isPending}
+          onClick={() => save.mutate()}
+        >
           {t('actions.save', { ns: 'common' })}
         </Button>
       </div>

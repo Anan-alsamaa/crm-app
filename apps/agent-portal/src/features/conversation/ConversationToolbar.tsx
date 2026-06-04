@@ -99,7 +99,9 @@ export function ConversationToolbar({ conversation }: Props) {
             label: t(`status.${s}`, { ns: 'common' }),
           }))}
         />
-        <span className="px-0.5 text-muted-foreground/40" aria-hidden>·</span>
+        <span className="px-0.5 text-muted-foreground/40" aria-hidden>
+          ·
+        </span>
         <GhostSelect
           size="sm"
           label={t('conversation.priority')}
@@ -112,7 +114,9 @@ export function ConversationToolbar({ conversation }: Props) {
             label: t(`priority.${p}`, { ns: 'common' }),
           }))}
         />
-        <span className="px-0.5 text-muted-foreground/40" aria-hidden>·</span>
+        <span className="px-0.5 text-muted-foreground/40" aria-hidden>
+          ·
+        </span>
         <GhostSelect
           size="sm"
           label={t('conversation.agent')}
@@ -128,7 +132,9 @@ export function ConversationToolbar({ conversation }: Props) {
             })),
           ]}
         />
-        <span className="px-0.5 text-muted-foreground/40" aria-hidden>·</span>
+        <span className="px-0.5 text-muted-foreground/40" aria-hidden>
+          ·
+        </span>
         <GhostSelect
           size="sm"
           label={t('conversation.team')}

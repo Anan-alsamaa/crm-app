@@ -54,10 +54,12 @@ const FAKE_CONV: ConversationContext = {
   ],
 };
 
-async function buildApp(opts: {
-  provider?: AIProvider;
-  ctx?: ConversationContext | null;
-} = {}): Promise<{ app: FastifyInstance; provider: StubProvider; redis: Redis }> {
+async function buildApp(
+  opts: {
+    provider?: AIProvider;
+    ctx?: ConversationContext | null;
+  } = {},
+): Promise<{ app: FastifyInstance; provider: StubProvider; redis: Redis }> {
   const provider = (opts.provider as StubProvider) ?? new StubProvider();
   const redis = new RedisMock() as unknown as Redis;
   await redis.flushall();
@@ -93,7 +95,11 @@ describe('AI endpoints', () => {
 
   it('rejects missing auth on every endpoint', async () => {
     for (const path of Object.values(AI_ENDPOINTS)) {
-      const res = await app.inject({ method: 'POST', url: path, payload: { conversationId: FAKE_CONV.id } });
+      const res = await app.inject({
+        method: 'POST',
+        url: path,
+        payload: { conversationId: FAKE_CONV.id },
+      });
       expect(res.statusCode).toBe(401);
     }
   });

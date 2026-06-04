@@ -46,16 +46,17 @@ function publish(input: ToastInput): string {
   return rec.id;
 }
 
-export const toast = Object.assign((title: string, opts?: Omit<ToastInput, 'title'>) =>
-  publish({ ...opts, title }),
-{
-  success: (title: string, opts?: Omit<ToastInput, 'title' | 'tone'>) =>
-    publish({ ...opts, title, tone: 'success' }),
-  error: (title: string, opts?: Omit<ToastInput, 'title' | 'tone'>) =>
-    publish({ ...opts, title, tone: 'error' }),
-  warning: (title: string, opts?: Omit<ToastInput, 'title' | 'tone'>) =>
-    publish({ ...opts, title, tone: 'warning' }),
-});
+export const toast = Object.assign(
+  (title: string, opts?: Omit<ToastInput, 'title'>) => publish({ ...opts, title }),
+  {
+    success: (title: string, opts?: Omit<ToastInput, 'title' | 'tone'>) =>
+      publish({ ...opts, title, tone: 'success' }),
+    error: (title: string, opts?: Omit<ToastInput, 'title' | 'tone'>) =>
+      publish({ ...opts, title, tone: 'error' }),
+    warning: (title: string, opts?: Omit<ToastInput, 'title' | 'tone'>) =>
+      publish({ ...opts, title, tone: 'warning' }),
+  },
+);
 
 const toneStyles: Record<ToastTone, string> = {
   default: 'bg-card text-card-foreground',
@@ -74,28 +75,62 @@ const toneIconBg: Record<ToastTone, string> = {
 function ToneIcon({ tone }: { tone: ToastTone }) {
   if (tone === 'success') {
     return (
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden>
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="h-3.5 w-3.5"
+        aria-hidden
+      >
         <path d="m3 8 3.5 3.5L13 5" />
       </svg>
     );
   }
   if (tone === 'error') {
     return (
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5" aria-hidden>
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        className="h-3.5 w-3.5"
+        aria-hidden
+      >
         <path d="M4 4l8 8M12 4l-8 8" />
       </svg>
     );
   }
   if (tone === 'warning') {
     return (
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden>
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="h-3.5 w-3.5"
+        aria-hidden
+      >
         <path d="M8 3v6" />
         <path d="M8 12.5v0" />
       </svg>
     );
   }
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5" aria-hidden>
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      className="h-3.5 w-3.5"
+      aria-hidden
+    >
       <circle cx="8" cy="8" r="6" />
       <path d="M8 5v3.5M8 11v0" />
     </svg>
@@ -174,9 +209,7 @@ function ToastCard({ toast: t, onDismiss }: { toast: ToastRecord; onDismiss: () 
         <p id={labelId} className="text-sm font-medium text-foreground">
           {t.title}
         </p>
-        {t.description && (
-          <p className="mt-0.5 text-xs text-muted-foreground">{t.description}</p>
-        )}
+        {t.description && <p className="mt-0.5 text-xs text-muted-foreground">{t.description}</p>}
       </div>
       <button
         type="button"
@@ -184,7 +217,15 @@ function ToastCard({ toast: t, onDismiss }: { toast: ToastRecord; onDismiss: () 
         aria-label="Dismiss"
         className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground"
       >
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3 w-3" aria-hidden>
+        <svg
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          className="h-3 w-3"
+          aria-hidden
+        >
           <path d="M4 4l8 8M12 4l-8 8" />
         </svg>
       </button>

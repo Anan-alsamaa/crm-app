@@ -29,10 +29,7 @@ export function YijiLogo({
   if (variant === 'tile') {
     return (
       <span
-        className={cn(
-          'grid place-items-center rounded-md bg-secondary/70 p-1',
-          className,
-        )}
+        className={cn('grid place-items-center rounded-md bg-secondary/70 p-1', className)}
         style={{ width: size, height: size }}
       >
         <img

@@ -173,7 +173,8 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     const caller = authOrReply(req, reply);
     if (!caller) return;
     const body = ConversationRef.safeParse(req.body);
-    if (!body.success) return reply.code(400).send({ error: 'invalid_body', issues: body.error.format() });
+    if (!body.success)
+      return reply.code(400).send({ error: 'invalid_body', issues: body.error.format() });
     const ctx = await deps.directus.getConversation(body.data.conversationId);
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
 
@@ -203,7 +204,8 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     const caller = authOrReply(req, reply);
     if (!caller) return;
     const body = SuggestReplyRequest.safeParse(req.body);
-    if (!body.success) return reply.code(400).send({ error: 'invalid_body', issues: body.error.format() });
+    if (!body.success)
+      return reply.code(400).send({ error: 'invalid_body', issues: body.error.format() });
     const ctx = await deps.directus.getConversation(body.data.conversationId);
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
 
@@ -243,7 +245,10 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (gateRes.cached) return reply.send(gateRes.cached as SentimentResponse);
 
     const p = prompts.analyzeSentiment(ctx);
-    const schema = z.object({ label: z.enum(['positive', 'neutral', 'negative']), score: z.number() });
+    const schema = z.object({
+      label: z.enum(['positive', 'neutral', 'negative']),
+      score: z.number(),
+    });
     try {
       const result: SentimentResponse = await runWith(
         AI_ENDPOINTS.analyzeSentiment,
@@ -342,7 +347,9 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     // Snippets come from recent conversations of the caller's vendor.
     const ranking = prompts.semanticSearch(body.data.query, ctxList);
     const schema = z.object({
-      results: z.array(z.object({ conversationId: z.string(), score: z.number(), snippet: z.string() })),
+      results: z.array(
+        z.object({ conversationId: z.string(), score: z.number(), snippet: z.string() }),
+      ),
     });
     try {
       const result: SemanticSearchResponse = await runWith(

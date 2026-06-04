@@ -55,9 +55,9 @@ export function ImportsPage() {
       const text = await file.text();
       const lines = text.split(/\r?\n/).filter(Boolean).slice(0, 6);
       const header = lines[0]?.split(',').map((s) => s.trim().replace(/^"|"$/g, '')) ?? [];
-      const sample = lines.slice(1).map((l) =>
-        l.split(',').map((s) => s.trim().replace(/^"|"$/g, '')),
-      );
+      const sample = lines
+        .slice(1)
+        .map((l) => l.split(',').map((s) => s.trim().replace(/^"|"$/g, '')));
       setPreview({ fileId: f.id, filename: f.filename_download, header, sample });
       // Auto-map header → field when header text matches a known field.
       const autoMap: Record<string, ContactField> = {};
@@ -67,7 +67,9 @@ export function ImportsPage() {
         if (match) autoMap[h] = match;
       }
       setMapping(autoMap);
-      toast.success(t('imports.uploaded', { defaultValue: 'File uploaded — map columns and submit.' }));
+      toast.success(
+        t('imports.uploaded', { defaultValue: 'File uploaded — map columns and submit.' }),
+      );
     },
     onError: () => toast.error(t('imports.uploadError', { defaultValue: 'Upload failed.' })),
   });
@@ -154,7 +156,8 @@ export function ImportsPage() {
           {upload.isPending && <Skeleton className="h-4 w-32 mt-2" />}
           {preview && (
             <p className="mt-2 text-xs text-muted-foreground">
-              {t('imports.uploaded', { defaultValue: 'File uploaded' })}: <span className="font-mono">{preview.filename}</span>
+              {t('imports.uploaded', { defaultValue: 'File uploaded' })}:{' '}
+              <span className="font-mono">{preview.filename}</span>
             </p>
           )}
         </section>
@@ -231,7 +234,8 @@ export function ImportsPage() {
           <EmptyState
             title={t('imports.empty', { defaultValue: 'Upload a CSV to begin' })}
             description={t('imports.emptyHint', {
-              defaultValue: 'Map columns to contact fields, preview the first rows, then queue the import.',
+              defaultValue:
+                'Map columns to contact fields, preview the first rows, then queue the import.',
             })}
           />
         )}

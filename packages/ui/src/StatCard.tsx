@@ -39,19 +39,14 @@ export function StatCard({
     <div className={cn('flex flex-col gap-1', className)} {...rest}>
       <div className="flex items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
         {tone !== 'default' && (
-          <span
-            aria-hidden
-            className={cn('h-1.5 w-1.5 rounded-full', dotBg[tone])}
-          />
+          <span aria-hidden className={cn('h-1.5 w-1.5 rounded-full', dotBg[tone])} />
         )}
         <span>{label}</span>
       </div>
       <div className="text-3xl font-semibold tabular-nums tracking-[-0.025em] text-foreground">
         {value}
       </div>
-      {caption && (
-        <div className="text-xs text-muted-foreground">{caption}</div>
-      )}
+      {caption && <div className="text-xs text-muted-foreground">{caption}</div>}
     </div>
   );
 }

@@ -58,7 +58,6 @@ function EyeIcon({ open }: { open: boolean }) {
   );
 }
 
-
 export function Login() {
   const { t } = useTranslation();
   const { login, logout } = useAuth();
@@ -116,9 +115,7 @@ export function Login() {
               <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
                 {t('login.title', { defaultValue: 'Sign in to YIJI CRM Admin' })}
               </h1>
-              <p className="text-sm text-muted-foreground">
-                Administrator access required.
-              </p>
+              <p className="text-sm text-muted-foreground">Administrator access required.</p>
             </div>
           </div>
 
@@ -200,12 +197,23 @@ export function Login() {
 
           <div className="px-8 py-3 text-center text-2xs text-muted-foreground">
             <div className="flex items-center justify-center gap-2">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3" aria-hidden>
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3 w-3"
+                aria-hidden
+              >
                 <rect x="3" y="7" width="10" height="6" rx="1" />
                 <path d="M5 7V5a3 3 0 0 1 6 0v2" />
               </svg>
               <span>{t('login.secure', { defaultValue: 'Every action audit-logged' })}</span>
-              <span className="text-border" aria-hidden>·</span>
+              <span className="text-border" aria-hidden>
+                ·
+              </span>
               <span>YIJI · Admin</span>
             </div>
           </div>

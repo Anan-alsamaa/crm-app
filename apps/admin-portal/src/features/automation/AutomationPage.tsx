@@ -60,7 +60,15 @@ const ACTION_KINDS: RuleAction['kind'][] = [
 
 function PlusIcon() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5" aria-hidden>
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      className="h-3.5 w-3.5"
+      aria-hidden
+    >
       <path d="M8 3v10M3 8h10" />
     </svg>
   );
@@ -221,7 +229,10 @@ export function AutomationPage() {
                     await update.mutateAsync({ id: r.id, patch: { active: !r.active } });
                   }}
                   onDelete={async () => {
-                    if (!confirm(t('automation.confirmDelete', { defaultValue: 'Delete this rule?' }))) return;
+                    if (
+                      !confirm(t('automation.confirmDelete', { defaultValue: 'Delete this rule?' }))
+                    )
+                      return;
                     await remove.mutateAsync(r.id);
                     toast.success(t('automation.deleted', { defaultValue: 'Rule deleted.' }));
                   }}
@@ -274,7 +285,10 @@ export function AutomationPage() {
             })}
           >
             <FormField label={t('automation.name', { defaultValue: 'Name' })}>
-              <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+              <Input
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              />
             </FormField>
             <FormField label={t('automation.description', { defaultValue: 'Description' })}>
               <Textarea
@@ -287,7 +301,9 @@ export function AutomationPage() {
               <FormField label={t('automation.trigger', { defaultValue: 'Trigger' })}>
                 <Select
                   value={draft.trigger_event}
-                  onChange={(e) => setDraft({ ...draft, trigger_event: e.target.value as TriggerEvent })}
+                  onChange={(e) =>
+                    setDraft({ ...draft, trigger_event: e.target.value as TriggerEvent })
+                  }
                 >
                   {TRIGGERS.map((trg) => (
                     <option key={trg} value={trg}>
@@ -311,7 +327,8 @@ export function AutomationPage() {
           <DrawerSection
             title={t('automation.sectionConditions', { defaultValue: 'Conditions' })}
             description={t('automation.sectionConditionsHint', {
-              defaultValue: 'All conditions must match. Reference fields with dot paths (e.g. context.priority).',
+              defaultValue:
+                'All conditions must match. Reference fields with dot paths (e.g. context.priority).',
             })}
           >
             <ConditionsEditor
@@ -389,7 +406,9 @@ function RuleCard({
     >
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex items-baseline gap-2">
-          <h3 className="text-sm font-semibold tracking-tight text-foreground truncate">{rule.name}</h3>
+          <h3 className="text-sm font-semibold tracking-tight text-foreground truncate">
+            {rule.name}
+          </h3>
           {!rule.active && (
             <span className="inline-flex items-center rounded-full bg-warning/20 px-2 py-0.5 text-2xs font-medium text-warning-foreground">
               {t('automation.inactive', { defaultValue: 'inactive' })}
@@ -405,8 +424,8 @@ function RuleCard({
           </Pill>
           <span className="text-2xs text-muted-foreground tabular-nums">
             {rule.conditions?.length ?? 0} {t('automation.cond', { defaultValue: 'cond' })} ·{' '}
-            {rule.actions?.length ?? 0} {t('automation.act', { defaultValue: 'act' })} ·{' '}
-            p={rule.priority}
+            {rule.actions?.length ?? 0} {t('automation.act', { defaultValue: 'act' })} · p=
+            {rule.priority}
           </span>
           {(rule.trigger_count ?? 0) > 0 && (
             <span className="text-2xs text-muted-foreground tabular-nums">
@@ -421,7 +440,9 @@ function RuleCard({
           onClick={onToggle}
           className="text-2xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
         >
-          {rule.active ? t('automation.disable', { defaultValue: 'disable' }) : t('automation.enable', { defaultValue: 'enable' })}
+          {rule.active
+            ? t('automation.disable', { defaultValue: 'disable' })
+            : t('automation.enable', { defaultValue: 'enable' })}
         </button>
         <span className="text-muted-foreground/40">·</span>
         <button
@@ -461,7 +482,9 @@ function ConditionsEditor({
     <div className="space-y-2">
       {conditions.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          {t('automation.noConditions', { defaultValue: 'No conditions — rule fires on every trigger.' })}
+          {t('automation.noConditions', {
+            defaultValue: 'No conditions — rule fires on every trigger.',
+          })}
         </p>
       ) : (
         <ul className="space-y-2">
@@ -475,7 +498,10 @@ function ConditionsEditor({
                 />
               </div>
               <div className="col-span-3">
-                <Select value={c.op} onChange={(e) => update(i, { op: e.target.value as RuleCondition['op'] })}>
+                <Select
+                  value={c.op}
+                  onChange={(e) => update(i, { op: e.target.value as RuleCondition['op'] })}
+                >
                   {OPS.map((op) => (
                     <option key={op} value={op}>
                       {op}

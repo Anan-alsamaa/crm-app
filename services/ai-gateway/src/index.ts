@@ -53,9 +53,12 @@ async function main(): Promise<void> {
 
   const app = Fastify({ loggerInstance: logger as unknown as FastifyBaseLogger });
   // CORS allow-list — comma-separated origins or `*` (dev only).
-  const corsOrigins = config.CORS_ORIGIN === '*'
-    ? true
-    : config.CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean);
+  const corsOrigins =
+    config.CORS_ORIGIN === '*'
+      ? true
+      : config.CORS_ORIGIN.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
   await app.register(cors, { origin: corsOrigins, credentials: true });
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/ready', async (_req, reply) => {

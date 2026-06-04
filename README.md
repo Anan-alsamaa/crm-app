@@ -36,13 +36,13 @@ crm-app/
 
 ## Prerequisites
 
-| Tool        | Version       | Notes                                          |
-| ----------- | ------------- | ---------------------------------------------- |
-| Node.js     | 20 LTS        | `nvm install 20` recommended                   |
-| pnpm        | 9.x           | `corepack enable && corepack prepare pnpm@9 --activate` |
-| PostgreSQL  | 16            | Or use the docker-compose stack                |
-| Redis       | 7             | Required for prod; dev can run with `REDIS_ENABLED=false` |
-| Docker      | 24+ (optional)| For `docker-compose.yml`                       |
+| Tool       | Version        | Notes                                                     |
+| ---------- | -------------- | --------------------------------------------------------- |
+| Node.js    | 20 LTS         | `nvm install 20` recommended                              |
+| pnpm       | 9.x            | `corepack enable && corepack prepare pnpm@9 --activate`   |
+| PostgreSQL | 16             | Or use the docker-compose stack                           |
+| Redis      | 7              | Required for prod; dev can run with `REDIS_ENABLED=false` |
+| Docker     | 24+ (optional) | For `docker-compose.yml`                                  |
 
 ## Quick start — local SQLite (no Docker)
 

@@ -70,9 +70,17 @@ export function evalCondition(
     case 'neq':
       return lhs !== rhs;
     case 'contains':
-      return typeof lhs === 'string' && typeof rhs === 'string' && lhs.toLowerCase().includes(rhs.toLowerCase());
+      return (
+        typeof lhs === 'string' &&
+        typeof rhs === 'string' &&
+        lhs.toLowerCase().includes(rhs.toLowerCase())
+      );
     case 'starts_with':
-      return typeof lhs === 'string' && typeof rhs === 'string' && lhs.toLowerCase().startsWith(rhs.toLowerCase());
+      return (
+        typeof lhs === 'string' &&
+        typeof rhs === 'string' &&
+        lhs.toLowerCase().startsWith(rhs.toLowerCase())
+      );
     case 'gt':
       return typeof lhs === 'number' && typeof rhs === 'number' && lhs > rhs;
     case 'lt':
@@ -114,7 +122,9 @@ async function executeAction(
     case 'assign_agent':
       if (entityType === 'conversation' || entityType === 'ticket') {
         await directus.request(
-          updateItem(entityType + 's', entityId, { assigned_agent: action.params.agentId } as never),
+          updateItem(entityType + 's', entityId, {
+            assigned_agent: action.params.agentId,
+          } as never),
         );
       }
       return;

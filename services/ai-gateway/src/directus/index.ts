@@ -33,7 +33,10 @@ export class GatewayDirectus {
    * Fetch the conversation header + recent messages (newest last) so prompts
    * have the full thread context.
    */
-  async getConversation(conversationId: string, messageLimit = 50): Promise<ConversationContext | null> {
+  async getConversation(
+    conversationId: string,
+    messageLimit = 50,
+  ): Promise<ConversationContext | null> {
     try {
       const conv = (await this.client.request(
         readItem('conversations', conversationId, {

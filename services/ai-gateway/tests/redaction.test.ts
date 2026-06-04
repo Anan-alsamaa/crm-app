@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  redact,
-  redactDeep,
-  unredact,
-  luhnValid,
-  ibanValid,
-} from '../src/redaction/index.js';
+import { redact, redactDeep, unredact, luhnValid, ibanValid } from '../src/redaction/index.js';
 
 describe('PII redaction', () => {
   it('redacts a plain email', () => {
@@ -78,9 +72,7 @@ describe('PII redaction', () => {
     const { redacted } = redact(
       'My card 4242 4242 4242 4242, email j@example.com, phone +44 20 7946 0958',
     );
-    expect(redacted).toBe(
-      'My card <CARD_1>, email <EMAIL_1>, phone <PHONE_1>',
-    );
+    expect(redacted).toBe('My card <CARD_1>, email <EMAIL_1>, phone <PHONE_1>');
   });
 
   it('does not leak any of the original values when redacted', () => {

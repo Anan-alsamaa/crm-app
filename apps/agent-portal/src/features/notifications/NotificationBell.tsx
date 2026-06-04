@@ -136,12 +136,13 @@ export function NotificationBell() {
 
           {/* Filter tabs */}
           <div className="flex gap-1 px-3 pb-2">
-            {(
-              [
-                { id: 'unread' as const, label: `Unread${unread.length ? ` · ${unread.length}` : ''}` },
-                { id: 'all' as const, label: `All${list.length ? ` · ${list.length}` : ''}` },
-              ]
-            ).map((tab) => (
+            {[
+              {
+                id: 'unread' as const,
+                label: `Unread${unread.length ? ` · ${unread.length}` : ''}`,
+              },
+              { id: 'all' as const, label: `All${list.length ? ` · ${list.length}` : ''}` },
+            ].map((tab) => (
               <button
                 key={tab.id}
                 type="button"
@@ -187,8 +188,16 @@ export function NotificationBell() {
               </div>
             ) : (
               [
-                { id: 'today', heading: t('notifications.today', { defaultValue: 'Today' }), items: groups.today },
-                { id: 'earlier', heading: t('notifications.earlier', { defaultValue: 'Earlier' }), items: groups.earlier },
+                {
+                  id: 'today',
+                  heading: t('notifications.today', { defaultValue: 'Today' }),
+                  items: groups.today,
+                },
+                {
+                  id: 'earlier',
+                  heading: t('notifications.earlier', { defaultValue: 'Earlier' }),
+                  items: groups.earlier,
+                },
               ]
                 .filter((g) => g.items.length > 0)
                 .map((g) => (
@@ -232,7 +241,8 @@ export function NotificationBell() {
                                   <button
                                     type="button"
                                     onClick={async () => {
-                                      if (!n.read_at) await markRead.mutateAsync(n.id).catch(() => null);
+                                      if (!n.read_at)
+                                        await markRead.mutateAsync(n.id).catch(() => null);
                                       setOpen(false);
                                       if (n.link) navigate(n.link);
                                     }}
@@ -271,7 +281,9 @@ export function NotificationBell() {
               }}
               className="hover:text-foreground"
             >
-              {t('notifications.managePreferences', { defaultValue: 'Manage notification preferences' })}
+              {t('notifications.managePreferences', {
+                defaultValue: 'Manage notification preferences',
+              })}
             </button>
           </div>
         </div>

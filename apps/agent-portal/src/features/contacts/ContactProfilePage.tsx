@@ -69,7 +69,10 @@ export function ContactProfilePage() {
     return items.sort((a, b) => (a.at < b.at ? 1 : -1));
   }, [conversations.data, tickets.data]);
 
-  const fullName = contact.data?.name ?? contact.data?.email ?? t('contacts.unknown', { defaultValue: 'Unknown contact' });
+  const fullName =
+    contact.data?.name ??
+    contact.data?.email ??
+    t('contacts.unknown', { defaultValue: 'Unknown contact' });
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -138,7 +141,9 @@ export function ContactProfilePage() {
           <Avatar name={c.name} email={c.email} size="lg" />
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex items-baseline gap-2">
-              <h2 className="text-xl font-semibold tracking-tight text-foreground truncate">{c.name ?? c.email}</h2>
+              <h2 className="text-xl font-semibold tracking-tight text-foreground truncate">
+                {c.name ?? c.email}
+              </h2>
               {metaTier && <Pill tone="primary">{metaTier}</Pill>}
             </div>
             <dl className="grid grid-cols-1 gap-x-6 gap-y-0.5 text-xs sm:grid-cols-2">
@@ -149,7 +154,10 @@ export function ContactProfilePage() {
                 <Row label={t('contacts.phone', { defaultValue: 'Phone' })} value={c.phone} />
               )}
               {c.vendor?.name && (
-                <Row label={t('contacts.vendor', { defaultValue: 'Vendor' })} value={c.vendor.name} />
+                <Row
+                  label={t('contacts.vendor', { defaultValue: 'Vendor' })}
+                  value={c.vendor.name}
+                />
               )}
               {c.external_customer_id && (
                 <Row
@@ -244,7 +252,9 @@ export function ContactProfilePage() {
                 {t('contacts.ticket', { defaultValue: 'Ticket' })}
               </span>
             </div>
-            <div className="mt-1 text-sm font-medium text-foreground truncate">{ticket.subject}</div>
+            <div className="mt-1 text-sm font-medium text-foreground truncate">
+              {ticket.subject}
+            </div>
           </div>
           <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
             {formatRelative(ticket.date_created)}

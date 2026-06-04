@@ -56,10 +56,9 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
         conversation: conversationId ?? null,
         assigned_agent: user?.id ?? null,
       } as Parameters<typeof createTicket.mutateAsync>[0]);
-      toast.success(
-        t('tickets.created', { defaultValue: 'Ticket created' }),
-        { description: values.subject },
-      );
+      toast.success(t('tickets.created', { defaultValue: 'Ticket created' }), {
+        description: values.subject,
+      });
       onClose();
     } catch {
       toast.error(t('tickets.createError'));

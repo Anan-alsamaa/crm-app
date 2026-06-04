@@ -62,7 +62,7 @@ describe('findExistingContact (per-vendor dedup)', () => {
     const id = await findExistingContact(d, 'v1', {});
     expect(id).toBeNull();
     // No request made because no identifiers.
-    expect((d.request as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+    expect(d.request as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
 
   it('returns the matched id when one row comes back', async () => {

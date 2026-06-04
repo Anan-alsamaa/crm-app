@@ -172,9 +172,7 @@ export function CommandPalette({
         {/* Results */}
         <div ref={listRef} className="max-h-[60vh] overflow-y-auto p-2">
           {flat.length === 0 ? (
-            <div className="px-3 py-12 text-center text-sm text-muted-foreground">
-              {emptyHint}
-            </div>
+            <div className="px-3 py-12 text-center text-sm text-muted-foreground">{emptyHint}</div>
           ) : (
             visibleGroups.map((g) => {
               const startIdx = flat.findIndex((it) => g.items[0] && it.id === g.items[0].id);

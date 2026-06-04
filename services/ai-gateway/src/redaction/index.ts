@@ -18,13 +18,7 @@
  * partially eaten by a phone pattern.
  */
 
-export type PiiCategory =
-  | 'email'
-  | 'phone'
-  | 'address'
-  | 'card'
-  | 'iban'
-  | 'national_id';
+export type PiiCategory = 'email' | 'phone' | 'address' | 'card' | 'iban' | 'national_id';
 
 export interface RedactionEntry {
   /** Placeholder token inserted into the redacted text. */

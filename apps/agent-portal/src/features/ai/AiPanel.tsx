@@ -240,7 +240,9 @@ export function AiPanel({ conversationId, vendorId, draft, locale, onReplySugges
           </p>
         ))}
 
-      {[summarize, suggestReply, sentiment, intent, entities, scoreLead].some((m) => m.isPending) && (
+      {[summarize, suggestReply, sentiment, intent, entities, scoreLead].some(
+        (m) => m.isPending,
+      ) && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner /> {t('ai.running', { defaultValue: 'Working…' })}
         </div>

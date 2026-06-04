@@ -1,10 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import {
-  createYijiClient,
-  HttpYijiClient,
-  MockYijiClient,
-  type YijiOrder,
-} from '../src/index.js';
+import { createYijiClient, HttpYijiClient, MockYijiClient, type YijiOrder } from '../src/index.js';
 
 describe('createYijiClient factory', () => {
   it('returns MockYijiClient when no apiUrl is set', () => {
@@ -84,7 +79,9 @@ describe('HttpYijiClient', () => {
   });
 
   it('calls the expected URL for getCustomer', async () => {
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ externalCustomerId: 'c1', name: 'Test' }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ externalCustomerId: 'c1', name: 'Test' }), { status: 200 }),
+    );
     const client = new HttpYijiClient({ baseUrl: 'https://api.example.com' });
     const c = await client.getCustomer('v1', 'c1');
     expect(c?.name).toBe('Test');
@@ -95,7 +92,9 @@ describe('HttpYijiClient', () => {
   });
 
   it('sends bearer token when provided', async () => {
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ externalCustomerId: 'c1' }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ externalCustomerId: 'c1' }), { status: 200 }),
+    );
     const client = new HttpYijiClient({ baseUrl: 'https://api.example.com', token: 't-abc' });
     await client.getCustomer('v1', 'c1');
     const initArg = fetchMock.mock.calls[0]?.[1] as RequestInit;
@@ -150,7 +149,14 @@ describe('HttpYijiClient', () => {
 
   it('returns array shape for orders directly', async () => {
     const fakeOrders: YijiOrder[] = [
-      { orderId: 'O1', status: 'placed', total: 10, currency: 'USD', placedAt: '2026-01-01T00:00:00Z', items: [] },
+      {
+        orderId: 'O1',
+        status: 'placed',
+        total: 10,
+        currency: 'USD',
+        placedAt: '2026-01-01T00:00:00Z',
+        items: [],
+      },
     ];
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(fakeOrders), { status: 200 }));
     const client = new HttpYijiClient({ baseUrl: 'https://api.example.com' });

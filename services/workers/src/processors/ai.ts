@@ -1,7 +1,12 @@
 import type { Job } from 'bullmq';
 import type { Logger } from 'pino';
 import { updateItem } from '@directus/sdk';
-import { AI_ENDPOINTS, type AiJob, type SummaryResponse, type LeadScoreResponse } from '@yiji/shared-types';
+import {
+  AI_ENDPOINTS,
+  type AiJob,
+  type SummaryResponse,
+  type LeadScoreResponse,
+} from '@yiji/shared-types';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 
 /**

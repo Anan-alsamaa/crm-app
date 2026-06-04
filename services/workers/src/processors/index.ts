@@ -92,7 +92,10 @@ export const processors: Record<QueueName, Processor> = {
   },
   [QUEUES.imports]: async (job, deps) => {
     if (!deps.imports) {
-      deps.logger.warn({ jobId: job.id }, 'imports processor invoked without imports deps configured');
+      deps.logger.warn(
+        { jobId: job.id },
+        'imports processor invoked without imports deps configured',
+      );
       return;
     }
     const importDeps: ImportsDeps = {

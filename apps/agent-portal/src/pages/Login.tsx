@@ -61,7 +61,6 @@ function EyeIcon({ open }: { open: boolean }) {
   );
 }
 
-
 export function Login() {
   const { t } = useTranslation();
   const { login } = useAuth();

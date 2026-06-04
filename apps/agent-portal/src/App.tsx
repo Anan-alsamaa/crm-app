@@ -119,9 +119,7 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
                           />
                         )}
                         <it.icon size={16} />
-                        {!isCollapsed && (
-                          <span className="flex-1 truncate">{it.label}</span>
-                        )}
+                        {!isCollapsed && <span className="flex-1 truncate">{it.label}</span>}
                       </>
                     )}
                   </NavLink>
@@ -139,12 +137,7 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
           isCollapsed ? 'px-2 space-y-1.5' : 'px-2.5 space-y-1',
         )}
       >
-        <div
-          className={cn(
-            'flex items-center',
-            isCollapsed ? 'justify-center gap-1' : 'gap-1',
-          )}
-        >
+        <div className={cn('flex items-center', isCollapsed ? 'justify-center gap-1' : 'gap-1')}>
           <NotificationBell />
           {!isCollapsed && <LanguageToggle />}
         </div>
@@ -191,9 +184,7 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
           aria-hidden
           className={cn(
             'h-12 w-0.5 rounded-full transition-colors duration-fast ease-out',
-            dragging
-              ? 'bg-primary'
-              : 'bg-transparent group-hover/handle:bg-primary/40',
+            dragging ? 'bg-primary' : 'bg-transparent group-hover/handle:bg-primary/40',
           )}
         />
       </div>
@@ -209,14 +200,16 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         { to: '/', end: true, label: t('nav.inbox'), icon: InboxIcon },
         { to: '/tickets', label: t('nav.tickets'), icon: TicketIcon },
-        { to: '/contacts', label: t('nav.contacts', { defaultValue: 'Contacts' }), icon: UsersIcon },
+        {
+          to: '/contacts',
+          label: t('nav.contacts', { defaultValue: 'Contacts' }),
+          icon: UsersIcon,
+        },
       ],
     },
     {
       heading: t('nav.account', { defaultValue: 'Account' }),
-      items: [
-        { to: '/preferences', label: t('nav.preferences'), icon: SettingsIcon },
-      ],
+      items: [{ to: '/preferences', label: t('nav.preferences'), icon: SettingsIcon }],
     },
   ];
   return (

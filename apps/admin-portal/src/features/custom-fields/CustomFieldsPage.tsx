@@ -31,7 +31,15 @@ const FIELD_TYPES: FieldType[] = ['text', 'number', 'boolean', 'date', 'select',
 
 function PlusIcon() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5" aria-hidden>
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      className="h-3.5 w-3.5"
+      aria-hidden
+    >
       <path d="M8 3v10M3 8h10" />
     </svg>
   );
@@ -166,7 +174,10 @@ export function CustomFieldsPage() {
                 <span className="font-medium capitalize">{et}</span>
                 <span className="tabular-nums text-2xs text-muted-foreground/80">{count}</span>
                 {active && (
-                  <span aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary" />
+                  <span
+                    aria-hidden
+                    className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary"
+                  />
                 )}
               </button>
             );
@@ -195,9 +206,12 @@ export function CustomFieldsPage() {
           </div>
         ) : byEntity[tab].length === 0 ? (
           <EmptyState
-            title={t('customFields.empty', { defaultValue: 'No custom fields for this entity yet.' })}
+            title={t('customFields.empty', {
+              defaultValue: 'No custom fields for this entity yet.',
+            })}
             description={t('customFields.emptyHint', {
-              defaultValue: 'Define fields once; they render dynamically in the agent portal on the matching entity.',
+              defaultValue:
+                'Define fields once; they render dynamically in the agent portal on the matching entity.',
             })}
             action={
               <Button
@@ -223,7 +237,12 @@ export function CustomFieldsPage() {
                     setDrawerOpen(true);
                   }}
                   onDelete={async () => {
-                    if (!confirm(t('customFields.confirmDelete', { defaultValue: 'Delete this field?' }))) return;
+                    if (
+                      !confirm(
+                        t('customFields.confirmDelete', { defaultValue: 'Delete this field?' }),
+                      )
+                    )
+                      return;
                     await remove.mutateAsync(f.id);
                   }}
                 />
@@ -295,7 +314,13 @@ export function CustomFieldsPage() {
             <FormField label={t('customFields.name', { defaultValue: 'Name' })}>
               <Input
                 value={draft.name}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value, key: draft.key || slugify(e.target.value) })}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    name: e.target.value,
+                    key: draft.key || slugify(e.target.value),
+                  })
+                }
               />
             </FormField>
             <FormField label={t('customFields.key', { defaultValue: 'Key' })}>
@@ -377,10 +402,16 @@ function FieldRow({
         <div className="flex items-baseline gap-2">
           <h3 className="text-sm font-semibold tracking-tight text-foreground">{f.name}</h3>
           <span className="font-mono text-2xs text-muted-foreground">{f.key}</span>
-          {f.required && <Pill tone="warning" size="sm">{t('customFields.requiredShort', { defaultValue: 'required' })}</Pill>}
+          {f.required && (
+            <Pill tone="warning" size="sm">
+              {t('customFields.requiredShort', { defaultValue: 'required' })}
+            </Pill>
+          )}
         </div>
         <div className="flex items-center gap-2 text-2xs text-muted-foreground">
-          <Pill tone="primary" size="sm">{f.field_type}</Pill>
+          <Pill tone="primary" size="sm">
+            {f.field_type}
+          </Pill>
           <span className="tabular-nums">#{f.display_order}</span>
           {(f.options?.length ?? 0) > 0 && (
             <span className="truncate">opts: {f.options!.join(', ')}</span>

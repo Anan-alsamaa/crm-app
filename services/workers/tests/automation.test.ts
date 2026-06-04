@@ -34,9 +34,15 @@ describe('evalCondition', () => {
   });
 
   it('contains / starts_with (case-insensitive)', () => {
-    expect(evalCondition(ctx, { field: 'context.subject', op: 'contains', value: 'WORLD' })).toBe(true);
-    expect(evalCondition(ctx, { field: 'context.subject', op: 'starts_with', value: 'HELLO' })).toBe(true);
-    expect(evalCondition(ctx, { field: 'context.subject', op: 'contains', value: 'xyz' })).toBe(false);
+    expect(evalCondition(ctx, { field: 'context.subject', op: 'contains', value: 'WORLD' })).toBe(
+      true,
+    );
+    expect(
+      evalCondition(ctx, { field: 'context.subject', op: 'starts_with', value: 'HELLO' }),
+    ).toBe(true);
+    expect(evalCondition(ctx, { field: 'context.subject', op: 'contains', value: 'xyz' })).toBe(
+      false,
+    );
   });
 
   it('gt / lt (numeric)', () => {
@@ -46,8 +52,12 @@ describe('evalCondition', () => {
   });
 
   it('in (array contains)', () => {
-    expect(evalCondition(ctx, { field: 'context.status', op: 'in', value: ['open', 'pending'] })).toBe(true);
-    expect(evalCondition(ctx, { field: 'context.status', op: 'in', value: ['closed'] })).toBe(false);
+    expect(
+      evalCondition(ctx, { field: 'context.status', op: 'in', value: ['open', 'pending'] }),
+    ).toBe(true);
+    expect(evalCondition(ctx, { field: 'context.status', op: 'in', value: ['closed'] })).toBe(
+      false,
+    );
   });
 
   it('returns false for unknown op', () => {
@@ -152,7 +162,9 @@ describe('processAutomationJob', () => {
       },
     ];
     // Override directus.request to return rules on the first call (mock above).
-    (deps.directus.request as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => nextRules);
+    (deps.directus.request as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async () => nextRules,
+    );
     await processAutomationJob(makeJob(), deps);
     expect(notifAdds).toHaveLength(1);
     expect(notifAdds[0]?.data).toMatchObject({ recipientId: 'u1', type: 'automation' });
@@ -171,7 +183,9 @@ describe('processAutomationJob', () => {
         trigger_count: 0,
       },
     ];
-    (deps.directus.request as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => nextRules);
+    (deps.directus.request as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async () => nextRules,
+    );
     await processAutomationJob(makeJob(), deps);
     expect(notifAdds).toHaveLength(0);
   });
@@ -189,10 +203,12 @@ describe('processAutomationJob', () => {
         trigger_count: 0,
       },
     ];
-    (deps.directus.request as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => nextRules);
+    (deps.directus.request as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async () => nextRules,
+    );
     await processAutomationJob(makeJob({ _depth: AUTOMATION_MAX_DEPTH }), deps);
     // No directus call happened — short-circuited before reading rules.
-    expect((deps.directus.request as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+    expect(deps.directus.request as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
     expect(notifAdds).toHaveLength(0);
   });
 });

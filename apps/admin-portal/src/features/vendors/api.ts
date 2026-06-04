@@ -47,8 +47,7 @@ export function useVendors() {
 export function useCreateVendor() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: VendorInput) =>
-      directus.request(createItem('vendors', input as never)),
+    mutationFn: (input: VendorInput) => directus.request(createItem('vendors', input as never)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vendors'] }),
   });
 }

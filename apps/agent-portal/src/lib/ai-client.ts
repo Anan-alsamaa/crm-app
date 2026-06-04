@@ -14,7 +14,8 @@ import { AI_ENDPOINTS } from '@yiji/shared-types';
  * Token + caller identity ride in headers exactly as the gateway expects.
  */
 
-const GATEWAY_URL = (import.meta.env.VITE_AI_GATEWAY_URL as string | undefined) ?? 'http://localhost:8081';
+const GATEWAY_URL =
+  (import.meta.env.VITE_AI_GATEWAY_URL as string | undefined) ?? 'http://localhost:8081';
 const SVC_TOKEN = (import.meta.env.VITE_AI_SVC_TOKEN as string | undefined) ?? '';
 
 export interface AiCaller {

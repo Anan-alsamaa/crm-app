@@ -39,7 +39,15 @@ type FormValues = z.infer<typeof schema>;
 
 function PlusIcon() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5" aria-hidden>
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      className="h-3.5 w-3.5"
+      aria-hidden
+    >
       <path d="M8 3v10M3 8h10" />
     </svg>
   );
@@ -200,7 +208,8 @@ export function VendorsPage() {
             : t('vendors.create', { defaultValue: 'New vendor' })
         }
         description={t('vendors.drawerHint', {
-          defaultValue: 'Branding here drives the customer chat widget for every conversation routed to this vendor.',
+          defaultValue:
+            'Branding here drives the customer chat widget for every conversation routed to this vendor.',
         })}
         footer={
           <>
@@ -227,13 +236,17 @@ export function VendorsPage() {
               defaultValue: 'How the vendor appears in the admin console and routing rules.',
             })}
           >
-            <FormField label={t('vendors.name', { defaultValue: 'Name' })} error={form.formState.errors.name?.message}>
+            <FormField
+              label={t('vendors.name', { defaultValue: 'Name' })}
+              error={form.formState.errors.name?.message}
+            >
               <Input invalid={!!form.formState.errors.name} {...form.register('name')} />
             </FormField>
             <FormField
               label={t('vendors.yijiId', { defaultValue: 'Yiji vendor ID' })}
               hint={t('vendors.yijiIdHint', {
-                defaultValue: 'The vendor identifier from the upstream Yiji platform — used for commerce lookups.',
+                defaultValue:
+                  'The vendor identifier from the upstream Yiji platform — used for commerce lookups.',
               })}
               error={form.formState.errors.yiji_vendor_id?.message}
             >
@@ -375,7 +388,12 @@ function ColorField({
           className="h-10 w-10 shrink-0 rounded-xl ring-1 ring-foreground/10"
           style={{ background: swatch }}
         />
-        <Input placeholder="#0F8D8F" className="font-mono tabular-nums" invalid={!!error} {...register} />
+        <Input
+          placeholder="#0F8D8F"
+          className="font-mono tabular-nums"
+          invalid={!!error}
+          {...register}
+        />
       </div>
     </FormField>
   );

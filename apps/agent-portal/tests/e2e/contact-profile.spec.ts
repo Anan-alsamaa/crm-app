@@ -55,7 +55,10 @@ test.describe('US6 — contact profile + commerce panel', () => {
     test.skip(!FULL_STACK, 'requires E2E_FULL_STACK=1');
     await signIn(page);
     await page.goto('http://localhost:5173/contacts');
-    await page.getByText(/demo customer/i).first().click();
+    await page
+      .getByText(/demo customer/i)
+      .first()
+      .click();
 
     // URL navigates to /contacts/<id>
     await expect(page).toHaveURL(/\/contacts\/[0-9a-f-]+$/i, { timeout: 10_000 });
@@ -94,7 +97,11 @@ test.describe('US6 — contact profile + commerce panel', () => {
           vendor: null,
         },
       };
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+      });
     });
     await page.goto('http://localhost:5173/contacts/00000000-0000-0000-0000-000000000001');
 

@@ -1,16 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Button,
-  cn,
-  FormField,
-  Input,
-  Skeleton,
-  toast,
-  Toolbar,
-  ToolbarSpacer,
-} from '@yiji/ui';
+import { Button, cn, FormField, Input, Skeleton, toast, Toolbar, ToolbarSpacer } from '@yiji/ui';
 import type { AiFeatureConfig } from '@yiji/shared-types';
 import { aiAdmin } from '../../lib/ai-client.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
@@ -18,13 +9,37 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
 type Config = typeof AiFeatureConfig._type;
 
 const FEATURES: Array<{ key: keyof Config; label: string; hint: string }> = [
-  { key: 'summarize', label: 'Summarize conversation', hint: 'Three-sentence summary on demand or on close.' },
+  {
+    key: 'summarize',
+    label: 'Summarize conversation',
+    hint: 'Three-sentence summary on demand or on close.',
+  },
   { key: 'suggestReply', label: 'Suggest reply', hint: 'Drafts a reply for the agent to refine.' },
-  { key: 'analyzeSentiment', label: 'Analyze sentiment', hint: 'Classifies the conversation as positive / neutral / negative.' },
-  { key: 'detectIntent', label: 'Detect intent', hint: 'Tags the customer’s primary intent (refund, shipping, etc.).' },
-  { key: 'extractEntities', label: 'Extract entities', hint: 'Pulls out order IDs, dates, amounts, tracking numbers.' },
-  { key: 'semanticSearch', label: 'Semantic search', hint: 'Ranks related conversations by meaning, not keyword.' },
-  { key: 'scoreLead', label: 'Score lead', hint: 'Estimates lead quality + the signals behind the score.' },
+  {
+    key: 'analyzeSentiment',
+    label: 'Analyze sentiment',
+    hint: 'Classifies the conversation as positive / neutral / negative.',
+  },
+  {
+    key: 'detectIntent',
+    label: 'Detect intent',
+    hint: 'Tags the customer’s primary intent (refund, shipping, etc.).',
+  },
+  {
+    key: 'extractEntities',
+    label: 'Extract entities',
+    hint: 'Pulls out order IDs, dates, amounts, tracking numbers.',
+  },
+  {
+    key: 'semanticSearch',
+    label: 'Semantic search',
+    hint: 'Ranks related conversations by meaning, not keyword.',
+  },
+  {
+    key: 'scoreLead',
+    label: 'Score lead',
+    hint: 'Estimates lead quality + the signals behind the score.',
+  },
 ];
 
 export function AiConfigPage() {
@@ -51,14 +66,16 @@ export function AiConfigPage() {
       qc.setQueryData(['ai-config'], data);
       toast.success(t('aiConfig.saved', { defaultValue: 'AI settings saved.' }));
     },
-    onError: () => toast.error(t('aiConfig.saveError', { defaultValue: 'Could not save AI settings.' })),
+    onError: () =>
+      toast.error(t('aiConfig.saveError', { defaultValue: 'Could not save AI settings.' })),
   });
 
   useEffect(() => {
     if (configQuery.data && !draft) setDraft(configQuery.data);
   }, [configQuery.data, draft]);
 
-  const dirty = !!draft && !!configQuery.data && JSON.stringify(draft) !== JSON.stringify(configQuery.data);
+  const dirty =
+    !!draft && !!configQuery.data && JSON.stringify(draft) !== JSON.stringify(configQuery.data);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -116,7 +133,8 @@ export function AiConfigPage() {
             </h2>
             <p className="text-sm text-foreground/80">
               {t('aiConfig.featuresHint', {
-                defaultValue: 'Disabled features return a clean error to the caller — no provider hit, no usage charge.',
+                defaultValue:
+                  'Disabled features return a clean error to the caller — no provider hit, no usage charge.',
               })}
             </p>
           </div>
@@ -162,7 +180,8 @@ export function AiConfigPage() {
             </h2>
             <p className="text-sm text-foreground/80">
               {t('aiConfig.budgetHint', {
-                defaultValue: 'Max provider calls per calendar month, across all features. 0 = unlimited.',
+                defaultValue:
+                  'Max provider calls per calendar month, across all features. 0 = unlimited.',
               })}
             </p>
           </div>
@@ -179,7 +198,10 @@ export function AiConfigPage() {
                 value={draft?.monthlyCap ?? 0}
                 onChange={(e) =>
                   draft &&
-                  setDraft({ ...draft, monthlyCap: Math.max(0, Number.parseInt(e.target.value, 10) || 0) })
+                  setDraft({
+                    ...draft,
+                    monthlyCap: Math.max(0, Number.parseInt(e.target.value, 10) || 0),
+                  })
                 }
               />
             </FormField>

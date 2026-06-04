@@ -55,7 +55,8 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     csatThanks: 'Thanks for the feedback!',
     csatThanksSub: 'We appreciate you taking the time.',
     offlineTitle: 'Our agents are offline right now',
-    offlineBody: 'Unfortunately, our agents are offline now. Please contact us directly and we will get back to you as soon as possible.',
+    offlineBody:
+      'Unfortunately, our agents are offline now. Please contact us directly and we will get back to you as soon as possible.',
     offlineCallLabel: 'Call us',
     offlineEmailLabel: 'Email us',
   },
@@ -81,7 +82,8 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     csatThanks: 'شكرًا لك على ملاحظاتك!',
     csatThanksSub: 'نقدّر الوقت الذي خصصته.',
     offlineTitle: 'فريق الدعم غير متاح حاليًا',
-    offlineBody: 'للأسف، وكلاؤنا غير متصلين في الوقت الحالي. يرجى التواصل معنا مباشرةً وسنعاود التواصل في أقرب وقت.',
+    offlineBody:
+      'للأسف، وكلاؤنا غير متصلين في الوقت الحالي. يرجى التواصل معنا مباشرةً وسنعاود التواصل في أقرب وقت.',
     offlineCallLabel: 'اتصل بنا',
     offlineEmailLabel: 'راسلنا بالبريد',
   },

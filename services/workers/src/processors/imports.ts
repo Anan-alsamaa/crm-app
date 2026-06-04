@@ -139,7 +139,9 @@ export async function processImportJob(
 
   // Discover the file's storage url, then fetch via the asset endpoint.
   // The /assets/<id> endpoint requires the bearer token to download the blob.
-  await directus.request(readFile(fileId, { fields: ['id', 'filename_disk', 'filename_download'] }));
+  await directus.request(
+    readFile(fileId, { fields: ['id', 'filename_disk', 'filename_download'] }),
+  );
   const res = await fetch(`${deps.directusUrl}/assets/${fileId}`, {
     headers: { authorization: `Bearer ${deps.directusToken}` },
   });

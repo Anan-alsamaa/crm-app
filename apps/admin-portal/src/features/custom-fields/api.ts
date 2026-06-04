@@ -24,7 +24,16 @@ export function useCustomFields() {
     queryFn: () =>
       directus.request(
         readItems('custom_fields', {
-          fields: ['id', 'entity_type', 'name', 'key', 'field_type', 'options', 'required', 'display_order'],
+          fields: [
+            'id',
+            'entity_type',
+            'name',
+            'key',
+            'field_type',
+            'options',
+            'required',
+            'display_order',
+          ],
           sort: ['entity_type', 'display_order', 'name'],
           limit: -1,
         }),

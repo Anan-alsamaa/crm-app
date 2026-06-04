@@ -48,15 +48,11 @@ export class SlidingWindowLimiter {
     const key = `${this.keyPrefix}:${scope}`;
     const now = Date.now();
     const ttl = Math.ceil(this.windowMs / 1000) + 5;
-    const res = (await this.redis.eval(
-      SCRIPT,
-      1,
-      key,
-      now,
-      this.windowMs,
-      this.limit,
-      ttl,
-    )) as [number, number, number];
+    const res = (await this.redis.eval(SCRIPT, 1, key, now, this.windowMs, this.limit, ttl)) as [
+      number,
+      number,
+      number,
+    ];
     return {
       allowed: res[0] === 1,
       count: res[1],
@@ -85,7 +81,10 @@ export class MonthlyCap {
   }
 
   /** Check + increment. Returns whether the request fits inside the cap. */
-  async tryConsume(scope: string, cap: number): Promise<{ allowed: boolean; used: number; cap: number }> {
+  async tryConsume(
+    scope: string,
+    cap: number,
+  ): Promise<{ allowed: boolean; used: number; cap: number }> {
     if (cap <= 0) {
       // Unlimited — still track usage for reporting.
       const key = `${this.keyPrefix}:${scope}:${this.monthKey()}`;

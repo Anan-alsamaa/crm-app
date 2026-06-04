@@ -25,9 +25,7 @@ export function DrawerSection({
         <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {title}
         </h3>
-        {description && (
-          <p className="text-sm leading-relaxed text-foreground/80">{description}</p>
-        )}
+        {description && <p className="text-sm leading-relaxed text-foreground/80">{description}</p>}
       </div>
       <div className="space-y-4">{children}</div>
     </section>

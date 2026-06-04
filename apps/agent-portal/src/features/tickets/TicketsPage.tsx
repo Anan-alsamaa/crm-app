@@ -44,7 +44,10 @@ export function TicketsPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<TicketFilter>('all');
 
-  const isOverdue = (tk: { first_responded_at: string | null; first_response_due_at: string | null }) =>
+  const isOverdue = (tk: {
+    first_responded_at: string | null;
+    first_response_due_at: string | null;
+  }) =>
     !tk.first_responded_at &&
     tk.first_response_due_at !== null &&
     new Date(tk.first_response_due_at).getTime() < Date.now();
@@ -114,9 +117,7 @@ export function TicketsPage() {
                       ? t('tickets.overdue', { defaultValue: 'Overdue' })
                       : t(`status.${f}`, { ns: 'common' })}
                 </span>
-                <span className={cn('tabular-nums text-2xs', !active && tone)}>
-                  {count}
-                </span>
+                <span className={cn('tabular-nums text-2xs', !active && tone)}>{count}</span>
                 {active && (
                   <span
                     aria-hidden
@@ -131,121 +132,118 @@ export function TicketsPage() {
 
       {/* Below: list + detail — no card wrapping */}
       <div className="flex flex-1 min-h-0">
-      <aside className="flex w-[360px] shrink-0 flex-col overflow-hidden">
-        <div className="flex-1 overflow-auto pt-2">
-          {tickets.isLoading ? (
-            <ul className="px-2 space-y-1">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <li
-                  key={i}
-                  className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5"
-                >
-                  <Skeleton className="h-7 w-7 rounded-full" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-3 w-3/4" />
-                    <div className="flex items-center gap-1.5">
-                      <Skeleton className="h-3.5 w-12 rounded-full" />
-                      <Skeleton className="h-3.5 w-16 rounded-full" />
-                    </div>
-                    <Skeleton className="h-2.5 w-1/2" />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : filtered.length > 0 ? (
-            <ul className="space-y-2 px-3 py-2">
-              {filtered.map((tk, i) => {
-                const active = selected === tk.id;
-                const overdue = isOverdue(tk);
-                return (
-                  <li
-                    key={tk.id}
-                    style={{ animationDelay: `${Math.min(i * 28, 280)}ms` }}
-                    className="motion-safe:animate-fade-in"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setSelected(tk.id)}
-                      className={cn(
-                        'group flex w-full items-start gap-3 rounded-2xl px-3.5 py-3 text-start',
-                        'transition-[box-shadow,transform,background-color] duration-fast ease-out',
-                        active
-                          ? 'bg-card shadow-md shadow-foreground/[0.08] ring-1 ring-primary/30'
-                          : 'bg-card/40 ring-1 ring-foreground/[0.03] hover:bg-card hover:shadow-sm hover:shadow-foreground/[0.06] hover:-translate-y-px',
-                      )}
-                    >
-                      <Avatar name={tk.contact?.name} email={tk.contact?.email} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span className="truncate text-sm font-medium text-foreground">
-                            {tk.subject}
-                          </span>
-                          <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-                            {formatRelative(tk.date_created)}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex items-center gap-1.5">
-                          <StatusPill status={tk.status} />
-                          {tk.priority !== 'medium' && tk.priority !== 'low' && (
-                            <Pill tone={tk.priority === 'urgent' ? 'pink' : 'orange'} size="sm">
-                              {t(`priority.${tk.priority}`, { ns: 'common' })}
-                            </Pill>
-                          )}
-                          {overdue && (
-                            <Pill tone="destructive" size="sm">
-                              {t('tickets.overdue', { defaultValue: 'overdue' })}
-                            </Pill>
-                          )}
-                        </div>
-                        {tk.contact?.email && (
-                          <div className="mt-1 truncate text-xs text-muted-foreground">
-                            {tk.contact.email}
-                          </div>
-                        )}
+        <aside className="flex w-[360px] shrink-0 flex-col overflow-hidden">
+          <div className="flex-1 overflow-auto pt-2">
+            {tickets.isLoading ? (
+              <ul className="px-2 space-y-1">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <li key={i} className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5">
+                    <Skeleton className="h-7 w-7 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-3 w-3/4" />
+                      <div className="flex items-center gap-1.5">
+                        <Skeleton className="h-3.5 w-12 rounded-full" />
+                        <Skeleton className="h-3.5 w-16 rounded-full" />
                       </div>
-                    </button>
+                      <Skeleton className="h-2.5 w-1/2" />
+                    </div>
                   </li>
-                );
-              })}
-            </ul>
+                ))}
+              </ul>
+            ) : filtered.length > 0 ? (
+              <ul className="space-y-2 px-3 py-2">
+                {filtered.map((tk, i) => {
+                  const active = selected === tk.id;
+                  const overdue = isOverdue(tk);
+                  return (
+                    <li
+                      key={tk.id}
+                      style={{ animationDelay: `${Math.min(i * 28, 280)}ms` }}
+                      className="motion-safe:animate-fade-in"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setSelected(tk.id)}
+                        className={cn(
+                          'group flex w-full items-start gap-3 rounded-2xl px-3.5 py-3 text-start',
+                          'transition-[box-shadow,transform,background-color] duration-fast ease-out',
+                          active
+                            ? 'bg-card shadow-md shadow-foreground/[0.08] ring-1 ring-primary/30'
+                            : 'bg-card/40 ring-1 ring-foreground/[0.03] hover:bg-card hover:shadow-sm hover:shadow-foreground/[0.06] hover:-translate-y-px',
+                        )}
+                      >
+                        <Avatar name={tk.contact?.name} email={tk.contact?.email} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="truncate text-sm font-medium text-foreground">
+                              {tk.subject}
+                            </span>
+                            <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                              {formatRelative(tk.date_created)}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <StatusPill status={tk.status} />
+                            {tk.priority !== 'medium' && tk.priority !== 'low' && (
+                              <Pill tone={tk.priority === 'urgent' ? 'pink' : 'orange'} size="sm">
+                                {t(`priority.${tk.priority}`, { ns: 'common' })}
+                              </Pill>
+                            )}
+                            {overdue && (
+                              <Pill tone="destructive" size="sm">
+                                {t('tickets.overdue', { defaultValue: 'overdue' })}
+                              </Pill>
+                            )}
+                          </div>
+                          {tk.contact?.email && (
+                            <div className="mt-1 truncate text-xs text-muted-foreground">
+                              {tk.contact.email}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="flex flex-col items-center gap-4 p-6 pt-12 text-center">
+                <TicketEmptyArt size={160} />
+                <div className="space-y-1">
+                  <h3 className="text-md font-semibold text-foreground">{t('tickets.empty')}</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {t('tickets.emptyHint', {
+                      defaultValue: 'Tickets are created from conversations that need follow-up.',
+                    })}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </aside>
+
+        <section className="flex-1 overflow-auto bg-background">
+          {selected ? (
+            <TicketDetail ticketId={selected} />
           ) : (
-            <div className="flex flex-col items-center gap-4 p-6 pt-12 text-center">
-              <TicketEmptyArt size={160} />
-              <div className="space-y-1">
-                <h3 className="text-md font-semibold text-foreground">{t('tickets.empty')}</h3>
-                <p className="text-xs text-muted-foreground">
-                  {t('tickets.emptyHint', {
-                    defaultValue: 'Tickets are created from conversations that need follow-up.',
-                  })}
-                </p>
+            <div className="flex h-full items-center justify-center px-6 text-center">
+              <div className="flex max-w-md flex-col items-center gap-5">
+                <TicketEmptyArt size={200} />
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-bold text-display tracking-tight">
+                    {t('tickets.selectPrompt', { defaultValue: 'Open a ticket' })}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {t('tickets.selectHint', {
+                      defaultValue:
+                        'Pick a ticket on the left to see its workflow, SLA timeline, and history.',
+                    })}
+                  </p>
+                </div>
               </div>
             </div>
           )}
-        </div>
-      </aside>
-
-      <section className="flex-1 overflow-auto bg-background">
-        {selected ? (
-          <TicketDetail ticketId={selected} />
-        ) : (
-          <div className="flex h-full items-center justify-center px-6 text-center">
-            <div className="flex max-w-md flex-col items-center gap-5">
-              <TicketEmptyArt size={200} />
-              <div className="space-y-2">
-                <h2 className="text-2xl font-bold text-display tracking-tight">
-                  {t('tickets.selectPrompt', { defaultValue: 'Open a ticket' })}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {t('tickets.selectHint', {
-                    defaultValue:
-                      'Pick a ticket on the left to see its workflow, SLA timeline, and history.',
-                  })}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
+        </section>
       </div>
     </div>
   );
@@ -277,13 +275,14 @@ function TicketDetail({ ticketId }: { ticketId: string }) {
     return 'text-foreground';
   };
 
-  const statusTone: Record<TicketStatus, 'success' | 'warning' | 'muted' | 'primary' | 'neutral'> = {
-    new: 'primary',
-    open: 'success',
-    pending: 'warning',
-    resolved: 'primary',
-    closed: 'muted',
-  };
+  const statusTone: Record<TicketStatus, 'success' | 'warning' | 'muted' | 'primary' | 'neutral'> =
+    {
+      new: 'primary',
+      open: 'success',
+      pending: 'warning',
+      resolved: 'primary',
+      closed: 'muted',
+    };
 
   return (
     <div className="mx-auto max-w-3xl space-y-7 p-6 sm:p-10">
@@ -309,7 +308,8 @@ function TicketDetail({ ticketId }: { ticketId: string }) {
               {tk.contact?.name ?? tk.contact?.email ?? t('inbox.unknownContact')}
               {tk.date_created && (
                 <>
-                  {' '}·{' '}
+                  {' '}
+                  ·{' '}
                   <span className="tabular-nums">
                     opened {new Date(tk.date_created).toLocaleDateString()}
                   </span>
@@ -412,10 +412,7 @@ function TicketDetail({ ticketId }: { ticketId: string }) {
         ) : events.data && events.data.length > 0 ? (
           <ol className="relative space-y-0">
             {/* Vertical connector */}
-            <span
-              aria-hidden
-              className="absolute start-[7px] top-2 bottom-2 w-px bg-border"
-            />
+            <span aria-hidden className="absolute start-[7px] top-2 bottom-2 w-px bg-border" />
             {events.data.map((ev) => {
               const isWarn = ev.event_type === 'sla_warning';
               const isBreach = ev.event_type === 'sla_breached';
