@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@directus/sdk": "^17.0.0",
+    "@fastify/cors": "^11.0.0",
     "@google/generative-ai": "^0.21.0",
     "@yiji/shared-config": "workspace:*",
     "@yiji/shared-types": "workspace:*",

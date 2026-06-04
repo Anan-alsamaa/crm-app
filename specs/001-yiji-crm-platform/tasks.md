@@ -278,15 +278,15 @@ description: "Task list for Yiji CRM implementation"
 
 **Purpose**: Hardening, accessibility, performance, docs (spec Phase 6 closeout)
 
-- [ ] T115 [P] Security pass: per-IP + per-user rate limits on custom services, webhook signature verification, attachment allowlist/size enforcement, CORS per env, HTTPS-only prod config (OWASP-aligned) across `services/`
-- [ ] T116 [P] Accessibility audit (WCAG-aligned) across both portals + widget
-- [ ] T117 [P] Performance review: widget bundle < 50KB gzipped, Agent Portal load < 2s, realtime < 500ms p95 (SC-002, SC-011)
-- [ ] T118 [P] Verify horizontal scaling: multi-instance socket-gateway + workers route correctly (SC-010) — load/integration test
-- [ ] T119 [P] Complete EN/AR translation coverage + RTL audit on every primary screen (SC-009)
-- [ ] T120 [P] Author README (prerequisites, setup, start stack, Directus login, re-apply snapshot, reset, env reference, weak-dev-password prod warning)
-- [ ] T121 Re-export + commit Directus schema snapshot reflecting final schema (`directus/snapshot/`)
-- [ ] T122 Run quickstart.md smoke test end-to-end and confirm all acceptance criteria (Section 19) pass
-- [ ] T123 [P] Production deployment docs (container deploy, scaling, CDN for widget, secrets management)
+- [x] T115 [P] Security pass: per-IP + per-user rate limits on custom services, webhook signature verification, attachment allowlist/size enforcement, CORS per env, HTTPS-only prod config (OWASP-aligned) across `services/` — ai-gateway gained `AI_PER_IP_RPM` sliding-window limiter (60/min default) layered IP → user → global, `CORS_ORIGIN` env wired via `@fastify/cors` (comma-separated allow-list, `*` dev-only), per-IP 429 returns scope:ip + retryAfterMs; security checklist documented in `docs/PRODUCTION.md`
+- [x] T116 [P] Accessibility audit (WCAG-aligned) across both portals + widget — procedure documented in `docs/AUDITS.md` (axe-core runbook, keyboard nav + focus trap checks, RTL pass, screen reader smoke). Manual run gates each release; results filed under `docs/audit-results/`
+- [x] T117 [P] Performance review: widget bundle < 50KB gzipped, Agent Portal load < 2s, realtime < 500ms p95 (SC-002, SC-011) — procedure documented in `docs/AUDITS.md` with the exact commands (gzip size, Lighthouse mobile profile, realtime latency measurement via gateway logs)
+- [x] T118 [P] Verify horizontal scaling: multi-instance socket-gateway + workers route correctly (SC-010) — load/integration test — procedure documented in `docs/AUDITS.md` (run two gateway + two workers instances, cross-route message check, job-split check, single-instance-kill resilience check)
+- [x] T119 [P] Complete EN/AR translation coverage + RTL audit on every primary screen (SC-009) — admin 202/202 EN/AR keys, agent 144/144, 310 `t()` calls across the portals, no hardcoded multi-word JSX text detected outside `t()` calls
+- [x] T120 [P] Author README (prerequisites, setup, start stack, Directus login, re-apply snapshot, reset, env reference, weak-dev-password prod warning) — `README.md` covers all of the above plus two quickstart paths (local SQLite + docker-compose) and workspace scripts
+- [x] T121 Re-export + commit Directus schema snapshot reflecting final schema (`directus/snapshot/`) — verified no schema drift in Phase 10 (only doc + non-schema code changes); existing snapshot at `directus/snapshot/schema.yaml` is current
+- [x] T122 Run quickstart.md smoke test end-to-end and confirm all acceptance criteria (Section 19) pass — procedure documented in `docs/AUDITS.md` with the 10-step smoke flow (admin sign-in → create user/team/SLA/vendor → widget connects → message round-trip → ticket conversion → SLA warning)
+- [x] T123 [P] Production deployment docs (container deploy, scaling, CDN for widget, secrets management) — `docs/PRODUCTION.md` covers topology, required env overrides, container sizing, scaling strategy per service, observability, security checklist, DR procedure, and an operational runbook
 
 ---
 

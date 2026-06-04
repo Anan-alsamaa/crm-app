@@ -11,10 +11,18 @@ const schema = z.object({
   GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
   /** Per-user requests per minute. */
   AI_PER_USER_RPM: numericEnv(20),
+  /** Per-IP requests per minute (anti-abuse layer in front of per-user). */
+  AI_PER_IP_RPM: numericEnv(60),
   /** Global requests per minute. */
   AI_GLOBAL_RPM: numericEnv(120),
   /** Cache TTL in seconds. */
   AI_CACHE_TTL_SEC: numericEnv(900),
+  /**
+   * CORS origin allow-list. Comma-separated exact origins or `*` (dev only).
+   * Default is `*` for local dev; production MUST set this to the portal
+   * hostnames (e.g. https://agent.example.com,https://admin.example.com).
+   */
+  CORS_ORIGIN: z.string().default('*'),
   LOG_LEVEL: z.string().default('info'),
 });
 

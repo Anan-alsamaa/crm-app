@@ -29,6 +29,8 @@ export interface RouteDeps {
   configStore: AiConfigStore;
   cache: ResponseCache;
   perUserLimiter: SlidingWindowLimiter;
+  /** Optional per-IP limiter; if omitted, only user + global limits apply. */
+  perIpLimiter?: SlidingWindowLimiter;
   globalLimiter: SlidingWindowLimiter;
   monthlyCap: MonthlyCap;
   serviceToken: string;
@@ -72,6 +74,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     reply: FastifyReply,
     endpoint: string,
     cacheKey: string,
+    clientIp?: string,
   ): Promise<{ cached?: unknown } | null> {
     // Feature flag
     const config = await deps.configStore.get();
@@ -87,7 +90,18 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
       return { cached: { ...cached, cached: true } };
     }
 
-    // Rate limits — per user + global
+    // Rate limits — per IP (anti-abuse) → per user → global
+    if (deps.perIpLimiter && clientIp) {
+      const ipVerdict = await deps.perIpLimiter.check(`ip:${clientIp}`);
+      if (!ipVerdict.allowed) {
+        void reply.code(429).send({
+          error: 'rate_limited',
+          scope: 'ip',
+          retryAfterMs: ipVerdict.resetAt - Date.now(),
+        });
+        return null;
+      }
+    }
     const userVerdict = await deps.perUserLimiter.check(`user:${caller.userId}`);
     if (!userVerdict.allowed) {
       void reply.code(429).send({
@@ -164,7 +178,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
 
     const cacheKey = `summary:${body.data.conversationId}:${ctx.messages.length}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.summarizeConversation, cacheKey);
+    const gateRes = await gate(caller, reply, AI_ENDPOINTS.summarizeConversation, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as SummaryResponse);
 
@@ -194,7 +208,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
 
     const cacheKey = `reply:${body.data.conversationId}:${ctx.messages.length}:${body.data.draft ?? ''}:${body.data.locale ?? ''}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.suggestReply, cacheKey);
+    const gateRes = await gate(caller, reply, AI_ENDPOINTS.suggestReply, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as SuggestReplyResponse);
 
@@ -224,7 +238,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
 
     const cacheKey = `sentiment:${body.data.conversationId}:${ctx.messages.length}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.analyzeSentiment, cacheKey);
+    const gateRes = await gate(caller, reply, AI_ENDPOINTS.analyzeSentiment, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as SentimentResponse);
 
@@ -255,7 +269,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
 
     const cacheKey = `intent:${body.data.conversationId}:${ctx.messages.length}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.detectIntent, cacheKey);
+    const gateRes = await gate(caller, reply, AI_ENDPOINTS.detectIntent, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as IntentResponse);
 
@@ -286,7 +300,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
 
     const cacheKey = `entities:${body.data.conversationId}:${ctx.messages.length}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.extractEntities, cacheKey);
+    const gateRes = await gate(caller, reply, AI_ENDPOINTS.extractEntities, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as EntitiesResponse);
 
@@ -318,7 +332,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
 
     // Caller's vendor scope wins over body
     const cacheKey = `search:${body.data.query}:${body.data.limit}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.semanticSearch, cacheKey);
+    const gateRes = await gate(caller, reply, AI_ENDPOINTS.semanticSearch, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as SemanticSearchResponse);
 
@@ -355,7 +369,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
 
     const cacheKey = `lead:${body.data.conversationId}:${ctx.messages.length}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.scoreLead, cacheKey);
+    const gateRes = await gate(caller, reply, AI_ENDPOINTS.scoreLead, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as LeadScoreResponse);
 

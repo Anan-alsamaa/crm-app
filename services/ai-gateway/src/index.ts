@@ -5,6 +5,7 @@
  * /admin/config + /admin/usage. PII redaction runs on every outbound call.
  */
 import Fastify, { type FastifyBaseLogger } from 'fastify';
+import cors from '@fastify/cors';
 import { Redis } from 'ioredis';
 import pino from 'pino';
 import { loadConfig } from './config.js';
@@ -46,10 +47,16 @@ async function main(): Promise<void> {
   const configStore = new AiConfigStore(redis);
   const cache = new ResponseCache(redis, config.AI_CACHE_TTL_SEC);
   const perUserLimiter = new SlidingWindowLimiter(redis, 60_000, config.AI_PER_USER_RPM, 'rl:user');
+  const perIpLimiter = new SlidingWindowLimiter(redis, 60_000, config.AI_PER_IP_RPM, 'rl:ip');
   const globalLimiter = new SlidingWindowLimiter(redis, 60_000, config.AI_GLOBAL_RPM, 'rl:global');
   const monthlyCap = new MonthlyCap(redis);
 
   const app = Fastify({ loggerInstance: logger as unknown as FastifyBaseLogger });
+  // CORS allow-list — comma-separated origins or `*` (dev only).
+  const corsOrigins = config.CORS_ORIGIN === '*'
+    ? true
+    : config.CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean);
+  await app.register(cors, { origin: corsOrigins, credentials: true });
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/ready', async (_req, reply) => {
     if (redis.status !== 'ready')
@@ -63,6 +70,7 @@ async function main(): Promise<void> {
     configStore,
     cache,
     perUserLimiter,
+    perIpLimiter,
     globalLimiter,
     monthlyCap,
     serviceToken: config.SVC_AI_TOKEN,
