@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -9,6 +10,7 @@ import {
   InboxIcon,
   SettingsIcon,
   SignOutIcon,
+  Spinner,
   TicketIcon,
   Toaster,
   UsersIcon,
@@ -18,14 +20,29 @@ import { RouteError } from './components/RouteError.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
 import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
-import { Inbox } from './pages/Inbox.js';
-import { TicketsPage } from './features/tickets/TicketsPage.js';
 import { NotificationBell } from './features/notifications/NotificationBell.js';
-import { PreferencesPage } from './features/notifications/PreferencesPage.js';
-import { ContactsPage } from './features/contacts/ContactsPage.js';
-import { ContactProfilePage } from './features/contacts/ContactProfilePage.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
+
+// Route pages are code-split so the initial bundle stays lean; each loads on
+// first navigation behind the shared Suspense fallback below.
+const Inbox = lazy(() => import('./pages/Inbox.js').then((m) => ({ default: m.Inbox })));
+const TicketsPage = lazy(() =>
+  import('./features/tickets/TicketsPage.js').then((m) => ({ default: m.TicketsPage })),
+);
+const PreferencesPage = lazy(() =>
+  import('./features/notifications/PreferencesPage.js').then((m) => ({
+    default: m.PreferencesPage,
+  })),
+);
+const ContactsPage = lazy(() =>
+  import('./features/contacts/ContactsPage.js').then((m) => ({ default: m.ContactsPage })),
+);
+const ContactProfilePage = lazy(() =>
+  import('./features/contacts/ContactProfilePage.js').then((m) => ({
+    default: m.ContactProfilePage,
+  })),
+);
 
 interface NavItem {
   to: string;
@@ -215,7 +232,18 @@ function Shell({ children }: { children: React.ReactNode }) {
           resetKeys={[location.pathname]}
           fallback={({ reset }) => <RouteError onRetry={reset} />}
         >
-          {children}
+          <Suspense
+            fallback={
+              <div
+                className="flex h-full items-center justify-center text-muted-foreground"
+                aria-busy="true"
+              >
+                <Spinner size={20} label={t('actions.loading', { ns: 'common' })} />
+              </div>
+            }
+          >
+            {children}
+          </Suspense>
         </ErrorBoundary>
       </AppShell>
       <AppCommandPalette />

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { Socket } from 'socket.io-client';
-import { Avatar, CloseIcon, cn, formatRelative, Spinner, useIsDesktop } from '@yiji/ui';
+import { Avatar, CloseIcon, cn, formatRelative, Skeleton, useIsDesktop } from '@yiji/ui';
 import { SOCKET_EVENTS, type MessageNew } from '@yiji/shared-types';
 import { getSocket } from '../../lib/socket.js';
 import { useAgents, useConversation, useMessages, type ConversationMessage } from '../inbox/api.js';
@@ -293,8 +293,32 @@ export function ConversationView({
 
   if (messagesQuery.isLoading)
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        <Spinner size={18} />
+      <div className="flex h-full flex-col" aria-busy="true" aria-live="polite">
+        <span className="sr-only">{t('actions.loading', { ns: 'common' })}</span>
+        {/* Toolbar placeholder */}
+        <div className="flex h-14 shrink-0 items-center gap-3 px-3 sm:px-5">
+          <Skeleton className="h-9 w-9 rounded-full" />
+          <div className="space-y-1.5">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-2.5 w-20" />
+          </div>
+        </div>
+        {/* Thread placeholder — alternating inbound/outbound bubbles */}
+        <div className="flex-1 overflow-hidden">
+          <div className="mx-auto flex max-w-3xl flex-col gap-4 px-5 py-6">
+            {[
+              { me: false, w: 'w-52' },
+              { me: true, w: 'w-40' },
+              { me: false, w: 'w-64' },
+              { me: true, w: 'w-32' },
+            ].map((b, i) => (
+              <div key={i} className={cn('flex gap-2.5', b.me ? 'flex-row-reverse' : 'flex-row')}>
+                <Skeleton className="h-7 w-7 shrink-0 rounded-full" />
+                <Skeleton className={cn('h-10 rounded-[18px]', b.w)} />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
 

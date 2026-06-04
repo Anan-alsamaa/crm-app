@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -9,6 +10,7 @@ import {
   ErrorBoundary,
   SettingsIcon,
   SignOutIcon,
+  Spinner,
   TeamIcon,
   Toaster,
   UsersIcon,
@@ -18,17 +20,39 @@ import { RouteError } from './components/RouteError.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
 import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
-import { UsersPage } from './features/users/UsersPage.js';
-import { TeamsPage } from './features/teams/TeamsPage.js';
-import { SlaPoliciesPage } from './features/sla/SlaPoliciesPage.js';
-import { VendorsPage } from './features/vendors/VendorsPage.js';
-import { AutomationPage } from './features/automation/AutomationPage.js';
-import { ReportsPage } from './features/reports/ReportsPage.js';
-import { CustomFieldsPage } from './features/custom-fields/CustomFieldsPage.js';
-import { ImportsPage } from './features/imports/ImportsPage.js';
-import { AiConfigPage } from './features/ai-config/AiConfigPage.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
+
+// Route pages are code-split so the initial bundle stays lean.
+const UsersPage = lazy(() =>
+  import('./features/users/UsersPage.js').then((m) => ({ default: m.UsersPage })),
+);
+const TeamsPage = lazy(() =>
+  import('./features/teams/TeamsPage.js').then((m) => ({ default: m.TeamsPage })),
+);
+const SlaPoliciesPage = lazy(() =>
+  import('./features/sla/SlaPoliciesPage.js').then((m) => ({ default: m.SlaPoliciesPage })),
+);
+const VendorsPage = lazy(() =>
+  import('./features/vendors/VendorsPage.js').then((m) => ({ default: m.VendorsPage })),
+);
+const AutomationPage = lazy(() =>
+  import('./features/automation/AutomationPage.js').then((m) => ({ default: m.AutomationPage })),
+);
+const ReportsPage = lazy(() =>
+  import('./features/reports/ReportsPage.js').then((m) => ({ default: m.ReportsPage })),
+);
+const CustomFieldsPage = lazy(() =>
+  import('./features/custom-fields/CustomFieldsPage.js').then((m) => ({
+    default: m.CustomFieldsPage,
+  })),
+);
+const ImportsPage = lazy(() =>
+  import('./features/imports/ImportsPage.js').then((m) => ({ default: m.ImportsPage })),
+);
+const AiConfigPage = lazy(() =>
+  import('./features/ai-config/AiConfigPage.js').then((m) => ({ default: m.AiConfigPage })),
+);
 
 interface NavItem {
   to: string;
@@ -239,7 +263,18 @@ function Shell({ children }: { children: React.ReactNode }) {
           resetKeys={[location.pathname]}
           fallback={({ reset }) => <RouteError onRetry={reset} />}
         >
-          {children}
+          <Suspense
+            fallback={
+              <div
+                className="flex h-full items-center justify-center text-muted-foreground"
+                aria-busy="true"
+              >
+                <Spinner size={20} label={t('actions.loading', { ns: 'common' })} />
+              </div>
+            }
+          >
+            {children}
+          </Suspense>
         </ErrorBoundary>
       </AppShell>
       <AppCommandPalette />
