@@ -61,6 +61,7 @@ under "Stream A". Read them, then start at #1. Roughly:
 ## Done criteria
 
 Stop when:
+
 - `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm test` are all green.
 - A fresh VM (or k8s namespace) can stand the stack up from your images +
   documented env, and observability shows up in a collector.
