@@ -52,37 +52,110 @@ function removePresence(vendorId: string, id: string): string[] {
  * Agent presence — global across vendors. Agents serve every vendor in this
  * release, so a single count is enough. We count DISTINCT logged-in agents,
  * not raw sockets: one agent with three tabs open is still "one online".
- * That matches the operational rule the host page advertises — even a single
- * logged-in agent with the app open in any tab = online.
  *
- * - `agentSocketUser[socketId]` records which user a given socket belongs to,
- *   so on disconnect we know whose count to decrement without re-reading
- *   socket.data.
- * - `agentRefCount[userId]` is the number of live sockets for that agent.
- * - distinctAgentCount() = number of keys with refCount > 0.
+ * Three structures:
+ *   - agentSocketUser[socketId] → userId. So on disconnect we know whose
+ *     refCount to decrement without re-reading socket.data.
+ *   - agentRefCount[userId] → live socket count. Entry presence (not value)
+ *     defines "currently online" — entries are only deleted by the offline
+ *     finaliser, not when the count hits zero. That keeps an agent counted
+ *     during the OFFLINE_GRACE window so a reload/network hiccup doesn't
+ *     flicker the host page to offline and back.
+ *   - agentOfflineTimers[userId] → pending offline timer. Cleared when the
+ *     agent reconnects within the grace window so the broadcast never fires.
+ *
+ * Flow:
+ *   socket connects     → addAgentSocket → cancels any pending offline timer.
+ *                         If this is a brand-new user, broadcast "online".
+ *                         If we cancelled a grace timer, no broadcast — the
+ *                         agent never actually went offline from the widget's
+ *                         POV, so we shouldn't announce a state change.
+ *   socket disconnects  → removeAgentSocket(immediate=false) → decrement.
+ *                         If refCount hits 0, schedule offline timer. If a
+ *                         reconnect lands first, timer is cancelled. If the
+ *                         timer fires, NOW delete the entry + broadcast.
+ *   agent:logout event  → removeAgentSocket(immediate=true) → bypass grace,
+ *                         delete entry + broadcast right away.
  */
+const OFFLINE_GRACE_MS = 5000;
 const agentSocketUser = new Map<string, string>();
 const agentRefCount = new Map<string, number>();
+const agentOfflineTimers = new Map<string, NodeJS.Timeout>();
+
 function distinctAgentCount(): number {
   return agentRefCount.size;
 }
-function addAgentSocket(socketId: string, userId: string): void {
+
+/**
+ * Track a freshly-connected agent socket. Returns true if this connection
+ * changed the distinct-online set (a brand-new agent came online, not just
+ * a reconnect or extra tab).
+ */
+function addAgentSocket(socketId: string, userId: string): boolean {
   agentSocketUser.set(socketId, userId);
+  // If a grace timer was waiting to declare this user offline, cancel it —
+  // they're back before the announcement, so no state change to publish.
+  const pending = agentOfflineTimers.get(userId);
+  if (pending) {
+    clearTimeout(pending);
+    agentOfflineTimers.delete(userId);
+  }
+  const wasTracked = agentRefCount.has(userId);
   agentRefCount.set(userId, (agentRefCount.get(userId) ?? 0) + 1);
+  // Presence changed only for first-time-seen agents. Reconnects within
+  // grace are silent (cancelled timer above) — we never said they were
+  // offline, so we don't need to say they're back online.
+  return !wasTracked;
 }
-/** Returns true if this drop changed the distinct-user count (someone went offline). */
-function removeAgentSocket(socketId: string): boolean {
+
+/**
+ * Drop an agent socket. With `immediate=false` (transport disconnect),
+ * schedules a grace-window finaliser; the caller should NOT broadcast.
+ * With `immediate=true` (explicit logout), removes the agent right away
+ * and returns true if a broadcast is needed.
+ */
+function removeAgentSocket(
+  io: import('socket.io').Server,
+  socketId: string,
+  immediate: boolean,
+): boolean {
   const userId = agentSocketUser.get(socketId);
   if (!userId) return false;
   agentSocketUser.delete(socketId);
   const next = (agentRefCount.get(userId) ?? 1) - 1;
-  if (next <= 0) {
+  if (next > 0) {
+    agentRefCount.set(userId, next);
+    return false; // other tabs still alive
+  }
+  agentRefCount.set(userId, 0);
+
+  if (immediate) {
+    // Explicit logout — bypass grace.
+    const pending = agentOfflineTimers.get(userId);
+    if (pending) {
+      clearTimeout(pending);
+      agentOfflineTimers.delete(userId);
+    }
     agentRefCount.delete(userId);
     return true;
   }
-  agentRefCount.set(userId, next);
+
+  // Transport disconnect — schedule the offline announcement so a reload
+  // (or any reconnect within OFFLINE_GRACE_MS) cancels it before it fires.
+  const existing = agentOfflineTimers.get(userId);
+  if (existing) clearTimeout(existing);
+  const t = setTimeout(() => {
+    agentOfflineTimers.delete(userId);
+    // Re-check: if a reconnect landed during the grace window the ref-
+    // count is now > 0 and we mustn't delete the entry.
+    if ((agentRefCount.get(userId) ?? 0) > 0) return;
+    agentRefCount.delete(userId);
+    broadcastAgentPresence(io);
+  }, OFFLINE_GRACE_MS);
+  agentOfflineTimers.set(userId, t);
   return false;
 }
+
 function broadcastAgentPresence(io: import('socket.io').Server): void {
   io.emit(SOCKET_EVENTS.agentsPresence, { count: distinctAgentCount() });
 }
@@ -128,11 +201,10 @@ export function registerConnection(deps: ConnectionDeps): void {
     if (data.kind === 'customer') void onCustomerConnect(socket, deps);
     else if (data.agentId) {
       void onAgentConnect(socket, deps);
-      const before = distinctAgentCount();
-      addAgentSocket(socket.id, data.agentId);
-      // Only broadcast when DISTINCT count changed (first tab from this
-      // agent). Subsequent tabs from the same agent don't move the dial.
-      if (distinctAgentCount() !== before) broadcastAgentPresence(io);
+      // addAgentSocket returns true only for a brand-new agent (not a tab
+      // dup or a reconnect inside the grace window) — that's the only case
+      // we need to broadcast for.
+      if (addAgentSocket(socket.id, data.agentId)) broadcastAgentPresence(io);
     }
 
     registerHandlers(socket, deps);
@@ -145,8 +217,10 @@ export function registerConnection(deps: ConnectionDeps): void {
           online,
         });
       } else if (data.kind === 'agent') {
-        // True only when the LAST tab for this agent closed (they went offline).
-        if (removeAgentSocket(socket.id)) broadcastAgentPresence(io);
+        // Transport-level disconnect: schedule a grace timer. If a reload
+        // reconnects within OFFLINE_GRACE_MS, the timer is cancelled and we
+        // never broadcast offline → no flicker.
+        removeAgentSocket(io, socket.id, false);
       }
     });
   });
@@ -194,7 +268,11 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   // so further events from this socket are dropped.
   socket.on(SOCKET_EVENTS.agentLogout, () => {
     if (data.kind !== 'agent') return;
-    if (removeAgentSocket(socket.id)) broadcastAgentPresence(io);
+    // Explicit logout: skip the disconnect grace window so the host page
+    // flips to offline immediately. The subsequent socket.disconnect()
+    // will fire the disconnect handler too, which no-ops (socket already
+    // removed from agentSocketUser).
+    if (removeAgentSocket(io, socket.id, true)) broadcastAgentPresence(io);
     socket.disconnect(true);
   });
 
