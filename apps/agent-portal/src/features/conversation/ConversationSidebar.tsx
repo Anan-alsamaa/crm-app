@@ -60,7 +60,7 @@ export function ConversationSidebar({ conversationId, notes, onDeleteNote, class
           <div className="space-y-1.5">
             <h3 className="text-lg font-bold tracking-tight text-foreground">{contactName}</h3>
             <Pill tone="pink" size="sm">
-              widget · web
+              {t('sidebar.channelWidget')}
             </Pill>
           </div>
         </div>
@@ -72,19 +72,19 @@ export function ConversationSidebar({ conversationId, notes, onDeleteNote, class
         <dl className="space-y-2.5 text-xs">
           {c.contact?.email && (
             <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">Email</dt>
+              <dt className="text-muted-foreground">{t('sidebar.email')}</dt>
               <dd className="truncate font-medium text-foreground">{c.contact.email}</dd>
             </div>
           )}
           {c.contact?.phone && (
             <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">Phone</dt>
+              <dt className="text-muted-foreground">{t('sidebar.phone')}</dt>
               <dd className="tabular-nums font-medium text-foreground">{c.contact.phone}</dd>
             </div>
           )}
           <div className="flex items-center justify-between gap-3">
-            <dt className="text-muted-foreground">Source</dt>
-            <dd className="font-medium text-foreground">Web widget</dd>
+            <dt className="text-muted-foreground">{t('sidebar.source')}</dt>
+            <dd className="font-medium text-foreground">{t('sidebar.sourceWidget')}</dd>
           </div>
         </dl>
       </section>

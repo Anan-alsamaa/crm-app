@@ -99,7 +99,18 @@
       "unread": "unread"
     },
     "emptyHint": "New conversations from your widget land here in real time.",
-    "welcomeHint": "Pick the next thread on the left, or use the stats above to filter by what needs attention first."
+    "welcomeHint": "Pick the next thread on the left, or use the stats above to filter by what needs attention first.",
+    "welcome": {
+      "queue": "queue",
+      "openCount": "{{count}} open",
+      "zeroTitle": "Inbox zero.",
+      "zeroAccent": "Take a breath.",
+      "waiting": "{{count}} conversation(s) waiting.",
+      "urgentAccent": "{{count}} urgent.",
+      "pace": "You set the pace.",
+      "recent": "Recent activity",
+      "zeroArt": "New conversations will land here as customers reach out through the widget, email, or other channels."
+    }
   },
   "conversation": {
     "replyPlaceholder": "Type a reply…",
@@ -127,6 +138,11 @@
   },
   "sidebar": {
     "contact": "Contact",
+    "channelWidget": "widget · web",
+    "email": "Email",
+    "phone": "Phone",
+    "source": "Source",
+    "sourceWidget": "Web widget",
     "tags": "Tags",
     "linkedTickets": "Linked tickets",
     "noTickets": "No linked tickets.",
@@ -192,7 +208,9 @@
     "earlier": "Earlier",
     "view": "View",
     "managePreferences": "Manage notification preferences",
-    "unreadCount": "{{count}} unread"
+    "unreadCount": "{{count}} unread",
+    "tabUnread": "Unread",
+    "tabAll": "All"
   },
   "preferences": {
     "title": "Notification preferences",

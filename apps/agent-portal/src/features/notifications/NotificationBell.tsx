@@ -139,9 +139,12 @@ export function NotificationBell() {
             {[
               {
                 id: 'unread' as const,
-                label: `Unread${unread.length ? ` · ${unread.length}` : ''}`,
+                label: `${t('notifications.tabUnread')}${unread.length ? ` · ${unread.length}` : ''}`,
               },
-              { id: 'all' as const, label: `All${list.length ? ` · ${list.length}` : ''}` },
+              {
+                id: 'all' as const,
+                label: `${t('notifications.tabAll')}${list.length ? ` · ${list.length}` : ''}`,
+              },
             ].map((tab) => (
               <button
                 key={tab.id}

@@ -471,20 +471,23 @@ export function Inbox() {
                 <div className="mx-auto flex h-full max-w-2xl flex-col justify-center px-6">
                   <div className="flex flex-col items-start gap-6">
                     <Pill tone="pink" size="md">
-                      <span className="font-semibold">queue</span>
+                      <span className="font-semibold">{t('inbox.welcome.queue')}</span>
                       <span className="opacity-70">·</span>
-                      <span>{openCount} open</span>
+                      <span>{t('inbox.welcome.openCount', { count: openCount })}</span>
                     </Pill>
                     <h2 className="text-3xl sm:text-4xl font-extrabold leading-[1.02] tracking-[-0.035em] text-display text-balance">
                       {openCount === 0 ? (
                         <>
-                          Inbox zero. <span className="text-primary">Take a breath.</span>
+                          {t('inbox.welcome.zeroTitle')}{' '}
+                          <span className="text-primary">{t('inbox.welcome.zeroAccent')}</span>
                         </>
                       ) : (
                         <>
-                          {openCount} {openCount === 1 ? 'conversation' : 'conversations'} waiting.{' '}
+                          {t('inbox.welcome.waiting', { count: openCount })}{' '}
                           <span className="text-primary">
-                            {urgentCount > 0 ? `${urgentCount} urgent.` : 'You set the pace.'}
+                            {urgentCount > 0
+                              ? t('inbox.welcome.urgentAccent', { count: urgentCount })
+                              : t('inbox.welcome.pace')}
                           </span>
                         </>
                       )}
@@ -499,7 +502,7 @@ export function Inbox() {
                     {recent.length > 0 && (
                       <div className="mt-2 w-full">
                         <p className="mb-3 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                          Recent activity
+                          {t('inbox.welcome.recent')}
                         </p>
                         <ul className="space-y-1">
                           {recent.map((c) => {
@@ -538,8 +541,7 @@ export function Inbox() {
                       <div className="mt-2 flex items-center gap-3">
                         <ConversationPlaceholderArt size={120} />
                         <p className="text-sm text-muted-foreground max-w-xs">
-                          New conversations will land here as customers reach out through the
-                          widget, email, or other channels.
+                          {t('inbox.welcome.zeroArt')}
                         </p>
                       </div>
                     )}
