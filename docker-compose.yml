@@ -42,10 +42,13 @@ services:
       redis:
         condition: service_healthy
     environment:
-      KEY: ${DIRECTUS_KEY}
-      SECRET: ${DIRECTUS_SECRET}
-      ADMIN_EMAIL: ${DIRECTUS_ADMIN_EMAIL}
-      ADMIN_PASSWORD: ${DIRECTUS_ADMIN_PASSWORD}
+      # Local-dev defaults so `docker compose up` boots Directus even without a
+      # .env (Directus refuses to start with an empty KEY/SECRET). Override all
+      # of these in production — see docker-compose.prod.yml + docs/PRODUCTION.md.
+      KEY: ${DIRECTUS_KEY:-dev-directus-key-change-me}
+      SECRET: ${DIRECTUS_SECRET:-dev-directus-secret-change-me}
+      ADMIN_EMAIL: ${DIRECTUS_ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${DIRECTUS_ADMIN_PASSWORD:-admin}
       PUBLIC_URL: ${DIRECTUS_PUBLIC_URL:-http://localhost:8055}
       DB_CLIENT: pg
       DB_HOST: ${DB_HOST:-postgres}
