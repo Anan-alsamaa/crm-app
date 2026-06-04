@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import type { AuthUser } from '@yiji/shared-config';
 import { auth } from '../directus.js';
+import { disconnectSocket } from '../socket.js';
 
 interface AuthState {
   user: AuthUser | null;
@@ -36,6 +37,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // Drop the realtime socket BEFORE revoking the token. The gateway only
+    // checks the token on the initial handshake, so without this the socket
+    // would survive logout — agent stays "online" from the widget's POV
+    // until the tab is reloaded or closed.
+    disconnectSocket();
     await auth.logout();
     setUser(null);
   }, []);

@@ -177,9 +177,25 @@ export function ConversationView({ conversationId }: { conversationId: string })
 
   const deleteNote = (noteId: string) => {
     if (!socketRef.current) return;
-    // Optimistic local removal — gateway broadcast will confirm + refetch.
+    // Optimistic removal: BOTH the unmerged `live` buffer AND the cached
+    // `messages` query result. Removing from `live` only is not enough —
+    // if the note had already been fetched from Directus it lives in
+    // `messagesQuery.data` (= the merged `base`), and the UI would keep
+    // showing it from there.
     setLive((prev) => prev.filter((m) => m.id !== noteId));
+    qc.setQueryData<ConversationMessage[]>(['messages', conversationId], (prev) =>
+      prev ? prev.filter((m) => m.id !== noteId) : prev,
+    );
     socketRef.current.emit(SOCKET_EVENTS.noteDelete, { conversationId, noteId });
+    // Failsafe refetch: if the gateway silently rejected the delete (e.g.
+    // service-account missing `messages.delete` permission) no `note:deleted`
+    // broadcast comes back, so without this the note would only "reappear"
+    // on the user's next reload. Re-querying Directus after a short delay
+    // makes a silent failure visible (note pops back) rather than leaving
+    // the UI lying about it.
+    window.setTimeout(() => {
+      void qc.invalidateQueries({ queryKey: ['messages', conversationId] });
+    }, 1500);
   };
 
   useEffect(() => {

@@ -225,21 +225,45 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
 
   // Delete an internal note: agents only. The directus helper re-checks the
   // message is in this conversation AND is actually an internal note, so a
-  // crafted payload can't wipe a real customer message.
+  // crafted payload can't wipe a real customer message. On failure we send
+  // an error back to the requesting socket so the client can roll its
+  // optimistic UI back immediately instead of waiting for the refetch
+  // failsafe.
   socket.on(SOCKET_EVENTS.noteDelete, async (raw: unknown) => {
     if (data.kind !== 'agent') return;
     const parsed = NoteDelete.safeParse(raw);
-    if (!parsed.success) return;
+    if (!parsed.success) {
+      socket.emit(SOCKET_EVENTS.error, {
+        code: 'bad_payload',
+        message: 'invalid note:delete',
+      });
+      return;
+    }
     const { conversationId, noteId } = parsed.data;
     try {
       const ok = await directus.deleteInternalNote(conversationId, noteId);
-      if (!ok) return;
+      if (!ok) {
+        // Not an internal note, or already gone. Tell the caller so they
+        // can refetch and resync.
+        socket.emit(SOCKET_EVENTS.error, {
+          code: 'note_delete_rejected',
+          message: 'note not found or not an internal note',
+        });
+        return;
+      }
       io.to(rooms.conversation(conversationId)).emit(SOCKET_EVENTS.noteDeleted, {
         conversationId,
         noteId,
       });
     } catch (err) {
       logger.error({ err }, 'note:delete failed');
+      // The most common cause locally is svc-socket-gateway missing the
+      // `messages.delete` permission until the bootstrap is re-run. Signal
+      // it back so the UI doesn't silently lie.
+      socket.emit(SOCKET_EVENTS.error, {
+        code: 'note_delete_failed',
+        message: 'could not delete note',
+      });
     }
   });
 
