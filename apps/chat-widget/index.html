@@ -246,6 +246,73 @@
       }
       .footer .brand-word { color: var(--ink); }
 
+      /* ───── Identity card (proves customer data is wired) ───── */
+      .identity-card {
+        position: fixed;
+        top: 80px;
+        inset-inline-end: 24px;
+        z-index: 6;
+        width: 280px;
+        background: var(--card);
+        border: 1px solid var(--border-strong);
+        border-radius: 14px;
+        box-shadow: 0 8px 24px -8px oklch(0.22 0.005 250 / 0.18);
+        padding: 14px 16px;
+        font-size: 12.5px;
+        line-height: 1.45;
+        animation: identity-in 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
+      }
+      .identity-card-head {
+        display: flex; align-items: center; gap: 8px;
+        font-weight: 600;
+        color: var(--ink);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 10px;
+      }
+      .identity-card-pill {
+        width: 7px; height: 7px; border-radius: 999px;
+        background: oklch(0.65 0.18 145);
+        box-shadow: 0 0 0 3px oklch(0.65 0.18 145 / 0.18);
+      }
+      .identity-card dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 4px 12px;
+        margin: 0;
+      }
+      .identity-card dt {
+        color: var(--muted);
+        font-weight: 500;
+        font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+        font-size: 11.5px;
+      }
+      .identity-card dd {
+        margin: 0;
+        color: var(--ink);
+        font-weight: 500;
+        overflow-wrap: anywhere;
+      }
+      .identity-card-foot {
+        margin: 12px 0 0;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 11.5px;
+        line-height: 1.5;
+      }
+      .identity-card-foot code {
+        background: oklch(0.96 0.005 230);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 11px;
+      }
+      @keyframes identity-in {
+        from { opacity: 0; transform: translateY(-6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
       /* ───── Widget hint arrow ───── */
       .widget-hint {
         position: fixed;
@@ -270,9 +337,38 @@
         0%, 100% { transform: translateY(0); }
         50% { transform: translateY(-3px); }
       }
+      /* ───── Mobile ───── */
       @media (max-width: 640px) {
         .widget-hint { display: none; }
         .nav-links { display: none; }
+        /* Identity card sits inline above the hero on mobile so it
+           doesn't fight the nav for vertical space. */
+        .identity-card {
+          position: static;
+          width: auto;
+          inset: auto;
+          margin: 12px 16px 0;
+        }
+        .nav { padding: 12px 16px; }
+        .nav-actions { gap: 6px; }
+        .nav-cta { padding: 8px 14px; font-size: 12.5px; }
+        .hero { padding: 40px 18px 30px; }
+        h1 { font-size: clamp(2rem, 9vw, 3rem); margin-top: 16px; }
+        .lede { margin-top: 18px; font-size: 0.97rem; }
+        .cta-row { margin-top: 22px; gap: 8px; }
+        .btn-primary, .btn-ghost { padding: 11px 18px; font-size: 14px; }
+        .stats { margin-top: 32px; padding-top: 20px; flex-direction: column; gap: 16px; }
+        .stat { min-width: 0; }
+        .features { margin: 56px auto 40px; padding: 0 18px; }
+        .features-title { font-size: clamp(1.4rem, 6vw, 2rem); }
+        .feature { padding: 18px; }
+        .footer {
+          padding: 20px 18px;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 8px;
+          font-size: 12.5px;
+        }
       }
     </style>
   </head>

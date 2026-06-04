@@ -219,7 +219,11 @@ export function Widget({ config }: { config: WidgetConfig }) {
   );
 
   return (
-    <div dir={rtl ? 'rtl' : 'ltr'} style={cssVars} className="yiji-widget">
+    <div
+      dir={rtl ? 'rtl' : 'ltr'}
+      style={cssVars}
+      className={`yiji-widget${open ? ' yiji-open' : ''}`}
+    >
       {open && (
         <div className="yiji-panel" role="dialog" aria-label={tr.title}>
           <header className="yiji-header">

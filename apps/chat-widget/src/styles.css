@@ -486,3 +486,79 @@
   color: var(--yiji-ink);
   font-weight: 600;
 }
+
+/* ───── Mobile responsive ─────
+ * Below 480px (phones in portrait): the panel goes full-screen, taking
+ * over the host page's viewport so the keyboard doesn't push the
+ * composer off. Uses dvh so the panel always fits the visible viewport
+ * (excluding URL bar on iOS). Honors safe-area inset for notched
+ * phones so the launcher + close button don't collide with the chin.
+ *
+ * The launcher is enlarged to a comfortable 56px thumb target and
+ * sits above the home-indicator on iOS.
+ */
+@media (max-width: 480px) {
+  .yiji-widget {
+    bottom: 16px;
+    inset-inline-end: 16px;
+    /* Push above the home indicator on iOS */
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  .yiji-launcher {
+    width: 56px;
+    height: 56px;
+  }
+  .yiji-panel {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    width: 100dvw;
+    height: 100vh;
+    height: 100dvh;
+    bottom: 0;
+    inset-inline-end: 0;
+    border-radius: 0;
+    /* Respect notch + home indicator */
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    transform-origin: center;
+  }
+  /* Larger close target for thumbs */
+  .yiji-close {
+    width: 36px;
+    height: 36px;
+  }
+  .yiji-close svg {
+    width: 16px;
+    height: 16px;
+  }
+  /* The launcher hides when the panel is open (full-screen panel covers it) */
+  .yiji-widget.yiji-open .yiji-launcher {
+    display: none;
+  }
+  /* Send button — bigger tap target */
+  .yiji-send {
+    width: 44px;
+    height: 44px;
+  }
+  /* Composer textarea — bigger touch + iOS-friendly font size to suppress zoom */
+  .yiji-input textarea {
+    font-size: 16px; /* >=16px avoids iOS Safari auto-zoom on focus */
+    min-height: 44px;
+  }
+  /* Hide the small attribution footer on mobile to claim every pixel for messages */
+  .yiji-footer {
+    display: none;
+  }
+}
+
+/* ───── Tablet refinement ─────
+ * 481–768px (small tablets / large phones in landscape): keep the
+ * floating panel but enlarge it slightly so the thread isn't cramped.
+ */
+@media (min-width: 481px) and (max-width: 768px) {
+  .yiji-panel {
+    width: min(420px, calc(100vw - 32px));
+    height: min(620px, calc(100vh - 100px));
+  }
+}
