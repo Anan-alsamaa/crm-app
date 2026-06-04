@@ -36,11 +36,11 @@ gateway. Everything is a pnpm/TypeScript monorepo.
 
 ### Frontends (`apps/`)
 
-| App | Stack | Port (dev) | Talks to |
-| --- | --- | --- | --- |
-| `agent-portal` | React 18, Vite, TanStack Query, RHF+Zod, i18next | 5173 | Directus (SDK), socket-gateway (WS), ai-gateway (fetch) |
-| `admin-portal` | React 18, Vite, TanStack Query, RHF+Zod, i18next | 5174 | Directus (SDK), ai-gateway (admin config) |
-| `chat-widget` | Preact, Vite (embeddable bundle) | 5175 | socket-gateway (WS) only |
+| App            | Stack                                            | Port (dev) | Talks to                                                |
+| -------------- | ------------------------------------------------ | ---------- | ------------------------------------------------------- |
+| `agent-portal` | React 18, Vite, TanStack Query, RHF+Zod, i18next | 5173       | Directus (SDK), socket-gateway (WS), ai-gateway (fetch) |
+| `admin-portal` | React 18, Vite, TanStack Query, RHF+Zod, i18next | 5174       | Directus (SDK), ai-gateway (admin config)               |
+| `chat-widget`  | Preact, Vite (embeddable bundle)                 | 5175       | socket-gateway (WS) only                                |
 
 Auth in the portals is Directus session auth via `@yiji/shared-config`'s auth
 client; route guards (`ProtectedRoute`) gate by Directus role. Both portals
@@ -98,14 +98,14 @@ Rooms namespace delivery: `conversation:<id>`, `agent:<id>`, `agents:all`,
 
 Six queues, each with a dedicated processor (`services/workers/src/processors`):
 
-| Queue | Trigger | Does |
-| --- | --- | --- |
-| `sla` | ticket lifecycle + periodic reconcile | computes first-response/resolution deadlines, emits warnings/breaches, schedules re-checks |
-| `notifications` | mentions, assignments, SLA events | writes in-app notifications + emails per user preferences |
-| `ai` | conversation close / manual | calls ai-gateway `summarize` / `score_lead`, persists results on the conversation |
-| `automation` | conversation/message/ticket events | runs admin-defined rules (depth-guarded against loops) |
-| `imports` | admin CSV upload | streams CSV, maps columns, per-vendor contact dedup + upsert |
-| `reports` | scheduled / manual | aggregates (4 implemented report types), renders CSV, optionally emails |
+| Queue           | Trigger                               | Does                                                                                       |
+| --------------- | ------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `sla`           | ticket lifecycle + periodic reconcile | computes first-response/resolution deadlines, emits warnings/breaches, schedules re-checks |
+| `notifications` | mentions, assignments, SLA events     | writes in-app notifications + emails per user preferences                                  |
+| `ai`            | conversation close / manual           | calls ai-gateway `summarize` / `score_lead`, persists results on the conversation          |
+| `automation`    | conversation/message/ticket events    | runs admin-defined rules (depth-guarded against loops)                                     |
+| `imports`       | admin CSV upload                      | streams CSV, maps columns, per-vendor contact dedup + upsert                               |
+| `reports`       | scheduled / manual                    | aggregates (4 implemented report types), renders CSV, optionally emails                    |
 
 Job options: 5 attempts, exponential backoff, failed jobs retained for
 inspection (dead-letter via the failed state).

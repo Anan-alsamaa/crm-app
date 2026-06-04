@@ -69,6 +69,7 @@ under "Stream C". Read them, then start at #1. Roughly:
 ## Done criteria
 
 Stop when:
+
 - CI under 12 min on every push.
 - Coverage thresholds enforced in CI (build fails on regression).
 - `husky` pre-commit prevents the format-drift class of bugs we hit earlier.
