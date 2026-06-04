@@ -1,0 +1,176 @@
+# Production stack for Yiji CRM.
+#
+# This is ADDITIVE to docker-compose.yml (which remains the working local-dev
+# stack). It runs the three Node services from their multi-stage production
+# images with NODE_ENV=production, strict secrets, and no silent dev defaults.
+#
+#   Build:   docker compose -f docker-compose.prod.yml build
+#   Run:     docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#   Scale:   docker compose -f docker-compose.prod.yml up -d --scale socket-gateway=3 --scale workers=2
+#
+# Required secrets use the `${VAR:?message}` form: compose REFUSES to start if
+# they are unset or empty, so a misconfigured deploy fails loudly at boot rather
+# than degrading silently. Supply them via --env-file or your secret store
+# (see docs/PRODUCTION.md → "Secrets management").
+#
+# Postgres + Redis are included for a self-contained single-host deploy. In a
+# managed environment, delete them and point DB_HOST / REDIS_URL at the managed
+# services instead.
+
+x-otel: &otel-env
+  # Empty by default → telemetry is a no-op. Set OTEL_EXPORTER_OTLP_ENDPOINT
+  # (e.g. http://otel-collector:4318) to turn tracing on.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  # ESM loader hook required for full auto-instrumentation under tsx/ESM.
+  NODE_OPTIONS: ${NODE_OPTIONS:---import @opentelemetry/instrumentation/hook.mjs}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-yiji_crm}
+      POSTGRES_USER: ${DB_USER:?set DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set a strong DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-directus} -d ${DB_DATABASE:-yiji_crm}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--save', '60', '1000']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  directus:
+    image: directus/directus:11
+    restart: unless-stopped
+    ports:
+      - '${DIRECTUS_PORT:-8055}:8055'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      KEY: ${DIRECTUS_KEY:?set DIRECTUS_KEY}
+      SECRET: ${DIRECTUS_SECRET:?set DIRECTUS_SECRET}
+      ADMIN_EMAIL: ${DIRECTUS_ADMIN_EMAIL:?set DIRECTUS_ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${DIRECTUS_ADMIN_PASSWORD:?set a strong DIRECTUS_ADMIN_PASSWORD}
+      PUBLIC_URL: ${DIRECTUS_PUBLIC_URL:?set DIRECTUS_PUBLIC_URL}
+      DB_CLIENT: pg
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_DATABASE: ${DB_DATABASE:-yiji_crm}
+      DB_USER: ${DB_USER:?set DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      REDIS: ${REDIS_URL:-redis://redis:6379}
+      CACHE_ENABLED: 'true'
+      CACHE_STORE: redis
+      WEBSOCKETS_ENABLED: 'true'
+      CORS_ENABLED: 'true'
+      CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal hostnames}
+      STORAGE_LOCATIONS: ${STORAGE_LOCATIONS:-local}
+    volumes:
+      - directus_uploads:/directus/uploads
+      - ./directus/extensions:/directus/extensions
+      - ./directus/snapshot:/directus/snapshot
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:8055/server/health']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  socket-gateway:
+    image: ${REGISTRY:-ghcr.io/yiji-crm}/socket-gateway:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: services/socket-gateway/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '${SOCKET_GATEWAY_PORT:-8080}:8080'
+    depends_on:
+      directus:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *otel-env
+      NODE_ENV: production
+      PORT: 8080
+      DIRECTUS_URL: ${DIRECTUS_PUBLIC_URL:?set DIRECTUS_PUBLIC_URL}
+      DIRECTUS_INTERNAL_URL: ${DIRECTUS_INTERNAL_URL:-http://directus:8055}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_ENABLED: 'true'
+      YIJI_JWT_SECRET: ${YIJI_JWT_SECRET:?set a strong YIJI_JWT_SECRET}
+      SVC_GATEWAY_TOKEN: ${SVC_GATEWAY_TOKEN:?set SVC_GATEWAY_TOKEN}
+      CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal hostnames}
+      OTEL_SERVICE_NAME: socket-gateway
+
+  workers:
+    image: ${REGISTRY:-ghcr.io/yiji-crm}/workers:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: services/workers/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      directus:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *otel-env
+      NODE_ENV: production
+      DIRECTUS_INTERNAL_URL: ${DIRECTUS_INTERNAL_URL:-http://directus:8055}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      SVC_WORKERS_TOKEN: ${SVC_WORKERS_TOKEN:?set SVC_WORKERS_TOKEN}
+      AI_GATEWAY_URL: ${AI_GATEWAY_URL:-http://ai-gateway:8081}
+      SVC_AI_TOKEN: ${SVC_AI_TOKEN:-}
+      SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST (notifications + reports need it)}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-Yiji Support <support@example.com>}
+      OTEL_SERVICE_NAME: workers
+
+  ai-gateway:
+    image: ${REGISTRY:-ghcr.io/yiji-crm}/ai-gateway:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: services/ai-gateway/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '${AI_GATEWAY_PORT:-8081}:8081'
+    depends_on:
+      directus:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *otel-env
+      NODE_ENV: production
+      PORT: 8081
+      DIRECTUS_INTERNAL_URL: ${DIRECTUS_INTERNAL_URL:-http://directus:8055}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      SVC_AI_TOKEN: ${SVC_AI_TOKEN:?set SVC_AI_TOKEN}
+      DIRECTUS_AI_TOKEN: ${DIRECTUS_AI_TOKEN:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+      CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal hostnames}
+      OTEL_SERVICE_NAME: ai-gateway
+
+volumes:
+  postgres_data:
+  redis_data:
+  directus_uploads:

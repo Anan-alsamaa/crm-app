@@ -439,8 +439,20 @@ async function applyConstraints(): Promise<void> {
   const pool = new pg.Pool(env.db);
   try {
     for (const sql of constraintStatements) {
+      // Log `=` vs `+` honestly so the idempotence check (check-idempotence.mjs)
+      // can assert "second apply created nothing" — `CREATE ... IF NOT EXISTS`
+      // succeeds either way, so we must probe pg_indexes to know which happened.
+      const name = sql.match(/INDEX\s+(?:IF NOT EXISTS\s+)?(\w+)/i)?.[1];
+      let existed = false;
+      if (name) {
+        const { rowCount } = await pool.query('SELECT 1 FROM pg_indexes WHERE indexname = $1', [
+          name,
+        ]);
+        existed = (rowCount ?? 0) > 0;
+      }
       await pool.query(sql);
-      console.log(`  + ${sql.split('\n')[0]?.trim()}`);
+      const label = name ?? sql.split('\n')[0]?.trim();
+      console.log(existed ? `  = ${label} (exists)` : `  + ${label}`);
     }
   } finally {
     await pool.end();

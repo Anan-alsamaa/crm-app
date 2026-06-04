@@ -1,0 +1,30 @@
+# Keep build context small and prevent host node_modules / build output from
+# clobbering the production dependency tree assembled inside the image.
+**/node_modules
+**/dist
+**/build
+**/.turbo
+**/coverage
+**/.vite
+**/*.tsbuildinfo
+
+.git
+.github
+.husky
+**/.env
+**/.env.*
+!**/.env.example
+
+# Tests, specs and docs are not needed in service runtime images.
+tests
+specs
+docs
+playwright-report
+test-results
+**/*.test.ts
+**/*.spec.ts
+
+# Editor / OS noise
+.vscode
+.idea
+**/.DS_Store
