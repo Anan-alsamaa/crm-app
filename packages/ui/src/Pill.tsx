@@ -25,7 +25,10 @@ export interface PillProps extends HTMLAttributes<HTMLSpanElement> {
 
 const tones: Record<Tone, string> = {
   neutral: 'bg-secondary text-foreground',
-  primary: 'bg-primary-subtle text-primary',
+  // A small-text pill on `bg-primary-subtle` (oklch ~0.92) with the default
+  // primary (oklch 0.58) only hits 3.96:1 — under WCAG AA. Darken the
+  // foreground for inside-pill contrast without touching the global token.
+  primary: 'bg-primary-subtle text-[oklch(0.42_0.10_196)]',
   success: 'bg-success/15 text-success',
   warning: 'bg-warning/20 text-warning-foreground',
   destructive: 'bg-destructive/15 text-destructive',

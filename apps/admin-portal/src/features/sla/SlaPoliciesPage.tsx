@@ -211,7 +211,7 @@ export function SlaPoliciesPage() {
                 {p.applies_to_priority?.map((pr) => (
                   <span
                     key={pr}
-                    className="inline-flex items-center rounded-full bg-primary-subtle px-2 py-0.5 text-2xs font-medium text-primary"
+                    className="inline-flex items-center rounded-full bg-primary-subtle px-2 py-0.5 text-xs font-semibold text-[oklch(0.42_0.10_196)]"
                   >
                     {t(`priority.${pr}`, { ns: 'common' })}
                   </span>

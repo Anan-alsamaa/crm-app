@@ -391,7 +391,7 @@ function FieldRow({
         <button
           type="button"
           onClick={onEdit}
-          className="text-2xs font-medium text-primary underline-offset-2 hover:underline"
+          className="text-xs font-semibold text-[oklch(0.42_0.10_196)] underline-offset-2 hover:underline"
         >
           {t('actions.edit', { ns: 'common', defaultValue: 'edit' })}
         </button>

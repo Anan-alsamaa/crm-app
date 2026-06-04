@@ -134,6 +134,7 @@ export function Toaster({ position = 'bottom', max = 4 }: ToasterProps = {}): JS
 
   return (
     <div
+      role="status"
       aria-live="polite"
       aria-label="Notifications"
       className={cn(

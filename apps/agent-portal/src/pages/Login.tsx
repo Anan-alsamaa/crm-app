@@ -151,7 +151,7 @@ export function Login() {
                   <a
                     href="#"
                     onClick={(e) => e.preventDefault()}
-                    className="text-2xs font-medium text-primary underline-offset-2 hover:underline"
+                    className="text-xs font-semibold text-[oklch(0.42_0.10_196)] underline-offset-2 hover:underline"
                   >
                     {t('login.forgot', { defaultValue: 'Forgot password?' })}
                   </a>

@@ -7,7 +7,7 @@ export function LanguageToggle() {
     <button
       type="button"
       onClick={() => void i18n.changeLanguage(next)}
-      className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground"
+      className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-current/85 transition-colors duration-fast ease-out hover:bg-current/10 hover:text-current"
       aria-label="Toggle language"
     >
       {next === 'ar' ? 'العربية' : 'EN'}

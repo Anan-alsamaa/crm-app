@@ -69,9 +69,9 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
           <div className="min-w-0 leading-tight">
             <div className="flex items-baseline gap-1.5 text-[15px] font-semibold tracking-[-0.015em] text-rail-active-foreground">
               <span>Yiji</span>
-              <span className="text-rail-foreground/45 font-normal">CRM</span>
+              <span className="text-rail-foreground/70 font-normal">CRM</span>
             </div>
-            <div className="text-2xs text-rail-foreground/55 mt-0.5">Agent workspace</div>
+            <div className="text-2xs text-rail-foreground/75 mt-0.5">Agent workspace</div>
           </div>
         )}
       </div>
@@ -86,7 +86,7 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
         {sections.map((sec, sIdx) => (
           <div key={sIdx}>
             {sec.heading && !isCollapsed && (
-              <h3 className="mb-1 px-2 text-2xs font-semibold uppercase tracking-[0.12em] text-rail-foreground/45 whitespace-nowrap">
+              <h3 className="mb-1 px-2 text-2xs font-semibold uppercase tracking-[0.12em] text-rail-foreground/70 whitespace-nowrap">
                 {sec.heading}
               </h3>
             )}

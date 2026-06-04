@@ -56,7 +56,10 @@ export function Avatar({
 }: AvatarProps): JSX.Element {
   const seed = (name || email || 'anon').toLowerCase();
   const hue = hueFor(seed);
-  const bg = `oklch(0.78 0.10 ${hue})`;
+  // Lightness 0.50 + chroma 0.17 keeps white text at >= 4.5:1 (WCAG AA)
+  // across every hue stop. Green hues around 130 sit at 4.23 at 0.55;
+  // dropping to 0.50 covers the full spectrum with margin.
+  const bg = `oklch(0.50 0.17 ${hue})`;
   const initials = initialsOf(name, email);
 
   return (
