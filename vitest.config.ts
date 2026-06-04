@@ -13,6 +13,11 @@ export default defineConfig({
     // Apps run their own jsdom-based Vitest config via `pnpm -r test`.
     include: ['{packages,services}/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**', 'apps/**', '**/tests/e2e/**', '**/*.e2e.*'],
+    // A single forked worker keeps peak memory low (the socket-gateway suite
+    // spins real Socket.IO servers) so coverage runs are stable on constrained
+    // runners. The whole services+packages suite is only a few seconds.
+    pool: 'forks',
+    poolOptions: { forks: { singleFork: true } },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'text-summary', 'json-summary', 'lcov'],
