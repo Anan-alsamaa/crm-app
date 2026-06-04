@@ -12,6 +12,7 @@ import {
   Pill,
   Select,
   Skeleton,
+  toast,
   useIsDesktop,
 } from '@yiji/ui';
 import { SOCKET_EVENTS, type ConversationStatus, type Priority } from '@yiji/shared-types';
@@ -85,15 +86,25 @@ export function Inbox() {
 
   const bulkSetStatus = async (status: ConversationStatus) => {
     const ids = [...checked];
-    await Promise.all(ids.map((id) => update.mutateAsync({ id, patch: { status } })));
-    await Promise.all(ids.map(broadcast));
-    setChecked(new Set());
+    try {
+      await Promise.all(ids.map((id) => update.mutateAsync({ id, patch: { status } })));
+      await Promise.all(ids.map(broadcast));
+      setChecked(new Set());
+      toast.success(t('inbox.bulkStatusDone', { count: ids.length }));
+    } catch {
+      toast.error(t('errors.updateFailed', { ns: 'common' }));
+    }
   };
   const bulkAddTag = async (tagId: string) => {
     const ids = [...checked];
-    await Promise.all(ids.map((id) => addTag.mutateAsync({ conversationId: id, tagId })));
-    await Promise.all(ids.map(broadcast));
-    setChecked(new Set());
+    try {
+      await Promise.all(ids.map((id) => addTag.mutateAsync({ conversationId: id, tagId })));
+      await Promise.all(ids.map(broadcast));
+      setChecked(new Set());
+      toast.success(t('inbox.bulkTagDone', { count: ids.length }));
+    } catch {
+      toast.error(t('errors.updateFailed', { ns: 'common' }));
+    }
   };
 
   const statusDisplay =

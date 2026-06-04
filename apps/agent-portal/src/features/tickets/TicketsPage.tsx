@@ -11,6 +11,7 @@ import {
   Skeleton,
   Spinner,
   TicketEmptyArt,
+  toast,
   Toolbar,
   useIsDesktop,
 } from '@yiji/ui';
@@ -278,7 +279,9 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
   const tk = ticket.data;
 
   const patch = (p: Parameters<typeof update.mutateAsync>[0]['patch']) =>
-    void update.mutateAsync({ id: tk.id, patch: p });
+    void update
+      .mutateAsync({ id: tk.id, patch: p })
+      .catch(() => toast.error(t('errors.updateFailed', { ns: 'common' })));
 
   const dueClass = (iso: string | null) => {
     if (!iso) return 'text-muted-foreground';

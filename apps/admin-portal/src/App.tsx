@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   AppShell,
@@ -6,6 +6,7 @@ import {
   Avatar,
   ClockIcon,
   cn,
+  ErrorBoundary,
   SettingsIcon,
   SignOutIcon,
   TeamIcon,
@@ -13,6 +14,7 @@ import {
   UsersIcon,
   YijiLogo,
 } from '@yiji/ui';
+import { RouteError } from './components/RouteError.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
 import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
@@ -175,6 +177,7 @@ function MobileBrand() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
+  const location = useLocation();
   const sections: NavSection[] = [
     {
       heading: t('nav.workspace', { defaultValue: 'Workspace' }),
@@ -232,7 +235,12 @@ function Shell({ children }: { children: React.ReactNode }) {
         menuLabel={t('nav.openMenu', { defaultValue: 'Open menu' })}
         closeLabel={t('nav.closeMenu', { defaultValue: 'Close menu' })}
       >
-        {children}
+        <ErrorBoundary
+          resetKeys={[location.pathname]}
+          fallback={({ reset }) => <RouteError onRetry={reset} />}
+        >
+          {children}
+        </ErrorBoundary>
       </AppShell>
       <AppCommandPalette />
       <Toaster position="bottom" />

@@ -36,6 +36,7 @@
     "matching": "مطابق",
     "searchPlaceholder": "ابحث بالاسم أو البريد أو الهاتف أو البائع…",
     "empty": "لا توجد جهات اتصال بعد.",
+    "emptyHint": "تظهر جهات الاتصال تلقائيًا عندما يتواصل العملاء عبر قنواتك.",
     "noMatch": "لا توجد نتائج مطابقة لبحثك.",
     "exportCsv": "تصدير CSV",
     "exportEmpty": "لا يوجد ما يمكن تصديره.",
@@ -81,7 +82,9 @@
     "bulkSelected": "{{count}} مُحدَّد",
     "bulkSetStatus": "تعيين الحالة…",
     "bulkAddTag": "إضافة وسم…",
-    "bulkClear": "مسح"
+    "bulkClear": "مسح",
+    "bulkStatusDone": "تم تحديث {{count}} محادثة.",
+    "bulkTagDone": "تم وسم {{count}} محادثة."
   },
   "conversation": {
     "replyPlaceholder": "اكتب ردًا…",

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeftIcon, Avatar, Button, cn, GhostSelect, InfoIcon, Pill } from '@yiji/ui';
+import { ArrowLeftIcon, Avatar, Button, cn, GhostSelect, InfoIcon, Pill, toast } from '@yiji/ui';
 import { SOCKET_EVENTS, type ConversationStatus, type Priority } from '@yiji/shared-types';
 import {
   useAgents,
@@ -52,8 +52,12 @@ export function ConversationToolbar({ conversation, onBack, onToggleDetails }: P
       : ((conversation as unknown as { vendor?: string }).vendor ?? '');
 
   const patch = async (p: Parameters<typeof update.mutateAsync>[0]['patch']) => {
-    await update.mutateAsync({ id: conversation.id, patch: p });
-    await broadcastUpdate(conversation.id);
+    try {
+      await update.mutateAsync({ id: conversation.id, patch: p });
+      await broadcastUpdate(conversation.id);
+    } catch {
+      toast.error(t('errors.updateFailed', { ns: 'common' }));
+    }
   };
 
   const contactName = conversation.contact?.name ?? conversation.contact?.email ?? 'Customer';
@@ -185,8 +189,12 @@ export function ConversationToolbar({ conversation, onBack, onToggleDetails }: P
                 key={tg.id}
                 type="button"
                 onClick={async () => {
-                  await addTag.mutateAsync({ conversationId: conversation.id, tagId: tg.id });
-                  await broadcastUpdate(conversation.id);
+                  try {
+                    await addTag.mutateAsync({ conversationId: conversation.id, tagId: tg.id });
+                    await broadcastUpdate(conversation.id);
+                  } catch {
+                    toast.error(t('errors.updateFailed', { ns: 'common' }));
+                  }
                 }}
                 className="block w-full rounded-sm px-2 py-1.5 text-start text-xs hover:bg-secondary"
               >

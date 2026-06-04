@@ -32,5 +32,14 @@
     "medium": "Medium",
     "high": "High",
     "urgent": "Urgent"
+  },
+  "errors": {
+    "updateFailed": "Couldn't save your change. Please try again.",
+    "actionFailed": "Something went wrong. Please try again.",
+    "loadFailed": "Couldn't load this. Check your connection and retry.",
+    "pageTitle": "Something went wrong",
+    "pageBody": "This page hit an unexpected error. You can try again, or reload the app.",
+    "retry": "Try again",
+    "reload": "Reload page"
   }
 }

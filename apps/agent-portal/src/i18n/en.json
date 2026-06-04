@@ -8,6 +8,7 @@
     "matching": "matching",
     "searchPlaceholder": "Search by name, email, phone, vendor…",
     "empty": "No contacts yet.",
+    "emptyHint": "Contacts appear automatically as customers reach out through your channels.",
     "noMatch": "No contacts match your search.",
     "exportCsv": "Export CSV",
     "exportEmpty": "Nothing to export.",
@@ -81,7 +82,9 @@
     "bulkSelected": "{{count}} selected",
     "bulkSetStatus": "Set status…",
     "bulkAddTag": "Add tag…",
-    "bulkClear": "Clear"
+    "bulkClear": "Clear",
+    "bulkStatusDone": "Updated {{count}} conversation(s).",
+    "bulkTagDone": "Tagged {{count}} conversation(s)."
   },
   "conversation": {
     "replyPlaceholder": "Type a reply…",

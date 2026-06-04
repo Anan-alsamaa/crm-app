@@ -51,6 +51,8 @@ export { Pill } from './Pill.js';
 export type { PillProps } from './Pill.js';
 export { EmptyState } from './EmptyState.js';
 export type { EmptyStateProps } from './EmptyState.js';
+export { ErrorBoundary } from './ErrorBoundary.js';
+export type { ErrorBoundaryProps, ErrorBoundaryFallbackProps } from './ErrorBoundary.js';
 export { Toolbar, ToolbarSpacer } from './Toolbar.js';
 export { PageHeader } from './PageHeader.js';
 export type { PageHeaderProps } from './PageHeader.js';

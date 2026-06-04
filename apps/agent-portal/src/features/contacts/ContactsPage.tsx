@@ -1,7 +1,17 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Avatar, Button, cn, Skeleton, toast, Toolbar, ToolbarSpacer } from '@yiji/ui';
+import {
+  Avatar,
+  Button,
+  cn,
+  EmptyState,
+  Skeleton,
+  toast,
+  Toolbar,
+  ToolbarSpacer,
+  UsersIcon,
+} from '@yiji/ui';
 import { useContacts, type ContactRow } from './api.js';
 
 /**
@@ -145,11 +155,18 @@ export function ContactsPage() {
               <Skeleton key={i} className="h-20 w-full rounded-2xl" />
             ))}
           </div>
+        ) : total === 0 ? (
+          <EmptyState
+            icon={<UsersIcon size={40} />}
+            title={t('contacts.empty', { defaultValue: 'No contacts yet.' })}
+            description={t('contacts.emptyHint', {
+              defaultValue:
+                'Contacts appear automatically as customers reach out through your channels.',
+            })}
+          />
         ) : filtered.length === 0 ? (
           <p className="py-12 text-center text-sm text-muted-foreground">
-            {total === 0
-              ? t('contacts.empty', { defaultValue: 'No contacts yet.' })
-              : t('contacts.noMatch', { defaultValue: 'No contacts match your search.' })}
+            {t('contacts.noMatch', { defaultValue: 'No contacts match your search.' })}
           </p>
         ) : (
           <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
