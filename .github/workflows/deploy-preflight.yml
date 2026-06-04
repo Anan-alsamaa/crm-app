@@ -18,6 +18,12 @@ on:
 permissions:
   contents: read
 
+# Superseded runs (e.g. rapid successive pushes) are cancelled so the slow
+# bootstrap-idempotence job doesn't pile up and starve the Actions runners.
+concurrency:
+  group: deploy-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   compose-validation:
     name: Validate compose files
