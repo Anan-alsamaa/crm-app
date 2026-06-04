@@ -17,7 +17,18 @@
     "test": "vitest run && pnpm -r --if-present test",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "dev": "pnpm -r --parallel --if-present dev"
+    "test:coverage": "vitest run --coverage",
+    "dev": "pnpm -r --parallel --if-present dev",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix --max-warnings=0",
+      "prettier --write"
+    ],
+    "*.{json,md,yaml,yml,css,html}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.1",
