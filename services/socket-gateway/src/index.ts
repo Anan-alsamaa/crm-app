@@ -120,9 +120,12 @@ async function main(): Promise<void> {
   const app = Fastify({ loggerInstance: logger as unknown as FastifyBaseLogger });
   applySecurityHeaders(app);
 
-  // Capture the raw JSON body so the webhook HMAC can be computed over the exact
-  // bytes the sender signed. The other endpoints are GETs with no body, so a
-  // global parser is safe here.
+  // Replace the default JSON parser with one that also retains the raw body, so
+  // the webhook HMAC can be computed over the exact bytes the sender signed.
+  // Fastify ships a default application/json parser, so we must remove it before
+  // registering ours (adding a duplicate throws FST_ERR_CTP_ALREADY_PRESENT and
+  // would crash the gateway on boot). Other endpoints are GETs with no body.
+  app.removeContentTypeParser('application/json');
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body: string, done) => {
     (req as { rawBody?: string }).rawBody = body;
     try {

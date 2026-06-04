@@ -275,7 +275,14 @@ async function applyRoles(client: AnyClient): Promise<void> {
 
     // Role (find by name, else create).
     const existingRoles = (await client.request(
-      readRoles({ filter: { name: { _eq: role.name } }, limit: 1, fields: ['id', 'policies'] }),
+      // Pull the nested policy id (policies = directus_access junction rows);
+      // without `.policy` the link check below never matches and re-links the
+      // policy on every run (non-idempotent + duplicate access rows).
+      readRoles({
+        filter: { name: { _eq: role.name } },
+        limit: 1,
+        fields: ['id', 'policies.policy'],
+      }),
     )) as Array<{ id: string; policies?: unknown[] }>;
     let roleId: string;
     if (existingRoles[0]) {
@@ -406,9 +413,11 @@ async function applyServiceUsers(client: AnyClient): Promise<void> {
       readUsers({ filter: { email: { _eq: email } }, limit: 1, fields: ['id'] }),
     )) as Array<{ id: string }>;
     if (existingUser[0]) {
-      await idempotent(`service user ${email} (update token)`, () =>
-        client.request(updateUser(existingUser[0]!.id, { token, role: roleId } as never)),
-      );
+      // "Ensure" the token/role (same value on re-run). Log as unchanged rather
+      // than created so the idempotence check stays honest — an unconditional
+      // update is a no-op at the data level here.
+      await client.request(updateUser(existingUser[0].id, { token, role: roleId } as never));
+      console.log(`  = service user ${email} (token ensured)`);
     } else {
       await idempotent(`service user ${email}`, () =>
         client.request(
