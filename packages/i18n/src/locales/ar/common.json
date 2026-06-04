@@ -12,7 +12,8 @@
     "send": "إرسال",
     "close": "إغلاق",
     "loading": "جارٍ التحميل",
-    "remove": "إزالة"
+    "remove": "إزالة",
+    "toggleLanguage": "تبديل اللغة"
   },
   "auth": {
     "signIn": "تسجيل الدخول",

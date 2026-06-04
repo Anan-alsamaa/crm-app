@@ -12,7 +12,8 @@
     "send": "Send",
     "close": "Close",
     "loading": "Loading",
-    "remove": "Remove"
+    "remove": "Remove",
+    "toggleLanguage": "Toggle language"
   },
   "auth": {
     "signIn": "Sign in",

@@ -137,6 +137,7 @@ export function ContactsPage() {
           </svg>
           <input
             type="search"
+            aria-label={t('contacts.searchPlaceholder', { defaultValue: 'Search…' })}
             placeholder={t('contacts.searchPlaceholder', { defaultValue: 'Search…' })}
             value={search}
             onChange={(e) => setSearch(e.target.value)}

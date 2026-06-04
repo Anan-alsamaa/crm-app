@@ -122,6 +122,7 @@ export function UsersPage() {
           </svg>
           <input
             type="search"
+            aria-label={t('users.searchPlaceholder', { defaultValue: 'Search…' })}
             placeholder={t('users.searchPlaceholder', {
               defaultValue: 'Search…',
             })}

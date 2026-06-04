@@ -218,6 +218,7 @@ export function Inbox() {
               </svg>
               <input
                 type="search"
+                aria-label={t('inbox.search')}
                 placeholder={t('inbox.search')}
                 className="block h-9 w-full rounded-full border-none bg-secondary/60 ps-9 pe-3 text-sm text-foreground placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-ring/25 text-start transition-[background-color,box-shadow] duration-fast ease-out"
                 value={filters.search ?? ''}
@@ -278,6 +279,7 @@ export function Inbox() {
               </span>
               <Select
                 defaultValue=""
+                aria-label={t('inbox.bulkSetStatus')}
                 className="h-7 border-none bg-card/80 text-xs shadow-none"
                 onChange={(e) => {
                   const v = e.target.value;
@@ -294,6 +296,7 @@ export function Inbox() {
               </Select>
               <Select
                 defaultValue=""
+                aria-label={t('inbox.bulkAddTag')}
                 className="h-7 border-none bg-card/80 text-xs shadow-none"
                 onChange={(e) => {
                   const v = e.target.value;
