@@ -109,7 +109,7 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute end-0 top-full z-50 mt-2 w-[26rem] overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in origin-top-end">
+        <div className="absolute end-0 top-full z-50 mt-2 w-[26rem] max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in origin-top-end">
           {/* Header */}
           <div className="flex items-center justify-between px-5 pt-4 pb-3">
             <div>

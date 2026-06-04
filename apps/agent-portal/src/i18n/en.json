@@ -112,6 +112,7 @@
   "tickets": {
     "title": "Tickets",
     "empty": "No tickets yet.",
+    "backToList": "All tickets",
     "selectPrompt": "Select a ticket to view details.",
     "createTitle": "Create ticket",
     "create": "Create",

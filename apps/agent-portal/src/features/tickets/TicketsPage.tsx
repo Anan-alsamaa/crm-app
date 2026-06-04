@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  ArrowLeftIcon,
   Avatar,
   Button,
   cn,
@@ -11,6 +12,7 @@ import {
   Spinner,
   TicketEmptyArt,
   Toolbar,
+  useIsDesktop,
 } from '@yiji/ui';
 import type { Priority, TicketStatus } from '@yiji/shared-types';
 import { useTickets, useTicket, useTicketEvents, useUpdateTicket } from './api.js';
@@ -41,6 +43,7 @@ function StatusPill({ status }: { status: TicketStatus }) {
 export function TicketsPage() {
   const { t } = useTranslation();
   const tickets = useTickets();
+  const isDesktop = useIsDesktop();
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<TicketFilter>('all');
 
@@ -89,8 +92,8 @@ export function TicketsPage() {
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
           {t('tickets.title')}
         </h1>
-        <span className="opacity-30 text-xs text-muted-foreground">·</span>
-        <div className="flex items-center gap-x-4 text-xs">
+        <span className="opacity-30 text-xs text-muted-foreground hidden sm:inline">·</span>
+        <div className="flex min-w-0 items-center gap-x-4 overflow-x-auto text-xs">
           {FILTERS.map((f) => {
             const active = filter === f;
             const count = filterCount(f);
@@ -130,126 +133,136 @@ export function TicketsPage() {
         </div>
       </Toolbar>
 
-      {/* Below: list + detail — no card wrapping */}
+      {/* Below: list + detail — no card wrapping. Single-column on mobile:
+          the list and the detail view swap places. */}
       <div className="flex flex-1 min-h-0">
-        <aside className="flex w-[360px] shrink-0 flex-col overflow-hidden">
-          <div className="flex-1 overflow-auto pt-2">
-            {tickets.isLoading ? (
-              <ul className="px-2 space-y-1">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <li key={i} className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5">
-                    <Skeleton className="h-7 w-7 rounded-full" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-3 w-3/4" />
-                      <div className="flex items-center gap-1.5">
-                        <Skeleton className="h-3.5 w-12 rounded-full" />
-                        <Skeleton className="h-3.5 w-16 rounded-full" />
-                      </div>
-                      <Skeleton className="h-2.5 w-1/2" />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : filtered.length > 0 ? (
-              <ul className="space-y-2 px-3 py-2">
-                {filtered.map((tk, i) => {
-                  const active = selected === tk.id;
-                  const overdue = isOverdue(tk);
-                  return (
-                    <li
-                      key={tk.id}
-                      style={{ animationDelay: `${Math.min(i * 28, 280)}ms` }}
-                      className="motion-safe:animate-fade-in"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setSelected(tk.id)}
-                        className={cn(
-                          'group flex w-full items-start gap-3 rounded-2xl px-3.5 py-3 text-start',
-                          'transition-[box-shadow,transform,background-color] duration-fast ease-out',
-                          active
-                            ? 'bg-card shadow-md shadow-foreground/[0.08] ring-1 ring-primary/30'
-                            : 'bg-card/40 ring-1 ring-foreground/[0.03] hover:bg-card hover:shadow-sm hover:shadow-foreground/[0.06] hover:-translate-y-px',
-                        )}
-                      >
-                        <Avatar name={tk.contact?.name} email={tk.contact?.email} size="sm" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="truncate text-sm font-medium text-foreground">
-                              {tk.subject}
-                            </span>
-                            <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-                              {formatRelative(tk.date_created)}
-                            </span>
-                          </div>
-                          <div className="mt-1 flex items-center gap-1.5">
-                            <StatusPill status={tk.status} />
-                            {tk.priority !== 'medium' && tk.priority !== 'low' && (
-                              <Pill tone={tk.priority === 'urgent' ? 'pink' : 'orange'} size="sm">
-                                {t(`priority.${tk.priority}`, { ns: 'common' })}
-                              </Pill>
-                            )}
-                            {overdue && (
-                              <Pill tone="destructive" size="sm">
-                                {t('tickets.overdue', { defaultValue: 'overdue' })}
-                              </Pill>
-                            )}
-                          </div>
-                          {tk.contact?.email && (
-                            <div className="mt-1 truncate text-xs text-muted-foreground">
-                              {tk.contact.email}
-                            </div>
-                          )}
+        {(isDesktop || selected === null) && (
+          <aside
+            className={cn(
+              'flex shrink-0 flex-col overflow-hidden',
+              isDesktop ? 'w-[360px]' : 'w-full',
+            )}
+          >
+            <div className="flex-1 overflow-auto pt-2">
+              {tickets.isLoading ? (
+                <ul className="px-2 space-y-1">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <li key={i} className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5">
+                      <Skeleton className="h-7 w-7 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-3 w-3/4" />
+                        <div className="flex items-center gap-1.5">
+                          <Skeleton className="h-3.5 w-12 rounded-full" />
+                          <Skeleton className="h-3.5 w-16 rounded-full" />
                         </div>
-                      </button>
+                        <Skeleton className="h-2.5 w-1/2" />
+                      </div>
                     </li>
-                  );
-                })}
-              </ul>
+                  ))}
+                </ul>
+              ) : filtered.length > 0 ? (
+                <ul className="space-y-2 px-3 py-2">
+                  {filtered.map((tk, i) => {
+                    const active = selected === tk.id;
+                    const overdue = isOverdue(tk);
+                    return (
+                      <li
+                        key={tk.id}
+                        style={{ animationDelay: `${Math.min(i * 28, 280)}ms` }}
+                        className="motion-safe:animate-fade-in"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setSelected(tk.id)}
+                          className={cn(
+                            'group flex w-full items-start gap-3 rounded-2xl px-3.5 py-3 text-start',
+                            'transition-[box-shadow,transform,background-color] duration-fast ease-out',
+                            active
+                              ? 'bg-card shadow-md shadow-foreground/[0.08] ring-1 ring-primary/30'
+                              : 'bg-card/40 ring-1 ring-foreground/[0.03] hover:bg-card hover:shadow-sm hover:shadow-foreground/[0.06] hover:-translate-y-px',
+                          )}
+                        >
+                          <Avatar name={tk.contact?.name} email={tk.contact?.email} size="sm" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="truncate text-sm font-medium text-foreground">
+                                {tk.subject}
+                              </span>
+                              <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                                {formatRelative(tk.date_created)}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex items-center gap-1.5">
+                              <StatusPill status={tk.status} />
+                              {tk.priority !== 'medium' && tk.priority !== 'low' && (
+                                <Pill tone={tk.priority === 'urgent' ? 'pink' : 'orange'} size="sm">
+                                  {t(`priority.${tk.priority}`, { ns: 'common' })}
+                                </Pill>
+                              )}
+                              {overdue && (
+                                <Pill tone="destructive" size="sm">
+                                  {t('tickets.overdue', { defaultValue: 'overdue' })}
+                                </Pill>
+                              )}
+                            </div>
+                            {tk.contact?.email && (
+                              <div className="mt-1 truncate text-xs text-muted-foreground">
+                                {tk.contact.email}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <div className="flex flex-col items-center gap-4 p-6 pt-12 text-center">
+                  <TicketEmptyArt size={160} />
+                  <div className="space-y-1">
+                    <h3 className="text-md font-semibold text-foreground">{t('tickets.empty')}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {t('tickets.emptyHint', {
+                        defaultValue: 'Tickets are created from conversations that need follow-up.',
+                      })}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
+
+        {(isDesktop || selected !== null) && (
+          <section className="flex-1 overflow-auto bg-background">
+            {selected ? (
+              <TicketDetail ticketId={selected} onBack={() => setSelected(null)} />
             ) : (
-              <div className="flex flex-col items-center gap-4 p-6 pt-12 text-center">
-                <TicketEmptyArt size={160} />
-                <div className="space-y-1">
-                  <h3 className="text-md font-semibold text-foreground">{t('tickets.empty')}</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {t('tickets.emptyHint', {
-                      defaultValue: 'Tickets are created from conversations that need follow-up.',
-                    })}
-                  </p>
+              <div className="flex h-full items-center justify-center px-6 text-center">
+                <div className="flex max-w-md flex-col items-center gap-5">
+                  <TicketEmptyArt size={200} />
+                  <div className="space-y-2">
+                    <h2 className="text-2xl font-bold text-display tracking-tight">
+                      {t('tickets.selectPrompt', { defaultValue: 'Open a ticket' })}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      {t('tickets.selectHint', {
+                        defaultValue:
+                          'Pick a ticket on the left to see its workflow, SLA timeline, and history.',
+                      })}
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
-          </div>
-        </aside>
-
-        <section className="flex-1 overflow-auto bg-background">
-          {selected ? (
-            <TicketDetail ticketId={selected} />
-          ) : (
-            <div className="flex h-full items-center justify-center px-6 text-center">
-              <div className="flex max-w-md flex-col items-center gap-5">
-                <TicketEmptyArt size={200} />
-                <div className="space-y-2">
-                  <h2 className="text-2xl font-bold text-display tracking-tight">
-                    {t('tickets.selectPrompt', { defaultValue: 'Open a ticket' })}
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    {t('tickets.selectHint', {
-                      defaultValue:
-                        'Pick a ticket on the left to see its workflow, SLA timeline, and history.',
-                    })}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </section>
+          </section>
+        )}
       </div>
     </div>
   );
 }
 
-function TicketDetail({ ticketId }: { ticketId: string }) {
+function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => void }) {
   const { t } = useTranslation();
   const ticket = useTicket(ticketId);
   const events = useTicketEvents(ticketId);
@@ -286,6 +299,18 @@ function TicketDetail({ ticketId }: { ticketId: string }) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-7 p-6 sm:p-10">
+      {/* Back to ticket list — mobile single-column only. */}
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-md lg:hidden"
+        >
+          <ArrowLeftIcon size={15} className="rtl:-scale-x-100" />
+          {t('tickets.backToList', { defaultValue: 'All tickets' })}
+        </button>
+      )}
+
       {/* Identity card — avatar + subject + contact + status pills */}
       <header className="space-y-4">
         <div className="flex items-start gap-4">

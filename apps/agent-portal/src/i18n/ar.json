@@ -112,6 +112,7 @@
   "tickets": {
     "title": "التذاكر",
     "empty": "لا توجد تذاكر بعد.",
+    "backToList": "كل التذاكر",
     "selectPrompt": "اختر تذكرة لعرض التفاصيل.",
     "createTitle": "إنشاء تذكرة",
     "create": "إنشاء",
