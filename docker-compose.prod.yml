@@ -121,6 +121,8 @@ services:
       WEBHOOK_TOLERANCE_SEC: ${WEBHOOK_TOLERANCE_SEC:-300}
       ATTACHMENT_MAX_BYTES: ${ATTACHMENT_MAX_BYTES:-10485760}
       ATTACHMENT_ALLOWED_MIME: ${ATTACHMENT_ALLOWED_MIME:-image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain}
+      MSG_RATE_CAPACITY: ${MSG_RATE_CAPACITY:-20}
+      MSG_RATE_REFILL_PER_SEC: ${MSG_RATE_REFILL_PER_SEC:-5}
       OTEL_SERVICE_NAME: socket-gateway
 
   workers:

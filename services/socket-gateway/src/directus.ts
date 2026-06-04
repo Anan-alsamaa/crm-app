@@ -102,12 +102,33 @@ export class GatewayDirectus {
     )) as { id: string };
 
     const now = new Date().toISOString();
-    await this.client.request(
-      updateItem('conversations', input.conversationId, {
-        last_message_at: now,
-      } as never),
-    );
+    const patch: Record<string, unknown> = { last_message_at: now };
+    // Unread bookkeeping (SC §7/§8): a customer message increments the agent's
+    // unread counter; an agent reply means the agent is active, so it resets to
+    // 0. Internal notes never touch the customer-facing unread count.
+    if (!input.isInternalNote) {
+      if (input.senderType === 'customer') {
+        const rows = (await this.client.request(
+          readItems('conversations', {
+            filter: { id: { _eq: input.conversationId } },
+            fields: ['unread_count_agent'],
+            limit: 1,
+          }),
+        )) as Array<{ unread_count_agent: number | null }>;
+        patch.unread_count_agent = (rows[0]?.unread_count_agent ?? 0) + 1;
+      } else if (input.senderType === 'agent') {
+        patch.unread_count_agent = 0;
+      }
+    }
+    await this.client.request(updateItem('conversations', input.conversationId, patch as never));
     return { id: created.id, createdAt: now };
+  }
+
+  /** Reset the agent unread counter when an agent reads the conversation. */
+  async markConversationRead(conversationId: string): Promise<void> {
+    await this.client.request(
+      updateItem('conversations', conversationId, { unread_count_agent: 0 } as never),
+    );
   }
 
   /**

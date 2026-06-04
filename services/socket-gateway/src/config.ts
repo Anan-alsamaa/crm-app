@@ -31,6 +31,10 @@ const schema = z
     ATTACHMENT_ALLOWED_MIME: z
       .string()
       .default('image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain'),
+    // Per-socket message rate limit (token bucket): burst capacity + sustained
+    // refill per second. Applies to message:send and note:add.
+    MSG_RATE_CAPACITY: numericEnv(20),
+    MSG_RATE_REFILL_PER_SEC: numericEnv(5),
   })
   .superRefine((cfg, ctx) => {
     if (cfg.NODE_ENV !== 'production') return;

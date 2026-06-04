@@ -102,6 +102,16 @@ export function createNotificationsRepo(client: YijiDirectusClient): Notificatio
         return {};
       }
     },
+    async getUserEmail(userId: string) {
+      try {
+        const u = (await client.request(readUser(userId, { fields: ['email'] }))) as {
+          email?: string | null;
+        };
+        return u.email ?? null;
+      } catch {
+        return null;
+      }
+    },
     async createNotification(input) {
       const row = (await client.request(
         createItem('notifications', {

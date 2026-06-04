@@ -58,6 +58,8 @@ export interface TicketRepo {
 export interface NotificationsRepo {
   /** Notification preferences map: type → channel. */
   getUserPreferences(userId: string): Promise<Record<string, string>>;
+  /** Resolve a user's email address (null if unknown) for email delivery. */
+  getUserEmail(userId: string): Promise<string | null>;
   /** Persist an in-app notifications row + stamp delivery timestamps. */
   createNotification(input: {
     recipient: string;

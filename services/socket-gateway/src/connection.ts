@@ -17,6 +17,7 @@ import { validateAgentToken } from './auth/agent-jwt.js';
 import type { SideEffectProducer } from './queue.js';
 import { createAgentPresence } from './agent-presence.js';
 import { validateAttachments, type AttachmentPolicy } from './attachments.js';
+import { createTokenBucket } from './rate-limit.js';
 
 interface SocketData {
   kind: 'customer' | 'agent';
@@ -35,6 +36,7 @@ export interface ConnectionDeps {
   producer: SideEffectProducer;
   logger: Logger;
   attachmentPolicy: AttachmentPolicy;
+  rateLimit: { capacity: number; refillPerSec: number };
 }
 
 /** In-memory presence per vendor room (per gateway instance). */
@@ -165,6 +167,9 @@ async function onAgentConnect(socket: Socket, { directus }: ConnectionDeps): Pro
 function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   const { io, directus, producer, logger, attachmentPolicy } = deps;
   const data = socket.data as SocketData;
+  // One token bucket per socket — throttles inbound write events (message:send,
+  // note:add) to a burst + sustained rate.
+  const writeBucket = createTokenBucket(deps.rateLimit.capacity, deps.rateLimit.refillPerSec);
 
   // Explicit logout signal from an agent. We mirror the disconnect cleanup
   // up-front so the host-page "agents online" pill flips immediately —
@@ -200,6 +205,11 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   });
 
   socket.on(SOCKET_EVENTS.messageSend, async (raw: unknown) => {
+    if (!writeBucket.tryRemove())
+      return socket.emit(SOCKET_EVENTS.error, {
+        code: 'rate_limited',
+        message: 'too many messages, slow down',
+      });
     const parsed = MessageSend.safeParse(raw);
     if (!parsed.success)
       return socket.emit(SOCKET_EVENTS.error, { code: 'bad_payload', message: 'invalid message' });
@@ -295,6 +305,11 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   // Internal notes: agents only.
   socket.on(SOCKET_EVENTS.noteAdd, async (raw: unknown) => {
     if (data.kind !== 'agent') return;
+    if (!writeBucket.tryRemove())
+      return socket.emit(SOCKET_EVENTS.error, {
+        code: 'rate_limited',
+        message: 'too many notes, slow down',
+      });
     const parsed = NoteAdd.safeParse(raw);
     if (!parsed.success) return;
     const { conversationId, content, clientMsgId } = parsed.data;
@@ -335,6 +350,13 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   socket.on(SOCKET_EVENTS.readAck, (raw: unknown) => {
     const parsed = ReadAck.safeParse(raw);
     if (!parsed.success) return;
+    // An agent reading the thread clears its unread counter. Fire-and-forget;
+    // a failed reset is non-fatal (next agent message resets it anyway).
+    if (data.kind === 'agent') {
+      directus
+        .markConversationRead(parsed.data.conversationId)
+        .catch((err) => logger.warn({ err }, 'markConversationRead failed'));
+    }
     socket
       .to(rooms.conversation(parsed.data.conversationId))
       .emit(SOCKET_EVENTS.readAck, parsed.data);

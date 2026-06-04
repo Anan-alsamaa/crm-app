@@ -111,6 +111,10 @@ async function main(): Promise<void> {
       config.ATTACHMENT_MAX_BYTES,
       config.ATTACHMENT_ALLOWED_MIME,
     ),
+    rateLimit: {
+      capacity: config.MSG_RATE_CAPACITY,
+      refillPerSec: config.MSG_RATE_REFILL_PER_SEC,
+    },
   });
 
   const app = Fastify({ loggerInstance: logger as unknown as FastifyBaseLogger });
