@@ -54,6 +54,7 @@ under "Stream B". Read them, then start at #1. Roughly:
 ## Done criteria
 
 Stop when:
+
 - `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm test` are all green.
 - Both portals render cleanly on iPhone 14 viewport (375×812) and desktop.
 - Axe reports zero serious/critical violations on every route in the existing E2E setup.
