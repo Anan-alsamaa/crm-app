@@ -12,10 +12,15 @@ interface Props {
   className?: string;
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({ children, count }: { children: React.ReactNode; count?: number }) {
   return (
-    <h3 className="mb-3 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-      {children}
+    <h3 className="mb-3 flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <span>{children}</span>
+      {count !== undefined && count > 0 && (
+        <span className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-semibold tabular-nums text-muted-foreground">
+          {count}
+        </span>
+      )}
     </h3>
   );
 }
@@ -134,20 +139,20 @@ export function ConversationSidebar({ conversationId, notes, onDeleteNote, class
       {/* Internal notes — agent-only side conversation. Authored by the team,
           rendered out of the customer thread so they can't bleed in visually. */}
       <section className="px-6 py-4">
-        <SectionLabel>
+        <SectionLabel count={notes?.length}>
           {t('sidebar.internalNotes', { defaultValue: 'Internal notes' })}
         </SectionLabel>
         {notes && notes.length > 0 ? (
-          <ul className="space-y-2.5">
+          <ul className="space-y-2">
             {notes.map((n) => (
               <li
                 key={n.id}
-                className="group relative rounded-lg bg-warning/10 px-3 py-2.5 ring-1 ring-warning/20"
+                className="group relative rounded-lg border-s-2 border-warning/50 bg-warning/10 ps-3 pe-3 py-2.5"
               >
-                <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
+                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
                   {n.content}
                 </p>
-                <div className="mt-1.5 flex items-center justify-between gap-2 text-2xs text-muted-foreground">
+                <div className="mt-2 flex items-center justify-between gap-2 text-2xs text-muted-foreground">
                   <span className="tabular-nums">
                     {n.date_created ? formatRelative(n.date_created) : ''}
                   </span>
@@ -185,7 +190,7 @@ export function ConversationSidebar({ conversationId, notes, onDeleteNote, class
 
       {/* Linked tickets — borderless rows with hover lift, not stacked cards. */}
       <section className="px-6 py-4 pb-8">
-        <SectionLabel>{t('sidebar.linkedTickets')}</SectionLabel>
+        <SectionLabel count={tickets.data?.length}>{t('sidebar.linkedTickets')}</SectionLabel>
         {tickets.isLoading ? (
           <Spinner />
         ) : tickets.data && tickets.data.length > 0 ? (
