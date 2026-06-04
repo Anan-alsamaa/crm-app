@@ -111,3 +111,41 @@ export function SignOutIcon({ size = 16, className, ...rest }: IconProps): JSX.E
     </svg>
   );
 }
+
+export function MenuIcon({ size = 20, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M3 6h18" />
+      <path d="M3 12h18" />
+      <path d="M3 18h18" />
+    </svg>
+  );
+}
+
+export function CloseIcon({ size = 20, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
+export function ArrowLeftIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M19 12H5" />
+      <path d="m12 19-7-7 7-7" />
+    </svg>
+  );
+}
+
+export function InfoIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4" />
+      <path d="M12 8h.01" />
+    </svg>
+  );
+}

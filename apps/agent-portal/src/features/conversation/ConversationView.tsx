@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { Socket } from 'socket.io-client';
-import { Avatar, cn, formatRelative, Spinner } from '@yiji/ui';
+import { Avatar, CloseIcon, cn, formatRelative, Spinner, useIsDesktop } from '@yiji/ui';
 import { SOCKET_EVENTS, type MessageNew } from '@yiji/shared-types';
 import { getSocket } from '../../lib/socket.js';
 import { useAgents, useConversation, useMessages, type ConversationMessage } from '../inbox/api.js';
@@ -40,9 +40,17 @@ function groupRuns(msgs: ConversationMessage[]): ConversationMessage[][] {
   return groups;
 }
 
-export function ConversationView({ conversationId }: { conversationId: string }) {
+export function ConversationView({
+  conversationId,
+  onBack,
+}: {
+  conversationId: string;
+  /** Mobile single-column: return to the inbox list. */
+  onBack?: () => void;
+}) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const isDesktop = useIsDesktop();
   const messagesQuery = useMessages(conversationId);
   const conversation = useConversation(conversationId);
   const agents = useAgents();
@@ -50,6 +58,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
   const [customerTyping, setCustomerTyping] = useState(false);
   const [draft, setDraft] = useState('');
   const [internalNote, setInternalNote] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [mentionMenu, setMentionMenu] = useState<{ query: string; from: number } | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -62,10 +71,24 @@ export function ConversationView({ conversationId }: { conversationId: string })
     setCustomerTyping(false);
     setDraft('');
     setInternalNote(false);
+    setDetailsOpen(false);
     setMentionMenu(null);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     isTypingRef.current = false;
   }, [conversationId]);
+
+  // Esc closes the mobile details overlay.
+  useEffect(() => {
+    if (!detailsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setDetailsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [detailsOpen]);
 
   const signalTyping = () => {
     if (!socketRef.current) return;
@@ -282,7 +305,13 @@ export function ConversationView({ conversationId }: { conversationId: string })
     <div className="flex h-full">
       <div className="flex flex-1 min-w-0 flex-col">
         {/* Toolbar — slim row of status/priority/agent controls. */}
-        {c && <ConversationToolbar conversation={c} />}
+        {c && (
+          <ConversationToolbar
+            conversation={c}
+            onBack={onBack}
+            onToggleDetails={() => setDetailsOpen(true)}
+          />
+        )}
 
         {/* Thread — soft mesh wash so it doesn't feel like a void. */}
         <div
@@ -500,11 +529,39 @@ export function ConversationView({ conversationId }: { conversationId: string })
         </div>
       </div>
 
-      <ConversationSidebar
-        conversationId={conversationId}
-        notes={notes}
-        onDeleteNote={deleteNote}
-      />
+      {isDesktop ? (
+        <ConversationSidebar
+          conversationId={conversationId}
+          notes={notes}
+          onDeleteNote={deleteNote}
+        />
+      ) : (
+        detailsOpen && (
+          <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
+            <div
+              aria-hidden
+              onClick={() => setDetailsOpen(false)}
+              className="absolute inset-0 bg-foreground/30 backdrop-blur-sm motion-safe:animate-fade-in"
+            />
+            <div className="absolute inset-y-0 end-0 flex bg-card shadow-2xl shadow-foreground/20 motion-safe:animate-slide-in-drawer">
+              <button
+                type="button"
+                onClick={() => setDetailsOpen(false)}
+                aria-label={t('actions.close', { ns: 'common', defaultValue: 'Close' })}
+                className="absolute end-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                <CloseIcon size={18} />
+              </button>
+              <ConversationSidebar
+                conversationId={conversationId}
+                notes={notes}
+                onDeleteNote={deleteNote}
+                className="w-[20rem] max-w-[85vw]"
+              />
+            </div>
+          </div>
+        )
+      )}
     </div>
   );
 }

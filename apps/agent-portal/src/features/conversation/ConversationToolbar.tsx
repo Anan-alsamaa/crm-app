@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Avatar, Button, cn, GhostSelect, Pill } from '@yiji/ui';
+import { ArrowLeftIcon, Avatar, Button, cn, GhostSelect, InfoIcon, Pill } from '@yiji/ui';
 import { SOCKET_EVENTS, type ConversationStatus, type Priority } from '@yiji/shared-types';
 import {
   useAgents,
@@ -30,9 +30,13 @@ async function broadcastUpdate(conversationId: string): Promise<void> {
 
 interface Props {
   conversation: InboxConversation;
+  /** Mobile-only: return to the inbox list (single-column view). */
+  onBack?: () => void;
+  /** Mobile-only: open the conversation details/notes panel. */
+  onToggleDetails?: () => void;
 }
 
-export function ConversationToolbar({ conversation }: Props) {
+export function ConversationToolbar({ conversation, onBack, onToggleDetails }: Props) {
   const { t } = useTranslation();
   const agents = useAgents();
   const teams = useTeamOptions();
@@ -61,7 +65,19 @@ export function ConversationToolbar({ conversation }: Props) {
   const teamLabel = currentTeam?.name ?? t('conversation.noTeam');
 
   return (
-    <div className="flex h-14 shrink-0 items-center gap-3 px-5">
+    <div className="flex h-14 shrink-0 items-center gap-3 px-3 sm:px-5">
+      {/* Back to inbox list — mobile single-column only. */}
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label={t('conversation.backToInbox', { defaultValue: 'Back to inbox' })}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors duration-fast ease-out hover:bg-secondary active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 lg:hidden"
+        >
+          <ArrowLeftIcon size={18} className="rtl:-scale-x-100" />
+        </button>
+      )}
+
       {/* Identity */}
       <div className="flex min-w-0 items-center gap-2.5">
         <Avatar name={conversation.contact?.name} email={conversation.contact?.email} size="md" />
@@ -85,8 +101,9 @@ export function ConversationToolbar({ conversation }: Props) {
         </div>
       </div>
 
-      {/* Inline meta — reads as breadcrumbs, not form fields */}
-      <div className="ms-auto flex flex-wrap items-center gap-0.5">
+      {/* Inline meta — reads as breadcrumbs, not form fields. Scrolls
+          horizontally on mobile so the bar keeps its single-row height. */}
+      <div className="ms-auto flex min-w-0 items-center gap-0.5 overflow-x-auto lg:flex-wrap lg:overflow-x-visible">
         <GhostSelect
           size="sm"
           label={t('conversation.status')}
@@ -189,6 +206,18 @@ export function ConversationToolbar({ conversation }: Props) {
           + {t('tickets.createTitle')}
         </Button>
       </div>
+
+      {/* Details / notes panel toggle — mobile single-column only. */}
+      {onToggleDetails && (
+        <button
+          type="button"
+          onClick={onToggleDetails}
+          aria-label={t('conversation.details', { defaultValue: 'Conversation details' })}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors duration-fast ease-out hover:bg-secondary active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 lg:hidden"
+        >
+          <InfoIcon size={18} />
+        </button>
+      )}
 
       {openTicketDialog && conversation.contact?.id && vendorId && (
         <CreateTicketDialog

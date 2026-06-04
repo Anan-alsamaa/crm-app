@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Avatar, Pill, Spinner, formatRelative } from '@yiji/ui';
+import { Avatar, cn, Pill, Spinner, formatRelative } from '@yiji/ui';
 import { useConversation, useLinkedTickets, type ConversationMessage } from '../inbox/api.js';
 import { AiPanel } from '../ai/AiPanel.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
@@ -8,6 +8,8 @@ interface Props {
   conversationId: string;
   notes?: ConversationMessage[];
   onDeleteNote?: (noteId: string) => void;
+  /** Width/utility override. Defaults to the desktop `w-80` rail width. */
+  className?: string;
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -26,14 +28,14 @@ const TICKET_TONE: Record<string, 'success' | 'warning' | 'muted' | 'primary' | 
   reopened: 'neutral',
 };
 
-export function ConversationSidebar({ conversationId, notes, onDeleteNote }: Props) {
+export function ConversationSidebar({ conversationId, notes, onDeleteNote, className }: Props) {
   const { t } = useTranslation();
   const convo = useConversation(conversationId);
   const tickets = useLinkedTickets(conversationId);
 
   if (convo.isLoading)
     return (
-      <aside className="flex w-80 items-center justify-center ">
+      <aside className={cn('flex w-80 items-center justify-center', className)}>
         <Spinner />
       </aside>
     );
@@ -42,7 +44,7 @@ export function ConversationSidebar({ conversationId, notes, onDeleteNote }: Pro
   const contactName = c.contact?.name ?? t('inbox.unknownContact');
 
   return (
-    <aside className="w-80 shrink-0 overflow-auto ">
+    <aside className={cn('w-80 shrink-0 overflow-auto', className)}>
       {/* Identity — big avatar in a mesh halo, no border below. */}
       <div className="relative overflow-hidden px-6 pb-6 pt-7">
         <div

@@ -21,6 +21,9 @@
     "data": "البيانات",
     "aiConfig": "المساعدة بالذكاء الاصطناعي",
     "intelligence": "الذكاء الاصطناعي",
+    "primary": "التنقل الرئيسي",
+    "openMenu": "فتح القائمة",
+    "closeMenu": "إغلاق القائمة",
     "signedInAs": "مسجّل الدخول باسم {{name}}"
   },
   "automation": {

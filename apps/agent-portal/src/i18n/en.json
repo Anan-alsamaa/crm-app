@@ -60,6 +60,9 @@
     "tickets": "Tickets",
     "contacts": "Contacts",
     "preferences": "Preferences",
+    "primary": "Primary navigation",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
     "signedInAs": "Signed in as {{name}}"
   },
   "inbox": {
@@ -93,7 +96,9 @@
     "team": "Team",
     "unassigned": "Unassigned",
     "noTeam": "No team",
-    "addTag": "Tag"
+    "addTag": "Tag",
+    "backToInbox": "Back to inbox",
+    "details": "Conversation details"
   },
   "sidebar": {
     "contact": "Contact",

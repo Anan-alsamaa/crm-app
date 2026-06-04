@@ -25,6 +25,9 @@
     "tickets": "التذاكر",
     "contacts": "جهات الاتصال",
     "preferences": "التفضيلات",
+    "primary": "التنقل الرئيسي",
+    "openMenu": "فتح القائمة",
+    "closeMenu": "إغلاق القائمة",
     "signedInAs": "مسجّل الدخول باسم {{name}}"
   },
   "contacts": {
@@ -93,7 +96,9 @@
     "team": "الفريق",
     "unassigned": "غير معيّن",
     "noTeam": "بدون فريق",
-    "addTag": "وسم"
+    "addTag": "وسم",
+    "backToInbox": "العودة إلى صندوق الوارد",
+    "details": "تفاصيل المحادثة"
   },
   "sidebar": {
     "contact": "جهة الاتصال",

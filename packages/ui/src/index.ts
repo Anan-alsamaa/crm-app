@@ -20,6 +20,10 @@ export {
   ClockIcon,
   SearchIcon,
   SignOutIcon,
+  MenuIcon,
+  CloseIcon,
+  ArrowLeftIcon,
+  InfoIcon,
 } from './Icon.js';
 export type { IconProps } from './Icon.js';
 export {
@@ -63,3 +67,6 @@ export type { StatCardProps } from './StatCard.js';
 export { YijiLogo } from './YijiLogo.js';
 export type { YijiLogoProps } from './YijiLogo.js';
 export { useResizable } from './useResizable.js';
+export { useMediaQuery, useIsDesktop } from './useMediaQuery.js';
+export { AppShell } from './AppShell.js';
+export type { AppShellProps, AppShellRailContext } from './AppShell.js';

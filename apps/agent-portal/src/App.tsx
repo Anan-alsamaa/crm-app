@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
+  AppShell,
+  type AppShellRailContext,
   Avatar,
   cn,
   InboxIcon,
@@ -8,7 +10,6 @@ import {
   SignOutIcon,
   TicketIcon,
   Toaster,
-  useResizable,
   UsersIcon,
   YijiLogo,
 } from '@yiji/ui';
@@ -36,27 +37,14 @@ interface NavSection {
   items: NavItem[];
 }
 
-function Sidebar({ sections }: { sections: NavSection[] }) {
+function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSection[] }) {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || '';
-  const { width, dragging, bind } = useResizable({
-    storageKey: 'yiji.agent.sidebarWidth',
-    defaultWidth: 224,
-    min: 64,
-    max: 360,
-  });
-  const isCollapsed = width < 140;
+  const isCollapsed = ctx.collapsed;
 
   return (
-    <nav
-      aria-label="Primary navigation"
-      style={{ width }}
-      className={cn(
-        'relative z-30 flex shrink-0 flex-col my-3 ms-3 rounded-xl bg-rail text-rail-foreground shadow-lg shadow-rail/20',
-        !dragging && 'transition-[width] duration-150 ease-out',
-      )}
-    >
+    <>
       {/* Brand */}
       <div
         className={cn(
@@ -97,6 +85,7 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
                     to={it.to}
                     end={it.end}
                     title={it.label}
+                    onClick={ctx.onNavigate}
                     className={({ isActive }) =>
                       cn(
                         'group relative flex h-9 items-center rounded-md text-sm font-medium',
@@ -137,8 +126,9 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
           isCollapsed ? 'px-2 space-y-1.5' : 'px-2.5 space-y-1',
         )}
       >
+        {/* NotificationBell lives in the mobile top bar, so only render it here on desktop. */}
         <div className={cn('flex items-center', isCollapsed ? 'justify-center gap-1' : 'gap-1')}>
-          <NotificationBell />
+          {ctx.variant === 'desktop' && <NotificationBell />}
           {!isCollapsed && <LanguageToggle />}
         </div>
         <div
@@ -171,24 +161,19 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
           )}
         </div>
       </div>
+    </>
+  );
+}
 
-      {/* Drag handle — 6px hit area on the trailing edge */}
-      <div
-        {...bind}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize sidebar"
-        className="group/handle absolute inset-y-0 end-0 w-1.5 -me-0.5 cursor-col-resize flex items-center justify-center"
-      >
-        <span
-          aria-hidden
-          className={cn(
-            'h-12 w-0.5 rounded-full transition-colors duration-fast ease-out',
-            dragging ? 'bg-primary' : 'bg-transparent group-hover/handle:bg-primary/40',
-          )}
-        />
-      </div>
-    </nav>
+/** Compact brand lockup for the mobile top bar. */
+function MobileBrand() {
+  return (
+    <div className="flex items-center gap-2">
+      <YijiLogo variant="tile" size={28} className="bg-rail shadow-sm shrink-0" />
+      <span className="text-[15px] font-semibold tracking-[-0.015em] text-foreground">
+        Yiji <span className="font-normal text-muted-foreground">CRM</span>
+      </span>
+    </div>
   );
 }
 
@@ -213,14 +198,21 @@ function Shell({ children }: { children: React.ReactNode }) {
     },
   ];
   return (
-    <div className="flex h-full text-foreground">
-      <Sidebar sections={sections} />
-      <main className="flex-1 min-w-0 min-h-0 m-3 ms-3 rounded-2xl bg-card/85 shadow-xl shadow-foreground/5 ring-1 ring-foreground/[0.04] overflow-hidden">
+    <>
+      <AppShell
+        rail={(ctx) => <Rail ctx={ctx} sections={sections} />}
+        topBarBrand={<MobileBrand />}
+        topBarActions={<NotificationBell />}
+        resizeStorageKey="yiji.agent.sidebarWidth"
+        navLabel={t('nav.primary', { defaultValue: 'Primary navigation' })}
+        menuLabel={t('nav.openMenu', { defaultValue: 'Open menu' })}
+        closeLabel={t('nav.closeMenu', { defaultValue: 'Close menu' })}
+      >
         {children}
-      </main>
+      </AppShell>
       <AppCommandPalette />
       <Toaster position="bottom" />
-    </div>
+    </>
   );
 }
 

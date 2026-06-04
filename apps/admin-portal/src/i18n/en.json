@@ -21,6 +21,9 @@
     "data": "Data",
     "aiConfig": "AI assistance",
     "intelligence": "Intelligence",
+    "primary": "Primary navigation",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
     "signedInAs": "Signed in as {{name}}"
   },
   "automation": {
