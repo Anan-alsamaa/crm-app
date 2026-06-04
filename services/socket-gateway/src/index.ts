@@ -16,7 +16,7 @@ import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
 import { createHs256Verifier } from './auth/customer-jwt.js';
 import { createProducer } from './queue.js';
-import { registerConnection } from './connection.js';
+import { registerConnection, getAgentPresenceSnapshot } from './connection.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -72,6 +72,13 @@ async function main(): Promise<void> {
     }
     return { status: 'ready' };
   });
+  // Diagnostic: inspect which agents the gateway thinks are currently
+  // online (and how many sockets each is holding). Useful for chasing the
+  // "host page shows online after logout" class of bugs — if this returns
+  // distinctOnline > 0 right after you signed out, the gateway is the
+  // source of truth saying you're still online, and the offending sockets
+  // are listed in `agents`.
+  app.get('/debug/presence', async () => getAgentPresenceSnapshot());
 
   httpServer.listen(config.PORT, () => logger.info(`socket-gateway on :${config.PORT}`));
   await app.listen({ port: config.PORT + 1, host: '0.0.0.0' });

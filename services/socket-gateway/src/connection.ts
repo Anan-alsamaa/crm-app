@@ -160,6 +160,27 @@ function broadcastAgentPresence(io: import('socket.io').Server): void {
   io.emit(SOCKET_EVENTS.agentsPresence, { count: distinctAgentCount() });
 }
 
+/**
+ * Read-only snapshot of agent-presence tracking, for the /debug/presence
+ * endpoint. Useful when the host page disagrees with what you expect —
+ * `curl :8081/debug/presence` reveals exactly which userIds still hold
+ * sockets and whether any of them are orphans from a previous reload.
+ */
+export function getAgentPresenceSnapshot(): {
+  distinctOnline: number;
+  agents: Array<{ userId: string; sockets: number; pendingOffline: boolean }>;
+} {
+  const agents: Array<{ userId: string; sockets: number; pendingOffline: boolean }> = [];
+  for (const [userId, count] of agentRefCount.entries()) {
+    agents.push({
+      userId,
+      sockets: count,
+      pendingOffline: agentOfflineTimers.has(userId),
+    });
+  }
+  return { distinctOnline: distinctAgentCount(), agents };
+}
+
 export function registerConnection(deps: ConnectionDeps): void {
   const { io, directus, directusUrl, verifier, logger } = deps;
 
@@ -267,13 +288,31 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   // of navigating away from the route). Then we close the socket ourselves
   // so further events from this socket are dropped.
   socket.on(SOCKET_EVENTS.agentLogout, () => {
-    if (data.kind !== 'agent') return;
-    // Explicit logout: skip the disconnect grace window so the host page
-    // flips to offline immediately. The subsequent socket.disconnect()
-    // will fire the disconnect handler too, which no-ops (socket already
-    // removed from agentSocketUser).
-    if (removeAgentSocket(io, socket.id, true)) broadcastAgentPresence(io);
-    socket.disconnect(true);
+    if (data.kind !== 'agent' || !data.agentId) return;
+    const userId = data.agentId;
+    // Disconnect EVERY socket we hold for this user, not just the one
+    // that emitted the event. Reasoning: development HMR (and an
+    // occasional flaky network) can leave orphan sockets registered to
+    // the same agentId — the agent's most recent tab logs out, but the
+    // gateway's refCount stays > 0 because an orphaned connection from
+    // earlier still holds a slot. The customer page would then keep
+    // showing "online" until the orphan times out via Engine.IO ping
+    // (~25–45s), which reads as the bug "must reload :5173 to go
+    // offline".
+    const sidsForUser: string[] = [];
+    for (const [sid, uid] of agentSocketUser.entries()) {
+      if (uid === userId) sidsForUser.push(sid);
+    }
+    logger.info(
+      { userId, sockets: sidsForUser.length },
+      'agent:logout — closing all sockets for user',
+    );
+    let presenceWasDropped = false;
+    for (const sid of sidsForUser) {
+      if (removeAgentSocket(io, sid, true)) presenceWasDropped = true;
+      io.sockets.sockets.get(sid)?.disconnect(true);
+    }
+    if (presenceWasDropped) broadcastAgentPresence(io);
   });
 
   socket.on(SOCKET_EVENTS.messageSend, async (raw: unknown) => {
