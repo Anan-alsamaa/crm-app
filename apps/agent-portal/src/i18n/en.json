@@ -47,7 +47,12 @@
       "sentiment": "Sentiment",
       "intent": "Intent",
       "entities": "Entities",
-      "scoreLead": "Score lead"
+      "scoreLead": "Score lead",
+      "search": "Search"
+    },
+    "search": {
+      "placeholder": "Search conversations…",
+      "empty": "No matching conversations."
     }
   },
   "login": {

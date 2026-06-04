@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -50,6 +51,13 @@ export function Inbox() {
   const tags = useTags();
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  // Deep-link support: /?conv=<id> opens that conversation (used by the
+  // command palette and AI semantic-search results).
+  const [searchParams] = useSearchParams();
+  const convParam = searchParams.get('conv');
+  useEffect(() => {
+    if (convParam) setSelected(convParam);
+  }, [convParam]);
   const update = useUpdateConversation();
   const addTag = useAddTagToConversation();
 
