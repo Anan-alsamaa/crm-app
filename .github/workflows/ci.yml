@@ -5,9 +5,17 @@ on:
     branches: ['**']
   pull_request:
 
+# Newer pushes cancel in-flight runs on the same ref — saves CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Lint + typecheck + unit tests with coverage. Independent of e2e so the two
+  # jobs run in parallel (the e2e job no longer `needs: quality`), keeping total
+  # wall-clock down. Coverage thresholds are enforced here (see vitest configs).
   quality:
-    name: Lint, typecheck & unit tests
+    name: Lint, typecheck & unit tests (+ coverage)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,13 +40,33 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Unit tests
-        run: pnpm test
+      - name: Unit tests + coverage (services & packages)
+        run: pnpm test:coverage
+
+      - name: App unit tests + coverage (jsdom)
+        # Each app's vitest.config.ts enforces its own coverage thresholds.
+        run: pnpm -r --if-present test
+
+      - name: Coverage summary → job summary
+        if: always()
+        run: node .github/scripts/coverage-summary.mjs >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage/lcov.info
+            coverage/coverage-summary.json
+            apps/*/coverage/lcov.info
+            apps/*/coverage/coverage-summary.json
+          retention-days: 7
+          if-no-files-found: ignore
 
   e2e:
     name: Playwright E2E
     runs-on: ubuntu-latest
-    needs: quality
 
     services:
       postgres:
@@ -105,8 +133,29 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Cache the Playwright browser binaries, keyed on the resolved Playwright
+      # version in the lockfile. On a hit the install below is a no-op for the
+      # browsers (only OS deps are (re)checked), shaving ~30-60s off each run.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(pnpm exec playwright --version | tr -d 'Version ')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+        # On a cache hit, install only the OS deps (fast); otherwise download
+        # the chromium build too.
+        run: |
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+            pnpm exec playwright install-deps chromium
+          else
+            pnpm exec playwright install --with-deps chromium
+          fi
 
       - name: Start Directus
         # The Directus container needs the bootstrap extensions (e.g.
