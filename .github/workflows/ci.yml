@@ -263,20 +263,27 @@ jobs:
           echo "background services launched"
 
       - name: Wait for services
+        # Each entry is "url|name". The gateway only serves /health on :8081
+        # (GET / is a 404, which `curl -sf` treats as failure), so it must be
+        # probed at /health; the Vite portals serve HTML on /.
         run: |
-          for entry in "8081:gateway-health" "5173:agent-portal" "5174:admin-portal" "5175:chat-widget"; do
-            port="${entry%%:*}"
-            name="${entry##*:}"
+          for entry in \
+            "http://localhost:8081/health|gateway-health" \
+            "http://localhost:5173|agent-portal" \
+            "http://localhost:5174|admin-portal" \
+            "http://localhost:5175|chat-widget"; do
+            url="${entry%%|*}"
+            name="${entry##*|}"
             up=0
             for i in $(seq 1 60); do
-              if curl -sf http://localhost:$port > /dev/null 2>&1; then
-                echo "${name} (:${port}) is up"
+              if curl -sf "$url" > /dev/null 2>&1; then
+                echo "${name} (${url}) is up"
                 up=1; break
               fi
               sleep 2
             done
             if [ $up -ne 1 ]; then
-              echo "${name} (:${port}) failed to come up"
+              echo "${name} (${url}) failed to come up"
               tail -80 *.log || true
               exit 1
             fi
