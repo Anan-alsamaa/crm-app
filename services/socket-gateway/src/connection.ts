@@ -35,9 +35,17 @@ export interface ConnectionDeps {
   verifier: CustomerVerifier;
   producer: SideEffectProducer;
   logger: Logger;
-  attachmentPolicy: AttachmentPolicy;
-  rateLimit: { capacity: number; refillPerSec: number };
+  // Optional with safe defaults so callers/tests that don't supply them still
+  // work; index.ts always passes them from config.
+  attachmentPolicy?: AttachmentPolicy;
+  rateLimit?: { capacity: number; refillPerSec: number };
 }
+
+const DEFAULT_ATTACHMENT_POLICY: AttachmentPolicy = {
+  maxBytes: 10 * 1024 * 1024,
+  allowedMime: ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf', 'text/plain'],
+};
+const DEFAULT_RATE_LIMIT = { capacity: 20, refillPerSec: 5 };
 
 /** In-memory presence per vendor room (per gateway instance). */
 const presence = new Map<string, Set<string>>();
@@ -165,11 +173,13 @@ async function onAgentConnect(socket: Socket, { directus }: ConnectionDeps): Pro
 }
 
 function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
-  const { io, directus, producer, logger, attachmentPolicy } = deps;
+  const { io, directus, producer, logger } = deps;
+  const attachmentPolicy = deps.attachmentPolicy ?? DEFAULT_ATTACHMENT_POLICY;
+  const rateLimit = deps.rateLimit ?? DEFAULT_RATE_LIMIT;
   const data = socket.data as SocketData;
   // One token bucket per socket — throttles inbound write events (message:send,
   // note:add) to a burst + sustained rate.
-  const writeBucket = createTokenBucket(deps.rateLimit.capacity, deps.rateLimit.refillPerSec);
+  const writeBucket = createTokenBucket(rateLimit.capacity, rateLimit.refillPerSec);
 
   // Explicit logout signal from an agent. We mirror the disconnect cleanup
   // up-front so the host-page "agents online" pill flips immediately —

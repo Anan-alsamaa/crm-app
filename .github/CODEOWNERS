@@ -1,0 +1,51 @@
+# Code owners for Yiji CRM.
+#
+# Ownership mirrors the three completion streams in
+# specs/001-yiji-crm-platform/parallel-work-plan.md. Replace the placeholder
+# team handles below with your real GitHub org teams (or @usernames) — these
+# are slugs, not yet-existing teams, so PRs won't auto-request review until the
+# teams exist.
+#
+# Last matching pattern wins, so order matters: shared/most-specific paths go last.
+
+# ── Default ───────────────────────────────────────────────────────────────
+*                                   @anan-sa/yiji-maintainers
+
+# ── Stream A — Infra / Production ───────────────────────────────────────────
+/services/                          @anan-sa/yiji-infra
+/directus/                          @anan-sa/yiji-infra
+/docker-compose*.yml                @anan-sa/yiji-infra
+**/Dockerfile                       @anan-sa/yiji-infra
+/.github/workflows/deploy*.yml      @anan-sa/yiji-infra
+/docs/PRODUCTION.md                 @anan-sa/yiji-infra
+
+# ── Stream B — Frontend / UX ────────────────────────────────────────────────
+/apps/                              @anan-sa/yiji-frontend
+/packages/ui/                       @anan-sa/yiji-frontend
+/packages/i18n/                     @anan-sa/yiji-frontend
+
+# ── Stream C — Quality / Docs / DX ──────────────────────────────────────────
+**/tests/                           @anan-sa/yiji-quality
+**/*.test.ts                        @anan-sa/yiji-quality
+**/*.test.tsx                       @anan-sa/yiji-quality
+**/*.spec.ts                        @anan-sa/yiji-quality
+**/vitest.config.*                  @anan-sa/yiji-quality
+/vitest.config.ts                   @anan-sa/yiji-quality
+/playwright.config.ts               @anan-sa/yiji-quality
+/.eslintrc*                         @anan-sa/yiji-quality
+/.prettierrc*                       @anan-sa/yiji-quality
+/.husky/                            @anan-sa/yiji-quality
+/.github/workflows/ci.yml           @anan-sa/yiji-quality
+/.github/scripts/                   @anan-sa/yiji-quality
+/.github/CODEOWNERS                 @anan-sa/yiji-quality
+/docs/                              @anan-sa/yiji-quality
+/README.md                          @anan-sa/yiji-quality
+/skills/                            @anan-sa/yiji-quality
+
+# ── Shared territory — require cross-stream review ──────────────────────────
+/packages/shared-types/             @anan-sa/yiji-maintainers
+/packages/shared-config/            @anan-sa/yiji-maintainers
+/pnpm-workspace.yaml                @anan-sa/yiji-maintainers
+/pnpm-lock.yaml                     @anan-sa/yiji-maintainers
+/tsconfig.base.json                 @anan-sa/yiji-maintainers
+/package.json                       @anan-sa/yiji-maintainers

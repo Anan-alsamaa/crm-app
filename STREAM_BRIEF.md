@@ -1,100 +1,112 @@
-# Stream A — Infra / Production Readiness
+# Stream C — Quality / Docs / DX
 
 You are the Claude session for this worktree. Read this brief first, then
 start work without further confirmation.
 
 ## Where you are
 
-- **Worktree**: `D:\emad\Afcoapp\ProgramFile\claudeCode\crm-app-infra`
-- **Branch**: `stream/infra` (off `001-yiji-crm-platform`)
-- **Integration branch** (where your work eventually merges): `001-yiji-crm-platform`
+- **Worktree**: `D:\emad\Afcoapp\ProgramFile\claudeCode\crm-app-quality`
+- **Branch**: `stream/quality` (off `001-yiji-crm-platform`)
+- **Integration branch**: `001-yiji-crm-platform`
 - **Coordination doc**: [specs/001-yiji-crm-platform/parallel-work-plan.md](./specs/001-yiji-crm-platform/parallel-work-plan.md) — read this before doing anything else.
 
 ## What you own — only edit these paths
 
-- `services/**`
-- `directus/**`
-- root `docker-compose*.yml`
-- any `Dockerfile` anywhere
-- `.github/workflows/deploy*.yml`
-- `docs/PRODUCTION.md`
+- `**/tests/**` (add tests anywhere — the test files are yours; the
+  source files they test are not — see below)
+- `.github/workflows/ci.yml`
+- `vitest.config.ts`, per-package `vitest.config.*`
+- `playwright.config.ts`
+- `.eslintrc*`, `.prettierrc*`
+- `.husky/**` (create it; doesn't exist yet)
+- `docs/**` except `docs/PRODUCTION.md`
+- `README.md`
+- root `package.json` scripts (the `"scripts"` section — careful, don't change deps)
+- `skills/**`
 
 ## What you must NOT edit (other streams own these)
 
-- `apps/**` — Stream B
-- `packages/ui/**`, `packages/i18n/**` — Stream B
-- `**/tests/**` outside `services/**/tests` — Stream C
-- `.github/workflows/ci.yml` — Stream C (you may add `deploy*.yml` only)
-- `docs/**` except `PRODUCTION.md` — Stream C
-- `README.md`, root `package.json` scripts, `.husky/**`, `vitest.config.ts`, `playwright.config.ts` — Stream C
+- `services/**`, `directus/**` — Stream A
+- `apps/**`, `packages/ui/**`, `packages/i18n/**` — Stream B
+- Any `Dockerfile`, `docker-compose*.yml`, `.github/workflows/deploy*.yml` — Stream A
+- `docs/PRODUCTION.md` — Stream A
+
+**Tests are yours, but the code they test isn't.** If a test reveals a
+bug in someone else's territory, file it for the owning stream (commit on
+`001-yiji-crm-platform`, or open an issue) — don't fix it here. The
+exception: if a test fix requires a one-line change to make a function
+exportable, coordinate with the owning stream first.
 
 ## Shared territory — escalate before touching
 
-If you need to add a new shared type or change `pnpm-lock.yaml`, **don't do
-it on this branch**. Commit it on `001-yiji-crm-platform` first (open a tiny
-PR), then rebase this branch and continue.
-
-- `packages/shared-types/**`
-- `packages/shared-config/**`
-- `pnpm-workspace.yaml`
-- `pnpm-lock.yaml`
+`packages/shared-types/**`, `packages/shared-config/**`, `pnpm-workspace.yaml`,
+`pnpm-lock.yaml`: land changes on `001-yiji-crm-platform` first, then rebase.
 
 ## Your work
 
 The 12 concrete tasks are in
 [specs/001-yiji-crm-platform/parallel-work-plan.md](./specs/001-yiji-crm-platform/parallel-work-plan.md)
-under "Stream A". Read them, then start at #1. Roughly:
+under "Stream C". Read them, then start at #1. Roughly:
 
-1. Multi-stage Dockerfiles for every service
-2. `docker-compose.prod.yml` or `k8s/` manifests — pick one
-3. OpenTelemetry SDK on all three Node services
-4. Prometheus `/metrics` endpoint on each service
-5. Postgres backup + restore scripts
-6. Document the secrets-management strategy
-7. CORS + security headers production audit
-8. Real `/ready` checks with downstream pings
-9. `.github/workflows/deploy.yml`
-10. Zod-validate every required env var; no silent defaults in prod
-11. Bootstrap idempotence CI check
-12. Rewrite `docs/PRODUCTION.md` as a real runbook
+1. Coverage targets — 70% services, 60% apps. Start by measuring with `pnpm vitest --coverage`.
+2. Critical-path Vitest:
+   - socket-gateway connection events (mocked Directus)
+   - workers: each queue processor, happy + failure
+   - ai-gateway: every endpoint × cache hit/miss × rate-limited/not
+   - agent-portal: `features/inbox/api.ts`, mentions, custom-field, AI panel
+   - admin-portal: at least one render test per feature page
+3. Critical-path Playwright E2E for the marquee flows.
+4. CI < 12 min — cache Playwright browsers, pnpm store, parallelize quality vs E2E.
+5. `husky` + `lint-staged`: pre-commit prettier + eslint on staged files.
+6. Coverage upload (Codecov or CI summary).
+7. `docs/ARCHITECTURE.md` — the as-built shape, not the spec aspirations.
+8. `docs/USER_GUIDE_AGENT.md`.
+9. `docs/USER_GUIDE_ADMIN.md`.
+10. Rewrite `README.md` for the current state.
+11. Storybook for `packages/ui` (optional, only if time permits).
+12. `.github/CODEOWNERS`.
 
 ## Done criteria
 
 Stop when:
 
-- `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm test` are all green.
-- A fresh VM (or k8s namespace) can stand the stack up from your images +
-  documented env, and observability shows up in a collector.
-- You've opened a PR into `001-yiji-crm-platform` for review.
+- CI under 12 min on every push.
+- Coverage thresholds enforced in CI (build fails on regression).
+- `husky` pre-commit prevents the format-drift class of bugs we hit earlier.
+- The three user-facing docs (agent guide, admin guide, architecture) read
+  cleanly without referencing planning artifacts.
+- PR opened into `001-yiji-crm-platform`.
 
 ## Workflow
 
 ```powershell
-# Before each session of work, sync to latest integration:
 git fetch origin
 git rebase origin/001-yiji-crm-platform
 
-# Iterate. Push often:
-git push -u origin stream/infra
+git push -u origin stream/quality
 
-# When a coherent chunk is done, open a PR:
-gh pr create --base 001-yiji-crm-platform --head stream/infra
+gh pr create --base 001-yiji-crm-platform --head stream/quality
 ```
 
-## Pinned constraints (do not violate)
+## Pinned constraints
 
-- **No new shared types on this branch.** Land them on `001-yiji-crm-platform` first.
-- **No commits to `001-yiji-crm-platform` directly** from this worktree. Only PRs.
-- **No skipping pre-commit hooks** (`--no-verify`) or pre-push hooks even when impatient.
-- **No removing the existing local-dev defaults**: `docker-compose.yml` stays a working local stack. Production lives in `docker-compose.prod.yml` (or `k8s/`) — additive only.
-- **Don't commit secrets.** Real values live in env / a secret store; the repo only holds `.env.example` entries + documentation.
+- **Tests must be deterministic.** No `Math.random()`, no real `Date.now()`
+  without injection. The codebase has a no-`Date.now`-in-workflow-scripts
+  rule for the same reason — apply that spirit here.
+- **No production code edits.** Mocking / adapters / fixtures go in `tests/`.
+- **CI changes that risk lengthening runtime need a measurement** before
+  merging. Comment the before/after wall-clock in the PR body.
+- **Pre-commit hooks**: when you wire husky, make sure they don't run the
+  full test suite — only prettier + eslint on staged files. We want fast.
+- **No commits to `001-yiji-crm-platform`** directly. Only PRs.
 
-## First commands to run
+## First commands
 
 ```powershell
-pnpm install --frozen-lockfile   # this worktree shares node_modules with main? no — separate install
-pnpm typecheck                   # confirm clean baseline before you start
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm vitest --coverage   # baseline measurement before you start adding tests
 ```
 
-When done with the first iteration, read `parallel-work-plan.md` task #1
-and start.
+When the baseline is captured (paste the coverage % into a working notes
+file), read `parallel-work-plan.md` task #1 and start.
