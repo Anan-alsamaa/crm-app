@@ -79,7 +79,9 @@ jobs:
     # every feature/stream PR, where cross-stream pieces aren't present yet and
     # it can't go green. Per-PR feedback comes from the fast `quality` job.
     # (push only fires on main/001 per the `on:` filter above.)
-    if: github.event_name == 'push'
+    # TEMP(diagnostic): also run on stream/quality PRs to capture the real
+    # gateway onboarding error now that it's logged (revert to push-only after).
+    if: github.event_name == 'push' || github.head_ref == 'stream/quality'
     timeout-minutes: 25
 
     services:
