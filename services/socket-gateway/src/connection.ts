@@ -259,6 +259,37 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     }
   });
 
+  // Attachment upload (esp. the customer widget, which has no Directus account):
+  // the client sends bytes, the gateway validates MIME/size, uploads via the
+  // service token, and acks the Directus file id to reference in message:send.
+  //   emit('attachment:upload', { filename, mimetype, content }, (res) => ...)
+  //   content: ArrayBuffer | typed array | base64 string
+  //   ack res: { ok:true, id, type, filesize } | { ok:false, error }
+  socket.on('attachment:upload', async (raw: unknown, ack?: (res: unknown) => void) => {
+    const respond = typeof ack === 'function' ? ack : () => undefined;
+    if (!writeBucket.tryRemove()) return respond({ ok: false, error: 'rate_limited' });
+    const data = raw as { filename?: unknown; mimetype?: unknown; content?: unknown };
+    const filename = typeof data?.filename === 'string' ? data.filename : 'upload';
+    const mimetype = typeof data?.mimetype === 'string' ? data.mimetype.toLowerCase() : '';
+    let buf: Buffer | null = null;
+    if (data?.content instanceof ArrayBuffer) buf = Buffer.from(data.content);
+    else if (ArrayBuffer.isView(data?.content as ArrayBufferView))
+      buf = Buffer.from((data.content as ArrayBufferView).buffer);
+    else if (typeof data?.content === 'string') buf = Buffer.from(data.content, 'base64');
+    if (!buf || buf.length === 0) return respond({ ok: false, error: 'no file content' });
+    if (!attachmentPolicy.allowedMime.includes(mimetype))
+      return respond({ ok: false, error: `type "${mimetype || 'unknown'}" not allowed` });
+    if (buf.length > attachmentPolicy.maxBytes)
+      return respond({ ok: false, error: 'file too large' });
+    try {
+      const file = await directus.uploadFile(buf, filename, mimetype);
+      respond({ ok: true, id: file.id, type: file.type, filesize: file.filesize });
+    } catch (err) {
+      logger.error({ err }, 'attachment upload failed');
+      respond({ ok: false, error: 'upload failed' });
+    }
+  });
+
   // Delete an internal note: agents only. The directus helper re-checks the
   // message is in this conversation AND is actually an internal note, so a
   // crafted payload can't wipe a real customer message. On failure we send

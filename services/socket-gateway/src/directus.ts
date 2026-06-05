@@ -1,4 +1,4 @@
-import { readItems, readFiles, createItem, updateItem, deleteItem } from '@directus/sdk';
+import { readItems, readFiles, createItem, updateItem, deleteItem, uploadFiles } from '@directus/sdk';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
 import type { SenderType } from '@yiji/shared-types';
 import type { CustomerClaims } from './auth/customer-jwt.js';
@@ -101,6 +101,20 @@ export class GatewayDirectus {
       } as never),
     )) as { id: string };
 
+    // Link attachments through the messages_files m2m junction so they survive
+    // a refetch (validated upstream in message:send). Failures here are logged
+    // by the caller; we attach best-effort per file.
+    if (input.attachments && input.attachments.length > 0) {
+      for (const fileId of input.attachments) {
+        await this.client.request(
+          createItem('messages_files', {
+            messages_id: created.id,
+            directus_files_id: fileId,
+          } as never),
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     const patch: Record<string, unknown> = { last_message_at: now };
     // Unread bookkeeping (SC §7/§8): a customer message increments the agent's
@@ -122,6 +136,30 @@ export class GatewayDirectus {
     }
     await this.client.request(updateItem('conversations', input.conversationId, patch as never));
     return { id: created.id, createdAt: now };
+  }
+
+  /**
+   * Upload a file to Directus via the service account and return its metadata.
+   * Used by the customer-widget upload path (customers have no Directus account,
+   * so the gateway proxies the upload with its service token).
+   */
+  async uploadFile(
+    content: Buffer,
+    filename: string,
+    mimetype: string,
+  ): Promise<{ id: string; type: string | null; filesize: number | null }> {
+    const form = new FormData();
+    form.append('file', new Blob([content], { type: mimetype }), filename);
+    const res = (await this.client.request(uploadFiles(form))) as {
+      id: string;
+      type: string | null;
+      filesize: number | string | null;
+    };
+    return {
+      id: res.id,
+      type: res.type ?? null,
+      filesize: res.filesize === null || res.filesize === undefined ? null : Number(res.filesize),
+    };
   }
 
   /** Reset the agent unread counter when an agent reads the conversation. */

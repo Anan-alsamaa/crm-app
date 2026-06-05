@@ -147,6 +147,11 @@ export const roles: RoleSpec[] = [
       { collection: 'conversations_tags', action: 'create' },
       { collection: 'conversations_tags', action: 'read' },
       { collection: 'conversations_tags', action: 'delete' },
+      // Attachments: upload files + read their metadata to render chips; read the
+      // message↔file junction. The gateway writes the junction on send.
+      { collection: 'directus_files', action: 'create' },
+      { collection: 'directus_files', action: 'read' },
+      { collection: 'messages_files', action: 'read' },
     ],
   },
   {
@@ -166,6 +171,11 @@ export const roles: RoleSpec[] = [
       { collection: 'messages', action: 'read' },
       { collection: 'messages', action: 'update' },
       { collection: 'messages', action: 'delete' },
+      // Attachments: upload customer files (proxy) + link them to messages.
+      { collection: 'directus_files', action: 'create' },
+      { collection: 'directus_files', action: 'read' },
+      { collection: 'messages_files', action: 'create' },
+      { collection: 'messages_files', action: 'read' },
       { collection: 'csat_responses', action: 'create' },
       { collection: 'csat_responses', action: 'read' },
       ...readOnly('directus_users'),
