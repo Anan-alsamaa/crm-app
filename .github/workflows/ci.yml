@@ -4,6 +4,7 @@ on:
   push:
     branches: ['**']
   pull_request:
+  workflow_dispatch: # allows running the full-stack E2E job on demand
 
 jobs:
   quality:
@@ -39,6 +40,10 @@ jobs:
     name: Playwright E2E
     runs-on: ubuntu-latest
     needs: quality
+    # Full-stack E2E (Directus + gateway + 3 dev servers) is heavy and flaky on
+    # shared runners, so it runs ON DEMAND only (Actions tab → Run workflow), not
+    # on every push/PR. Day-to-day CI status is the quality job above.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
 
     services:
       postgres:
@@ -201,7 +206,9 @@ jobs:
             done
             if [ $up -ne 1 ]; then
               echo "${name} (:${port}) failed to come up"
-              tail -80 *.log || true
+              # `tail -80` is invalid on this runner's tail; use -n 80. Dump each
+              # log explicitly so a failed start is actually debuggable.
+              for f in *.log; do echo "----- $f -----"; tail -n 80 "$f" || true; done
               exit 1
             fi
           done
