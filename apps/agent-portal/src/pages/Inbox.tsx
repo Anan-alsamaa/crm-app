@@ -11,10 +11,12 @@ import {
   GhostSelect,
   InboxEmptyArt,
   Pill,
+  ResizeHandle,
   Select,
   Skeleton,
   toast,
   useIsDesktop,
+  useResizable,
 } from '@yiji/ui';
 import { SOCKET_EVENTS, type ConversationStatus, type Priority } from '@yiji/shared-types';
 import {
@@ -46,6 +48,12 @@ export function Inbox() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const isDesktop = useIsDesktop();
+  const list = useResizable({
+    storageKey: 'yiji.agent.inboxWidth',
+    defaultWidth: 340,
+    min: 288,
+    max: 480,
+  });
   const [filters, setFilters] = useState<InboxFilters>({ status: 'open', sort: 'recent' });
   const conversations = useConversations(filters);
   const tags = useTags();
@@ -136,7 +144,10 @@ export function Inbox() {
   return (
     <div className="flex h-full">
       {showList && (
-        <aside className={cn('flex shrink-0 flex-col', isDesktop ? 'w-[340px]' : 'w-full')}>
+        <aside
+          className={cn('relative flex shrink-0 flex-col', !isDesktop && 'w-full')}
+          style={isDesktop ? { width: list.width } : undefined}
+        >
           {/* Header */}
           <div className="flex shrink-0 items-baseline gap-2 px-5 pt-5">
             <h2 className="text-xl font-bold tracking-tight text-foreground">{t('inbox.title')}</h2>
@@ -463,6 +474,14 @@ export function Inbox() {
               </div>
             )}
           </div>
+          {isDesktop && (
+            <ResizeHandle
+              bind={list.bind}
+              dragging={list.dragging}
+              side="start"
+              label={t('inbox.resizeList', { defaultValue: 'Resize conversation list' })}
+            />
+          )}
         </aside>
       )}
 

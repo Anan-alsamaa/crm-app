@@ -14,6 +14,7 @@ import {
 } from '@yiji/ui';
 import { SOCKET_EVENTS, type MessageNew } from '@yiji/shared-types';
 import { getSocket, uploadAttachment } from '../../lib/socket.js';
+import { noteSelfSend } from '../../lib/sound.js';
 import { useAgents, useConversation, useMessages, type ConversationMessage } from '../inbox/api.js';
 import { AttachmentChips } from './AttachmentChips.js';
 import { ConversationToolbar } from './ConversationToolbar.js';
@@ -251,6 +252,7 @@ export function ConversationView({
     // A reply needs text OR at least one attachment; internal notes are text-only.
     if (!socketRef.current) return;
     if (internalNote ? !content : !content && attachmentIds.length === 0) return;
+    noteSelfSend(); // don't beep on the echo of our own message
     const cmid = clientId();
     if (internalNote) {
       const mentions = resolveMentions(content, agents.data ?? []);
@@ -680,6 +682,7 @@ export function ConversationView({
           conversationId={conversationId}
           notes={notes}
           onDeleteNote={deleteNote}
+          resizable
         />
       ) : (
         detailsOpen && (

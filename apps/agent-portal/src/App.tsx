@@ -22,8 +22,10 @@ import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
 import { NotificationBell } from './features/notifications/NotificationBell.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
+import { SoundToggle } from './components/SoundToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
 import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
+import { NewMessageSound } from './components/NewMessageSound.js';
 
 // Route pages are code-split so the initial bundle stays lean; each loads on
 // first navigation behind the shared Suspense fallback below.
@@ -147,8 +149,14 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
         )}
       >
         {/* NotificationBell lives in the mobile top bar, so only render it here on desktop. */}
-        <div className={cn('flex items-center', isCollapsed ? 'justify-center gap-1' : 'gap-1')}>
+        <div
+          className={cn(
+            'flex items-center',
+            isCollapsed ? 'flex-wrap justify-center gap-1' : 'gap-1',
+          )}
+        >
           {ctx.variant === 'desktop' && <NotificationBell />}
+          <SoundToggle />
           {!isCollapsed && <LanguageToggle />}
         </div>
         <div
@@ -249,6 +257,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       </AppShell>
       <AppCommandPalette />
       <AppKeyboardShortcuts />
+      <NewMessageSound />
       <Toaster position="bottom" />
     </>
   );

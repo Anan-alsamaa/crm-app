@@ -115,7 +115,8 @@
       "pace": "You set the pace.",
       "recent": "Recent activity",
       "zeroArt": "New conversations will land here as customers reach out through the widget, email, or other channels."
-    }
+    },
+    "resizeList": "Resize conversation list"
   },
   "conversation": {
     "replyPlaceholder": "Type a reply…",
@@ -157,7 +158,8 @@
     "noTickets": "No linked tickets.",
     "internalNotes": "Internal notes",
     "noNotes": "No internal notes yet.",
-    "removeNote": "Remove note"
+    "removeNote": "Remove note",
+    "resizePanel": "Resize details panel"
   },
   "tickets": {
     "title": "Tickets",
@@ -253,5 +255,9 @@
     "commandPalette": "Command palette",
     "showShortcuts": "Show this help",
     "closeDialogs": "Close dialogs"
+  },
+  "sound": {
+    "mute": "Mute notifications",
+    "unmute": "Unmute notifications"
   }
 }

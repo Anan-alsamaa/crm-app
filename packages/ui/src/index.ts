@@ -24,6 +24,8 @@ export {
   CloseIcon,
   ArrowLeftIcon,
   InfoIcon,
+  SoundOnIcon,
+  SoundOffIcon,
 } from './Icon.js';
 export type { IconProps } from './Icon.js';
 export {
@@ -72,6 +74,8 @@ export type { StatCardProps } from './StatCard.js';
 export { YijiLogo } from './YijiLogo.js';
 export type { YijiLogoProps } from './YijiLogo.js';
 export { useResizable } from './useResizable.js';
+export { ResizeHandle } from './ResizeHandle.js';
+export type { ResizeHandleProps } from './ResizeHandle.js';
 export { useMediaQuery, useIsDesktop } from './useMediaQuery.js';
 export { AppShell } from './AppShell.js';
 export type { AppShellProps, AppShellRailContext } from './AppShell.js';

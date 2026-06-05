@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Avatar, cn, Pill, Spinner, formatRelative } from '@yiji/ui';
+import { Avatar, cn, Pill, ResizeHandle, Spinner, formatRelative, useResizable } from '@yiji/ui';
 import { useConversation, useLinkedTickets, type ConversationMessage } from '../inbox/api.js';
 import { AiPanel } from '../ai/AiPanel.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
@@ -10,6 +10,8 @@ interface Props {
   onDeleteNote?: (noteId: string) => void;
   /** Width/utility override. Defaults to the desktop `w-80` rail width. */
   className?: string;
+  /** Desktop only: make the panel drag-resizable from its leading edge. */
+  resizable?: boolean;
 }
 
 function SectionLabel({ children, count }: { children: React.ReactNode; count?: number }) {
@@ -33,14 +35,41 @@ const TICKET_TONE: Record<string, 'success' | 'warning' | 'muted' | 'primary' | 
   reopened: 'neutral',
 };
 
-export function ConversationSidebar({ conversationId, notes, onDeleteNote, className }: Props) {
+export function ConversationSidebar({
+  conversationId,
+  notes,
+  onDeleteNote,
+  className,
+  resizable,
+}: Props) {
   const { t } = useTranslation();
   const convo = useConversation(conversationId);
   const tickets = useLinkedTickets(conversationId);
+  const rs = useResizable({
+    storageKey: 'yiji.agent.convoSidebarWidth',
+    defaultWidth: 320,
+    min: 264,
+    max: 480,
+    side: 'end',
+  });
+  const sizeProps = resizable ? { style: { width: rs.width } } : undefined;
+  const widthClass = resizable ? '' : 'w-80';
+  const handle = resizable ? (
+    <ResizeHandle
+      bind={rs.bind}
+      dragging={rs.dragging}
+      side="end"
+      label={t('sidebar.resizePanel', { defaultValue: 'Resize details panel' })}
+    />
+  ) : null;
 
   if (convo.isLoading)
     return (
-      <aside className={cn('flex w-80 items-center justify-center', className)}>
+      <aside
+        className={cn('relative flex shrink-0 items-center justify-center', widthClass, className)}
+        {...sizeProps}
+      >
+        {handle}
         <Spinner />
       </aside>
     );
@@ -49,7 +78,8 @@ export function ConversationSidebar({ conversationId, notes, onDeleteNote, class
   const contactName = c.contact?.name ?? t('inbox.unknownContact');
 
   return (
-    <aside className={cn('w-80 shrink-0 overflow-auto', className)}>
+    <aside className={cn('relative shrink-0 overflow-auto', widthClass, className)} {...sizeProps}>
+      {handle}
       {/* Identity — big avatar in a mesh halo, no border below. */}
       <div className="relative overflow-hidden px-6 pb-6 pt-7">
         <div

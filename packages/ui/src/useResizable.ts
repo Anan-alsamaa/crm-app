@@ -9,13 +9,21 @@ interface Options {
   min: number;
   /** Maximum width during drag. */
   max: number;
+  /**
+   * Which edge the panel is anchored to. `'start'` (default) puts the drag
+   * handle on the trailing edge and grows the panel as you drag outward (used
+   * by the side rail and the inbox list). `'end'` anchors the panel to the
+   * trailing edge with the handle on the leading edge (the conversation
+   * details panel) — the drag direction is inverted accordingly.
+   */
+  side?: 'start' | 'end';
 }
 
 /**
- * Drag-to-resize hook for a panel anchored to the start edge.
- * Returns the current width plus a `bind` for the drag handle.
+ * Drag-to-resize hook. Returns the current width plus a `bind` for the drag
+ * handle. RTL-aware, and edge-aware via `side`.
  */
-export function useResizable({ storageKey, defaultWidth, min, max }: Options) {
+export function useResizable({ storageKey, defaultWidth, min, max, side = 'start' }: Options) {
   const [width, setWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return defaultWidth;
     const raw = window.localStorage.getItem(storageKey);
@@ -40,8 +48,9 @@ export function useResizable({ storageKey, defaultWidth, min, max }: Options) {
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
 
+      const sign = (isRTL ? -1 : 1) * (side === 'end' ? -1 : 1);
       const onMove = (ev: PointerEvent) => {
-        const delta = isRTL ? startX - ev.clientX : ev.clientX - startX;
+        const delta = sign * (ev.clientX - startX);
         const next = Math.max(min, Math.min(max, startWidth + delta));
         setWidth(next);
       };
@@ -55,7 +64,7 @@ export function useResizable({ storageKey, defaultWidth, min, max }: Options) {
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
     },
-    [width, min, max],
+    [width, min, max, side],
   );
 
   return { width, setWidth, dragging, bind: { onPointerDown } };
