@@ -74,9 +74,22 @@ integration behaviour owned by other streams (file these):
   (`heading "Shared Inbox"` never appears). Agent login→inbox flow doesn't
   complete in CI. Could also be a globalSetup env-propagation detail (Stream C);
   needs a reproducible full stack to confirm.
-- **Stream A (gateway) / Stream B (widget)** — chat widget stays on
-  `data-testid="yiji-status" = "Connecting…"`; the customer socket never
-  connects to the gateway.
+- **Stream A (gateway)** — chat widget loops `yiji-status = "Connecting… /
+Reconnecting…"`; the gateway **rejects every customer socket** with
+  `level:40 kind:"customer" err:"unauthorized" "connection rejected"`
+  (gateway.log, CI run 27008729342). `"unauthorized"` is the _fallback_ branch
+  in `connection.ts` (`err instanceof Error ? err.message : 'unauthorized'`),
+  so a **non-Error** is being thrown during customer onboarding — JWT verify
+  likely passes (that throws a `CustomerTokenError` with a real message), but a
+  later Directus call (`resolveVendor` / `upsertContact` /
+  `findOrCreateConversation`) throws a non-Error (Directus SDK error). `demo-vendor`
+  is seeded + active and `YIJI_JWT_SECRET` parity is set in CI, so the likely
+  cause is the **svc-socket-gateway service token lacking read/write permission**
+  on vendors/contacts/conversations (Stream A bootstrap policy), or a
+  `YIJI_JWT_SECRET` mismatch. **Fix for Stream A:** log the real error in that
+  catch (don't collapse to "unauthorized"), then grant/verify svc-socket-gateway
+  permissions. The agent-portal specs (login → inbox) pass once the selector fix
+  lands; only the widget round-trip is blocked by this.
 
 Because the suite needs the whole integrated stack, the CI **e2e job now runs as
 an integration gate** (`if: github.event_name == 'push'`, i.e. on main /
