@@ -1,4 +1,11 @@
-import { readItems, readFiles, createItem, updateItem, deleteItem, uploadFiles } from '@directus/sdk';
+import {
+  readItems,
+  readFiles,
+  createItem,
+  updateItem,
+  deleteItem,
+  uploadFiles,
+} from '@directus/sdk';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
 import type { SenderType } from '@yiji/shared-types';
 import type { CustomerClaims } from './auth/customer-jwt.js';
