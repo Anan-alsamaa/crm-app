@@ -113,7 +113,15 @@ export function registerConnection(deps: ConnectionDeps): void {
       data.conversationId = conversationId;
       return next();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'unauthorized';
+      // Directus SDK rejects with a non-Error object ({ errors: [{ message }] }).
+      // Don't collapse those to a useless "unauthorized" — surface the real
+      // cause (permissions, invalid svc token, unreachable Directus, …) so
+      // onboarding failures are diagnosable in the logs instead of opaque.
+      const msg =
+        err instanceof Error
+          ? err.message
+          : ((err as { errors?: Array<{ message?: string }> } | null)?.errors?.[0]?.message ??
+            'unauthorized');
       logger.warn({ kind: auth.kind, err: msg }, 'connection rejected');
       return next(new Error(msg));
     }
