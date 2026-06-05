@@ -54,6 +54,16 @@ const DEFAULT_ATTACHMENT_POLICY: AttachmentPolicy = {
 };
 const DEFAULT_RATE_LIMIT = { capacity: 20, refillPerSec: 5 };
 
+/** Extract a human message from an Error or a Directus SDK error object. */
+function extractAuthError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object' && 'errors' in err) {
+    const errors = (err as { errors?: Array<{ message?: string }> }).errors;
+    if (Array.isArray(errors) && errors[0]?.message) return `directus: ${errors[0].message}`;
+  }
+  return 'unauthorized';
+}
+
 /** In-memory presence per vendor room (per gateway instance). */
 const presence = new Map<string, Set<string>>();
 function addPresence(vendorId: string, id: string): string[] {
@@ -113,7 +123,11 @@ export function registerConnection(deps: ConnectionDeps): void {
       data.conversationId = conversationId;
       return next();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'unauthorized';
+      // Surface the REAL cause. Directus SDK rejects with a non-Error object
+      // ({ errors: [{ message }] }), which the old `instanceof Error` check
+      // swallowed into a useless "unauthorized" — hiding e.g. a failing vendor
+      // lookup (bad svc token / Directus unreachable) behind a generic message.
+      const msg = extractAuthError(err);
       logger.warn({ kind: auth.kind, err: msg }, 'connection rejected');
       return next(new Error(msg));
     }
