@@ -27,18 +27,31 @@ test('admin creates a team then a user assigned to it', async ({ page }) => {
 
   await page.getByRole('link', { name: /teams/i }).click();
   await page.waitForURL(/\/teams/);
-  await page.getByLabel(/^name$/i).fill(teamName);
-  await page.getByRole('button', { name: /create team/i }).click();
+  // Create-team is a Drawer (role="dialog"); the toolbar/empty-state CTA opens
+  // it. Scope the form + submit to the drawer (the trigger shares its label).
+  await page
+    .getByRole('button', { name: /create team/i })
+    .first()
+    .click();
+  const teamDrawer = page.getByRole('dialog');
+  // FormField doesn't wire label→input, so target RHF fields by name attribute.
+  await teamDrawer.locator('input[name="name"]').fill(teamName);
+  await teamDrawer.getByRole('button', { name: /create team/i }).click();
   await expect(page.getByText(teamName)).toBeVisible();
 
   await page.getByRole('link', { name: /users/i }).click();
   await page.waitForURL(/\/users/);
   const email = `agent.${Date.now()}@example.com`;
-  await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill('password123');
-  await page.getByLabel(/role/i).selectOption({ label: 'Agent' });
-  await page.getByLabel(/team/i).selectOption({ label: teamName });
-  await page.getByRole('button', { name: /create user/i }).click();
+  await page
+    .getByRole('button', { name: /create user/i })
+    .first()
+    .click();
+  const userDrawer = page.getByRole('dialog');
+  await userDrawer.locator('input[name="email"]').fill(email);
+  await userDrawer.locator('input[name="password"]').fill('password123');
+  await userDrawer.locator('select[name="role"]').selectOption({ label: 'Agent' });
+  await userDrawer.locator('select[name="team"]').selectOption({ label: teamName });
+  await userDrawer.getByRole('button', { name: /create user/i }).click();
   // Wait for the success notice, then for the row to appear in the refetched table.
   await expect(page.getByText(/user created/i)).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText(email)).toBeVisible({ timeout: 10_000 });
