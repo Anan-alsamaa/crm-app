@@ -31,7 +31,9 @@ test('customer message reaches the agent and the agent reply returns', async ({ 
   await agent.getByLabel(/email/i).fill(AGENT_EMAIL);
   await agent.getByLabel(/password/i).fill(AGENT_PASSWORD);
   await agent.getByRole('button', { name: /sign in/i }).click();
-  await expect(agent.getByRole('heading', { name: /shared inbox/i })).toBeVisible({ timeout: 10_000 });
+  await expect(agent.getByRole('heading', { name: /shared inbox/i })).toBeVisible({
+    timeout: 10_000,
+  });
 
   // 3. The conversation appears in the inbox; open it and see the customer's message.
   const firstConvo = agent.locator('aside li button').first();
