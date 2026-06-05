@@ -70,10 +70,13 @@ the 6-hour ceiling). Chain of fixes (all Stream C / CI territory):
 With those, the specs run: **1 passed, 8 failed**. Remaining failures are real
 integration behaviour owned by other streams (file these):
 
-- **Stream B (agent-portal)** — after UI login the inbox never renders
-  (`heading "Shared Inbox"` never appears). Agent login→inbox flow doesn't
-  complete in CI. Could also be a globalSetup env-propagation detail (Stream C);
-  needs a reproducible full stack to confirm.
+- **agent-portal (Stream C spec bug — FIXED)** — NOT an app bug. Login + inbox
+  render correctly; the spec used `getByRole('heading', { name: /inbox/i })`
+  which matched two headings on an empty inbox (`Shared Inbox` title +
+  `Inbox zero. Take a breath.` empty state) → Playwright strict-mode violation.
+  Fixed to `/shared inbox/i` across the agent + widget specs. Verified locally:
+  `auth.spec` 2/2. (The widget-dependent agent specs still need the gateway fix
+  below to create their seed conversation.)
 - **Stream A (gateway)** — chat widget loops `yiji-status = "Connecting… /
 Reconnecting…"`; the gateway **rejects every customer socket** with
   `level:40 kind:"customer" err:"unauthorized" "connection rejected"`
