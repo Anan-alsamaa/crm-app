@@ -72,8 +72,14 @@ jobs:
   e2e:
     name: Playwright E2E
     runs-on: ubuntu-latest
-    # Hard ceiling so a hung dev server / unresponsive Directus fails the job in
-    # minutes instead of burning the 6-hour GitHub default.
+    # The full-stack E2E suite needs the WHOLE integrated stack (gateway +
+    # both portals + widget + Directus) working together, so it only makes
+    # sense once all streams are merged. Run it as an integration gate — on
+    # pushes to the long-lived branches (main / 001-yiji-crm-platform) — not on
+    # every feature/stream PR, where cross-stream pieces aren't present yet and
+    # it can't go green. Per-PR feedback comes from the fast `quality` job.
+    # (push only fires on main/001 per the `on:` filter above.)
+    if: github.event_name == 'push'
     timeout-minutes: 25
 
     services:
