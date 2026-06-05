@@ -43,7 +43,14 @@ export interface ConnectionDeps {
 
 const DEFAULT_ATTACHMENT_POLICY: AttachmentPolicy = {
   maxBytes: 10 * 1024 * 1024,
-  allowedMime: ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf', 'text/plain'],
+  allowedMime: [
+    'image/png',
+    'image/jpeg',
+    'image/gif',
+    'image/webp',
+    'application/pdf',
+    'text/plain',
+  ],
 };
 const DEFAULT_RATE_LIMIT = { capacity: 20, refillPerSec: 5 };
 
