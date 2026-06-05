@@ -385,7 +385,11 @@ async function applyProjectOwner(client: AnyClient, ownerEmail: string): Promise
   await client.request(
     updateSettings({ project_owner: users[0].id, project_use_case: 'internal-tool' } as never),
   );
-  console.log(`  + project_owner set to ${ownerEmail}`);
+  // Log as an "ensure" (=) not a create (+): this re-sets the SAME canonical
+  // owner, and the lock-project-owner hook guarantees it can't drift. The guard
+  // above can miss when Directus serves a cached (stale-null) settings read, so
+  // logging `=` here keeps the idempotence check honest for the no-op re-set.
+  console.log(`  = project_owner ensured -> ${ownerEmail}`);
 }
 
 async function applyServiceUsers(client: AnyClient): Promise<void> {
