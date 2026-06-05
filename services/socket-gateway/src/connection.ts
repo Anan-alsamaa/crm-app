@@ -248,7 +248,8 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       io.to(rooms.conversation(conversationId)).emit(SOCKET_EVENTS.messageNew, payload);
       // Signal every agent inbox to refresh (covers conversations they haven't joined).
       io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId });
-      await producer.messageReceived(conversationId);
+      // Carry the message text so keyword-based automation rules can match.
+      await producer.messageReceived(conversationId, content);
     } catch (err) {
       logger.error({ err }, 'message:send failed');
       socket.emit(SOCKET_EVENTS.error, {

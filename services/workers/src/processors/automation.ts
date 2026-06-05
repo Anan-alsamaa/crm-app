@@ -163,6 +163,24 @@ async function executeAction(
         payload: { entityId, entityType, automation: true },
       });
       return;
+    case 'escalate':
+      // Escalate = raise priority (default urgent) on the entity, and notify a
+      // recipient if one is configured. Records as an `escalation` notification.
+      if (entityType === 'conversation' || entityType === 'ticket') {
+        const priority = (action.params.priority as string) ?? 'urgent';
+        await directus.request(updateItem(entityType + 's', entityId, { priority } as never));
+      }
+      if (action.params.recipientId) {
+        await notificationsQueue.add('send', {
+          recipientId: action.params.recipientId as string,
+          type: 'escalation',
+          title: (action.params.title as string) ?? 'Escalation',
+          body: (action.params.body as string) ?? `Escalated ${entityType} ${entityId}`,
+          link: action.params.link as string | undefined,
+          payload: { entityId, entityType, automation: true, escalated: true },
+        });
+      }
+      return;
     default:
       logger.warn({ kind: action.kind }, 'unknown automation action — skipped');
       // Touch context so unused-param lint stays happy without losing the
