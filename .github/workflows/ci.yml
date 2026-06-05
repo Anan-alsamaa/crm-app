@@ -202,6 +202,7 @@ jobs:
             -e REDIS=$REDIS_URL \
             -e CACHE_ENABLED=true -e CACHE_STORE=redis \
             -e WEBSOCKETS_ENABLED=true \
+            -e CORS_ENABLED=true -e CORS_ORIGIN=true \
             -e STORAGE_LOCATIONS=local -e STORAGE_LOCAL_DRIVER=local \
             -e STORAGE_LOCAL_ROOT=/directus/uploads \
             -v ${{ github.workspace }}/directus/extensions:/directus/extensions \

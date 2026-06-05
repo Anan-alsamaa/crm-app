@@ -60,6 +60,10 @@ services:
       CACHE_ENABLED: 'true'
       CACHE_STORE: redis
       WEBSOCKETS_ENABLED: 'true'
+      # Allow the portals/widget (different localhost ports) to call Directus.
+      # CORS_ORIGIN=true reflects the request origin (works with credentials).
+      CORS_ENABLED: 'true'
+      CORS_ORIGIN: 'true'
       STORAGE_LOCATIONS: local
       STORAGE_LOCAL_DRIVER: local
       STORAGE_LOCAL_ROOT: /directus/uploads
