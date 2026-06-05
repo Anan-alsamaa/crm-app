@@ -193,22 +193,30 @@ jobs:
 
       - name: Wait for services
         run: |
-          for entry in "8081:gateway-health" "5173:agent-portal" "5174:admin-portal" "5175:chat-widget"; do
-            port="${entry%%:*}"
-            name="${entry##*:}"
+          # Each entry is "name|url". The gateway only serves specific routes
+          # (no `/`), so it MUST be probed at /health — curl -sf treats the
+          # gateway's 404-on-/ as a failure, which is why this wait used to time
+          # out even though the gateway was healthy. The Vite portals serve 200
+          # on /.
+          dump_logs() { for f in *.log; do echo "----- $f -----"; tail -n 80 "$f" || true; done; }
+          for entry in \
+            "gateway-health|http://localhost:8081/health" \
+            "agent-portal|http://localhost:5173/" \
+            "admin-portal|http://localhost:5174/" \
+            "chat-widget|http://localhost:5175/"; do
+            name="${entry%%|*}"
+            url="${entry##*|}"
             up=0
             for i in $(seq 1 60); do
-              if curl -sf http://localhost:$port > /dev/null 2>&1; then
-                echo "${name} (:${port}) is up"
+              if curl -sf "$url" > /dev/null 2>&1; then
+                echo "${name} is up (${url})"
                 up=1; break
               fi
               sleep 2
             done
             if [ $up -ne 1 ]; then
-              echo "${name} (:${port}) failed to come up"
-              # `tail -80` is invalid on this runner's tail; use -n 80. Dump each
-              # log explicitly so a failed start is actually debuggable.
-              for f in *.log; do echo "----- $f -----"; tail -n 80 "$f" || true; done
+              echo "${name} failed to come up (${url})"
+              dump_logs
               exit 1
             fi
           done
