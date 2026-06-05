@@ -41,25 +41,39 @@ export class GatewayDirectus {
     if (claims.phone) or.push({ phone: { _eq: claims.phone } });
     if (claims.email) or.push({ email: { _eq: claims.email } });
 
-    const existing = (await this.client.request(
-      readItems('contacts', {
-        filter: { vendor: { _eq: vendorUuid }, _or: or },
-        fields: ['id'],
-        limit: 1,
-      }),
-    )) as Array<{ id: string }>;
-    if (existing[0]) return existing[0].id;
+    const findExisting = async (): Promise<string | null> => {
+      const rows = (await this.client.request(
+        readItems('contacts', {
+          filter: { vendor: { _eq: vendorUuid }, _or: or },
+          fields: ['id'],
+          limit: 1,
+        }),
+      )) as Array<{ id: string }>;
+      return rows[0]?.id ?? null;
+    };
 
-    const created = (await this.client.request(
-      createItem('contacts', {
-        vendor: vendorUuid,
-        external_customer_id: claims.customer_id,
-        name: claims.name ?? null,
-        phone: claims.phone ?? null,
-        email: claims.email ?? null,
-      } as never),
-    )) as { id: string };
-    return created.id;
+    const existing = await findExisting();
+    if (existing) return existing;
+
+    try {
+      const created = (await this.client.request(
+        createItem('contacts', {
+          vendor: vendorUuid,
+          external_customer_id: claims.customer_id,
+          name: claims.name ?? null,
+          phone: claims.phone ?? null,
+          email: claims.email ?? null,
+        } as never),
+      )) as { id: string };
+      return created.id;
+    } catch (err) {
+      // Concurrent connections for the same customer race the read-then-create
+      // above and trip the (vendor, phone)/(vendor, email) partial-unique index.
+      // Re-read and return the contact the other connection just created.
+      const raced = await findExisting();
+      if (raced) return raced;
+      throw err;
+    }
   }
 
   /** Return the contact's open conversation, or create a new one. */
