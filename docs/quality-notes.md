@@ -67,34 +67,56 @@ the 6-hour ceiling). Chain of fixes (all Stream C / CI territory):
    (it only serves `/health|/ready|/debug/presence`); `curl -sf` failed → fixed
    to probe `/health`.
 
-With those, the specs run: **1 passed, 8 failed**. Remaining failures are real
-integration behaviour owned by other streams (file these):
+### Root-cause chain (debugged from 1/9 → 8–9/9 passing)
 
-- **agent-portal (Stream C spec bug — FIXED)** — NOT an app bug. Login + inbox
-  render correctly; the spec used `getByRole('heading', { name: /inbox/i })`
-  which matched two headings on an empty inbox (`Shared Inbox` title +
-  `Inbox zero. Take a breath.` empty state) → Playwright strict-mode violation.
-  Fixed to `/shared inbox/i` across the agent + widget specs. Verified locally:
-  `auth.spec` 2/2. (The widget-dependent agent specs still need the gateway fix
-  below to create their seed conversation.)
-- **Stream A (gateway)** — chat widget loops `yiji-status = "Connecting… /
-Reconnecting…"`; the gateway **rejects every customer socket** with
-  `level:40 kind:"customer" err:"unauthorized" "connection rejected"`
-  (gateway.log, CI run 27008729342). `"unauthorized"` is the _fallback_ branch
-  in `connection.ts` (`err instanceof Error ? err.message : 'unauthorized'`),
-  so a **non-Error** is being thrown during customer onboarding — JWT verify
-  likely passes (that throws a `CustomerTokenError` with a real message), but a
-  later Directus call (`resolveVendor` / `upsertContact` /
-  `findOrCreateConversation`) throws a non-Error (Directus SDK error). `demo-vendor`
-  is seeded + active and `YIJI_JWT_SECRET` parity is set in CI, so the likely
-  cause is the **svc-socket-gateway service token lacking read/write permission**
-  on vendors/contacts/conversations (Stream A bootstrap policy), or a
-  `YIJI_JWT_SECRET` mismatch. **Fix for Stream A:** log the real error in that
-  catch (don't collapse to "unauthorized"), then grant/verify svc-socket-gateway
-  permissions. The agent-portal specs (login → inbox) pass once the selector fix
-  lands; only the widget round-trip is blocked by this.
+Once it ran (1 passed / 8 failed), the failures peeled back four **systemic**
+causes plus a few spec/UI issues:
 
-Because the suite needs the whole integrated stack, the CI **e2e job now runs as
-an integration gate** (`if: github.event_name == 'push'`, i.e. on main /
-001-yiji-crm-platform after streams merge) rather than on every feature PR,
-where cross-stream pieces aren't present. Per-PR signal comes from `quality`.
+4. **Gateway swallowed the real error** as a generic `"unauthorized"`
+   (`connection.ts` non-Error fallback). Fixed to surface the Directus SDK
+   error message. _This was the key that made the rest diagnosable._
+5. **`(vendor, phone)` unique-constraint race** — the widget reconnects
+   aggressively, so concurrent `upsertContact` flows each read "not found" then
+   race to create the same contact; all-but-one hit the partial-unique index.
+   Fixed: `upsertContact` is idempotent (re-query + return on the unique
+   violation). Unit-tested.
+6. **Stale read-after-write** — CI Directus ran `CACHE_ENABLED` + redis but
+   Directus defaults `CACHE_AUTO_PURGE=false`, so writes never invalidated
+   cached reads; the gateway's re-query kept seeing stale-empty. Fixed:
+   `CACHE_AUTO_PURGE=true` on the CI Directus. (→ gateway rejections 11 → 0.)
+7. **CORS** — the portal login (`:5173/:5174` → Directus `:8055`) was
+   CORS-blocked (trace: `ERR_FAILED` / `net::`, no `Access-Control-Allow-Origin`);
+   login never completed → every login-dependent spec failed on the login page.
+   Fixed: `CORS_ENABLED=true` + `CORS_ORIGIN=true` on the CI Directus.
+   (→ 6/9 passing.)
+
+Spec/selector fixes (Stream C territory, all verified locally):
+
+- inbox heading `/inbox/i` matched two headings on an empty inbox
+  (`Shared Inbox` + `Inbox zero…` empty state) → narrowed to `/shared inbox/i`.
+- internal-note toggle is a tab `<button>`, not a checkbox → click the button.
+- admin team/user create forms are Drawers (`role="dialog"`) that must be opened
+  first; RHF fields targeted by `name` attribute (see FormField gap below).
+
+### Follow-ups for the other streams
+
+- **Stream A — `docker-compose.yml` (prod):** add `CACHE_AUTO_PURGE=true` and
+  CORS (`CORS_ENABLED`/`CORS_ORIGIN`) to the Directus service — the prod config
+  has the same gaps the CI Directus had, so prod portals + the gateway
+  read-after-write would hit the identical bugs.
+- **Stream A — `directus/bootstrap`:** make `apply` self-exit (close the DB /
+  Directus client) so it doesn't hang; CI currently caps it at 300s.
+- **Stream B — `packages/ui/FormField`:** wire `label` → input (htmlFor/id or
+  aria-labelledby). It doesn't, so `getByLabel` fails app-wide (Login, all create
+  drawers); specs work around it via `name`-attribute / id selectors.
+- **Stream B — `ConversationToolbar`:** the "+ Create ticket" button's hit-box is
+  overlapped by a chat bubble at the test viewport (z-index/layout); the ticket
+  spec force-clicks to bypass it. Worth a real layout fix.
+- `tickets.spec` "preferences saved" is occasionally flaky in CI (passes
+  locally + on retry) — full-stack timing.
+
+Because the suite needs the whole integrated stack, the CI **e2e job runs as an
+integration gate** (`if: github.event_name == 'push'`, i.e. on main /
+001-yiji-crm-platform after streams merge) rather than on every feature PR.
+Per-PR signal comes from the fast `quality` job. To debug e2e on a stream PR,
+temporarily add `|| github.head_ref == '<branch>'` to that `if`.
