@@ -207,7 +207,26 @@ jobs:
         # SVC_GATEWAY_TOKEN/SVC_WORKERS_TOKEN/SVC_AI_TOKEN are in env, so
         # bootstrap creates each service user with its static token set —
         # no follow-up PATCH needed for those.
-        run: pnpm --filter @yiji/directus-bootstrap apply
+        #
+        # NOTE: directus-bootstrap finishes its work (~90s, prints "Done.") but
+        # the process does not self-exit — it leaves an open DB/Directus handle,
+        # so Node hangs indefinitely. Until that's fixed in directus/bootstrap
+        # (Stream A: close connections / process.exit after apply), cap it: a
+        # SIGTERM kill (exit 124) after the work is done is treated as success;
+        # any other non-zero exit is a real bootstrap failure.
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=30 300 pnpm --filter @yiji/directus-bootstrap apply
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "bootstrap exited cleanly"
+          elif [ "$code" -eq 124 ]; then
+            echo "::warning title=directus-bootstrap::apply completed but did not self-exit (open handle); killed after 300s. Fix in directus/bootstrap (Stream A)."
+          else
+            echo "bootstrap failed with exit code $code"
+            exit "$code"
+          fi
 
       - name: Seed demo vendor
         # The widget chat spec sends vendor_id=demo-vendor in its JWT; the
