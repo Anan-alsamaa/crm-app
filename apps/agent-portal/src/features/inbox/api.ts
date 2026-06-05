@@ -15,12 +15,19 @@ export interface InboxConversation {
   tags?: Array<{ tags_id: { id: string; name: string; color: string | null } | null }>;
 }
 
+export interface MessageAttachment {
+  id: string;
+  filename: string | null;
+  type: string | null;
+}
+
 export interface ConversationMessage {
   id: string;
   sender_type: 'customer' | 'agent' | 'system';
   content: string;
   is_internal_note: boolean;
   date_created: string | null;
+  attachments?: MessageAttachment[];
 }
 
 export interface InboxFilters {
@@ -84,15 +91,55 @@ export function useMessages(conversationId: string | null) {
   return useQuery({
     enabled: !!conversationId,
     queryKey: ['messages', conversationId],
-    queryFn: () =>
-      directus.request(
+    queryFn: async () => {
+      const msgs = (await directus.request(
         readItems('messages', {
           filter: { conversation: { _eq: conversationId } },
           fields: ['id', 'sender_type', 'content', 'is_internal_note', 'date_created'],
           sort: ['date_created'],
           limit: -1,
         }),
-      ) as Promise<ConversationMessage[]>,
+      )) as ConversationMessage[];
+      const ids = msgs.map((m) => m.id);
+      if (ids.length === 0) return msgs;
+      // Attachments live in the messages_files m2m junction (there is no alias
+      // field on `messages`). Fail soft: against an older gateway/permission set
+      // the junction read may be denied — messages still render without chips.
+      try {
+        const links = (await directus.request(
+          readItems('messages_files', {
+            filter: { messages_id: { _in: ids } },
+            fields: ['messages_id', { directus_files_id: ['id', 'filename_download', 'type'] }],
+            limit: -1,
+          }),
+        )) as Array<{
+          messages_id: string;
+          directus_files_id: {
+            id: string;
+            filename_download: string | null;
+            type: string | null;
+          } | null;
+        }>;
+        const byMsg = new Map<string, MessageAttachment[]>();
+        for (const l of links) {
+          if (!l.directus_files_id) continue;
+          const arr = byMsg.get(l.messages_id) ?? [];
+          arr.push({
+            id: l.directus_files_id.id,
+            filename: l.directus_files_id.filename_download,
+            type: l.directus_files_id.type,
+          });
+          byMsg.set(l.messages_id, arr);
+        }
+        for (const m of msgs) {
+          const a = byMsg.get(m.id);
+          if (a) m.attachments = a;
+        }
+      } catch {
+        /* attachments unavailable — render messages without them */
+      }
+      return msgs;
+    },
   });
 }
 

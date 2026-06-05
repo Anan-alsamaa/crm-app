@@ -2,10 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { Socket } from 'socket.io-client';
-import { Avatar, CloseIcon, cn, formatRelative, Skeleton, useIsDesktop } from '@yiji/ui';
+import {
+  Avatar,
+  CloseIcon,
+  cn,
+  formatRelative,
+  Skeleton,
+  Spinner,
+  toast,
+  useIsDesktop,
+} from '@yiji/ui';
 import { SOCKET_EVENTS, type MessageNew } from '@yiji/shared-types';
-import { getSocket } from '../../lib/socket.js';
+import { getSocket, uploadAttachment } from '../../lib/socket.js';
 import { useAgents, useConversation, useMessages, type ConversationMessage } from '../inbox/api.js';
+import { AttachmentChips } from './AttachmentChips.js';
 import { ConversationToolbar } from './ConversationToolbar.js';
 import { ConversationSidebar } from './ConversationSidebar.js';
 import { resolveMentions } from './mentions.js';
@@ -60,8 +70,11 @@ export function ConversationView({
   const [internalNote, setInternalNote] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [mentionMenu, setMentionMenu] = useState<{ query: string; from: number } | null>(null);
+  const [pending, setPending] = useState<Array<{ id: string; name: string }>>([]);
+  const [uploading, setUploading] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const draftRef = useRef<HTMLTextAreaElement | null>(null);
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -73,6 +86,8 @@ export function ConversationView({
     setInternalNote(false);
     setDetailsOpen(false);
     setMentionMenu(null);
+    setPending([]);
+    setUploading(false);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     isTypingRef.current = false;
   }, [conversationId]);
@@ -135,6 +150,11 @@ export function ConversationView({
                   content: msg.content,
                   is_internal_note: false,
                   date_created: msg.createdAt,
+                  attachments: (msg.attachments ?? []).map((id) => ({
+                    id,
+                    filename: null,
+                    type: null,
+                  })),
                 },
               ],
         );
@@ -227,7 +247,10 @@ export function ConversationView({
 
   const send = () => {
     const content = draft.trim();
-    if (!content || !socketRef.current) return;
+    const attachmentIds = pending.map((p) => p.id);
+    // A reply needs text OR at least one attachment; internal notes are text-only.
+    if (!socketRef.current) return;
+    if (internalNote ? !content : !content && attachmentIds.length === 0) return;
     const cmid = clientId();
     if (internalNote) {
       const mentions = resolveMentions(content, agents.data ?? []);
@@ -241,16 +264,35 @@ export function ConversationView({
       socketRef.current.emit(SOCKET_EVENTS.messageSend, {
         conversationId,
         content,
+        ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
         clientMsgId: cmid,
       });
     }
     setDraft('');
+    setPending([]);
     setMentionMenu(null);
     stopTyping();
     void qc.invalidateQueries({ queryKey: ['conversations'] });
     // Reset textarea height after sending.
     if (draftRef.current) draftRef.current.style.height = 'auto';
   };
+
+  const onPickFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const up = await uploadAttachment(file);
+        setPending((prev) => [...prev, { id: up.id, name: file.name }]);
+      }
+    } catch {
+      toast.error(t('conversation.attachFailed', { defaultValue: 'Could not upload the file.' }));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+  const removePending = (id: string) => setPending((prev) => prev.filter((p) => p.id !== id));
 
   const onDraftChange = (value: string, caret: number) => {
     setDraft(value);
@@ -383,24 +425,38 @@ export function ConversationView({
                     <div className={cn('flex flex-col gap-0.5', isAgent && 'items-end')}>
                       {run.map((m, i) => {
                         const isLast = i === run.length - 1;
+                        const hasContent = m.content.trim().length > 0;
                         return (
                           <div
                             key={m.id}
                             className={cn(
-                              'px-3.5 py-2 text-sm leading-relaxed break-words text-start max-w-fit',
-                              // No borders, no card chrome. Just bg + shape.
-                              isNote
-                                ? 'bg-warning/15 text-warning-foreground'
-                                : isAgent
-                                  ? 'bg-foreground text-background'
-                                  : 'bg-secondary text-foreground',
-                              // Smooth pill shape, tail only on the LAST bubble of a run.
-                              'rounded-[18px]',
-                              isLast && isAgent && 'rounded-ee-sm',
-                              isLast && !isAgent && 'rounded-es-sm',
+                              'flex flex-col gap-1',
+                              isAgent ? 'items-end' : 'items-start',
                             )}
                           >
-                            <p className="whitespace-pre-wrap">{m.content}</p>
+                            {hasContent && (
+                              <div
+                                className={cn(
+                                  'px-3.5 py-2 text-sm leading-relaxed break-words text-start max-w-fit',
+                                  // No borders, no card chrome. Just bg + shape.
+                                  isNote
+                                    ? 'bg-warning/15 text-warning-foreground'
+                                    : isAgent
+                                      ? 'bg-foreground text-background'
+                                      : 'bg-secondary text-foreground',
+                                  // Smooth pill shape, tail only on the LAST bubble of a run.
+                                  'rounded-[18px]',
+                                  isLast && isAgent && 'rounded-ee-sm',
+                                  isLast && !isAgent && 'rounded-es-sm',
+                                )}
+                              >
+                                <p className="whitespace-pre-wrap">{m.content}</p>
+                              </div>
+                            )}
+                            <AttachmentChips
+                              attachments={m.attachments}
+                              align={isAgent ? 'end' : 'start'}
+                            />
                           </div>
                         );
                       })}
@@ -475,11 +531,44 @@ export function ConversationView({
                 internalNote && 'focus-within:ring-warning/50',
               )}
             >
+              {/* Pending attachments (uploaded, not yet sent) */}
+              {pending.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 px-3 pt-3">
+                  {pending.map((p) => (
+                    <span
+                      key={p.id}
+                      className="inline-flex max-w-[14rem] items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 text-xs text-foreground ring-1 ring-foreground/[0.05]"
+                    >
+                      <span className="truncate">{p.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => removePending(p.id)}
+                        aria-label={t('conversation.removeAttachment', {
+                          defaultValue: 'Remove attachment',
+                        })}
+                        className="shrink-0 text-muted-foreground transition-colors duration-fast hover:text-foreground"
+                      >
+                        <CloseIcon size={13} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => void onPickFiles(e.target.files)}
+              />
+
               <textarea
                 ref={draftRef}
                 rows={1}
                 className={cn(
-                  'block w-full resize-none bg-transparent px-3 py-3 pe-14 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground',
+                  'block w-full resize-none bg-transparent py-3 pe-14 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground',
+                  internalNote ? 'px-3' : 'ps-12 pe-14',
                   'border-none outline-none focus:ring-0',
                 )}
                 value={draft}
@@ -500,10 +589,43 @@ export function ConversationView({
                 }}
               />
 
+              {/* Attach — reply mode only (internal notes are text-only) */}
+              {!internalNote && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  aria-label={t('conversation.attach', { defaultValue: 'Attach file' })}
+                  className={cn(
+                    'absolute start-2 bottom-2 inline-flex h-9 w-9 items-center justify-center rounded-full',
+                    'text-muted-foreground transition-colors duration-fast ease-out',
+                    'hover:bg-secondary hover:text-foreground active:enabled:scale-95',
+                    'disabled:opacity-40 disabled:cursor-not-allowed',
+                  )}
+                >
+                  {uploading ? (
+                    <Spinner size={16} />
+                  ) : (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-4 w-4"
+                      aria-hidden
+                    >
+                      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                  )}
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={send}
-                disabled={draft.trim().length === 0}
+                disabled={draft.trim().length === 0 && (internalNote || pending.length === 0)}
                 aria-label={t('actions.send', { ns: 'common' })}
                 className={cn(
                   'absolute end-2 bottom-2 inline-flex h-9 w-9 items-center justify-center rounded-full',

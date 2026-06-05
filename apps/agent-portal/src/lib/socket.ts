@@ -40,6 +40,43 @@ export async function getSocket(): Promise<Socket> {
   return globalThis.__yijiAgentSocket;
 }
 
+export interface UploadedAttachment {
+  id: string;
+  type: string | null;
+  filesize: number | null;
+}
+
+/**
+ * Upload a file through the gateway, which validates MIME/size and proxies it
+ * to Directus via the service account (agents and the widget share this path).
+ * Resolves with the Directus file id to reference in `message:send`.
+ */
+export async function uploadAttachment(file: File): Promise<UploadedAttachment> {
+  const socket = await getSocket();
+  const content = await file.arrayBuffer();
+  return new Promise<UploadedAttachment>((resolve, reject) => {
+    socket.timeout(20_000).emit(
+      'attachment:upload',
+      { filename: file.name, mimetype: file.type, content },
+      (
+        err: Error | null,
+        res?: {
+          ok?: boolean;
+          id?: string;
+          type?: string | null;
+          filesize?: number | null;
+          error?: string;
+        },
+      ) => {
+        if (err) return reject(new Error('upload_timeout'));
+        if (res?.ok && res.id)
+          resolve({ id: res.id, type: res.type ?? null, filesize: res.filesize ?? null });
+        else reject(new Error(res?.error ?? 'upload_failed'));
+      },
+    );
+  });
+}
+
 export function disconnectSocket(): void {
   const s = globalThis.__yijiAgentSocket;
   // Drop the global reference first so any subsequent getSocket() call

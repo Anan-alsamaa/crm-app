@@ -133,6 +133,10 @@
     "addTag": "وسم",
     "backToInbox": "العودة إلى صندوق الوارد",
     "details": "تفاصيل المحادثة",
+    "attach": "إرفاق ملف",
+    "attachment": "مرفق",
+    "attachFailed": "تعذّر رفع الملف.",
+    "removeAttachment": "إزالة المرفق",
     "you": "أنت",
     "tab": {
       "reply": "رد",

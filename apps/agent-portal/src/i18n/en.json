@@ -133,6 +133,10 @@
     "addTag": "Tag",
     "backToInbox": "Back to inbox",
     "details": "Conversation details",
+    "attach": "Attach file",
+    "attachment": "Attachment",
+    "attachFailed": "Could not upload the file.",
+    "removeAttachment": "Remove attachment",
     "you": "You",
     "tab": {
       "reply": "Reply",
