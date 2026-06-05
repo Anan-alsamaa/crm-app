@@ -270,7 +270,8 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
         expect.objectContaining({ conversationId: 'conv-1', content: 'hello world' }),
       );
       await new Promise((r) => setTimeout(r, 20));
-      expect(harness.stubs.producer.messageReceived).toHaveBeenCalledWith('conv-1');
+      // The gateway forwards the message content too (for keyword automation).
+      expect(harness.stubs.producer.messageReceived).toHaveBeenCalledWith('conv-1', 'hello world');
     });
 
     it('message:send with a bad payload emits a bad_payload error', async () => {

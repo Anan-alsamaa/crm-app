@@ -1,0 +1,12 @@
+{
+  "name": "directus-extension-notify-on-change",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Creates in-app notification rows when a conversation/ticket is assigned or a ticket's status changes (spec §13 producers that originate from Directus PATCHes).",
+  "directus:extension": {
+    "type": "hook",
+    "path": "index.js",
+    "source": "index.js",
+    "host": "^11.0.0"
+  }
+}

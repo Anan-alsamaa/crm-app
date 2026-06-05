@@ -53,18 +53,23 @@ export async function processNotificationJob(
   if (inApp) deps.onInAppCreated?.({ id: created.id, recipient: recipientId, type });
 
   if (email) {
-    try {
-      // The recipient's email address is not in the job payload; in this
-      // worker version we assume the NotificationsRepo persists the row and
-      // a downstream mail relay (or the same repo) supplies the address.
-      // Here we just call the transport with the title+body so the dev no-op
-      // logs it; SMTP impls should attach `to` via a profile lookup.
-      await deps.mail.send({ to: recipientId, subject: title, text: body });
-    } catch (err) {
+    // Resolve the recipient's actual email address — the job payload only
+    // carries the user id. Skip (don't misfire to a user id) if unknown.
+    const to = await deps.notifications.getUserEmail(recipientId);
+    if (!to) {
       deps.logger.warn(
-        { err: err instanceof Error ? err.message : String(err) },
-        'email send failed; in-app row already written',
+        { recipientId, type },
+        'email channel requested but recipient has no email; in-app row already written',
       );
+    } else {
+      try {
+        await deps.mail.send({ to, subject: title, text: body });
+      } catch (err) {
+        deps.logger.warn(
+          { err: err instanceof Error ? err.message : String(err) },
+          'email send failed; in-app row already written',
+        );
+      }
     }
   }
 }

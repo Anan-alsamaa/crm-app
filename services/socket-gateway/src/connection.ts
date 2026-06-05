@@ -16,6 +16,8 @@ import { CustomerTokenError } from './auth/customer-jwt.js';
 import { validateAgentToken } from './auth/agent-jwt.js';
 import type { SideEffectProducer } from './queue.js';
 import { createAgentPresence } from './agent-presence.js';
+import { validateAttachments, type AttachmentPolicy } from './attachments.js';
+import { createTokenBucket } from './rate-limit.js';
 
 interface SocketData {
   kind: 'customer' | 'agent';
@@ -33,7 +35,24 @@ export interface ConnectionDeps {
   verifier: CustomerVerifier;
   producer: SideEffectProducer;
   logger: Logger;
+  // Optional with safe defaults so callers/tests that don't supply them still
+  // work; index.ts always passes them from config.
+  attachmentPolicy?: AttachmentPolicy;
+  rateLimit?: { capacity: number; refillPerSec: number };
 }
+
+const DEFAULT_ATTACHMENT_POLICY: AttachmentPolicy = {
+  maxBytes: 10 * 1024 * 1024,
+  allowedMime: [
+    'image/png',
+    'image/jpeg',
+    'image/gif',
+    'image/webp',
+    'application/pdf',
+    'text/plain',
+  ],
+};
+const DEFAULT_RATE_LIMIT = { capacity: 20, refillPerSec: 5 };
 
 /** In-memory presence per vendor room (per gateway instance). */
 const presence = new Map<string, Set<string>>();
@@ -162,7 +181,12 @@ async function onAgentConnect(socket: Socket, { directus }: ConnectionDeps): Pro
 
 function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   const { io, directus, producer, logger } = deps;
+  const attachmentPolicy = deps.attachmentPolicy ?? DEFAULT_ATTACHMENT_POLICY;
+  const rateLimit = deps.rateLimit ?? DEFAULT_RATE_LIMIT;
   const data = socket.data as SocketData;
+  // One token bucket per socket — throttles inbound write events (message:send,
+  // note:add) to a burst + sustained rate.
+  const writeBucket = createTokenBucket(rateLimit.capacity, rateLimit.refillPerSec);
 
   // Explicit logout signal from an agent. We mirror the disconnect cleanup
   // up-front so the host-page "agents online" pill flips immediately —
@@ -198,11 +222,28 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   });
 
   socket.on(SOCKET_EVENTS.messageSend, async (raw: unknown) => {
+    if (!writeBucket.tryRemove())
+      return socket.emit(SOCKET_EVENTS.error, {
+        code: 'rate_limited',
+        message: 'too many messages, slow down',
+      });
     const parsed = MessageSend.safeParse(raw);
     if (!parsed.success)
       return socket.emit(SOCKET_EVENTS.error, { code: 'bad_payload', message: 'invalid message' });
     const { conversationId, content, attachments, clientMsgId } = parsed.data;
     try {
+      // Attachment validation (MIME allow-list + size cap) before persisting.
+      if (attachments && attachments.length > 0) {
+        const metas = await directus.getFilesMeta(attachments);
+        const check = validateAttachments(attachments, metas, attachmentPolicy);
+        if (!check.ok) {
+          logger.warn({ conversationId, reason: check.reason }, 'attachment rejected');
+          return socket.emit(SOCKET_EVENTS.error, {
+            code: 'attachment_rejected',
+            message: check.reason ?? 'attachment not allowed',
+          });
+        }
+      }
       const senderType = data.kind === 'agent' ? 'agent' : 'customer';
       const saved = await directus.persistMessage({
         conversationId,
@@ -224,13 +265,45 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       io.to(rooms.conversation(conversationId)).emit(SOCKET_EVENTS.messageNew, payload);
       // Signal every agent inbox to refresh (covers conversations they haven't joined).
       io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId });
-      await producer.messageReceived(conversationId);
+      // Carry the message text so keyword-based automation rules can match.
+      await producer.messageReceived(conversationId, content);
     } catch (err) {
       logger.error({ err }, 'message:send failed');
       socket.emit(SOCKET_EVENTS.error, {
         code: 'persist_failed',
         message: 'could not send message',
       });
+    }
+  });
+
+  // Attachment upload (esp. the customer widget, which has no Directus account):
+  // the client sends bytes, the gateway validates MIME/size, uploads via the
+  // service token, and acks the Directus file id to reference in message:send.
+  //   emit('attachment:upload', { filename, mimetype, content }, (res) => ...)
+  //   content: ArrayBuffer | typed array | base64 string
+  //   ack res: { ok:true, id, type, filesize } | { ok:false, error }
+  socket.on('attachment:upload', async (raw: unknown, ack?: (res: unknown) => void) => {
+    const respond = typeof ack === 'function' ? ack : () => undefined;
+    if (!writeBucket.tryRemove()) return respond({ ok: false, error: 'rate_limited' });
+    const data = raw as { filename?: unknown; mimetype?: unknown; content?: unknown };
+    const filename = typeof data?.filename === 'string' ? data.filename : 'upload';
+    const mimetype = typeof data?.mimetype === 'string' ? data.mimetype.toLowerCase() : '';
+    let buf: Buffer | null = null;
+    if (data?.content instanceof ArrayBuffer) buf = Buffer.from(data.content);
+    else if (ArrayBuffer.isView(data?.content as ArrayBufferView))
+      buf = Buffer.from((data.content as ArrayBufferView).buffer);
+    else if (typeof data?.content === 'string') buf = Buffer.from(data.content, 'base64');
+    if (!buf || buf.length === 0) return respond({ ok: false, error: 'no file content' });
+    if (!attachmentPolicy.allowedMime.includes(mimetype))
+      return respond({ ok: false, error: `type "${mimetype || 'unknown'}" not allowed` });
+    if (buf.length > attachmentPolicy.maxBytes)
+      return respond({ ok: false, error: 'file too large' });
+    try {
+      const file = await directus.uploadFile(buf, filename, mimetype);
+      respond({ ok: true, id: file.id, type: file.type, filesize: file.filesize });
+    } catch (err) {
+      logger.error({ err }, 'attachment upload failed');
+      respond({ ok: false, error: 'upload failed' });
     }
   });
 
@@ -281,6 +354,11 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   // Internal notes: agents only.
   socket.on(SOCKET_EVENTS.noteAdd, async (raw: unknown) => {
     if (data.kind !== 'agent') return;
+    if (!writeBucket.tryRemove())
+      return socket.emit(SOCKET_EVENTS.error, {
+        code: 'rate_limited',
+        message: 'too many notes, slow down',
+      });
     const parsed = NoteAdd.safeParse(raw);
     if (!parsed.success) return;
     const { conversationId, content, clientMsgId } = parsed.data;
@@ -321,6 +399,13 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   socket.on(SOCKET_EVENTS.readAck, (raw: unknown) => {
     const parsed = ReadAck.safeParse(raw);
     if (!parsed.success) return;
+    // An agent reading the thread clears its unread counter. Fire-and-forget;
+    // a failed reset is non-fatal (next agent message resets it anyway).
+    if (data.kind === 'agent') {
+      directus
+        .markConversationRead(parsed.data.conversationId)
+        .catch((err) => logger.warn({ err }, 'markConversationRead failed'));
+    }
     socket
       .to(rooms.conversation(parsed.data.conversationId))
       .emit(SOCKET_EVENTS.readAck, parsed.data);

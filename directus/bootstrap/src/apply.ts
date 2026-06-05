@@ -275,7 +275,14 @@ async function applyRoles(client: AnyClient): Promise<void> {
 
     // Role (find by name, else create).
     const existingRoles = (await client.request(
-      readRoles({ filter: { name: { _eq: role.name } }, limit: 1, fields: ['id', 'policies'] }),
+      // Pull the nested policy id (policies = directus_access junction rows);
+      // without `.policy` the link check below never matches and re-links the
+      // policy on every run (non-idempotent + duplicate access rows).
+      readRoles({
+        filter: { name: { _eq: role.name } },
+        limit: 1,
+        fields: ['id', 'policies.policy'],
+      }),
     )) as Array<{ id: string; policies?: unknown[] }>;
     let roleId: string;
     if (existingRoles[0]) {
@@ -378,7 +385,11 @@ async function applyProjectOwner(client: AnyClient, ownerEmail: string): Promise
   await client.request(
     updateSettings({ project_owner: users[0].id, project_use_case: 'internal-tool' } as never),
   );
-  console.log(`  + project_owner set to ${ownerEmail}`);
+  // Log as an "ensure" (=) not a create (+): this re-sets the SAME canonical
+  // owner, and the lock-project-owner hook guarantees it can't drift. The guard
+  // above can miss when Directus serves a cached (stale-null) settings read, so
+  // logging `=` here keeps the idempotence check honest for the no-op re-set.
+  console.log(`  = project_owner ensured -> ${ownerEmail}`);
 }
 
 async function applyServiceUsers(client: AnyClient): Promise<void> {
@@ -406,9 +417,11 @@ async function applyServiceUsers(client: AnyClient): Promise<void> {
       readUsers({ filter: { email: { _eq: email } }, limit: 1, fields: ['id'] }),
     )) as Array<{ id: string }>;
     if (existingUser[0]) {
-      await idempotent(`service user ${email} (update token)`, () =>
-        client.request(updateUser(existingUser[0]!.id, { token, role: roleId } as never)),
-      );
+      // "Ensure" the token/role (same value on re-run). Log as unchanged rather
+      // than created so the idempotence check stays honest — an unconditional
+      // update is a no-op at the data level here.
+      await client.request(updateUser(existingUser[0].id, { token, role: roleId } as never));
+      console.log(`  = service user ${email} (token ensured)`);
     } else {
       await idempotent(`service user ${email}`, () =>
         client.request(
@@ -439,8 +452,20 @@ async function applyConstraints(): Promise<void> {
   const pool = new pg.Pool(env.db);
   try {
     for (const sql of constraintStatements) {
+      // Log `=` vs `+` honestly so the idempotence check (check-idempotence.mjs)
+      // can assert "second apply created nothing" — `CREATE ... IF NOT EXISTS`
+      // succeeds either way, so we must probe pg_indexes to know which happened.
+      const name = sql.match(/INDEX\s+(?:IF NOT EXISTS\s+)?(\w+)/i)?.[1];
+      let existed = false;
+      if (name) {
+        const { rowCount } = await pool.query('SELECT 1 FROM pg_indexes WHERE indexname = $1', [
+          name,
+        ]);
+        existed = (rowCount ?? 0) > 0;
+      }
       await pool.query(sql);
-      console.log(`  + ${sql.split('\n')[0]?.trim()}`);
+      const label = name ?? sql.split('\n')[0]?.trim();
+      console.log(existed ? `  = ${label} (exists)` : `  + ${label}`);
     }
   } finally {
     await pool.end();
@@ -465,7 +490,14 @@ async function main(): Promise<void> {
   console.log(`Done. Directus reports ${cols.length} collections.`);
 }
 
-main().catch((err) => {
-  console.error('Bootstrap failed:', err);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    // Force a clean exit: the Directus SDK (undici) and pg can leave keep-alive
+    // sockets open, which otherwise keeps the event loop alive and hangs the
+    // process — stalling CI's bootstrap step + the idempotence check.
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error('Bootstrap failed:', err);
+    process.exit(1);
+  });

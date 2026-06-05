@@ -4,10 +4,12 @@
  * Stateless Socket.IO server. When REDIS_ENABLED, uses the Redis adapter for
  * cross-instance fanout (horizontal scaling, SC-010) + BullMQ side-effect jobs.
  * When disabled, runs a single in-memory instance so it works locally without
- * Redis. Fastify serves /health + /ready; pino logging; graceful shutdown.
+ * Redis. Fastify serves /health + /ready + /metrics; pino logging; graceful
+ * shutdown.
  */
+import './telemetry.js'; // MUST be first: starts OTel before http/ioredis load.
 import { createServer } from 'node:http';
-import Fastify, { type FastifyBaseLogger } from 'fastify';
+import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import { Server as SocketServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
@@ -17,6 +19,35 @@ import { GatewayDirectus } from './directus.js';
 import { createHs256Verifier } from './auth/customer-jwt.js';
 import { createProducer } from './queue.js';
 import { registerConnection, getAgentPresenceSnapshot } from './connection.js';
+import { Registry } from './metrics.js';
+import { parseAttachmentPolicy } from './attachments.js';
+import { verifyWebhookSignature } from './webhook.js';
+
+/** Reachability ping to Directus /server/health with a hard timeout. */
+async function pingDirectus(url: string, timeoutMs = 2000): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${url}/server/health`, { signal: ctrl.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Standard hardening headers for the (internal) health/metrics endpoints. */
+function applySecurityHeaders(app: FastifyInstance): void {
+  app.addHook('onSend', async (_req, reply, payload) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('Referrer-Policy', 'no-referrer');
+    reply.header('Cross-Origin-Resource-Policy', 'same-origin');
+    reply.removeHeader('X-Powered-By');
+    return payload;
+  });
+}
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -24,6 +55,20 @@ async function main(): Promise<void> {
 
   const httpServer = createServer();
   const io = new SocketServer(httpServer, { cors: { origin: config.CORS_ORIGIN } });
+
+  // --- Metrics ---
+  const metrics = new Registry();
+  metrics.collectDefaultMetrics('socket-gateway');
+  const connectionsTotal = metrics.counter(
+    'socket_connections_total',
+    'Total Socket.IO connections accepted since start.',
+  );
+  const activeConnections = metrics.gauge(
+    'socket_active_connections',
+    'Currently connected Socket.IO clients on this instance.',
+  );
+  activeConnections.onCollect(() => activeConnections.set(io.engine.clientsCount ?? 0));
+  io.on('connection', () => connectionsTotal.inc());
 
   let pubClient: Redis | undefined;
   let subClient: Redis | undefined;
@@ -62,15 +107,86 @@ async function main(): Promise<void> {
     verifier,
     producer,
     logger,
+    attachmentPolicy: parseAttachmentPolicy(
+      config.ATTACHMENT_MAX_BYTES,
+      config.ATTACHMENT_ALLOWED_MIME,
+    ),
+    rateLimit: {
+      capacity: config.MSG_RATE_CAPACITY,
+      refillPerSec: config.MSG_RATE_REFILL_PER_SEC,
+    },
   });
 
   const app = Fastify({ loggerInstance: logger as unknown as FastifyBaseLogger });
+  applySecurityHeaders(app);
+
+  // Replace the default JSON parser with one that also retains the raw body, so
+  // the webhook HMAC can be computed over the exact bytes the sender signed.
+  // Fastify ships a default application/json parser, so we must remove it before
+  // registering ours (adding a duplicate throws FST_ERR_CTP_ALREADY_PRESENT and
+  // would crash the gateway on boot). Other endpoints are GETs with no body.
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body: string, done) => {
+    (req as { rawBody?: string }).rawBody = body;
+    try {
+      done(null, body ? JSON.parse(body) : {});
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
+
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/ready', async (_req, reply) => {
-    if (config.REDIS_ENABLED && pubClient?.status !== 'ready') {
-      return reply.code(503).send({ status: 'not-ready', redis: pubClient?.status });
+    const checks: Record<string, string> = {};
+    let ready = true;
+
+    if (config.REDIS_ENABLED) {
+      try {
+        const pong = pubClient && (await pubClient.ping());
+        checks.redis = pong === 'PONG' ? 'ok' : (pubClient?.status ?? 'unknown');
+        if (pong !== 'PONG') ready = false;
+      } catch {
+        checks.redis = 'unreachable';
+        ready = false;
+      }
+    } else {
+      checks.redis = 'disabled';
     }
-    return { status: 'ready' };
+
+    const directusOk = await pingDirectus(config.DIRECTUS_INTERNAL_URL);
+    checks.directus = directusOk ? 'ok' : 'unreachable';
+    if (!directusOk) ready = false;
+
+    if (!ready) return reply.code(503).send({ status: 'not-ready', checks });
+    return { status: 'ready', checks };
+  });
+  app.get('/metrics', async (_req, reply) => {
+    reply.header('content-type', metrics.contentType);
+    return metrics.render();
+  });
+  // Inbound webhook receiver (e.g. Yiji platform events). Rejects anything
+  // without a valid HMAC signature + fresh timestamp. Disabled (503) until a
+  // secret is configured, so it is never an unauthenticated open endpoint.
+  app.post('/webhooks/yiji', async (req, reply) => {
+    if (!config.YIJI_WEBHOOK_SECRET) {
+      return reply.code(503).send({ status: 'webhooks-not-configured' });
+    }
+    const result = verifyWebhookSignature({
+      secret: config.YIJI_WEBHOOK_SECRET,
+      rawBody: (req as { rawBody?: string }).rawBody ?? '',
+      signature: req.headers['x-yiji-signature'] as string | undefined,
+      timestamp: req.headers['x-yiji-timestamp'] as string | undefined,
+      toleranceSec: config.WEBHOOK_TOLERANCE_SEC,
+    });
+    if (!result.valid) {
+      logger.warn({ reason: result.reason }, 'webhook signature rejected');
+      return reply.code(401).send({ status: 'invalid-signature' });
+    }
+    const event = (req.body as { type?: string } | undefined)?.type ?? 'unknown';
+    logger.info({ event }, 'webhook accepted');
+    // Signature verified. Downstream processing (fan-out / enqueue) is wired by
+    // the consuming pipeline; we acknowledge receipt here.
+    return reply.code(202).send({ status: 'accepted', event });
   });
   // Diagnostic: inspect which agents the gateway thinks are currently
   // online (and how many sockets each is holding). Useful for chasing the
@@ -82,7 +198,7 @@ async function main(): Promise<void> {
 
   httpServer.listen(config.PORT, () => logger.info(`socket-gateway on :${config.PORT}`));
   await app.listen({ port: config.PORT + 1, host: '0.0.0.0' });
-  logger.info(`health endpoints on :${config.PORT + 1}`);
+  logger.info(`health + metrics endpoints on :${config.PORT + 1}`);
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'shutting down');
