@@ -329,6 +329,15 @@
   color: var(--yiji-ink);
   border-bottom-start-radius: 4px;
 }
+.yiji-msg.system {
+  align-self: center;
+  max-width: 90%;
+  background: transparent;
+  color: var(--yiji-muted);
+  font-size: 12.5px;
+  text-align: center;
+  padding: 4px 10px;
+}
 .yiji-typing {
   align-self: flex-start;
   display: inline-flex;
@@ -373,27 +382,41 @@
   padding: 12px 14px 14px;
   background: var(--yiji-surface);
 }
-.yiji-input textarea {
+/* The field groups the attach button + textarea into one rounded pill so the
+   paperclip reads as part of the composer, not a stray icon. */
+.yiji-field {
   flex: 1;
-  resize: none;
-  border: none;
-  border-radius: 16px;
-  padding: 11px 14px;
-  font-family: inherit;
-  font-size: 14px;
-  line-height: 1.4;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+  padding-left: 4px;
+  border-radius: 18px;
   background: var(--yiji-surface-2);
-  color: var(--yiji-ink);
-  max-height: 90px;
   box-shadow: inset 0 0 0 1px var(--yiji-border);
   transition:
     background-color 160ms var(--yiji-ease),
     box-shadow 160ms var(--yiji-ease);
 }
-.yiji-input textarea:focus {
-  outline: none;
+.yiji-field:focus-within {
   background: var(--yiji-surface);
   box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--yiji-primary) 45%, transparent);
+}
+.yiji-input textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: none;
+  padding: 11px 12px 11px 4px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  background: transparent;
+  color: var(--yiji-ink);
+  max-height: 90px;
+}
+.yiji-input textarea:focus {
+  outline: none;
 }
 .yiji-input textarea::placeholder {
   color: var(--yiji-muted);
@@ -432,8 +455,9 @@
   transform: scaleX(-1);
 }
 .yiji-attach {
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 4px;
   border-radius: 999px;
   border: none;
   background: transparent;
@@ -447,7 +471,7 @@
     color 160ms var(--yiji-ease);
 }
 .yiji-attach:hover:not(:disabled) {
-  background: var(--yiji-surface-2);
+  background: color-mix(in oklab, var(--yiji-ink) 8%, transparent);
   color: var(--yiji-ink);
 }
 .yiji-attach:disabled {
@@ -455,8 +479,8 @@
   cursor: not-allowed;
 }
 .yiji-attach svg {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
 }
 .yiji-pending {
   display: flex;

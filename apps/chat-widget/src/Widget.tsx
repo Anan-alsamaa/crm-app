@@ -434,7 +434,13 @@ export function Widget({ config }: { config: WidgetConfig }) {
                 {messages.map((m) => (
                   <div
                     key={m.id}
-                    className={`yiji-msg ${m.senderType === 'customer' ? 'mine' : 'theirs'}`}
+                    className={`yiji-msg ${
+                      m.senderType === 'customer'
+                        ? 'mine'
+                        : m.senderType === 'system'
+                          ? 'system'
+                          : 'theirs'
+                    }`}
                   >
                     {m.content}
                     {m.attachments && m.attachments.length > 0 && (
@@ -575,27 +581,29 @@ export function Widget({ config }: { config: WidgetConfig }) {
                   hidden
                   onChange={(e) => void onPickFiles((e.target as HTMLInputElement).files)}
                 />
-                <button
-                  className="yiji-attach"
-                  onClick={() => fileRef.current?.click()}
-                  aria-label={tr.attach}
-                  disabled={!ready || uploading}
-                >
-                  <AttachIcon />
-                </button>
-                <textarea
-                  ref={textareaRef}
-                  value={draft}
-                  placeholder={tr.placeholder}
-                  onInput={onInput}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      send();
-                    }
-                  }}
-                  rows={1}
-                />
+                <div className="yiji-field">
+                  <button
+                    className="yiji-attach"
+                    onClick={() => fileRef.current?.click()}
+                    aria-label={tr.attach}
+                    disabled={!ready || uploading}
+                  >
+                    <AttachIcon />
+                  </button>
+                  <textarea
+                    ref={textareaRef}
+                    value={draft}
+                    placeholder={tr.placeholder}
+                    onInput={onInput}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        send();
+                      }
+                    }}
+                    rows={1}
+                  />
+                </div>
                 <button
                   className="yiji-send"
                   onClick={send}
