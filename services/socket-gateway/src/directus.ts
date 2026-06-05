@@ -29,29 +29,45 @@ export class GatewayDirectus {
 
   /** Upsert a contact, deduped per vendor by phone then email (SC-007). */
   async upsertContact(vendorUuid: string, claims: CustomerClaims): Promise<string> {
-    const or: Array<Record<string, unknown>> = [];
-    if (claims.phone) or.push({ phone: { _eq: claims.phone } });
-    if (claims.email) or.push({ email: { _eq: claims.email } });
+    const findExisting = async (): Promise<string | null> => {
+      const or: Array<Record<string, unknown>> = [];
+      if (claims.phone) or.push({ phone: { _eq: claims.phone } });
+      if (claims.email) or.push({ email: { _eq: claims.email } });
+      if (or.length === 0) return null;
+      const existing = (await this.client.request(
+        readItems('contacts', {
+          filter: { vendor: { _eq: vendorUuid }, _or: or },
+          fields: ['id'],
+          limit: 1,
+        }),
+      )) as Array<{ id: string }>;
+      return existing[0]?.id ?? null;
+    };
 
-    const existing = (await this.client.request(
-      readItems('contacts', {
-        filter: { vendor: { _eq: vendorUuid }, _or: or },
-        fields: ['id'],
-        limit: 1,
-      }),
-    )) as Array<{ id: string }>;
-    if (existing[0]) return existing[0].id;
+    const existingId = await findExisting();
+    if (existingId) return existingId;
 
-    const created = (await this.client.request(
-      createItem('contacts', {
-        vendor: vendorUuid,
-        external_customer_id: claims.customer_id,
-        name: claims.name ?? null,
-        phone: claims.phone ?? null,
-        email: claims.email ?? null,
-      } as never),
-    )) as { id: string };
-    return created.id;
+    try {
+      const created = (await this.client.request(
+        createItem('contacts', {
+          vendor: vendorUuid,
+          external_customer_id: claims.customer_id,
+          name: claims.name ?? null,
+          phone: claims.phone ?? null,
+          email: claims.email ?? null,
+        } as never),
+      )) as { id: string };
+      return created.id;
+    } catch (err) {
+      // The widget reconnects aggressively, so multiple onboarding flows can
+      // race: each reads "not found" then races to create the same contact,
+      // and all-but-one hit the (vendor, phone|email) partial-unique index.
+      // That's not a real failure — re-query and return the contact the
+      // winning create produced. Only rethrow if it genuinely doesn't exist.
+      const raced = await findExisting();
+      if (raced) return raced;
+      throw err;
+    }
   }
 
   /** Return the contact's open conversation, or create a new one. */
