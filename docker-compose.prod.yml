@@ -179,6 +179,43 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal hostnames}
       OTEL_SERVICE_NAME: ai-gateway
 
+  # Portals — static SPAs served by nginx. The DEFAULT prod hosting is a CDN /
+  # static host (see docs/PRODUCTION.md); these container services are the
+  # self-hosted alternative for a single-host deploy. VITE_* are baked at BUILD
+  # time (client-visible) — set the real public URLs as build args. Put nothing
+  # secret in them.
+  agent-portal:
+    image: ${REGISTRY:-ghcr.io/yiji-crm}/agent-portal:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: apps/agent-portal/Dockerfile
+      args:
+        VITE_DIRECTUS_URL: ${VITE_DIRECTUS_URL:-http://localhost:8055}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:8080}
+        VITE_AI_GATEWAY_URL: ${VITE_AI_GATEWAY_URL:-http://localhost:8081}
+    restart: unless-stopped
+    ports:
+      - '${AGENT_PORTAL_PORT:-8090}:80'
+    depends_on:
+      directus:
+        condition: service_healthy
+
+  admin-portal:
+    image: ${REGISTRY:-ghcr.io/yiji-crm}/admin-portal:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: apps/admin-portal/Dockerfile
+      args:
+        VITE_DIRECTUS_URL: ${VITE_DIRECTUS_URL:-http://localhost:8055}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:8080}
+        VITE_AI_GATEWAY_URL: ${VITE_AI_GATEWAY_URL:-http://localhost:8081}
+    restart: unless-stopped
+    ports:
+      - '${ADMIN_PORTAL_PORT:-8092}:80'
+    depends_on:
+      directus:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   redis_data:
