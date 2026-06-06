@@ -29,12 +29,20 @@ concurrency:
 
 jobs:
   build-and-push:
-    name: Build & push ${{ matrix.service }}
+    name: Build & push ${{ matrix.name }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        service: [socket-gateway, workers, ai-gateway]
+        # name = image name; dockerfile = path (services live under services/,
+        # the static portals under apps/). Portals additionally consume VITE_*
+        # build args (baked into the bundle at build time — see below).
+        include:
+          - { name: socket-gateway, dockerfile: services/socket-gateway/Dockerfile }
+          - { name: workers, dockerfile: services/workers/Dockerfile }
+          - { name: ai-gateway, dockerfile: services/ai-gateway/Dockerfile }
+          - { name: agent-portal, dockerfile: apps/agent-portal/Dockerfile }
+          - { name: admin-portal, dockerfile: apps/admin-portal/Dockerfile }
     steps:
       - uses: actions/checkout@v4
 
@@ -52,7 +60,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.service }}
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
           tags: |
             type=sha,format=long
             type=ref,event=branch
@@ -65,12 +73,20 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: services/${{ matrix.service }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          # VITE_* are consumed only by the portal images (baked into the bundle
+          # at build time). Set them as repo Variables for a real deploy; unset
+          # falls back to the Dockerfile ARG defaults. Harmless for the services
+          # (unused ARGs). Never put secrets here — they ship to the browser.
+          build-args: |
+            VITE_DIRECTUS_URL=${{ vars.VITE_DIRECTUS_URL }}
+            VITE_SOCKET_URL=${{ vars.VITE_SOCKET_URL }}
+            VITE_AI_GATEWAY_URL=${{ vars.VITE_AI_GATEWAY_URL }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
           provenance: false
 
   summary:
@@ -83,10 +99,12 @@ jobs:
           {
             echo "## Deploy complete"
             echo ""
-            echo "Pushed images to \`ghcr.io/${{ github.repository_owner }}/<service>\`:"
+            echo "Pushed images to \`ghcr.io/${{ github.repository_owner }}/<image>\`:"
             echo "- socket-gateway"
             echo "- workers"
             echo "- ai-gateway"
+            echo "- agent-portal (static SPA / nginx)"
+            echo "- admin-portal (static SPA / nginx)"
             echo ""
             echo "Roll out with:"
             echo '```'
