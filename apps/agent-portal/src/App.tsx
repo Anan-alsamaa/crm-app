@@ -148,21 +148,26 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
           isCollapsed ? 'px-2 space-y-1.5' : 'px-2.5 space-y-1',
         )}
       >
-        {/* NotificationBell lives in the mobile top bar, so only render it here on desktop. */}
-        <div
-          className={cn(
-            'flex items-center',
-            isCollapsed ? 'flex-wrap justify-center gap-1' : 'gap-1',
-          )}
-        >
-          {ctx.variant === 'desktop' && <NotificationBell />}
-          <SoundToggle collapsed={isCollapsed} />
-          {!isCollapsed && <LanguageToggle />}
-        </div>
+        {/* Utility controls. Two notification-related controls that are easy to
+            confuse, so when the rail is expanded each gets its own labelled row:
+            the bell is the notifications INBOX, the sound toggle mutes the
+            new-message BEEP. The NotificationBell also lives in the mobile top
+            bar, so it's only rendered here on desktop. */}
+        {isCollapsed ? (
+          <div className="flex flex-wrap items-center justify-center gap-1">
+            {ctx.variant === 'desktop' && <NotificationBell />}
+            <SoundToggle collapsed />
+          </div>
+        ) : (
+          <div className="space-y-0.5">
+            {ctx.variant === 'desktop' && <NotificationBell expanded />}
+            <SoundToggle />
+          </div>
+        )}
         <div
           className={cn(
             'flex items-center rounded-md',
-            isCollapsed ? 'justify-center py-1' : 'gap-2.5 px-1 py-1',
+            isCollapsed ? 'justify-center py-1' : 'gap-2 px-1 py-1',
           )}
         >
           <Avatar name={name} email={user?.email} size="sm" />
@@ -176,6 +181,7 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
                   {user?.email ?? ''}
                 </div>
               </div>
+              <LanguageToggle />
               <button
                 type="button"
                 onClick={() => void logout()}

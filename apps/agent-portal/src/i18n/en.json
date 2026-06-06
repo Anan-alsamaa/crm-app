@@ -257,10 +257,11 @@
     "closeDialogs": "Close dialogs"
   },
   "sound": {
-    "mute": "Mute notifications",
-    "unmute": "Unmute notifications",
+    "mute": "Mute new-message sound",
+    "unmute": "Unmute new-message sound",
     "statusOn": "Sound on",
     "statusMuted": "Muted",
+    "railLabel": "Message sounds",
     "prefTitle": "New-message sound",
     "prefHint": "Play a short chime in this browser when a new message arrives.",
     "on": "On",
