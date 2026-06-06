@@ -105,9 +105,10 @@ export function ConversationToolbar({ conversation, onBack, onToggleDetails }: P
         </div>
       </div>
 
-      {/* Inline meta — reads as breadcrumbs, not form fields. Scrolls
-          horizontally on mobile so the bar keeps its single-row height. */}
-      <div className="ms-auto flex min-w-0 items-center gap-0.5 overflow-x-auto lg:flex-wrap lg:overflow-x-visible">
+      {/* Inline meta — reads as breadcrumbs, not form fields. Single scrollable
+          row at every size so it never wraps below the fixed-height bar and
+          overlaps the conversation thread. */}
+      <div className="ms-auto flex min-w-0 items-center gap-0.5 overflow-x-auto">
         <GhostSelect
           size="sm"
           label={t('conversation.status')}

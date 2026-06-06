@@ -20,7 +20,9 @@ async function signInAgent(page: import('@playwright/test').Page) {
   await page.getByLabel(/email/i).fill(AGENT_EMAIL);
   await page.getByLabel(/password/i).fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
-  await expect(page.getByRole('heading', { name: /inbox/i })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('heading', { name: /shared inbox/i })).toBeVisible({
+    timeout: 20_000,
+  });
 }
 
 test('agent creates a ticket from a conversation, advances workflow, sees history', async ({
@@ -34,9 +36,16 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
     .first()
     .click();
   await customer.getByTestId('yiji-status').waitFor({ state: 'detached', timeout: 15_000 });
-  await customer.getByPlaceholder(/type a message/i).fill(`Ticket E2E ${Date.now()}`);
-  await customer.keyboard.press('Enter');
-  await customer.waitForTimeout(500);
+  // Connecting creates the conversation server-side; sending a message is
+  // best-effort (only possible when an agent is online and the composer shows).
+  const startChat = customer.getByRole('button', { name: /start a chat/i });
+  if (await startChat.isVisible().catch(() => false)) await startChat.click().catch(() => {});
+  const composer = customer.getByPlaceholder(/type a message/i);
+  if (await composer.isVisible().catch(() => false)) {
+    await composer.fill(`Ticket E2E ${Date.now()}`);
+    await customer.keyboard.press('Enter');
+  }
+  await customer.waitForTimeout(1500);
 
   // 2. Agent opens the conversation.
   const agent = await browser.newPage();
@@ -57,9 +66,9 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   await agent.getByRole('link', { name: /tickets/i }).click();
   await expect(agent.getByText(subject)).toBeVisible({ timeout: 10_000 });
 
-  // 4. Open the ticket detail.
-  await agent.getByText(subject).click();
-  await expect(agent.getByRole('heading', { name: subject })).toBeVisible();
+  // 4. Open the ticket detail (click the list row button, not just the text).
+  await agent.locator('aside li button', { hasText: subject }).first().click();
+  await expect(agent.getByRole('heading', { name: subject })).toBeVisible({ timeout: 10_000 });
 
   // 5. Mark first response sent → button disappears and "Responded at" shows.
   await agent.getByRole('button', { name: /mark first response sent/i }).click();

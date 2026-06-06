@@ -18,9 +18,17 @@ test.beforeAll(async ({ browser }) => {
     .first()
     .click();
   await page.getByTestId('yiji-status').waitFor({ state: 'detached', timeout: 15_000 });
-  await page.getByPlaceholder(/type a message/i).fill(`US3 seed ${Date.now()}`);
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(1000);
+  // Connecting already creates the conversation server-side. If an agent is
+  // online the composer is shown and we also send a message; if offline the
+  // widget shows the contact landing — the conversation still exists.
+  const startChat = page.getByRole('button', { name: /start a chat/i });
+  if (await startChat.isVisible().catch(() => false)) await startChat.click().catch(() => {});
+  const composer = page.getByPlaceholder(/type a message/i);
+  if (await composer.isVisible().catch(() => false)) {
+    await composer.fill(`US3 seed ${Date.now()}`);
+    await page.keyboard.press('Enter');
+  }
+  await page.waitForTimeout(1500);
   await page.close();
 });
 
@@ -29,7 +37,9 @@ test('agent changes status, priority, and assignment then sees them persist', as
   await page.getByLabel(/email/i).fill(AGENT_EMAIL);
   await page.getByLabel(/password/i).fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
-  await expect(page.getByRole('heading', { name: /inbox/i })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('heading', { name: /shared inbox/i })).toBeVisible({
+    timeout: 10_000,
+  });
 
   // Open the first conversation.
   const firstConvo = page.locator('aside li button').first();
