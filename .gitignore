@@ -35,8 +35,8 @@ directus/uploads/
 directus/database/
 .data/
 
-# Local Directus SQLite dev instance
-directus/local/data.db
+# Local Directus dev instance (SQLite legacy backups + uploads + state)
+directus/local/data.db*
 directus/local/uploads/
 directus/local/.directus/
 
