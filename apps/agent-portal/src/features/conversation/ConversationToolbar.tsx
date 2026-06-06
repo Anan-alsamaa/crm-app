@@ -61,7 +61,11 @@ export function ConversationToolbar({ conversation }: Props) {
   const teamLabel = currentTeam?.name ?? t('conversation.noTeam');
 
   return (
-    <div className="flex h-14 shrink-0 items-center gap-3 px-5">
+    // min-h (not fixed h) + flex-wrap so the controls grow onto a second row
+    // instead of overflowing; relative z-10 keeps the toolbar (incl. the
+    // "Create ticket" button) above the message thread so its hit-box is never
+    // covered by the first chat bubble.
+    <div className="relative z-10 flex min-h-[3.5rem] shrink-0 flex-wrap items-center gap-3 px-5">
       {/* Identity */}
       <div className="flex min-w-0 items-center gap-2.5">
         <Avatar name={conversation.contact?.name} email={conversation.contact?.email} size="md" />
