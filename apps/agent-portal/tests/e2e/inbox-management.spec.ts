@@ -64,7 +64,11 @@ test('agent toggles internal note mode and sees the amber styling', async ({ pag
   await page.locator('aside li button').first().waitFor({ timeout: 15_000 });
   await page.locator('aside li button').first().click();
 
-  await page.getByRole('checkbox', { name: /internal note/i }).check();
+  // Switch the composer into internal-note mode (a toggle tab, aria-pressed).
+  await page
+    .getByRole('button', { name: /internal note/i })
+    .first()
+    .click();
   const note = `internal-note ${Date.now()}`;
   await page.getByPlaceholder(/internal note/i).fill(note);
   await page.keyboard.press('Enter');

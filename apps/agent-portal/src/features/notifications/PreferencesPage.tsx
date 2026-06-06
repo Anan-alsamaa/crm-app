@@ -129,12 +129,7 @@ export function PreferencesPage() {
     if (prefs.data) setDraft(prefs.data);
   }, [prefs.data]);
 
-  if (prefs.isLoading || !prefs.data)
-    return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        <Spinner />
-      </div>
-    );
+  const loading = prefs.isLoading || !prefs.data;
 
   const save = async () => {
     try {
@@ -145,6 +140,9 @@ export function PreferencesPage() {
     }
   };
 
+  // The toolbar (title + Save) renders immediately; only the list body waits on
+  // data — consistent with the other admin/agent pages and so the heading is
+  // available right away.
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Toolbar>
@@ -155,59 +153,71 @@ export function PreferencesPage() {
           <span className="opacity-50">·</span> {t('preferences.description')}
         </span>
         <ToolbarSpacer />
-        <Button type="button" size="sm" onClick={() => void save()} loading={update.isPending}>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => void save()}
+          loading={update.isPending}
+          disabled={loading}
+        >
           {t('actions.save', { ns: 'common' })}
         </Button>
       </Toolbar>
 
-      <div className="mx-auto w-full max-w-3xl flex-1 overflow-auto px-6 py-8 space-y-6 sm:px-10">
-        {GROUPS.map((g) => (
-          <section key={g.key} className="space-y-3">
-            <div className="space-y-1 px-1">
-              <h2 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                {t(g.titleKey, { defaultValue: g.titleFallback })}
-              </h2>
-              <p className="text-sm text-foreground/80">
-                {t(g.descriptionKey, { defaultValue: g.descriptionFallback })}
-              </p>
-            </div>
-            <ul className="rounded-2xl bg-card/60 shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04] divide-y divide-border/40 px-5">
-              {g.types.map((type) => {
-                const meta = META[type];
-                return (
-                  <li
-                    key={type}
-                    className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between first:pt-0 last:pb-0"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium text-foreground">
-                        {t(`notifications.type.${type}`, { defaultValue: type })}
-                      </div>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {t(meta?.descriptionKey ?? '', {
-                          defaultValue: meta?.fallbackDescription ?? '',
-                        })}
-                      </p>
-                    </div>
-                    <Select
-                      className="h-8 w-full sm:w-44 text-xs"
-                      value={draft[type] ?? 'both'}
-                      onChange={(e) => setDraft((d) => ({ ...d, [type]: e.target.value }))}
-                      aria-label={type}
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+          <Spinner />
+        </div>
+      ) : (
+        <div className="mx-auto w-full max-w-3xl flex-1 overflow-auto px-6 py-8 space-y-6 sm:px-10">
+          {GROUPS.map((g) => (
+            <section key={g.key} className="space-y-3">
+              <div className="space-y-1 px-1">
+                <h2 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {t(g.titleKey, { defaultValue: g.titleFallback })}
+                </h2>
+                <p className="text-sm text-foreground/80">
+                  {t(g.descriptionKey, { defaultValue: g.descriptionFallback })}
+                </p>
+              </div>
+              <ul className="rounded-2xl bg-card/60 shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04] divide-y divide-border/40 px-5">
+                {g.types.map((type) => {
+                  const meta = META[type];
+                  return (
+                    <li
+                      key={type}
+                      className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between first:pt-0 last:pb-0"
                     >
-                      {CHANNELS.map((c) => (
-                        <option key={c} value={c}>
-                          {t(`preferences.channels.${c}`, { defaultValue: c })}
-                        </option>
-                      ))}
-                    </Select>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))}
-      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-foreground">
+                          {t(`notifications.type.${type}`, { defaultValue: type })}
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {t(meta?.descriptionKey ?? '', {
+                            defaultValue: meta?.fallbackDescription ?? '',
+                          })}
+                        </p>
+                      </div>
+                      <Select
+                        className="h-8 w-full sm:w-44 text-xs"
+                        value={draft[type] ?? 'both'}
+                        onChange={(e) => setDraft((d) => ({ ...d, [type]: e.target.value }))}
+                        aria-label={type}
+                      >
+                        {CHANNELS.map((c) => (
+                          <option key={c} value={c}>
+                            {t(`preferences.channels.${c}`, { defaultValue: c })}
+                          </option>
+                        ))}
+                      </Select>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

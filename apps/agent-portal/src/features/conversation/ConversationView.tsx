@@ -491,6 +491,7 @@ export function ConversationView({
             <div className="mb-1 flex items-center gap-4 text-xs">
               <button
                 type="button"
+                aria-pressed={!internalNote}
                 onClick={() => {
                   setInternalNote(false);
                   setMentionMenu(null);
@@ -506,6 +507,7 @@ export function ConversationView({
               </button>
               <button
                 type="button"
+                aria-pressed={internalNote}
                 onClick={() => setInternalNote(true)}
                 className={cn(
                   'relative inline-flex h-8 items-center gap-1.5 font-medium transition-colors duration-fast ease-out',

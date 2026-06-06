@@ -27,18 +27,30 @@ test('admin creates a team then a user assigned to it', async ({ page }) => {
 
   await page.getByRole('link', { name: /teams/i }).click();
   await page.waitForURL(/\/teams/);
-  await page.getByLabel(/^name$/i).fill(teamName);
-  await page.getByRole('button', { name: /create team/i }).click();
+  // Open the create-team drawer, fill the name, submit (scoped to the dialog so
+  // it doesn't collide with the toolbar opener that shares the label).
+  await page
+    .getByRole('button', { name: /create team/i })
+    .first()
+    .click();
+  const teamDialog = page.getByRole('dialog');
+  await teamDialog.getByLabel(/^name$/i).fill(teamName);
+  await teamDialog.getByRole('button', { name: /create team/i }).click();
   await expect(page.getByText(teamName)).toBeVisible();
 
   await page.getByRole('link', { name: /users/i }).click();
   await page.waitForURL(/\/users/);
   const email = `agent.${Date.now()}@example.com`;
-  await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill('password123');
-  await page.getByLabel(/role/i).selectOption({ label: 'Agent' });
-  await page.getByLabel(/team/i).selectOption({ label: teamName });
-  await page.getByRole('button', { name: /create user/i }).click();
+  await page
+    .getByRole('button', { name: /create user/i })
+    .first()
+    .click();
+  const userDialog = page.getByRole('dialog');
+  await userDialog.getByLabel(/email/i).fill(email);
+  await userDialog.getByLabel(/password/i).fill('password123');
+  await userDialog.getByLabel(/role/i).selectOption({ label: 'Agent' });
+  await userDialog.getByLabel(/team/i).selectOption({ label: teamName });
+  await userDialog.getByRole('button', { name: /create user/i }).click();
   // Wait for the success notice, then for the row to appear in the refetched table.
   await expect(page.getByText(/user created/i)).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText(email)).toBeVisible({ timeout: 10_000 });
