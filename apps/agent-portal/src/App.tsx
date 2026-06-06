@@ -156,7 +156,7 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
           )}
         >
           {ctx.variant === 'desktop' && <NotificationBell />}
-          <SoundToggle />
+          <SoundToggle collapsed={isCollapsed} />
           {!isCollapsed && <LanguageToggle />}
         </div>
         <div

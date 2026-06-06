@@ -567,89 +567,94 @@ export function ConversationView({
                 onChange={(e) => void onPickFiles(e.target.files)}
               />
 
-              <textarea
-                ref={draftRef}
-                rows={1}
-                className={cn(
-                  'block w-full resize-none bg-transparent py-3 pe-14 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground',
-                  internalNote ? 'px-3' : 'ps-12 pe-14',
-                  'border-none outline-none focus:ring-0',
+              {/* Attach · textarea · send sit in one flex row so the buttons stay
+                  aligned to the textarea and bottom-anchor as it grows, instead
+                  of floating absolutely over the text. */}
+              <div className="flex items-end gap-1 px-1.5 py-1.5">
+                {/* Attach — reply mode only (internal notes are text-only) */}
+                {!internalNote && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    aria-label={t('conversation.attach', { defaultValue: 'Attach file' })}
+                    className={cn(
+                      'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+                      'text-muted-foreground transition-colors duration-fast ease-out',
+                      'hover:bg-secondary hover:text-foreground active:enabled:scale-95',
+                      'disabled:opacity-40 disabled:cursor-not-allowed',
+                    )}
+                  >
+                    {uploading ? (
+                      <Spinner size={16} />
+                    ) : (
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.75"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-[18px] w-[18px]"
+                        aria-hidden
+                      >
+                        <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                      </svg>
+                    )}
+                  </button>
                 )}
-                value={draft}
-                placeholder={
-                  internalNote
-                    ? t('conversation.notePlaceholder')
-                    : t('conversation.replyPlaceholder')
-                }
-                onChange={(e) =>
-                  onDraftChange(e.target.value, e.target.selectionStart ?? e.target.value.length)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  }
-                  if (e.key === 'Escape') setMentionMenu(null);
-                }}
-              />
 
-              {/* Attach — reply mode only (internal notes are text-only) */}
-              {!internalNote && (
+                <textarea
+                  ref={draftRef}
+                  rows={1}
+                  className={cn(
+                    'block min-w-0 flex-1 resize-none bg-transparent py-2 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground',
+                    internalNote ? 'px-2' : 'px-1',
+                    'border-none outline-none focus:ring-0',
+                  )}
+                  value={draft}
+                  placeholder={
+                    internalNote
+                      ? t('conversation.notePlaceholder')
+                      : t('conversation.replyPlaceholder')
+                  }
+                  onChange={(e) =>
+                    onDraftChange(e.target.value, e.target.selectionStart ?? e.target.value.length)
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      send();
+                    }
+                    if (e.key === 'Escape') setMentionMenu(null);
+                  }}
+                />
+
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  aria-label={t('conversation.attach', { defaultValue: 'Attach file' })}
+                  onClick={send}
+                  disabled={draft.trim().length === 0 && (internalNote || pending.length === 0)}
+                  aria-label={t('actions.send', { ns: 'common' })}
                   className={cn(
-                    'absolute start-2 bottom-2 inline-flex h-9 w-9 items-center justify-center rounded-full',
-                    'text-muted-foreground transition-colors duration-fast ease-out',
-                    'hover:bg-secondary hover:text-foreground active:enabled:scale-95',
+                    'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+                    'transition-[transform,background-color,opacity] duration-fast ease-out',
+                    'active:enabled:scale-95',
                     'disabled:opacity-40 disabled:cursor-not-allowed',
+                    internalNote
+                      ? 'bg-warning text-warning-foreground'
+                      : 'bg-foreground text-background hover:bg-foreground/90',
                   )}
                 >
-                  {uploading ? (
-                    <Spinner size={16} />
-                  ) : (
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.75"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="h-4 w-4"
-                      aria-hidden
-                    >
-                      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                    </svg>
-                  )}
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                    className="h-4 w-4 rtl:scale-x-[-1]"
+                    aria-hidden
+                  >
+                    <path d="M1.6 13.7 14 8.4c.55-.23.55-1.01 0-1.24L1.6 1.86c-.55-.24-1.13.27-.94.85L2.3 7.32 8.5 8 2.3 8.68l-1.64 4.61c-.2.58.39 1.09.94.85Z" />
+                  </svg>
                 </button>
-              )}
-
-              <button
-                type="button"
-                onClick={send}
-                disabled={draft.trim().length === 0 && (internalNote || pending.length === 0)}
-                aria-label={t('actions.send', { ns: 'common' })}
-                className={cn(
-                  'absolute end-2 bottom-2 inline-flex h-9 w-9 items-center justify-center rounded-full',
-                  'transition-[transform,background-color,opacity] duration-fast ease-out',
-                  'active:enabled:scale-95',
-                  'disabled:opacity-40 disabled:cursor-not-allowed',
-                  internalNote
-                    ? 'bg-warning text-warning-foreground'
-                    : 'bg-foreground text-background hover:bg-foreground/90',
-                )}
-              >
-                <svg
-                  viewBox="0 0 16 16"
-                  fill="currentColor"
-                  className="h-4 w-4 rtl:scale-x-[-1]"
-                  aria-hidden
-                >
-                  <path d="M1.6 13.7 14 8.4c.55-.23.55-1.01 0-1.24L1.6 1.86c-.55-.24-1.13.27-.94.85L2.3 7.32 8.5 8 2.3 8.68l-1.64 4.61c-.2.58.39 1.09.94.85Z" />
-                </svg>
-              </button>
+              </div>
 
               {mentionMenu && filteredAgents.length > 0 && (
                 <div className="absolute bottom-full start-1 mb-2 max-h-56 w-72 overflow-auto rounded-xl border border-border bg-popover text-popover-foreground shadow-lg animate-scale-in origin-bottom">

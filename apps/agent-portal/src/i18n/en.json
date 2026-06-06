@@ -258,6 +258,12 @@
   },
   "sound": {
     "mute": "Mute notifications",
-    "unmute": "Unmute notifications"
+    "unmute": "Unmute notifications",
+    "statusOn": "Sound on",
+    "statusMuted": "Muted",
+    "prefTitle": "New-message sound",
+    "prefHint": "Play a short chime in this browser when a new message arrives.",
+    "on": "On",
+    "off": "Off"
   }
 }

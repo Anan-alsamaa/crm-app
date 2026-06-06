@@ -4,9 +4,12 @@ import {
   BellIcon,
   Button,
   ClockIcon,
+  cn,
   InboxIcon,
   Select,
   SettingsIcon,
+  SoundOffIcon,
+  SoundOnIcon,
   Spinner,
   TicketIcon,
   toast,
@@ -15,6 +18,7 @@ import {
   UsersIcon,
 } from '@yiji/ui';
 import type { JSX } from 'react';
+import { isSoundMuted, playMessageBeep, setSoundMuted } from '../../lib/sound.js';
 import { CHANNELS, useNotificationPreferences, useUpdateNotificationPreferences } from './api.js';
 
 interface RowMeta {
@@ -124,6 +128,14 @@ export function PreferencesPage() {
   const prefs = useNotificationPreferences();
   const update = useUpdateNotificationPreferences();
   const [draft, setDraft] = useState<Record<string, string>>({});
+  // New-message sound is a per-browser setting (localStorage), not a server
+  // preference — so it applies instantly and doesn't ride the Save button.
+  const [soundOn, setSoundOn] = useState(!isSoundMuted());
+  const setSound = (on: boolean) => {
+    setSoundMuted(!on);
+    setSoundOn(on);
+    if (on) playMessageBeep();
+  };
 
   useEffect(() => {
     if (prefs.data) setDraft(prefs.data);
@@ -170,6 +182,73 @@ export function PreferencesPage() {
         </div>
       ) : (
         <div className="mx-auto w-full max-w-3xl flex-1 overflow-auto px-6 py-8 space-y-6 sm:px-10">
+          {/* New-message sound — a per-browser toggle, kept visually distinct
+              from the server-saved channel rows below. */}
+          <section className="space-y-3">
+            <div className="space-y-1 px-1">
+              <h2 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {t('preferences.group.sound', { defaultValue: 'Sound' })}
+              </h2>
+              <p className="text-sm text-foreground/80">{t('sound.prefHint')}</p>
+            </div>
+            <ul className="rounded-2xl bg-card/60 shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04] px-5">
+              <li className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between first:pt-4 last:pb-4">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <span
+                    className={cn(
+                      'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors',
+                      soundOn
+                        ? 'bg-primary-subtle text-primary'
+                        : 'bg-secondary text-muted-foreground',
+                    )}
+                  >
+                    {soundOn ? <SoundOnIcon size={18} /> : <SoundOffIcon size={18} />}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-foreground">
+                      {t('sound.prefTitle')}
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {soundOn ? t('sound.statusOn') : t('sound.statusMuted')}
+                    </p>
+                  </div>
+                </div>
+                <div
+                  role="group"
+                  aria-label={t('sound.prefTitle')}
+                  className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5 text-xs"
+                >
+                  <button
+                    type="button"
+                    aria-pressed={soundOn}
+                    onClick={() => setSound(true)}
+                    className={cn(
+                      'rounded-md px-3.5 py-1.5 font-medium transition-colors duration-fast ease-out',
+                      soundOn
+                        ? 'bg-card text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {t('sound.on')}
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={!soundOn}
+                    onClick={() => setSound(false)}
+                    className={cn(
+                      'rounded-md px-3.5 py-1.5 font-medium transition-colors duration-fast ease-out',
+                      !soundOn
+                        ? 'bg-card text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {t('sound.off')}
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </section>
+
           {GROUPS.map((g) => (
             <section key={g.key} className="space-y-3">
               <div className="space-y-1 px-1">
