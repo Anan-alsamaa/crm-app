@@ -260,6 +260,35 @@ async function applyJunctions(client: AnyClient): Promise<void> {
   }
 }
 
+/**
+ * Provision custom fields on the built-in `directus_users` collection (#10).
+ *
+ * `notification_preferences` is referenced by the Agent policy in roles.ts
+ * (self-service update) and read by the notification worker for per-user
+ * channel prefs, but it is NOT a Directus system field — without creating it
+ * here, the agent's preferences-save 403s ("field does not exist") and the
+ * worker has nothing to read. Nullable (the app treats absent prefs as the
+ * channel defaults). locale/first_name/last_name are built-in, so only this
+ * one needs creating.
+ */
+async function applyUserFields(client: AnyClient): Promise<void> {
+  console.log('User profile fields:');
+  await idempotent('directus_users.notification_preferences', () =>
+    client.request(
+      createField('directus_users', {
+        field: 'notification_preferences',
+        type: 'json',
+        meta: {
+          interface: 'input-code',
+          special: ['cast-json'],
+          note: 'Per-user notification channel preferences (agent portal + workers).',
+        },
+        schema: { is_nullable: true, default_value: null },
+      } as never),
+    ),
+  );
+}
+
 async function applyRoles(client: AnyClient): Promise<void> {
   // Directus 11 access model: Role groups users; a Policy carries access flags
   // (admin_access / app_access) and Permissions; directus_access links them.
@@ -382,14 +411,29 @@ async function applyProjectOwner(client: AnyClient, ownerEmail: string): Promise
     console.log(`  = project_owner already ${ownerEmail} (locked)`);
     return;
   }
-  await client.request(
-    updateSettings({ project_owner: users[0].id, project_use_case: 'internal-tool' } as never),
-  );
-  // Log as an "ensure" (=) not a create (+): this re-sets the SAME canonical
-  // owner, and the lock-project-owner hook guarantees it can't drift. The guard
-  // above can miss when Directus serves a cached (stale-null) settings read, so
-  // logging `=` here keeps the idempotence check honest for the no-op re-set.
-  console.log(`  = project_owner ensured -> ${ownerEmail}`);
+  try {
+    await client.request(
+      updateSettings({ project_owner: users[0].id, project_use_case: 'internal-tool' } as never),
+    );
+    // Log as an "ensure" (=) not a create (+): this re-sets the SAME canonical
+    // owner, and the lock-project-owner hook guarantees it can't drift. The guard
+    // above can miss when Directus serves a cached (stale-null) settings read, so
+    // logging `=` here keeps the idempotence check honest for the no-op re-set.
+    console.log(`  = project_owner ensured -> ${ownerEmail}`);
+  } catch (err) {
+    // A 403/forbidden here is NON-FATAL and must not abort the bootstrap (#11):
+    // the lock-project-owner hook rejects re-assignment once an owner is set,
+    // and under BSL the admin policy can lack settings-update. The canonical
+    // owner is unchanged either way, so warn and let the run complete. (This
+    // step is also sequenced last in main() so constraints can't be gated
+    // behind it.) Re-throw only genuinely unexpected errors.
+    const msg = errorMessage(err);
+    if (/403|forbidden|permission|not allowed|locked|owner/i.test(msg)) {
+      console.warn(`  ~ project_owner not updated (${msg}) — continuing`);
+    } else {
+      throw err;
+    }
+  }
 }
 
 async function applyServiceUsers(client: AnyClient): Promise<void> {
@@ -479,12 +523,16 @@ async function main(): Promise<void> {
   await client.login(env.adminEmail, env.adminPassword);
 
   await applyCollections(client);
+  await applyUserFields(client);
   await applyRelations(client);
   await applyJunctions(client);
   await applyRoles(client);
   await applyServiceUsers(client);
-  await applyProjectOwner(client, env.adminEmail);
+  // Constraints run BEFORE project-owner so the dedup indexes are never gated
+  // behind it (#11): project-owner is now tolerant, but keeping it last means
+  // even an unexpected failure there can't skip the raw-SQL constraints.
   await applyConstraints();
+  await applyProjectOwner(client, env.adminEmail);
 
   const cols = (await client.request(readCollections())) as Array<{ collection: string }>;
   console.log(`Done. Directus reports ${cols.length} collections.`);
