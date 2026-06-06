@@ -93,4 +93,67 @@ export default async function globalSetup(): Promise<void> {
   process.env.E2E_AGENT_ACCESS_TOKEN = agentSession.data.access_token;
   process.env.E2E_AGENT_REFRESH_TOKEN = agentSession.data.refresh_token;
   process.env.E2E_AGENT_EXPIRES = String(agentSession.data.expires);
+
+  // 5. Seed open conversations directly via the Directus API so the inbox/ticket
+  //    specs have deterministic data and don't have to drive the (timing-flaky)
+  //    chat widget just to create something to act on. Two conversations so the
+  //    bulk-select spec has more than one row. demo-vendor is created by the CI
+  //    "Seed demo vendor" step before this runs (and exists locally by hand).
+  try {
+    const vendorRes = await json<{ data: Array<{ id: string }> }>(
+      await fetchT(
+        `${DIRECTUS}/items/vendors?filter[yiji_vendor_id][_eq]=demo-vendor&fields=id&limit=1`,
+        { headers },
+      ),
+    );
+    const vendorId = vendorRes.data[0]?.id;
+    if (!vendorId) {
+      console.warn('[e2e-setup] demo-vendor not found — skipping conversation seed');
+    } else {
+      const stamp = process.env.E2E_AGENT_EXPIRES ?? '0';
+      for (let i = 1; i <= 2; i++) {
+        const contact = await json<{ data: { id: string } }>(
+          await fetchT(`${DIRECTUS}/items/contacts`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              vendor: vendorId,
+              external_customer_id: `e2e-seed-${i}-${stamp}`,
+              name: `E2E Seed ${i}`,
+            }),
+          }),
+        );
+        const convo = await json<{ data: { id: string } }>(
+          await fetchT(`${DIRECTUS}/items/conversations`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              vendor: vendorId,
+              contact: contact.data.id,
+              status: 'open',
+              priority: 'medium',
+              unread_count_agent: 1,
+              last_message_at: new Date().toISOString(),
+            }),
+          }),
+        );
+        await json(
+          await fetchT(`${DIRECTUS}/items/messages`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              conversation: convo.data.id,
+              sender_type: 'customer',
+              sender_contact: contact.data.id,
+              content: `E2E seed message ${i}`,
+              is_internal_note: false,
+            }),
+          }),
+        );
+      }
+      console.log('[e2e-setup] seeded 2 open conversations for demo-vendor');
+    }
+  } catch (err) {
+    console.warn('[e2e-setup] conversation seed failed (specs may fall back):', err);
+  }
 }

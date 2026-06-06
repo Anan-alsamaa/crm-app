@@ -14,6 +14,9 @@ async function login(page: import('@playwright/test').Page) {
   await page.getByLabel(/email/i).fill(ADMIN_EMAIL);
   await page.getByLabel(/password/i).fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
+  // Wait for the post-login landing (Users management) so callers can click nav
+  // links immediately without racing the auth redirect / first paint.
+  await expect(page.getByRole('heading', { name: /users/i })).toBeVisible({ timeout: 20_000 });
 }
 
 test('admin signs in and sees Users management', async ({ page }) => {

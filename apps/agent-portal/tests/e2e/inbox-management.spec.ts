@@ -2,27 +2,13 @@ import { test, expect } from '@playwright/test';
 
 /**
  * US3 (T057) — shared inbox management.
- * Seeds an inbound message via the widget so there's a conversation, then the
- * signed-in agent exercises status / priority / assignment / tag controls and
- * verifies they persist (refresh) and broadcast (would refresh peers).
+ * Conversations are seeded deterministically via the Directus API in Playwright
+ * globalSetup (tests/e2e-setup/global-setup.ts), so the signed-in agent can
+ * immediately exercise status / priority / assignment / tag controls and verify
+ * they persist — no flaky widget-driving just to create data to act on.
  */
 const AGENT_EMAIL = process.env.E2E_AGENT_EMAIL!;
 const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD!;
-
-test.beforeAll(async ({ browser }) => {
-  // Make sure at least one conversation exists by sending a widget message.
-  const page = await browser.newPage();
-  await page.goto('http://localhost:5175/');
-  await page
-    .getByRole('button', { name: /support/i })
-    .first()
-    .click();
-  await page.getByTestId('yiji-status').waitFor({ state: 'detached', timeout: 15_000 });
-  await page.getByPlaceholder(/type a message/i).fill(`US3 seed ${Date.now()}`);
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(1000);
-  await page.close();
-});
 
 test('agent changes status, priority, and assignment then sees them persist', async ({ page }) => {
   await page.goto('http://localhost:5173/login');

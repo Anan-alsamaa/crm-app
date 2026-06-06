@@ -28,17 +28,9 @@ async function signInAgent(page: import('@playwright/test').Page) {
 test('agent creates a ticket from a conversation, advances workflow, sees history', async ({
   browser,
 }) => {
-  // 1. Seed a conversation via widget.
-  const customer = await browser.newPage();
-  await customer.goto('http://localhost:5175/');
-  await customer
-    .getByRole('button', { name: /support/i })
-    .first()
-    .click();
-  await customer.getByTestId('yiji-status').waitFor({ state: 'detached', timeout: 15_000 });
-  await customer.getByPlaceholder(/type a message/i).fill(`Ticket E2E ${Date.now()}`);
-  await customer.keyboard.press('Enter');
-  await customer.waitForTimeout(500);
+  // 1. A conversation is already seeded deterministically via the Directus API
+  //    in Playwright globalSetup (tests/e2e-setup/global-setup.ts) — no need to
+  //    drive the (timing-flaky) widget just to create one to act on.
 
   // 2. Agent opens the conversation.
   const agent = await browser.newPage();
