@@ -38,15 +38,14 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   await agent.locator('aside li button').first().waitFor({ timeout: 15_000 });
   await agent.locator('aside li button').first().click();
 
-  // 3. Click "+ Create ticket" in the toolbar.
-  // force: a chat bubble overlaps the toolbar button's hit-box at this
-  // viewport (Stream B ConversationToolbar layout/z-index — tracked in
-  // docs/quality-notes.md). The button is functional; bypass the overlap.
+  // 3. Click "+ Create ticket" in the toolbar. (The toolbar now grows + sits at
+  // z-10 above the thread, so its hit-box is no longer covered by a chat bubble
+  // — a plain, actionable click works without force.)
   const subject = `From conv ${Date.now()}`;
   await agent
     .getByRole('button', { name: /create ticket/i })
     .first()
-    .click({ force: true });
+    .click();
   await agent.getByLabel(/subject/i).fill(subject);
   await agent.getByLabel(/^description$/i).fill('Auto-created via E2E.');
   await agent.getByRole('button', { name: /^create$/i }).click();
