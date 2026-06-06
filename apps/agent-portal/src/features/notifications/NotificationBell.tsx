@@ -20,7 +20,7 @@ const TONE_BY_TYPE: Record<string, NotifTone> = {
   automation: 'muted',
 };
 
-export function NotificationBell({ expanded = false }: { expanded?: boolean }) {
+export function NotificationBell() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -86,68 +86,30 @@ export function NotificationBell({ expanded = false }: { expanded?: boolean }) {
 
   return (
     <div className="relative" ref={rootRef}>
-      {expanded ? (
-        // Rail (expanded): a full-width labelled row so it reads unmistakably
-        // as the notifications inbox, distinct from the sibling sound toggle.
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className={cn(
-            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-rail-foreground/85',
-            'transition-colors duration-fast ease-out hover:bg-white/[0.08] hover:text-rail-active-foreground',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
-          )}
-          aria-label={t('notifications.title')}
-          aria-expanded={open}
-        >
-          <BellIcon size={15} className="shrink-0" />
-          <span className="min-w-0 flex-1 truncate text-start text-xs font-medium">
-            {t('notifications.title')}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          'relative inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground',
+          'transition-[transform,background-color,color] duration-fast ease-out',
+          'hover:bg-secondary hover:text-foreground active:scale-95',
+        )}
+        aria-label={t('notifications.title')}
+        aria-expanded={open}
+      >
+        <BellIcon size={16} />
+        {unread.length > 0 && (
+          <span
+            className="absolute -end-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground"
+            aria-label={`${unread.length} unread`}
+          >
+            {unread.length}
           </span>
-          {unread.length > 0 && (
-            <span
-              className="inline-flex h-4 min-w-[16px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground"
-              aria-label={`${unread.length} unread`}
-            >
-              {unread.length}
-            </span>
-          )}
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className={cn(
-            'relative inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground',
-            'transition-[transform,background-color,color] duration-fast ease-out',
-            'hover:bg-secondary hover:text-foreground active:scale-95',
-          )}
-          aria-label={t('notifications.title')}
-          aria-expanded={open}
-        >
-          <BellIcon size={16} />
-          {unread.length > 0 && (
-            <span
-              className="absolute -end-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground"
-              aria-label={`${unread.length} unread`}
-            >
-              {unread.length}
-            </span>
-          )}
-        </button>
-      )}
+        )}
+      </button>
 
       {open && (
-        <div
-          className={cn(
-            'absolute z-50 w-[26rem] max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in',
-            expanded
-              ? // Rail sits at the bottom-left: open upward, extending right into the content.
-                'bottom-full start-0 mb-2 origin-bottom-start'
-              : // Mobile top bar: open downward from the right edge.
-                'top-full end-0 mt-2 origin-top-end',
-          )}
-        >
+        <div className="absolute end-0 top-full z-50 mt-2 w-[26rem] max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in origin-top-end">
           {/* Header */}
           <div className="flex items-center justify-between px-5 pt-4 pb-3">
             <div>

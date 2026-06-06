@@ -148,22 +148,9 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
           isCollapsed ? 'px-2 space-y-1.5' : 'px-2.5 space-y-1',
         )}
       >
-        {/* Utility controls. Two notification-related controls that are easy to
-            confuse, so when the rail is expanded each gets its own labelled row:
-            the bell is the notifications INBOX, the sound toggle mutes the
-            new-message BEEP. The NotificationBell also lives in the mobile top
-            bar, so it's only rendered here on desktop. */}
-        {isCollapsed ? (
-          <div className="flex flex-wrap items-center justify-center gap-1">
-            {ctx.variant === 'desktop' && <NotificationBell />}
-            <SoundToggle collapsed />
-          </div>
-        ) : (
-          <div className="space-y-0.5">
-            {ctx.variant === 'desktop' && <NotificationBell expanded />}
-            <SoundToggle />
-          </div>
-        )}
+        {/* Utility controls (notifications bell, message-sound mute, language)
+            live in the top navbar — see the AppShell `topBar` below. The rail
+            footer is just the signed-in user + sign-out. */}
         <div
           className={cn(
             'flex items-center rounded-md',
@@ -181,7 +168,6 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
                   {user?.email ?? ''}
                 </div>
               </div>
-              <LanguageToggle />
               <button
                 type="button"
                 onClick={() => void logout()}
@@ -237,7 +223,20 @@ function Shell({ children }: { children: React.ReactNode }) {
       <AppShell
         rail={(ctx) => <Rail ctx={ctx} sections={sections} />}
         topBarBrand={<MobileBrand />}
-        topBarActions={<NotificationBell />}
+        topBarActions={
+          <div className="flex items-center gap-0.5 text-muted-foreground">
+            <NotificationBell />
+            <SoundToggle />
+            <LanguageToggle />
+          </div>
+        }
+        topBar={
+          <div className="flex items-center gap-1 text-muted-foreground">
+            <NotificationBell />
+            <SoundToggle />
+            <LanguageToggle />
+          </div>
+        }
         resizeStorageKey="yiji.agent.sidebarWidth"
         navLabel={t('nav.primary', { defaultValue: 'Primary navigation' })}
         menuLabel={t('nav.openMenu', { defaultValue: 'Open menu' })}

@@ -36,6 +36,12 @@ export interface AppShellProps {
   topBarBrand?: ReactNode;
   /** Optional trailing actions in the mobile top bar (e.g. a notification bell). */
   topBarActions?: ReactNode;
+  /**
+   * Optional desktop top navbar, rendered as a slim header above the content
+   * card (right-aligned utility controls — notifications, sound, language, …).
+   * No-op on mobile, where `topBarActions` already serves that role.
+   */
+  topBar?: ReactNode;
   /** localStorage key persisting the desktop rail width. */
   resizeStorageKey: string;
   /** Accessible label for the nav landmark. */
@@ -54,6 +60,7 @@ export function AppShell({
   rail,
   topBarBrand,
   topBarActions,
+  topBar,
   resizeStorageKey,
   navLabel,
   menuLabel,
@@ -87,11 +94,11 @@ export function AppShell({
     };
   }, [open]);
 
-  const main = (
+  const mainCard = (marginClass: string) => (
     <main
       className={cn(
         'flex-1 min-w-0 min-h-0 rounded-2xl bg-card/85 shadow-xl shadow-foreground/5 ring-1 ring-foreground/[0.04] overflow-hidden',
-        isDesktop ? 'm-3 ms-3' : 'mx-2 mb-2',
+        marginClass,
       )}
     >
       {children}
@@ -99,36 +106,56 @@ export function AppShell({
   );
 
   if (isDesktop) {
+    const railNav = (
+      <nav
+        aria-label={navLabel}
+        style={{ width }}
+        className={cn(
+          RAIL_CLASS,
+          'my-3 ms-3',
+          !dragging && 'transition-[width] duration-150 ease-out',
+        )}
+      >
+        {rail({ variant: 'desktop', collapsed: width < 140, onNavigate: () => {} })}
+        {/* Drag handle — 6px hit area on the trailing edge */}
+        <div
+          {...bind}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          className="group/handle absolute inset-y-0 end-0 w-1.5 -me-0.5 cursor-col-resize flex items-center justify-center"
+        >
+          <span
+            aria-hidden
+            className={cn(
+              'h-12 w-0.5 rounded-full transition-colors duration-fast ease-out',
+              dragging ? 'bg-primary' : 'bg-transparent group-hover/handle:bg-primary/40',
+            )}
+          />
+        </div>
+      </nav>
+    );
+
+    // With a top navbar: the content column carries a slim header above the
+    // card. Without one: the card fills the column (legacy behaviour).
+    if (topBar) {
+      return (
+        <div className="flex h-full text-foreground">
+          {railNav}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <header className="flex h-14 shrink-0 items-center justify-end gap-1.5 pe-4 ps-3 pt-2">
+              {topBar}
+            </header>
+            {mainCard('mx-3 mb-3 mt-1')}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex h-full text-foreground">
-        <nav
-          aria-label={navLabel}
-          style={{ width }}
-          className={cn(
-            RAIL_CLASS,
-            'my-3 ms-3',
-            !dragging && 'transition-[width] duration-150 ease-out',
-          )}
-        >
-          {rail({ variant: 'desktop', collapsed: width < 140, onNavigate: () => {} })}
-          {/* Drag handle — 6px hit area on the trailing edge */}
-          <div
-            {...bind}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize sidebar"
-            className="group/handle absolute inset-y-0 end-0 w-1.5 -me-0.5 cursor-col-resize flex items-center justify-center"
-          >
-            <span
-              aria-hidden
-              className={cn(
-                'h-12 w-0.5 rounded-full transition-colors duration-fast ease-out',
-                dragging ? 'bg-primary' : 'bg-transparent group-hover/handle:bg-primary/40',
-              )}
-            />
-          </div>
-        </nav>
-        {main}
+        {railNav}
+        {mainCard('m-3 ms-3')}
       </div>
     );
   }
@@ -151,7 +178,7 @@ export function AppShell({
         {topBarActions}
       </header>
 
-      {main}
+      {mainCard('mx-2 mb-2')}
 
       {/* Off-canvas drawer + backdrop — always mounted so it can transition;
           `invisible` removes it from the tab order and a11y tree when closed. */}
