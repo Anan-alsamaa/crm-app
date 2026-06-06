@@ -66,6 +66,30 @@ describe('GatewayDirectus.upsertContact', () => {
     });
     expect(id).toBe('c2');
   });
+
+  it('recovers from a concurrent-create unique violation by re-querying', async () => {
+    request
+      .mockResolvedValueOnce([]) // lookup miss
+      .mockRejectedValueOnce({
+        errors: [
+          { message: 'Value for field "vendor, phone" in collection "contacts" has to be unique.' },
+        ],
+      }) // create loses the race
+      .mockResolvedValueOnce([{ id: 'contact-raced' }]); // re-query finds the winner's row
+    const id = await makeGateway().upsertContact('vendor-uuid', baseClaims);
+    expect(id).toBe('contact-raced');
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  it('rethrows a create failure that is not a lost race', async () => {
+    request
+      .mockResolvedValueOnce([]) // lookup miss
+      .mockRejectedValueOnce(new Error('db exploded')) // create fails for real
+      .mockResolvedValueOnce([]); // re-query still finds nothing
+    await expect(makeGateway().upsertContact('vendor-uuid', baseClaims)).rejects.toThrow(
+      'db exploded',
+    );
+  });
 });
 
 describe('GatewayDirectus.findOrCreateConversation', () => {

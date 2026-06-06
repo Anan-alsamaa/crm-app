@@ -37,23 +37,23 @@ export class GatewayDirectus {
 
   /** Upsert a contact, deduped per vendor by phone then email (SC-007). */
   async upsertContact(vendorUuid: string, claims: CustomerClaims): Promise<string> {
-    const or: Array<Record<string, unknown>> = [];
-    if (claims.phone) or.push({ phone: { _eq: claims.phone } });
-    if (claims.email) or.push({ email: { _eq: claims.email } });
-
     const findExisting = async (): Promise<string | null> => {
-      const rows = (await this.client.request(
+      const or: Array<Record<string, unknown>> = [];
+      if (claims.phone) or.push({ phone: { _eq: claims.phone } });
+      if (claims.email) or.push({ email: { _eq: claims.email } });
+      if (or.length === 0) return null;
+      const existing = (await this.client.request(
         readItems('contacts', {
           filter: { vendor: { _eq: vendorUuid }, _or: or },
           fields: ['id'],
           limit: 1,
         }),
       )) as Array<{ id: string }>;
-      return rows[0]?.id ?? null;
+      return existing[0]?.id ?? null;
     };
 
-    const existing = await findExisting();
-    if (existing) return existing;
+    const existingId = await findExisting();
+    if (existingId) return existingId;
 
     try {
       const created = (await this.client.request(
@@ -67,9 +67,11 @@ export class GatewayDirectus {
       )) as { id: string };
       return created.id;
     } catch (err) {
-      // Concurrent connections for the same customer race the read-then-create
-      // above and trip the (vendor, phone)/(vendor, email) partial-unique index.
-      // Re-read and return the contact the other connection just created.
+      // The widget reconnects aggressively, so multiple onboarding flows can
+      // race: each reads "not found" then races to create the same contact,
+      // and all-but-one hit the (vendor, phone|email) partial-unique index.
+      // That's not a real failure — re-query and return the contact the
+      // winning create produced. Only rethrow if it genuinely doesn't exist.
       const raced = await findExisting();
       if (raced) return raced;
       throw err;
