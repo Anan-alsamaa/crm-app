@@ -59,6 +59,9 @@ services:
       REDIS: ${REDIS_URL:-redis://redis:6379}
       CACHE_ENABLED: 'true'
       CACHE_STORE: redis
+      # Purge the read cache on writes so the gateway's read-after-write
+      # (e.g. contact upsert) never sees a stale "not found".
+      CACHE_AUTO_PURGE: 'true'
       WEBSOCKETS_ENABLED: 'true'
       # Allow the portals/widget (different localhost ports) to call Directus.
       # CORS_ORIGIN=true reflects the request origin (works with credentials).

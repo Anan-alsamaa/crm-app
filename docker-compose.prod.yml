@@ -78,6 +78,8 @@ services:
       REDIS: ${REDIS_URL:-redis://redis:6379}
       CACHE_ENABLED: 'true'
       CACHE_STORE: redis
+      # Invalidate read cache on writes (read-after-write consistency).
+      CACHE_AUTO_PURGE: 'true'
       WEBSOCKETS_ENABLED: 'true'
       CORS_ENABLED: 'true'
       CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal hostnames}
