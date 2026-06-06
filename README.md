@@ -169,6 +169,16 @@ docker compose down -v   # removes the postgres + redis volumes
 CI runs the `quality` (lint/typecheck/unit+coverage) and `e2e` jobs in
 parallel; Playwright browsers and the pnpm store are cached.
 
+## Component library (Storybook)
+
+The `@yiji/ui` primitives have a Storybook (design tokens + Tailwind preset
+wired in):
+
+```bash
+pnpm --filter @yiji/ui storybook        # dev server on :6006
+pnpm --filter @yiji/ui build-storybook  # static build → packages/ui/storybook-static
+```
+
 ## Production checklist
 
 See [docs/PRODUCTION.md](./docs/PRODUCTION.md) for a full deploy guide.

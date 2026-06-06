@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Self-contained design tokens for the @yiji/ui Storybook preview, mirrored
+ * from the portals' index.css so the primitives render with the real palette
+ * without coupling Storybook to an app package. Keep in sync with the apps'
+ * token block if the palette changes.
+ */
+:root,
+[data-theme='light'] {
+  --radius: 0.5rem;
+  --background: 0.985 0.002 230;
+  --foreground: 0.2 0.005 250;
+  --card: 1 0 0;
+  --card-foreground: 0.2 0.005 250;
+  --popover: 1 0 0;
+  --popover-foreground: 0.2 0.005 250;
+  --primary: 0.58 0.097 196;
+  --primary-foreground: 1 0 0;
+  --primary-subtle: 0.58 0.097 196 / 0.12;
+  --secondary: 0.96 0.005 230;
+  --secondary-foreground: 0.2 0.005 250;
+  --muted: 0.96 0.005 230;
+  --muted-foreground: 0.46 0.01 250;
+  --accent: 0.58 0.097 196;
+  --accent-foreground: 1 0 0;
+  --destructive: 0.56 0.22 25;
+  --destructive-foreground: 1 0 0;
+  --success: 0.58 0.15 155;
+  --success-foreground: 1 0 0;
+  --warning: 0.7 0.16 70;
+  --warning-foreground: 0.22 0.005 250;
+  --border: 0.22 0.005 250 / 0.12;
+  --border-strong: 0.22 0.005 250 / 0.2;
+  --input: 0.96 0.005 230;
+  --ring: 0.58 0.097 196;
+  --shadow-color: 0.22 0.005 250;
+  --rail: 0.22 0.045 196;
+  --rail-foreground: 0.92 0.03 196;
+  --rail-active: 0.28 0.07 196;
+  --rail-active-foreground: 1 0 0;
+  --rail-border: 0.16 0.04 196;
+  --secondary-brand: 0.66 0.22 0;
+  --secondary-brand-foreground: 1 0 0;
+  --display: 0.16 0.01 250;
+}
+
+[data-theme='dark'] {
+  --background: 0.17 0.005 250;
+  --foreground: 0.96 0 0;
+  --card: 0.2 0.005 250;
+  --card-foreground: 0.96 0 0;
+  --popover: 0.22 0.005 250;
+  --popover-foreground: 0.96 0 0;
+  --primary: 0.66 0.11 196;
+  --primary-foreground: 0.16 0.005 250;
+  --primary-subtle: 0.66 0.11 196 / 0.18;
+  --secondary: 0.24 0.005 250;
+  --secondary-foreground: 0.96 0 0;
+  --muted: 0.24 0.005 250;
+  --muted-foreground: 0.66 0.008 250;
+  --accent: 0.66 0.11 196;
+  --accent-foreground: 0.16 0.005 250;
+  --destructive: 0.68 0.21 25;
+  --destructive-foreground: 1 0 0;
+  --success: 0.7 0.14 155;
+  --success-foreground: 0.17 0 0;
+  --warning: 0.78 0.14 70;
+  --warning-foreground: 0.17 0 0;
+  --border: 0.96 0 0 / 0.1;
+  --border-strong: 0.96 0 0 / 0.18;
+  --input: 0.24 0.005 250;
+  --ring: 0.66 0.11 196;
+  --shadow-color: 0 0 0;
+  --rail: 0.14 0.04 196;
+  --rail-foreground: 0.88 0.03 196;
+  --rail-active: 0.2 0.06 196;
+  --rail-active-foreground: 1 0 0;
+  --rail-border: 0.1 0.04 196;
+}
+
+body {
+  margin: 0;
+  color: oklch(var(--foreground));
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+}
