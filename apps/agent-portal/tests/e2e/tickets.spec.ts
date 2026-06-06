@@ -49,12 +49,15 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   await agent.getByLabel(/subject/i).fill(subject);
   await agent.getByLabel(/^description$/i).fill('Auto-created via E2E.');
   await agent.getByRole('button', { name: /^create$/i }).click();
-  // Dialog closes; subject appears in the tickets list.
+  // Dialog closes; subject appears in the tickets list. Scope to the list-row
+  // button (not getByText) so we don't also match the success toast, whose
+  // description echoes the subject (strict-mode double match).
   await agent.getByRole('link', { name: /tickets/i }).click();
-  await expect(agent.getByText(subject)).toBeVisible({ timeout: 10_000 });
+  const ticketRow = agent.getByRole('button', { name: subject });
+  await expect(ticketRow).toBeVisible({ timeout: 10_000 });
 
   // 4. Open the ticket detail.
-  await agent.getByText(subject).click();
+  await ticketRow.click();
   await expect(agent.getByRole('heading', { name: subject })).toBeVisible();
 
   // 5. Mark first response sent → button disappears and "Responded at" shows.
