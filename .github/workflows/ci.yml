@@ -82,11 +82,11 @@ jobs:
     # `workflow_dispatch` also allows running it on demand from the Actions tab.
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     timeout-minutes: 25
-    # Non-blocking for now: the full-stack suite is still being stabilized and a
-    # couple of product specs (portal login → heading) are owned by the frontend
-    # stream. It still RUNS and reports on every integration push for visibility,
-    # but doesn't mark CI red. Remove this once the portal E2E flows are green.
-    continue-on-error: true
+    # Hard gate: the full-stack suite is green (10/10) and deterministic — the
+    # conversations are API-seeded in globalSetup, so it no longer depends on
+    # flaky widget timing. It blocks integration pushes to main / 001 if any
+    # spec regresses. (Was previously continue-on-error while the portal flows
+    # were stabilized.)
 
     services:
       postgres:
