@@ -83,6 +83,16 @@ Build + push to GHCR via CI: the [`Deploy`](#deploy-workflow) workflow.
 | `ai-gateway`     | `node:20-alpine` | 8081         | 8081        | `GET :8081/health`   |
 | `workers`        | `node:20-alpine` | —            | 8090        | `GET :8090/health`   |
 | portals/widget   | static (CDN)     | 80/443       | n/a         | n/a                  |
+| `agent-portal`\* | `nginx:alpine`   | 80           | 80          | `GET /health`        |
+| `admin-portal`\* | `nginx:alpine`   | 80           | 80          | `GET /health`        |
+
+\* The portals are **static SPAs**; the default and recommended hosting is a
+CDN / static host (cheapest, fastest, no servers to run). For a self-contained
+single-host deploy you can instead build the container images
+(`apps/{agent,admin}-portal/Dockerfile`, wired into `docker-compose.prod.yml` as
+the `agent-portal` / `admin-portal` services, default host ports 8090 / 8092).
+`VITE_*` values are baked at **build** time (client-visible) — pass the real
+public URLs as `--build-arg` and never bake secrets.
 
 ## Configuration & env validation
 
