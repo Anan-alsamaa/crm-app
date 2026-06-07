@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Avatar, cn, Pill, ResizeHandle, Spinner, formatRelative, useResizable } from '@yiji/ui';
 import { useConversation, useLinkedTickets, type ConversationMessage } from '../inbox/api.js';
 import { AiPanel } from '../ai/AiPanel.js';
+import { ConversationTags } from './ConversationTags.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 
 interface Props {
@@ -124,29 +125,10 @@ export function ConversationSidebar({
         </dl>
       </section>
 
-      {/* Tags */}
-      {c.tags && c.tags.length > 0 && (
-        <section className="px-6 py-4">
-          <SectionLabel>{t('sidebar.tags')}</SectionLabel>
-          <div className="flex flex-wrap gap-1.5">
-            {c.tags.map((tg) =>
-              tg.tags_id ? (
-                <span
-                  key={tg.tags_id.id}
-                  className="rounded-md bg-secondary px-2 py-1 text-xs font-medium text-foreground"
-                  style={
-                    tg.tags_id.color
-                      ? { background: `${tg.tags_id.color}24`, color: tg.tags_id.color }
-                      : undefined
-                  }
-                >
-                  {tg.tags_id.name}
-                </span>
-              ) : null,
-            )}
-          </div>
-        </section>
-      )}
+      {/* Tags — the single, interactive home for conversation tags. */}
+      <section className="px-6 py-4">
+        <ConversationTags conversation={c} />
+      </section>
 
       {/* Custom fields (per-conversation) */}
       <section className="px-6 py-4">

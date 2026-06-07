@@ -13,6 +13,8 @@
     "close": "Close",
     "loading": "Loading",
     "remove": "Remove",
+    "add": "Add",
+    "done": "Done",
     "toggleLanguage": "Toggle language"
   },
   "auth": {

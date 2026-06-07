@@ -13,6 +13,8 @@
     "close": "إغلاق",
     "loading": "جارٍ التحميل",
     "remove": "إزالة",
+    "add": "إضافة",
+    "done": "تم",
     "toggleLanguage": "تبديل اللغة"
   },
   "auth": {
