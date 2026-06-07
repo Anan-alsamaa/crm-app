@@ -143,10 +143,10 @@ export function AppShell({
         <div className="flex h-full text-foreground">
           {railNav}
           <div className="flex min-w-0 flex-1 flex-col">
-            <header className="flex h-14 shrink-0 items-center justify-end gap-1.5 pe-4 ps-3 pt-2">
-              {topBar}
-            </header>
-            {mainCard('mx-3 mb-3 mt-1')}
+            {/* Slim top bar — just tall enough for the section label + controls,
+                so the content card (and the conversation) gets the height. */}
+            <header className="flex h-10 shrink-0 items-center px-3.5 pt-1.5">{topBar}</header>
+            {mainCard('mx-3 mb-3 mt-0.5')}
           </div>
         </div>
       );
