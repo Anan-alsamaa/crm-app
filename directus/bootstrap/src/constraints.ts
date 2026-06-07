@@ -44,4 +44,22 @@ export const constraintStatements: string[] = [
      ON messages_mentions (messages_id, directus_users_id);`,
   `CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_files
      ON messages_files (messages_id, directus_files_id);`,
+
+  // Hard cap: at most 5 tags per conversation. The unique index above stops
+  // duplicate links; this stops a 6th distinct link. Enforced at the database
+  // so it holds regardless of client (portal cap is just the friendly UX).
+  `CREATE OR REPLACE FUNCTION enforce_max_conversation_tags() RETURNS trigger AS $$
+     BEGIN
+       IF (SELECT count(*) FROM conversations_tags
+             WHERE conversations_id = NEW.conversations_id) >= 5 THEN
+         RAISE EXCEPTION 'A conversation can have at most 5 tags'
+           USING ERRCODE = 'check_violation';
+       END IF;
+       RETURN NEW;
+     END;
+   $$ LANGUAGE plpgsql;`,
+  `DROP TRIGGER IF EXISTS trg_max_conversation_tags ON conversations_tags;
+   CREATE TRIGGER trg_max_conversation_tags
+     BEFORE INSERT ON conversations_tags
+     FOR EACH ROW EXECUTE FUNCTION enforce_max_conversation_tags();`,
 ];
