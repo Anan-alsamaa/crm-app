@@ -27,6 +27,9 @@ import { CreateTicketDialog } from '../tickets/CreateTicketDialog.js';
 const STATUSES: ConversationStatus[] = ['open', 'pending', 'resolved', 'closed'];
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 
+/** A conversation can carry at most this many tags. */
+const MAX_TAGS = 5;
+
 async function broadcastUpdate(conversationId: string): Promise<void> {
   const socket = await getSocket();
   socket.emit(SOCKET_EVENTS.conversationUpdated, { conversationId });
@@ -55,8 +58,17 @@ export function ConversationToolbar({ conversation, onBack, onToggleDetails }: P
   const assigned = conversation.tags?.filter((j) => j.tags_id) ?? [];
   const assignedIds = new Set(assigned.map((j) => j.tags_id!.id));
   const available = (tags.data ?? []).filter((tg) => !assignedIds.has(tg.id));
+  const atMax = assigned.length >= MAX_TAGS;
+  const limitMsg = t('conversation.tagLimit', {
+    count: MAX_TAGS,
+    defaultValue: `Up to ${MAX_TAGS} tags per conversation.`,
+  });
 
   const assignTag = async (tagId: string) => {
+    if (atMax) {
+      toast.error(limitMsg);
+      return;
+    }
     try {
       await addTag.mutateAsync({ conversationId: conversation.id, tagId });
       await broadcastUpdate(conversation.id);
@@ -67,6 +79,10 @@ export function ConversationToolbar({ conversation, onBack, onToggleDetails }: P
   const createAndAssign = async () => {
     const name = newTag.trim();
     if (!name) return;
+    if (atMax) {
+      toast.error(limitMsg);
+      return;
+    }
     try {
       const existing = (tags.data ?? []).find((tg) => tg.name.toLowerCase() === name.toLowerCase());
       const tagId = existing ? existing.id : (await createTag.mutateAsync({ name })).id;
@@ -235,19 +251,37 @@ export function ConversationToolbar({ conversation, onBack, onToggleDetails }: P
           </span>
         ))}
 
-        {/* Add / create tag — type to create a new one, or pick an existing. */}
-        <details className="group relative">
-          <summary
-            className={cn(
-              'inline-flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-xs text-muted-foreground transition-colors duration-fast ease-out',
-              'hover:bg-secondary/70 [&::-webkit-details-marker]:hidden',
-            )}
+        {/* Add / create tag — type to create a new one, or pick an existing.
+            Disabled once the conversation hits the MAX_TAGS cap. */}
+        {atMax ? (
+          <span
+            className="inline-flex h-7 cursor-default items-center gap-1 rounded-md px-2 text-xs text-muted-foreground/70"
+            title={limitMsg}
           >
-            <span className="text-sm leading-none">+</span>
-            <span>{t('conversation.addTag')}</span>
-          </summary>
-          <div className="absolute end-0 z-30 mt-1 w-56 rounded-2xl bg-popover p-1.5 shadow-xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in origin-top-end">
-            <div className="flex items-center gap-1 p-1">
+            {t('conversation.tagsFull', {
+              count: MAX_TAGS,
+              defaultValue: `${MAX_TAGS}/${MAX_TAGS} tags`,
+            })}
+          </span>
+        ) : (
+          <details className="group relative">
+            <summary
+              className={cn(
+                'inline-flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-xs text-muted-foreground transition-colors duration-fast ease-out',
+                'hover:bg-secondary/70 [&::-webkit-details-marker]:hidden',
+              )}
+            >
+              <span className="text-sm leading-none">+</span>
+              <span>{t('conversation.addTag')}</span>
+            </summary>
+            <div className="absolute end-0 z-30 mt-1 w-56 rounded-2xl bg-popover p-1.5 shadow-xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in origin-top-end">
+              <div className="flex items-center justify-between px-2 pt-1 pb-1.5 text-2xs text-muted-foreground">
+                <span>{t('conversation.addTag')}</span>
+                <span className="tabular-nums">
+                  {assigned.length}/{MAX_TAGS}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 p-1">
               <input
                 type="text"
                 value={newTag}
@@ -298,8 +332,9 @@ export function ConversationToolbar({ conversation, onBack, onToggleDetails }: P
                   </button>
                 ))}
             </div>
-          </div>
-        </details>
+            </div>
+          </details>
+        )}
 
         <Button type="button" variant="default" size="sm" onClick={() => setOpenTicketDialog(true)}>
           + {t('tickets.createTitle')}

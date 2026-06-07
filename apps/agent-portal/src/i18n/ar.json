@@ -132,6 +132,8 @@
     "unassigned": "غير معيّن",
     "noTeam": "بدون فريق",
     "addTag": "وسم",
+    "tagLimit": "حتى {{count}} وسوم لكل محادثة.",
+    "tagsFull": "{{count}}/{{count}} وسوم",
     "backToInbox": "العودة إلى صندوق الوارد",
     "details": "تفاصيل المحادثة",
     "attach": "إرفاق ملف",

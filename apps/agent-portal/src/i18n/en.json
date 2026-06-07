@@ -132,6 +132,8 @@
     "unassigned": "Unassigned",
     "noTeam": "No team",
     "addTag": "Tag",
+    "tagLimit": "Up to {{count}} tags per conversation.",
+    "tagsFull": "{{count}}/{{count}} tags",
     "backToInbox": "Back to inbox",
     "details": "Conversation details",
     "attach": "Attach file",
