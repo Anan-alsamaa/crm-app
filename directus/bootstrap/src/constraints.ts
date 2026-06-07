@@ -30,4 +30,18 @@ export const constraintStatements: string[] = [
   // Custom field key unique per entity_type.
   `CREATE UNIQUE INDEX IF NOT EXISTS uq_custom_fields_entity_key
      ON custom_fields (entity_type, key);`,
+
+  // M2M junctions: a given pair may only be linked once. Without these the same
+  // tag (or mention/file) can be attached to the same parent repeatedly, which
+  // is what let a single conversation accumulate dozens of duplicate tag chips.
+  `CREATE UNIQUE INDEX IF NOT EXISTS uq_conversations_tags
+     ON conversations_tags (conversations_id, tags_id);`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS uq_contacts_tags
+     ON contacts_tags (contacts_id, tags_id);`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS uq_tickets_tags
+     ON tickets_tags (tickets_id, tags_id);`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_mentions
+     ON messages_mentions (messages_id, directus_users_id);`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_files
+     ON messages_files (messages_id, directus_files_id);`,
 ];
