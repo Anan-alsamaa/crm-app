@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { readItems, readUsers, updateItem, createItem } from '@directus/sdk';
+import { readItems, readUsers, updateItem, createItem, deleteItem } from '@directus/sdk';
 import type { ConversationStatus, Priority } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 
@@ -12,7 +12,7 @@ export interface InboxConversation {
   assigned_agent: string | null;
   assigned_team: string | null;
   contact: { id: string; name: string | null; email: string | null; phone: string | null } | null;
-  tags?: Array<{ tags_id: { id: string; name: string; color: string | null } | null }>;
+  tags?: Array<{ id: string; tags_id: { id: string; name: string; color: string | null } | null }>;
 }
 
 export interface MessageAttachment {
@@ -78,7 +78,7 @@ export function useConversations(filters: InboxFilters = {}) {
             'assigned_agent',
             'assigned_team',
             { contact: ['id', 'name', 'email', 'phone'] },
-            { tags: [{ tags_id: ['id', 'name', 'color'] }] },
+            { tags: ['id', { tags_id: ['id', 'name', 'color'] }] },
           ],
           sort,
           ...(filter ? { filter } : {}),
@@ -161,7 +161,7 @@ export function useConversation(conversationId: string | null) {
               'assigned_team',
               { contact: ['id', 'name', 'email', 'phone'] },
               { vendor: ['id', 'name'] },
-              { tags: [{ tags_id: ['id', 'name', 'color'] }] },
+              { tags: ['id', { tags_id: ['id', 'name', 'color'] }] },
             ],
             limit: 1,
           }),
@@ -280,11 +280,25 @@ export function useAddTagToConversation() {
   });
 }
 
+export function useRemoveTagFromConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ junctionId }: { junctionId: string; conversationId: string }) =>
+      directus.request(deleteItem('conversations_tags', junctionId)),
+    onSuccess: (_d, vars) => {
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+      void qc.invalidateQueries({ queryKey: ['conversation', vars.conversationId] });
+    },
+  });
+}
+
 export function useCreateTag() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ name, color }: { name: string; color?: string }) =>
-      directus.request(createItem('tags', { name, color: color ?? '#94a3b8' } as never)),
+      directus.request(
+        createItem('tags', { name, color: color ?? '#94a3b8' } as never),
+      ) as Promise<{ id: string; name: string; color: string | null }>,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tags'] }),
   });
 }
