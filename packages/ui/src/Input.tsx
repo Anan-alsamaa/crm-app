@@ -80,7 +80,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
       className={cn(
         fieldBase,
         'h-10 ps-3.5 pe-9 text-sm text-start appearance-none cursor-pointer',
-        "bg-[length:10px_10px] bg-no-repeat bg-[right_0.75rem_center] [background-image:url(\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2010%206'%3E%3Cpath%20fill='none'%20stroke='%23a8a8a4'%20stroke-width='1.5'%20stroke-linecap='round'%20stroke-linejoin='round'%20d='M1%201l4%204%204-4'/%3E%3C/svg%3E\")]",
+        // NB: keep this data URI free of ';' and raw quotes. A ';charset=utf-8'
+        // here gets the declaration cut short once the prod CSS minifier strips
+        // the url() quotes, which corrupts the following rule. Quotes are %27.
+        'bg-[length:10px_10px] bg-no-repeat bg-[right_0.75rem_center] [background-image:url("data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2010%206%27%3E%3Cpath%20fill=%27none%27%20stroke=%27%23a8a8a4%27%20stroke-width=%271.5%27%20stroke-linecap=%27round%27%20stroke-linejoin=%27round%27%20d=%27M1%201l4%204%204-4%27/%3E%3C/svg%3E")]',
         '[dir=rtl]:bg-[left_0.75rem_center]',
         invalid && 'border-destructive focus:border-destructive',
         className,
