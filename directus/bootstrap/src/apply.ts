@@ -16,6 +16,7 @@ import {
   createCollection,
   createField,
   createRelation,
+  updateRelation,
   createRole,
   updateRole,
   createPolicy,
@@ -253,6 +254,32 @@ async function applyJunctions(client: AnyClient): Promise<void> {
             field,
             related_collection: related,
             schema: { on_delete: 'CASCADE' },
+          } as never),
+        ),
+      );
+    }
+
+    // Expose the M2M as a nested alias on collectionA (e.g. `conversations.tags`).
+    // Without this the owning collection cannot read its related rows via a
+    // nested field — the junction is only reachable directly. Two parts:
+    //   1. an alias field on collectionA, and
+    //   2. the A-side relation's one_field/junction_field so it resolves through
+    //      the junction to collectionB.
+    // updateRelation runs every pass (metadata-only, idempotent in effect).
+    if (j.aliasA) {
+      await idempotent(`alias ${j.collectionA}.${j.aliasA}`, () =>
+        client.request(
+          createField(j.collectionA, {
+            field: j.aliasA,
+            type: 'alias',
+            meta: { interface: 'list-m2m', special: ['m2m'] },
+          } as never),
+        ),
+      );
+      await idempotent(`wire ${j.junction}.${j.fieldA} one_field=${j.aliasA}`, () =>
+        client.request(
+          updateRelation(j.junction, j.fieldA, {
+            meta: { one_field: j.aliasA, junction_field: j.fieldB },
           } as never),
         ),
       );

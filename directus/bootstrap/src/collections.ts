@@ -51,6 +51,13 @@ export interface JunctionSpec {
   fieldA: string; // junction field → A
   collectionB: string;
   fieldB: string; // junction field → B
+  /**
+   * Name of the M2M alias field to expose on collectionA (e.g. `conversations.tags`).
+   * Without it the junction is only reachable directly; the owning collection
+   * cannot read its related rows via a nested field. Set for every junction the
+   * app reads as `A.<alias>`.
+   */
+  aliasA?: string;
 }
 
 const PRIORITY = ['low', 'medium', 'high', 'urgent'];
@@ -359,6 +366,7 @@ export const junctions: JunctionSpec[] = [
     fieldA: 'contacts_id',
     collectionB: 'tags',
     fieldB: 'tags_id',
+    aliasA: 'tags',
   },
   {
     junction: 'conversations_tags',
@@ -366,6 +374,7 @@ export const junctions: JunctionSpec[] = [
     fieldA: 'conversations_id',
     collectionB: 'tags',
     fieldB: 'tags_id',
+    aliasA: 'tags',
   },
   {
     junction: 'tickets_tags',
@@ -373,6 +382,7 @@ export const junctions: JunctionSpec[] = [
     fieldA: 'tickets_id',
     collectionB: 'tags',
     fieldB: 'tags_id',
+    aliasA: 'tags',
   },
   {
     junction: 'messages_mentions',
@@ -380,6 +390,7 @@ export const junctions: JunctionSpec[] = [
     fieldA: 'messages_id',
     collectionB: 'directus_users',
     fieldB: 'directus_users_id',
+    aliasA: 'mentions',
   },
   {
     junction: 'messages_files',
