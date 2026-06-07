@@ -349,7 +349,7 @@ export function ConversationView({
         </div>
         {/* Thread placeholder — alternating inbound/outbound bubbles */}
         <div className="flex-1 overflow-hidden">
-          <div className="mx-auto flex max-w-3xl flex-col gap-4 px-5 py-6">
+          <div className="mx-auto flex max-w-4xl flex-col gap-4 px-5 py-6">
             {[
               { me: false, w: 'w-52' },
               { me: true, w: 'w-40' },
@@ -390,7 +390,7 @@ export function ConversationView({
               'radial-gradient(at 8% 8%, oklch(var(--primary) / 0.04) 0%, transparent 40%), radial-gradient(at 92% 92%, oklch(var(--secondary-brand) / 0.04) 0%, transparent 45%)',
           }}
         >
-          <div className="mx-auto flex max-w-3xl flex-col gap-4 px-5 py-6">
+          <div className="mx-auto flex max-w-4xl flex-col gap-4 px-5 py-6">
             {grouped.map((run, runIdx) => {
               const head = run[0]!;
               const isAgent = head.sender_type === 'agent';
@@ -486,7 +486,7 @@ export function ConversationView({
 
         {/* Reply composer — floating card lit by focus. */}
         <div>
-          <div className="mx-auto max-w-3xl px-5 pb-5 pt-3">
+          <div className="mx-auto max-w-4xl px-5 pb-5 pt-3">
             {/* Tabs: reply / internal note (text-button style, no chip chrome) */}
             <div className="mb-1 flex items-center gap-4 text-xs">
               <button

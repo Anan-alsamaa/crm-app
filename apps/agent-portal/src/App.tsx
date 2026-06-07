@@ -218,6 +218,15 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [{ to: '/preferences', label: t('nav.preferences'), icon: SettingsIcon }],
     },
   ];
+  // Current section label — anchors the left of the top bar so it reads as a
+  // real top bar (context left, actions right) instead of icons floating in a
+  // empty band.
+  const pageTitle =
+    sections
+      .flatMap((s) => s.items)
+      .find((it) =>
+        it.to === '/' ? location.pathname === '/' : location.pathname.startsWith(it.to),
+      )?.label ?? '';
   return (
     <>
       <AppShell
@@ -231,10 +240,15 @@ function Shell({ children }: { children: React.ReactNode }) {
           </div>
         }
         topBar={
-          <div className="flex items-center gap-1 text-muted-foreground">
-            <NotificationBell />
-            <SoundToggle />
-            <LanguageToggle />
+          <div className="flex w-full items-center justify-between gap-3">
+            <span className="truncate text-sm font-semibold tracking-tight text-foreground">
+              {pageTitle}
+            </span>
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <NotificationBell />
+              <SoundToggle />
+              <LanguageToggle />
+            </div>
           </div>
         }
         resizeStorageKey="yiji.agent.sidebarWidth"
