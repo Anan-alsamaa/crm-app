@@ -17,6 +17,7 @@
     "test": "vitest run && pnpm -r --if-present test",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:local": "node tests/e2e-local/run.mjs",
     "test:coverage": "vitest run --coverage",
     "dev": "pnpm -r --parallel --if-present dev",
     "prepare": "husky || true"
