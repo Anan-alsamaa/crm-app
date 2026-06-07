@@ -390,7 +390,11 @@ export function ConversationView({
               'radial-gradient(at 8% 8%, oklch(var(--primary) / 0.04) 0%, transparent 40%), radial-gradient(at 92% 92%, oklch(var(--secondary-brand) / 0.04) 0%, transparent 45%)',
           }}
         >
-          <div className="mx-auto flex max-w-4xl flex-col gap-4 px-5 py-6">
+          {/* min-h-full + justify-end bottom-anchors the thread: a short
+              conversation sits just above the composer instead of floating at
+              the top with an empty void below. Long threads overflow + scroll
+              normally. */}
+          <div className="mx-auto flex min-h-full max-w-4xl flex-col justify-end gap-5 px-5 py-6">
             {grouped.map((run, runIdx) => {
               const head = run[0]!;
               const isAgent = head.sender_type === 'agent';
@@ -439,7 +443,7 @@ export function ConversationView({
                             {hasContent && (
                               <div
                                 className={cn(
-                                  'px-3.5 py-2 text-sm leading-relaxed break-words text-start max-w-fit',
+                                  'px-4 py-2.5 text-[15px] leading-relaxed break-words text-start max-w-fit',
                                   // No borders, no card chrome. Just bg + shape.
                                   isNote
                                     ? 'bg-warning/15 text-warning-foreground'
