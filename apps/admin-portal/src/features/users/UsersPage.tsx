@@ -166,73 +166,65 @@ export function UsersPage() {
             })}
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((u, i) => {
+          /* Dense list — one row per account (density is a feature). Hairline
+             dividers, no card chrome, columns read like a table at sm+. */
+          <ul className="mx-auto max-w-5xl divide-y divide-border/50 overflow-hidden rounded-xl bg-card/50 ring-1 ring-border/60">
+            {filtered.map((u) => {
               const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
               const isAdmin = u.role?.name?.toLowerCase() === 'administrator';
               return (
-                <button
-                  key={u.id}
-                  type="button"
-                  style={{ animationDelay: `${Math.min(i * 22, 220)}ms` }}
-                  className={cn(
-                    'group relative flex items-center gap-4 rounded-2xl bg-card/70 px-5 py-4 text-start',
-                    'shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04]',
-                    'transition-[box-shadow,transform,background-color] duration-fast ease-out',
-                    'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px',
-                    'motion-safe:animate-fade-in',
-                  )}
-                >
-                  <Avatar name={fullName} email={u.email} size="md" />
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex items-baseline gap-2">
+                <li key={u.id}>
+                  <button
+                    type="button"
+                    className={cn(
+                      'group flex w-full items-center gap-3 px-4 py-2.5 text-start',
+                      'transition-colors duration-fast ease-out hover:bg-secondary/50',
+                      'focus-visible:outline-none focus-visible:bg-secondary/60',
+                    )}
+                  >
+                    <span className="relative shrink-0">
+                      <Avatar name={fullName} email={u.email} size="sm" />
+                      <span
+                        aria-hidden
+                        title={u.status}
+                        className={cn(
+                          'absolute -bottom-0.5 -end-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-card',
+                          u.status === 'active' ? 'bg-success' : 'bg-muted-foreground/40',
+                        )}
+                      />
+                    </span>
+                    <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-foreground">
                         {fullName || u.email}
                       </div>
-                      {u.status === 'active' ? (
-                        <span
-                          aria-hidden
-                          className="h-1.5 w-1.5 rounded-full bg-success"
-                          title="active"
-                        />
-                      ) : (
-                        <span
-                          aria-hidden
-                          className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50"
-                          title={u.status}
-                        />
+                      {fullName && (
+                        <div className="truncate text-xs text-muted-foreground">{u.email}</div>
                       )}
                     </div>
-                    {fullName && (
-                      <div className="truncate text-xs text-muted-foreground">{u.email}</div>
-                    )}
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      <span
-                        className={cn(
-                          'inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium',
-                          isAdmin
-                            ? 'bg-primary-subtle text-primary'
-                            : 'bg-secondary text-muted-foreground',
-                        )}
-                      >
-                        {u.role?.name ?? '—'}
-                      </span>
-                      <span
-                        className={cn(
-                          'inline-flex items-center rounded-full px-2 py-0.5 text-2xs',
-                          u.team
-                            ? 'bg-secondary text-muted-foreground'
-                            : 'bg-warning/20 text-warning-foreground',
-                        )}
-                      >
-                        {u.team?.name ?? t('users.noTeam')}
-                      </span>
-                    </div>
-                  </div>
-                </button>
+                    <span
+                      className={cn(
+                        'hidden shrink-0 items-center rounded-full px-2 py-0.5 text-2xs font-medium sm:inline-flex',
+                        isAdmin
+                          ? 'bg-primary-subtle text-primary'
+                          : 'bg-secondary text-foreground/75',
+                      )}
+                    >
+                      {u.role?.name ?? '—'}
+                    </span>
+                    <span
+                      title={u.team?.name ?? t('users.noTeam')}
+                      className={cn(
+                        'hidden w-32 shrink-0 truncate text-end text-xs sm:block',
+                        u.team ? 'text-muted-foreground' : 'text-warning-foreground',
+                      )}
+                    >
+                      {u.team?.name ?? t('users.noTeam')}
+                    </span>
+                  </button>
+                </li>
               );
             })}
-          </div>
+          </ul>
         )}
       </div>
 
