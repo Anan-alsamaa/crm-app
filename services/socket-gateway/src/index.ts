@@ -54,7 +54,16 @@ async function main(): Promise<void> {
   const logger = pino({ level: config.LOG_LEVEL, name: 'socket-gateway' });
 
   const httpServer = createServer();
-  const io = new SocketServer(httpServer, { cors: { origin: config.CORS_ORIGIN } });
+  // CORS_ORIGIN may be '*' or a comma-separated allow-list. Socket.IO treats a
+  // bare string as a single literal origin, so split the list into an array —
+  // otherwise every browser Origin is rejected when an explicit list is set.
+  const corsOrigin =
+    config.CORS_ORIGIN.trim() === '*'
+      ? '*'
+      : config.CORS_ORIGIN.split(',')
+          .map((o) => o.trim())
+          .filter(Boolean);
+  const io = new SocketServer(httpServer, { cors: { origin: corsOrigin } });
 
   // --- Metrics ---
   const metrics = new Registry();
