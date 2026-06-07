@@ -40,16 +40,20 @@ Config lives in `ecosystem.config.cjs`; secrets in `.env.prod` (gitignored).
 ## Rebuilding the portals
 
 `VITE_*` are baked at build time from the **root** `crm-app-frontend/.env`
-(gitignored). After changing a portal or those vars:
+(gitignored). After changing a portal or those vars, rebuild all three +
+regenerate the widget host page with one command:
 
 ```pwsh
-cd ../crm-app-frontend
-pnpm --filter @yiji/agent-portal build
-pnpm --filter @yiji/admin-portal build
-pnpm --filter @yiji/chat-widget build   # then re-create dist/index.html host page
+pwsh ./build-frontend.ps1
 ```
 
-`serve` picks up the new files automatically (no pm2 restart needed).
+(It builds the three apps and re-creates the widget `dist/index.html` from the
+original landing markup + the IIFE bundle + a token minted with the prod JWT
+secret — the widget lib build doesn't emit a host page on its own.)
+
+`serve` picks up the new files automatically (no pm2 restart needed). If a page
+looks stale/broken after a rebuild, hard-refresh the browser (Ctrl+Shift+R) —
+the asset hashes changed and the old cached `index.html` points at gone files.
 
 ## Notes & gotchas
 
