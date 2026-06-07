@@ -85,6 +85,11 @@ export function ConversationToolbar({ conversation, onBack, onToggleDetails }: P
     }
     try {
       const existing = (tags.data ?? []).find((tg) => tg.name.toLowerCase() === name.toLowerCase());
+      // Already on this conversation — don't create a duplicate junction row.
+      if (existing && assignedIds.has(existing.id)) {
+        setNewTag('');
+        return;
+      }
       const tagId = existing ? existing.id : (await createTag.mutateAsync({ name })).id;
       await addTag.mutateAsync({ conversationId: conversation.id, tagId });
       await broadcastUpdate(conversation.id);
