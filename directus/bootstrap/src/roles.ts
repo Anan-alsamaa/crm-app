@@ -136,7 +136,8 @@ export const roles: RoleSpec[] = [
         action: 'update',
         permissions: { assigned_agent: { _eq: '$CURRENT_USER' } },
       },
-      ...readOnly('ticket_events'),
+      // Append-only: agents add internal notes as 'commented' ticket_events.
+      ...appendOnly('ticket_events'),
       { collection: 'notifications', action: 'read', permissions: SELF_RECIPIENT },
       {
         collection: 'notifications',
@@ -151,6 +152,10 @@ export const roles: RoleSpec[] = [
       { collection: 'conversations_tags', action: 'create' },
       { collection: 'conversations_tags', action: 'read' },
       { collection: 'conversations_tags', action: 'delete' },
+      // Tag a contact (same junction pattern).
+      { collection: 'contacts_tags', action: 'create' },
+      { collection: 'contacts_tags', action: 'read' },
+      { collection: 'contacts_tags', action: 'delete' },
       // Attachments: upload files + read their metadata to render chips; read the
       // message↔file junction. The gateway writes the junction on send.
       { collection: 'directus_files', action: 'create' },
