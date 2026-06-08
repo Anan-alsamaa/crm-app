@@ -15,6 +15,8 @@
     "help": "تواجه مشكلة في تسجيل الدخول؟ تواصل مع مسؤول النظام."
   },
   "nav": {
+    "overview": "نظرة عامة",
+    "dashboard": "لوحة المعلومات",
     "users": "المستخدمون",
     "teams": "الفرق",
     "vendors": "البائعون",
@@ -32,6 +34,27 @@
     "signedInAs": "مسجّل الدخول باسم {{name}}",
     "workspace": "مساحة العمل",
     "policies": "السياسات"
+  },
+  "dashboard": {
+    "title": "نظرة عامة",
+    "range": "النطاق الزمني",
+    "lastDays": "آخر {{count}} يوم",
+    "conversations": "المحادثات",
+    "inRange": "ضمن النطاق",
+    "avgResponse": "متوسط الاستجابة",
+    "firstReply": "أول رد",
+    "slaCompliance": "الالتزام باتفاقية الخدمة",
+    "onTime": "أول رد في الوقت المحدد",
+    "resolution": "معدل الحل",
+    "ofTickets": "من {{count}} تذكرة",
+    "csat": "رضا العملاء",
+    "responses": "{{count}} استجابة",
+    "volume": "حجم المحادثات",
+    "byStatus": "المحادثات حسب الحالة",
+    "topAgents": "إنتاجية الوكلاء",
+    "topVendors": "نشاط البائعين",
+    "resolvedUnit": "محلولة",
+    "convsUnit": "محادثات"
   },
   "automation": {
     "title": "الأتمتة",
@@ -72,6 +95,10 @@
   },
   "reports": {
     "title": "التقارير",
+    "agent": "الوكيل (اختياري)",
+    "team": "الفريق (اختياري)",
+    "anyAgent": "أي وكيل",
+    "anyTeam": "أي فريق",
     "saved": "محفوظ",
     "create": "تقرير جديد",
     "edit": "تعديل التقرير",
@@ -146,6 +173,10 @@
     "total": "بائع",
     "active": "نشط",
     "inactive": "غير نشط",
+    "logo": "الشعار",
+    "uploadLogo": "رفع شعار",
+    "replaceLogo": "استبدال",
+    "logoError": "تعذّر رفع الشعار.",
     "create": "بائع جديد",
     "edit": "تعديل البائع",
     "created": "تم إنشاء البائع.",

@@ -8,6 +8,7 @@ import {
   ClockIcon,
   cn,
   ErrorBoundary,
+  InboxIcon,
   SettingsIcon,
   SignOutIcon,
   Spinner,
@@ -25,6 +26,9 @@ import { AppCommandPalette } from './components/AppCommandPalette.js';
 import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
 
 // Route pages are code-split so the initial bundle stays lean.
+const DashboardPage = lazy(() =>
+  import('./features/dashboard/DashboardPage.js').then((m) => ({ default: m.DashboardPage })),
+);
 const UsersPage = lazy(() =>
   import('./features/users/UsersPage.js').then((m) => ({ default: m.UsersPage })),
 );
@@ -205,6 +209,16 @@ function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const sections: NavSection[] = [
     {
+      heading: t('nav.overview', { defaultValue: 'Overview' }),
+      items: [
+        {
+          to: '/dashboard',
+          label: t('nav.dashboard', { defaultValue: 'Dashboard' }),
+          icon: InboxIcon,
+        },
+      ],
+    },
+    {
       heading: t('nav.workspace', { defaultValue: 'Workspace' }),
       items: [
         { to: '/users', label: t('nav.users'), icon: UsersIcon },
@@ -291,6 +305,16 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <DashboardPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/users"
             element={
@@ -381,8 +405,8 @@ export function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/" element={<Navigate to="/users" replace />} />
-          <Route path="*" element={<Navigate to="/users" replace />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

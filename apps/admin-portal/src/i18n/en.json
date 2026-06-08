@@ -15,6 +15,8 @@
     "help": "Trouble signing in? Talk to your system administrator."
   },
   "nav": {
+    "overview": "Overview",
+    "dashboard": "Dashboard",
     "users": "Users",
     "teams": "Teams",
     "vendors": "Vendors",
@@ -32,6 +34,27 @@
     "signedInAs": "Signed in as {{name}}",
     "workspace": "Workspace",
     "policies": "Policies"
+  },
+  "dashboard": {
+    "title": "Overview",
+    "range": "Date range",
+    "lastDays": "Last {{count}} days",
+    "conversations": "Conversations",
+    "inRange": "in range",
+    "avgResponse": "Avg response",
+    "firstReply": "first reply",
+    "slaCompliance": "SLA compliance",
+    "onTime": "on-time first reply",
+    "resolution": "Resolution rate",
+    "ofTickets": "of {{count}} tickets",
+    "csat": "CSAT",
+    "responses": "{{count}} responses",
+    "volume": "Conversation volume",
+    "byStatus": "Conversations by status",
+    "topAgents": "Agent productivity",
+    "topVendors": "Vendor activity",
+    "resolvedUnit": "resolved",
+    "convsUnit": "convos"
   },
   "automation": {
     "title": "Automation",
@@ -72,6 +95,10 @@
   },
   "reports": {
     "title": "Reports",
+    "agent": "Agent (optional)",
+    "team": "Team (optional)",
+    "anyAgent": "Any agent",
+    "anyTeam": "Any team",
     "saved": "saved",
     "create": "New report",
     "edit": "Edit report",
@@ -146,6 +173,10 @@
     "total": "vendors",
     "active": "active",
     "inactive": "inactive",
+    "logo": "Logo",
+    "uploadLogo": "Upload logo",
+    "replaceLogo": "Replace",
+    "logoError": "Could not upload the logo.",
     "create": "New vendor",
     "edit": "Edit vendor",
     "created": "Vendor created.",

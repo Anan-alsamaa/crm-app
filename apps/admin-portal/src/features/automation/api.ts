@@ -27,7 +27,8 @@ export interface RuleAction {
     | 'set_priority'
     | 'set_status'
     | 'add_tag'
-    | 'send_notification';
+    | 'send_notification'
+    | 'escalate';
   params: Record<string, unknown>;
 }
 

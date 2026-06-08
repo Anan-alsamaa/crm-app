@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
+import { uploadFiles } from '@directus/sdk';
 import {
   Button,
   cn,
@@ -12,11 +13,15 @@ import {
   FormField,
   Input,
   Skeleton,
+  Spinner,
   toast,
   Toolbar,
   ToolbarSpacer,
 } from '@yiji/ui';
+import { directus } from '../../lib/directus.js';
 import { useVendors, useCreateVendor, useUpdateVendor, type VendorRow } from './api.js';
+
+const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_URL ?? 'http://localhost:8055';
 
 /**
  * Vendor management.
@@ -60,6 +65,9 @@ export function VendorsPage() {
   const update = useUpdateVendor();
   const [editing, setEditing] = useState<VendorRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [logoId, setLogoId] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -68,6 +76,7 @@ export function VendorsPage() {
 
   useEffect(() => {
     if (drawerOpen && editing) {
+      setLogoId(editing.logo ?? null);
       form.reset({
         name: editing.name,
         yiji_vendor_id: editing.yiji_vendor_id,
@@ -76,6 +85,7 @@ export function VendorsPage() {
         status: editing.status,
       });
     } else if (drawerOpen && !editing) {
+      setLogoId(null);
       form.reset({
         name: '',
         yiji_vendor_id: '',
@@ -85,6 +95,22 @@ export function VendorsPage() {
       });
     }
   }, [drawerOpen, editing, form]);
+
+  const onPickLogo = async (file: File | null): Promise<void> => {
+    if (!file) return;
+    setUploadingLogo(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = (await directus.request(uploadFiles(fd))) as { id: string };
+      setLogoId(res.id);
+    } catch {
+      toast.error(t('vendors.logoError', { defaultValue: 'Could not upload the logo.' }));
+    } finally {
+      setUploadingLogo(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    }
+  };
 
   const onSubmit = form.handleSubmit(async (values) => {
     const colors: { primary?: string; secondary?: string } = {};
@@ -98,6 +124,7 @@ export function VendorsPage() {
             name: values.name,
             yiji_vendor_id: values.yiji_vendor_id,
             colors,
+            logo: logoId,
             status: values.status,
           },
         });
@@ -107,6 +134,7 @@ export function VendorsPage() {
           name: values.name,
           yiji_vendor_id: values.yiji_vendor_id,
           colors,
+          logo: logoId,
           status: values.status,
         });
         toast.success(t('vendors.created', { defaultValue: 'Vendor created.' }));
@@ -267,9 +295,57 @@ export function VendorsPage() {
           <DrawerSection
             title={t('vendors.sectionBranding', { defaultValue: 'Branding' })}
             description={t('vendors.sectionBrandingHint', {
-              defaultValue: 'Colors propagate to the chat widget. Use #RRGGBB hex.',
+              defaultValue: 'Logo + colors propagate to the chat widget. Use #RRGGBB hex.',
             })}
           >
+            <FormField label={t('vendors.logo', { defaultValue: 'Logo' })}>
+              <div className="flex items-center gap-3">
+                <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary ring-1 ring-border">
+                  {logoId ? (
+                    <img
+                      src={`${DIRECTUS_URL}/assets/${logoId}?width=96&height=96&fit=cover`}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-base font-semibold text-muted-foreground">
+                      {(form.watch('name') ?? '?').slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                </span>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={(e) => void onPickLogo(e.target.files?.[0] ?? null)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploadingLogo}
+                  onClick={() => logoInputRef.current?.click()}
+                >
+                  {uploadingLogo ? (
+                    <Spinner size={14} />
+                  ) : logoId ? (
+                    t('vendors.replaceLogo', { defaultValue: 'Replace' })
+                  ) : (
+                    t('vendors.uploadLogo', { defaultValue: 'Upload logo' })
+                  )}
+                </Button>
+                {logoId && (
+                  <button
+                    type="button"
+                    onClick={() => setLogoId(null)}
+                    className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {t('actions.remove', { ns: 'common', defaultValue: 'Remove' })}
+                  </button>
+                )}
+              </div>
+            </FormField>
             <ColorField
               label={t('vendors.primary', { defaultValue: 'Primary color' })}
               register={form.register('primary')}

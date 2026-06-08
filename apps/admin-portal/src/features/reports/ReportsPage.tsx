@@ -8,6 +8,7 @@ import {
   EmptyState,
   FormField,
   Input,
+  Select,
   Skeleton,
   toast,
   Toolbar,
@@ -22,6 +23,8 @@ import {
   type ReportInput,
   type ReportType,
 } from './api.js';
+import { useUsers } from '../users/api.js';
+import { useTeams } from '../teams/api.js';
 
 /**
  * Reports admin — list of saved reports + create/edit drawer.
@@ -64,6 +67,8 @@ interface Draft {
   from: string;
   to: string;
   vendor: string;
+  agent: string;
+  team: string;
   emailRecipients: string;
 }
 
@@ -74,6 +79,8 @@ const blank = (): Draft => ({
   from: '',
   to: '',
   vendor: '',
+  agent: '',
+  team: '',
   emailRecipients: '',
 });
 
@@ -83,6 +90,8 @@ export function ReportsPage() {
   const create = useCreateReport();
   const update = useUpdateReport();
   const remove = useDeleteReport();
+  const users = useUsers();
+  const teams = useTeams();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(blank());
@@ -99,6 +108,8 @@ export function ReportsPage() {
           from: existing.filters?.from ?? '',
           to: existing.filters?.to ?? '',
           vendor: existing.filters?.vendor ?? '',
+          agent: existing.filters?.agent ?? '',
+          team: existing.filters?.team ?? '',
           emailRecipients: (existing.schedule?.email ?? []).join(', '),
         });
       }
@@ -120,6 +131,8 @@ export function ReportsPage() {
         ...(draft.from ? { from: draft.from } : {}),
         ...(draft.to ? { to: draft.to } : {}),
         ...(draft.vendor ? { vendor: draft.vendor.trim() } : {}),
+        ...(draft.agent ? { agent: draft.agent } : {}),
+        ...(draft.team ? { team: draft.team } : {}),
       },
       schedule: {
         email: draft.emailRecipients
@@ -319,6 +332,34 @@ export function ReportsPage() {
                 placeholder="vendor-uuid"
               />
             </FormField>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FormField label={t('reports.agent', { defaultValue: 'Agent (optional)' })}>
+                <Select
+                  value={draft.agent}
+                  onChange={(e) => setDraft({ ...draft, agent: e.target.value })}
+                >
+                  <option value="">{t('reports.anyAgent', { defaultValue: 'Any agent' })}</option>
+                  {(users.data ?? []).map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {[u.first_name, u.last_name].filter(Boolean).join(' ') || u.email}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+              <FormField label={t('reports.team', { defaultValue: 'Team (optional)' })}>
+                <Select
+                  value={draft.team}
+                  onChange={(e) => setDraft({ ...draft, team: e.target.value })}
+                >
+                  <option value="">{t('reports.anyTeam', { defaultValue: 'Any team' })}</option>
+                  {(teams.data ?? []).map((tm) => (
+                    <option key={tm.id} value={tm.id}>
+                      {tm.name}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+            </div>
           </DrawerSection>
 
           <DrawerSection
