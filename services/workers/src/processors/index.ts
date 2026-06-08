@@ -15,7 +15,12 @@ import type { YijiDirectusClient } from '@yiji/shared-config';
 import { processSlaJob, type SlaDeps } from './sla.js';
 import { processNotificationJob, type NotifDeps } from './notifications.js';
 import { processAiJob, type AiDeps } from './ai.js';
-import { processAutomationJob, type AutomationDeps } from './automation.js';
+import {
+  processAutomationJob,
+  runInactivitySweep,
+  INACTIVITY_SWEEP_NAME,
+  type AutomationDeps,
+} from './automation.js';
 import { processImportJob, type ImportsDeps } from './imports.js';
 import { processReportJob, type ReportsDeps } from './reports.js';
 import { createTicketRepo, createNotificationsRepo } from './directus-repos.js';
@@ -35,6 +40,8 @@ export interface ProcessorDeps {
   ai?: { gatewayUrl: string; gatewayToken: string; workerUserId: string };
   /** Directus URL + service token for the imports processor to download CSVs. */
   imports?: { directusUrl: string; directusToken: string };
+  /** Minutes of silence before a conversation is swept as inactive. */
+  inactivityMinutes?: number;
 }
 
 export type Processor = (job: Job, deps: ProcessorDeps) => Promise<void>;
@@ -82,6 +89,17 @@ export const processors: Record<QueueName, Processor> = {
     await processAiJob(job as Job<AiJob>, aiDeps);
   },
   [QUEUES.automation]: async (job, deps) => {
+    // The recurring inactivity sweep shares the automation queue but isn't a
+    // per-entity trigger — it fans out one inactivity job per stale conversation.
+    if (job.name === INACTIVITY_SWEEP_NAME) {
+      await runInactivitySweep({
+        directus: deps.directus,
+        automationQueue: deps.queues[QUEUES.automation],
+        logger: deps.logger,
+        thresholdMinutes: deps.inactivityMinutes ?? 120,
+      });
+      return;
+    }
     const autoDeps: AutomationDeps = {
       directus: deps.directus,
       logger: deps.logger,
@@ -121,3 +139,4 @@ export const processors: Record<QueueName, Processor> = {
 void notImplemented;
 
 export { scheduleReconcile } from './sla.js';
+export { scheduleInactivitySweep } from './automation.js';
