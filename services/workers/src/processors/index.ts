@@ -121,3 +121,4 @@ export const processors: Record<QueueName, Processor> = {
 void notImplemented;
 
 export { scheduleReconcile } from './sla.js';
+export { syncScheduledReports } from './reports.js';
