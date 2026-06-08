@@ -15,7 +15,6 @@
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
-    "@preact/preset-vite": "^2.9.3",
     "jose": "^5.9.6",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
