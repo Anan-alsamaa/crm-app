@@ -51,6 +51,9 @@ export function ConversationToolbar({ conversation, onBack, onToggleDetails }: P
 
   const contactName = conversation.contact?.name ?? conversation.contact?.email ?? 'Customer';
 
+  // Read-only at-a-glance tag strip; full management lives in the details sidebar.
+  const tagChips = conversation.tags?.filter((j) => j.tags_id) ?? [];
+
   const currentAgent = agents.data?.find((a) => a.id === conversation.assigned_agent);
   const currentTeam = teams.data?.find((tm) => tm.id === conversation.assigned_team);
   const agentLabel =
@@ -96,6 +99,25 @@ export function ConversationToolbar({ conversation, onBack, onToggleDetails }: P
           {conversation.contact?.email && (
             <div className="truncate text-xs text-muted-foreground">
               {conversation.contact.email}
+            </div>
+          )}
+          {/* At-a-glance tags (read-only). Hidden on small screens to keep the
+              identity compact; managed in the details sidebar. */}
+          {tagChips.length > 0 && (
+            <div className="mt-1 hidden flex-wrap items-center gap-1 lg:flex">
+              {tagChips.map((j) => (
+                <span
+                  key={j.id}
+                  className="inline-flex items-center gap-1 rounded-full bg-secondary px-1.5 py-px text-[10px] font-medium text-foreground/75"
+                >
+                  <span
+                    aria-hidden
+                    className="h-1 w-1 shrink-0 rounded-full"
+                    style={{ background: j.tags_id!.color ?? '#94a3b8' }}
+                  />
+                  <span className="max-w-[8rem] truncate">{j.tags_id!.name}</span>
+                </span>
+              ))}
             </div>
           )}
         </div>
