@@ -151,11 +151,18 @@ export function ContactsPage() {
 
       <div className="flex-1 overflow-auto px-5 py-3">
         {contacts.isLoading ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 w-full rounded-2xl" />
+          <ul className="mx-auto max-w-5xl divide-y divide-border/50 overflow-hidden rounded-xl bg-card/50 ring-1 ring-border/60">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <li key={i} className="flex items-center gap-3 px-4 py-2.5">
+                <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-3 w-40" />
+                  <Skeleton className="h-2.5 w-28" />
+                </div>
+                <Skeleton className="hidden h-2.5 w-24 sm:block" />
+              </li>
             ))}
-          </div>
+          </ul>
         ) : total === 0 ? (
           <EmptyState
             icon={<UsersIcon size={40} />}
@@ -170,44 +177,38 @@ export function ContactsPage() {
             {t('contacts.noMatch', { defaultValue: 'No contacts match your search.' })}
           </p>
         ) : (
-          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((c, i) => {
+          <ul className="mx-auto max-w-5xl divide-y divide-border/50 overflow-hidden rounded-xl bg-card/50 ring-1 ring-border/60">
+            {filtered.map((c) => {
               const name = c.name ?? c.email ?? c.phone ?? c.external_customer_id ?? '—';
               return (
-                <li
-                  key={c.id}
-                  style={{ animationDelay: `${Math.min(i * 22, 220)}ms` }}
-                  className="motion-safe:animate-fade-in"
-                >
+                <li key={c.id}>
                   <button
                     type="button"
                     onClick={() => navigate(`/contacts/${c.id}`)}
                     className={cn(
-                      'group flex w-full items-center gap-4 rounded-2xl bg-card/70 px-5 py-4 text-start',
-                      'shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04]',
-                      'transition-[box-shadow,transform,background-color] duration-fast ease-out',
-                      'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px',
+                      'group flex w-full items-center gap-3 px-4 py-2.5 text-start',
+                      'transition-colors duration-fast ease-out hover:bg-secondary/50',
+                      'focus-visible:outline-none focus-visible:bg-secondary/60',
                     )}
                   >
-                    <Avatar name={c.name} email={c.email} size="md" />
-                    <div className="min-w-0 flex-1 space-y-1">
+                    <Avatar name={c.name} email={c.email} size="sm" className="shrink-0" />
+                    <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-foreground">{name}</div>
                       {c.email && (
                         <div className="truncate text-xs text-muted-foreground">{c.email}</div>
                       )}
-                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                        {c.phone && (
-                          <span className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-2xs tabular-nums text-muted-foreground">
-                            {c.phone}
-                          </span>
-                        )}
-                        {c.vendor?.name && (
-                          <span className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-2xs text-muted-foreground">
-                            {c.vendor.name}
-                          </span>
-                        )}
-                      </div>
                     </div>
+                    {c.phone && (
+                      <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block">
+                        {c.phone}
+                      </span>
+                    )}
+                    <span
+                      title={c.vendor?.name ?? ''}
+                      className="hidden w-32 shrink-0 truncate text-end text-xs text-muted-foreground sm:block"
+                    >
+                      {c.vendor?.name ?? '—'}
+                    </span>
                   </button>
                 </li>
               );
