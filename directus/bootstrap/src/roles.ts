@@ -161,6 +161,10 @@ export const roles: RoleSpec[] = [
       { collection: 'directus_files', action: 'create' },
       { collection: 'directus_files', action: 'read' },
       { collection: 'messages_files', action: 'read' },
+      // Ticket attachments: agents upload + link files to tickets directly.
+      { collection: 'tickets_files', action: 'create' },
+      { collection: 'tickets_files', action: 'read' },
+      { collection: 'tickets_files', action: 'delete' },
     ],
   },
   {

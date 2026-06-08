@@ -44,6 +44,8 @@ export const constraintStatements: string[] = [
      ON messages_mentions (messages_id, directus_users_id);`,
   `CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_files
      ON messages_files (messages_id, directus_files_id);`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS uq_tickets_files
+     ON tickets_files (tickets_id, directus_files_id);`,
 
   // Hard cap: at most 5 tags per conversation. The unique index above stops
   // duplicate links; this stops a 6th distinct link. Enforced at the database

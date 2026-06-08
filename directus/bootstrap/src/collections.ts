@@ -399,4 +399,12 @@ export const junctions: JunctionSpec[] = [
     collectionB: 'directus_files',
     fieldB: 'directus_files_id',
   },
+  {
+    junction: 'tickets_files',
+    collectionA: 'tickets',
+    fieldA: 'tickets_id',
+    collectionB: 'directus_files',
+    fieldB: 'directus_files_id',
+    aliasA: 'attachments',
+  },
 ];
