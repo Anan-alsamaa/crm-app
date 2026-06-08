@@ -309,6 +309,16 @@ export function App() {
             }
           />
           <Route
+            path="/tickets/:ticketId"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <TicketsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/preferences"
             element={
               <ProtectedRoute>

@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeftIcon,
@@ -61,6 +62,15 @@ export function TicketsPage() {
   const isDesktop = useIsDesktop();
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<TicketFilter>('all');
+
+  // Deep-link support: open a specific ticket from /tickets?id=<id> (command
+  // palette, AI search) or /tickets/<id> (notification "View" links).
+  const { ticketId: pathTicketId } = useParams();
+  const [searchParams] = useSearchParams();
+  const deepLinkId = pathTicketId ?? searchParams.get('id');
+  useEffect(() => {
+    if (deepLinkId) setSelected(deepLinkId);
+  }, [deepLinkId]);
 
   const isOverdue = (tk: {
     first_responded_at: string | null;
