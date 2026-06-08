@@ -18,27 +18,42 @@ import {
   Toolbar,
   ToolbarSpacer,
 } from '@yiji/ui';
-import { useUsers, useRoles, useCreateUser } from './api.js';
+import {
+  useUsers,
+  useRoles,
+  useCreateUser,
+  useUpdateUser,
+  useDeleteUser,
+  type AdminUser,
+} from './api.js';
 import { useTeams } from '../teams/api.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 
 const schema = z.object({
   email: z.string().email(),
-  password: z.string().min(6),
+  // Optional so editing doesn't force a password reset; required-on-create is
+  // enforced in onSubmit.
+  password: z.string().min(6).optional().or(z.literal('')),
   first_name: z.string().optional(),
   last_name: z.string().optional(),
   role: z.string().min(1),
   team: z.string().optional(),
+  status: z.enum(['active', 'inactive']).optional(),
   locale: z.enum(['en', 'ar']).optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
 export function UsersPage() {
   const { t } = useTranslation();
+  const { user: currentUser } = useAuth();
   const users = useUsers();
   const roles = useRoles();
   const teams = useTeams();
   const createUser = useCreateUser();
+  const updateUser = useUpdateUser();
+  const deleteUser = useDeleteUser();
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<AdminUser | null>(null);
   const [search, setSearch] = useState('');
 
   const {
@@ -48,16 +63,81 @@ export function UsersPage() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
+  const openCreate = () => {
+    setEditing(null);
+    reset({ email: '', password: '', first_name: '', last_name: '', role: '', team: '', locale: 'en' });
+    setOpen(true);
+  };
+  const openEdit = (u: AdminUser) => {
+    setEditing(u);
+    reset({
+      email: u.email ?? '',
+      password: '',
+      first_name: u.first_name ?? '',
+      last_name: u.last_name ?? '',
+      role: u.role?.id ?? '',
+      team: u.team?.id ?? '',
+      status: (u.status as 'active' | 'inactive') ?? 'active',
+    });
+    setOpen(true);
+  };
+
+  // Guard against locking yourself out / removing the project owner.
+  const isSelf = editing?.id === currentUser?.id;
+  const isOwner = editing?.role?.name?.toLowerCase() === 'administrator';
+  const canDelete = !!editing && !isSelf && !isOwner;
+
   const onSubmit = handleSubmit(async (values) => {
     try {
-      await createUser.mutateAsync({ ...values, team: values.team || null });
+      if (editing) {
+        const patch: Record<string, unknown> = {
+          email: values.email,
+          first_name: values.first_name || null,
+          last_name: values.last_name || null,
+          role: values.role,
+          team: values.team || null,
+          status: values.status ?? 'active',
+        };
+        if (values.password) patch.password = values.password;
+        await updateUser.mutateAsync({ id: editing.id, patch });
+        toast.success(t('users.updated', { defaultValue: 'User updated.' }));
+      } else {
+        if (!values.password) {
+          toast.error(t('users.passwordRequired', { defaultValue: 'Password is required.' }));
+          return;
+        }
+        await createUser.mutateAsync({
+          email: values.email,
+          password: values.password,
+          first_name: values.first_name,
+          last_name: values.last_name,
+          role: values.role,
+          team: values.team || null,
+          locale: values.locale,
+        });
+        toast.success(t('users.created'));
+      }
       reset();
       setOpen(false);
-      toast.success(t('users.created'));
+      setEditing(null);
     } catch {
-      toast.error(t('users.createError'));
+      toast.error(editing ? t('users.saveError', { defaultValue: 'Could not save.' }) : t('users.createError'));
     }
   });
+
+  const onDelete = async () => {
+    if (!editing || !canDelete) return;
+    if (!window.confirm(t('users.confirmDelete', { defaultValue: 'Delete this account permanently?' })))
+      return;
+    try {
+      await deleteUser.mutateAsync(editing.id);
+      toast.success(t('users.deleted', { defaultValue: 'User deleted.' }));
+      setOpen(false);
+      setEditing(null);
+    } catch {
+      toast.error(t('users.deleteError', { defaultValue: 'Could not delete user.' }));
+    }
+  };
 
   const filtered = (users.data ?? []).filter((u) => {
     if (!search.trim()) return true;
@@ -131,7 +211,7 @@ export function UsersPage() {
             className="block h-8 w-full rounded-md border border-border bg-background/60 ps-8 pe-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none text-start transition-colors duration-fast ease-out"
           />
         </div>
-        <Button type="button" size="sm" onClick={() => setOpen(true)} iconStart={<PlusIcon />}>
+        <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
           {t('users.create')}
         </Button>
       </Toolbar>
@@ -154,7 +234,7 @@ export function UsersPage() {
               defaultValue: 'Invite your first teammate by clicking Create user.',
             })}
             action={
-              <Button type="button" onClick={() => setOpen(true)} iconStart={<PlusIcon />}>
+              <Button type="button" onClick={openCreate} iconStart={<PlusIcon />}>
                 {t('users.create')}
               </Button>
             }
@@ -176,6 +256,7 @@ export function UsersPage() {
                 <li key={u.id}>
                   <button
                     type="button"
+                    onClick={() => openEdit(u)}
                     className={cn(
                       'group flex w-full items-center gap-3 px-4 py-2.5 text-start',
                       'transition-colors duration-fast ease-out hover:bg-secondary/50',
@@ -230,18 +311,42 @@ export function UsersPage() {
 
       <Drawer
         open={open}
-        onClose={() => setOpen(false)}
-        title={t('users.create')}
-        description={t('users.createHint', {
-          defaultValue: 'New teammates get an invite email and can sign in immediately.',
-        })}
+        onClose={() => {
+          setOpen(false);
+          setEditing(null);
+        }}
+        title={editing ? t('users.edit', { defaultValue: 'Edit user' }) : t('users.create')}
+        description={
+          editing
+            ? t('users.editHint', { defaultValue: 'Update role, team, status, or reset the password.' })
+            : t('users.createHint', {
+                defaultValue: 'New teammates get an invite email and can sign in immediately.',
+              })
+        }
         footer={
           <>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+            {canDelete && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void onDelete()}
+                className="text-destructive hover:bg-destructive/10 me-auto"
+              >
+                {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setOpen(false);
+                setEditing(null);
+              }}
+            >
               {t('actions.cancel', { ns: 'common' })}
             </Button>
             <Button type="submit" form="create-user-form" loading={isSubmitting}>
-              {t('users.create')}
+              {editing ? t('actions.save', { ns: 'common', defaultValue: 'Save' }) : t('users.create')}
             </Button>
           </>
         }
@@ -295,6 +400,21 @@ export function UsersPage() {
                 ))}
               </Select>
             </FormField>
+            {editing && (
+              <FormField
+                label={t('users.status', { defaultValue: 'Status' })}
+                hint={t('users.statusHint', {
+                  defaultValue: 'Inactive accounts cannot sign in but keep their data.',
+                })}
+              >
+                <Select {...register('status')}>
+                  <option value="active">{t('users.active', { defaultValue: 'Active' })}</option>
+                  <option value="inactive">
+                    {t('users.inactive', { defaultValue: 'Inactive' })}
+                  </option>
+                </Select>
+              </FormField>
+            )}
           </DrawerSection>
 
           <DrawerSection
@@ -306,16 +426,24 @@ export function UsersPage() {
             <FormField
               label={t('auth.password', { ns: 'common' })}
               error={errors.password?.message}
-              hint={t('users.passwordHint', { defaultValue: 'At least 6 characters.' })}
+              hint={
+                editing
+                  ? t('users.passwordEditHint', {
+                      defaultValue: 'Leave blank to keep the current password.',
+                    })
+                  : t('users.passwordHint', { defaultValue: 'At least 6 characters.' })
+              }
             >
               <Input type="password" invalid={!!errors.password} {...register('password')} />
             </FormField>
-            <FormField label={t('users.locale')}>
-              <Select defaultValue="en" {...register('locale')}>
-                <option value="en">English</option>
-                <option value="ar">العربية</option>
-              </Select>
-            </FormField>
+            {!editing && (
+              <FormField label={t('users.locale')}>
+                <Select defaultValue="en" {...register('locale')}>
+                  <option value="en">English</option>
+                  <option value="ar">العربية</option>
+                </Select>
+              </FormField>
+            )}
           </DrawerSection>
         </form>
       </Drawer>

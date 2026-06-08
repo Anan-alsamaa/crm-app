@@ -223,13 +223,19 @@ export function useAgents() {
   return useQuery({
     queryKey: ['agents'],
     queryFn: () =>
-      directus.request(
-        readUsers({
-          limit: -1,
-          fields: ['id', 'email', 'first_name', 'last_name'],
-          sort: ['email'],
-        }),
-      ) as Promise<AgentOption[]>,
+      directus
+        .request(
+          readUsers({
+            limit: -1,
+            fields: ['id', 'email', 'first_name', 'last_name'],
+            sort: ['email'],
+          }),
+        )
+        // Service accounts (svc-*@svc.example.com) aren't people — never offer
+        // them for assignment or @mentions.
+        .then((rows) =>
+          (rows as AgentOption[]).filter((u) => !(u.email ?? '').toLowerCase().includes('@svc.')),
+        ) as Promise<AgentOption[]>,
   });
 }
 
