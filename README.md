@@ -210,6 +210,8 @@ Highlights:
 - **[docs/USER_GUIDE_ADMIN.md](./docs/USER_GUIDE_ADMIN.md)** — configuration:
   users, teams, vendors, SLA, automation, reports, custom fields, imports, AI.
 - **[docs/PRODUCTION.md](./docs/PRODUCTION.md)** — deployment runbook.
+- **[docs/AUDITS.md](./docs/AUDITS.md)** — pre-release audit runbook: accessibility
+  (WCAG), performance, horizontal scaling, and the quickstart smoke test.
 
 The original design artifacts (spec, data model, contracts) live under
 [specs/001-yiji-crm-platform/](./specs/001-yiji-crm-platform/) for historical
