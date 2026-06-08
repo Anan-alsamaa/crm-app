@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { readItems, readItem, deleteItem } from '@directus/sdk';
+import { readItems, readItem, createItem, deleteItem } from '@directus/sdk';
 import { directus } from '../../lib/directus.js';
+
+/** A tag attached to a contact via the contacts_tags junction. */
+export interface ContactTagLink {
+  id: string;
+  tags_id: { id: string; name: string; color: string | null } | null;
+}
 
 /**
  * Contacts API.
@@ -19,6 +25,7 @@ export interface ContactRow {
   email: string | null;
   metadata: Record<string, unknown> | null;
   vendor: { id: string; name: string; yiji_vendor_id: string } | null;
+  tags?: ContactTagLink[];
   date_created: string | null;
 }
 
@@ -87,9 +94,35 @@ export function useContact(id: string) {
             'vendor.id',
             'vendor.name',
             'vendor.yiji_vendor_id',
+            'tags.id',
+            'tags.tags_id.id',
+            'tags.tags_id.name',
+            'tags.tags_id.color',
           ],
         }),
       ) as Promise<ContactRow>,
+  });
+}
+
+/** Attach an existing tag to a contact (contacts_tags junction). */
+export function useAddTagToContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contactId, tagId }: { contactId: string; tagId: string }) =>
+      directus.request(
+        createItem('contacts_tags', { contacts_id: contactId, tags_id: tagId } as never),
+      ),
+    onSuccess: (_d, vars) => void qc.invalidateQueries({ queryKey: ['contact', vars.contactId] }),
+  });
+}
+
+/** Remove a tag from a contact by its junction-row id. */
+export function useRemoveTagFromContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ junctionId }: { junctionId: string; contactId: string }) =>
+      directus.request(deleteItem('contacts_tags', junctionId)),
+    onSuccess: (_d, vars) => void qc.invalidateQueries({ queryKey: ['contact', vars.contactId] }),
   });
 }
 

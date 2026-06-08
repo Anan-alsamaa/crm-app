@@ -16,7 +16,10 @@ import {
   useIsDesktop,
 } from '@yiji/ui';
 import type { Priority, TicketStatus } from '@yiji/shared-types';
-import { useTickets, useTicket, useTicketEvents, useUpdateTicket } from './api.js';
+import { useTickets, useTicket, useTicketEvents, useUpdateTicket, useAddTicketNote } from './api.js';
+import { useAgents, useTeamOptions } from '../inbox/api.js';
+import { resolveMentions } from '../conversation/mentions.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 
 const STATUSES: TicketStatus[] = ['new', 'open', 'pending', 'resolved', 'closed'];
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
@@ -268,6 +271,11 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
   const ticket = useTicket(ticketId);
   const events = useTicketEvents(ticketId);
   const update = useUpdateTicket();
+  const agents = useAgents();
+  const teams = useTeamOptions();
+  const addNote = useAddTicketNote();
+  const { user } = useAuth();
+  const [note, setNote] = useState('');
 
   if (ticket.isLoading)
     return (
@@ -282,6 +290,16 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
     void update
       .mutateAsync({ id: tk.id, patch: p })
       .catch(() => toast.error(t('errors.updateFailed', { ns: 'common' })));
+
+  const submitNote = () => {
+    const text = note.trim();
+    if (!text || !user) return;
+    const mentions = resolveMentions(text, agents.data ?? []);
+    addNote
+      .mutateAsync({ ticketId: tk.id, text, actorId: user.id, mentions })
+      .then(() => setNote(''))
+      .catch(() => toast.error(t('errors.updateFailed', { ns: 'common' })));
+  };
 
   const dueClass = (iso: string | null) => {
     if (!iso) return 'text-muted-foreground';
@@ -392,6 +410,38 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
             ))}
           </Select>
         </label>
+        <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span>{t('conversation.agent')}</span>
+          <Select
+            value={tk.assigned_agent ?? ''}
+            aria-label={t('conversation.agent')}
+            onChange={(e) => patch({ assigned_agent: e.target.value || null })}
+            className="h-7 text-xs"
+          >
+            <option value="">{t('conversation.unassigned')}</option>
+            {(agents.data ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.first_name ?? a.email}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span>{t('conversation.team')}</span>
+          <Select
+            value={tk.assigned_team ?? ''}
+            aria-label={t('conversation.team')}
+            onChange={(e) => patch({ assigned_team: e.target.value || null })}
+            className="h-7 text-xs"
+          >
+            <option value="">{t('conversation.noTeam')}</option>
+            {(teams.data ?? []).map((tm) => (
+              <option key={tm.id} value={tm.id}>
+                {tm.name}
+              </option>
+            ))}
+          </Select>
+        </label>
         {!tk.first_responded_at && (
           <Button
             type="button"
@@ -426,6 +476,43 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         </div>
       </section>
 
+      {/* Internal note composer — appends a 'commented' event to the history. */}
+      <section className="space-y-2">
+        <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          {t('tickets.addNote', { defaultValue: 'Add internal note' })}
+        </h3>
+        <div className="rounded-2xl bg-card/60 p-2 ring-1 ring-foreground/[0.04] focus-within:ring-primary/30">
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                submitNote();
+              }
+            }}
+            rows={2}
+            placeholder={t('tickets.notePlaceholder', {
+              defaultValue: 'Leave a note for the team… @mention to notify',
+            })}
+            className="block w-full resize-none rounded-lg bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+          />
+          <div className="flex items-center justify-end gap-2 px-1">
+            <span className="me-auto text-2xs text-muted-foreground">
+              {t('conversation.mentionHint', { defaultValue: 'Type @ to mention a teammate' })}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!note.trim() || addNote.isPending}
+              onClick={submitNote}
+            >
+              {t('tickets.addNoteCta', { defaultValue: 'Add note' })}
+            </Button>
+          </div>
+        </div>
+      </section>
+
       {/* History timeline — actual timeline with connector line */}
       <section className="space-y-3">
         <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -451,24 +538,40 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                   : tone === 'warning'
                     ? 'bg-warning'
                     : 'bg-primary';
+              const isComment = ev.event_type === 'commented';
+              const commentText =
+                isComment && ev.payload && typeof ev.payload.text === 'string'
+                  ? (ev.payload.text as string)
+                  : null;
+              const actorName =
+                ev.actor && typeof ev.actor === 'object'
+                  ? (ev.actor.first_name ?? ev.actor.email ?? null)
+                  : null;
               return (
                 <li key={ev.id} className="relative flex items-start gap-3 py-2.5 ps-0">
                   <span
                     className={cn(
                       'relative z-10 mt-1 grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full ring-4 ring-background',
-                      dotBg,
+                      isComment ? 'bg-foreground/70' : dotBg,
                     )}
                     aria-hidden
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <span className="text-sm font-medium text-foreground">
-                        {t(`tickets.event.${ev.event_type}`, { defaultValue: ev.event_type })}
+                        {isComment && actorName
+                          ? actorName
+                          : t(`tickets.event.${ev.event_type}`, { defaultValue: ev.event_type })}
                       </span>
                       <span className="text-2xs tabular-nums text-muted-foreground">
                         {ev.date_created ? new Date(ev.date_created).toLocaleString() : ''}
                       </span>
                     </div>
+                    {commentText && (
+                      <p className="mt-1 whitespace-pre-wrap rounded-lg bg-secondary/60 px-3 py-2 text-sm leading-relaxed text-foreground">
+                        {commentText}
+                      </p>
+                    )}
                   </div>
                 </li>
               );

@@ -184,6 +184,9 @@
     "resolutionDue": "موعد الحل",
     "respondedAt": "تم الرد في",
     "markResponded": "وضع علامة بأن الرد الأول أُرسل",
+    "addNote": "إضافة ملاحظة داخلية",
+    "notePlaceholder": "اترك ملاحظة للفريق… أشر إلى زميل بـ @ لإعلامه",
+    "addNoteCta": "إضافة ملاحظة",
     "event": {
       "created": "تم إنشاء التذكرة",
       "status_changed": "تغيّرت الحالة",

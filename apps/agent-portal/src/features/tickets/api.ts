@@ -149,3 +149,34 @@ export function useUpdateTicket() {
     },
   });
 }
+
+/**
+ * Add an internal note to a ticket as an append-only 'commented' event. Mentions
+ * (resolved agent ids) ride along in the payload for downstream notification.
+ */
+export function useAddTicketNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ticketId,
+      text,
+      actorId,
+      mentions,
+    }: {
+      ticketId: string;
+      text: string;
+      actorId: string;
+      mentions?: string[];
+    }) =>
+      directus.request(
+        createItem('ticket_events', {
+          ticket: ticketId,
+          event_type: 'commented',
+          actor: actorId,
+          payload: { text, ...(mentions && mentions.length ? { mentions } : {}) },
+        } as never),
+      ),
+    onSuccess: (_d, vars) =>
+      void qc.invalidateQueries({ queryKey: ['ticket-events', vars.ticketId] }),
+  });
+}

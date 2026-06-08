@@ -184,6 +184,9 @@
     "resolutionDue": "Resolution due",
     "respondedAt": "Responded at",
     "markResponded": "Mark first response sent",
+    "addNote": "Add internal note",
+    "notePlaceholder": "Leave a note for the team… @mention to notify",
+    "addNoteCta": "Add note",
     "event": {
       "created": "Ticket created",
       "status_changed": "Status changed",
