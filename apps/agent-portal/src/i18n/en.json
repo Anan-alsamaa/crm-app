@@ -187,6 +187,9 @@
     "addNote": "Add internal note",
     "notePlaceholder": "Leave a note for the team… @mention to notify",
     "addNoteCta": "Add note",
+    "attachments": "Attachments",
+    "attach": "Attach file",
+    "noAttachments": "No attachments yet.",
     "event": {
       "created": "Ticket created",
       "status_changed": "Status changed",

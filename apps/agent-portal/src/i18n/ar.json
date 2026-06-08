@@ -187,6 +187,9 @@
     "addNote": "إضافة ملاحظة داخلية",
     "notePlaceholder": "اترك ملاحظة للفريق… أشر إلى زميل بـ @ لإعلامه",
     "addNoteCta": "إضافة ملاحظة",
+    "attachments": "المرفقات",
+    "attach": "إرفاق ملف",
+    "noAttachments": "لا توجد مرفقات بعد.",
     "event": {
       "created": "تم إنشاء التذكرة",
       "status_changed": "تغيّرت الحالة",

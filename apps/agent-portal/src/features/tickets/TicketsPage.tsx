@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeftIcon,
   Avatar,
   Button,
+  CloseIcon,
   cn,
   formatRelative,
   Pill,
@@ -16,10 +17,20 @@ import {
   useIsDesktop,
 } from '@yiji/ui';
 import type { Priority, TicketStatus } from '@yiji/shared-types';
-import { useTickets, useTicket, useTicketEvents, useUpdateTicket, useAddTicketNote } from './api.js';
+import {
+  useTickets,
+  useTicket,
+  useTicketEvents,
+  useUpdateTicket,
+  useAddTicketNote,
+  useAddTicketAttachment,
+  useRemoveTicketAttachment,
+} from './api.js';
 import { useAgents, useTeamOptions } from '../inbox/api.js';
 import { resolveMentions } from '../conversation/mentions.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+
+const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_URL ?? 'http://localhost:8055';
 
 const STATUSES: TicketStatus[] = ['new', 'open', 'pending', 'resolved', 'closed'];
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
@@ -274,8 +285,12 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
   const agents = useAgents();
   const teams = useTeamOptions();
   const addNote = useAddTicketNote();
+  const addAttachment = useAddTicketAttachment();
+  const removeAttachment = useRemoveTicketAttachment();
   const { user } = useAuth();
   const [note, setNote] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   if (ticket.isLoading)
     return (
@@ -299,6 +314,21 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
       .mutateAsync({ ticketId: tk.id, text, actorId: user.id, mentions })
       .then(() => setNote(''))
       .catch(() => toast.error(t('errors.updateFailed', { ns: 'common' })));
+  };
+
+  const onPickFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        await addAttachment.mutateAsync({ ticketId: tk.id, file });
+      }
+    } catch {
+      toast.error(t('conversation.attachFailed', { defaultValue: 'Could not upload the file.' }));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const dueClass = (iso: string | null) => {
@@ -474,6 +504,74 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
             dueClass={dueClass}
           />
         </div>
+      </section>
+
+      {/* Attachments — agent-uploaded files linked via tickets_files. */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            {t('tickets.attachments', { defaultValue: 'Attachments' })}
+          </h3>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => void onPickFiles(e.target.files)}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-border px-2.5 text-xs text-muted-foreground transition-colors duration-fast ease-out hover:border-primary/40 hover:text-foreground disabled:opacity-50"
+          >
+            {uploading ? (
+              <Spinner size={13} />
+            ) : (
+              <>
+                <span className="text-sm leading-none">+</span>
+                <span>{t('tickets.attach', { defaultValue: 'Attach file' })}</span>
+              </>
+            )}
+          </button>
+        </div>
+        {tk.attachments && tk.attachments.length > 0 ? (
+          <ul className="flex flex-wrap gap-2">
+            {tk.attachments.map((a) => (
+              <li
+                key={a.id}
+                className="group inline-flex max-w-[16rem] items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 text-xs text-foreground ring-1 ring-foreground/[0.05]"
+              >
+                <a
+                  href={a.file ? `${DIRECTUS_URL}/assets/${a.file.id}?download` : undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="truncate hover:underline"
+                >
+                  {a.file?.filename ?? t('conversation.attachment', { defaultValue: 'Attachment' })}
+                </a>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void removeAttachment
+                      .mutateAsync({ junctionId: a.id, ticketId: tk.id })
+                      .catch(() => toast.error(t('errors.updateFailed', { ns: 'common' })))
+                  }
+                  aria-label={t('conversation.removeAttachment', {
+                    defaultValue: 'Remove attachment',
+                  })}
+                  className="shrink-0 text-muted-foreground transition-colors duration-fast hover:text-foreground"
+                >
+                  <CloseIcon size={12} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {t('tickets.noAttachments', { defaultValue: 'No attachments yet.' })}
+          </p>
+        )}
       </section>
 
       {/* Internal note composer — appends a 'commented' event to the history. */}
