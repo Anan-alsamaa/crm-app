@@ -46,6 +46,8 @@ interface RangeFilter {
   from?: string;
   to?: string;
   vendor?: string;
+  agent?: string;
+  team?: string;
 }
 
 /** Apply only the date range to `field` (for collections without a vendor column). */
@@ -58,9 +60,16 @@ function applyDateRange(filter: Record<string, unknown>, range: RangeFilter, fie
   }
 }
 
+/** Assignment scoping for collections that carry assigned_agent/assigned_team. */
+function applyAssignment(filter: Record<string, unknown>, range: RangeFilter): void {
+  if (range.agent) filter.assigned_agent = { _eq: range.agent };
+  if (range.team) filter.assigned_team = { _eq: range.team };
+}
+
 function applyRange(filter: Record<string, unknown>, range: RangeFilter, field: string): void {
   applyDateRange(filter, range, field);
   if (range.vendor) filter.vendor = { _eq: range.vendor };
+  applyAssignment(filter, range);
 }
 
 async function reportConversationVolume(
@@ -211,6 +220,7 @@ export async function reportAgentProductivity(
 ): Promise<{ rows: string[][]; rowCount: number }> {
   const filter: Record<string, unknown> = { assigned_agent: { _nnull: true } };
   applyDateRange(filter, range, 'date_created');
+  applyAssignment(filter, range);
   const tickets = (await deps.directus.request(
     readItems('tickets', {
       filter,
