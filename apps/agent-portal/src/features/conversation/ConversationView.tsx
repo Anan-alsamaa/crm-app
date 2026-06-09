@@ -145,25 +145,27 @@ export function ConversationView({
 
       const onNew = (msg: MessageNew) => {
         if (msg.conversationId !== conversationId) return;
-        setLive((prev) =>
-          prev.some((m) => m.id === msg.id)
-            ? prev
-            : [
-                ...prev,
-                {
-                  id: msg.id,
-                  sender_type: msg.senderType,
-                  content: msg.content,
-                  is_internal_note: false,
-                  date_created: msg.createdAt,
-                  attachments: (msg.attachments ?? []).map((id) => ({
-                    id,
-                    filename: null,
-                    type: null,
-                  })),
-                },
-              ],
-        );
+        const confirmed: ConversationMessage = {
+          id: msg.id,
+          sender_type: msg.senderType,
+          content: msg.content,
+          is_internal_note: false,
+          date_created: msg.createdAt,
+          attachments: (msg.attachments ?? []).map((id) => ({
+            id,
+            filename: null,
+            type: null,
+          })),
+        };
+        setLive((prev) => {
+          // Reconcile the optimistic echo: if we already rendered this message
+          // optimistically (temp id === clientMsgId), swap it for the confirmed
+          // one (real id, pending cleared) in place.
+          if (msg.clientMsgId && prev.some((m) => m.id === msg.clientMsgId)) {
+            return prev.map((m) => (m.id === msg.clientMsgId ? confirmed : m));
+          }
+          return prev.some((m) => m.id === msg.id) ? prev : [...prev, confirmed];
+        });
       };
       const onNoteNew = (n: NoteNew) => {
         if (n.conversationId !== conversationId) return;
@@ -274,6 +276,21 @@ export function ConversationView({
         ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
         clientMsgId: cmid,
       });
+      // Optimistic: render the reply instantly (id = clientMsgId, pending) so
+      // the thread feels zero-latency. onNew reconciles it to the confirmed
+      // message (real id) when the gateway echoes it back.
+      setLive((prev) => [
+        ...prev,
+        {
+          id: cmid,
+          sender_type: 'agent',
+          content,
+          is_internal_note: false,
+          date_created: new Date().toISOString(),
+          attachments: pending.map((p) => ({ id: p.id, filename: p.name, type: null })),
+          pending: true,
+        },
+      ]);
     }
     setDraft('');
     setPending([]);
@@ -427,7 +444,9 @@ export function ConversationView({
                   ? t('conversation.internalNote')
                   : t('conversation.you', { defaultValue: 'You' })
                 : contactName;
-              const time = formatRelative(last.date_created);
+              const time = last.pending
+                ? t('conversation.sending', { defaultValue: 'Sending…' })
+                : formatRelative(last.date_created);
               // Day separator when the calendar day changes from the previous run.
               const prevRun = grouped[runIdx - 1];
               const showDay =
@@ -499,6 +518,8 @@ export function ConversationView({
                                       'rounded-[18px]',
                                       isLast && isAgent && 'rounded-ee-sm',
                                       isLast && !isAgent && 'rounded-es-sm',
+                                      // Optimistic message: dim until the server confirms.
+                                      m.pending && 'opacity-60',
                                     )}
                                   >
                                     <p className="whitespace-pre-wrap">{m.content}</p>

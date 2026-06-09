@@ -28,6 +28,8 @@ export interface ConversationMessage {
   is_internal_note: boolean;
   date_created: string | null;
   attachments?: MessageAttachment[];
+  /** Client-only: an optimistic message awaiting the server echo. */
+  pending?: boolean;
 }
 
 export interface InboxFilters {

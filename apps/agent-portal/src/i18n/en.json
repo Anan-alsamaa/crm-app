@@ -150,6 +150,7 @@
     "yesterday": "Yesterday",
     "copyMessage": "Copy message",
     "copied": "Copied",
+    "sending": "Sending…",
     "tab": {
       "reply": "Reply",
       "note": "Internal note"
