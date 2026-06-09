@@ -1,0 +1,10 @@
+# On Windows, git's bundled sh can spawn lint-staged's prettier/eslint .cmd
+# shims without Node on PATH ("'node' is not recognized"), which fails the hook.
+# Prepend the standard Node install dir on git-bash only; no effect on Linux/CI.
+case "$(uname -s)" in
+MINGW* | MSYS* | CYGWIN*)
+  [ -d "/c/Program Files/nodejs" ] && PATH="/c/Program Files/nodejs:$PATH" && export PATH
+  ;;
+esac
+
+pnpm exec lint-staged

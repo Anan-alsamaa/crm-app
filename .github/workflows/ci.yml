@@ -1,14 +1,28 @@
 name: CI
 
 on:
+  # Direct pushes to the long-lived branches, plus every PR. Stream/feature
+  # branches get CI through their PR (one run per push) rather than a second
+  # push-triggered run — avoids running the whole workflow twice per push.
   push:
-    branches: ['**']
+    branches: [main, 001-yiji-crm-platform]
   pull_request:
+  workflow_dispatch: # allows running the full-stack E2E job on demand
+
+# Newer pushes cancel in-flight runs for the same branch. Keying on head_ref
+# (set on PRs) collapses a branch's push+PR runs into one group.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # Lint + typecheck + unit tests with coverage. Independent of e2e so the two
+  # jobs run in parallel (the e2e job no longer `needs: quality`), keeping total
+  # wall-clock down. Coverage thresholds are enforced here (see vitest configs).
   quality:
-    name: Lint, typecheck & unit tests
+    name: Lint, typecheck & unit tests (+ coverage)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -32,13 +46,47 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Unit tests
-        run: pnpm test
+      - name: Unit tests + coverage (services & packages)
+        run: pnpm test:coverage
+
+      - name: App unit tests + coverage (jsdom)
+        # Each app's vitest.config.ts enforces its own coverage thresholds.
+        run: pnpm -r --if-present test
+
+      - name: Coverage summary → job summary
+        if: always()
+        run: node .github/scripts/coverage-summary.mjs >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage/lcov.info
+            coverage/coverage-summary.json
+            apps/*/coverage/lcov.info
+            apps/*/coverage/coverage-summary.json
+          retention-days: 7
+          if-no-files-found: ignore
 
   e2e:
     name: Playwright E2E
     runs-on: ubuntu-latest
-    needs: quality
+    # The full-stack E2E suite needs the WHOLE integrated stack (gateway +
+    # both portals + widget + Directus) working together, so it only makes
+    # sense once all streams are merged. Run it as an integration gate — on
+    # pushes to the long-lived branches (main / 001-yiji-crm-platform) — not on
+    # every feature/stream PR, where cross-stream pieces aren't present yet and
+    # it can't go green. Per-PR feedback comes from the fast `quality` job.
+    # `workflow_dispatch` also allows running it on demand from the Actions tab.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 25
+    # Hard gate: the full-stack suite is green (10/10) and deterministic — the
+    # conversations are API-seeded in globalSetup, so it no longer depends on
+    # flaky widget timing. It blocks integration pushes to main / 001 if any
+    # spec regresses. (Was previously continue-on-error while the portal flows
+    # were stabilized.)
 
     services:
       postgres:
@@ -90,6 +138,12 @@ jobs:
       VITE_DIRECTUS_URL: http://localhost:8055
       VITE_SOCKET_URL: http://localhost:8080
       VITE_AI_GATEWAY_URL: http://localhost:8081
+      # E2E agent creds — globalSetup seeds this user, but it runs in a separate
+      # process from the Playwright workers, so process.env set there doesn't
+      # reach the specs. Define them at job level (must match globalSetup's
+      # defaults) so both the seeding and the specs use the same credentials.
+      E2E_AGENT_EMAIL: e2e.agent@example.com
+      E2E_AGENT_PASSWORD: E2eAgentPass1!
 
     steps:
       - uses: actions/checkout@v4
@@ -105,8 +159,29 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Cache the Playwright browser binaries, keyed on the resolved Playwright
+      # version in the lockfile. On a hit the install below is a no-op for the
+      # browsers (only OS deps are (re)checked), shaving ~30-60s off each run.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(pnpm exec playwright --version | tr -d 'Version ')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+        # On a cache hit, install only the OS deps (fast); otherwise download
+        # the chromium build too.
+        run: |
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+            pnpm exec playwright install-deps chromium
+          else
+            pnpm exec playwright install --with-deps chromium
+          fi
 
       - name: Start Directus
         # The Directus container needs the bootstrap extensions (e.g.
@@ -125,8 +200,9 @@ jobs:
             -e DB_DATABASE=$DB_DATABASE \
             -e DB_USER=$DB_USER -e DB_PASSWORD=$DB_PASSWORD \
             -e REDIS=$REDIS_URL \
-            -e CACHE_ENABLED=true -e CACHE_STORE=redis \
+            -e CACHE_ENABLED=true -e CACHE_STORE=redis -e CACHE_AUTO_PURGE=true \
             -e WEBSOCKETS_ENABLED=true \
+            -e CORS_ENABLED=true -e CORS_ORIGIN=true \
             -e STORAGE_LOCATIONS=local -e STORAGE_LOCAL_DRIVER=local \
             -e STORAGE_LOCAL_ROOT=/directus/uploads \
             -v ${{ github.workspace }}/directus/extensions:/directus/extensions \
@@ -150,7 +226,26 @@ jobs:
         # SVC_GATEWAY_TOKEN/SVC_WORKERS_TOKEN/SVC_AI_TOKEN are in env, so
         # bootstrap creates each service user with its static token set —
         # no follow-up PATCH needed for those.
-        run: pnpm --filter @yiji/directus-bootstrap apply
+        #
+        # NOTE: directus-bootstrap finishes its work (~90s, prints "Done.") but
+        # the process does not self-exit — it leaves an open DB/Directus handle,
+        # so Node hangs indefinitely. Until that's fixed in directus/bootstrap
+        # (Stream A: close connections / process.exit after apply), cap it: a
+        # SIGTERM kill (exit 124) after the work is done is treated as success;
+        # any other non-zero exit is a real bootstrap failure.
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=30 300 pnpm --filter @yiji/directus-bootstrap apply
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "bootstrap exited cleanly"
+          elif [ "$code" -eq 124 ]; then
+            echo "::warning title=directus-bootstrap::apply completed but did not self-exit (open handle); killed after 300s. Fix in directus/bootstrap (Stream A)."
+          else
+            echo "bootstrap failed with exit code $code"
+            exit "$code"
+          fi
 
       - name: Seed demo vendor
         # The widget chat spec sends vendor_id=demo-vendor in its JWT; the
@@ -187,21 +282,29 @@ jobs:
           echo "background services launched"
 
       - name: Wait for services
+        # Each entry is "url|name". The gateway only serves /health on :8081
+        # (GET / is a 404, which `curl -sf` treats as failure), so it must be
+        # probed at /health; the Vite portals serve HTML on /.
         run: |
-          for entry in "8081:gateway-health" "5173:agent-portal" "5174:admin-portal" "5175:chat-widget"; do
-            port="${entry%%:*}"
-            name="${entry##*:}"
+          for entry in \
+            "http://localhost:8081/health|gateway-health" \
+            "http://localhost:5173|agent-portal" \
+            "http://localhost:5174|admin-portal" \
+            "http://localhost:5175|chat-widget"; do
+            url="${entry%%|*}"
+            name="${entry##*|}"
             up=0
             for i in $(seq 1 60); do
-              if curl -sf http://localhost:$port > /dev/null 2>&1; then
-                echo "${name} (:${port}) is up"
+              if curl -sf "$url" > /dev/null 2>&1; then
+                echo "${name} (${url}) is up"
                 up=1; break
               fi
               sleep 2
             done
             if [ $up -ne 1 ]; then
-              echo "${name} (:${port}) failed to come up"
-              tail -80 *.log || true
+              echo "${name} (${url}) failed to come up"
+              # `tail -80` is invalid on the runner's tail; use -n 80 + per-file.
+              for f in *.log; do echo "----- $f -----"; tail -n 80 "$f" || true; done
               exit 1
             fi
           done

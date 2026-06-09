@@ -204,7 +204,9 @@ export function DashboardPage() {
                           <span className="flex-1 text-sm capitalize text-foreground">
                             {t(`status.${status}`, { ns: 'common', defaultValue: status })}
                           </span>
-                          <span className="text-sm tabular-nums text-muted-foreground">{count}</span>
+                          <span className="text-sm tabular-nums text-muted-foreground">
+                            {count}
+                          </span>
                         </li>
                       ))}
                   </ul>
@@ -215,7 +217,11 @@ export function DashboardPage() {
               <div className="grid gap-5 lg:grid-cols-2">
                 <Card title={t('dashboard.topAgents', { defaultValue: 'Agent productivity' })}>
                   <RankList
-                    rows={m.data.topAgents.map((a) => ({ id: a.id, name: a.name, value: a.resolved }))}
+                    rows={m.data.topAgents.map((a) => ({
+                      id: a.id,
+                      name: a.name,
+                      value: a.resolved,
+                    }))}
                     unit={t('dashboard.resolvedUnit', { defaultValue: 'resolved' })}
                   />
                 </Card>

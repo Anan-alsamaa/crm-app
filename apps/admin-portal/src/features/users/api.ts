@@ -36,23 +36,25 @@ export function useUsers() {
   return useQuery({
     queryKey: ['users'],
     queryFn: () =>
-      directus.request(
-        readUsers({
-          limit: -1,
-          fields: [
-            'id',
-            'email',
-            'first_name',
-            'last_name',
-            'status',
-            { role: ['id', 'name'] },
-            { team: ['id', 'name'] },
-          ],
-          sort: ['email'],
-        }),
-      ).then((rows) =>
-        (rows as AdminUser[]).filter((u) => !isServiceRole(u.role?.name)),
-      ) as Promise<AdminUser[]>,
+      directus
+        .request(
+          readUsers({
+            limit: -1,
+            fields: [
+              'id',
+              'email',
+              'first_name',
+              'last_name',
+              'status',
+              { role: ['id', 'name'] },
+              { team: ['id', 'name'] },
+            ],
+            sort: ['email'],
+          }),
+        )
+        .then((rows) =>
+          (rows as AdminUser[]).filter((u) => !isServiceRole(u.role?.name)),
+        ) as Promise<AdminUser[]>,
   });
 }
 

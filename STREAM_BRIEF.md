@@ -1,31 +1,41 @@
-# Stream B — Frontend / UX Polish
+# Stream C — Quality / Docs / DX
 
 You are the Claude session for this worktree. Read this brief first, then
 start work without further confirmation.
 
 ## Where you are
 
-- **Worktree**: `D:\emad\Afcoapp\ProgramFile\claudeCode\crm-app-frontend`
-- **Branch**: `stream/frontend` (off `001-yiji-crm-platform`)
+- **Worktree**: `D:\emad\Afcoapp\ProgramFile\claudeCode\crm-app-quality`
+- **Branch**: `stream/quality` (off `001-yiji-crm-platform`)
 - **Integration branch**: `001-yiji-crm-platform`
 - **Coordination doc**: [specs/001-yiji-crm-platform/parallel-work-plan.md](./specs/001-yiji-crm-platform/parallel-work-plan.md) — read this before doing anything else.
 
 ## What you own — only edit these paths
 
-- `apps/**` (agent-portal, admin-portal, chat-widget)
-- `packages/ui/**`
-- `packages/i18n/**`
+- `**/tests/**` (add tests anywhere — the test files are yours; the
+  source files they test are not — see below)
+- `.github/workflows/ci.yml`
+- `vitest.config.ts`, per-package `vitest.config.*`
+- `playwright.config.ts`
+- `.eslintrc*`, `.prettierrc*`
+- `.husky/**` (create it; doesn't exist yet)
+- `docs/**` except `docs/PRODUCTION.md`
+- `README.md`
+- root `package.json` scripts (the `"scripts"` section — careful, don't change deps)
+- `skills/**`
 
 ## What you must NOT edit (other streams own these)
 
-- `services/**` — Stream A
-- `directus/**` — Stream A
+- `services/**`, `directus/**` — Stream A
+- `apps/**`, `packages/ui/**`, `packages/i18n/**` — Stream B
 - Any `Dockerfile`, `docker-compose*.yml`, `.github/workflows/deploy*.yml` — Stream A
 - `docs/PRODUCTION.md` — Stream A
-- `**/tests/**` outside `apps/**/tests` — Stream C
-- `.github/workflows/ci.yml`, `vitest.config.ts`, `playwright.config.ts`, root `package.json` scripts, `.husky/**` — Stream C
-- `docs/**` except files inside `apps/**` (none expected) — Stream C
-- `README.md` — Stream C
+
+**Tests are yours, but the code they test isn't.** If a test reveals a
+bug in someone else's territory, file it for the owning stream (commit on
+`001-yiji-crm-platform`, or open an issue) — don't fix it here. The
+exception: if a test fix requires a one-line change to make a function
+exportable, coordinate with the owning stream first.
 
 ## Shared territory — escalate before touching
 
@@ -36,30 +46,35 @@ start work without further confirmation.
 
 The 12 concrete tasks are in
 [specs/001-yiji-crm-platform/parallel-work-plan.md](./specs/001-yiji-crm-platform/parallel-work-plan.md)
-under "Stream B". Read them, then start at #1. Roughly:
+under "Stream C". Read them, then start at #1. Roughly:
 
-1. Mobile responsive agent portal (drawer at sm, single-column conversation view)
-2. Mobile responsive admin portal
-3. Loading skeletons across every fetching page
-4. Designed empty states for every list view
-5. Route-level error boundaries with retry
-6. Unified toast notifications across both portals
-7. Axe accessibility audit + fix every violation
-8. Lighthouse: agent-portal first-load < 2s / < 200KB initial JS gzipped
-9. i18n completeness — every string via `t()`, EN+AR keys exist, RTL passes
-10. Polish recent presence/notes work (sidebar internal-notes section, status pill)
-11. Keyboard nav + `?` shortcut overlay
-12. Coordinate with Stream C on visual-regression Playwright screenshots
+1. Coverage targets — 70% services, 60% apps. Start by measuring with `pnpm vitest --coverage`.
+2. Critical-path Vitest:
+   - socket-gateway connection events (mocked Directus)
+   - workers: each queue processor, happy + failure
+   - ai-gateway: every endpoint × cache hit/miss × rate-limited/not
+   - agent-portal: `features/inbox/api.ts`, mentions, custom-field, AI panel
+   - admin-portal: at least one render test per feature page
+3. Critical-path Playwright E2E for the marquee flows.
+4. CI < 12 min — cache Playwright browsers, pnpm store, parallelize quality vs E2E.
+5. `husky` + `lint-staged`: pre-commit prettier + eslint on staged files.
+6. Coverage upload (Codecov or CI summary).
+7. `docs/ARCHITECTURE.md` — the as-built shape, not the spec aspirations.
+8. `docs/USER_GUIDE_AGENT.md`.
+9. `docs/USER_GUIDE_ADMIN.md`.
+10. Rewrite `README.md` for the current state.
+11. Storybook for `packages/ui` (optional, only if time permits).
+12. `.github/CODEOWNERS`.
 
 ## Done criteria
 
 Stop when:
 
-- `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm test` are all green.
-- Both portals render cleanly on iPhone 14 viewport (375×812) and desktop.
-- Axe reports zero serious/critical violations on every route in the existing E2E setup.
-- Lighthouse hits the budget on agent-portal home (signed in).
-- A native AR speaker (or your best simulation) reads the portals end-to-end without finding hardcoded English strings.
+- CI under 12 min on every push.
+- Coverage thresholds enforced in CI (build fails on regression).
+- `husky` pre-commit prevents the format-drift class of bugs we hit earlier.
+- The three user-facing docs (agent guide, admin guide, architecture) read
+  cleanly without referencing planning artifacts.
 - PR opened into `001-yiji-crm-platform`.
 
 ## Workflow
@@ -68,22 +83,21 @@ Stop when:
 git fetch origin
 git rebase origin/001-yiji-crm-platform
 
-# Iterate. Push often:
-git push -u origin stream/frontend
+git push -u origin stream/quality
 
-gh pr create --base 001-yiji-crm-platform --head stream/frontend
+gh pr create --base 001-yiji-crm-platform --head stream/quality
 ```
 
 ## Pinned constraints
 
-- **No services or infra changes from this branch.** If a frontend bug
-  has a backend cause, file it for Stream A on `001-yiji-crm-platform`
-  (or open an issue) — don't fix it here.
-- **No new shared types.** Land them on `001-yiji-crm-platform` first.
-- **No silent translation fallbacks**: if a key is missing from `ar.json`,
-  add it. No `defaultValue:` shrugs.
-- **Don't disable accessibility lint rules** to "make it pass". Fix the
-  underlying HTML.
+- **Tests must be deterministic.** No `Math.random()`, no real `Date.now()`
+  without injection. The codebase has a no-`Date.now`-in-workflow-scripts
+  rule for the same reason — apply that spirit here.
+- **No production code edits.** Mocking / adapters / fixtures go in `tests/`.
+- **CI changes that risk lengthening runtime need a measurement** before
+  merging. Comment the before/after wall-clock in the PR body.
+- **Pre-commit hooks**: when you wire husky, make sure they don't run the
+  full test suite — only prettier + eslint on staged files. We want fast.
 - **No commits to `001-yiji-crm-platform`** directly. Only PRs.
 
 ## First commands
@@ -91,7 +105,8 @@ gh pr create --base 001-yiji-crm-platform --head stream/frontend
 ```powershell
 pnpm install --frozen-lockfile
 pnpm typecheck
-pnpm --filter @yiji/agent-portal dev   # spin it up to look around before editing
+pnpm vitest --coverage   # baseline measurement before you start adding tests
 ```
 
-When the baseline is clean, read `parallel-work-plan.md` task #1 and start.
+When the baseline is captured (paste the coverage % into a working notes
+file), read `parallel-work-plan.md` task #1 and start.

@@ -85,10 +85,7 @@ export function useTicket(id: string | null) {
             'date_created',
             { contact: ['id', 'name', 'email'] },
             {
-              attachments: [
-                'id',
-                { directus_files_id: ['id', 'filename_download', 'type'] },
-              ],
+              attachments: ['id', { directus_files_id: ['id', 'filename_download', 'type'] }],
             },
           ],
           limit: 1,
@@ -97,17 +94,19 @@ export function useTicket(id: string | null) {
       const raw = rows[0];
       if (!raw) return null;
       // Flatten the junction rows into a friendlier shape.
-      const attachments = ((raw.attachments as Array<Record<string, unknown>> | undefined) ?? []).map(
-        (j) => {
-          const f = j.directus_files_id as
-            | { id: string; filename_download: string | null; type: string | null }
-            | null;
-          return {
-            id: j.id as string,
-            file: f ? { id: f.id, filename: f.filename_download, type: f.type } : null,
-          };
-        },
-      );
+      const attachments = (
+        (raw.attachments as Array<Record<string, unknown>> | undefined) ?? []
+      ).map((j) => {
+        const f = j.directus_files_id as {
+          id: string;
+          filename_download: string | null;
+          type: string | null;
+        } | null;
+        return {
+          id: j.id as string,
+          file: f ? { id: f.id, filename: f.filename_download, type: f.type } : null,
+        };
+      });
       return { ...(raw as unknown as TicketRow), attachments };
     },
   });

@@ -529,70 +529,71 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
 
           {/* Attachments — agent-uploaded files linked via tickets_files. */}
           <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {t('tickets.attachments', { defaultValue: 'Attachments' })}
-          </h3>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            hidden
-            onChange={(e) => void onPickFiles(e.target.files)}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-border px-2.5 text-xs text-muted-foreground transition-colors duration-fast ease-out hover:border-primary/40 hover:text-foreground disabled:opacity-50"
-          >
-            {uploading ? (
-              <Spinner size={13} />
-            ) : (
-              <>
-                <span className="text-sm leading-none">+</span>
-                <span>{t('tickets.attach', { defaultValue: 'Attach file' })}</span>
-              </>
-            )}
-          </button>
-        </div>
-        {tk.attachments && tk.attachments.length > 0 ? (
-          <ul className="flex flex-wrap gap-2">
-            {tk.attachments.map((a) => (
-              <li
-                key={a.id}
-                className="group inline-flex max-w-[16rem] items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 text-xs text-foreground ring-1 ring-foreground/[0.05]"
+            <div className="flex items-center justify-between">
+              <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('tickets.attachments', { defaultValue: 'Attachments' })}
+              </h3>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => void onPickFiles(e.target.files)}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-border px-2.5 text-xs text-muted-foreground transition-colors duration-fast ease-out hover:border-primary/40 hover:text-foreground disabled:opacity-50"
               >
-                <a
-                  href={a.file ? `${DIRECTUS_URL}/assets/${a.file.id}?download` : undefined}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="truncate hover:underline"
-                >
-                  {a.file?.filename ?? t('conversation.attachment', { defaultValue: 'Attachment' })}
-                </a>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void removeAttachment
-                      .mutateAsync({ junctionId: a.id, ticketId: tk.id })
-                      .catch(() => toast.error(t('errors.updateFailed', { ns: 'common' })))
-                  }
-                  aria-label={t('conversation.removeAttachment', {
-                    defaultValue: 'Remove attachment',
-                  })}
-                  className="shrink-0 text-muted-foreground transition-colors duration-fast hover:text-foreground"
-                >
-                  <CloseIcon size={12} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {t('tickets.noAttachments', { defaultValue: 'No attachments yet.' })}
-          </p>
-        )}
+                {uploading ? (
+                  <Spinner size={13} />
+                ) : (
+                  <>
+                    <span className="text-sm leading-none">+</span>
+                    <span>{t('tickets.attach', { defaultValue: 'Attach file' })}</span>
+                  </>
+                )}
+              </button>
+            </div>
+            {tk.attachments && tk.attachments.length > 0 ? (
+              <ul className="flex flex-wrap gap-2">
+                {tk.attachments.map((a) => (
+                  <li
+                    key={a.id}
+                    className="group inline-flex max-w-[16rem] items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 text-xs text-foreground ring-1 ring-foreground/[0.05]"
+                  >
+                    <a
+                      href={a.file ? `${DIRECTUS_URL}/assets/${a.file.id}?download` : undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="truncate hover:underline"
+                    >
+                      {a.file?.filename ??
+                        t('conversation.attachment', { defaultValue: 'Attachment' })}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void removeAttachment
+                          .mutateAsync({ junctionId: a.id, ticketId: tk.id })
+                          .catch(() => toast.error(t('errors.updateFailed', { ns: 'common' })))
+                      }
+                      aria-label={t('conversation.removeAttachment', {
+                        defaultValue: 'Remove attachment',
+                      })}
+                      className="shrink-0 text-muted-foreground transition-colors duration-fast hover:text-foreground"
+                    >
+                      <CloseIcon size={12} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t('tickets.noAttachments', { defaultValue: 'No attachments yet.' })}
+              </p>
+            )}
           </section>
         </aside>
 
@@ -600,110 +601,112 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         <div className="min-w-0 space-y-6 lg:order-1">
           {/* Internal note composer — appends a 'commented' event to the history. */}
           <section className="space-y-2">
-        <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {t('tickets.addNote', { defaultValue: 'Add internal note' })}
-        </h3>
-        <div className="rounded-2xl bg-card/60 p-2 ring-1 ring-foreground/[0.04] focus-within:ring-primary/30">
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                submitNote();
-              }
-            }}
-            rows={2}
-            placeholder={t('tickets.notePlaceholder', {
-              defaultValue: 'Leave a note for the team… @mention to notify',
-            })}
-            className="block w-full resize-none rounded-lg bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-          />
-          <div className="flex items-center justify-end gap-2 px-1">
-            <span className="me-auto text-2xs text-muted-foreground">
-              {t('conversation.mentionHint', { defaultValue: 'Type @ to mention a teammate' })}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              disabled={!note.trim() || addNote.isPending}
-              onClick={submitNote}
-            >
-              {t('tickets.addNoteCta', { defaultValue: 'Add note' })}
-            </Button>
-          </div>
-        </div>
-      </section>
+            <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('tickets.addNote', { defaultValue: 'Add internal note' })}
+            </h3>
+            <div className="rounded-2xl bg-card/60 p-2 ring-1 ring-foreground/[0.04] focus-within:ring-primary/30">
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    submitNote();
+                  }
+                }}
+                rows={2}
+                placeholder={t('tickets.notePlaceholder', {
+                  defaultValue: 'Leave a note for the team… @mention to notify',
+                })}
+                className="block w-full resize-none rounded-lg bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+              />
+              <div className="flex items-center justify-end gap-2 px-1">
+                <span className="me-auto text-2xs text-muted-foreground">
+                  {t('conversation.mentionHint', { defaultValue: 'Type @ to mention a teammate' })}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!note.trim() || addNote.isPending}
+                  onClick={submitNote}
+                >
+                  {t('tickets.addNoteCta', { defaultValue: 'Add note' })}
+                </Button>
+              </div>
+            </div>
+          </section>
 
-      {/* History timeline — actual timeline with connector line */}
-      <section className="space-y-3">
-        <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {t('tickets.history')}
-        </h3>
-        {events.isLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-2/3" />
-            <Skeleton className="h-10 w-3/4" />
-          </div>
-        ) : events.data && events.data.length > 0 ? (
-          <ol className="relative space-y-0">
-            {/* Vertical connector */}
-            <span aria-hidden className="absolute start-[7px] top-2 bottom-2 w-px bg-border" />
-            {events.data.map((ev) => {
-              const isWarn = ev.event_type === 'sla_warning';
-              const isBreach = ev.event_type === 'sla_breached';
-              const tone = isBreach ? 'destructive' : isWarn ? 'warning' : 'primary';
-              const dotBg =
-                tone === 'destructive'
-                  ? 'bg-destructive'
-                  : tone === 'warning'
-                    ? 'bg-warning'
-                    : 'bg-primary';
-              const isComment = ev.event_type === 'commented';
-              const commentText =
-                isComment && ev.payload && typeof ev.payload.text === 'string'
-                  ? (ev.payload.text as string)
-                  : null;
-              const actorName =
-                ev.actor && typeof ev.actor === 'object'
-                  ? (ev.actor.first_name ?? ev.actor.email ?? null)
-                  : null;
-              return (
-                <li key={ev.id} className="relative flex items-start gap-3 py-2.5 ps-0">
-                  <span
-                    className={cn(
-                      'relative z-10 mt-1 grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full ring-4 ring-background',
-                      isComment ? 'bg-foreground/70' : dotBg,
-                    )}
-                    aria-hidden
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="text-sm font-medium text-foreground">
-                        {isComment && actorName
-                          ? actorName
-                          : t(`tickets.event.${ev.event_type}`, { defaultValue: ev.event_type })}
-                      </span>
-                      <span className="text-2xs tabular-nums text-muted-foreground">
-                        {ev.date_created ? new Date(ev.date_created).toLocaleString() : ''}
-                      </span>
-                    </div>
-                    {commentText && (
-                      <p className="mt-1 whitespace-pre-wrap rounded-lg bg-secondary/60 px-3 py-2 text-sm leading-relaxed text-foreground">
-                        {commentText}
-                      </p>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        ) : (
-          <p className="py-6 text-center text-sm text-muted-foreground/80">
-            {t('tickets.noEvents')}
-          </p>
-        )}
+          {/* History timeline — actual timeline with connector line */}
+          <section className="space-y-3">
+            <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('tickets.history')}
+            </h3>
+            {events.isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-2/3" />
+                <Skeleton className="h-10 w-3/4" />
+              </div>
+            ) : events.data && events.data.length > 0 ? (
+              <ol className="relative space-y-0">
+                {/* Vertical connector */}
+                <span aria-hidden className="absolute start-[7px] top-2 bottom-2 w-px bg-border" />
+                {events.data.map((ev) => {
+                  const isWarn = ev.event_type === 'sla_warning';
+                  const isBreach = ev.event_type === 'sla_breached';
+                  const tone = isBreach ? 'destructive' : isWarn ? 'warning' : 'primary';
+                  const dotBg =
+                    tone === 'destructive'
+                      ? 'bg-destructive'
+                      : tone === 'warning'
+                        ? 'bg-warning'
+                        : 'bg-primary';
+                  const isComment = ev.event_type === 'commented';
+                  const commentText =
+                    isComment && ev.payload && typeof ev.payload.text === 'string'
+                      ? (ev.payload.text as string)
+                      : null;
+                  const actorName =
+                    ev.actor && typeof ev.actor === 'object'
+                      ? (ev.actor.first_name ?? ev.actor.email ?? null)
+                      : null;
+                  return (
+                    <li key={ev.id} className="relative flex items-start gap-3 py-2.5 ps-0">
+                      <span
+                        className={cn(
+                          'relative z-10 mt-1 grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full ring-4 ring-background',
+                          isComment ? 'bg-foreground/70' : dotBg,
+                        )}
+                        aria-hidden
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <span className="text-sm font-medium text-foreground">
+                            {isComment && actorName
+                              ? actorName
+                              : t(`tickets.event.${ev.event_type}`, {
+                                  defaultValue: ev.event_type,
+                                })}
+                          </span>
+                          <span className="text-2xs tabular-nums text-muted-foreground">
+                            {ev.date_created ? new Date(ev.date_created).toLocaleString() : ''}
+                          </span>
+                        </div>
+                        {commentText && (
+                          <p className="mt-1 whitespace-pre-wrap rounded-lg bg-secondary/60 px-3 py-2 text-sm leading-relaxed text-foreground">
+                            {commentText}
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className="py-6 text-center text-sm text-muted-foreground/80">
+                {t('tickets.noEvents')}
+              </p>
+            )}
           </section>
         </div>
       </div>

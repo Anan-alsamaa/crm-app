@@ -28,24 +28,9 @@ async function signInAgent(page: import('@playwright/test').Page) {
 test('agent creates a ticket from a conversation, advances workflow, sees history', async ({
   browser,
 }) => {
-  // 1. Seed a conversation via widget.
-  const customer = await browser.newPage();
-  await customer.goto('http://localhost:5175/');
-  await customer
-    .getByRole('button', { name: /support/i })
-    .first()
-    .click();
-  await customer.getByTestId('yiji-status').waitFor({ state: 'detached', timeout: 15_000 });
-  // Connecting creates the conversation server-side; sending a message is
-  // best-effort (only possible when an agent is online and the composer shows).
-  const startChat = customer.getByRole('button', { name: /start a chat/i });
-  if (await startChat.isVisible().catch(() => false)) await startChat.click().catch(() => {});
-  const composer = customer.getByPlaceholder(/type a message/i);
-  if (await composer.isVisible().catch(() => false)) {
-    await composer.fill(`Ticket E2E ${Date.now()}`);
-    await customer.keyboard.press('Enter');
-  }
-  await customer.waitForTimeout(1500);
+  // 1. A conversation is already seeded deterministically via the Directus API
+  //    in Playwright globalSetup (tests/e2e-setup/global-setup.ts) — no need to
+  //    drive the (timing-flaky) widget just to create one to act on.
 
   // 2. Agent opens the conversation.
   const agent = await browser.newPage();
@@ -53,7 +38,9 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   await agent.locator('aside li button').first().waitFor({ timeout: 15_000 });
   await agent.locator('aside li button').first().click();
 
-  // 3. Click "+ Create ticket" in the toolbar.
+  // 3. Click "+ Create ticket" in the toolbar. (The toolbar now grows + sits at
+  // z-10 above the thread, so its hit-box is no longer covered by a chat bubble
+  // — a plain, actionable click works without force.)
   const subject = `From conv ${Date.now()}`;
   await agent
     .getByRole('button', { name: /create ticket/i })
@@ -62,13 +49,16 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   await agent.getByLabel(/subject/i).fill(subject);
   await agent.getByLabel(/^description$/i).fill('Auto-created via E2E.');
   await agent.getByRole('button', { name: /^create$/i }).click();
-  // Dialog closes; subject appears in the tickets list.
+  // Dialog closes; subject appears in the tickets list. Scope to the list-row
+  // button (not getByText) so we don't also match the success toast, whose
+  // description echoes the subject (strict-mode double match).
   await agent.getByRole('link', { name: /tickets/i }).click();
-  await expect(agent.getByText(subject)).toBeVisible({ timeout: 10_000 });
+  const ticketRow = agent.getByRole('button', { name: subject });
+  await expect(ticketRow).toBeVisible({ timeout: 10_000 });
 
-  // 4. Open the ticket detail (click the list row button, not just the text).
-  await agent.locator('aside li button', { hasText: subject }).first().click();
-  await expect(agent.getByRole('heading', { name: subject })).toBeVisible({ timeout: 10_000 });
+  // 4. Open the ticket detail.
+  await ticketRow.click();
+  await expect(agent.getByRole('heading', { name: subject })).toBeVisible();
 
   // 5. Mark first response sent → button disappears and "Responded at" shows.
   await agent.getByRole('button', { name: /mark first response sent/i }).click();

@@ -70,3 +70,9 @@ dump.rdb
 # local dev runtime (native redis + directus run dir)
 .redis-win/
 .directus-run/
+
+# Storybook build output
+**/storybook-static
+# Coverage helper + SQLite backups (from base)
+coverage-buckets.mjs
+directus/local/data.db*

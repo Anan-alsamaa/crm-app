@@ -190,6 +190,35 @@ describe('processAutomationJob', () => {
     expect(notifAdds).toHaveLength(0);
   });
 
+  it('escalate action fires on a keyword match in context.message and notifies', async () => {
+    nextRules = [
+      {
+        id: 'r-esc',
+        name: 'Refund → escalate',
+        trigger_event: 'message_received',
+        conditions: [{ field: 'context.message', op: 'contains', value: 'refund' }],
+        actions: [{ kind: 'escalate', params: { priority: 'urgent', recipientId: 'mgr1' } }],
+        active: true,
+        priority: 0,
+        trigger_count: 0,
+      },
+    ];
+    (deps.directus.request as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async () => nextRules,
+    );
+    await processAutomationJob(
+      makeJob({
+        triggerEvent: 'message_received',
+        entity: { type: 'conversation', id: 'c1' },
+        context: { message: 'I want a REFUND please' },
+      }),
+      deps,
+    );
+    // keyword matched (case-insensitive) → escalation notification enqueued
+    expect(notifAdds).toHaveLength(1);
+    expect(notifAdds[0]?.data).toMatchObject({ recipientId: 'mgr1', type: 'escalation' });
+  });
+
   it('respects AUTOMATION_MAX_DEPTH and short-circuits', async () => {
     nextRules = [
       {

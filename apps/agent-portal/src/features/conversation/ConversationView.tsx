@@ -437,7 +437,10 @@ export function ConversationView({
                     </div>
                   )}
                   <div
-                    className={cn('flex gap-2.5', isAgent ? 'flex-row-reverse text-end' : 'flex-row')}
+                    className={cn(
+                      'flex gap-2.5',
+                      isAgent ? 'flex-row-reverse text-end' : 'flex-row',
+                    )}
                   >
                     <Avatar
                       name={isAgent ? 'You' : c?.contact?.name}

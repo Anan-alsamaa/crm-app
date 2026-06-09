@@ -42,7 +42,9 @@ export function useDashboardMetrics(days: number) {
             fields: ['id', 'status', 'date_created', 'vendor'],
             limit: -1,
           }),
-        ) as Promise<Array<{ id: string; status: string; date_created: string | null; vendor: string | null }>>,
+        ) as Promise<
+          Array<{ id: string; status: string; date_created: string | null; vendor: string | null }>
+        >,
         directus.request(
           readItems('tickets', {
             filter: dateFilter,
@@ -75,14 +77,24 @@ export function useDashboardMetrics(days: number) {
         ) as Promise<Array<{ id: string; score: number | null }>>,
         directus.request(
           readUsers({ fields: ['id', 'first_name', 'last_name', 'email'], limit: -1 }),
-        ) as Promise<Array<{ id: string; first_name: string | null; last_name: string | null; email: string | null }>>,
-        directus.request(
-          readItems('vendors', { fields: ['id', 'name'], limit: -1 }),
-        ) as Promise<Array<{ id: string; name: string }>>,
+        ) as Promise<
+          Array<{
+            id: string;
+            first_name: string | null;
+            last_name: string | null;
+            email: string | null;
+          }>
+        >,
+        directus.request(readItems('vendors', { fields: ['id', 'name'], limit: -1 })) as Promise<
+          Array<{ id: string; name: string }>
+        >,
       ]);
 
       const userName = new Map(
-        users.map((u) => [u.id, [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '—']),
+        users.map((u) => [
+          u.id,
+          [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '—',
+        ]),
       );
       const vendorName = new Map(vendors.map((v) => [v.id, v.name]));
 
@@ -118,12 +130,16 @@ export function useDashboardMetrics(days: number) {
         }
         if (tk.first_response_due_at) {
           slaEligible += 1;
-          if (tk.first_responded_at && new Date(tk.first_responded_at) <= new Date(tk.first_response_due_at))
+          if (
+            tk.first_responded_at &&
+            new Date(tk.first_responded_at) <= new Date(tk.first_response_due_at)
+          )
             slaOnTime += 1;
         }
         if (tk.status === 'resolved' || tk.status === 'closed') {
           resolvedOrClosed += 1;
-          if (tk.assigned_agent) byAgent.set(tk.assigned_agent, (byAgent.get(tk.assigned_agent) ?? 0) + 1);
+          if (tk.assigned_agent)
+            byAgent.set(tk.assigned_agent, (byAgent.get(tk.assigned_agent) ?? 0) + 1);
         }
       }
       const topAgents = Array.from(byAgent.entries())
@@ -141,7 +157,9 @@ export function useDashboardMetrics(days: number) {
         slaCompliancePct: slaEligible ? (slaOnTime / slaEligible) * 100 : null,
         ticketResolutionPct: tickets.length ? (resolvedOrClosed / tickets.length) * 100 : null,
         ticketTotal: tickets.length,
-        csatAvg: csatScores.length ? csatScores.reduce((a, b) => a + b, 0) / csatScores.length : null,
+        csatAvg: csatScores.length
+          ? csatScores.reduce((a, b) => a + b, 0) / csatScores.length
+          : null,
         csatCount: csatScores.length,
         topAgents,
         topVendors,

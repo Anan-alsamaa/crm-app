@@ -65,7 +65,15 @@ export function UsersPage() {
 
   const openCreate = () => {
     setEditing(null);
-    reset({ email: '', password: '', first_name: '', last_name: '', role: '', team: '', locale: 'en' });
+    reset({
+      email: '',
+      password: '',
+      first_name: '',
+      last_name: '',
+      role: '',
+      team: '',
+      locale: 'en',
+    });
     setOpen(true);
   };
   const openEdit = (u: AdminUser) => {
@@ -121,13 +129,21 @@ export function UsersPage() {
       setOpen(false);
       setEditing(null);
     } catch {
-      toast.error(editing ? t('users.saveError', { defaultValue: 'Could not save.' }) : t('users.createError'));
+      toast.error(
+        editing
+          ? t('users.saveError', { defaultValue: 'Could not save.' })
+          : t('users.createError'),
+      );
     }
   });
 
   const onDelete = async () => {
     if (!editing || !canDelete) return;
-    if (!window.confirm(t('users.confirmDelete', { defaultValue: 'Delete this account permanently?' })))
+    if (
+      !window.confirm(
+        t('users.confirmDelete', { defaultValue: 'Delete this account permanently?' }),
+      )
+    )
       return;
     try {
       await deleteUser.mutateAsync(editing.id);
@@ -318,7 +334,9 @@ export function UsersPage() {
         title={editing ? t('users.edit', { defaultValue: 'Edit user' }) : t('users.create')}
         description={
           editing
-            ? t('users.editHint', { defaultValue: 'Update role, team, status, or reset the password.' })
+            ? t('users.editHint', {
+                defaultValue: 'Update role, team, status, or reset the password.',
+              })
             : t('users.createHint', {
                 defaultValue: 'New teammates get an invite email and can sign in immediately.',
               })
@@ -346,7 +364,9 @@ export function UsersPage() {
               {t('actions.cancel', { ns: 'common' })}
             </Button>
             <Button type="submit" form="create-user-form" loading={isSubmitting}>
-              {editing ? t('actions.save', { ns: 'common', defaultValue: 'Save' }) : t('users.create')}
+              {editing
+                ? t('actions.save', { ns: 'common', defaultValue: 'Save' })
+                : t('users.create')}
             </Button>
           </>
         }

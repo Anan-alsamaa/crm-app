@@ -12,6 +12,11 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
+  // Per-test cap (default is 30s but make it explicit) and a hard ceiling on
+  // the whole run so a stuck spec/setup can't hang CI for hours.
+  timeout: 30_000,
+  expect: { timeout: 10_000 },
+  globalTimeout: 12 * 60_000,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5173',

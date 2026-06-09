@@ -86,14 +86,18 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
           </p>
         </div>
         <form onSubmit={onSubmit} className="space-y-5" noValidate>
-          <FormField label={t('tickets.subject')} error={errors.subject?.message}>
-            <Input invalid={!!errors.subject} {...register('subject')} />
+          <FormField
+            label={t('tickets.subject')}
+            htmlFor="ticket-subject"
+            error={errors.subject?.message}
+          >
+            <Input id="ticket-subject" invalid={!!errors.subject} {...register('subject')} />
           </FormField>
-          <FormField label={t('tickets.description')}>
-            <Textarea rows={3} {...register('description')} />
+          <FormField label={t('tickets.description')} htmlFor="ticket-description">
+            <Textarea id="ticket-description" rows={3} {...register('description')} />
           </FormField>
-          <FormField label={t('conversation.priority')}>
-            <Select {...register('priority')}>
+          <FormField label={t('conversation.priority')} htmlFor="ticket-priority">
+            <Select id="ticket-priority" {...register('priority')}>
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>
                   {t(`priority.${p}`, { ns: 'common' })}

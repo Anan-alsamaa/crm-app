@@ -6,10 +6,11 @@ import { processNotificationJob, type NotifDeps } from '../src/processors/notifi
 import type { NotificationsRepo } from '../src/processors/repos.js';
 import type { MailTransport } from '../src/mail/index.js';
 
-function makeRepo(prefs: Record<string, string>) {
+function makeRepo(prefs: Record<string, string>, email: string | null = 'user-1@example.com') {
   const created: Array<Record<string, unknown>> = [];
   const repo: NotificationsRepo = {
     getUserPreferences: async () => prefs,
+    getUserEmail: async () => email,
     createNotification: async (input) => {
       created.push(input);
       return { id: `n-${created.length}` };
@@ -72,13 +73,23 @@ describe('processNotificationJob (T068)', () => {
     expect(sent).toHaveLength(0);
   });
 
-  it('channel "email": skips in-app stamp + sends email', async () => {
+  it('channel "email": skips in-app stamp + sends email to the resolved address', async () => {
     const { repo, created } = makeRepo({ sla_warning: 'email' });
     const { mail, sent } = makeMail();
     await processNotificationJob(JOB, { notifications: repo, mail, logger });
     expect(created[0]!.channelInappDeliveredAt).toBeUndefined();
     expect(created[0]!.channelEmailDeliveredAt).toBeTruthy();
     expect(sent).toHaveLength(1);
+    expect(sent[0]!.to).toBe('user-1@example.com');
+  });
+
+  it('email channel but recipient has no email: no send, in-app row still written', async () => {
+    const { repo, created } = makeRepo({ sla_warning: 'both' }, null);
+    const { mail, sent } = makeMail();
+    await processNotificationJob(JOB, { notifications: repo, mail, logger });
+    expect(created).toHaveLength(1);
+    expect(created[0]!.channelInappDeliveredAt).toBeTruthy();
+    expect(sent).toHaveLength(0);
   });
 
   it('channel "none": suppresses the entire notification', async () => {

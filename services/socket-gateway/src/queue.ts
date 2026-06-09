@@ -10,7 +10,9 @@ import { QUEUES, type AutomationJob } from '@yiji/shared-types';
  */
 export interface SideEffectProducer {
   conversationCreated(conversationId: string): Promise<void>;
-  messageReceived(conversationId: string): Promise<void>;
+  /** `content` is carried into the automation context so keyword rules
+   *  (condition `{field: 'context.message', op: 'contains', ...}`) can match. */
+  messageReceived(conversationId: string, content?: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -49,11 +51,11 @@ class BullProducer implements SideEffectProducer {
     };
     await this.automation.add('conversation_created', job);
   }
-  async messageReceived(conversationId: string): Promise<void> {
+  async messageReceived(conversationId: string, content?: string): Promise<void> {
     const job: AutomationJob = {
       triggerEvent: 'message_received',
       entity: { type: 'conversation', id: conversationId },
-      context: {},
+      context: content ? { message: content } : {},
       _depth: 0,
     };
     await this.automation.add('message_received', job);

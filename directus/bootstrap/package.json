@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "apply": "tsx src/apply.ts",
+    "seed:demo": "tsx src/seed-demo.ts",
     "verify": "tsx src/verify.ts",
     "validate-compose": "node scripts/validate-compose.mjs",
+    "validate-compose:prod": "node scripts/validate-compose.mjs docker-compose.prod.yml",
+    "check-idempotence": "node scripts/check-idempotence.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

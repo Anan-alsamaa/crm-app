@@ -2,35 +2,13 @@ import { test, expect } from '@playwright/test';
 
 /**
  * US3 (T057) — shared inbox management.
- * Seeds an inbound message via the widget so there's a conversation, then the
- * signed-in agent exercises status / priority / assignment / tag controls and
- * verifies they persist (refresh) and broadcast (would refresh peers).
+ * Conversations are seeded deterministically via the Directus API in Playwright
+ * globalSetup (tests/e2e-setup/global-setup.ts), so the signed-in agent can
+ * immediately exercise status / priority / assignment / tag controls and verify
+ * they persist — no flaky widget-driving just to create data to act on.
  */
 const AGENT_EMAIL = process.env.E2E_AGENT_EMAIL!;
 const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD!;
-
-test.beforeAll(async ({ browser }) => {
-  // Make sure at least one conversation exists by sending a widget message.
-  const page = await browser.newPage();
-  await page.goto('http://localhost:5175/');
-  await page
-    .getByRole('button', { name: /support/i })
-    .first()
-    .click();
-  await page.getByTestId('yiji-status').waitFor({ state: 'detached', timeout: 15_000 });
-  // Connecting already creates the conversation server-side. If an agent is
-  // online the composer is shown and we also send a message; if offline the
-  // widget shows the contact landing — the conversation still exists.
-  const startChat = page.getByRole('button', { name: /start a chat/i });
-  if (await startChat.isVisible().catch(() => false)) await startChat.click().catch(() => {});
-  const composer = page.getByPlaceholder(/type a message/i);
-  if (await composer.isVisible().catch(() => false)) {
-    await composer.fill(`US3 seed ${Date.now()}`);
-    await page.keyboard.press('Enter');
-  }
-  await page.waitForTimeout(1500);
-  await page.close();
-});
 
 test('agent changes status, priority, and assignment then sees them persist', async ({ page }) => {
   await page.goto('http://localhost:5173/login');
@@ -74,11 +52,8 @@ test('agent toggles internal note mode and sees the amber styling', async ({ pag
   await page.locator('aside li button').first().waitFor({ timeout: 15_000 });
   await page.locator('aside li button').first().click();
 
-  // Switch the composer into internal-note mode (a toggle tab, aria-pressed).
-  await page
-    .getByRole('button', { name: /internal note/i })
-    .first()
-    .click();
+  // The note toggle is a tab button ("Internal note"), not a checkbox.
+  await page.getByRole('button', { name: /internal note/i }).click();
   const note = `internal-note ${Date.now()}`;
   await page.getByPlaceholder(/internal note/i).fill(note);
   await page.keyboard.press('Enter');
