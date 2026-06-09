@@ -12,7 +12,7 @@ import {
   InboxEmptyArt,
   Pill,
   ResizeHandle,
-  Select,
+  SelectMenu,
   Skeleton,
   toast,
   useIsDesktop,
@@ -296,40 +296,31 @@ export function Inbox() {
               <span className="font-semibold text-primary">
                 {t('inbox.bulkSelected', { count: checked.size })}
               </span>
-              <Select
-                defaultValue=""
+              <SelectMenu
+                size="sm"
+                value=""
+                placeholder={t('inbox.bulkSetStatus')}
                 aria-label={t('inbox.bulkSetStatus')}
-                className="h-7 border-none bg-card/80 text-xs shadow-none"
-                onChange={(e) => {
-                  const v = e.target.value;
-                  e.target.value = '';
+                className="bg-card/80"
+                onChange={(v) => {
                   if (v) void bulkSetStatus(v as ConversationStatus);
                 }}
-              >
-                <option value="">{t('inbox.bulkSetStatus')}</option>
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {t(`status.${s}`, { ns: 'common' })}
-                  </option>
-                ))}
-              </Select>
-              <Select
-                defaultValue=""
+                options={STATUSES.map((s) => ({
+                  value: s,
+                  label: t(`status.${s}`, { ns: 'common' }),
+                }))}
+              />
+              <SelectMenu
+                size="sm"
+                value=""
+                placeholder={t('inbox.bulkAddTag')}
                 aria-label={t('inbox.bulkAddTag')}
-                className="h-7 border-none bg-card/80 text-xs shadow-none"
-                onChange={(e) => {
-                  const v = e.target.value;
-                  e.target.value = '';
+                className="bg-card/80"
+                onChange={(v) => {
                   if (v) void bulkAddTag(v);
                 }}
-              >
-                <option value="">{t('inbox.bulkAddTag')}</option>
-                {tags.data?.map((tg) => (
-                  <option key={tg.id} value={tg.id}>
-                    {tg.name}
-                  </option>
-                ))}
-              </Select>
+                options={(tags.data ?? []).map((tg) => ({ value: tg.id, label: tg.name }))}
+              />
               <Button
                 variant="ghost"
                 size="sm"

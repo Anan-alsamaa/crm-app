@@ -45,6 +45,8 @@ export { Input, Textarea, Select } from './Input.js';
 export type { InputProps, TextareaProps, SelectProps } from './Input.js';
 export { GhostSelect } from './GhostSelect.js';
 export type { GhostSelectProps, GhostSelectOption } from './GhostSelect.js';
+export { SelectMenu } from './SelectMenu.js';
+export type { SelectMenuProps, SelectMenuOption } from './SelectMenu.js';
 export { FormField } from './FormField.js';
 export type { FormFieldProps } from './FormField.js';
 export { Card, CardHeader, CardTitle, CardSubtitle } from './Card.js';

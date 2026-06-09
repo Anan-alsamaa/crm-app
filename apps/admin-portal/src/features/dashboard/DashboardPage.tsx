@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cn, Select, Skeleton, Toolbar, ToolbarSpacer } from '@yiji/ui';
+import { cn, SelectMenu, Skeleton, Toolbar, ToolbarSpacer } from '@yiji/ui';
 import { useDashboardMetrics, type DashboardMetrics } from './api.js';
 
 const RANGES = [7, 30, 90];
@@ -120,18 +120,16 @@ export function DashboardPage() {
           {t('dashboard.title', { defaultValue: 'Overview' })}
         </h1>
         <ToolbarSpacer />
-        <Select
+        <SelectMenu
+          size="sm"
           value={String(days)}
-          onChange={(e) => setDays(Number(e.target.value))}
+          onChange={(v) => setDays(Number(v))}
           aria-label={t('dashboard.range', { defaultValue: 'Date range' })}
-          className="h-8 w-auto text-xs"
-        >
-          {RANGES.map((d) => (
-            <option key={d} value={d}>
-              {t('dashboard.lastDays', { count: d, defaultValue: `Last ${d} days` })}
-            </option>
-          ))}
-        </Select>
+          options={RANGES.map((d) => ({
+            value: String(d),
+            label: t('dashboard.lastDays', { count: d, defaultValue: `Last ${d} days` }),
+          }))}
+        />
       </Toolbar>
 
       <div className="flex-1 overflow-auto p-5 sm:p-6">

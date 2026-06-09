@@ -8,7 +8,7 @@ import {
   EmptyState,
   FormField,
   Input,
-  Select,
+  SelectMenu,
   Skeleton,
   toast,
   Toolbar,
@@ -334,30 +334,31 @@ export function ReportsPage() {
             </FormField>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField label={t('reports.agent', { defaultValue: 'Agent (optional)' })}>
-                <Select
+                <SelectMenu
+                  fullWidth
                   value={draft.agent}
-                  onChange={(e) => setDraft({ ...draft, agent: e.target.value })}
-                >
-                  <option value="">{t('reports.anyAgent', { defaultValue: 'Any agent' })}</option>
-                  {(users.data ?? []).map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {[u.first_name, u.last_name].filter(Boolean).join(' ') || u.email}
-                    </option>
-                  ))}
-                </Select>
+                  aria-label={t('reports.agent', { defaultValue: 'Agent (optional)' })}
+                  onChange={(v) => setDraft({ ...draft, agent: v })}
+                  options={[
+                    { value: '', label: t('reports.anyAgent', { defaultValue: 'Any agent' }) },
+                    ...(users.data ?? []).map((u) => ({
+                      value: u.id,
+                      label: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email,
+                    })),
+                  ]}
+                />
               </FormField>
               <FormField label={t('reports.team', { defaultValue: 'Team (optional)' })}>
-                <Select
+                <SelectMenu
+                  fullWidth
                   value={draft.team}
-                  onChange={(e) => setDraft({ ...draft, team: e.target.value })}
-                >
-                  <option value="">{t('reports.anyTeam', { defaultValue: 'Any team' })}</option>
-                  {(teams.data ?? []).map((tm) => (
-                    <option key={tm.id} value={tm.id}>
-                      {tm.name}
-                    </option>
-                  ))}
-                </Select>
+                  aria-label={t('reports.team', { defaultValue: 'Team (optional)' })}
+                  onChange={(v) => setDraft({ ...draft, team: v })}
+                  options={[
+                    { value: '', label: t('reports.anyTeam', { defaultValue: 'Any team' }) },
+                    ...(teams.data ?? []).map((tm) => ({ value: tm.id, label: tm.name })),
+                  ]}
+                />
               </FormField>
             </div>
           </DrawerSection>

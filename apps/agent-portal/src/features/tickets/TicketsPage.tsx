@@ -9,7 +9,7 @@ import {
   cn,
   formatRelative,
   Pill,
-  Select,
+  SelectMenu,
   Skeleton,
   Spinner,
   TicketEmptyArt,
@@ -426,71 +426,67 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
             <div className="space-y-2.5">
               <label className="block space-y-1">
                 <span className="text-2xs text-muted-foreground">{t('conversation.status')}</span>
-                <Select
+                <SelectMenu
+                  size="sm"
+                  fullWidth
                   value={tk.status}
                   aria-label={t('conversation.status')}
-                  onChange={(e) => {
-                    const next = e.target.value as TicketStatus;
+                  onChange={(next) => {
                     const extra: Record<string, string> = {};
                     if (next === 'resolved') extra.resolved_at = new Date().toISOString();
                     if (next === 'closed') extra.closed_at = new Date().toISOString();
-                    patch({ status: next, ...extra });
+                    patch({ status: next as TicketStatus, ...extra });
                   }}
-                  className="h-8 w-full text-xs"
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {t(`status.${s}`, { ns: 'common' })}
-                    </option>
-                  ))}
-                </Select>
+                  options={STATUSES.map((s) => ({
+                    value: s,
+                    label: t(`status.${s}`, { ns: 'common' }),
+                  }))}
+                />
               </label>
               <label className="block space-y-1">
                 <span className="text-2xs text-muted-foreground">{t('conversation.priority')}</span>
-                <Select
+                <SelectMenu
+                  size="sm"
+                  fullWidth
                   value={tk.priority}
                   aria-label={t('conversation.priority')}
-                  onChange={(e) => patch({ priority: e.target.value as Priority })}
-                  className="h-8 w-full text-xs"
-                >
-                  {PRIORITIES.map((p) => (
-                    <option key={p} value={p}>
-                      {t(`priority.${p}`, { ns: 'common' })}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(v) => patch({ priority: v as Priority })}
+                  options={PRIORITIES.map((p) => ({
+                    value: p,
+                    label: t(`priority.${p}`, { ns: 'common' }),
+                  }))}
+                />
               </label>
               <label className="block space-y-1">
                 <span className="text-2xs text-muted-foreground">{t('conversation.agent')}</span>
-                <Select
+                <SelectMenu
+                  size="sm"
+                  fullWidth
                   value={tk.assigned_agent ?? ''}
                   aria-label={t('conversation.agent')}
-                  onChange={(e) => patch({ assigned_agent: e.target.value || null })}
-                  className="h-8 w-full text-xs"
-                >
-                  <option value="">{t('conversation.unassigned')}</option>
-                  {(agents.data ?? []).map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.first_name ?? a.email}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(v) => patch({ assigned_agent: v || null })}
+                  options={[
+                    { value: '', label: t('conversation.unassigned') },
+                    ...(agents.data ?? []).map((a) => ({
+                      value: a.id,
+                      label: a.first_name ?? a.email ?? '',
+                    })),
+                  ]}
+                />
               </label>
               <label className="block space-y-1">
                 <span className="text-2xs text-muted-foreground">{t('conversation.team')}</span>
-                <Select
+                <SelectMenu
+                  size="sm"
+                  fullWidth
                   value={tk.assigned_team ?? ''}
                   aria-label={t('conversation.team')}
-                  onChange={(e) => patch({ assigned_team: e.target.value || null })}
-                  className="h-8 w-full text-xs"
-                >
-                  <option value="">{t('conversation.noTeam')}</option>
-                  {(teams.data ?? []).map((tm) => (
-                    <option key={tm.id} value={tm.id}>
-                      {tm.name}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(v) => patch({ assigned_team: v || null })}
+                  options={[
+                    { value: '', label: t('conversation.noTeam') },
+                    ...(teams.data ?? []).map((tm) => ({ value: tm.id, label: tm.name })),
+                  ]}
+                />
               </label>
             </div>
             {!tk.first_responded_at && (
