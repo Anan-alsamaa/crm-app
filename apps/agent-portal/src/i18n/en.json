@@ -148,6 +148,8 @@
     "you": "You",
     "today": "Today",
     "yesterday": "Yesterday",
+    "copyMessage": "Copy message",
+    "copied": "Copied",
     "tab": {
       "reply": "Reply",
       "note": "Internal note"
