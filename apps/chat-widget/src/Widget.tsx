@@ -83,6 +83,22 @@ function SendIcon() {
   );
 }
 
+function AttachIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  );
+}
+
 function PhoneIcon() {
   return (
     <svg
@@ -157,9 +173,15 @@ export function Widget({ config }: { config: WidgetConfig }) {
     null,
   );
   const [agentsOnline, setAgentsOnline] = useState<number>(0);
+  const [pending, setPending] = useState<Array<{ id: string; name: string }>>([]);
+  const [uploading, setUploading] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const convoRef = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  // Remembers uploaded filenames by file id so the customer's own bubbles show
+  // a name (received agent files have no name and fall back to "Attachment").
+  const attachNamesRef = useRef<Record<string, string>>({});
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -241,7 +263,8 @@ export function Widget({ config }: { config: WidgetConfig }) {
 
   const send = () => {
     const content = draft.trim();
-    if (!content || !convoRef.current || !socketRef.current) return;
+    const attachmentIds = pending.map((p) => p.id);
+    if ((!content && attachmentIds.length === 0) || !convoRef.current || !socketRef.current) return;
     const cmid = clientId();
     setMessages((prev) => [
       ...prev,
@@ -250,7 +273,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
         conversationId: convoRef.current!,
         senderType: 'customer',
         content,
-        attachments: [],
+        attachments: attachmentIds,
         createdAt: new Date().toISOString(),
         clientMsgId: cmid,
       },
@@ -258,11 +281,64 @@ export function Widget({ config }: { config: WidgetConfig }) {
     socketRef.current.emit('message:send', {
       conversationId: convoRef.current,
       content,
+      ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
       clientMsgId: cmid,
     });
     setDraft('');
+    setPending([]);
     stopTyping();
   };
+
+  // Upload through the gateway (it proxies to Directus; the customer has no
+  // Directus account). Returns the file id to reference in message:send.
+  const uploadOne = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const socket = socketRef.current;
+      if (!socket) return reject(new Error('not_connected'));
+      void file.arrayBuffer().then((content) => {
+        socket
+          .timeout(20_000)
+          .emit(
+            'attachment:upload',
+            { filename: file.name, mimetype: file.type, content },
+            (err: Error | null, res?: { ok?: boolean; id?: string; error?: string }) => {
+              if (err) return reject(new Error('timeout'));
+              if (res?.ok && res.id) {
+                attachNamesRef.current[res.id] = file.name;
+                resolve(res.id);
+              } else reject(new Error(res?.error ?? 'upload_failed'));
+            },
+          );
+      });
+    });
+
+  const onPickFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const id = await uploadOne(file);
+        setPending((prev) => [...prev, { id, name: file.name }]);
+      }
+    } catch {
+      // Surface inline by appending a system note; keeps the widget dependency-free.
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: clientId(),
+          conversationId: convoRef.current ?? '',
+          senderType: 'system',
+          content: tr.attachFailed,
+          attachments: [],
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+  const removePending = (id: string) => setPending((prev) => prev.filter((p) => p.id !== id));
 
   const onInput = (e: Event) => {
     const target = e.target as HTMLTextAreaElement;
@@ -358,9 +434,25 @@ export function Widget({ config }: { config: WidgetConfig }) {
                 {messages.map((m) => (
                   <div
                     key={m.id}
-                    className={`yiji-msg ${m.senderType === 'customer' ? 'mine' : 'theirs'}`}
+                    className={`yiji-msg ${
+                      m.senderType === 'customer'
+                        ? 'mine'
+                        : m.senderType === 'system'
+                          ? 'system'
+                          : 'theirs'
+                    }`}
                   >
                     {m.content}
+                    {m.attachments && m.attachments.length > 0 && (
+                      <div className="yiji-msg-files">
+                        {m.attachments.map((id) => (
+                          <span className="yiji-msg-file" key={id}>
+                            <AttachIcon />
+                            <span>{attachNamesRef.current[id] ?? tr.attachment}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
                 {agentTyping && (
@@ -464,29 +556,64 @@ export function Widget({ config }: { config: WidgetConfig }) {
               </div>
             </div>
           ) : (
-            <div className="yiji-input">
-              <textarea
-                ref={textareaRef}
-                value={draft}
-                placeholder={tr.placeholder}
-                onInput={onInput}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                rows={1}
-              />
-              <button
-                className="yiji-send"
-                onClick={send}
-                aria-label={tr.send}
-                disabled={!ready || draft.trim().length === 0}
-              >
-                <SendIcon />
-              </button>
-            </div>
+            <>
+              {pending.length > 0 && (
+                <div className="yiji-pending">
+                  {pending.map((p) => (
+                    <span className="yiji-chip" key={p.id}>
+                      <span>{p.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => removePending(p.id)}
+                        aria-label={tr.removeAttachment}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="yiji-input">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={(e) => void onPickFiles((e.target as HTMLInputElement).files)}
+                />
+                <div className="yiji-field">
+                  <button
+                    className="yiji-attach"
+                    onClick={() => fileRef.current?.click()}
+                    aria-label={tr.attach}
+                    disabled={!ready || uploading}
+                  >
+                    <AttachIcon />
+                  </button>
+                  <textarea
+                    ref={textareaRef}
+                    value={draft}
+                    placeholder={tr.placeholder}
+                    onInput={onInput}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        send();
+                      }
+                    }}
+                    rows={1}
+                  />
+                </div>
+                <button
+                  className="yiji-send"
+                  onClick={send}
+                  aria-label={tr.send}
+                  disabled={!ready || (draft.trim().length === 0 && pending.length === 0)}
+                >
+                  <SendIcon />
+                </button>
+              </div>
+            </>
           )}
 
           <p className="yiji-footer">

@@ -123,58 +123,54 @@ export function TeamsPage() {
             }
           />
         ) : (
-          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {teams.data.map((tm, i) => {
+          /* Dense list — one row per team. Members shown as a small avatar
+             stack with an overflow count; no card chrome. */
+          <ul className="mx-auto max-w-5xl divide-y divide-border/50 overflow-hidden rounded-xl bg-card/50 ring-1 ring-border/60">
+            {teams.data.map((tm) => {
               const members = (users.data ?? []).filter((u) => u.team?.id === tm.id);
               const memberCount = members.length;
               return (
-                <li
-                  key={tm.id}
-                  style={{ animationDelay: `${Math.min(i * 22, 220)}ms` }}
-                  className="motion-safe:animate-fade-in"
-                >
+                <li key={tm.id}>
                   <button
                     type="button"
                     className={cn(
-                      'group flex w-full flex-col gap-3 rounded-2xl bg-card/70 px-5 py-4 text-start',
-                      'shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04]',
-                      'transition-[box-shadow,transform,background-color] duration-fast ease-out',
-                      'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px',
+                      'group flex w-full items-center gap-3 px-4 py-2.5 text-start',
+                      'transition-colors duration-fast ease-out hover:bg-secondary/50',
+                      'focus-visible:outline-none focus-visible:bg-secondary/60',
                     )}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-foreground tracking-tight">
-                          {tm.name}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-foreground">{tm.name}</div>
+                      {tm.description && (
+                        <div className="truncate text-xs text-muted-foreground">
+                          {tm.description}
                         </div>
-                        {tm.description && (
-                          <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                            {tm.description}
-                          </div>
+                      )}
+                    </div>
+                    {memberCount > 0 ? (
+                      <div className="flex shrink-0 items-center -space-x-1.5">
+                        {members.slice(0, 4).map((m) => {
+                          const fn = [m.first_name, m.last_name].filter(Boolean).join(' ');
+                          return (
+                            <span key={m.id} className="rounded-full ring-2 ring-card">
+                              <Avatar name={fn} email={m.email} size="xs" />
+                            </span>
+                          );
+                        })}
+                        {memberCount > 4 && (
+                          <span className="ms-2.5 text-2xs text-muted-foreground tabular-nums">
+                            +{memberCount - 4}
+                          </span>
                         )}
                       </div>
-                      <span className="shrink-0 inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-2xs font-medium text-muted-foreground tabular-nums">
-                        {memberCount}
+                    ) : (
+                      <span className="shrink-0 text-2xs italic text-muted-foreground/70">
+                        no members
                       </span>
-                    </div>
-                    <div className="flex items-center -space-x-2">
-                      {members.slice(0, 5).map((m) => {
-                        const fn = [m.first_name, m.last_name].filter(Boolean).join(' ');
-                        return (
-                          <span key={m.id} className="ring-2 ring-card rounded-full">
-                            <Avatar name={fn} email={m.email} size="xs" />
-                          </span>
-                        );
-                      })}
-                      {memberCount > 5 && (
-                        <span className="ms-2 text-2xs text-muted-foreground tabular-nums">
-                          +{memberCount - 5}
-                        </span>
-                      )}
-                      {memberCount === 0 && (
-                        <span className="text-2xs italic text-muted-foreground/70">no members</span>
-                      )}
-                    </div>
+                    )}
+                    <span className="w-20 shrink-0 text-end text-xs text-muted-foreground tabular-nums">
+                      {memberCount} {memberCount === 1 ? 'member' : 'members'}
+                    </span>
                   </button>
                 </li>
               );

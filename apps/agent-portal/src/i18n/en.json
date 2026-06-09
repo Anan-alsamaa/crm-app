@@ -8,6 +8,7 @@
     "matching": "matching",
     "searchPlaceholder": "Search by name, email, phone, vendor…",
     "empty": "No contacts yet.",
+    "emptyHint": "Contacts appear automatically as customers reach out through your channels.",
     "noMatch": "No contacts match your search.",
     "exportCsv": "Export CSV",
     "exportEmpty": "Nothing to export.",
@@ -46,21 +47,37 @@
       "sentiment": "Sentiment",
       "intent": "Intent",
       "entities": "Entities",
-      "scoreLead": "Score lead"
+      "scoreLead": "Score lead",
+      "search": "Search"
+    },
+    "search": {
+      "placeholder": "Search conversations…",
+      "empty": "No matching conversations."
     }
   },
   "login": {
     "title": "Sign in to YIJI CRM",
     "submit": "Sign in",
     "error": "Invalid email or password",
-    "emailPlaceholder": "you@company.com"
+    "emailPlaceholder": "you@company.com",
+    "subtitle": "Continue helping your customers.",
+    "forgot": "Forgot password?",
+    "hidePassword": "Hide",
+    "showPassword": "Reveal",
+    "secure": "Secured by JWT + TLS",
+    "help": "Trouble signing in? Talk to your administrator."
   },
   "nav": {
     "inbox": "Inbox",
     "tickets": "Tickets",
     "contacts": "Contacts",
     "preferences": "Preferences",
-    "signedInAs": "Signed in as {{name}}"
+    "primary": "Primary navigation",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "signedInAs": "Signed in as {{name}}",
+    "work": "Work",
+    "account": "Account"
   },
   "inbox": {
     "title": "Shared Inbox",
@@ -78,7 +95,28 @@
     "bulkSelected": "{{count}} selected",
     "bulkSetStatus": "Set status…",
     "bulkAddTag": "Add tag…",
-    "bulkClear": "Clear"
+    "bulkClear": "Clear",
+    "bulkStatusDone": "Updated {{count}} conversation(s).",
+    "bulkTagDone": "Tagged {{count}} conversation(s).",
+    "stats": {
+      "open": "open",
+      "urgent": "urgent",
+      "unread": "unread"
+    },
+    "emptyHint": "New conversations from your widget land here in real time.",
+    "welcomeHint": "Pick the next thread on the left, or use the stats above to filter by what needs attention first.",
+    "welcome": {
+      "queue": "queue",
+      "openCount": "{{count}} open",
+      "zeroTitle": "Inbox zero.",
+      "zeroAccent": "Take a breath.",
+      "waiting": "{{count}} conversation(s) waiting.",
+      "urgentAccent": "{{count}} urgent.",
+      "pace": "You set the pace.",
+      "recent": "Recent activity",
+      "zeroArt": "New conversations will land here as customers reach out through the widget, email, or other channels."
+    },
+    "resizeList": "Resize conversation list"
   },
   "conversation": {
     "replyPlaceholder": "Type a reply…",
@@ -93,20 +131,49 @@
     "team": "Team",
     "unassigned": "Unassigned",
     "noTeam": "No team",
-    "addTag": "Tag"
+    "addTag": "Add tag",
+    "tagLimit": "Up to {{count}} tags per conversation.",
+    "tagsFull": "{{count}}/{{count}} tags",
+    "noTagsYet": "No tags yet.",
+    "tagSearchPlaceholder": "Search or create…",
+    "createTagNamed": "Create “{{name}}”",
+    "allTagsAdded": "All tags added — type to create a new one.",
+    "removeTag": "Remove {{name}}",
+    "backToInbox": "Back to inbox",
+    "details": "Conversation details",
+    "attach": "Attach file",
+    "attachment": "Attachment",
+    "attachFailed": "Could not upload the file.",
+    "removeAttachment": "Remove attachment",
+    "you": "You",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "tab": {
+      "reply": "Reply",
+      "note": "Internal note"
+    },
+    "sendHint": "to send",
+    "newlineHint": "for newline"
   },
   "sidebar": {
     "contact": "Contact",
+    "channelWidget": "widget · web",
+    "email": "Email",
+    "phone": "Phone",
+    "source": "Source",
+    "sourceWidget": "Web widget",
     "tags": "Tags",
     "linkedTickets": "Linked tickets",
     "noTickets": "No linked tickets.",
     "internalNotes": "Internal notes",
     "noNotes": "No internal notes yet.",
-    "removeNote": "Remove note"
+    "removeNote": "Remove note",
+    "resizePanel": "Resize details panel"
   },
   "tickets": {
     "title": "Tickets",
     "empty": "No tickets yet.",
+    "backToList": "All tickets",
     "selectPrompt": "Select a ticket to view details.",
     "createTitle": "Create ticket",
     "create": "Create",
@@ -119,6 +186,13 @@
     "resolutionDue": "Resolution due",
     "respondedAt": "Responded at",
     "markResponded": "Mark first response sent",
+    "addNote": "Add internal note",
+    "notePlaceholder": "Leave a note for the team… @mention to notify",
+    "addNoteCta": "Add note",
+    "attachments": "Attachments",
+    "attach": "Attach file",
+    "noAttachments": "No attachments yet.",
+    "properties": "Properties",
     "event": {
       "created": "Ticket created",
       "status_changed": "Status changed",
@@ -130,7 +204,14 @@
       "closed": "Closed",
       "reopened": "Reopened",
       "automation_triggered": "Automation triggered"
-    }
+    },
+    "created": "Ticket created",
+    "createHint": "Capture the work as a ticket so it can be tracked against an SLA.",
+    "filterAll": "All",
+    "overdue": "overdue",
+    "emptyHint": "Tickets are created from conversations that need follow-up.",
+    "selectHint": "Pick a ticket on the left to see its workflow, SLA timeline, and history.",
+    "slaSection": "SLA"
   },
   "notifications": {
     "title": "Notifications",
@@ -145,7 +226,18 @@
       "reminder": "Reminder",
       "escalation": "Escalation",
       "automation": "Automation"
-    }
+    },
+    "allRead": "All caught up",
+    "markAllRead": "Mark all read",
+    "emptyHint": "New SLA warnings, mentions, and assignments land here.",
+    "emptyAllHint": "You have no notifications yet.",
+    "today": "Today",
+    "earlier": "Earlier",
+    "view": "View",
+    "managePreferences": "Manage notification preferences",
+    "unreadCount": "{{count}} unread",
+    "tabUnread": "Unread",
+    "tabAll": "All"
   },
   "preferences": {
     "title": "Notification preferences",
@@ -160,5 +252,35 @@
     },
     "saved": "Preferences saved.",
     "error": "Could not save preferences."
+  },
+  "cmd": {
+    "pages": "Pages",
+    "conversations": "Conversations",
+    "tickets": "Tickets",
+    "actions": "Quick actions"
+  },
+  "customFields": {
+    "saved": "Custom fields saved.",
+    "saveError": "Could not save.",
+    "title": "Custom fields"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "navigation": "Navigation",
+    "general": "General",
+    "commandPalette": "Command palette",
+    "showShortcuts": "Show this help",
+    "closeDialogs": "Close dialogs"
+  },
+  "sound": {
+    "mute": "Mute new-message sound",
+    "unmute": "Unmute new-message sound",
+    "statusOn": "Sound on",
+    "statusMuted": "Muted",
+    "railLabel": "Message sounds",
+    "prefTitle": "New-message sound",
+    "prefHint": "Play a short chime in this browser when a new message arrives.",
+    "on": "On",
+    "off": "Off"
   }
 }

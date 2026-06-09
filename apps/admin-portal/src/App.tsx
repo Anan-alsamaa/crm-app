@@ -1,31 +1,63 @@
-import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
+  AppShell,
+  type AppShellRailContext,
   Avatar,
   ClockIcon,
   cn,
+  ErrorBoundary,
+  InboxIcon,
   SettingsIcon,
   SignOutIcon,
+  Spinner,
   TeamIcon,
   Toaster,
-  useResizable,
   UsersIcon,
   YijiLogo,
 } from '@yiji/ui';
+import { RouteError } from './components/RouteError.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
 import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
-import { UsersPage } from './features/users/UsersPage.js';
-import { TeamsPage } from './features/teams/TeamsPage.js';
-import { SlaPoliciesPage } from './features/sla/SlaPoliciesPage.js';
-import { VendorsPage } from './features/vendors/VendorsPage.js';
-import { AutomationPage } from './features/automation/AutomationPage.js';
-import { ReportsPage } from './features/reports/ReportsPage.js';
-import { CustomFieldsPage } from './features/custom-fields/CustomFieldsPage.js';
-import { ImportsPage } from './features/imports/ImportsPage.js';
-import { AiConfigPage } from './features/ai-config/AiConfigPage.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
+import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
+
+// Route pages are code-split so the initial bundle stays lean.
+const DashboardPage = lazy(() =>
+  import('./features/dashboard/DashboardPage.js').then((m) => ({ default: m.DashboardPage })),
+);
+const UsersPage = lazy(() =>
+  import('./features/users/UsersPage.js').then((m) => ({ default: m.UsersPage })),
+);
+const TeamsPage = lazy(() =>
+  import('./features/teams/TeamsPage.js').then((m) => ({ default: m.TeamsPage })),
+);
+const SlaPoliciesPage = lazy(() =>
+  import('./features/sla/SlaPoliciesPage.js').then((m) => ({ default: m.SlaPoliciesPage })),
+);
+const VendorsPage = lazy(() =>
+  import('./features/vendors/VendorsPage.js').then((m) => ({ default: m.VendorsPage })),
+);
+const AutomationPage = lazy(() =>
+  import('./features/automation/AutomationPage.js').then((m) => ({ default: m.AutomationPage })),
+);
+const ReportsPage = lazy(() =>
+  import('./features/reports/ReportsPage.js').then((m) => ({ default: m.ReportsPage })),
+);
+const CustomFieldsPage = lazy(() =>
+  import('./features/custom-fields/CustomFieldsPage.js').then((m) => ({
+    default: m.CustomFieldsPage,
+  })),
+);
+const ImportsPage = lazy(() =>
+  import('./features/imports/ImportsPage.js').then((m) => ({ default: m.ImportsPage })),
+);
+const AiConfigPage = lazy(() =>
+  import('./features/ai-config/AiConfigPage.js').then((m) => ({ default: m.AiConfigPage })),
+);
 
 interface NavItem {
   to: string;
@@ -39,27 +71,14 @@ interface NavSection {
   items: NavItem[];
 }
 
-function Sidebar({ sections }: { sections: NavSection[] }) {
+function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSection[] }) {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || '';
-  const { width, dragging, bind } = useResizable({
-    storageKey: 'yiji.admin.sidebarWidth',
-    defaultWidth: 224,
-    min: 64,
-    max: 360,
-  });
-  const isCollapsed = width < 140;
+  const isCollapsed = ctx.collapsed;
 
   return (
-    <nav
-      aria-label="Primary navigation"
-      style={{ width }}
-      className={cn(
-        'relative z-30 flex shrink-0 flex-col my-3 ms-3 rounded-xl bg-rail text-rail-foreground shadow-lg shadow-rail/20',
-        !dragging && 'transition-[width] duration-150 ease-out',
-      )}
-    >
+    <>
       {/* Brand */}
       <div
         className={cn(
@@ -98,6 +117,7 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
                   <NavLink
                     to={it.to}
                     title={it.label}
+                    onClick={ctx.onNavigate}
                     className={({ isActive }) =>
                       cn(
                         'group relative flex h-9 items-center rounded-md text-sm font-medium',
@@ -168,33 +188,36 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
           )}
         </div>
       </div>
+    </>
+  );
+}
 
-      {/* Drag handle — 6px hit area on the trailing edge */}
-      <div
-        {...bind}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize sidebar"
-        className={cn(
-          'group/handle absolute inset-y-0 end-0 w-1.5 -me-0.5 cursor-col-resize',
-          'flex items-center justify-center',
-        )}
-      >
-        <span
-          aria-hidden
-          className={cn(
-            'h-12 w-0.5 rounded-full transition-colors duration-fast ease-out',
-            dragging ? 'bg-primary' : 'bg-transparent group-hover/handle:bg-primary/40',
-          )}
-        />
-      </div>
-    </nav>
+/** Compact brand lockup for the mobile top bar. */
+function MobileBrand() {
+  return (
+    <div className="flex items-center gap-2">
+      <YijiLogo variant="tile" size={28} className="bg-rail shadow-sm shrink-0" />
+      <span className="text-[15px] font-semibold tracking-[-0.015em] text-foreground">
+        Yiji <span className="font-normal text-muted-foreground">CRM</span>
+      </span>
+    </div>
   );
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
+  const location = useLocation();
   const sections: NavSection[] = [
+    {
+      heading: t('nav.overview', { defaultValue: 'Overview' }),
+      items: [
+        {
+          to: '/dashboard',
+          label: t('nav.dashboard', { defaultValue: 'Dashboard' }),
+          icon: InboxIcon,
+        },
+      ],
+    },
     {
       heading: t('nav.workspace', { defaultValue: 'Workspace' }),
       items: [
@@ -242,14 +265,37 @@ function Shell({ children }: { children: React.ReactNode }) {
     },
   ];
   return (
-    <div className="flex h-full text-foreground">
-      <Sidebar sections={sections} />
-      <main className="flex-1 min-w-0 min-h-0 m-3 ms-3 rounded-2xl bg-card/85 shadow-xl shadow-foreground/5 ring-1 ring-foreground/[0.04] overflow-hidden">
-        {children}
-      </main>
+    <>
+      <AppShell
+        rail={(ctx) => <Rail ctx={ctx} sections={sections} />}
+        topBarBrand={<MobileBrand />}
+        resizeStorageKey="yiji.admin.sidebarWidth"
+        navLabel={t('nav.primary', { defaultValue: 'Primary navigation' })}
+        menuLabel={t('nav.openMenu', { defaultValue: 'Open menu' })}
+        closeLabel={t('nav.closeMenu', { defaultValue: 'Close menu' })}
+      >
+        <ErrorBoundary
+          resetKeys={[location.pathname]}
+          fallback={({ reset }) => <RouteError onRetry={reset} />}
+        >
+          <Suspense
+            fallback={
+              <div
+                className="flex h-full items-center justify-center text-muted-foreground"
+                aria-busy="true"
+              >
+                <Spinner size={20} label={t('actions.loading', { ns: 'common' })} />
+              </div>
+            }
+          >
+            {children}
+          </Suspense>
+        </ErrorBoundary>
+      </AppShell>
       <AppCommandPalette />
+      <AppKeyboardShortcuts />
       <Toaster position="bottom" />
-    </div>
+    </>
   );
 }
 
@@ -259,6 +305,16 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <DashboardPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/users"
             element={
@@ -349,8 +405,8 @@ export function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/" element={<Navigate to="/users" replace />} />
-          <Route path="*" element={<Navigate to="/users" replace />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

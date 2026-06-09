@@ -1,19 +1,29 @@
 import { useTranslation } from 'react-i18next';
-import { Avatar, Pill, Spinner, formatRelative } from '@yiji/ui';
+import { Avatar, cn, Pill, ResizeHandle, Spinner, formatRelative, useResizable } from '@yiji/ui';
 import { useConversation, useLinkedTickets, type ConversationMessage } from '../inbox/api.js';
 import { AiPanel } from '../ai/AiPanel.js';
+import { ConversationTags } from './ConversationTags.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 
 interface Props {
   conversationId: string;
   notes?: ConversationMessage[];
   onDeleteNote?: (noteId: string) => void;
+  /** Width/utility override. Defaults to the desktop `w-80` rail width. */
+  className?: string;
+  /** Desktop only: make the panel drag-resizable from its leading edge. */
+  resizable?: boolean;
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({ children, count }: { children: React.ReactNode; count?: number }) {
   return (
-    <h3 className="mb-3 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-      {children}
+    <h3 className="mb-3 flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <span>{children}</span>
+      {count !== undefined && count > 0 && (
+        <span className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-semibold tabular-nums text-muted-foreground">
+          {count}
+        </span>
+      )}
     </h3>
   );
 }
@@ -26,14 +36,41 @@ const TICKET_TONE: Record<string, 'success' | 'warning' | 'muted' | 'primary' | 
   reopened: 'neutral',
 };
 
-export function ConversationSidebar({ conversationId, notes, onDeleteNote }: Props) {
+export function ConversationSidebar({
+  conversationId,
+  notes,
+  onDeleteNote,
+  className,
+  resizable,
+}: Props) {
   const { t } = useTranslation();
   const convo = useConversation(conversationId);
   const tickets = useLinkedTickets(conversationId);
+  const rs = useResizable({
+    storageKey: 'yiji.agent.convoSidebarWidth',
+    defaultWidth: 320,
+    min: 264,
+    max: 480,
+    side: 'end',
+  });
+  const sizeProps = resizable ? { style: { width: rs.width } } : undefined;
+  const widthClass = resizable ? '' : 'w-80';
+  const handle = resizable ? (
+    <ResizeHandle
+      bind={rs.bind}
+      dragging={rs.dragging}
+      side="end"
+      label={t('sidebar.resizePanel', { defaultValue: 'Resize details panel' })}
+    />
+  ) : null;
 
   if (convo.isLoading)
     return (
-      <aside className="flex w-80 items-center justify-center ">
+      <aside
+        className={cn('relative flex shrink-0 items-center justify-center', widthClass, className)}
+        {...sizeProps}
+      >
+        {handle}
         <Spinner />
       </aside>
     );
@@ -42,7 +79,8 @@ export function ConversationSidebar({ conversationId, notes, onDeleteNote }: Pro
   const contactName = c.contact?.name ?? t('inbox.unknownContact');
 
   return (
-    <aside className="w-80 shrink-0 overflow-auto ">
+    <aside className={cn('relative shrink-0 overflow-auto', widthClass, className)} {...sizeProps}>
+      {handle}
       {/* Identity — big avatar in a mesh halo, no border below. */}
       <div className="relative overflow-hidden px-6 pb-6 pt-7">
         <div
@@ -58,7 +96,7 @@ export function ConversationSidebar({ conversationId, notes, onDeleteNote }: Pro
           <div className="space-y-1.5">
             <h3 className="text-lg font-bold tracking-tight text-foreground">{contactName}</h3>
             <Pill tone="pink" size="sm">
-              widget · web
+              {t('sidebar.channelWidget')}
             </Pill>
           </div>
         </div>
@@ -70,46 +108,27 @@ export function ConversationSidebar({ conversationId, notes, onDeleteNote }: Pro
         <dl className="space-y-2.5 text-xs">
           {c.contact?.email && (
             <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">Email</dt>
+              <dt className="text-muted-foreground">{t('sidebar.email')}</dt>
               <dd className="truncate font-medium text-foreground">{c.contact.email}</dd>
             </div>
           )}
           {c.contact?.phone && (
             <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">Phone</dt>
+              <dt className="text-muted-foreground">{t('sidebar.phone')}</dt>
               <dd className="tabular-nums font-medium text-foreground">{c.contact.phone}</dd>
             </div>
           )}
           <div className="flex items-center justify-between gap-3">
-            <dt className="text-muted-foreground">Source</dt>
-            <dd className="font-medium text-foreground">Web widget</dd>
+            <dt className="text-muted-foreground">{t('sidebar.source')}</dt>
+            <dd className="font-medium text-foreground">{t('sidebar.sourceWidget')}</dd>
           </div>
         </dl>
       </section>
 
-      {/* Tags */}
-      {c.tags && c.tags.length > 0 && (
-        <section className="px-6 py-4">
-          <SectionLabel>{t('sidebar.tags')}</SectionLabel>
-          <div className="flex flex-wrap gap-1.5">
-            {c.tags.map((tg) =>
-              tg.tags_id ? (
-                <span
-                  key={tg.tags_id.id}
-                  className="rounded-md bg-secondary px-2 py-1 text-xs font-medium text-foreground"
-                  style={
-                    tg.tags_id.color
-                      ? { background: `${tg.tags_id.color}24`, color: tg.tags_id.color }
-                      : undefined
-                  }
-                >
-                  {tg.tags_id.name}
-                </span>
-              ) : null,
-            )}
-          </div>
-        </section>
-      )}
+      {/* Tags — the single, interactive home for conversation tags. */}
+      <section className="px-6 py-4">
+        <ConversationTags conversation={c} />
+      </section>
 
       {/* Custom fields (per-conversation) */}
       <section className="px-6 py-4">
@@ -132,20 +151,20 @@ export function ConversationSidebar({ conversationId, notes, onDeleteNote }: Pro
       {/* Internal notes — agent-only side conversation. Authored by the team,
           rendered out of the customer thread so they can't bleed in visually. */}
       <section className="px-6 py-4">
-        <SectionLabel>
+        <SectionLabel count={notes?.length}>
           {t('sidebar.internalNotes', { defaultValue: 'Internal notes' })}
         </SectionLabel>
         {notes && notes.length > 0 ? (
-          <ul className="space-y-2.5">
+          <ul className="space-y-2">
             {notes.map((n) => (
               <li
                 key={n.id}
-                className="group relative rounded-lg bg-warning/10 px-3 py-2.5 ring-1 ring-warning/20"
+                className="group relative rounded-lg border-s-2 border-warning/50 bg-warning/10 ps-3 pe-3 py-2.5"
               >
-                <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
+                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
                   {n.content}
                 </p>
-                <div className="mt-1.5 flex items-center justify-between gap-2 text-2xs text-muted-foreground">
+                <div className="mt-2 flex items-center justify-between gap-2 text-2xs text-muted-foreground">
                   <span className="tabular-nums">
                     {n.date_created ? formatRelative(n.date_created) : ''}
                   </span>
@@ -183,7 +202,7 @@ export function ConversationSidebar({ conversationId, notes, onDeleteNote }: Pro
 
       {/* Linked tickets — borderless rows with hover lift, not stacked cards. */}
       <section className="px-6 py-4 pb-8">
-        <SectionLabel>{t('sidebar.linkedTickets')}</SectionLabel>
+        <SectionLabel count={tickets.data?.length}>{t('sidebar.linkedTickets')}</SectionLabel>
         {tickets.isLoading ? (
           <Spinner />
         ) : tickets.data && tickets.data.length > 0 ? (

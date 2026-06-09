@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import { Button, cn, Pill, Spinner } from '@yiji/ui';
@@ -38,11 +39,13 @@ function fmtErr(err: unknown): string {
 
 export function AiPanel({ conversationId, vendorId, draft, locale, onReplySuggested }: Props) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const caller = { userId: user?.id ?? '', vendorId };
 
-  type ResultKey = 'summary' | 'reply' | 'sentiment' | 'intent' | 'entities' | 'lead';
+  type ResultKey = 'summary' | 'reply' | 'sentiment' | 'intent' | 'entities' | 'lead' | 'search';
   const [active, setActive] = useState<ResultKey | null>(null);
+  const [query, setQuery] = useState('');
 
   const summarize = useMutation({
     mutationFn: () => ai.summarize(caller, conversationId),
@@ -71,9 +74,12 @@ export function AiPanel({ conversationId, vendorId, draft, locale, onReplySugges
     mutationFn: () => ai.scoreLead(caller, conversationId),
     onSuccess: () => setActive('lead'),
   });
+  const search = useMutation({
+    mutationFn: (q: string) => ai.search(caller, q),
+  });
 
   const actions: Array<{
-    key: ResultKey | 'search';
+    key: ResultKey;
     label: string;
     busy: boolean;
     run: () => void;
@@ -114,7 +120,18 @@ export function AiPanel({ conversationId, vendorId, draft, locale, onReplySugges
       busy: scoreLead.isPending,
       run: () => scoreLead.mutate(),
     },
+    {
+      key: 'search',
+      label: t('ai.action.search', { defaultValue: 'Search' }),
+      busy: search.isPending,
+      run: () => setActive('search'),
+    },
   ];
+
+  const runSearch = () => {
+    const q = query.trim();
+    if (q) search.mutate(q);
+  };
 
   return (
     <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] px-5 py-4 space-y-4">
@@ -224,8 +241,55 @@ export function AiPanel({ conversationId, vendorId, draft, locale, onReplySugges
         </ResultCard>
       )}
 
+      {active === 'search' && (
+        <ResultCard label={t('ai.action.search', { defaultValue: 'Search' })}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              runSearch();
+            }}
+            className="flex items-center gap-2"
+          >
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label={t('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
+              placeholder={t('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
+              className="block h-8 w-full rounded-md border border-border bg-background/60 px-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none text-start"
+            />
+            <Button type="submit" size="sm" loading={search.isPending} disabled={!query.trim()}>
+              {t('actions.search', { ns: 'common', defaultValue: 'Search' })}
+            </Button>
+          </form>
+          {search.data &&
+            (search.data.results.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {t('ai.search.empty', { defaultValue: 'No matching conversations.' })}
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {search.data.results.map((r) => (
+                  <li key={r.conversationId}>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/?conv=${r.conversationId}`)}
+                      className="block w-full rounded-md px-2 py-1.5 text-start transition-colors duration-fast ease-out hover:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                    >
+                      <p className="line-clamp-2 text-xs text-foreground">{r.snippet}</p>
+                      <span className="text-2xs tabular-nums text-muted-foreground">
+                        {(r.score * 100).toFixed(0)}%
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ))}
+        </ResultCard>
+      )}
+
       {/* Errors — show last failed mutation */}
-      {[summarize, suggestReply, sentiment, intent, entities, scoreLead]
+      {[summarize, suggestReply, sentiment, intent, entities, scoreLead, search]
         .filter((m) => m.isError)
         .slice(-1)
         .map((m, i) => (
@@ -240,7 +304,7 @@ export function AiPanel({ conversationId, vendorId, draft, locale, onReplySugges
           </p>
         ))}
 
-      {[summarize, suggestReply, sentiment, intent, entities, scoreLead].some(
+      {[summarize, suggestReply, sentiment, intent, entities, scoreLead, search].some(
         (m) => m.isPending,
       ) && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">

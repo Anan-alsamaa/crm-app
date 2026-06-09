@@ -111,3 +111,61 @@ export function SignOutIcon({ size = 16, className, ...rest }: IconProps): JSX.E
     </svg>
   );
 }
+
+export function MenuIcon({ size = 20, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M3 6h18" />
+      <path d="M3 12h18" />
+      <path d="M3 18h18" />
+    </svg>
+  );
+}
+
+export function CloseIcon({ size = 20, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
+export function ArrowLeftIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M19 12H5" />
+      <path d="m12 19-7-7 7-7" />
+    </svg>
+  );
+}
+
+export function InfoIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4" />
+      <path d="M12 8h.01" />
+    </svg>
+  );
+}
+
+export function SoundOnIcon({ size = 16, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+    </svg>
+  );
+}
+
+export function SoundOffIcon({ size = 16, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+      <path d="m23 9-6 6" />
+      <path d="m17 9 6 6" />
+    </svg>
+  );
+}

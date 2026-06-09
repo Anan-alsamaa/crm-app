@@ -56,6 +56,7 @@ const ACTION_KINDS: RuleAction['kind'][] = [
   'set_status',
   'add_tag',
   'send_notification',
+  'escalate',
 ];
 
 function PlusIcon() {

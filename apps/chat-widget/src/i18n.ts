@@ -12,6 +12,9 @@ export interface WidgetStrings {
   connecting: string;
   reconnecting: string;
   attach: string;
+  attachment: string;
+  attachFailed: string;
+  removeAttachment: string;
   close: string;
   /** Idle state when the conversation has no messages yet. */
   emptyTitle: string;
@@ -44,6 +47,9 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     connecting: 'Connecting…',
     reconnecting: 'Reconnecting…',
     attach: 'Attach file',
+    attachment: 'Attachment',
+    attachFailed: 'Could not upload the file.',
+    removeAttachment: 'Remove attachment',
     close: 'Close',
     emptyTitle: 'Say hello to start the chat',
     emptySub: 'A real teammate will reply. Typical reply time is a few minutes.',
@@ -71,6 +77,9 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     connecting: 'جارٍ الاتصال…',
     reconnecting: 'إعادة الاتصال…',
     attach: 'إرفاق ملف',
+    attachment: 'مرفق',
+    attachFailed: 'تعذّر رفع الملف.',
+    removeAttachment: 'إزالة المرفق',
     close: 'إغلاق',
     emptyTitle: 'ابدأ المحادثة بقول مرحبًا',
     emptySub: 'سيردّ عليك أحد أعضاء الفريق. عادةً ما يستجيب خلال دقائق.',

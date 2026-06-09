@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { readItems, readUsers, updateItem, createItem } from '@directus/sdk';
+import { readItems, readUsers, updateItem, createItem, deleteItem } from '@directus/sdk';
 import type { ConversationStatus, Priority } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 
@@ -12,7 +12,13 @@ export interface InboxConversation {
   assigned_agent: string | null;
   assigned_team: string | null;
   contact: { id: string; name: string | null; email: string | null; phone: string | null } | null;
-  tags?: Array<{ tags_id: { id: string; name: string; color: string | null } | null }>;
+  tags?: Array<{ id: string; tags_id: { id: string; name: string; color: string | null } | null }>;
+}
+
+export interface MessageAttachment {
+  id: string;
+  filename: string | null;
+  type: string | null;
 }
 
 export interface ConversationMessage {
@@ -21,6 +27,7 @@ export interface ConversationMessage {
   content: string;
   is_internal_note: boolean;
   date_created: string | null;
+  attachments?: MessageAttachment[];
 }
 
 export interface InboxFilters {
@@ -71,7 +78,7 @@ export function useConversations(filters: InboxFilters = {}) {
             'assigned_agent',
             'assigned_team',
             { contact: ['id', 'name', 'email', 'phone'] },
-            { tags: [{ tags_id: ['id', 'name', 'color'] }] },
+            { tags: ['id', { tags_id: ['id', 'name', 'color'] }] },
           ],
           sort,
           ...(filter ? { filter } : {}),
@@ -84,15 +91,55 @@ export function useMessages(conversationId: string | null) {
   return useQuery({
     enabled: !!conversationId,
     queryKey: ['messages', conversationId],
-    queryFn: () =>
-      directus.request(
+    queryFn: async () => {
+      const msgs = (await directus.request(
         readItems('messages', {
           filter: { conversation: { _eq: conversationId } },
           fields: ['id', 'sender_type', 'content', 'is_internal_note', 'date_created'],
           sort: ['date_created'],
           limit: -1,
         }),
-      ) as Promise<ConversationMessage[]>,
+      )) as ConversationMessage[];
+      const ids = msgs.map((m) => m.id);
+      if (ids.length === 0) return msgs;
+      // Attachments live in the messages_files m2m junction (there is no alias
+      // field on `messages`). Fail soft: against an older gateway/permission set
+      // the junction read may be denied — messages still render without chips.
+      try {
+        const links = (await directus.request(
+          readItems('messages_files', {
+            filter: { messages_id: { _in: ids } },
+            fields: ['messages_id', { directus_files_id: ['id', 'filename_download', 'type'] }],
+            limit: -1,
+          }),
+        )) as Array<{
+          messages_id: string;
+          directus_files_id: {
+            id: string;
+            filename_download: string | null;
+            type: string | null;
+          } | null;
+        }>;
+        const byMsg = new Map<string, MessageAttachment[]>();
+        for (const l of links) {
+          if (!l.directus_files_id) continue;
+          const arr = byMsg.get(l.messages_id) ?? [];
+          arr.push({
+            id: l.directus_files_id.id,
+            filename: l.directus_files_id.filename_download,
+            type: l.directus_files_id.type,
+          });
+          byMsg.set(l.messages_id, arr);
+        }
+        for (const m of msgs) {
+          const a = byMsg.get(m.id);
+          if (a) m.attachments = a;
+        }
+      } catch {
+        /* attachments unavailable — render messages without them */
+      }
+      return msgs;
+    },
   });
 }
 
@@ -114,7 +161,7 @@ export function useConversation(conversationId: string | null) {
               'assigned_team',
               { contact: ['id', 'name', 'email', 'phone'] },
               { vendor: ['id', 'name'] },
-              { tags: [{ tags_id: ['id', 'name', 'color'] }] },
+              { tags: ['id', { tags_id: ['id', 'name', 'color'] }] },
             ],
             limit: 1,
           }),
@@ -176,13 +223,19 @@ export function useAgents() {
   return useQuery({
     queryKey: ['agents'],
     queryFn: () =>
-      directus.request(
-        readUsers({
-          limit: -1,
-          fields: ['id', 'email', 'first_name', 'last_name'],
-          sort: ['email'],
-        }),
-      ) as Promise<AgentOption[]>,
+      directus
+        .request(
+          readUsers({
+            limit: -1,
+            fields: ['id', 'email', 'first_name', 'last_name'],
+            sort: ['email'],
+          }),
+        )
+        // Service accounts (svc-*@svc.example.com) aren't people — never offer
+        // them for assignment or @mentions.
+        .then((rows) =>
+          (rows as AgentOption[]).filter((u) => !(u.email ?? '').toLowerCase().includes('@svc.')),
+        ) as Promise<AgentOption[]>,
   });
 }
 
@@ -233,11 +286,25 @@ export function useAddTagToConversation() {
   });
 }
 
+export function useRemoveTagFromConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ junctionId }: { junctionId: string; conversationId: string }) =>
+      directus.request(deleteItem('conversations_tags', junctionId)),
+    onSuccess: (_d, vars) => {
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+      void qc.invalidateQueries({ queryKey: ['conversation', vars.conversationId] });
+    },
+  });
+}
+
 export function useCreateTag() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ name, color }: { name: string; color?: string }) =>
-      directus.request(createItem('tags', { name, color: color ?? '#94a3b8' } as never)),
+      directus.request(
+        createItem('tags', { name, color: color ?? '#94a3b8' } as never),
+      ) as Promise<{ id: string; name: string; color: string | null }>,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tags'] }),
   });
 }
