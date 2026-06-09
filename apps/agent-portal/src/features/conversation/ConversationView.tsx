@@ -536,7 +536,7 @@ export function ConversationView({
                 className={cn(
                   'relative h-8 font-medium transition-colors duration-fast ease-out',
                   !internalNote
-                    ? 'text-foreground after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-foreground'
+                    ? 'text-foreground after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-primary'
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -568,7 +568,8 @@ export function ConversationView({
                 'group relative rounded-2xl transition-[box-shadow,background-color] duration-fast ease-out',
                 'ring-1 ring-foreground/[0.05]',
                 internalNote ? 'bg-warning/10' : 'bg-card/70 backdrop-blur',
-                'focus-within:bg-card focus-within:shadow-lg focus-within:shadow-foreground/[0.08] focus-within:ring-primary/30',
+                // Confident teal lift on focus: brand glow + a 2px brand ring.
+                'focus-within:bg-card focus-within:shadow-lg focus-within:shadow-primary/15 focus-within:ring-2 focus-within:ring-primary/40',
                 internalNote && 'focus-within:ring-warning/50',
               )}
             >
@@ -679,7 +680,7 @@ export function ConversationView({
                     'disabled:opacity-40 disabled:cursor-not-allowed',
                     internalNote
                       ? 'bg-warning text-warning-foreground hover:enabled:shadow-warning/30'
-                      : 'bg-foreground text-background hover:bg-foreground/90 hover:enabled:shadow-foreground/25',
+                      : 'bg-primary text-primary-foreground hover:bg-primary/90 hover:enabled:shadow-primary/40',
                   )}
                 >
                   <svg
