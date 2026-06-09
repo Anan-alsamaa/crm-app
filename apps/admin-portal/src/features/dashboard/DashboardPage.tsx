@@ -32,8 +32,18 @@ function Stat({
   accent?: boolean;
 }) {
   return (
-    <div className="rounded-2xl bg-card/60 px-5 py-4 ring-1 ring-border/60">
-      <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+    <div
+      className={cn(
+        'rounded-2xl px-5 py-4 shadow-sm shadow-foreground/[0.05] transition-shadow duration-fast ease-out',
+        accent ? 'bg-primary-subtle/50 ring-1 ring-primary/25' : 'bg-card/70 ring-1 ring-border/60',
+      )}
+    >
+      <div
+        className={cn(
+          'text-2xs font-semibold uppercase tracking-[0.12em]',
+          accent ? 'text-primary/80' : 'text-muted-foreground',
+        )}
+      >
         {label}
       </div>
       <div
@@ -44,7 +54,11 @@ function Stat({
       >
         {value}
       </div>
-      {hint && <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div>}
+      {hint && (
+        <div className={cn('mt-0.5 text-xs', accent ? 'text-primary/70' : 'text-muted-foreground')}>
+          {hint}
+        </div>
+      )}
     </div>
   );
 }
@@ -58,7 +72,7 @@ function VolumeBars({ series }: { series: DashboardMetrics['volumeSeries'] }) {
       {series.map((s) => (
         <div key={s.day} className="group relative flex-1" title={`${s.day}: ${s.count}`}>
           <div
-            className="w-full rounded-t bg-primary/70 transition-colors group-hover:bg-primary"
+            className="w-full rounded-t-md bg-gradient-to-t from-primary/70 to-primary shadow-sm shadow-primary/20 transition-[filter,opacity] duration-fast ease-out group-hover:brightness-110"
             style={{ height: `${Math.max(4, (s.count / max) * 100)}%` }}
           />
         </div>
@@ -84,7 +98,7 @@ function RankList({
           <span className="w-28 shrink-0 truncate text-sm text-foreground">{r.name}</span>
           <span className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
             <span
-              className="block h-full rounded-full bg-primary/70"
+              className="block h-full rounded-full bg-gradient-to-r from-primary/75 to-primary shadow-sm shadow-primary/20"
               style={{ width: `${(r.value / max) * 100}%` }}
             />
           </span>
@@ -99,7 +113,7 @@ function RankList({
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl bg-card/60 p-5 ring-1 ring-border/60">
+    <section className="rounded-2xl bg-card/70 p-5 shadow-sm shadow-foreground/[0.05] ring-1 ring-border/60">
       <h2 className="mb-4 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {title}
       </h2>

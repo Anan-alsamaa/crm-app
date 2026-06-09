@@ -322,6 +322,9 @@
   background: var(--yiji-primary);
   color: #fff;
   border-bottom-end-radius: 4px;
+  /* Soft teal-tinted lift so the customer's own messages read as raised,
+     echoing the agent portal's bubble depth across both ends of the thread. */
+  box-shadow: 0 4px 12px -4px color-mix(in oklab, var(--yiji-primary) 55%, transparent);
 }
 .yiji-msg.theirs {
   align-self: flex-start;
@@ -435,10 +438,12 @@
   transition:
     transform 160ms var(--yiji-ease),
     background-color 160ms var(--yiji-ease),
+    box-shadow 160ms var(--yiji-ease),
     opacity 160ms var(--yiji-ease);
 }
 .yiji-send:hover:not(:disabled) {
   background: color-mix(in oklab, var(--yiji-primary) 90%, black);
+  box-shadow: 0 6px 16px -4px color-mix(in oklab, var(--yiji-primary) 60%, transparent);
 }
 .yiji-send:active:not(:disabled) {
   transform: scale(0.92);
@@ -784,6 +789,29 @@
   /* Hide the small attribution footer on mobile to claim every pixel for messages */
   .yiji-footer {
     display: none;
+  }
+}
+
+/* ───── Reduced motion ─────
+ * Honor the OS setting: drop entrance animations, the typing-dot bounce, and
+ * hover lifts to instant/static states. Color + shadow feedback still apply,
+ * so the widget stays legible and responsive without movement.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .yiji-panel,
+  .yiji-msg {
+    animation: none;
+  }
+  .yiji-typing-dot {
+    animation: none;
+    opacity: 0.6;
+  }
+  .yiji-launcher,
+  .yiji-launcher:hover,
+  .yiji-send:active:not(:disabled),
+  .yiji-close:active,
+  .yiji-csat-star:hover {
+    transform: none;
   }
 }
 
