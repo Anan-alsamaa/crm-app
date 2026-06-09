@@ -146,6 +146,8 @@
     "attachFailed": "Could not upload the file.",
     "removeAttachment": "Remove attachment",
     "you": "You",
+    "today": "Today",
+    "yesterday": "Yesterday",
     "tab": {
       "reply": "Reply",
       "note": "Internal note"

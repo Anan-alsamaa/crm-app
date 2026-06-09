@@ -382,7 +382,7 @@ export function Inbox() {
                         className={cn(
                           'group relative flex items-start rounded-2xl transition-[box-shadow,transform,background-color] duration-fast ease-out motion-safe:animate-fade-in',
                           active
-                            ? 'bg-card shadow-md shadow-foreground/[0.08] ring-1 ring-primary/30'
+                            ? 'bg-primary-subtle/60 shadow-md shadow-foreground/[0.08] ring-1 ring-primary/40'
                             : 'bg-card/40 ring-1 ring-foreground/[0.03] hover:bg-card hover:shadow-sm hover:shadow-foreground/[0.06] hover:-translate-y-px',
                         )}
                       >

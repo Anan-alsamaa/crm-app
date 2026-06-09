@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { Socket } from 'socket.io-client';
@@ -31,6 +31,11 @@ interface NoteNew {
   createdAt: string;
   clientMsgId?: string;
   isInternalNote: true;
+}
+
+/** Calendar-day key for grouping the thread into Today / Yesterday / date sections. */
+function dayKeyOf(iso: string | null): string {
+  return iso ? new Date(iso).toDateString() : '';
 }
 
 /** Group consecutive same-sender messages so avatars only render once per run. */
@@ -369,6 +374,16 @@ export function ConversationView({
   const c = conversation.data;
   const contactName = c?.contact?.name ?? c?.contact?.email ?? t('inbox.unknownContact');
 
+  const dayLabel = (iso: string | null): string => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diff = Math.round((startOf(new Date()) - startOf(d)) / 86_400_000);
+    if (diff <= 0) return t('conversation.today', { defaultValue: 'Today' });
+    if (diff === 1) return t('conversation.yesterday', { defaultValue: 'Yesterday' });
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
   return (
     <div className="flex h-full">
       <div className="flex flex-1 min-w-0 flex-col">
@@ -406,69 +421,84 @@ export function ConversationView({
                   : t('conversation.you', { defaultValue: 'You' })
                 : contactName;
               const time = formatRelative(last.date_created);
+              // Day separator when the calendar day changes from the previous run.
+              const prevRun = grouped[runIdx - 1];
+              const showDay =
+                !!head.date_created &&
+                (!prevRun || dayKeyOf(head.date_created) !== dayKeyOf(prevRun[0]!.date_created));
 
               return (
-                <div
-                  key={runIdx}
-                  className={cn('flex gap-2.5', isAgent ? 'flex-row-reverse text-end' : 'flex-row')}
-                >
-                  <Avatar
-                    name={isAgent ? 'You' : c?.contact?.name}
-                    email={isAgent ? undefined : c?.contact?.email}
-                    size="sm"
-                    className={cn(isAgent && isNote && 'ring-2 ring-warning/40 ring-offset-1')}
-                  />
-                  <div
-                    className={cn(
-                      'flex max-w-[78%] min-w-0 flex-col gap-1',
-                      isAgent && 'items-end',
-                    )}
-                  >
-                    <div className="flex items-baseline gap-2 text-2xs">
-                      <span className="font-medium text-foreground">{senderLabel}</span>
-                      <span className="text-muted-foreground tabular-nums">{time}</span>
+                <Fragment key={runIdx}>
+                  {showDay && (
+                    <div className="flex items-center justify-center py-1">
+                      <span className="rounded-full bg-secondary/70 px-2.5 py-0.5 text-2xs font-medium text-muted-foreground ring-1 ring-foreground/[0.04] backdrop-blur-sm">
+                        {dayLabel(head.date_created)}
+                      </span>
                     </div>
-                    <div className={cn('flex flex-col gap-0.5', isAgent && 'items-end')}>
-                      {run.map((m, i) => {
-                        const isLast = i === run.length - 1;
-                        const hasContent = m.content.trim().length > 0;
-                        return (
-                          <div
-                            key={m.id}
-                            className={cn(
-                              'flex flex-col gap-1',
-                              isAgent ? 'items-end' : 'items-start',
-                            )}
-                          >
-                            {hasContent && (
-                              <div
-                                className={cn(
-                                  'px-4 py-2.5 text-[15px] leading-relaxed break-words text-start max-w-fit',
-                                  // No borders, no card chrome. Just bg + shape.
-                                  isNote
-                                    ? 'bg-warning/15 text-warning-foreground'
-                                    : isAgent
-                                      ? 'bg-foreground text-background'
-                                      : 'bg-secondary text-foreground',
-                                  // Smooth pill shape, tail only on the LAST bubble of a run.
-                                  'rounded-[18px]',
-                                  isLast && isAgent && 'rounded-ee-sm',
-                                  isLast && !isAgent && 'rounded-es-sm',
-                                )}
-                              >
-                                <p className="whitespace-pre-wrap">{m.content}</p>
-                              </div>
-                            )}
-                            <AttachmentChips
-                              attachments={m.attachments}
-                              align={isAgent ? 'end' : 'start'}
-                            />
-                          </div>
-                        );
-                      })}
+                  )}
+                  <div
+                    className={cn('flex gap-2.5', isAgent ? 'flex-row-reverse text-end' : 'flex-row')}
+                  >
+                    <Avatar
+                      name={isAgent ? 'You' : c?.contact?.name}
+                      email={isAgent ? undefined : c?.contact?.email}
+                      size="sm"
+                      className={cn(isAgent && isNote && 'ring-2 ring-warning/40 ring-offset-1')}
+                    />
+                    <div
+                      className={cn(
+                        'flex max-w-[78%] min-w-0 flex-col gap-1',
+                        isAgent && 'items-end',
+                      )}
+                    >
+                      <div className="flex items-baseline gap-2 text-2xs">
+                        <span className="font-medium text-foreground">{senderLabel}</span>
+                        <span className="text-muted-foreground tabular-nums">{time}</span>
+                      </div>
+                      <div className={cn('flex flex-col gap-0.5', isAgent && 'items-end')}>
+                        {run.map((m, i) => {
+                          const isLast = i === run.length - 1;
+                          const hasContent = m.content.trim().length > 0;
+                          return (
+                            <div
+                              key={m.id}
+                              className={cn(
+                                'flex flex-col gap-1',
+                                isAgent ? 'items-end' : 'items-start',
+                              )}
+                            >
+                              {hasContent && (
+                                <div
+                                  className={cn(
+                                    'px-4 py-2.5 text-[15px] leading-relaxed break-words text-start max-w-fit',
+                                    'motion-safe:animate-message-in',
+                                    // Depth: the dark agent bubble lifts; the light
+                                    // customer bubble gets a hairline edge. No card chrome.
+                                    isNote
+                                      ? 'bg-warning/15 text-warning-foreground ring-1 ring-warning/20'
+                                      : isAgent
+                                        ? 'bg-foreground text-background shadow-md shadow-foreground/15'
+                                        : 'bg-secondary text-foreground ring-1 ring-foreground/[0.04]',
+                                    // Smooth pill shape, tail only on the LAST bubble of a run.
+                                    'rounded-[18px]',
+                                    isLast && isAgent && 'rounded-ee-sm',
+                                    isLast && !isAgent && 'rounded-es-sm',
+                                  )}
+                                >
+                                  <p className="whitespace-pre-wrap">{m.content}</p>
+                                </div>
+                              )}
+                              <AttachmentChips
+                                attachments={m.attachments}
+                                align={isAgent ? 'end' : 'start'}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
-                </div>
+                </Fragment>
               );
             })}
 
@@ -640,19 +670,19 @@ export function ConversationView({
                   disabled={draft.trim().length === 0 && (internalNote || pending.length === 0)}
                   aria-label={t('actions.send', { ns: 'common' })}
                   className={cn(
-                    'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
-                    'transition-[transform,background-color,opacity] duration-fast ease-out',
-                    'active:enabled:scale-95',
+                    'group/send inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+                    'transition-[transform,background-color,box-shadow,opacity] duration-fast ease-out',
+                    'hover:enabled:scale-105 hover:enabled:shadow-md active:enabled:scale-90',
                     'disabled:opacity-40 disabled:cursor-not-allowed',
                     internalNote
-                      ? 'bg-warning text-warning-foreground'
-                      : 'bg-foreground text-background hover:bg-foreground/90',
+                      ? 'bg-warning text-warning-foreground hover:enabled:shadow-warning/30'
+                      : 'bg-foreground text-background hover:bg-foreground/90 hover:enabled:shadow-foreground/25',
                   )}
                 >
                   <svg
                     viewBox="0 0 16 16"
                     fill="currentColor"
-                    className="h-4 w-4 rtl:scale-x-[-1]"
+                    className="h-4 w-4 transition-transform duration-fast ease-out group-hover/send:translate-x-px rtl:scale-x-[-1]"
                     aria-hidden
                   >
                     <path d="M1.6 13.7 14 8.4c.55-.23.55-1.01 0-1.24L1.6 1.86c-.55-.24-1.13.27-.94.85L2.3 7.32 8.5 8 2.3 8.68l-1.64 4.61c-.2.58.39 1.09.94.85Z" />

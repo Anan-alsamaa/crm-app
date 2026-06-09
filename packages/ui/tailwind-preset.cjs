@@ -206,6 +206,11 @@ module.exports = {
           '0%': { transform: 'translateX(8%)', opacity: '0' },
           '100%': { transform: 'translateX(0)', opacity: '1' },
         },
+        // Chat bubble settle-in — a message lifts into place once on arrival.
+        'message-in': {
+          '0%': { opacity: '0', transform: 'translateY(10px) scale(0.985)' },
+          '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both',
@@ -217,6 +222,7 @@ module.exports = {
         'soft-pulse': 'soft-pulse 3.2s ease-in-out infinite',
         'slide-in-drawer':
           'slide-in-drawer 240ms cubic-bezier(0.32, 0.72, 0, 1) both',
+        'message-in': 'message-in 260ms cubic-bezier(0.23, 1, 0.32, 1) both',
       },
       spacing: {
         // Two editorial steps added to the default scale.

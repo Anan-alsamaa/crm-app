@@ -146,6 +146,8 @@
     "attachFailed": "تعذّر رفع الملف.",
     "removeAttachment": "إزالة المرفق",
     "you": "أنت",
+    "today": "اليوم",
+    "yesterday": "أمس",
     "tab": {
       "reply": "رد",
       "note": "ملاحظة داخلية"
