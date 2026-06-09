@@ -13,6 +13,11 @@ vi.mock('react-i18next', () => ({
 const inbox = vi.hoisted(() => ({
   useConversation: vi.fn(),
   useLinkedTickets: vi.fn(),
+  // ConversationSidebar now renders <ConversationTags>, which reads these.
+  useTags: () => ({ data: [] }),
+  useCreateTag: () => ({ mutateAsync: () => Promise.resolve({ id: 't', name: '', color: null }) }),
+  useAddTagToConversation: () => ({ mutateAsync: () => Promise.resolve({}) }),
+  useRemoveTagFromConversation: () => ({ mutateAsync: () => Promise.resolve({}) }),
 }));
 vi.mock('../src/features/inbox/api.js', () => inbox);
 

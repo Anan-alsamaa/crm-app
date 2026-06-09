@@ -6,7 +6,10 @@ import React from 'react';
 const changeLanguage = vi.hoisted(() => vi.fn());
 const i18nState = vi.hoisted(() => ({ language: 'en' }));
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ i18n: { language: i18nState.language, changeLanguage } }),
+  useTranslation: () => ({
+    t: (k: string, o?: { defaultValue?: string }) => o?.defaultValue ?? k,
+    i18n: { language: i18nState.language, changeLanguage },
+  }),
 }));
 
 import { LanguageToggle } from '../src/components/LanguageToggle.js';

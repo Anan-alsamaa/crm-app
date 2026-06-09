@@ -15,10 +15,16 @@ const usersApi = vi.hoisted(() => ({
   useUsers: vi.fn(),
   useRoles: vi.fn(),
   useCreateUser: vi.fn(),
+  useUpdateUser: vi.fn(),
+  useDeleteUser: vi.fn(),
 }));
 vi.mock('../src/features/users/api.js', () => usersApi);
 vi.mock('../src/features/teams/api.js', () => ({
   useTeams: () => ({ data: [{ id: 't1', name: 'Sales' }] }),
+}));
+// UsersPage reads the current user (to guard self/owner deletion).
+vi.mock('../src/lib/auth/AuthContext.js', () => ({
+  useAuth: () => ({ user: { id: 'me', email: 'me@b.com', role: { name: 'Administrator' } } }),
 }));
 
 import { UsersPage } from '../src/features/users/UsersPage.js';
@@ -34,6 +40,8 @@ function renderPage() {
 beforeEach(() => {
   usersApi.useRoles.mockReturnValue({ data: [{ id: 'r1', name: 'Administrator' }] });
   usersApi.useCreateUser.mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({}) });
+  usersApi.useUpdateUser.mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({}) });
+  usersApi.useDeleteUser.mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({}) });
 });
 
 describe('UsersPage', () => {
