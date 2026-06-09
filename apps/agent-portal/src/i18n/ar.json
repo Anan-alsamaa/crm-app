@@ -190,6 +190,7 @@
     "attachments": "المرفقات",
     "attach": "إرفاق ملف",
     "noAttachments": "لا توجد مرفقات بعد.",
+    "properties": "الخصائص",
     "event": {
       "created": "تم إنشاء التذكرة",
       "status_changed": "تغيّرت الحالة",

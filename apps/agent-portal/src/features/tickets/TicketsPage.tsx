@@ -359,7 +359,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
     };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-7 p-6 sm:p-10">
+    <div className="mx-auto max-w-5xl space-y-6 p-6 sm:p-8">
       {/* Back to ticket list — mobile single-column only. */}
       {onBack && (
         <button
@@ -412,112 +412,123 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         )}
       </header>
 
-      {/* Controls row — ghost selects, mark-responded CTA */}
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-card/60 ring-1 ring-foreground/[0.04] px-4 py-3">
-        <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span>{t('conversation.status')}</span>
-          <Select
-            value={tk.status}
-            aria-label={t('conversation.status')}
-            onChange={(e) => {
-              const next = e.target.value as TicketStatus;
-              const extra: Record<string, string> = {};
-              if (next === 'resolved') extra.resolved_at = new Date().toISOString();
-              if (next === 'closed') extra.closed_at = new Date().toISOString();
-              patch({ status: next, ...extra });
-            }}
-            className="h-7 text-xs"
-          >
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {t(`status.${s}`, { ns: 'common' })}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span>{t('conversation.priority')}</span>
-          <Select
-            value={tk.priority}
-            aria-label={t('conversation.priority')}
-            onChange={(e) => patch({ priority: e.target.value as Priority })}
-            className="h-7 text-xs"
-          >
-            {PRIORITIES.map((p) => (
-              <option key={p} value={p}>
-                {t(`priority.${p}`, { ns: 'common' })}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span>{t('conversation.agent')}</span>
-          <Select
-            value={tk.assigned_agent ?? ''}
-            aria-label={t('conversation.agent')}
-            onChange={(e) => patch({ assigned_agent: e.target.value || null })}
-            className="h-7 text-xs"
-          >
-            <option value="">{t('conversation.unassigned')}</option>
-            {(agents.data ?? []).map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.first_name ?? a.email}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span>{t('conversation.team')}</span>
-          <Select
-            value={tk.assigned_team ?? ''}
-            aria-label={t('conversation.team')}
-            onChange={(e) => patch({ assigned_team: e.target.value || null })}
-            className="h-7 text-xs"
-          >
-            <option value="">{t('conversation.noTeam')}</option>
-            {(teams.data ?? []).map((tm) => (
-              <option key={tm.id} value={tm.id}>
-                {tm.name}
-              </option>
-            ))}
-          </Select>
-        </label>
-        {!tk.first_responded_at && (
-          <Button
-            type="button"
-            size="sm"
-            className="ms-auto"
-            onClick={() => patch({ first_responded_at: new Date().toISOString() })}
-          >
-            {t('tickets.markResponded')}
-          </Button>
-        )}
-      </div>
+      {/* Two-column body: narrative (notes + history) on the left, ticket
+          metadata/config in a rail on the right. order-swap keeps the source
+          order (rail markup first) while the rail renders on the right at lg+. */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        {/* Rail — properties, SLA, attachments. */}
+        <aside className="space-y-5 lg:order-2">
+          {/* Properties — stacked selects + the mark-responded CTA. */}
+          <section className="space-y-3 rounded-2xl bg-card/60 p-4 ring-1 ring-foreground/[0.04]">
+            <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('tickets.properties', { defaultValue: 'Properties' })}
+            </h3>
+            <div className="space-y-2.5">
+              <label className="block space-y-1">
+                <span className="text-2xs text-muted-foreground">{t('conversation.status')}</span>
+                <Select
+                  value={tk.status}
+                  aria-label={t('conversation.status')}
+                  onChange={(e) => {
+                    const next = e.target.value as TicketStatus;
+                    const extra: Record<string, string> = {};
+                    if (next === 'resolved') extra.resolved_at = new Date().toISOString();
+                    if (next === 'closed') extra.closed_at = new Date().toISOString();
+                    patch({ status: next, ...extra });
+                  }}
+                  className="h-8 w-full text-xs"
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {t(`status.${s}`, { ns: 'common' })}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="block space-y-1">
+                <span className="text-2xs text-muted-foreground">{t('conversation.priority')}</span>
+                <Select
+                  value={tk.priority}
+                  aria-label={t('conversation.priority')}
+                  onChange={(e) => patch({ priority: e.target.value as Priority })}
+                  className="h-8 w-full text-xs"
+                >
+                  {PRIORITIES.map((p) => (
+                    <option key={p} value={p}>
+                      {t(`priority.${p}`, { ns: 'common' })}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="block space-y-1">
+                <span className="text-2xs text-muted-foreground">{t('conversation.agent')}</span>
+                <Select
+                  value={tk.assigned_agent ?? ''}
+                  aria-label={t('conversation.agent')}
+                  onChange={(e) => patch({ assigned_agent: e.target.value || null })}
+                  className="h-8 w-full text-xs"
+                >
+                  <option value="">{t('conversation.unassigned')}</option>
+                  {(agents.data ?? []).map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.first_name ?? a.email}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="block space-y-1">
+                <span className="text-2xs text-muted-foreground">{t('conversation.team')}</span>
+                <Select
+                  value={tk.assigned_team ?? ''}
+                  aria-label={t('conversation.team')}
+                  onChange={(e) => patch({ assigned_team: e.target.value || null })}
+                  className="h-8 w-full text-xs"
+                >
+                  <option value="">{t('conversation.noTeam')}</option>
+                  {(teams.data ?? []).map((tm) => (
+                    <option key={tm.id} value={tm.id}>
+                      {tm.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            </div>
+            {!tk.first_responded_at && (
+              <Button
+                type="button"
+                size="sm"
+                fullWidth
+                onClick={() => patch({ first_responded_at: new Date().toISOString() })}
+              >
+                {t('tickets.markResponded')}
+              </Button>
+            )}
+          </section>
 
-      {/* SLA deadlines — borderless rows with status icons */}
-      <section className="space-y-3">
-        <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {t('tickets.slaSection', { defaultValue: 'SLA' })}
-        </h3>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <SlaCard
-            label={t('tickets.firstResponseDue')}
-            iso={tk.first_response_due_at}
-            metAt={tk.first_responded_at}
-            dueClass={dueClass}
-            metLabel={t('tickets.respondedAt')}
-          />
-          <SlaCard
-            label={t('tickets.resolutionDue')}
-            iso={tk.resolution_due_at}
-            metAt={null}
-            dueClass={dueClass}
-          />
-        </div>
-      </section>
+          {/* SLA deadlines — stacked in the rail. */}
+          <section className="space-y-2.5">
+            <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('tickets.slaSection', { defaultValue: 'SLA' })}
+            </h3>
+            <div className="space-y-2">
+              <SlaCard
+                label={t('tickets.firstResponseDue')}
+                iso={tk.first_response_due_at}
+                metAt={tk.first_responded_at}
+                dueClass={dueClass}
+                metLabel={t('tickets.respondedAt')}
+              />
+              <SlaCard
+                label={t('tickets.resolutionDue')}
+                iso={tk.resolution_due_at}
+                metAt={null}
+                dueClass={dueClass}
+              />
+            </div>
+          </section>
 
-      {/* Attachments — agent-uploaded files linked via tickets_files. */}
-      <section className="space-y-3">
+          {/* Attachments — agent-uploaded files linked via tickets_files. */}
+          <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('tickets.attachments', { defaultValue: 'Attachments' })}
@@ -582,10 +593,13 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
             {t('tickets.noAttachments', { defaultValue: 'No attachments yet.' })}
           </p>
         )}
-      </section>
+          </section>
+        </aside>
 
-      {/* Internal note composer — appends a 'commented' event to the history. */}
-      <section className="space-y-2">
+        {/* Main column — the ticket narrative: notes + history. */}
+        <div className="min-w-0 space-y-6 lg:order-1">
+          {/* Internal note composer — appends a 'commented' event to the history. */}
+          <section className="space-y-2">
         <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           {t('tickets.addNote', { defaultValue: 'Add internal note' })}
         </h3>
@@ -690,7 +704,9 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
             {t('tickets.noEvents')}
           </p>
         )}
-      </section>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }

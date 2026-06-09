@@ -190,6 +190,7 @@
     "attachments": "Attachments",
     "attach": "Attach file",
     "noAttachments": "No attachments yet.",
+    "properties": "Properties",
     "event": {
       "created": "Ticket created",
       "status_changed": "Status changed",
