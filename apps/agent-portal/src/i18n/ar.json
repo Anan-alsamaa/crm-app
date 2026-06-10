@@ -145,6 +145,8 @@
     "attachment": "مرفق",
     "attachFailed": "تعذّر رفع الملف.",
     "removeAttachment": "إزالة المرفق",
+    "download": "تنزيل",
+    "previewImage": "معاينة {{name}}",
     "you": "أنت",
     "today": "اليوم",
     "yesterday": "أمس",

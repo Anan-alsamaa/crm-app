@@ -15,6 +15,8 @@ import {
 import { SOCKET_EVENTS, type MessageNew } from '@yiji/shared-types';
 import { getSocket, uploadAttachment } from '../../lib/socket.js';
 import { noteSelfSend } from '../../lib/sound.js';
+import { formatBytes } from '../../lib/files.js';
+import { FileGlyph } from '../../components/FileGlyph.js';
 import { useAgents, useConversation, useMessages, type ConversationMessage } from '../inbox/api.js';
 import { AttachmentChips } from './AttachmentChips.js';
 import { ConversationToolbar } from './ConversationToolbar.js';
@@ -76,7 +78,9 @@ export function ConversationView({
   const [internalNote, setInternalNote] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [mentionMenu, setMentionMenu] = useState<{ query: string; from: number } | null>(null);
-  const [pending, setPending] = useState<Array<{ id: string; name: string }>>([]);
+  const [pending, setPending] = useState<
+    Array<{ id: string; name: string; type: string; size: number; preview?: string }>
+  >([]);
   const [uploading, setUploading] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -151,21 +155,35 @@ export function ConversationView({
           content: msg.content,
           is_internal_note: false,
           date_created: msg.createdAt,
+          // message:new only carries attachment ids (no type/size). For our own
+          // optimistic echo we keep the richer local metadata below; for inbound
+          // messages we refetch to resolve filename/type/size into thumbnails.
           attachments: (msg.attachments ?? []).map((id) => ({
             id,
             filename: null,
             type: null,
+            filesize: null,
           })),
         };
         setLive((prev) => {
           // Reconcile the optimistic echo: if we already rendered this message
           // optimistically (temp id === clientMsgId), swap it for the confirmed
-          // one (real id, pending cleared) in place.
+          // one (real id, pending cleared) — but keep the optimistic attachment
+          // metadata so image thumbnails don't flicker back to generic chips.
           if (msg.clientMsgId && prev.some((m) => m.id === msg.clientMsgId)) {
-            return prev.map((m) => (m.id === msg.clientMsgId ? confirmed : m));
+            return prev.map((m) =>
+              m.id === msg.clientMsgId
+                ? { ...confirmed, attachments: m.attachments ?? confirmed.attachments }
+                : m,
+            );
           }
           return prev.some((m) => m.id === msg.id) ? prev : [...prev, confirmed];
         });
+        // Inbound attachments arrive as bare ids — refetch to hydrate type/size
+        // so they render as thumbnails / typed chips rather than placeholders.
+        if (!msg.clientMsgId && msg.attachments && msg.attachments.length > 0) {
+          void qc.invalidateQueries({ queryKey: ['messages', conversationId] });
+        }
       };
       const onNoteNew = (n: NoteNew) => {
         if (n.conversationId !== conversationId) return;
@@ -287,12 +305,18 @@ export function ConversationView({
           content,
           is_internal_note: false,
           date_created: new Date().toISOString(),
-          attachments: pending.map((p) => ({ id: p.id, filename: p.name, type: null })),
+          attachments: pending.map((p) => ({
+            id: p.id,
+            filename: p.name,
+            type: p.type,
+            filesize: p.size,
+          })),
           pending: true,
         },
       ]);
     }
     setDraft('');
+    pending.forEach((p) => p.preview && URL.revokeObjectURL(p.preview));
     setPending([]);
     setMentionMenu(null);
     stopTyping();
@@ -307,7 +331,13 @@ export function ConversationView({
     try {
       for (const file of Array.from(files)) {
         const up = await uploadAttachment(file);
-        setPending((prev) => [...prev, { id: up.id, name: file.name }]);
+        // Local object URL gives an instant image thumbnail in the composer —
+        // no server round-trip needed to preview what's about to be sent.
+        const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
+        setPending((prev) => [
+          ...prev,
+          { id: up.id, name: file.name, type: file.type, size: file.size, preview },
+        ]);
       }
     } catch {
       toast.error(t('conversation.attachFailed', { defaultValue: 'Could not upload the file.' }));
@@ -316,7 +346,12 @@ export function ConversationView({
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
-  const removePending = (id: string) => setPending((prev) => prev.filter((p) => p.id !== id));
+  const removePending = (id: string) =>
+    setPending((prev) => {
+      const target = prev.find((p) => p.id === id);
+      if (target?.preview) URL.revokeObjectURL(target.preview);
+      return prev.filter((p) => p.id !== id);
+    });
 
   const onDraftChange = (value: string, caret: number) => {
     setDraft(value);
@@ -631,27 +666,56 @@ export function ConversationView({
                 internalNote && 'focus-within:ring-warning/50',
               )}
             >
-              {/* Pending attachments (uploaded, not yet sent) */}
+              {/* Pending attachments (uploaded, not yet sent) — image thumbnails
+                  preview instantly from the local file; other types show a
+                  typed chip with size. Each has a remove control. */}
               {pending.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 px-3 pt-3">
-                  {pending.map((p) => (
-                    <span
-                      key={p.id}
-                      className="inline-flex max-w-[14rem] items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 text-xs text-foreground ring-1 ring-foreground/[0.05]"
-                    >
-                      <span className="truncate">{p.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => removePending(p.id)}
-                        aria-label={t('conversation.removeAttachment', {
-                          defaultValue: 'Remove attachment',
-                        })}
-                        className="shrink-0 text-muted-foreground transition-colors duration-fast hover:text-foreground"
+                <div className="flex flex-wrap gap-2 px-3 pt-3">
+                  {pending.map((p) =>
+                    p.preview ? (
+                      <div
+                        key={p.id}
+                        className="group/att relative h-16 w-16 overflow-hidden rounded-lg ring-1 ring-foreground/[0.08]"
                       >
-                        <CloseIcon size={13} />
-                      </button>
-                    </span>
-                  ))}
+                        <img src={p.preview} alt={p.name} className="h-full w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removePending(p.id)}
+                          aria-label={t('conversation.removeAttachment', {
+                            defaultValue: 'Remove attachment',
+                          })}
+                          className="absolute end-0.5 top-0.5 grid h-5 w-5 place-items-center rounded-full bg-foreground/75 text-background opacity-0 transition-opacity duration-fast ease-out hover:bg-foreground focus-visible:opacity-100 focus-visible:outline-none group-hover/att:opacity-100"
+                        >
+                          <CloseIcon size={11} />
+                        </button>
+                      </div>
+                    ) : (
+                      <span
+                        key={p.id}
+                        className="inline-flex max-w-[15rem] items-center gap-2 rounded-lg bg-secondary px-2 py-1.5 ring-1 ring-foreground/[0.05]"
+                      >
+                        <FileGlyph type={p.type} filename={p.name} size="sm" />
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-medium text-foreground">
+                            {p.name}
+                          </span>
+                          <span className="block text-2xs tabular-nums text-muted-foreground">
+                            {formatBytes(p.size)}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removePending(p.id)}
+                          aria-label={t('conversation.removeAttachment', {
+                            defaultValue: 'Remove attachment',
+                          })}
+                          className="shrink-0 text-muted-foreground transition-colors duration-fast hover:text-foreground"
+                        >
+                          <CloseIcon size={13} />
+                        </button>
+                      </span>
+                    ),
+                  )}
                 </div>
               )}
 

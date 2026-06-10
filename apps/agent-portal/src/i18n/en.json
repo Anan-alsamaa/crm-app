@@ -145,6 +145,8 @@
     "attachment": "Attachment",
     "attachFailed": "Could not upload the file.",
     "removeAttachment": "Remove attachment",
+    "download": "Download",
+    "previewImage": "Preview {{name}}",
     "you": "You",
     "today": "Today",
     "yesterday": "Yesterday",
