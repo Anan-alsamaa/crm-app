@@ -148,6 +148,8 @@
     "you": "أنت",
     "today": "اليوم",
     "yesterday": "أمس",
+    "copyMessage": "نسخ الرسالة",
+    "copied": "تم النسخ",
     "tab": {
       "reply": "رد",
       "note": "ملاحظة داخلية"

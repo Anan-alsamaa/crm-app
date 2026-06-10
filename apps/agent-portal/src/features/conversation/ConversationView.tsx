@@ -384,6 +384,13 @@ export function ConversationView({
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   };
 
+  const copyMessage = (text: string) => {
+    void navigator.clipboard?.writeText(text).then(
+      () => toast.success(t('conversation.copied', { defaultValue: 'Copied' })),
+      () => undefined,
+    );
+  };
+
   return (
     <div className="flex h-full">
       <div className="flex flex-1 min-w-0 flex-col">
@@ -473,22 +480,52 @@ export function ConversationView({
                               {hasContent && (
                                 <div
                                   className={cn(
-                                    'px-4 py-2.5 text-[15px] leading-relaxed break-words text-start max-w-fit',
-                                    'motion-safe:animate-message-in',
-                                    // Depth: the dark agent bubble lifts; the light
-                                    // customer bubble gets a hairline edge. No card chrome.
-                                    isNote
-                                      ? 'bg-warning/15 text-warning-foreground ring-1 ring-warning/20'
-                                      : isAgent
-                                        ? 'bg-foreground text-background shadow-md shadow-foreground/15'
-                                        : 'bg-secondary text-foreground ring-1 ring-foreground/[0.04]',
-                                    // Smooth pill shape, tail only on the LAST bubble of a run.
-                                    'rounded-[18px]',
-                                    isLast && isAgent && 'rounded-ee-sm',
-                                    isLast && !isAgent && 'rounded-es-sm',
+                                    'group/msg flex items-center gap-1.5',
+                                    isAgent ? 'flex-row-reverse' : 'flex-row',
                                   )}
                                 >
-                                  <p className="whitespace-pre-wrap">{m.content}</p>
+                                  <div
+                                    className={cn(
+                                      'px-4 py-2.5 text-[15px] leading-relaxed break-words text-start max-w-fit',
+                                      'motion-safe:animate-message-in',
+                                      // Depth: the dark agent bubble lifts; the light
+                                      // customer bubble gets a hairline edge. No card chrome.
+                                      isNote
+                                        ? 'bg-warning/15 text-warning-foreground ring-1 ring-warning/20'
+                                        : isAgent
+                                          ? 'bg-foreground text-background shadow-md shadow-foreground/15'
+                                          : 'bg-secondary text-foreground ring-1 ring-foreground/[0.04]',
+                                      // Smooth pill shape, tail only on the LAST bubble of a run.
+                                      'rounded-[18px]',
+                                      isLast && isAgent && 'rounded-ee-sm',
+                                      isLast && !isAgent && 'rounded-es-sm',
+                                    )}
+                                  >
+                                    <p className="whitespace-pre-wrap">{m.content}</p>
+                                  </div>
+                                  {/* Signature touch: copy a message on hover. */}
+                                  <button
+                                    type="button"
+                                    onClick={() => copyMessage(m.content)}
+                                    aria-label={t('conversation.copyMessage', {
+                                      defaultValue: 'Copy message',
+                                    })}
+                                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color,background-color] duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/msg:opacity-100"
+                                  >
+                                    <svg
+                                      viewBox="0 0 16 16"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="1.5"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      className="h-3.5 w-3.5"
+                                      aria-hidden
+                                    >
+                                      <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+                                      <path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2" />
+                                    </svg>
+                                  </button>
                                 </div>
                               )}
                               <AttachmentChips
@@ -536,7 +573,7 @@ export function ConversationView({
                 className={cn(
                   'relative h-8 font-medium transition-colors duration-fast ease-out',
                   !internalNote
-                    ? 'text-foreground after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-foreground'
+                    ? 'text-foreground after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-primary'
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -568,7 +605,8 @@ export function ConversationView({
                 'group relative rounded-2xl transition-[box-shadow,background-color] duration-fast ease-out',
                 'ring-1 ring-foreground/[0.05]',
                 internalNote ? 'bg-warning/10' : 'bg-card/70 backdrop-blur',
-                'focus-within:bg-card focus-within:shadow-lg focus-within:shadow-foreground/[0.08] focus-within:ring-primary/30',
+                // Confident teal lift on focus: brand glow + a 2px brand ring.
+                'focus-within:bg-card focus-within:shadow-lg focus-within:shadow-primary/15 focus-within:ring-2 focus-within:ring-primary/40',
                 internalNote && 'focus-within:ring-warning/50',
               )}
             >
@@ -679,7 +717,7 @@ export function ConversationView({
                     'disabled:opacity-40 disabled:cursor-not-allowed',
                     internalNote
                       ? 'bg-warning text-warning-foreground hover:enabled:shadow-warning/30'
-                      : 'bg-foreground text-background hover:bg-foreground/90 hover:enabled:shadow-foreground/25',
+                      : 'bg-primary text-primary-foreground hover:bg-primary/90 hover:enabled:shadow-primary/40',
                   )}
                 >
                   <svg

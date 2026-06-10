@@ -19,6 +19,8 @@ const base =
   'relative inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium select-none ' +
   'transition-[transform,background-color,color,border-color,box-shadow] duration-base ease-out ' +
   'disabled:opacity-50 disabled:pointer-events-none ' +
+  // Confident, on-brand teal focus ring (keyboard a11y) + tactile press.
+  'outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background ' +
   'active:enabled:scale-[0.97]';
 
 const variants: Record<Variant, string> = {
