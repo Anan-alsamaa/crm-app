@@ -48,6 +48,19 @@ function isAuthError(err: Error): boolean {
   return /token|unauthorized|inactive vendor/i.test(err.message);
 }
 
+/** Signal "the gateway rejected our token" exactly once. Stops the reconnect
+ *  storm on the offending socket and notifies the app (logout + redirect).
+ *  A later successful `connect` re-arms it. */
+function fireSessionExpired(socket?: Socket): void {
+  if (sessionExpiredFired) return;
+  sessionExpiredFired = true;
+  if (socket) {
+    socket.io.opts.reconnection = false; // no point hammering with a dead token
+    socket.disconnect();
+  }
+  onSessionExpired?.();
+}
+
 /** Connect the agent socket using the current Directus access token. */
 export async function getSocket(): Promise<Socket> {
   if (globalThis.__yijiAgentSocket?.connected) return globalThis.__yijiAgentSocket;
@@ -63,12 +76,7 @@ export async function getSocket(): Promise<Socket> {
     sessionExpiredFired = false; // a good connection re-arms the signal
   });
   socket.on('connect_error', (err: Error) => {
-    if (!isAuthError(err) || sessionExpiredFired) return;
-    sessionExpiredFired = true;
-    // No point hammering the gateway with the same rejected token.
-    socket.io.opts.reconnection = false;
-    socket.disconnect();
-    onSessionExpired?.();
+    if (isAuthError(err)) fireSessionExpired(socket);
   });
   globalThis.__yijiAgentSocket = socket;
   return socket;
@@ -89,6 +97,17 @@ export async function uploadAttachment(file: File): Promise<UploadedAttachment> 
   const socket = await getSocket();
   const content = await file.arrayBuffer();
   return new Promise<UploadedAttachment>((resolve, reject) => {
+    // If the gateway rejects our token while the upload is buffered, don't wait
+    // out the 20s timeout — fail fast with `session_expired` so the app's
+    // session-expiry flow (toast + redirect) takes over immediately.
+    const onAuthFail = (err: Error) => {
+      if (!isAuthError(err)) return;
+      cleanup();
+      fireSessionExpired(socket);
+      reject(new Error('session_expired'));
+    };
+    const cleanup = () => socket.off('connect_error', onAuthFail);
+    socket.on('connect_error', onAuthFail);
     socket.timeout(20_000).emit(
       'attachment:upload',
       { filename: file.name, mimetype: file.type, content },
@@ -102,6 +121,7 @@ export async function uploadAttachment(file: File): Promise<UploadedAttachment> 
           error?: string;
         },
       ) => {
+        cleanup();
         if (err) return reject(new Error('upload_timeout'));
         if (res?.ok && res.id)
           resolve({ id: res.id, type: res.type ?? null, filesize: res.filesize ?? null });

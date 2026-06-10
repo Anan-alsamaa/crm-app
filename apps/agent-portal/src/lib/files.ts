@@ -65,6 +65,51 @@ export function fileLabel(filename?: string | null, type?: string | null): strin
   return k === 'file' ? 'File' : k.charAt(0).toUpperCase() + k.slice(1);
 }
 
+/**
+ * Attachment policy — MIRRORS the socket-gateway's server-side limits
+ * (`ATTACHMENT_ALLOWED_MIME` / `ATTACHMENT_MAX_BYTES`, defaults in
+ * services/socket-gateway/src/config.ts). The gateway is the source of truth
+ * and re-validates every upload; this client copy exists only to give instant,
+ * specific feedback (and an `accept` filter on the picker) instead of letting
+ * the user wait through a 20s round-trip for a file the gateway will reject.
+ * Keep this list in sync if the gateway env changes.
+ */
+export const ALLOWED_ATTACHMENT_MIME = [
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'application/pdf',
+  'text/plain',
+] as const;
+
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10 MB
+
+/** `accept` attribute for the file picker, so the OS dialog only offers
+ *  uploadable types (extensions + MIME for broad browser support). */
+export const ATTACHMENT_ACCEPT =
+  '.png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,' + ALLOWED_ATTACHMENT_MIME.join(',');
+
+export type AttachmentRejection = 'type' | 'size';
+
+/**
+ * Validate a file against the gateway policy BEFORE uploading. Returns null if
+ * the file is acceptable, or a reason code the caller maps to a localized
+ * message. Empty MIME falls back to the extension (some OSes report '' for
+ * .txt/.csv); anything we can't positively place is rejected as 'type'.
+ */
+export function validateAttachment(file: File): AttachmentRejection | null {
+  if (file.size > MAX_ATTACHMENT_BYTES) return 'size';
+  const mime = (file.type || '').toLowerCase();
+  if (mime) {
+    return (ALLOWED_ATTACHMENT_MIME as readonly string[]).includes(mime) ? null : 'type';
+  }
+  // No MIME from the browser — fall back to extension for the allowed set.
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  const okByExt = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'txt'];
+  return ext && okByExt.includes(ext) ? null : 'type';
+}
+
 /** Human-readable byte size, e.g. 1536 → "1.5 KB". */
 export function formatBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) return '';

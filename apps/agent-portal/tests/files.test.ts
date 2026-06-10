@@ -1,5 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { fileKind, formatBytes, fileLabel, isImage } from '../src/lib/files.js';
+import {
+  fileKind,
+  formatBytes,
+  fileLabel,
+  isImage,
+  validateAttachment,
+  MAX_ATTACHMENT_BYTES,
+  ATTACHMENT_ACCEPT,
+} from '../src/lib/files.js';
+
+function fakeFile(name: string, type: string, size: number): File {
+  // jsdom's File ignores the blob content's real size, so override `size`.
+  const f = new File(['x'], name, { type });
+  Object.defineProperty(f, 'size', { value: size });
+  return f;
+}
 
 describe('fileKind', () => {
   it('classifies by MIME type', () => {
@@ -42,6 +57,40 @@ describe('formatBytes', () => {
     expect(formatBytes(null)).toBe('');
     expect(formatBytes(undefined)).toBe('');
     expect(formatBytes(-5)).toBe('');
+  });
+});
+
+describe('validateAttachment', () => {
+  it('accepts allowed types within the size limit', () => {
+    expect(validateAttachment(fakeFile('a.png', 'image/png', 1024))).toBeNull();
+    expect(validateAttachment(fakeFile('a.jpg', 'image/jpeg', 1024))).toBeNull();
+    expect(validateAttachment(fakeFile('a.pdf', 'application/pdf', 1024))).toBeNull();
+    expect(validateAttachment(fakeFile('a.txt', 'text/plain', 1024))).toBeNull();
+  });
+
+  it('rejects disallowed types', () => {
+    expect(validateAttachment(fakeFile('a.docx', 'application/msword', 1024))).toBe('type');
+    expect(validateAttachment(fakeFile('a.zip', 'application/zip', 1024))).toBe('type');
+    expect(validateAttachment(fakeFile('a.svg', 'image/svg+xml', 1024))).toBe('type');
+    expect(validateAttachment(fakeFile('a.mp4', 'video/mp4', 1024))).toBe('type');
+  });
+
+  it('rejects files over the size limit', () => {
+    expect(validateAttachment(fakeFile('big.png', 'image/png', MAX_ATTACHMENT_BYTES + 1))).toBe(
+      'size',
+    );
+  });
+
+  it('falls back to the extension when the browser reports no MIME', () => {
+    expect(validateAttachment(fakeFile('notes.txt', '', 1024))).toBeNull();
+    expect(validateAttachment(fakeFile('photo.JPG', '', 1024))).toBeNull();
+    expect(validateAttachment(fakeFile('mystery', '', 1024))).toBe('type');
+    expect(validateAttachment(fakeFile('book.epub', '', 1024))).toBe('type');
+  });
+
+  it('exposes an accept filter covering the allowed types', () => {
+    expect(ATTACHMENT_ACCEPT).toContain('application/pdf');
+    expect(ATTACHMENT_ACCEPT).toContain('.png');
   });
 });
 

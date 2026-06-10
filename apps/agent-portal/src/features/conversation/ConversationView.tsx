@@ -15,7 +15,7 @@ import {
 import { SOCKET_EVENTS, type MessageNew } from '@yiji/shared-types';
 import { getSocket, uploadAttachment } from '../../lib/socket.js';
 import { noteSelfSend } from '../../lib/sound.js';
-import { formatBytes } from '../../lib/files.js';
+import { formatBytes, validateAttachment, ATTACHMENT_ACCEPT } from '../../lib/files.js';
 import { FileGlyph } from '../../components/FileGlyph.js';
 import { useAgents, useConversation, useMessages, type ConversationMessage } from '../inbox/api.js';
 import { AttachmentChips } from './AttachmentChips.js';
@@ -325,22 +325,67 @@ export function ConversationView({
     if (draftRef.current) draftRef.current.style.height = 'auto';
   };
 
+  // Map a gateway upload-failure code (or a client-side rejection) to a
+  // specific, actionable message — so "attachment not working" tells the agent
+  // WHY (wrong type / too big / rate-limited) instead of a blank "failed".
+  const uploadErrorMessage = (reason: string): string => {
+    if (/too large|size/i.test(reason))
+      return t('conversation.attachTooLarge', {
+        defaultValue: 'File is too large. Maximum size is 10 MB.',
+      });
+    if (/not allowed|type|unknown/i.test(reason))
+      return t('conversation.attachBadType', {
+        defaultValue: 'Unsupported file type. Allowed: images, PDF, and text files.',
+      });
+    if (/rate_limited|rate limit/i.test(reason))
+      return t('conversation.attachRateLimited', {
+        defaultValue: 'Too many uploads. Please wait a moment and try again.',
+      });
+    if (/timeout/i.test(reason))
+      return t('conversation.attachTimeout', {
+        defaultValue: 'Upload timed out. Check your connection and try again.',
+      });
+    return t('conversation.attachFailed', { defaultValue: 'Could not upload the file.' });
+  };
+
   const onPickFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    const picked = Array.from(files);
+
+    // Validate client-side against the gateway policy first: reject wrong types
+    // and oversized files instantly with a clear reason, rather than uploading
+    // bytes that the gateway will reject after a round-trip.
+    const accepted: File[] = [];
+    for (const file of picked) {
+      const reject = validateAttachment(file);
+      if (reject) toast.error(uploadErrorMessage(reject === 'size' ? 'too large' : 'not allowed'));
+      else accepted.push(file);
+    }
+    if (accepted.length === 0) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setUploading(true);
     try {
-      for (const file of Array.from(files)) {
-        const up = await uploadAttachment(file);
-        // Local object URL gives an instant image thumbnail in the composer —
-        // no server round-trip needed to preview what's about to be sent.
-        const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
-        setPending((prev) => [
-          ...prev,
-          { id: up.id, name: file.name, type: file.type, size: file.size, preview },
-        ]);
+      for (const file of accepted) {
+        try {
+          const up = await uploadAttachment(file);
+          // Local object URL gives an instant image thumbnail in the composer —
+          // no server round-trip needed to preview what's about to be sent.
+          const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
+          setPending((prev) => [
+            ...prev,
+            { id: up.id, name: file.name, type: file.type, size: file.size, preview },
+          ]);
+        } catch (err) {
+          // Surface the gateway's specific reason (e.g. "file too large",
+          // "type X not allowed", "rate_limited"). A dead session is handled
+          // globally (toast + redirect), so don't double-report it here.
+          const reason = err instanceof Error ? err.message : '';
+          if (reason !== 'session_expired') toast.error(uploadErrorMessage(reason));
+        }
       }
-    } catch {
-      toast.error(t('conversation.attachFailed', { defaultValue: 'Could not upload the file.' }));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -724,6 +769,7 @@ export function ConversationView({
                 type="file"
                 multiple
                 hidden
+                accept={ATTACHMENT_ACCEPT}
                 onChange={(e) => void onPickFiles(e.target.files)}
               />
 
