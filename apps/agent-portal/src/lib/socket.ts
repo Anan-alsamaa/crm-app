@@ -64,9 +64,23 @@ function fireSessionExpired(socket?: Socket): void {
 /** Connect the agent socket using the current Directus access token. */
 export async function getSocket(): Promise<Socket> {
   if (globalThis.__yijiAgentSocket?.connected) return globalThis.__yijiAgentSocket;
-  const token = await auth.getToken();
   const socket = io(SOCKET_URL, {
-    auth: { kind: 'agent', token },
+    // `auth` is a FUNCTION, not a static object, on purpose. Socket.IO re-invokes
+    // it before EVERY (re)connection attempt, so getToken() runs each time and
+    // refreshes the Directus access token when it has expired. Without this, the
+    // handshake token is captured once at io() time; after the ~15min access-token
+    // TTL any auto-reconnect (network blip, gateway restart) resends the now-stale
+    // token, the gateway rejects it as "invalid agent token", and Socket.IO loops
+    // on that forever — the agent goes silently offline mid-session and uploads /
+    // sends fail. Re-fetching lets a reconnect self-heal with a fresh token.
+    // If the refresh token is also dead, getToken() resolves null → no token →
+    // the connect_error handler below fires session-expiry (logout + redirect).
+    auth: (cb: (data: Record<string, unknown>) => void) => {
+      void auth
+        .getToken()
+        .then((token) => cb({ kind: 'agent', token: token ?? undefined }))
+        .catch(() => cb({ kind: 'agent' }));
+    },
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionDelay: 500,
