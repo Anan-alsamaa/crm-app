@@ -419,7 +419,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         {/* Rail — properties, SLA, attachments. */}
         <aside className="space-y-5 lg:order-2">
           {/* Properties — stacked selects + the mark-responded CTA. */}
-          <section className="space-y-3 rounded-2xl bg-card/60 p-4 ring-1 ring-foreground/[0.04]">
+          <section className="space-y-3 rounded-2xl bg-card/70 p-4 shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04]">
             <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               {t('tickets.properties', { defaultValue: 'Properties' })}
             </h3>
