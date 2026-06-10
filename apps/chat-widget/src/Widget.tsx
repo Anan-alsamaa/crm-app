@@ -173,15 +173,22 @@ export function Widget({ config }: { config: WidgetConfig }) {
     null,
   );
   const [agentsOnline, setAgentsOnline] = useState<number>(0);
-  const [pending, setPending] = useState<Array<{ id: string; name: string }>>([]);
+  const [pending, setPending] = useState<
+    Array<{ id: string; name: string; type: string; preview?: string }>
+  >([]);
   const [uploading, setUploading] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const convoRef = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  // Remembers uploaded filenames by file id so the customer's own bubbles show
-  // a name (received agent files have no name and fall back to "Attachment").
-  const attachNamesRef = useRef<Record<string, string>>({});
+  // Remembers metadata for the customer's OWN uploads by file id, so their sent
+  // bubbles can show the filename and an inline image preview (a local object
+  // URL — the customer has no Directus token to refetch the file). Received
+  // agent files arrive as bare ids with no metadata, so they fall back to a
+  // generic "Attachment" chip.
+  const attachMetaRef = useRef<Record<string, { name: string; type: string; preview?: string }>>(
+    {},
+  );
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -303,10 +310,8 @@ export function Widget({ config }: { config: WidgetConfig }) {
             { filename: file.name, mimetype: file.type, content },
             (err: Error | null, res?: { ok?: boolean; id?: string; error?: string }) => {
               if (err) return reject(new Error('timeout'));
-              if (res?.ok && res.id) {
-                attachNamesRef.current[res.id] = file.name;
-                resolve(res.id);
-              } else reject(new Error(res?.error ?? 'upload_failed'));
+              if (res?.ok && res.id) resolve(res.id);
+              else reject(new Error(res?.error ?? 'upload_failed'));
             },
           );
       });
@@ -318,7 +323,12 @@ export function Widget({ config }: { config: WidgetConfig }) {
     try {
       for (const file of Array.from(files)) {
         const id = await uploadOne(file);
-        setPending((prev) => [...prev, { id, name: file.name }]);
+        // Local object URL → instant image thumbnail in the composer and in the
+        // sent bubble, with no need to refetch a private file the customer
+        // can't access anyway.
+        const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
+        attachMetaRef.current[id] = { name: file.name, type: file.type, preview };
+        setPending((prev) => [...prev, { id, name: file.name, type: file.type, preview }]);
       }
     } catch {
       // Surface inline by appending a system note; keeps the widget dependency-free.
@@ -338,7 +348,13 @@ export function Widget({ config }: { config: WidgetConfig }) {
       if (fileRef.current) fileRef.current.value = '';
     }
   };
-  const removePending = (id: string) => setPending((prev) => prev.filter((p) => p.id !== id));
+  const removePending = (id: string) =>
+    setPending((prev) => {
+      const gone = prev.find((p) => p.id === id);
+      if (gone?.preview) URL.revokeObjectURL(gone.preview);
+      delete attachMetaRef.current[id];
+      return prev.filter((p) => p.id !== id);
+    });
 
   const onInput = (e: Event) => {
     const target = e.target as HTMLTextAreaElement;
@@ -445,12 +461,30 @@ export function Widget({ config }: { config: WidgetConfig }) {
                     {m.content}
                     {m.attachments && m.attachments.length > 0 && (
                       <div className="yiji-msg-files">
-                        {m.attachments.map((id) => (
-                          <span className="yiji-msg-file" key={id}>
-                            <AttachIcon />
-                            <span>{attachNamesRef.current[id] ?? tr.attachment}</span>
-                          </span>
-                        ))}
+                        {m.attachments.map((id) => {
+                          const meta = attachMetaRef.current[id];
+                          // Own image upload: render the local preview, click to
+                          // open full size in a new tab.
+                          if (meta?.preview) {
+                            return (
+                              <button
+                                type="button"
+                                className="yiji-msg-image"
+                                key={id}
+                                onClick={() => window.open(meta.preview, '_blank', 'noopener')}
+                                aria-label={meta.name}
+                              >
+                                <img src={meta.preview} alt={meta.name} />
+                              </button>
+                            );
+                          }
+                          return (
+                            <span className="yiji-msg-file" key={id}>
+                              <AttachIcon />
+                              <span>{meta?.name ?? tr.attachment}</span>
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -560,8 +594,19 @@ export function Widget({ config }: { config: WidgetConfig }) {
               {pending.length > 0 && (
                 <div className="yiji-pending">
                   {pending.map((p) => (
-                    <span className="yiji-chip" key={p.id}>
-                      <span>{p.name}</span>
+                    <span
+                      className={`yiji-chip${p.preview ? ' yiji-chip-img' : ''}`}
+                      key={p.id}
+                      title={p.name}
+                    >
+                      {p.preview ? (
+                        <img className="yiji-chip-thumb" src={p.preview} alt={p.name} />
+                      ) : (
+                        <>
+                          <AttachIcon />
+                          <span className="yiji-chip-name">{p.name}</span>
+                        </>
+                      )}
                       <button
                         type="button"
                         onClick={() => removePending(p.id)}

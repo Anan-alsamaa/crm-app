@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@yiji/ui';
@@ -25,33 +25,44 @@ export function Lightbox({
 }) {
   const { t } = useTranslation();
 
+  // Keep the latest onClose without re-subscribing the listener every render
+  // (the parent passes a fresh arrow each time), so Escape can never race a
+  // re-render and end up bound to a stale/removed handler.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
   useEffect(() => {
+    // Capture phase so nothing downstream (composer, shortcuts) can swallow Esc.
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        e.stopPropagation();
+        closeRef.current();
       }
     };
-    window.addEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
     // Lock background scroll while open.
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKey, true);
       document.body.style.overflow = prev;
     };
-  }, [onClose]);
+  }, []);
 
   const size = formatBytes(filesize);
+  const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
   return createPortal(
+    // Any click that isn't on the image (or an action button) dismisses — far
+    // more reliable than matching e.target===e.currentTarget, which left the
+    // top bar and the image's letterbox margins as dead zones that ignored
+    // clicks (so the first attempt to close often did nothing).
     <div
       role="dialog"
       aria-modal="true"
       aria-label={filename ?? t('conversation.attachment', { defaultValue: 'Attachment' })}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      onClick={onClose}
       className="fixed inset-0 z-[80] flex flex-col bg-foreground/80 backdrop-blur-md animate-fade-in"
     >
       {/* Top bar: name + size, actions */}
@@ -65,7 +76,10 @@ export function Lightbox({
         {onDownload && (
           <button
             type="button"
-            onClick={onDownload}
+            onClick={(e) => {
+              stop(e);
+              onDownload();
+            }}
             aria-label={t('conversation.download', { defaultValue: 'Download' })}
             className="inline-flex h-9 items-center gap-1.5 rounded-full bg-background/15 px-3.5 text-sm font-medium text-background transition-colors duration-fast ease-out hover:bg-background/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background/50"
           >
@@ -75,7 +89,10 @@ export function Lightbox({
         )}
         <button
           type="button"
-          onClick={onClose}
+          onClick={(e) => {
+            stop(e);
+            onClose();
+          }}
           aria-label={t('actions.close', { ns: 'common', defaultValue: 'Close' })}
           className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-background/15 text-background transition-colors duration-fast ease-out hover:bg-background/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background/50"
         >
@@ -83,16 +100,13 @@ export function Lightbox({
         </button>
       </div>
 
-      {/* Image stage */}
-      <div
-        className="flex min-h-0 flex-1 items-center justify-center p-4 pt-0"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
-      >
+      {/* Image stage — clicking the image keeps it open; clicking around it (or
+          anywhere else) bubbles to the backdrop and closes. */}
+      <div className="flex min-h-0 flex-1 items-center justify-center p-4 pt-0">
         <img
           src={url}
           alt={filename ?? ''}
+          onClick={stop}
           className={cn(
             'max-h-full max-w-full rounded-lg object-contain shadow-2xl shadow-foreground/40',
             'motion-safe:animate-scale-in',
