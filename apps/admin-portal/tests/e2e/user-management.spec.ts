@@ -14,10 +14,12 @@ async function login(page: import('@playwright/test').Page) {
   await page.getByLabel(/email/i).fill(ADMIN_EMAIL);
   await page.getByLabel(/password/i).fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
-  // Wait for the post-login landing — the admin lands on the Dashboard
-  // ("Overview" heading) — so callers can click nav links immediately without
-  // racing the auth redirect / first paint.
-  await expect(page.getByRole('heading', { name: /overview/i })).toBeVisible({ timeout: 20_000 });
+  // Wait for the post-login landing — the admin lands on the Dashboard, whose
+  // h1 is "Overview" (level:1 disambiguates it from the "Overview" section
+  // sub-heading) — so callers can click nav links without racing the redirect.
+  await expect(page.getByRole('heading', { name: /overview/i, level: 1 })).toBeVisible({
+    timeout: 20_000,
+  });
 }
 
 test('admin signs in and reaches Users management', async ({ page }) => {
