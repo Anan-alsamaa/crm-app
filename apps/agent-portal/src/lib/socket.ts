@@ -26,18 +26,52 @@ declare global {
   var __yijiAgentSocket: Socket | undefined;
 }
 
+// --- Session-expiry signalling -------------------------------------------
+// The gateway only validates the token on the initial handshake; an expired or
+// missing token surfaces as a `connect_error`. We notify the app once so it can
+// drop the dead session and send the agent to the login screen, instead of
+// silently failing every realtime action (send, typing, attachment upload).
+
+let onSessionExpired: (() => void) | null = null;
+let sessionExpiredFired = false;
+
+/** Register a handler for "the gateway rejected our token". AuthProvider uses
+ *  this to log out + redirect. Pass null to unregister. */
+export function setSessionExpiredHandler(fn: (() => void) | null): void {
+  onSessionExpired = fn;
+}
+
+/** Gateway auth rejections arrive as connect_error with these messages
+ *  ("missing token", "invalid agent token", "unauthorized", ...). Plain
+ *  network blips (xhr/websocket/timeout) must NOT trip session expiry. */
+function isAuthError(err: Error): boolean {
+  return /token|unauthorized|inactive vendor/i.test(err.message);
+}
+
 /** Connect the agent socket using the current Directus access token. */
 export async function getSocket(): Promise<Socket> {
   if (globalThis.__yijiAgentSocket?.connected) return globalThis.__yijiAgentSocket;
   const token = await auth.getToken();
-  globalThis.__yijiAgentSocket = io(SOCKET_URL, {
+  const socket = io(SOCKET_URL, {
     auth: { kind: 'agent', token },
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionDelay: 500,
     reconnectionDelayMax: 10_000,
   });
-  return globalThis.__yijiAgentSocket;
+  socket.on('connect', () => {
+    sessionExpiredFired = false; // a good connection re-arms the signal
+  });
+  socket.on('connect_error', (err: Error) => {
+    if (!isAuthError(err) || sessionExpiredFired) return;
+    sessionExpiredFired = true;
+    // No point hammering the gateway with the same rejected token.
+    socket.io.opts.reconnection = false;
+    socket.disconnect();
+    onSessionExpired?.();
+  });
+  globalThis.__yijiAgentSocket = socket;
+  return socket;
 }
 
 export interface UploadedAttachment {

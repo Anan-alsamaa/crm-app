@@ -2,6 +2,9 @@
   "brandName": "YIJI CRM",
   "portalName": "وكيل",
   "portalFullName": "YIJI CRM · وكيل",
+  "auth": {
+    "sessionExpired": "انتهت جلستك. يُرجى تسجيل الدخول مرة أخرى."
+  },
   "ai": {
     "title": "المساعدة بالذكاء الاصطناعي",
     "running": "جارٍ التنفيذ…",

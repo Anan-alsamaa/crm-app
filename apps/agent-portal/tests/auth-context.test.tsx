@@ -1,14 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 
-const { authMock, disconnectSocket } = vi.hoisted(() => ({
+const { authMock, disconnectSocket, setSessionExpiredHandler } = vi.hoisted(() => ({
   authMock: { me: vi.fn(), login: vi.fn(), logout: vi.fn() },
   disconnectSocket: vi.fn(),
+  setSessionExpiredHandler: vi.fn(),
 }));
 vi.mock('../src/lib/directus.js', () => ({ auth: authMock }));
-vi.mock('../src/lib/socket.js', () => ({ disconnectSocket }));
+vi.mock('../src/lib/socket.js', () => ({ disconnectSocket, setSessionExpiredHandler }));
+vi.mock('react-i18next', () => {
+  // Stable `t` reference so the provider's [t] effect doesn't re-run each render.
+  const t = (key: string, opts?: { defaultValue?: string }) => opts?.defaultValue ?? key;
+  return { useTranslation: () => ({ t }) };
+});
+// Replace just the toast helper (no Toaster is mounted in this unit test).
+vi.mock('@yiji/ui', async (orig) => {
+  const actual = await orig<typeof import('@yiji/ui')>();
+  return { ...actual, toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } };
+});
 
 import { AuthProvider, useAuth } from '../src/lib/auth/AuthContext.js';
 
@@ -30,6 +41,7 @@ beforeEach(() => {
   authMock.login.mockReset();
   authMock.logout.mockReset();
   disconnectSocket.mockReset();
+  setSessionExpiredHandler.mockReset();
 });
 
 describe('AuthProvider / useAuth', () => {
@@ -79,6 +91,30 @@ describe('AuthProvider / useAuth', () => {
     await userEvent.click(screen.getByText('do-logout'));
     await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('anon'));
     expect(disconnectSocket).toHaveBeenCalled();
+    expect(authMock.logout).toHaveBeenCalled();
+  });
+
+  it('clears the session when the gateway reports the token expired', async () => {
+    authMock.me.mockResolvedValue(me);
+    authMock.logout.mockResolvedValue(undefined);
+    render(
+      <AuthProvider>
+        <Consumer />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('user:agent@x.com'));
+
+    // The provider registers a session-expired handler; invoke it the way the
+    // socket layer would when the gateway rejects our token.
+    const handler = setSessionExpiredHandler.mock.calls
+      .map((c) => c[0])
+      .find((arg): arg is () => void => typeof arg === 'function');
+    expect(handler).toBeTruthy();
+    await act(async () => {
+      handler!();
+    });
+
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('anon'));
     expect(authMock.logout).toHaveBeenCalled();
   });
 
