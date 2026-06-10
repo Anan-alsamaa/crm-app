@@ -8,7 +8,7 @@ import {
   EmptyState,
   FormField,
   Input,
-  Select,
+  SelectMenu,
   Skeleton,
   toast,
   Toolbar,
@@ -132,14 +132,20 @@ export function ImportsPage() {
               defaultValue: 'Dedup runs per-vendor on phone OR email.',
             })}
           >
-            <Select value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
-              <option value="">—</option>
-              {(vendors.data ?? []).map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name} ({v.yiji_vendor_id})
-                </option>
-              ))}
-            </Select>
+            <SelectMenu
+              fullWidth
+              value={vendorId}
+              onChange={(v) => setVendorId(v)}
+              aria-label={t('imports.vendor', { defaultValue: 'Target vendor' })}
+              placeholder="—"
+              options={[
+                { value: '', label: '—' },
+                ...(vendors.data ?? []).map((v) => ({
+                  value: v.id,
+                  label: `${v.name} (${v.yiji_vendor_id})`,
+                })),
+              ]}
+            />
           </FormField>
         </section>
 
@@ -174,23 +180,22 @@ export function ImportsPage() {
                   <span className="col-span-5 truncate text-xs font-mono text-foreground">{h}</span>
                   <span className="col-span-1 text-center text-muted-foreground">→</span>
                   <div className="col-span-6">
-                    <Select
+                    <SelectMenu
+                      fullWidth
                       value={mapping[h] ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value as ContactField | '';
+                      onChange={(val) => {
+                        const v = val as ContactField | '';
                         const next = { ...mapping };
                         if (v) next[h] = v;
                         else delete next[h];
                         setMapping(next);
                       }}
-                    >
-                      <option value="">— skip —</option>
-                      {CONTACT_FIELDS.map((cf) => (
-                        <option key={cf} value={cf}>
-                          {cf}
-                        </option>
-                      ))}
-                    </Select>
+                      aria-label={`${t('imports.mapping', { defaultValue: 'Column mapping' })}: ${h}`}
+                      options={[
+                        { value: '', label: '— skip —' },
+                        ...CONTACT_FIELDS.map((cf) => ({ value: cf, label: cf })),
+                      ]}
+                    />
                   </div>
                 </div>
               ))}

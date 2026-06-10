@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { readItems, createItem, updateItem } from '@directus/sdk';
-import { Button, FormField, Input, Select, Skeleton, toast } from '@yiji/ui';
+import { Button, FormField, Input, SelectMenu, Skeleton, toast } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -187,29 +187,34 @@ function FieldInput({
     case 'boolean':
       return (
         <FormField label={label}>
-          <Select
+          <SelectMenu
+            fullWidth
             value={value === true ? 'yes' : value === false ? 'no' : ''}
-            onChange={(e) =>
-              onChange(e.target.value === 'yes' ? true : e.target.value === 'no' ? false : null)
-            }
-          >
-            <option value="">—</option>
-            <option value="yes">yes</option>
-            <option value="no">no</option>
-          </Select>
+            onChange={(v) => onChange(v === 'yes' ? true : v === 'no' ? false : null)}
+            aria-label={label}
+            placeholder="—"
+            options={[
+              { value: '', label: '—' },
+              { value: 'yes', label: 'yes' },
+              { value: 'no', label: 'no' },
+            ]}
+          />
         </FormField>
       );
     case 'select':
       return (
         <FormField label={label}>
-          <Select value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)}>
-            <option value="">—</option>
-            {(def.options ?? []).map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </Select>
+          <SelectMenu
+            fullWidth
+            value={(value as string) ?? ''}
+            onChange={(v) => onChange(v)}
+            aria-label={label}
+            placeholder="—"
+            options={[
+              { value: '', label: '—' },
+              ...(def.options ?? []).map((opt) => ({ value: opt, label: opt })),
+            ]}
+          />
         </FormField>
       );
     case 'multiselect': {

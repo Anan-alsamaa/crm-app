@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
-import { Button, FormField, Input, Select, Textarea, toast } from '@yiji/ui';
+import { Button, FormField, Input, SelectMenu, Textarea, toast } from '@yiji/ui';
 import type { Priority } from '@yiji/shared-types';
 import { useCreateTicket } from './api.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
@@ -31,6 +31,7 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -97,13 +98,22 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
             <Textarea id="ticket-description" rows={3} {...register('description')} />
           </FormField>
           <FormField label={t('conversation.priority')} htmlFor="ticket-priority">
-            <Select id="ticket-priority" {...register('priority')}>
-              {PRIORITIES.map((p) => (
-                <option key={p} value={p}>
-                  {t(`priority.${p}`, { ns: 'common' })}
-                </option>
-              ))}
-            </Select>
+            <Controller
+              control={control}
+              name="priority"
+              render={({ field }) => (
+                <SelectMenu
+                  fullWidth
+                  value={field.value}
+                  onChange={field.onChange}
+                  aria-label={t('conversation.priority')}
+                  options={PRIORITIES.map((p) => ({
+                    value: p,
+                    label: t(`priority.${p}`, { ns: 'common' }),
+                  }))}
+                />
+              )}
+            />
           </FormField>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" size="md" onClick={onClose}>
