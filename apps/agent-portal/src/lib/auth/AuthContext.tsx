@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { toast } from '@yiji/ui';
 import type { AuthUser } from '@yiji/shared-config';
 import { auth } from '../directus.js';
-import { disconnectSocket } from '../socket.js';
+import { disconnectSocket, setSessionExpiredHandler } from '../socket.js';
 
 interface AuthState {
   user: AuthUser | null;
@@ -13,6 +15,7 @@ interface AuthState {
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -30,6 +33,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active = false;
     };
   }, []);
+
+  // When the gateway rejects our token (session expired / invalid), the socket
+  // layer fires this once. Drop the dead session and let ProtectedRoute bounce
+  // to /login, with a clear message — so a stale token never masquerades as
+  // "messaging/attachments are broken".
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      toast.error(
+        t('auth.sessionExpired', { defaultValue: 'Your session expired. Please sign in again.' }),
+      );
+      setUser(null);
+      void auth.logout().catch(() => undefined); // best-effort: token already dead
+    });
+    return () => setSessionExpiredHandler(null);
+  }, [t]);
 
   const login = useCallback(async (email: string, password: string) => {
     await auth.login(email, password);

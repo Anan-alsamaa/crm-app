@@ -26,18 +26,74 @@ declare global {
   var __yijiAgentSocket: Socket | undefined;
 }
 
+// --- Session-expiry signalling -------------------------------------------
+// The gateway only validates the token on the initial handshake; an expired or
+// missing token surfaces as a `connect_error`. We notify the app once so it can
+// drop the dead session and send the agent to the login screen, instead of
+// silently failing every realtime action (send, typing, attachment upload).
+
+let onSessionExpired: (() => void) | null = null;
+let sessionExpiredFired = false;
+
+/** Register a handler for "the gateway rejected our token". AuthProvider uses
+ *  this to log out + redirect. Pass null to unregister. */
+export function setSessionExpiredHandler(fn: (() => void) | null): void {
+  onSessionExpired = fn;
+}
+
+/** Gateway auth rejections arrive as connect_error with these messages
+ *  ("missing token", "invalid agent token", "unauthorized", ...). Plain
+ *  network blips (xhr/websocket/timeout) must NOT trip session expiry. */
+function isAuthError(err: Error): boolean {
+  return /token|unauthorized|inactive vendor/i.test(err.message);
+}
+
+/** Signal "the gateway rejected our token" exactly once. Stops the reconnect
+ *  storm on the offending socket and notifies the app (logout + redirect).
+ *  A later successful `connect` re-arms it. */
+function fireSessionExpired(socket?: Socket): void {
+  if (sessionExpiredFired) return;
+  sessionExpiredFired = true;
+  if (socket) {
+    socket.io.opts.reconnection = false; // no point hammering with a dead token
+    socket.disconnect();
+  }
+  onSessionExpired?.();
+}
+
 /** Connect the agent socket using the current Directus access token. */
 export async function getSocket(): Promise<Socket> {
   if (globalThis.__yijiAgentSocket?.connected) return globalThis.__yijiAgentSocket;
-  const token = await auth.getToken();
-  globalThis.__yijiAgentSocket = io(SOCKET_URL, {
-    auth: { kind: 'agent', token },
+  const socket = io(SOCKET_URL, {
+    // `auth` is a FUNCTION, not a static object, on purpose. Socket.IO re-invokes
+    // it before EVERY (re)connection attempt, so getToken() runs each time and
+    // refreshes the Directus access token when it has expired. Without this, the
+    // handshake token is captured once at io() time; after the ~15min access-token
+    // TTL any auto-reconnect (network blip, gateway restart) resends the now-stale
+    // token, the gateway rejects it as "invalid agent token", and Socket.IO loops
+    // on that forever — the agent goes silently offline mid-session and uploads /
+    // sends fail. Re-fetching lets a reconnect self-heal with a fresh token.
+    // If the refresh token is also dead, getToken() resolves null → no token →
+    // the connect_error handler below fires session-expiry (logout + redirect).
+    auth: (cb: (data: Record<string, unknown>) => void) => {
+      void auth
+        .getToken()
+        .then((token) => cb({ kind: 'agent', token: token ?? undefined }))
+        .catch(() => cb({ kind: 'agent' }));
+    },
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionDelay: 500,
     reconnectionDelayMax: 10_000,
   });
-  return globalThis.__yijiAgentSocket;
+  socket.on('connect', () => {
+    sessionExpiredFired = false; // a good connection re-arms the signal
+  });
+  socket.on('connect_error', (err: Error) => {
+    if (isAuthError(err)) fireSessionExpired(socket);
+  });
+  globalThis.__yijiAgentSocket = socket;
+  return socket;
 }
 
 export interface UploadedAttachment {
@@ -55,6 +111,17 @@ export async function uploadAttachment(file: File): Promise<UploadedAttachment> 
   const socket = await getSocket();
   const content = await file.arrayBuffer();
   return new Promise<UploadedAttachment>((resolve, reject) => {
+    // If the gateway rejects our token while the upload is buffered, don't wait
+    // out the 20s timeout — fail fast with `session_expired` so the app's
+    // session-expiry flow (toast + redirect) takes over immediately.
+    const onAuthFail = (err: Error) => {
+      if (!isAuthError(err)) return;
+      cleanup();
+      fireSessionExpired(socket);
+      reject(new Error('session_expired'));
+    };
+    const cleanup = () => socket.off('connect_error', onAuthFail);
+    socket.on('connect_error', onAuthFail);
     socket.timeout(20_000).emit(
       'attachment:upload',
       { filename: file.name, mimetype: file.type, content },
@@ -68,6 +135,7 @@ export async function uploadAttachment(file: File): Promise<UploadedAttachment> 
           error?: string;
         },
       ) => {
+        cleanup();
         if (err) return reject(new Error('upload_timeout'));
         if (res?.ok && res.id)
           resolve({ id: res.id, type: res.type ?? null, filesize: res.filesize ?? null });

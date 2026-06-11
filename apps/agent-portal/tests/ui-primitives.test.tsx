@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { useEffect } from 'react';
-import { ErrorBoundary, useIsDesktop, useKeyboardShortcuts } from '@yiji/ui';
+import { useEffect, useState } from 'react';
+import { ErrorBoundary, SelectMenu, useIsDesktop, useKeyboardShortcuts } from '@yiji/ui';
 
 afterEach(() => cleanup());
 
@@ -125,5 +125,98 @@ describe('useIsDesktop', () => {
     // matchMedia is not defined in jsdom by default (deleted in afterEach).
     render(<MqHarness onValue={() => {}} />);
     expect(screen.getByText('mobile')).toBeInTheDocument();
+  });
+});
+
+// ---- SelectMenu -------------------------------------------------------------
+
+function MenuHarness({
+  initial = 'open',
+  onPick,
+}: {
+  initial?: string;
+  onPick?: (v: string) => void;
+}) {
+  const [value, setValue] = useState(initial);
+  return (
+    <SelectMenu
+      aria-label="Status"
+      value={value}
+      onChange={(v) => {
+        setValue(v);
+        onPick?.(v);
+      }}
+      options={[
+        { value: 'open', label: 'Open' },
+        { value: 'pending', label: 'Pending' },
+        { value: 'resolved', label: 'Resolved' },
+      ]}
+    />
+  );
+}
+
+describe('SelectMenu', () => {
+  beforeEach(() => {
+    // jsdom doesn't implement scrollIntoView; the open menu scrolls the active
+    // option into view.
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('shows the selected option in the trigger and no listbox while closed', () => {
+    render(<MenuHarness initial="pending" />);
+    expect(screen.getByRole('combobox', { name: 'Status' })).toHaveTextContent('Pending');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('opens on click and selects an option with the mouse', () => {
+    const onPick = vi.fn();
+    render(<MenuHarness onPick={onPick} />);
+    const trigger = screen.getByRole('combobox', { name: 'Status' });
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Resolved' })).toBeInTheDocument();
+
+    // The click target is the inner button (the row), not the li[role=option].
+    fireEvent.click(screen.getByRole('button', { name: 'Resolved' }));
+    expect(onPick).toHaveBeenCalledWith('resolved');
+    // Menu closes and the trigger reflects the new value.
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(trigger).toHaveTextContent('Resolved');
+  });
+
+  it('navigates and selects with the keyboard (ArrowDown + Enter)', () => {
+    const onPick = vi.fn();
+    render(<MenuHarness onPick={onPick} />);
+    const trigger = screen.getByRole('combobox', { name: 'Status' });
+
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' }); // opens, active = selected (open)
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' }); // active -> pending
+    fireEvent.keyDown(trigger, { key: 'Enter' });
+    expect(onPick).toHaveBeenCalledWith('pending');
+  });
+
+  it('jumps to a match via type-ahead', () => {
+    const onPick = vi.fn();
+    render(<MenuHarness onPick={onPick} />);
+    const trigger = screen.getByRole('combobox', { name: 'Status' });
+
+    fireEvent.click(trigger);
+    fireEvent.keyDown(trigger, { key: 'r' }); // -> Resolved
+    fireEvent.keyDown(trigger, { key: 'Enter' });
+    expect(onPick).toHaveBeenCalledWith('resolved');
+  });
+
+  it('closes on Escape without selecting', () => {
+    const onPick = vi.fn();
+    render(<MenuHarness onPick={onPick} />);
+    const trigger = screen.getByRole('combobox', { name: 'Status' });
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    fireEvent.keyDown(trigger, { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(onPick).not.toHaveBeenCalled();
   });
 });

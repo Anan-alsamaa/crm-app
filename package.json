@@ -22,15 +22,6 @@
     "dev": "pnpm -r --parallel --if-present dev",
     "prepare": "husky || true"
   },
-  "lint-staged": {
-    "*.{ts,tsx}": [
-      "eslint --fix --max-warnings=0",
-      "prettier --write"
-    ],
-    "*.{json,md,yaml,yml,css,html}": [
-      "prettier --write"
-    ]
-  },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.1",
     "@playwright/test": "^1.49.1",

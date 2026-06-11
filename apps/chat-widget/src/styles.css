@@ -322,6 +322,9 @@
   background: var(--yiji-primary);
   color: #fff;
   border-bottom-end-radius: 4px;
+  /* Soft teal-tinted lift so the customer's own messages read as raised,
+     echoing the agent portal's bubble depth across both ends of the thread. */
+  box-shadow: 0 4px 12px -4px color-mix(in oklab, var(--yiji-primary) 55%, transparent);
 }
 .yiji-msg.theirs {
   align-self: flex-start;
@@ -435,10 +438,12 @@
   transition:
     transform 160ms var(--yiji-ease),
     background-color 160ms var(--yiji-ease),
+    box-shadow 160ms var(--yiji-ease),
     opacity 160ms var(--yiji-ease);
 }
 .yiji-send:hover:not(:disabled) {
   background: color-mix(in oklab, var(--yiji-primary) 90%, black);
+  box-shadow: 0 6px 16px -4px color-mix(in oklab, var(--yiji-primary) 60%, transparent);
 }
 .yiji-send:active:not(:disabled) {
   transform: scale(0.92);
@@ -537,6 +542,68 @@
 }
 .yiji-msg-file {
   background: color-mix(in oklab, currentColor 10%, transparent);
+}
+
+/* Image attachments: thumbnail in the composer tray + in the sent bubble. */
+.yiji-chip-img {
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+  max-width: none;
+}
+.yiji-chip-thumb {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+}
+.yiji-chip-img button {
+  position: absolute;
+  top: 2px;
+  inset-inline-end: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--yiji-ink) 62%, transparent);
+  color: #fff;
+  font-size: 13px;
+}
+.yiji-chip-img button:hover {
+  background: var(--yiji-ink);
+  color: #fff;
+}
+.yiji-msg-image {
+  display: block;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--yiji-surface-2);
+  box-shadow: inset 0 0 0 1px var(--yiji-border);
+  transition:
+    transform 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 200ms ease;
+}
+.yiji-msg-image img {
+  display: block;
+  max-width: 200px;
+  max-height: 200px;
+  object-fit: cover;
+}
+.yiji-msg-image:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 0 0 1px var(--yiji-border),
+    0 4px 12px color-mix(in oklab, var(--yiji-ink) 14%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .yiji-msg-image {
+    transition: none;
+  }
+  .yiji-msg-image:hover {
+    transform: none;
+  }
 }
 
 /* ───── CSAT ───── */
@@ -784,6 +851,29 @@
   /* Hide the small attribution footer on mobile to claim every pixel for messages */
   .yiji-footer {
     display: none;
+  }
+}
+
+/* ───── Reduced motion ─────
+ * Honor the OS setting: drop entrance animations, the typing-dot bounce, and
+ * hover lifts to instant/static states. Color + shadow feedback still apply,
+ * so the widget stays legible and responsive without movement.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .yiji-panel,
+  .yiji-msg {
+    animation: none;
+  }
+  .yiji-typing-dot {
+    animation: none;
+    opacity: 0.6;
+  }
+  .yiji-launcher,
+  .yiji-launcher:hover,
+  .yiji-send:active:not(:disabled),
+  .yiji-close:active,
+  .yiji-csat-star:hover {
+    transform: none;
   }
 }
 

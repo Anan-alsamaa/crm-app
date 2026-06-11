@@ -9,7 +9,7 @@ import {
   FormField,
   Input,
   Pill,
-  Select,
+  SelectMenu,
   Skeleton,
   Textarea,
   toast,
@@ -300,18 +300,13 @@ export function AutomationPage() {
             </FormField>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField label={t('automation.trigger', { defaultValue: 'Trigger' })}>
-                <Select
+                <SelectMenu
+                  fullWidth
                   value={draft.trigger_event}
-                  onChange={(e) =>
-                    setDraft({ ...draft, trigger_event: e.target.value as TriggerEvent })
-                  }
-                >
-                  {TRIGGERS.map((trg) => (
-                    <option key={trg} value={trg}>
-                      {trg}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(v) => setDraft({ ...draft, trigger_event: v as TriggerEvent })}
+                  aria-label={t('automation.trigger', { defaultValue: 'Trigger' })}
+                  options={TRIGGERS.map((trg) => ({ value: trg, label: trg }))}
+                />
               </FormField>
               <FormField label={t('automation.priority', { defaultValue: 'Priority' })}>
                 <Input
@@ -499,16 +494,13 @@ function ConditionsEditor({
                 />
               </div>
               <div className="col-span-3">
-                <Select
+                <SelectMenu
+                  fullWidth
                   value={c.op}
-                  onChange={(e) => update(i, { op: e.target.value as RuleCondition['op'] })}
-                >
-                  {OPS.map((op) => (
-                    <option key={op} value={op}>
-                      {op}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(v) => update(i, { op: v as RuleCondition['op'] })}
+                  aria-label={t('automation.operator', { defaultValue: 'Operator' })}
+                  options={OPS.map((op) => ({ value: op, label: op }))}
+                />
               </div>
               <div className="col-span-3">
                 <Input
@@ -561,21 +553,17 @@ function ActionsEditor({
           {actions.map((a, i) => (
             <li key={i} className="rounded-xl bg-secondary/40 px-3 py-3 space-y-2">
               <div className="flex items-center gap-2">
-                <Select
+                <SelectMenu
                   className="w-44"
                   value={a.kind}
-                  onChange={(e) => {
+                  onChange={(v) => {
                     const next = [...actions];
-                    next[i] = { kind: e.target.value as RuleAction['kind'], params: {} };
+                    next[i] = { kind: v as RuleAction['kind'], params: {} };
                     onChange(next);
                   }}
-                >
-                  {ACTION_KINDS.map((k) => (
-                    <option key={k} value={k}>
-                      {k}
-                    </option>
-                  ))}
-                </Select>
+                  aria-label={t('automation.action', { defaultValue: 'Action' })}
+                  options={ACTION_KINDS.map((k) => ({ value: k, label: k }))}
+                />
                 <button
                   type="button"
                   onClick={() => onChange(actions.filter((_, j) => j !== i))}

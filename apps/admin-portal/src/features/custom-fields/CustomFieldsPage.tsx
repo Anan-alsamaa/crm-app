@@ -9,7 +9,7 @@ import {
   FormField,
   Input,
   Pill,
-  Select,
+  SelectMenu,
   Skeleton,
   toast,
   Toolbar,
@@ -292,16 +292,13 @@ export function CustomFieldsPage() {
             })}
           >
             <FormField label={t('customFields.entity', { defaultValue: 'Entity' })}>
-              <Select
+              <SelectMenu
+                fullWidth
                 value={draft.entity_type}
-                onChange={(e) => setDraft({ ...draft, entity_type: e.target.value as EntityType })}
-              >
-                {ENTITY_TYPES.map((et) => (
-                  <option key={et} value={et}>
-                    {et}
-                  </option>
-                ))}
-              </Select>
+                onChange={(v) => setDraft({ ...draft, entity_type: v as EntityType })}
+                aria-label={t('customFields.entity', { defaultValue: 'Entity' })}
+                options={ENTITY_TYPES.map((et) => ({ value: et, label: et }))}
+              />
             </FormField>
           </DrawerSection>
 
@@ -331,16 +328,13 @@ export function CustomFieldsPage() {
               />
             </FormField>
             <FormField label={t('customFields.type', { defaultValue: 'Type' })}>
-              <Select
+              <SelectMenu
+                fullWidth
                 value={draft.field_type}
-                onChange={(e) => setDraft({ ...draft, field_type: e.target.value as FieldType })}
-              >
-                {FIELD_TYPES.map((ft) => (
-                  <option key={ft} value={ft}>
-                    {ft}
-                  </option>
-                ))}
-              </Select>
+                onChange={(v) => setDraft({ ...draft, field_type: v as FieldType })}
+                aria-label={t('customFields.type', { defaultValue: 'Type' })}
+                options={FIELD_TYPES.map((ft) => ({ value: ft, label: ft }))}
+              />
             </FormField>
             {(draft.field_type === 'select' || draft.field_type === 'multiselect') && (
               <FormField
@@ -356,13 +350,16 @@ export function CustomFieldsPage() {
             )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField label={t('customFields.required', { defaultValue: 'Required' })}>
-                <Select
+                <SelectMenu
+                  fullWidth
                   value={draft.required ? 'yes' : 'no'}
-                  onChange={(e) => setDraft({ ...draft, required: e.target.value === 'yes' })}
-                >
-                  <option value="no">no</option>
-                  <option value="yes">yes</option>
-                </Select>
+                  onChange={(v) => setDraft({ ...draft, required: v === 'yes' })}
+                  aria-label={t('customFields.required', { defaultValue: 'Required' })}
+                  options={[
+                    { value: 'no', label: 'no' },
+                    { value: 'yes', label: 'yes' },
+                  ]}
+                />
               </FormField>
               <FormField label={t('customFields.order', { defaultValue: 'Display order' })}>
                 <Input
@@ -396,6 +393,8 @@ function FieldRow({
       className={cn(
         'group flex items-start justify-between gap-4 rounded-2xl bg-card/70 px-5 py-4',
         'shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04]',
+        'transition-[box-shadow,transform,background-color] duration-fast ease-out',
+        'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08]',
       )}
     >
       <div className="min-w-0 flex-1 space-y-1">

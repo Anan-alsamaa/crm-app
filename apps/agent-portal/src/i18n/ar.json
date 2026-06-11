@@ -2,6 +2,9 @@
   "brandName": "YIJI CRM",
   "portalName": "وكيل",
   "portalFullName": "YIJI CRM · وكيل",
+  "auth": {
+    "sessionExpired": "انتهت جلستك. يُرجى تسجيل الدخول مرة أخرى."
+  },
   "ai": {
     "title": "المساعدة بالذكاء الاصطناعي",
     "running": "جارٍ التنفيذ…",
@@ -144,12 +147,19 @@
     "attach": "إرفاق ملف",
     "attachment": "مرفق",
     "attachFailed": "تعذّر رفع الملف.",
+    "attachTooLarge": "حجم الملف كبير جدًا. الحد الأقصى 10 ميغابايت.",
+    "attachBadType": "نوع الملف غير مدعوم. المسموح: الصور وملفات PDF والملفات النصية.",
+    "attachRateLimited": "عمليات رفع كثيرة جدًا. يُرجى الانتظار قليلًا وإعادة المحاولة.",
+    "attachTimeout": "انتهت مهلة الرفع. تحقّق من اتصالك وحاول مرة أخرى.",
     "removeAttachment": "إزالة المرفق",
+    "download": "تنزيل",
+    "previewImage": "معاينة {{name}}",
     "you": "أنت",
     "today": "اليوم",
     "yesterday": "أمس",
     "copyMessage": "نسخ الرسالة",
     "copied": "تم النسخ",
+    "sending": "جارٍ الإرسال…",
     "tab": {
       "reply": "رد",
       "note": "ملاحظة داخلية"

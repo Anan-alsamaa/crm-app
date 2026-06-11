@@ -28,15 +28,29 @@ beforeEach(() => {
 });
 
 describe('agent socket singleton', () => {
-  it('connects with the current Directus token on first call', async () => {
+  it('supplies a freshly-fetched token via an auth callback on each connection', async () => {
     const sock = makeSocket(false);
     ioMock.mockReturnValue(sock);
     const result = await getSocket();
     expect(result).toBe(sock);
-    expect(getToken).toHaveBeenCalledTimes(1);
     expect(ioMock).toHaveBeenCalledTimes(1);
     const [, opts] = ioMock.mock.calls[0]!;
-    expect(opts.auth).toEqual({ kind: 'agent', token: 'tok-123' });
+    // `auth` is a function (not a static object) so socket.io re-fetches the
+    // token before every (re)connect — a reconnect after token expiry self-heals.
+    expect(typeof opts.auth).toBe('function');
+    const received = await new Promise((resolve) => opts.auth(resolve));
+    expect(received).toEqual({ kind: 'agent', token: 'tok-123' });
+    expect(getToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits the token when none is available so the gateway reports session expiry', async () => {
+    getToken.mockResolvedValue(null);
+    const sock = makeSocket(false);
+    ioMock.mockReturnValue(sock);
+    await getSocket();
+    const [, opts] = ioMock.mock.calls[0]!;
+    const received = await new Promise((resolve) => opts.auth(resolve));
+    expect(received).toEqual({ kind: 'agent', token: undefined });
   });
 
   it('reuses an already-connected socket without reconnecting', async () => {

@@ -19,6 +19,7 @@ export interface MessageAttachment {
   id: string;
   filename: string | null;
   type: string | null;
+  filesize: number | null;
 }
 
 export interface ConversationMessage {
@@ -28,6 +29,8 @@ export interface ConversationMessage {
   is_internal_note: boolean;
   date_created: string | null;
   attachments?: MessageAttachment[];
+  /** Client-only: an optimistic message awaiting the server echo. */
+  pending?: boolean;
 }
 
 export interface InboxFilters {
@@ -109,7 +112,10 @@ export function useMessages(conversationId: string | null) {
         const links = (await directus.request(
           readItems('messages_files', {
             filter: { messages_id: { _in: ids } },
-            fields: ['messages_id', { directus_files_id: ['id', 'filename_download', 'type'] }],
+            fields: [
+              'messages_id',
+              { directus_files_id: ['id', 'filename_download', 'type', 'filesize'] },
+            ],
             limit: -1,
           }),
         )) as Array<{
@@ -118,16 +124,19 @@ export function useMessages(conversationId: string | null) {
             id: string;
             filename_download: string | null;
             type: string | null;
+            filesize: number | string | null;
           } | null;
         }>;
         const byMsg = new Map<string, MessageAttachment[]>();
         for (const l of links) {
           if (!l.directus_files_id) continue;
           const arr = byMsg.get(l.messages_id) ?? [];
+          const fs = l.directus_files_id.filesize;
           arr.push({
             id: l.directus_files_id.id,
             filename: l.directus_files_id.filename_download,
             type: l.directus_files_id.type,
+            filesize: fs === null || fs === undefined ? null : Number(fs),
           });
           byMsg.set(l.messages_id, arr);
         }

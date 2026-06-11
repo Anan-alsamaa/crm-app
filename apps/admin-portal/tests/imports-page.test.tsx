@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React from 'react';
@@ -40,7 +40,11 @@ describe('ImportsPage', () => {
   });
 
   it('lists the available vendors in the select', () => {
+    // SelectMenu renders its options in a portal only while open (unlike a
+    // native <select>, which keeps every <option> in the DOM), so open it first.
+    Element.prototype.scrollIntoView = vi.fn();
     renderPage();
+    fireEvent.click(screen.getByRole('combobox', { name: 'Target vendor' }));
     expect(screen.getByText('Acme (acme-1)')).toBeInTheDocument();
   });
 

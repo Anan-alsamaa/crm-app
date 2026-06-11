@@ -6,7 +6,7 @@ import {
   ClockIcon,
   cn,
   InboxIcon,
-  Select,
+  SelectMenu,
   SettingsIcon,
   SoundOffIcon,
   SoundOnIcon,
@@ -277,18 +277,17 @@ export function PreferencesPage() {
                           })}
                         </p>
                       </div>
-                      <Select
-                        className="h-8 w-full sm:w-44 text-xs"
+                      <SelectMenu
+                        size="sm"
+                        className="w-full sm:w-44"
                         value={draft[type] ?? 'both'}
-                        onChange={(e) => setDraft((d) => ({ ...d, [type]: e.target.value }))}
+                        onChange={(v) => setDraft((d) => ({ ...d, [type]: v }))}
                         aria-label={type}
-                      >
-                        {CHANNELS.map((c) => (
-                          <option key={c} value={c}>
-                            {t(`preferences.channels.${c}`, { defaultValue: c })}
-                          </option>
-                        ))}
-                      </Select>
+                        options={CHANNELS.map((c) => ({
+                          value: c,
+                          label: t(`preferences.channels.${c}`, { defaultValue: c }),
+                        }))}
+                      />
                     </li>
                   );
                 })}

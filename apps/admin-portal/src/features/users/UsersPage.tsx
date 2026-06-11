@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
@@ -12,7 +12,7 @@ import {
   EmptyState,
   FormField,
   Input,
-  Select,
+  SelectMenu,
   Skeleton,
   toast,
   Toolbar,
@@ -60,6 +60,7 @@ export function UsersPage() {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
@@ -399,26 +400,41 @@ export function UsersPage() {
             })}
           >
             <FormField label={t('users.role')} error={errors.role?.message}>
-              <Select defaultValue="" invalid={!!errors.role} {...register('role')}>
-                <option value="" disabled>
-                  —
-                </option>
-                {roles.data?.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </Select>
+              <Controller
+                control={control}
+                name="role"
+                defaultValue=""
+                render={({ field }) => (
+                  <SelectMenu
+                    fullWidth
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    invalid={!!errors.role}
+                    aria-label={t('users.role')}
+                    placeholder="—"
+                    options={(roles.data ?? []).map((r) => ({ value: r.id, label: r.name }))}
+                  />
+                )}
+              />
             </FormField>
             <FormField label={t('users.team')}>
-              <Select defaultValue="" {...register('team')}>
-                <option value="">{t('users.noTeam')}</option>
-                {teams.data?.map((tm) => (
-                  <option key={tm.id} value={tm.id}>
-                    {tm.name}
-                  </option>
-                ))}
-              </Select>
+              <Controller
+                control={control}
+                name="team"
+                defaultValue=""
+                render={({ field }) => (
+                  <SelectMenu
+                    fullWidth
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    aria-label={t('users.team')}
+                    options={[
+                      { value: '', label: t('users.noTeam') },
+                      ...(teams.data ?? []).map((tm) => ({ value: tm.id, label: tm.name })),
+                    ]}
+                  />
+                )}
+              />
             </FormField>
             {editing && (
               <FormField
@@ -427,12 +443,26 @@ export function UsersPage() {
                   defaultValue: 'Inactive accounts cannot sign in but keep their data.',
                 })}
               >
-                <Select {...register('status')}>
-                  <option value="active">{t('users.active', { defaultValue: 'Active' })}</option>
-                  <option value="inactive">
-                    {t('users.inactive', { defaultValue: 'Inactive' })}
-                  </option>
-                </Select>
+                <Controller
+                  control={control}
+                  name="status"
+                  defaultValue="active"
+                  render={({ field }) => (
+                    <SelectMenu
+                      fullWidth
+                      value={field.value ?? 'active'}
+                      onChange={field.onChange}
+                      aria-label={t('users.status', { defaultValue: 'Status' })}
+                      options={[
+                        { value: 'active', label: t('users.active', { defaultValue: 'Active' }) },
+                        {
+                          value: 'inactive',
+                          label: t('users.inactive', { defaultValue: 'Inactive' }),
+                        },
+                      ]}
+                    />
+                  )}
+                />
               </FormField>
             )}
           </DrawerSection>
@@ -458,10 +488,23 @@ export function UsersPage() {
             </FormField>
             {!editing && (
               <FormField label={t('users.locale')}>
-                <Select defaultValue="en" {...register('locale')}>
-                  <option value="en">English</option>
-                  <option value="ar">العربية</option>
-                </Select>
+                <Controller
+                  control={control}
+                  name="locale"
+                  defaultValue="en"
+                  render={({ field }) => (
+                    <SelectMenu
+                      fullWidth
+                      value={field.value ?? 'en'}
+                      onChange={field.onChange}
+                      aria-label={t('users.locale')}
+                      options={[
+                        { value: 'en', label: 'English' },
+                        { value: 'ar', label: 'العربية' },
+                      ]}
+                    />
+                  )}
+                />
               </FormField>
             )}
           </DrawerSection>
