@@ -71,7 +71,9 @@ function widgetHostPage(secret: string, gatewayUrl: string): Plugin {
         async function mint(id) {
           var header = b64uStr(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
           var now = Math.floor(Date.now() / 1000);
-          var payload = b64uStr(JSON.stringify(Object.assign({}, id, { iat: now, exp: now + 7200 })));
+          // 12h TTL: a local QA harness shouldn't lose its session every 2h.
+          // (A real host page receives a platform-signed token instead.)
+          var payload = b64uStr(JSON.stringify(Object.assign({}, id, { iat: now, exp: now + 43200 })));
           var data = header + '.' + payload;
           var key = await crypto.subtle.importKey(
             'raw', new TextEncoder().encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
