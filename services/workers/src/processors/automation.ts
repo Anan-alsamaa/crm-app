@@ -259,3 +259,75 @@ export async function processAutomationJob(
     }
   }
 }
+
+/* ── Inactivity sweep ─────────────────────────────────────────────────
+ * The `inactivity` trigger has no natural event source — nothing in the
+ * realtime path emits it. A recurring sweep finds conversations that have gone
+ * quiet past a threshold and enqueues one inactivity automation job each, so
+ * admin-configured inactivity rules (reminders, re-assignment, escalation) fire.
+ * Idempotent per inactivity period: the jobId is keyed on the conversation +
+ * its current last_message_at, so a given quiet period enqueues at most once;
+ * a new customer/agent message moves last_message_at and re-arms it.
+ */
+export interface InactivitySweepDeps {
+  directus: YijiDirectusClient;
+  automationQueue: Queue;
+  logger: Logger;
+  thresholdMinutes: number;
+}
+
+export async function runInactivitySweep(deps: InactivitySweepDeps): Promise<void> {
+  const cutoff = new Date(Date.now() - deps.thresholdMinutes * 60_000).toISOString();
+  const stale = (await deps.directus.request(
+    readItems('conversations', {
+      // `_lt` already excludes nulls; `_and` keeps the two field conditions
+      // unambiguous for the SDK's filter serialization.
+      filter: {
+        _and: [{ status: { _in: ['open', 'pending'] } }, { last_message_at: { _lt: cutoff } }],
+      },
+      fields: ['id', 'last_message_at'],
+      limit: 200,
+    }),
+  )) as Array<{ id: string; last_message_at: string }>;
+
+  for (const c of stale) {
+    const job: AutomationJob = {
+      triggerEvent: 'inactivity',
+      entity: { type: 'conversation', id: c.id },
+      context: { lastMessageAt: c.last_message_at },
+      _depth: 0,
+    };
+    await deps.automationQueue.add('inactivity', job, {
+      jobId: `inact:${c.id}:${c.last_message_at}`,
+      removeOnComplete: false,
+      removeOnFail: false,
+    });
+  }
+  if (stale.length > 0) deps.logger.info({ count: stale.length }, 'inactivity sweep enqueued');
+}
+
+const INACTIVITY_SWEEP_NAME = 'inactivity_sweep';
+
+/** Recurring inactivity sweep, scheduled on the automation queue at startup. */
+export async function scheduleInactivitySweep(
+  automationQueue: Queue,
+  everyMs: number,
+): Promise<void> {
+  await automationQueue.add(
+    INACTIVITY_SWEEP_NAME,
+    {
+      triggerEvent: 'inactivity',
+      entity: { type: '__sweep__', id: '__sweep__' },
+      context: {},
+      _depth: 0,
+    } as AutomationJob,
+    {
+      repeat: { every: everyMs },
+      jobId: 'automation:inactivity-sweep',
+      removeOnComplete: true,
+      removeOnFail: true,
+    },
+  );
+}
+
+export { INACTIVITY_SWEEP_NAME };

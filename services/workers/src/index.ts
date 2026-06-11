@@ -19,6 +19,7 @@ import { createMailTransport } from './mail/index.js';
 import {
   processors,
   scheduleReconcile,
+  scheduleInactivitySweep,
   syncScheduledReports,
   type ProcessorDeps,
 } from './processors/index.js';
@@ -59,6 +60,12 @@ async function main(): Promise<void> {
   await scheduleReconcile(queues[QUEUES.sla], 60_000);
   logger.info('SLA reconcile sweep scheduled (every 60s)');
 
+  // Recurring inactivity sweep — enqueues `inactivity` automation triggers for
+  // conversations gone quiet past the threshold (default 120m, every 5m).
+  const inactivityMinutes = Number(process.env.INACTIVITY_MINUTES ?? 120);
+  await scheduleInactivitySweep(queues[QUEUES.automation], 5 * 60_000);
+  logger.info({ inactivityMinutes }, 'inactivity sweep scheduled (every 5m)');
+
   // Scheduled reports (§16/§18): register a BullMQ Job Scheduler per report that
   // has a `schedule.cron`, so BullMQ fires it and the reports worker generates +
   // emails it. Re-sync every 5 min so admin-created/edited reports are picked up
@@ -96,6 +103,7 @@ async function main(): Promise<void> {
       directusUrl: config.DIRECTUS_INTERNAL_URL,
       directusToken: config.SVC_WORKERS_TOKEN,
     },
+    inactivityMinutes,
   };
   const workers = queueNames.map(
     (queue) =>

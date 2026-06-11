@@ -98,7 +98,11 @@ export const roles: RoleSpec[] = [
     permissions: [
       ...readOnly('vendors'),
       ...readOnly('teams'),
-      ...readOnly('tags'),
+      // Agents can create custom tags on the fly (and rename/recolour) + read
+      // them, in addition to assigning via the conversations_tags junction below.
+      { collection: 'tags', action: 'read' },
+      { collection: 'tags', action: 'create' },
+      { collection: 'tags', action: 'update' },
       ...readOnly('sla_policies'),
       ...readOnly('automation_rules'),
       ...readOnly('custom_fields'),
@@ -132,7 +136,8 @@ export const roles: RoleSpec[] = [
         action: 'update',
         permissions: { assigned_agent: { _eq: '$CURRENT_USER' } },
       },
-      ...readOnly('ticket_events'),
+      // Append-only: agents add internal notes as 'commented' ticket_events.
+      ...appendOnly('ticket_events'),
       { collection: 'notifications', action: 'read', permissions: SELF_RECIPIENT },
       {
         collection: 'notifications',
@@ -147,11 +152,19 @@ export const roles: RoleSpec[] = [
       { collection: 'conversations_tags', action: 'create' },
       { collection: 'conversations_tags', action: 'read' },
       { collection: 'conversations_tags', action: 'delete' },
+      // Tag a contact (same junction pattern).
+      { collection: 'contacts_tags', action: 'create' },
+      { collection: 'contacts_tags', action: 'read' },
+      { collection: 'contacts_tags', action: 'delete' },
       // Attachments: upload files + read their metadata to render chips; read the
       // message↔file junction. The gateway writes the junction on send.
       { collection: 'directus_files', action: 'create' },
       { collection: 'directus_files', action: 'read' },
       { collection: 'messages_files', action: 'read' },
+      // Ticket attachments: agents upload + link files to tickets directly.
+      { collection: 'tickets_files', action: 'create' },
+      { collection: 'tickets_files', action: 'read' },
+      { collection: 'tickets_files', action: 'delete' },
     ],
   },
   {

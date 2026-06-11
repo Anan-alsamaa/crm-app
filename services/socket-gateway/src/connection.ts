@@ -8,6 +8,7 @@ import {
   NoteDelete,
   TypingSignal,
   ReadAck,
+  CsatSubmit,
   type MessageNew,
 } from '@yiji/shared-types';
 import type { GatewayDirectus } from './directus.js';
@@ -423,6 +424,26 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     socket
       .to(rooms.conversation(parsed.data.conversationId))
       .emit(SOCKET_EVENTS.readAck, parsed.data);
+  });
+
+  // Customer CSAT (post-close survey from the widget). We trust the socket's
+  // authenticated conversation/contact, not the payload's conversationId, and
+  // persist at most one rating per conversation.
+  socket.on(SOCKET_EVENTS.csatSubmit, (raw: unknown) => {
+    if (data.kind !== 'customer' || !data.conversationId || !data.contactId) return;
+    const parsed = CsatSubmit.safeParse(raw);
+    if (!parsed.success) {
+      return socket.emit(SOCKET_EVENTS.error, { code: 'bad_payload', message: 'invalid csat' });
+    }
+    if (parsed.data.conversationId !== data.conversationId) return;
+    directus
+      .persistCsat({
+        conversationId: data.conversationId,
+        contactId: data.contactId,
+        score: parsed.data.score,
+        comment: parsed.data.comment,
+      })
+      .catch((err) => logger.error({ err: extractAuthError(err) }, 'csat persist failed'));
   });
 
   // An agent opening a conversation joins its room to receive realtime messages,

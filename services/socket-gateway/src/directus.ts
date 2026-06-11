@@ -193,6 +193,42 @@ export class GatewayDirectus {
   }
 
   /**
+   * Record a customer's CSAT rating (post-close survey). At most one per
+   * conversation (DB enforces uq_csat_conversation), so we pre-check and skip a
+   * duplicate rather than relying on the service account having update rights.
+   * Links conversations.csat_response so reports/agent UI can resolve it.
+   */
+  async persistCsat(input: {
+    conversationId: string;
+    contactId: string;
+    score: number;
+    comment?: string;
+  }): Promise<void> {
+    const existing = (await this.client.request(
+      readItems('csat_responses', {
+        filter: { conversation: { _eq: input.conversationId } },
+        fields: ['id'],
+        limit: 1,
+      }),
+    )) as Array<{ id: string }>;
+    if (existing[0]) return; // already rated — one CSAT per conversation
+
+    const created = (await this.client.request(
+      createItem('csat_responses', {
+        conversation: input.conversationId,
+        contact: input.contactId,
+        score: input.score,
+        comment: input.comment?.trim() ? input.comment.trim() : null,
+        submitted_at: new Date().toISOString(),
+      } as never),
+    )) as { id: string };
+
+    await this.client.request(
+      updateItem('conversations', input.conversationId, { csat_response: created.id } as never),
+    );
+  }
+
+  /**
    * Delete an internal note. Guarded server-side: we re-read the message and
    * verify it is in the claimed conversation and IS an internal note before
    * touching it, so a malformed client cannot delete a real customer/agent
