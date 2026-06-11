@@ -308,10 +308,18 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     const filename = typeof data?.filename === 'string' ? data.filename : 'upload';
     const mimetype = typeof data?.mimetype === 'string' ? data.mimetype.toLowerCase() : '';
     let buf: Buffer | null = null;
-    if (data?.content instanceof ArrayBuffer) buf = Buffer.from(data.content);
-    else if (ArrayBuffer.isView(data?.content as ArrayBufferView))
-      buf = Buffer.from((data.content as ArrayBufferView).buffer);
-    else if (typeof data?.content === 'string') buf = Buffer.from(data.content, 'base64');
+    if (ArrayBuffer.isView(data?.content as ArrayBufferView)) {
+      // socket.io usually delivers binary as a Node Buffer / typed array, which
+      // is a VIEW into a larger (pooled) ArrayBuffer. Copy ONLY the view's range
+      // (byteOffset..byteLength) — reading `.buffer` alone grabs the entire
+      // backing store and stores unrelated pool bytes, corrupting the file.
+      const v = data.content as ArrayBufferView;
+      buf = Buffer.from(v.buffer, v.byteOffset, v.byteLength);
+    } else if (data?.content instanceof ArrayBuffer) {
+      buf = Buffer.from(data.content);
+    } else if (typeof data?.content === 'string') {
+      buf = Buffer.from(data.content, 'base64');
+    }
     if (!buf || buf.length === 0) return respond({ ok: false, error: 'no file content' });
     if (!attachmentPolicy.allowedMime.includes(mimetype))
       return respond({ ok: false, error: `type "${mimetype || 'unknown'}" not allowed` });
@@ -350,7 +358,16 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       }
       const file = await directus.fetchFileBytes(id);
       if (!file) return respond({ ok: false, error: 'not_found' });
-      respond({ ok: true, content: file.content, type: file.type, filename: file.filename });
+      // Send bytes as a base64 STRING, not a raw Buffer: binary ack payloads
+      // arrive corrupted in the browser socket.io client (engine.io's binary
+      // framing differs across the websocket/polling transports), so a plain
+      // JSON string is the only reliable transport here.
+      respond({
+        ok: true,
+        content: file.content.toString('base64'),
+        type: file.type,
+        filename: file.filename,
+      });
     } catch (err) {
       logger.error({ err }, 'attachment:get failed');
       respond({ ok: false, error: 'fetch_failed' });
