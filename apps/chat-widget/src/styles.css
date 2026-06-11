@@ -605,6 +605,28 @@
     transform: none;
   }
 }
+.yiji-msg-file-link {
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  transition: background-color 160ms ease;
+}
+.yiji-msg-file-link:hover {
+  background: color-mix(in oklab, currentColor 18%, transparent);
+}
+.yiji-msg-file-loading {
+  opacity: 0.6;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .yiji-msg-file-loading {
+    animation: yiji-att-pulse 1.2s ease-in-out infinite;
+  }
+}
+@keyframes yiji-att-pulse {
+  50% {
+    opacity: 0.32;
+  }
+}
 
 /* ───── CSAT ───── */
 .yiji-csat {

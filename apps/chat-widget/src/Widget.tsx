@@ -177,6 +177,14 @@ export function Widget({ config }: { config: WidgetConfig }) {
     Array<{ id: string; name: string; type: string; preview?: string }>
   >([]);
   const [uploading, setUploading] = useState(false);
+  // Resolved blob URLs for RECEIVED attachments (agent-sent, or own files after
+  // a reload) — the customer has no Directus token, so the gateway streams the
+  // bytes over the socket via attachment:get and we wrap them in a blob URL.
+  const [resolved, setResolved] = useState<
+    Record<string, { url?: string; type?: string | null; name?: string | null; error?: boolean }>
+  >({});
+  // Ids we've already requested, so a re-render never double-fetches.
+  const attemptedRef = useRef<Set<string>>(new Set());
   const socketRef = useRef<Socket | null>(null);
   const convoRef = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -356,6 +364,44 @@ export function Widget({ config }: { config: WidgetConfig }) {
       return prev.filter((p) => p.id !== id);
     });
 
+  // Fetch a received attachment's bytes through the gateway (once per id) and
+  // expose a blob URL the bubble can render/download. Own image uploads already
+  // have a local preview, so they're skipped.
+  const ensureAttachment = (id: string) => {
+    if (attachMetaRef.current[id]?.preview) return;
+    if (attemptedRef.current.has(id)) return;
+    const socket = socketRef.current;
+    if (!socket) return;
+    attemptedRef.current.add(id);
+    socket.timeout(20_000).emit(
+      'attachment:get',
+      { id },
+      (
+        err: Error | null,
+        res?: {
+          ok?: boolean;
+          content?: ArrayBuffer;
+          type?: string | null;
+          filename?: string | null;
+        },
+      ) => {
+        if (err || !res?.ok || !res.content) {
+          setResolved((prev) => ({ ...prev, [id]: { error: true } }));
+          return;
+        }
+        const url = URL.createObjectURL(
+          new Blob([res.content], { type: res.type ?? 'application/octet-stream' }),
+        );
+        setResolved((prev) => ({ ...prev, [id]: { url, type: res.type, name: res.filename } }));
+      },
+    );
+  };
+
+  // Resolve every attachment that appears in the thread (realtime + history).
+  useEffect(() => {
+    for (const m of messages) for (const id of m.attachments ?? []) ensureAttachment(id);
+  }, [messages]);
+
   const onInput = (e: Event) => {
     const target = e.target as HTMLTextAreaElement;
     const value = target.value;
@@ -463,25 +509,49 @@ export function Widget({ config }: { config: WidgetConfig }) {
                       <div className="yiji-msg-files">
                         {m.attachments.map((id) => {
                           const meta = attachMetaRef.current[id];
-                          // Own image upload: render the local preview, click to
-                          // open full size in a new tab.
-                          if (meta?.preview) {
+                          const r = resolved[id];
+                          const url = meta?.preview ?? r?.url;
+                          const type = meta?.type ?? r?.type ?? null;
+                          const name = meta?.name ?? r?.name ?? null;
+                          const isImg = !!url && (type ?? '').startsWith('image/');
+                          // Image (own preview or fetched): thumbnail, click opens full size.
+                          if (url && isImg) {
                             return (
                               <button
                                 type="button"
                                 className="yiji-msg-image"
                                 key={id}
-                                onClick={() => window.open(meta.preview, '_blank', 'noopener')}
-                                aria-label={meta.name}
+                                onClick={() => window.open(url, '_blank', 'noopener')}
+                                aria-label={name ?? tr.attachment}
                               >
-                                <img src={meta.preview} alt={meta.name} />
+                                <img src={url} alt={name ?? ''} />
                               </button>
                             );
                           }
+                          // Non-image file with bytes available: download chip.
+                          if (url) {
+                            return (
+                              <a
+                                className="yiji-msg-file yiji-msg-file-link"
+                                key={id}
+                                href={url}
+                                download={name ?? 'attachment'}
+                                target="_blank"
+                                rel="noopener"
+                              >
+                                <AttachIcon />
+                                <span>{name ?? tr.attachment}</span>
+                              </a>
+                            );
+                          }
+                          // Still fetching, or failed: a plain chip (with name when known).
                           return (
-                            <span className="yiji-msg-file" key={id}>
+                            <span
+                              className={`yiji-msg-file${r?.error ? '' : ' yiji-msg-file-loading'}`}
+                              key={id}
+                            >
                               <AttachIcon />
-                              <span>{meta?.name ?? tr.attachment}</span>
+                              <span>{name ?? tr.attachment}</span>
                             </span>
                           );
                         })}
