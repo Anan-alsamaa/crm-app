@@ -22,6 +22,16 @@ const DEFAULT_FALLBACK = {
   email: 'cs@anan.sa',
 };
 
+// An attachment is an image if its MIME says so, OR (when the MIME is missing)
+// its filename has an image extension — otherwise a null-type PNG would render
+// as a download chip instead of an inline thumbnail.
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|avif|bmp|heic|ico)$/i;
+function looksLikeImage(type?: string | null, name?: string | null): boolean {
+  if ((type ?? '').toLowerCase().startsWith('image/')) return true;
+  if (type) return false;
+  return !!name && IMAGE_EXT.test(name);
+}
+
 interface Branding {
   primary?: string;
   secondary?: string;
@@ -513,7 +523,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
                           const url = meta?.preview ?? r?.url;
                           const type = meta?.type ?? r?.type ?? null;
                           const name = meta?.name ?? r?.name ?? null;
-                          const isImg = !!url && (type ?? '').startsWith('image/');
+                          const isImg = !!url && looksLikeImage(type, name);
                           // Image (own preview or fetched): thumbnail, click opens full size.
                           if (url && isImg) {
                             return (

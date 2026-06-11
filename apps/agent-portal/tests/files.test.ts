@@ -37,6 +37,15 @@ describe('fileKind', () => {
     expect(fileKind(null, 'mystery')).toBe('file');
   });
 
+  it('classifies images by extension when the MIME type is null', () => {
+    // Regression: a null-type PNG used to fall through to a generic file chip
+    // instead of an inline thumbnail.
+    expect(fileKind(null, 'db2ns.png')).toBe('image');
+    expect(fileKind('', 'photo.JPG')).toBe('image');
+    expect(fileKind(null, 'art.webp')).toBe('image');
+    expect(isImage(null, 'db2ns.png')).toBe(true);
+  });
+
   it('isImage is true only for images', () => {
     expect(isImage('image/jpeg')).toBe(true);
     expect(isImage('application/pdf', 'x.pdf')).toBe(false);

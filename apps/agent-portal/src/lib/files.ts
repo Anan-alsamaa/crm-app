@@ -16,6 +16,19 @@ export type FileKind =
   | 'file';
 
 const EXT_KIND: Record<string, FileKind> = {
+  // Images — critical: attachments sometimes arrive with a null MIME type
+  // (older rows, junction reads), and without these an image would fall through
+  // to a generic file chip instead of an inline thumbnail.
+  png: 'image',
+  jpg: 'image',
+  jpeg: 'image',
+  gif: 'image',
+  webp: 'image',
+  svg: 'image',
+  avif: 'image',
+  bmp: 'image',
+  heic: 'image',
+  ico: 'image',
   pdf: 'pdf',
   csv: 'sheet',
   xls: 'sheet',
