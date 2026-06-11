@@ -28,6 +28,11 @@ COPY --from=prod-deps /app/services/socket-gateway/node_modules ./services/socke
 # Application + workspace package source (consumed as TS by tsx at runtime).
 COPY packages/shared-config ./packages/shared-config
 COPY packages/shared-types ./packages/shared-types
+# The shared packages import zod (etc.); bring their node_modules (pnpm symlinks
+# into the copied root .pnpm store) or the service can't resolve those deps at
+# runtime (ERR_MODULE_NOT_FOUND: zod).
+COPY --from=prod-deps /app/packages/shared-config/node_modules ./packages/shared-config/node_modules
+COPY --from=prod-deps /app/packages/shared-types/node_modules ./packages/shared-types/node_modules
 COPY tsconfig.base.json ./
 COPY services/socket-gateway ./services/socket-gateway
 
