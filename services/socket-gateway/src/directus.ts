@@ -18,9 +18,13 @@ import type { AttachmentMeta } from './attachments.js';
  */
 export class GatewayDirectus {
   private readonly client: YijiDirectusClient;
+  private readonly url: string;
+  private readonly token: string;
 
   constructor(url: string, token: string) {
     this.client = createServiceClient({ url, token });
+    this.url = url;
+    this.token = token;
   }
 
   /** Resolve the CRM vendor UUID from the Yiji external vendor id (must be active). */
@@ -267,6 +271,56 @@ export class GatewayDirectus {
       // Directus returns filesize as a bigint string; coerce to number.
       filesize: r.filesize === null || r.filesize === undefined ? null : Number(r.filesize),
     }));
+  }
+
+  /**
+   * Authorization gate for `attachment:get`: is this file referenced by a
+   * message in the given conversation? Customers have no Directus account, so
+   * the gateway proxies asset reads on their behalf — but only for files that
+   * actually belong to their own conversation (prevents fetching arbitrary file
+   * UUIDs). Filters the messages_files junction through to the parent message's
+   * conversation.
+   */
+  async attachmentInConversation(fileId: string, conversationId: string): Promise<boolean> {
+    const rows = (await this.client.request(
+      readItems(
+        'messages_files' as never,
+        {
+          filter: {
+            directus_files_id: { _eq: fileId },
+            messages_id: { conversation: { _eq: conversationId } },
+          },
+          fields: ['id'],
+          limit: 1,
+        } as never,
+      ),
+    )) as Array<{ id: string }>;
+    return rows.length > 0;
+  }
+
+  /**
+   * Fetch a private file's bytes + display metadata via the service token, so
+   * the gateway can stream it to a customer who has no Directus account. Returns
+   * null if the file no longer exists or the asset can't be read.
+   */
+  async fetchFileBytes(
+    fileId: string,
+  ): Promise<{ content: Buffer; type: string | null; filename: string | null } | null> {
+    const rows = (await this.client.request(
+      readFiles({
+        filter: { id: { _eq: fileId } },
+        fields: ['id', 'type', 'filename_download'],
+        limit: 1,
+      }),
+    )) as Array<{ id: string; type: string | null; filename_download: string | null }>;
+    const meta = rows[0];
+    if (!meta) return null;
+    const res = await fetch(`${this.url}/assets/${fileId}`, {
+      headers: { Authorization: `Bearer ${this.token}` },
+    });
+    if (!res.ok) return null;
+    const content = Buffer.from(await res.arrayBuffer());
+    return { content, type: meta.type, filename: meta.filename_download };
   }
 
   /** Conversations an agent may see (assigned to them or unassigned). */

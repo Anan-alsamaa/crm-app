@@ -202,6 +202,10 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   // One token bucket per socket — throttles inbound write events (message:send,
   // note:add) to a burst + sustained rate.
   const writeBucket = createTokenBucket(rateLimit.capacity, rateLimit.refillPerSec);
+  // Separate, more generous bucket for attachment:get reads — opening a
+  // conversation can fan out several asset fetches at once, and reads are
+  // cheaper than writes, so they shouldn't compete with the message budget.
+  const readBucket = createTokenBucket(rateLimit.capacity * 3, rateLimit.refillPerSec * 3);
 
   // Explicit logout signal from an agent. We mirror the disconnect cleanup
   // up-front so the host-page "agents online" pill flips immediately —
@@ -319,6 +323,37 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     } catch (err) {
       logger.error({ err }, 'attachment upload failed');
       respond({ ok: false, error: 'upload failed' });
+    }
+  });
+
+  // Attachment download — the mirror of the upload above. Customers have no
+  // Directus account, so they can't fetch a private /assets/:id themselves; the
+  // gateway streams the bytes on their behalf, but ONLY for files that belong
+  // to their own conversation (authorization via attachmentInConversation).
+  //   emit('attachment:get', { id }, (res) => ...)
+  //   ack res: { ok:true, content:ArrayBuffer, type, filename } | { ok:false, error }
+  socket.on('attachment:get', async (raw: unknown, ack?: (res: unknown) => void) => {
+    const respond = typeof ack === 'function' ? ack : () => undefined;
+    if (!readBucket.tryRemove()) return respond({ ok: false, error: 'rate_limited' });
+    const id = (raw as { id?: unknown })?.id;
+    if (typeof id !== 'string' || !id) return respond({ ok: false, error: 'bad_request' });
+    try {
+      // Customers may only read attachments from their own conversation. Agents
+      // already hold Directus asset access via their own token, so the gateway
+      // doesn't restrict them further here.
+      if (data.kind === 'customer') {
+        if (
+          !data.conversationId ||
+          !(await directus.attachmentInConversation(id, data.conversationId))
+        )
+          return respond({ ok: false, error: 'forbidden' });
+      }
+      const file = await directus.fetchFileBytes(id);
+      if (!file) return respond({ ok: false, error: 'not_found' });
+      respond({ ok: true, content: file.content, type: file.type, filename: file.filename });
+    } catch (err) {
+      logger.error({ err }, 'attachment:get failed');
+      respond({ ok: false, error: 'fetch_failed' });
     }
   });
 
