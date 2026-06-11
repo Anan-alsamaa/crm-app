@@ -390,17 +390,21 @@ export function Widget({ config }: { config: WidgetConfig }) {
         err: Error | null,
         res?: {
           ok?: boolean;
-          content?: ArrayBuffer;
+          content?: string; // base64
           type?: string | null;
           filename?: string | null;
         },
       ) => {
-        if (err || !res?.ok || !res.content) {
+        if (err || !res?.ok || typeof res.content !== 'string') {
           setResolved((prev) => ({ ...prev, [id]: { error: true } }));
           return;
         }
+        // content is base64 (see the gateway's attachment:get) — decode to bytes.
+        const bin = atob(res.content);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         const url = URL.createObjectURL(
-          new Blob([res.content], { type: res.type ?? 'application/octet-stream' }),
+          new Blob([bytes], { type: res.type ?? 'application/octet-stream' }),
         );
         setResolved((prev) => ({ ...prev, [id]: { url, type: res.type, name: res.filename } }));
       },
