@@ -17,7 +17,7 @@ import { CustomerTokenError } from './auth/customer-jwt.js';
 import { validateAgentToken } from './auth/agent-jwt.js';
 import type { SideEffectProducer } from './queue.js';
 import { createAgentPresence } from './agent-presence.js';
-import { validateAttachments, type AttachmentPolicy } from './attachments.js';
+import { validateAttachments, decodeUploadContent, type AttachmentPolicy } from './attachments.js';
 import { createTokenBucket } from './rate-limit.js';
 
 interface SocketData {
@@ -303,12 +303,8 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     const data = raw as { filename?: unknown; mimetype?: unknown; content?: unknown };
     const filename = typeof data?.filename === 'string' ? data.filename : 'upload';
     const mimetype = typeof data?.mimetype === 'string' ? data.mimetype.toLowerCase() : '';
-    let buf: Buffer | null = null;
-    if (data?.content instanceof ArrayBuffer) buf = Buffer.from(data.content);
-    else if (ArrayBuffer.isView(data?.content as ArrayBufferView))
-      buf = Buffer.from((data.content as ArrayBufferView).buffer);
-    else if (typeof data?.content === 'string') buf = Buffer.from(data.content, 'base64');
-    if (!buf || buf.length === 0) return respond({ ok: false, error: 'no file content' });
+    const buf = decodeUploadContent(data?.content);
+    if (!buf) return respond({ ok: false, error: 'no file content' });
     if (!attachmentPolicy.allowedMime.includes(mimetype))
       return respond({ ok: false, error: `type "${mimetype || 'unknown'}" not allowed` });
     if (buf.length > attachmentPolicy.maxBytes)
