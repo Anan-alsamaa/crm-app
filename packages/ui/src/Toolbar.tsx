@@ -13,7 +13,7 @@ export function Toolbar({
   return (
     <div
       className={cn(
-        'sticky top-0 z-20 flex h-14 items-center gap-3 bg-card/60 px-6 backdrop-blur',
+        'sticky top-0 z-20 flex h-14 items-center gap-3 bg-card/60 px-4 backdrop-blur sm:px-6',
         className,
       )}
       {...rest}

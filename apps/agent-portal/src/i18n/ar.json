@@ -11,21 +11,37 @@
       "sentiment": "المشاعر",
       "intent": "النيّة",
       "entities": "الكيانات",
-      "scoreLead": "تقييم العميل المحتمل"
+      "scoreLead": "تقييم العميل المحتمل",
+      "search": "بحث"
+    },
+    "search": {
+      "placeholder": "ابحث في المحادثات…",
+      "empty": "لا توجد محادثات مطابقة."
     }
   },
   "login": {
     "title": "تسجيل الدخول إلى بوابة الوكيل",
     "submit": "تسجيل الدخول",
     "error": "البريد الإلكتروني أو كلمة المرور غير صحيحة",
-    "emailPlaceholder": "you@company.com"
+    "emailPlaceholder": "you@company.com",
+    "subtitle": "واصل مساعدة عملائك.",
+    "forgot": "هل نسيت كلمة المرور؟",
+    "hidePassword": "إخفاء",
+    "showPassword": "إظهار",
+    "secure": "محمي بـ JWT و TLS",
+    "help": "تواجه مشكلة في تسجيل الدخول؟ تواصل مع المسؤول."
   },
   "nav": {
     "inbox": "صندوق الوارد",
     "tickets": "التذاكر",
     "contacts": "جهات الاتصال",
     "preferences": "التفضيلات",
-    "signedInAs": "مسجّل الدخول باسم {{name}}"
+    "primary": "التنقل الرئيسي",
+    "openMenu": "فتح القائمة",
+    "closeMenu": "إغلاق القائمة",
+    "signedInAs": "مسجّل الدخول باسم {{name}}",
+    "work": "العمل",
+    "account": "الحساب"
   },
   "contacts": {
     "title": "جهات الاتصال",
@@ -33,6 +49,7 @@
     "matching": "مطابق",
     "searchPlaceholder": "ابحث بالاسم أو البريد أو الهاتف أو البائع…",
     "empty": "لا توجد جهات اتصال بعد.",
+    "emptyHint": "تظهر جهات الاتصال تلقائيًا عندما يتواصل العملاء عبر قنواتك.",
     "noMatch": "لا توجد نتائج مطابقة لبحثك.",
     "exportCsv": "تصدير CSV",
     "exportEmpty": "لا يوجد ما يمكن تصديره.",
@@ -78,7 +95,28 @@
     "bulkSelected": "{{count}} مُحدَّد",
     "bulkSetStatus": "تعيين الحالة…",
     "bulkAddTag": "إضافة وسم…",
-    "bulkClear": "مسح"
+    "bulkClear": "مسح",
+    "bulkStatusDone": "تم تحديث {{count}} محادثة.",
+    "bulkTagDone": "تم وسم {{count}} محادثة.",
+    "stats": {
+      "open": "مفتوحة",
+      "urgent": "عاجلة",
+      "unread": "غير مقروءة"
+    },
+    "emptyHint": "تصل المحادثات الجديدة من الأداة هنا فورًا.",
+    "welcomeHint": "اختر المحادثة التالية من القائمة، أو استخدم الإحصاءات أعلاه للتصفية حسب ما يحتاج الانتباه أولًا.",
+    "welcome": {
+      "queue": "الطابور",
+      "openCount": "{{count}} مفتوحة",
+      "zeroTitle": "صندوق فارغ.",
+      "zeroAccent": "خذ نفسًا.",
+      "waiting": "{{count}} محادثة بانتظارك.",
+      "urgentAccent": "{{count}} عاجلة.",
+      "pace": "أنت تحدّد الإيقاع.",
+      "recent": "النشاط الأخير",
+      "zeroArt": "ستصل المحادثات الجديدة هنا عندما يتواصل العملاء عبر الأداة أو البريد أو القنوات الأخرى."
+    },
+    "resizeList": "تغيير حجم قائمة المحادثات"
   },
   "conversation": {
     "replyPlaceholder": "اكتب ردًا…",
@@ -93,20 +131,51 @@
     "team": "الفريق",
     "unassigned": "غير معيّن",
     "noTeam": "بدون فريق",
-    "addTag": "وسم"
+    "addTag": "إضافة وسم",
+    "tagLimit": "حتى {{count}} وسوم لكل محادثة.",
+    "tagsFull": "{{count}}/{{count}} وسوم",
+    "noTagsYet": "لا توجد وسوم بعد.",
+    "tagSearchPlaceholder": "ابحث أو أنشئ…",
+    "createTagNamed": "إنشاء «{{name}}»",
+    "allTagsAdded": "تمت إضافة كل الوسوم — اكتب لإنشاء وسم جديد.",
+    "removeTag": "إزالة {{name}}",
+    "backToInbox": "العودة إلى صندوق الوارد",
+    "details": "تفاصيل المحادثة",
+    "attach": "إرفاق ملف",
+    "attachment": "مرفق",
+    "attachFailed": "تعذّر رفع الملف.",
+    "removeAttachment": "إزالة المرفق",
+    "you": "أنت",
+    "today": "اليوم",
+    "yesterday": "أمس",
+    "copyMessage": "نسخ الرسالة",
+    "copied": "تم النسخ",
+    "tab": {
+      "reply": "رد",
+      "note": "ملاحظة داخلية"
+    },
+    "sendHint": "للإرسال",
+    "newlineHint": "لسطر جديد"
   },
   "sidebar": {
     "contact": "جهة الاتصال",
+    "channelWidget": "أداة · ويب",
+    "email": "البريد الإلكتروني",
+    "phone": "الهاتف",
+    "source": "المصدر",
+    "sourceWidget": "أداة الويب",
     "tags": "الوسوم",
     "linkedTickets": "التذاكر المرتبطة",
     "noTickets": "لا توجد تذاكر مرتبطة.",
     "internalNotes": "الملاحظات الداخلية",
     "noNotes": "لا توجد ملاحظات داخلية بعد.",
-    "removeNote": "حذف الملاحظة"
+    "removeNote": "حذف الملاحظة",
+    "resizePanel": "تغيير حجم لوحة التفاصيل"
   },
   "tickets": {
     "title": "التذاكر",
     "empty": "لا توجد تذاكر بعد.",
+    "backToList": "كل التذاكر",
     "selectPrompt": "اختر تذكرة لعرض التفاصيل.",
     "createTitle": "إنشاء تذكرة",
     "create": "إنشاء",
@@ -119,6 +188,13 @@
     "resolutionDue": "موعد الحل",
     "respondedAt": "تم الرد في",
     "markResponded": "وضع علامة بأن الرد الأول أُرسل",
+    "addNote": "إضافة ملاحظة داخلية",
+    "notePlaceholder": "اترك ملاحظة للفريق… أشر إلى زميل بـ @ لإعلامه",
+    "addNoteCta": "إضافة ملاحظة",
+    "attachments": "المرفقات",
+    "attach": "إرفاق ملف",
+    "noAttachments": "لا توجد مرفقات بعد.",
+    "properties": "الخصائص",
     "event": {
       "created": "تم إنشاء التذكرة",
       "status_changed": "تغيّرت الحالة",
@@ -130,7 +206,14 @@
       "closed": "مغلق",
       "reopened": "أُعيد فتحه",
       "automation_triggered": "تم تشغيل الأتمتة"
-    }
+    },
+    "created": "تم إنشاء التذكرة",
+    "createHint": "سجّل العمل كتذكرة ليُتابَع وفق اتفاقية الخدمة.",
+    "filterAll": "الكل",
+    "overdue": "متأخرة",
+    "emptyHint": "تُنشأ التذاكر من المحادثات التي تحتاج إلى متابعة.",
+    "selectHint": "اختر تذكرة من القائمة لعرض سير عملها وجدول اتفاقية الخدمة وسجلّها.",
+    "slaSection": "اتفاقية الخدمة"
   },
   "notifications": {
     "title": "التنبيهات",
@@ -145,7 +228,18 @@
       "reminder": "تذكير",
       "escalation": "تصعيد",
       "automation": "أتمتة"
-    }
+    },
+    "allRead": "لا جديد لديك",
+    "markAllRead": "تعليم الكل كمقروء",
+    "emptyHint": "تظهر هنا تنبيهات اتفاقية الخدمة والإشارات والتعيينات الجديدة.",
+    "emptyAllHint": "لا توجد لديك إشعارات بعد.",
+    "today": "اليوم",
+    "earlier": "سابقًا",
+    "view": "عرض",
+    "managePreferences": "إدارة تفضيلات الإشعارات",
+    "unreadCount": "{{count}} غير مقروءة",
+    "tabUnread": "غير مقروءة",
+    "tabAll": "الكل"
   },
   "preferences": {
     "title": "تفضيلات التنبيهات",
@@ -160,5 +254,35 @@
     },
     "saved": "تم حفظ التفضيلات.",
     "error": "تعذّر حفظ التفضيلات."
+  },
+  "cmd": {
+    "pages": "الصفحات",
+    "conversations": "المحادثات",
+    "tickets": "التذاكر",
+    "actions": "إجراءات سريعة"
+  },
+  "customFields": {
+    "saved": "تم حفظ الحقول المخصّصة.",
+    "saveError": "تعذّر الحفظ.",
+    "title": "حقول مخصّصة"
+  },
+  "shortcuts": {
+    "title": "اختصارات لوحة المفاتيح",
+    "navigation": "التنقل",
+    "general": "عام",
+    "commandPalette": "لوحة الأوامر",
+    "showShortcuts": "عرض هذه المساعدة",
+    "closeDialogs": "إغلاق النوافذ"
+  },
+  "sound": {
+    "mute": "كتم صوت الرسائل الجديدة",
+    "unmute": "إلغاء كتم صوت الرسائل الجديدة",
+    "statusOn": "الصوت مفعّل",
+    "statusMuted": "مكتوم",
+    "railLabel": "أصوات الرسائل",
+    "prefTitle": "صوت الرسائل الجديدة",
+    "prefHint": "تشغيل نغمة قصيرة في هذا المتصفح عند وصول رسالة جديدة.",
+    "on": "مفعّل",
+    "off": "متوقف"
   }
 }

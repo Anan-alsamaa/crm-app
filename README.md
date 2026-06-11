@@ -159,15 +159,29 @@ docker compose down -v   # removes the postgres + redis volumes
   coverage; each app reports its own. CI **enforces** line thresholds
   (services ≥70%, apps gated by their `vitest.config.ts`) and fails on
   regression. Coverage is uploaded as a CI artifact and summarized on each run.
-- **E2E**: `pnpm test:e2e` — Playwright across agent / admin / widget.
-  Some full-stack specs are gated on `E2E_FULL_STACK=1` so they don't run by
-  default.
+- **E2E**: `pnpm test:e2e` — Playwright across agent / admin / widget (the
+  full-stack suite runs in CI on the integration branch). To run it locally
+  **safely**, use `pnpm test:e2e:local`: it spins up a throwaway SQLite Directus
+  on `:8066`, applies the schema, starts the gateway + portals + widget against
+  it, runs Playwright, then tears everything down — so it **never touches the
+  demo database**. Prereq: stop your demo dev servers first (the specs use
+  ports 5173–5175 / 8080).
 - **Pre-commit**: husky + lint-staged run `eslint --fix` + `prettier` on staged
   files (no test suite) so format/lint drift never lands. Installed via
   `pnpm install` (the `prepare` script).
 
 CI runs the `quality` (lint/typecheck/unit+coverage) and `e2e` jobs in
 parallel; Playwright browsers and the pnpm store are cached.
+
+## Component library (Storybook)
+
+The `@yiji/ui` primitives have a Storybook (design tokens + Tailwind preset
+wired in):
+
+```bash
+pnpm --filter @yiji/ui storybook        # dev server on :6006
+pnpm --filter @yiji/ui build-storybook  # static build → packages/ui/storybook-static
+```
 
 ## Production checklist
 
@@ -196,6 +210,8 @@ Highlights:
 - **[docs/USER_GUIDE_ADMIN.md](./docs/USER_GUIDE_ADMIN.md)** — configuration:
   users, teams, vendors, SLA, automation, reports, custom fields, imports, AI.
 - **[docs/PRODUCTION.md](./docs/PRODUCTION.md)** — deployment runbook.
+- **[docs/AUDITS.md](./docs/AUDITS.md)** — pre-release audit runbook: accessibility
+  (WCAG), performance, horizontal scaling, and the quickstart smoke test.
 
 The original design artifacts (spec, data model, contracts) live under
 [specs/001-yiji-crm-platform/](./specs/001-yiji-crm-platform/) for historical

@@ -16,7 +16,7 @@ export interface ReportRow {
   name: string;
   description: string | null;
   type: ReportType;
-  filters: { from?: string; to?: string; vendor?: string } | null;
+  filters: { from?: string; to?: string; vendor?: string; agent?: string; team?: string } | null;
   schedule: { email?: string[]; cron?: string } | null;
   last_run_at: string | null;
 }

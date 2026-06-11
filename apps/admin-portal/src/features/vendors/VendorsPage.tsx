@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
+import { uploadFiles } from '@directus/sdk';
 import {
   Button,
   cn,
@@ -12,11 +13,15 @@ import {
   FormField,
   Input,
   Skeleton,
+  Spinner,
   toast,
   Toolbar,
   ToolbarSpacer,
 } from '@yiji/ui';
+import { directus } from '../../lib/directus.js';
 import { useVendors, useCreateVendor, useUpdateVendor, type VendorRow } from './api.js';
+
+const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_URL ?? 'http://localhost:8055';
 
 /**
  * Vendor management.
@@ -60,6 +65,9 @@ export function VendorsPage() {
   const update = useUpdateVendor();
   const [editing, setEditing] = useState<VendorRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [logoId, setLogoId] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -68,6 +76,7 @@ export function VendorsPage() {
 
   useEffect(() => {
     if (drawerOpen && editing) {
+      setLogoId(editing.logo ?? null);
       form.reset({
         name: editing.name,
         yiji_vendor_id: editing.yiji_vendor_id,
@@ -76,6 +85,7 @@ export function VendorsPage() {
         status: editing.status,
       });
     } else if (drawerOpen && !editing) {
+      setLogoId(null);
       form.reset({
         name: '',
         yiji_vendor_id: '',
@@ -85,6 +95,22 @@ export function VendorsPage() {
       });
     }
   }, [drawerOpen, editing, form]);
+
+  const onPickLogo = async (file: File | null): Promise<void> => {
+    if (!file) return;
+    setUploadingLogo(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = (await directus.request(uploadFiles(fd))) as { id: string };
+      setLogoId(res.id);
+    } catch {
+      toast.error(t('vendors.logoError', { defaultValue: 'Could not upload the logo.' }));
+    } finally {
+      setUploadingLogo(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    }
+  };
 
   const onSubmit = form.handleSubmit(async (values) => {
     const colors: { primary?: string; secondary?: string } = {};
@@ -98,6 +124,7 @@ export function VendorsPage() {
             name: values.name,
             yiji_vendor_id: values.yiji_vendor_id,
             colors,
+            logo: logoId,
             status: values.status,
           },
         });
@@ -107,6 +134,7 @@ export function VendorsPage() {
           name: values.name,
           yiji_vendor_id: values.yiji_vendor_id,
           colors,
+          logo: logoId,
           status: values.status,
         });
         toast.success(t('vendors.created', { defaultValue: 'Vendor created.' }));
@@ -155,9 +183,15 @@ export function VendorsPage() {
 
       <div className="flex-1 overflow-auto px-5 py-3">
         {vendors.isLoading ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-32 w-full rounded-2xl" />
+          <div className="mx-auto max-w-5xl divide-y divide-border/50 overflow-hidden rounded-xl ring-1 ring-border/60">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-3">
+                <Skeleton className="h-8 w-8 rounded-lg" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-3 w-1/4" />
+                  <Skeleton className="h-2.5 w-1/3" />
+                </div>
+              </div>
             ))}
           </div>
         ) : !vendors.data || vendors.data.length === 0 ? (
@@ -180,7 +214,7 @@ export function VendorsPage() {
             }
           />
         ) : (
-          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <ul className="mx-auto max-w-5xl divide-y divide-border/50 overflow-hidden rounded-xl bg-card/50 ring-1 ring-border/60">
             {vendors.data.map((v) => (
               <li key={v.id}>
                 <VendorCard
@@ -261,9 +295,57 @@ export function VendorsPage() {
           <DrawerSection
             title={t('vendors.sectionBranding', { defaultValue: 'Branding' })}
             description={t('vendors.sectionBrandingHint', {
-              defaultValue: 'Colors propagate to the chat widget. Use #RRGGBB hex.',
+              defaultValue: 'Logo + colors propagate to the chat widget. Use #RRGGBB hex.',
             })}
           >
+            <FormField label={t('vendors.logo', { defaultValue: 'Logo' })}>
+              <div className="flex items-center gap-3">
+                <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary ring-1 ring-border">
+                  {logoId ? (
+                    <img
+                      src={`${DIRECTUS_URL}/assets/${logoId}?width=96&height=96&fit=cover`}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-base font-semibold text-muted-foreground">
+                      {(form.watch('name') ?? '?').slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                </span>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={(e) => void onPickLogo(e.target.files?.[0] ?? null)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploadingLogo}
+                  onClick={() => logoInputRef.current?.click()}
+                >
+                  {uploadingLogo ? (
+                    <Spinner size={14} />
+                  ) : logoId ? (
+                    t('vendors.replaceLogo', { defaultValue: 'Replace' })
+                  ) : (
+                    t('vendors.uploadLogo', { defaultValue: 'Upload logo' })
+                  )}
+                </Button>
+                {logoId && (
+                  <button
+                    type="button"
+                    onClick={() => setLogoId(null)}
+                    className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {t('actions.remove', { ns: 'common', defaultValue: 'Remove' })}
+                  </button>
+                )}
+              </div>
+            </FormField>
             <ColorField
               label={t('vendors.primary', { defaultValue: 'Primary color' })}
               register={form.register('primary')}
@@ -324,46 +406,34 @@ function VendorCard({ v, onEdit }: { v: VendorRow; onEdit: () => void }) {
       type="button"
       onClick={onEdit}
       className={cn(
-        'group flex w-full flex-col gap-3 rounded-2xl bg-card/70 px-5 py-4 text-start',
-        'shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04]',
-        'transition-[box-shadow,transform,background-color] duration-fast ease-out',
-        'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px',
+        'group flex w-full items-center gap-3 px-4 py-2.5 text-start',
+        'transition-colors duration-fast ease-out hover:bg-secondary/50',
+        'focus-visible:outline-none focus-visible:bg-secondary/60',
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm font-semibold tracking-tight text-foreground truncate">
-              {v.name}
+      {/* Two-tone brand chip — the vendor's primary + secondary at a glance. */}
+      <span
+        aria-hidden
+        title={`${primary} · ${secondary}`}
+        className="flex h-8 w-8 shrink-0 overflow-hidden rounded-lg ring-1 ring-foreground/10"
+      >
+        <span className="h-full w-1/2" style={{ background: primary }} />
+        <span className="h-full w-1/2" style={{ background: secondary }} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium text-foreground">{v.name}</span>
+          {v.status === 'inactive' && (
+            <span className="inline-flex items-center rounded-full bg-warning/20 px-2 py-0.5 text-2xs font-medium text-warning-foreground">
+              {t('vendors.inactive', { defaultValue: 'inactive' })}
             </span>
-            {v.status === 'inactive' && (
-              <span className="inline-flex items-center rounded-full bg-warning/20 px-2 py-0.5 text-2xs font-medium text-warning-foreground">
-                {t('vendors.inactive', { defaultValue: 'inactive' })}
-              </span>
-            )}
-          </div>
-          <div className="mt-0.5 truncate text-2xs font-mono text-muted-foreground">
-            {v.yiji_vendor_id}
-          </div>
+          )}
         </div>
+        <div className="truncate font-mono text-2xs text-muted-foreground">{v.yiji_vendor_id}</div>
       </div>
-      <div className="flex items-center gap-2">
-        <span
-          aria-hidden
-          className="h-8 w-8 shrink-0 rounded-lg ring-1 ring-foreground/10"
-          style={{ background: primary }}
-          title={`primary ${primary}`}
-        />
-        <span
-          aria-hidden
-          className="h-8 w-8 shrink-0 rounded-lg ring-1 ring-foreground/10"
-          style={{ background: secondary }}
-          title={`secondary ${secondary}`}
-        />
-        <div className="ms-auto text-2xs text-muted-foreground tabular-nums">
-          <span className="font-mono">{primary}</span>
-        </div>
-      </div>
+      <span className="hidden shrink-0 font-mono text-2xs text-muted-foreground sm:block">
+        {primary}
+      </span>
     </button>
   );
 }

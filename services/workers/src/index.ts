@@ -20,6 +20,7 @@ import {
   processors,
   scheduleReconcile,
   scheduleInactivitySweep,
+  syncScheduledReports,
   type ProcessorDeps,
 } from './processors/index.js';
 import { Registry } from './metrics.js';
@@ -64,6 +65,27 @@ async function main(): Promise<void> {
   const inactivityMinutes = Number(process.env.INACTIVITY_MINUTES ?? 120);
   await scheduleInactivitySweep(queues[QUEUES.automation], 5 * 60_000);
   logger.info({ inactivityMinutes }, 'inactivity sweep scheduled (every 5m)');
+
+  // Scheduled reports (§16/§18): register a BullMQ Job Scheduler per report that
+  // has a `schedule.cron`, so BullMQ fires it and the reports worker generates +
+  // emails it. Re-sync every 5 min so admin-created/edited reports are picked up
+  // without a restart. Startup sync is best-effort — if Directus is momentarily
+  // unreachable the periodic timer retries.
+  try {
+    const { active } = await syncScheduledReports(queues[QUEUES.reports], { directus, logger });
+    logger.info({ active }, 'scheduled reports synced at startup');
+  } catch (err) {
+    logger.warn(
+      { err: (err as Error).message },
+      'initial scheduled-reports sync failed (retrying)',
+    );
+  }
+  const reportSyncTimer = setInterval(() => {
+    void syncScheduledReports(queues[QUEUES.reports], { directus, logger }).catch((err) =>
+      logger.warn({ err: (err as Error).message }, 'scheduled-reports re-sync failed'),
+    );
+  }, 5 * 60_000);
+  reportSyncTimer.unref();
 
   const deps: ProcessorDeps = {
     logger,
@@ -152,6 +174,7 @@ async function main(): Promise<void> {
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'shutting down — draining workers');
+    clearInterval(reportSyncTimer);
     await Promise.all(workers.map((w) => w.close()));
     await Promise.all(Object.values(queues).map((q) => q.close()));
     await app.close();

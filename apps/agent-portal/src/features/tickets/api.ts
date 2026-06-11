@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { readItems, createItem, updateItem } from '@directus/sdk';
+import { readItems, createItem, updateItem, deleteItem, uploadFiles } from '@directus/sdk';
 import type { Priority, TicketStatus } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+
+export interface TicketAttachment {
+  /** Junction-row id (for removal). */
+  id: string;
+  file: { id: string; filename: string | null; type: string | null } | null;
+}
 
 export interface TicketRow {
   id: string;
@@ -16,6 +22,7 @@ export interface TicketRow {
   first_response_due_at: string | null;
   resolution_due_at: string | null;
   first_responded_at: string | null;
+  attachments?: TicketAttachment[];
   date_created: string | null;
 }
 
@@ -77,11 +84,30 @@ export function useTicket(id: string | null) {
             'first_responded_at',
             'date_created',
             { contact: ['id', 'name', 'email'] },
+            {
+              attachments: ['id', { directus_files_id: ['id', 'filename_download', 'type'] }],
+            },
           ],
           limit: 1,
         }),
-      )) as TicketRow[];
-      return rows[0] ?? null;
+      )) as Array<Record<string, unknown>>;
+      const raw = rows[0];
+      if (!raw) return null;
+      // Flatten the junction rows into a friendlier shape.
+      const attachments = (
+        (raw.attachments as Array<Record<string, unknown>> | undefined) ?? []
+      ).map((j) => {
+        const f = j.directus_files_id as {
+          id: string;
+          filename_download: string | null;
+          type: string | null;
+        } | null;
+        return {
+          id: j.id as string,
+          file: f ? { id: f.id, filename: f.filename_download, type: f.type } : null,
+        };
+      });
+      return { ...(raw as unknown as TicketRow), attachments };
     },
   });
 }
@@ -147,5 +173,65 @@ export function useUpdateTicket() {
       void qc.invalidateQueries({ queryKey: ['ticket', vars.id] });
       void qc.invalidateQueries({ queryKey: ['ticket-events', vars.id] });
     },
+  });
+}
+
+/**
+ * Add an internal note to a ticket as an append-only 'commented' event. Mentions
+ * (resolved agent ids) ride along in the payload for downstream notification.
+ */
+export function useAddTicketNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ticketId,
+      text,
+      actorId,
+      mentions,
+    }: {
+      ticketId: string;
+      text: string;
+      actorId: string;
+      mentions?: string[];
+    }) =>
+      directus.request(
+        createItem('ticket_events', {
+          ticket: ticketId,
+          event_type: 'commented',
+          actor: actorId,
+          payload: { text, ...(mentions && mentions.length ? { mentions } : {}) },
+        } as never),
+      ),
+    onSuccess: (_d, vars) =>
+      void qc.invalidateQueries({ queryKey: ['ticket-events', vars.ticketId] }),
+  });
+}
+
+/** Upload a file and link it to a ticket via the tickets_files junction. */
+export function useAddTicketAttachment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ticketId, file }: { ticketId: string; file: File }) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      const uploaded = (await directus.request(uploadFiles(fd))) as { id: string };
+      await directus.request(
+        createItem('tickets_files', {
+          tickets_id: ticketId,
+          directus_files_id: uploaded.id,
+        } as never),
+      );
+    },
+    onSuccess: (_d, vars) => void qc.invalidateQueries({ queryKey: ['ticket', vars.ticketId] }),
+  });
+}
+
+/** Remove a ticket attachment by its junction-row id. */
+export function useRemoveTicketAttachment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ junctionId }: { junctionId: string; ticketId: string }) =>
+      directus.request(deleteItem('tickets_files', junctionId)),
+    onSuccess: (_d, vars) => void qc.invalidateQueries({ queryKey: ['ticket', vars.ticketId] }),
   });
 }

@@ -10,6 +10,7 @@ import {
   type ContactTimelineTicket,
 } from './api.js';
 import { CommercePanel } from './CommercePanel.js';
+import { ContactTags } from './ContactTags.js';
 
 /**
  * Contact profile.
@@ -108,15 +109,18 @@ export function ContactProfilePage() {
             />
           </div>
 
-          {/* Right column: commerce panel */}
-          <div className="space-y-3">
-            <h2 className="px-1 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {t('commerce.title', { defaultValue: 'Commerce' })}
-            </h2>
-            <CommercePanel
-              yijiVendorId={contact.data?.vendor?.yiji_vendor_id ?? ''}
-              externalCustomerId={contact.data?.external_customer_id ?? ''}
-            />
+          {/* Right column: tags + commerce panel */}
+          <div className="space-y-6">
+            {contact.data && <ContactTags contact={contact.data} />}
+            <div className="space-y-3">
+              <h2 className="px-1 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {t('commerce.title', { defaultValue: 'Commerce' })}
+              </h2>
+              <CommercePanel
+                yijiVendorId={contact.data?.vendor?.yiji_vendor_id ?? ''}
+                externalCustomerId={contact.data?.external_customer_id ?? ''}
+              />
+            </div>
           </div>
         </div>
       </div>

@@ -109,9 +109,13 @@ Spec/selector fixes (Stream C territory, all verified locally):
 - **Stream B — `packages/ui/FormField`:** wire `label` → input (htmlFor/id or
   aria-labelledby). It doesn't, so `getByLabel` fails app-wide (Login, all create
   drawers); specs work around it via `name`-attribute / id selectors.
-- **Stream B — `ConversationToolbar`:** the "+ Create ticket" button's hit-box is
+- **Stream B — `ConversationToolbar`:** ~~the "+ Create ticket" button's hit-box is
   overlapped by a chat bubble at the test viewport (z-index/layout); the ticket
-  spec force-clicks to bypass it. Worth a real layout fix.
+  spec force-clicks to bypass it.~~ **FIXED:** the toolbar now uses `min-h` +
+  `flex-wrap` (grows onto a second row instead of overflowing) and `relative
+z-10` (stacks above the thread), so the button is always actionable. The
+  ticket spec no longer force-clicks. `CreateTicketDialog` also wires
+  `htmlFor`/`id` on its fields so `getByLabel` resolves (see FormField note).
 - `tickets.spec` "preferences saved" is occasionally flaky in CI (passes
   locally + on retry) — full-stack timing.
 

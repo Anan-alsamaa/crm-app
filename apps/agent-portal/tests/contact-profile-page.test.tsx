@@ -20,6 +20,10 @@ vi.mock('../src/features/contacts/api.js', () => hooks);
 vi.mock('../src/features/contacts/CommercePanel.js', () => ({
   CommercePanel: () => <div>commerce-panel</div>,
 }));
+// New child that pulls in tag hooks — stub like the commerce panel.
+vi.mock('../src/features/contacts/ContactTags.js', () => ({
+  ContactTags: () => <div>contact-tags</div>,
+}));
 
 import { ContactProfilePage } from '../src/features/contacts/ContactProfilePage.js';
 

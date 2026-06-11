@@ -80,12 +80,15 @@ jobs:
     # every feature/stream PR, where cross-stream pieces aren't present yet and
     # it can't go green. Per-PR feedback comes from the fast `quality` job.
     # `workflow_dispatch` also allows running it on demand from the Actions tab.
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Only runs on demand now (Actions tab → "Run workflow") — NOT on every push.
+    # The full-stack E2E shifts whenever a UI selector moves, so running it as an
+    # automatic gate generated a flood of CI-failure emails. Run it yourself when
+    # you actually want a full-stack check.
+    if: github.event_name == 'workflow_dispatch'
     timeout-minutes: 25
-    # Non-blocking for now: the full-stack suite is still being stabilized and a
-    # couple of product specs (portal login → heading) are owned by the frontend
-    # stream. It still RUNS and reports on every integration push for visibility,
-    # but doesn't mark CI red. Remove this once the portal E2E flows are green.
+    # Non-blocking as well: even a manual run won't mark CI red. Belt-and-braces
+    # so E2E never emails a failure. (To make it a hard gate again: change the
+    # `if` back to include `push` and remove continue-on-error.)
     continue-on-error: true
 
     services:

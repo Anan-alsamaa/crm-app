@@ -1,4 +1,4 @@
-import type { Job } from 'bullmq';
+import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
 import { readItems, readItem, updateItem } from '@directus/sdk';
 import type { ReportJob } from '@yiji/shared-types';
@@ -398,4 +398,66 @@ export async function processReportJob(
   }
 
   return { reportId, type: report.type, generatedAt, csv, rowCount };
+}
+
+/**
+ * Reconcile BullMQ Job Schedulers against the saved reports that carry a
+ * `schedule.cron`. Each such report gets one scheduler (`report:<id>`) that
+ * BullMQ fires on its cron pattern, enqueueing a normal report job (handled by
+ * processReportJob → generate CSV + email recipients + bump last_run_at).
+ * Schedulers for reports whose cron was removed/changed or that were deleted
+ * are pruned. Idempotent — safe to call at startup and on a periodic re-sync.
+ *
+ * This is what makes "scheduled reports" actually fire (spec §16 / §18). Without
+ * it, a report's cron is stored but nothing ever triggers it.
+ */
+export async function syncScheduledReports(
+  reportsQueue: Queue,
+  deps: { directus: ReportsDeps['directus']; logger: Logger },
+): Promise<{ active: number; removed: number }> {
+  const PREFIX = 'report:';
+  const rows = (await deps.directus.request(
+    readItems('reports', { fields: ['id', 'schedule'], limit: -1 }),
+  )) as Array<{ id: string; schedule: { cron?: string } | null }>;
+
+  // Desired scheduler id -> cron pattern, for every report with a non-empty cron.
+  const desired = new Map<string, string>();
+  for (const r of rows) {
+    const cron = r.schedule?.cron?.trim();
+    if (cron) desired.set(`${PREFIX}${r.id}`, cron);
+  }
+
+  // Upsert one scheduler per scheduled report (idempotent by scheduler id). A
+  // bad cron is logged and skipped so one misconfigured report can't break the
+  // whole sweep.
+  for (const [id, cron] of [...desired]) {
+    const reportId = id.slice(PREFIX.length);
+    try {
+      await reportsQueue.upsertJobScheduler(
+        id,
+        { pattern: cron },
+        { name: 'scheduled-report', data: { reportId } },
+      );
+    } catch (err) {
+      deps.logger.warn(
+        { reportId, cron, err: (err as Error).message },
+        'invalid report cron — scheduler not set',
+      );
+      desired.delete(id);
+    }
+  }
+
+  // Prune schedulers whose report no longer wants one.
+  let removed = 0;
+  const existing = await reportsQueue.getJobSchedulers();
+  for (const s of existing) {
+    const key = (s as { key?: string }).key;
+    if (key && key.startsWith(PREFIX) && !desired.has(key)) {
+      await reportsQueue.removeJobScheduler(key);
+      removed += 1;
+    }
+  }
+
+  deps.logger.info({ active: desired.size, removed }, 'scheduled reports synced');
+  return { active: desired.size, removed };
 }

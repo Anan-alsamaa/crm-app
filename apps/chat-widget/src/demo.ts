@@ -21,8 +21,14 @@ import { YijiChat } from './embed.js';
  * identity so it's visible the data made it through. Useful when
  * QA-ing the integration on a phone or in stage.
  */
-const DEV_SECRET = 'dev-yiji-secret';
-const GATEWAY_URL = 'http://localhost:8080';
+// Dev/demo only: the host page normally receives a platform-signed JWT. Here we
+// mint one locally with a shared secret. Both are configurable at build time so
+// a production-like run can align them with the gateway (YIJI_JWT_SECRET) and
+// the real gateway URL.
+const DEV_SECRET =
+  (import.meta.env.VITE_WIDGET_JWT_SECRET as string | undefined) ?? 'dev-yiji-secret';
+const GATEWAY_URL =
+  (import.meta.env.VITE_SOCKET_URL as string | undefined) ?? 'http://localhost:8080';
 
 interface CustomerIdentity {
   vendor_id: string;

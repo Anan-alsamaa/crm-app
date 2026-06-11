@@ -140,3 +140,4 @@ void notImplemented;
 
 export { scheduleReconcile } from './sla.js';
 export { scheduleInactivitySweep } from './automation.js';
+export { syncScheduledReports } from './reports.js';

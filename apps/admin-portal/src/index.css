@@ -11,28 +11,28 @@
 [data-theme='light'] {
   --radius: 0.5rem;
   --background: 0.985 0.002 230;
-  --foreground: 0.20 0.005 250;
+  --foreground: 0.2 0.005 250;
   --card: 1 0 0;
-  --card-foreground: 0.20 0.005 250;
+  --card-foreground: 0.2 0.005 250;
   --popover: 1 0 0;
-  --popover-foreground: 0.20 0.005 250;
+  --popover-foreground: 0.2 0.005 250;
   --primary: 0.58 0.097 196;
   --primary-foreground: 1 0 0;
   --primary-subtle: 0.58 0.097 196 / 0.12;
   --secondary: 0.96 0.005 230;
-  --secondary-foreground: 0.20 0.005 250;
+  --secondary-foreground: 0.2 0.005 250;
   --muted: 0.96 0.005 230;
-  --muted-foreground: 0.46 0.010 250;
+  --muted-foreground: 0.46 0.01 250;
   --accent: 0.58 0.097 196;
   --accent-foreground: 1 0 0;
   --destructive: 0.56 0.22 25;
   --destructive-foreground: 1 0 0;
   --success: 0.58 0.15 155;
   --success-foreground: 1 0 0;
-  --warning: 0.70 0.16 70;
+  --warning: 0.7 0.16 70;
   --warning-foreground: 0.22 0.005 250;
   --border: 0.22 0.005 250 / 0.12;
-  --border-strong: 0.22 0.005 250 / 0.20;
+  --border-strong: 0.22 0.005 250 / 0.2;
   --input: 0.96 0.005 230;
   --ring: 0.58 0.097 196;
   --shadow-color: 0.22 0.005 250;
@@ -50,7 +50,7 @@
 [data-theme='dark'] {
   --background: 0.17 0.005 250;
   --foreground: 0.96 0 0;
-  --card: 0.20 0.005 250;
+  --card: 0.2 0.005 250;
   --card-foreground: 0.96 0 0;
   --popover: 0.22 0.005 250;
   --popover-foreground: 0.96 0 0;
@@ -65,26 +65,31 @@
   --accent-foreground: 0.16 0.005 250;
   --destructive: 0.68 0.21 25;
   --destructive-foreground: 1 0 0;
-  --success: 0.70 0.14 155;
+  --success: 0.7 0.14 155;
   --success-foreground: 0.17 0 0;
   --warning: 0.78 0.14 70;
   --warning-foreground: 0.17 0 0;
-  --border: 0.96 0 0 / 0.10;
+  --border: 0.96 0 0 / 0.1;
   --border-strong: 0.96 0 0 / 0.18;
   --input: 0.24 0.005 250;
   --ring: 0.66 0.11 196;
   --shadow-color: 0 0 0;
   --rail: 0.14 0.04 196;
   --rail-foreground: 0.88 0.03 196;
-  --rail-active: 0.20 0.06 196;
+  --rail-active: 0.2 0.06 196;
   --rail-active-foreground: 1 0 0;
-  --rail-border: 0.10 0.04 196;
+  --rail-border: 0.1 0.04 196;
 }
 
-html,
-body,
-#root {
-  height: 100%;
+/* Full-viewport height chain. Kept in @layer base so it's emitted in the base
+   layer — never adjacent to a utility rule that could absorb it during prod
+   CSS minification (see Input.tsx data-URI note). */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
 }
 
 body {
@@ -141,7 +146,8 @@ body {
 
 :where(button, a, [role='button'], input, select, textarea):focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px oklch(var(--background)),
+  box-shadow:
+    0 0 0 2px oklch(var(--background)),
     0 0 0 4px oklch(var(--ring) / 0.55);
   border-radius: var(--radius);
 }

@@ -20,6 +20,12 @@ export {
   ClockIcon,
   SearchIcon,
   SignOutIcon,
+  MenuIcon,
+  CloseIcon,
+  ArrowLeftIcon,
+  InfoIcon,
+  SoundOnIcon,
+  SoundOffIcon,
 } from './Icon.js';
 export type { IconProps } from './Icon.js';
 export {
@@ -47,11 +53,16 @@ export { Pill } from './Pill.js';
 export type { PillProps } from './Pill.js';
 export { EmptyState } from './EmptyState.js';
 export type { EmptyStateProps } from './EmptyState.js';
+export { ErrorBoundary } from './ErrorBoundary.js';
+export type { ErrorBoundaryProps, ErrorBoundaryFallbackProps } from './ErrorBoundary.js';
 export { Toolbar, ToolbarSpacer } from './Toolbar.js';
 export { PageHeader } from './PageHeader.js';
 export type { PageHeaderProps } from './PageHeader.js';
 export { CommandPalette, useCommandPaletteShortcut } from './CommandPalette.js';
 export type { CommandPaletteProps, CommandGroup, CommandItem } from './CommandPalette.js';
+export { ShortcutsOverlay } from './ShortcutsOverlay.js';
+export type { ShortcutsOverlayProps, ShortcutGroup, ShortcutRow } from './ShortcutsOverlay.js';
+export { useKeyboardShortcuts } from './useKeyboardShortcuts.js';
 export { Toaster, toast } from './Toast.js';
 export type { ToastInput, ToastTone } from './Toast.js';
 export { Drawer } from './Drawer.js';
@@ -63,3 +74,8 @@ export type { StatCardProps } from './StatCard.js';
 export { YijiLogo } from './YijiLogo.js';
 export type { YijiLogoProps } from './YijiLogo.js';
 export { useResizable } from './useResizable.js';
+export { ResizeHandle } from './ResizeHandle.js';
+export type { ResizeHandleProps } from './ResizeHandle.js';
+export { useMediaQuery, useIsDesktop } from './useMediaQuery.js';
+export { AppShell } from './AppShell.js';
+export type { AppShellProps, AppShellRailContext } from './AppShell.js';

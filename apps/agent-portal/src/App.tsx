@@ -1,28 +1,51 @@
-import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
+  AppShell,
+  type AppShellRailContext,
   Avatar,
   cn,
+  ErrorBoundary,
   InboxIcon,
   SettingsIcon,
   SignOutIcon,
+  Spinner,
   TicketIcon,
   Toaster,
-  useResizable,
   UsersIcon,
   YijiLogo,
 } from '@yiji/ui';
+import { RouteError } from './components/RouteError.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
 import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
-import { Inbox } from './pages/Inbox.js';
-import { TicketsPage } from './features/tickets/TicketsPage.js';
 import { NotificationBell } from './features/notifications/NotificationBell.js';
-import { PreferencesPage } from './features/notifications/PreferencesPage.js';
-import { ContactsPage } from './features/contacts/ContactsPage.js';
-import { ContactProfilePage } from './features/contacts/ContactProfilePage.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
+import { SoundToggle } from './components/SoundToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
+import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
+import { NewMessageSound } from './components/NewMessageSound.js';
+
+// Route pages are code-split so the initial bundle stays lean; each loads on
+// first navigation behind the shared Suspense fallback below.
+const Inbox = lazy(() => import('./pages/Inbox.js').then((m) => ({ default: m.Inbox })));
+const TicketsPage = lazy(() =>
+  import('./features/tickets/TicketsPage.js').then((m) => ({ default: m.TicketsPage })),
+);
+const PreferencesPage = lazy(() =>
+  import('./features/notifications/PreferencesPage.js').then((m) => ({
+    default: m.PreferencesPage,
+  })),
+);
+const ContactsPage = lazy(() =>
+  import('./features/contacts/ContactsPage.js').then((m) => ({ default: m.ContactsPage })),
+);
+const ContactProfilePage = lazy(() =>
+  import('./features/contacts/ContactProfilePage.js').then((m) => ({
+    default: m.ContactProfilePage,
+  })),
+);
 
 interface NavItem {
   to: string;
@@ -36,27 +59,14 @@ interface NavSection {
   items: NavItem[];
 }
 
-function Sidebar({ sections }: { sections: NavSection[] }) {
+function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSection[] }) {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || '';
-  const { width, dragging, bind } = useResizable({
-    storageKey: 'yiji.agent.sidebarWidth',
-    defaultWidth: 224,
-    min: 64,
-    max: 360,
-  });
-  const isCollapsed = width < 140;
+  const isCollapsed = ctx.collapsed;
 
   return (
-    <nav
-      aria-label="Primary navigation"
-      style={{ width }}
-      className={cn(
-        'relative z-30 flex shrink-0 flex-col my-3 ms-3 rounded-xl bg-rail text-rail-foreground shadow-lg shadow-rail/20',
-        !dragging && 'transition-[width] duration-150 ease-out',
-      )}
-    >
+    <>
       {/* Brand */}
       <div
         className={cn(
@@ -97,6 +107,7 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
                     to={it.to}
                     end={it.end}
                     title={it.label}
+                    onClick={ctx.onNavigate}
                     className={({ isActive }) =>
                       cn(
                         'group relative flex h-9 items-center rounded-md text-sm font-medium',
@@ -137,14 +148,13 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
           isCollapsed ? 'px-2 space-y-1.5' : 'px-2.5 space-y-1',
         )}
       >
-        <div className={cn('flex items-center', isCollapsed ? 'justify-center gap-1' : 'gap-1')}>
-          <NotificationBell />
-          {!isCollapsed && <LanguageToggle />}
-        </div>
+        {/* Utility controls (notifications bell, message-sound mute, language)
+            live in the top navbar — see the AppShell `topBar` below. The rail
+            footer is just the signed-in user + sign-out. */}
         <div
           className={cn(
             'flex items-center rounded-md',
-            isCollapsed ? 'justify-center py-1' : 'gap-2.5 px-1 py-1',
+            isCollapsed ? 'justify-center py-1' : 'gap-2 px-1 py-1',
           )}
         >
           <Avatar name={name} email={user?.email} size="sm" />
@@ -171,29 +181,25 @@ function Sidebar({ sections }: { sections: NavSection[] }) {
           )}
         </div>
       </div>
+    </>
+  );
+}
 
-      {/* Drag handle — 6px hit area on the trailing edge */}
-      <div
-        {...bind}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize sidebar"
-        className="group/handle absolute inset-y-0 end-0 w-1.5 -me-0.5 cursor-col-resize flex items-center justify-center"
-      >
-        <span
-          aria-hidden
-          className={cn(
-            'h-12 w-0.5 rounded-full transition-colors duration-fast ease-out',
-            dragging ? 'bg-primary' : 'bg-transparent group-hover/handle:bg-primary/40',
-          )}
-        />
-      </div>
-    </nav>
+/** Compact brand lockup for the mobile top bar. */
+function MobileBrand() {
+  return (
+    <div className="flex items-center gap-2">
+      <YijiLogo variant="tile" size={28} className="bg-rail shadow-sm shrink-0" />
+      <span className="text-[15px] font-semibold tracking-[-0.015em] text-foreground">
+        Yiji <span className="font-normal text-muted-foreground">CRM</span>
+      </span>
+    </div>
   );
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
+  const location = useLocation();
   const sections: NavSection[] = [
     {
       heading: t('nav.work', { defaultValue: 'Work' }),
@@ -212,15 +218,67 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [{ to: '/preferences', label: t('nav.preferences'), icon: SettingsIcon }],
     },
   ];
+  // Current section label — anchors the left of the top bar so it reads as a
+  // real top bar (context left, actions right) instead of icons floating in a
+  // empty band.
+  const pageTitle =
+    sections
+      .flatMap((s) => s.items)
+      .find((it) =>
+        it.to === '/' ? location.pathname === '/' : location.pathname.startsWith(it.to),
+      )?.label ?? '';
   return (
-    <div className="flex h-full text-foreground">
-      <Sidebar sections={sections} />
-      <main className="flex-1 min-w-0 min-h-0 m-3 ms-3 rounded-2xl bg-card/85 shadow-xl shadow-foreground/5 ring-1 ring-foreground/[0.04] overflow-hidden">
-        {children}
-      </main>
+    <>
+      <AppShell
+        rail={(ctx) => <Rail ctx={ctx} sections={sections} />}
+        topBarBrand={<MobileBrand />}
+        topBarActions={
+          <div className="flex items-center gap-0.5 text-muted-foreground">
+            <NotificationBell />
+            <SoundToggle />
+            <LanguageToggle />
+          </div>
+        }
+        topBar={
+          <div className="flex w-full items-center justify-between gap-3">
+            <span className="truncate text-sm font-semibold tracking-tight text-foreground">
+              {pageTitle}
+            </span>
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <NotificationBell />
+              <SoundToggle />
+              <LanguageToggle />
+            </div>
+          </div>
+        }
+        resizeStorageKey="yiji.agent.sidebarWidth"
+        navLabel={t('nav.primary', { defaultValue: 'Primary navigation' })}
+        menuLabel={t('nav.openMenu', { defaultValue: 'Open menu' })}
+        closeLabel={t('nav.closeMenu', { defaultValue: 'Close menu' })}
+      >
+        <ErrorBoundary
+          resetKeys={[location.pathname]}
+          fallback={({ reset }) => <RouteError onRetry={reset} />}
+        >
+          <Suspense
+            fallback={
+              <div
+                className="flex h-full items-center justify-center text-muted-foreground"
+                aria-busy="true"
+              >
+                <Spinner size={20} label={t('actions.loading', { ns: 'common' })} />
+              </div>
+            }
+          >
+            {children}
+          </Suspense>
+        </ErrorBoundary>
+      </AppShell>
       <AppCommandPalette />
+      <AppKeyboardShortcuts />
+      <NewMessageSound />
       <Toaster position="bottom" />
-    </div>
+    </>
   );
 }
 
@@ -242,6 +300,16 @@ export function App() {
           />
           <Route
             path="/tickets"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <TicketsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tickets/:ticketId"
             element={
               <ProtectedRoute>
                 <Shell>
