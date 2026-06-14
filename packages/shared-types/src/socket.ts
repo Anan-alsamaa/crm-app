@@ -95,6 +95,17 @@ export const PresenceUpdate = z.object({
 });
 export type PresenceUpdate = z.infer<typeof PresenceUpdate>;
 
+/** Server → conversation room. Customer connect/disconnect, delivered to the
+ * agents viewing that conversation — powers the header's "{name} is online" /
+ * "New customer" line. `isNew` is true only on the customer's first-ever
+ * contact (the gateway had to create the contact row). */
+export const CustomerPresence = z.object({
+  conversationId: idSchema,
+  online: z.boolean(),
+  isNew: z.boolean().optional(),
+});
+export type CustomerPresence = z.infer<typeof CustomerPresence>;
+
 export const SocketError = z.object({ code: z.string(), message: z.string() });
 export type SocketError = z.infer<typeof SocketError>;
 
@@ -123,6 +134,9 @@ export const SOCKET_EVENTS = {
   agentAssigned: 'agent:assigned',
   conversationStatusChanged: 'conversation:status_changed',
   presenceUpdate: 'presence:update',
+  /** Server → conversation room. Customer online/offline for the agents
+   * viewing that conversation (header "is online" / "New customer"). */
+  customerPresence: 'customer:presence',
   /** Server → client. Agent-presence pulse broadcast to every vendor room
    * so customer widgets can render an "agents offline" fallback. */
   agentsPresence: 'agents:presence',

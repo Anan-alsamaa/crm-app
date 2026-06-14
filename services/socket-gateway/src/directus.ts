@@ -39,9 +39,22 @@ export class GatewayDirectus {
     return rows[0] ?? null;
   }
 
-  /** Upsert a contact, deduped per vendor by phone then email (SC-007). */
-  async upsertContact(vendorUuid: string, claims: CustomerClaims): Promise<string> {
-    const findExisting = async (): Promise<string | null> => {
+  /**
+   * Upsert a contact, deduped per vendor by phone then email (SC-007).
+   * Returns the contact id plus `isNew` (true only when a brand-new contact row
+   * was created — i.e. the customer's first-ever contact) and the resolved
+   * name/phone. The gateway carries these to the widget (greeting) and to the
+   * agents (header "{name} is online" / "New customer").
+   */
+  async upsertContact(
+    vendorUuid: string,
+    claims: CustomerClaims,
+  ): Promise<{ id: string; isNew: boolean; name: string | null; phone: string | null }> {
+    const findExisting = async (): Promise<{
+      id: string;
+      name: string | null;
+      phone: string | null;
+    } | null> => {
       const or: Array<Record<string, unknown>> = [];
       if (claims.phone) or.push({ phone: { _eq: claims.phone } });
       if (claims.email) or.push({ email: { _eq: claims.email } });
@@ -49,35 +62,39 @@ export class GatewayDirectus {
       const existing = (await this.client.request(
         readItems('contacts', {
           filter: { vendor: { _eq: vendorUuid }, _or: or },
-          fields: ['id'],
+          fields: ['id', 'name', 'phone'],
           limit: 1,
         }),
-      )) as Array<{ id: string }>;
-      return existing[0]?.id ?? null;
+      )) as Array<{ id: string; name: string | null; phone: string | null }>;
+      return existing[0] ?? null;
     };
 
-    const existingId = await findExisting();
-    if (existingId) return existingId;
+    const existing = await findExisting();
+    if (existing)
+      return { id: existing.id, isNew: false, name: existing.name, phone: existing.phone };
 
+    const name = claims.name ?? null;
+    const phone = claims.phone ?? null;
     try {
       const created = (await this.client.request(
         createItem('contacts', {
           vendor: vendorUuid,
           external_customer_id: claims.customer_id,
-          name: claims.name ?? null,
-          phone: claims.phone ?? null,
+          name,
+          phone,
           email: claims.email ?? null,
         } as never),
       )) as { id: string };
-      return created.id;
+      return { id: created.id, isNew: true, name, phone };
     } catch (err) {
       // The widget reconnects aggressively, so multiple onboarding flows can
       // race: each reads "not found" then races to create the same contact,
       // and all-but-one hit the (vendor, phone|email) partial-unique index.
       // That's not a real failure — re-query and return the contact the
       // winning create produced. Only rethrow if it genuinely doesn't exist.
+      // (A contact that lost the create race already exists, so isNew = false.)
       const raced = await findExisting();
-      if (raced) return raced;
+      if (raced) return { id: raced.id, isNew: false, name: raced.name, phone: raced.phone };
       throw err;
     }
   }
@@ -105,6 +122,80 @@ export class GatewayDirectus {
       } as never),
     )) as { id: string };
     return created.id;
+  }
+
+  /**
+   * Recent thread history for a conversation, oldest-first — so the customer
+   * widget can render the existing conversation on (re)connect instead of
+   * starting blank (the agent portal already reads this from Directus). Internal
+   * notes are excluded; attachment file ids come through the messages_files m2m.
+   */
+  async listConversationMessages(
+    conversationId: string,
+    limit = 100,
+  ): Promise<
+    Array<{
+      id: string;
+      senderType: SenderType;
+      content: string;
+      createdAt: string | null;
+      attachments: string[];
+    }>
+  > {
+    const rows = (await this.client.request(
+      readItems('messages', {
+        filter: { conversation: { _eq: conversationId }, is_internal_note: { _eq: false } },
+        fields: ['id', 'sender_type', 'content', 'date_created'],
+        sort: ['date_created'],
+        limit,
+      }),
+    )) as Array<{
+      id: string;
+      sender_type: SenderType;
+      content: string | null;
+      date_created: string | null;
+    }>;
+    if (rows.length === 0) return [];
+
+    // Attachments live in the messages_files m2m junction — there is NO nested
+    // alias field on `messages` (a nested read returns nothing), so read the
+    // junction separately and group file ids by message. Mirrors the agent
+    // portal. Fail soft: if the junction read is denied, messages still return
+    // (without attachments) rather than blanking the whole history.
+    const byMsg = new Map<string, string[]>();
+    try {
+      const ids = rows.map((r) => r.id);
+      const links = (await this.client.request(
+        readItems('messages_files', {
+          filter: { messages_id: { _in: ids } },
+          fields: ['messages_id', { directus_files_id: ['id'] }],
+          limit: -1,
+        }),
+      )) as Array<{
+        messages_id: string;
+        directus_files_id: { id: string } | string | null;
+      }>;
+      for (const l of links) {
+        const fid =
+          l.directus_files_id && typeof l.directus_files_id === 'object'
+            ? l.directus_files_id.id
+            : (l.directus_files_id as string | null);
+        if (!fid) continue;
+        const arr = byMsg.get(l.messages_id) ?? [];
+        arr.push(fid);
+        byMsg.set(l.messages_id, arr);
+      }
+    } catch {
+      /* junction read unavailable — return messages without attachments */
+    }
+
+    return rows.map((r) => ({
+      id: r.id,
+      senderType: r.sender_type,
+      content: r.content ?? '',
+      createdAt: r.date_created,
+      attachments: byMsg.get(r.id) ?? [],
+    }));
   }
 
   /** Persist a message and bump conversation activity. Returns the new message. */
