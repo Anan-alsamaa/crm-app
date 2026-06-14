@@ -76,9 +76,13 @@ function ImageThumb({
 }) {
   const { t } = useTranslation();
   const { url, error } = useAssetBlobUrl(a.id, true);
+  // Track <img> decode failures separately: the asset can fetch fine (200) yet
+  // be undecodable bytes (e.g. a file corrupted at rest), in which case the
+  // image renders as a blank box. Degrade those to a file chip too.
+  const [decodeError, setDecodeError] = useState(false);
 
-  // If the thumbnail can't load (perms/network), degrade to a normal file chip.
-  if (error) return <FileChip a={a} onClick={onFallbackDownload} />;
+  // If the thumbnail can't load (perms/network) or decode, degrade to a file chip.
+  if (error || decodeError) return <FileChip a={a} onClick={onFallbackDownload} />;
 
   return (
     <button
@@ -100,6 +104,7 @@ function ImageThumb({
         <img
           src={url}
           alt={a.filename ?? ''}
+          onError={() => setDecodeError(true)}
           className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.04]"
         />
       ) : (

@@ -33,6 +33,8 @@ function fmtErr(err: unknown): string {
     return s ? `Rate limited. Retry in ${s}s.` : 'Rate limited.';
   }
   if (e?.code === 'not_configured') return 'AI provider not configured.';
+  if (e?.code === 'provider_unavailable' || e?.code === 'upstream')
+    return 'AI is temporarily busy. Please try again in a moment.';
   if (e?.code === 'conversation_not_found') return 'Conversation not found.';
   return e?.message ?? 'Failed.';
 }
