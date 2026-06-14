@@ -31,20 +31,60 @@ export class GeminiProvider implements AIProvider {
         maxOutputTokens: input.maxOutputTokens ?? 1024,
       },
     });
-    try {
-      const result = await model.generateContent(input.user);
-      const text = result.response.text().trim();
-      return { text, model: this.model };
-    } catch (err) {
-      const msg = (err as Error).message ?? 'unknown';
-      // Map common Google API failures to our typed error.
-      if (/quota|rate/i.test(msg)) {
-        throw new AiProviderError(msg, 'rate_limited', 429);
+    // Gemini's free/shared tiers return transient 503 "model overloaded"
+    // spikes. Retry a couple of times with backoff before surfacing so a
+    // single spike doesn't fail the agent's request.
+    const maxAttempts = 3;
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const result = await model.generateContent(input.user);
+        const text = result.response.text().trim();
+        return { text, model: this.model };
+      } catch (err) {
+        lastErr = err;
+        const status = parseHttpStatus((err as Error).message ?? '');
+        if ((status === 503 || status === 429) && attempt < maxAttempts) {
+          await delay(attempt * 500);
+          continue;
+        }
+        throw classifyGeminiError(err);
       }
-      if (/api key|unauthorized|permission/i.test(msg)) {
-        throw new AiProviderError(msg, 'not_configured', 503);
-      }
-      throw new AiProviderError(msg, 'upstream', 502);
     }
+    throw classifyGeminiError(lastErr);
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Pull the HTTP status out of Google's `[503 Service Unavailable] ...` messages. */
+function parseHttpStatus(message: string): number | null {
+  const m = message.match(/\[(\d{3})\b/);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Map a Google API failure to our typed error.
+ *
+ * Classify by the embedded HTTP status first — matching on words is unsafe
+ * because the error message contains the request URL (`...:generateContent`),
+ * and `generate` literally contains the substring "rate". A loose `/rate/`
+ * test therefore mislabels *every* failure as `rate_limited`.
+ */
+function classifyGeminiError(err: unknown): AiProviderError {
+  const msg = (err as Error)?.message ?? 'unknown';
+  const status = parseHttpStatus(msg);
+
+  if (status === 429 || /RESOURCE_EXHAUSTED|exceeded your.*quota|too many requests/i.test(msg)) {
+    return new AiProviderError(msg, 'rate_limited', 429);
+  }
+  if (status === 401 || status === 403 || /api key|unauthorized|permission denied/i.test(msg)) {
+    return new AiProviderError(msg, 'not_configured', 503);
+  }
+  if (status === 503 || status === 500 || status === 504 || /overloaded|unavailable/i.test(msg)) {
+    return new AiProviderError(msg, 'provider_unavailable', 503);
+  }
+  return new AiProviderError(msg, 'upstream', 502);
 }
