@@ -13,12 +13,18 @@ const idSchema = z.union([z.string(), z.number()]).transform(String);
  */
 
 // --- Client → Server ---
-export const MessageSend = z.object({
-  conversationId: idSchema,
-  content: z.string().min(1),
-  attachments: z.array(z.string()).optional(),
-  clientMsgId: z.string(),
-});
+export const MessageSend = z
+  .object({
+    conversationId: idSchema,
+    // Content may be empty for an attachment-only message; the refine below
+    // still rejects a message that has neither text nor an attachment.
+    content: z.string(),
+    attachments: z.array(z.string()).optional(),
+    clientMsgId: z.string(),
+  })
+  .refine((d) => d.content.trim().length > 0 || (d.attachments?.length ?? 0) > 0, {
+    message: 'message must have text or at least one attachment',
+  });
 export type MessageSend = z.infer<typeof MessageSend>;
 
 export const NoteAdd = z.object({
