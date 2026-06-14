@@ -74,6 +74,14 @@ export function ConversationView({
   const agents = useAgents();
   const [live, setLive] = useState<ConversationMessage[]>([]);
   const [customerTyping, setCustomerTyping] = useState(false);
+  // Live customer presence for this conversation (gateway `customer:presence`):
+  // null until the first event, then drives the header's online / "New customer"
+  // line. isNew is sticky across an offline transition (the offline event omits
+  // it) so a new customer who closes their tab still reads as new.
+  const [customerPresence, setCustomerPresence] = useState<{
+    online: boolean;
+    isNew: boolean;
+  } | null>(null);
   const [draft, setDraft] = useState('');
   const [internalNote, setInternalNote] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -92,6 +100,7 @@ export function ConversationView({
   useEffect(() => {
     setLive([]);
     setCustomerTyping(false);
+    setCustomerPresence(null);
     setDraft('');
     setInternalNote(false);
     setDetailsOpen(false);
@@ -206,6 +215,19 @@ export function ConversationView({
         if (e.conversationId === conversationId && e.who === 'customer')
           setCustomerTyping(e.isTyping);
       };
+      const onCustomerPresence = (e: {
+        conversationId: string;
+        online: boolean;
+        isNew?: boolean;
+      }) => {
+        if (e.conversationId !== conversationId) return;
+        // Keep isNew across the offline event (which omits it) so a new customer
+        // who closes their tab still reads as "New customer", just offline.
+        setCustomerPresence((prev) => ({
+          online: e.online,
+          isNew: e.isNew ?? prev?.isNew ?? false,
+        }));
+      };
       const onChanged = (e: { conversationId: string }) => {
         if (e.conversationId !== conversationId) return;
         void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
@@ -219,12 +241,14 @@ export function ConversationView({
       socket.on(SOCKET_EVENTS.noteNew, onNoteNew);
       socket.on(SOCKET_EVENTS.noteDeleted, onNoteDeleted);
       socket.on(SOCKET_EVENTS.typingUpdate, onTyping);
+      socket.on(SOCKET_EVENTS.customerPresence, onCustomerPresence);
       socket.on(SOCKET_EVENTS.conversationChanged, onChanged);
       return () => {
         socket.off(SOCKET_EVENTS.messageNew, onNew);
         socket.off(SOCKET_EVENTS.noteNew, onNoteNew);
         socket.off(SOCKET_EVENTS.noteDeleted, onNoteDeleted);
         socket.off(SOCKET_EVENTS.typingUpdate, onTyping);
+        socket.off(SOCKET_EVENTS.customerPresence, onCustomerPresence);
         socket.off(SOCKET_EVENTS.conversationChanged, onChanged);
       };
     })();
@@ -495,6 +519,7 @@ export function ConversationView({
         {c && (
           <ConversationToolbar
             conversation={c}
+            customerPresence={customerPresence}
             onBack={onBack}
             onToggleDetails={() => setDetailsOpen(true)}
           />

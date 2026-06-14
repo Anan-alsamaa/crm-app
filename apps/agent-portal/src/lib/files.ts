@@ -70,6 +70,22 @@ export function isImage(type: string | null | undefined, filename?: string | nul
   return fileKind(type, filename) === 'image';
 }
 
+/**
+ * True when the kind can't be determined yet — no MIME type AND no recognized
+ * extension (e.g. a realtime attachment that arrives as a bare id with null
+ * metadata). Such attachments are optimistically routed through the image
+ * preview path: the <img> decode is the real test, and a genuine non-image
+ * degrades to a file chip via onError. This keeps an inbound image from ever
+ * showing as a "download" chip during the brief window before its filename/type
+ * hydrates from Directus.
+ */
+export function isUnknownType(type: string | null | undefined, filename?: string | null): boolean {
+  if (type && type.trim()) return false;
+  const ext = filename?.split('.').pop()?.toLowerCase();
+  if (ext && EXT_KIND[ext]) return false;
+  return true;
+}
+
 /** Short uppercase type label for a chip subtitle, e.g. "PDF", "DOCX", "Image". */
 export function fileLabel(filename?: string | null, type?: string | null): string {
   const ext = filename?.includes('.') ? filename.split('.').pop() : undefined;
