@@ -516,6 +516,8 @@ export function Widget({ config }: { config: WidgetConfig }) {
                         : m.senderType === 'system'
                           ? 'system'
                           : 'theirs'
+                    }${
+                      !m.content?.trim() && m.attachments && m.attachments.length > 0 ? ' bare' : ''
                     }`}
                   >
                     {m.content}

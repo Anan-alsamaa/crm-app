@@ -341,6 +341,14 @@
   text-align: center;
   padding: 4px 10px;
 }
+/* Attachment-only message: drop the bubble chrome so the thumbnail/chip stands
+   alone (matches the agent portal), instead of sitting in a tinted bubble. */
+.yiji-msg.bare {
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  border-radius: 0;
+}
 .yiji-typing {
   align-self: flex-start;
   display: inline-flex;
