@@ -96,11 +96,15 @@ export function ConversationView({
   const draftRef = useRef<HTMLTextAreaElement | null>(null);
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Last message id we've sent a read:ack for, so opening/viewing a conversation
+  // clears its unread badge once (not on every render/refetch).
+  const lastReadRef = useRef<string | null>(null);
 
   useEffect(() => {
     setLive([]);
     setCustomerTyping(false);
     setCustomerPresence(null);
+    lastReadRef.current = null;
     setDraft('');
     setInternalNote(false);
     setDetailsOpen(false);
@@ -267,6 +271,30 @@ export function ConversationView({
   const threadMessages = useMemo(() => all.filter((m) => !m.is_internal_note), [all]);
   const notes = useMemo(() => all.filter((m) => m.is_internal_note), [all]);
   const grouped = useMemo(() => groupRuns(threadMessages), [threadMessages]);
+
+  // Mark the conversation read on VIEW so its inbox unread badge clears — not
+  // only when the agent replies. The gateway has the read:ack handler
+  // (markConversationRead) but nothing emitted it. Guarded so we only emit when
+  // the latest message changes, and we optimistically zero the badge across all
+  // cached inbox queries so it clears instantly.
+  useEffect(() => {
+    if (threadMessages.length === 0) return;
+    const lastId = threadMessages[threadMessages.length - 1]!.id;
+    if (lastReadRef.current === lastId) return;
+    lastReadRef.current = lastId;
+    void getSocket().then((s) =>
+      s.emit(SOCKET_EVENTS.readAck, { conversationId, lastMessageId: lastId }),
+    );
+    qc.setQueriesData({ queryKey: ['conversations'] }, (old: unknown) =>
+      Array.isArray(old)
+        ? old.map((c) =>
+            c && (c as { id?: string }).id === conversationId
+              ? { ...(c as object), unread_count_agent: 0 }
+              : c,
+          )
+        : old,
+    );
+  }, [conversationId, threadMessages, qc]);
 
   const deleteNote = (noteId: string) => {
     if (!socketRef.current) return;
