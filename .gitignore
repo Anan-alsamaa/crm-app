@@ -80,3 +80,7 @@ coverage-buckets.mjs
 .directus-prod/
 .load-env.ps1
 directus/local/data.db*
+
+# Local dev artifacts (machine-specific helper + pg backup output dir)
+backups/
+dev-supervisor.ps1
