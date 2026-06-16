@@ -313,6 +313,11 @@ jobs:
           done
 
       - name: Run E2E
+        # Full-stack job: enable the specs that need seeded demo data
+        # (US6 contact-profile + US7 custom-fields). globalSetup seeds the
+        # canonical "Demo Customer" (demo-customer-1) those specs target.
+        env:
+          E2E_FULL_STACK: '1'
         run: pnpm test:e2e
 
       - name: Upload Playwright report
