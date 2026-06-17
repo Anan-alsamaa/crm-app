@@ -1,0 +1,17 @@
+{
+  "name": "yiji-bull-board",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local Bull Board dashboard for the Yiji CRM BullMQ queues (connects to Redis on the dev host port).",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "@bull-board/api": "^6.5.3",
+    "@bull-board/express": "^6.5.3",
+    "bullmq": "^5.34.0",
+    "express": "^4.21.2",
+    "ioredis": "^5.4.2"
+  }
+}
