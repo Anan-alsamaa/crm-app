@@ -89,3 +89,4 @@ dev-supervisor.ps1
 tools/bull-board/bb.out
 tools/bull-board/bb.err
 tools/bull-board/package-lock.json
+tools/load-test/package-lock.json
