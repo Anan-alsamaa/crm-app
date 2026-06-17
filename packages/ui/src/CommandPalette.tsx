@@ -1,6 +1,7 @@
 import type { JSX, KeyboardEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from './cn.js';
+import { useFocusTrap } from './useFocusTrap.js';
 
 /*
  * Command palette. Cmd+K / Ctrl+K triggers it from anywhere; the consuming
@@ -67,6 +68,7 @@ export function CommandPalette({
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   // Filter + flatten so cursor is a single index across all groups.
   const visibleGroups = useMemo(() => {
@@ -106,6 +108,8 @@ export function CommandPalette({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
+  useFocusTrap(panelRef, open);
+
   if (!open) return null;
 
   const onInputKey = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -140,7 +144,10 @@ export function CommandPalette({
         className="absolute inset-0 bg-foreground/20 backdrop-blur-md"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-popover/95 backdrop-blur-md text-popover-foreground shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in origin-top">
+      <div
+        ref={panelRef}
+        className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-popover/95 backdrop-blur-md text-popover-foreground shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in origin-top"
+      >
         {/* Search input */}
         <div className="flex items-center gap-3 px-5">
           <svg

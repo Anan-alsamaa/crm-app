@@ -66,6 +66,7 @@ export { CommandPalette, useCommandPaletteShortcut } from './CommandPalette.js';
 export type { CommandPaletteProps, CommandGroup, CommandItem } from './CommandPalette.js';
 export { ConfirmDialog } from './ConfirmDialog.js';
 export type { ConfirmDialogProps } from './ConfirmDialog.js';
+export { useFocusTrap } from './useFocusTrap.js';
 export { ShortcutsOverlay } from './ShortcutsOverlay.js';
 export type { ShortcutsOverlayProps, ShortcutGroup, ShortcutRow } from './ShortcutsOverlay.js';
 export { useKeyboardShortcuts } from './useKeyboardShortcuts.js';

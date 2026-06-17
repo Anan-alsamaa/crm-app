@@ -1,6 +1,7 @@
 import type { JSX, ReactNode } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { cn } from './cn.js';
+import { useFocusTrap } from './useFocusTrap.js';
 
 /*
  * Side drawer — slides in from the end (start in RTL). The primary
@@ -57,6 +58,9 @@ export function Drawer({
     };
   }, [open, onClose]);
 
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(panelRef, open);
+
   if (!open) return null;
 
   return (
@@ -75,6 +79,7 @@ export function Drawer({
 
       {/* Panel — anchored to the end edge, floats with soft shadow */}
       <div
+        ref={panelRef}
         className={cn(
           'absolute inset-y-3 end-3 flex max-w-[100vw] flex-col rounded-2xl bg-card shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06]',
           widthClass[width],
