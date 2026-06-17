@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import {
   Button,
   cn,
+  ConfirmDialog,
   Drawer,
   DrawerSection,
   EmptyState,
+  ErrorState,
   FormField,
   Input,
   Pill,
@@ -83,6 +85,17 @@ export function CustomFieldsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(blank());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const onDelete = async (): Promise<void> => {
+    if (!deletingId) return;
+    try {
+      await remove.mutateAsync(deletingId);
+      setDeletingId(null);
+    } catch {
+      toast.error(t('customFields.deleteError', { defaultValue: 'Could not delete field.' }));
+    }
+  };
 
   const byEntity = useMemo(() => {
     const all = fields.data ?? [];
@@ -198,7 +211,16 @@ export function CustomFieldsPage() {
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-3">
-        {fields.isLoading ? (
+        {fields.isError ? (
+          <ErrorState
+            title={t('customFields.loadError', { defaultValue: 'Could not load custom fields' })}
+            message={t('customFields.loadErrorHint', {
+              defaultValue: 'Check your connection and try again.',
+            })}
+            retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+            onRetry={() => void fields.refetch()}
+          />
+        ) : fields.isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-16 w-full rounded-2xl" />
@@ -236,15 +258,7 @@ export function CustomFieldsPage() {
                     setEditingId(f.id);
                     setDrawerOpen(true);
                   }}
-                  onDelete={async () => {
-                    if (
-                      !confirm(
-                        t('customFields.confirmDelete', { defaultValue: 'Delete this field?' }),
-                      )
-                    )
-                      return;
-                    await remove.mutateAsync(f.id);
-                  }}
+                  onDelete={() => setDeletingId(f.id)}
                 />
               </li>
             ))}
@@ -374,6 +388,17 @@ export function CustomFieldsPage() {
           </DrawerSection>
         </div>
       </Drawer>
+
+      <ConfirmDialog
+        open={deletingId !== null}
+        destructive
+        title={t('customFields.confirmDelete', { defaultValue: 'Delete this field?' })}
+        confirmLabel={t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+        cancelLabel={t('actions.cancel', { ns: 'common' })}
+        loading={remove.isPending}
+        onConfirm={() => void onDelete()}
+        onCancel={() => setDeletingId(null)}
+      />
     </div>
   );
 }

@@ -7,9 +7,11 @@ import {
   Avatar,
   Button,
   cn,
+  ConfirmDialog,
   Drawer,
   DrawerSection,
   EmptyState,
+  ErrorState,
   FormField,
   Input,
   SelectMenu,
@@ -55,6 +57,7 @@ export function UsersPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [search, setSearch] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const {
     register,
@@ -140,15 +143,10 @@ export function UsersPage() {
 
   const onDelete = async () => {
     if (!editing || !canDelete) return;
-    if (
-      !window.confirm(
-        t('users.confirmDelete', { defaultValue: 'Delete this account permanently?' }),
-      )
-    )
-      return;
     try {
       await deleteUser.mutateAsync(editing.id);
       toast.success(t('users.deleted', { defaultValue: 'User deleted.' }));
+      setConfirmDelete(false);
       setOpen(false);
       setEditing(null);
     } catch {
@@ -234,7 +232,16 @@ export function UsersPage() {
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-3">
-        {users.isLoading ? (
+        {users.isError ? (
+          <ErrorState
+            title={t('users.loadError', { defaultValue: 'Could not load users' })}
+            message={t('users.loadErrorHint', {
+              defaultValue: 'Check your connection and try again.',
+            })}
+            retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+            onRetry={() => void users.refetch()}
+          />
+        ) : users.isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3 rounded-lg px-2 py-3">
@@ -348,7 +355,7 @@ export function UsersPage() {
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => void onDelete()}
+                onClick={() => setConfirmDelete(true)}
                 className="text-destructive hover:bg-destructive/10 me-auto"
               >
                 {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
@@ -510,6 +517,17 @@ export function UsersPage() {
           </DrawerSection>
         </form>
       </Drawer>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        destructive
+        title={t('users.confirmDelete', { defaultValue: 'Delete this account permanently?' })}
+        confirmLabel={t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+        cancelLabel={t('actions.cancel', { ns: 'common' })}
+        loading={deleteUser.isPending}
+        onConfirm={() => void onDelete()}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

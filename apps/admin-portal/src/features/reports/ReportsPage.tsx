@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import {
   Button,
   cn,
+  ConfirmDialog,
   Drawer,
   DrawerSection,
   EmptyState,
+  ErrorState,
   FormField,
   Input,
   SelectMenu,
@@ -95,6 +97,17 @@ export function ReportsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(blank());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const onDelete = async (): Promise<void> => {
+    if (!deletingId) return;
+    try {
+      await remove.mutateAsync(deletingId);
+      setDeletingId(null);
+    } catch {
+      toast.error(t('reports.deleteError', { defaultValue: 'Could not delete report.' }));
+    }
+  };
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -186,7 +199,16 @@ export function ReportsPage() {
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-3">
-        {reports.isLoading ? (
+        {reports.isError ? (
+          <ErrorState
+            title={t('reports.loadError', { defaultValue: 'Could not load reports' })}
+            message={t('reports.loadErrorHint', {
+              defaultValue: 'Check your connection and try again.',
+            })}
+            retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+            onRetry={() => void reports.refetch()}
+          />
+        ) : reports.isLoading ? (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-28 w-full rounded-2xl" />
@@ -222,13 +244,7 @@ export function ReportsPage() {
                     setEditingId(r.id);
                     setDrawerOpen(true);
                   }}
-                  onDelete={async () => {
-                    if (
-                      !confirm(t('reports.confirmDelete', { defaultValue: 'Delete this report?' }))
-                    )
-                      return;
-                    await remove.mutateAsync(r.id);
-                  }}
+                  onDelete={() => setDeletingId(r.id)}
                 />
               </li>
             ))}
@@ -380,6 +396,17 @@ export function ReportsPage() {
           </DrawerSection>
         </div>
       </Drawer>
+
+      <ConfirmDialog
+        open={deletingId !== null}
+        destructive
+        title={t('reports.confirmDelete', { defaultValue: 'Delete this report?' })}
+        confirmLabel={t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+        cancelLabel={t('actions.cancel', { ns: 'common' })}
+        loading={remove.isPending}
+        onConfirm={() => void onDelete()}
+        onCancel={() => setDeletingId(null)}
+      />
     </div>
   );
 }

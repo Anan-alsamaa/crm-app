@@ -7,6 +7,7 @@ import {
   Button,
   cn,
   ConversationPlaceholderArt,
+  ErrorState,
   formatRelative,
   GhostSelect,
   InboxEmptyArt,
@@ -334,7 +335,16 @@ export function Inbox() {
 
           {/* List — no borders between rows; hover bg + active bg do the work. */}
           <div className="flex-1 overflow-auto">
-            {conversations.isLoading ? (
+            {conversations.isError ? (
+              <ErrorState
+                title={t('inbox.loadError', { defaultValue: 'Could not load conversations' })}
+                message={t('inbox.loadErrorHint', {
+                  defaultValue: 'Check your connection and try again.',
+                })}
+                retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+                onRetry={() => void conversations.refetch()}
+              />
+            ) : conversations.isLoading ? (
               <ul className="px-2 pt-2 space-y-1">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <li key={i} className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5">
