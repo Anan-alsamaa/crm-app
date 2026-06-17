@@ -69,12 +69,16 @@ export function UsersPage() {
 
   const openCreate = () => {
     setEditing(null);
+    // Pre-select Agent — the overwhelmingly common case — so creating a teammate
+    // is one click. The field stays visible + changeable. Falls back to empty if
+    // no Agent role exists (forcing an explicit pick).
+    const agentRole = (roles.data ?? []).find((r) => r.name.toLowerCase() === 'agent');
     reset({
       email: '',
       password: '',
       first_name: '',
       last_name: '',
-      role: '',
+      role: agentRole?.id ?? '',
       team: '',
       locale: 'en',
     });
@@ -98,6 +102,15 @@ export function UsersPage() {
   const isSelf = editing?.id === currentUser?.id;
   const isOwner = editing?.role?.name?.toLowerCase() === 'administrator';
   const canDelete = !!editing && !isSelf && !isOwner;
+
+  // Administrator is the system superuser (full schema + permission control) and
+  // must NOT be assignable from the portal — granting it is a privilege-escalation
+  // risk. We drop it from the selectable roles, keeping it only when editing
+  // someone who is ALREADY an Administrator, so their role still displays and is
+  // never silently downgraded on save.
+  const roleOptions = (roles.data ?? [])
+    .filter((r) => r.name.toLowerCase() !== 'administrator' || isOwner)
+    .map((r) => ({ value: r.id, label: r.name }));
 
   const onSubmit = handleSubmit(async (values) => {
     try {
@@ -419,7 +432,7 @@ export function UsersPage() {
                     invalid={!!errors.role}
                     aria-label={t('users.role')}
                     placeholder="—"
-                    options={(roles.data ?? []).map((r) => ({ value: r.id, label: r.name }))}
+                    options={roleOptions}
                   />
                 )}
               />

@@ -15,11 +15,23 @@ import { useUsers } from '../features/users/api.js';
 import { useTeams } from '../features/teams/api.js';
 import { useAuth } from '../lib/auth/AuthContext.js';
 
-export function AppCommandPalette() {
+/**
+ * Open state is lifted to the shell so a top-bar search trigger can open the
+ * same palette. The shell passes `open` + `onOpenChange`; if omitted the
+ * component falls back to its own state (Cmd/Ctrl+K only).
+ */
+interface AppCommandPaletteProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPaletteProps = {}) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = onOpenChange ?? setOpenState;
 
   useCommandPaletteShortcut(() => setOpen(true));
 
@@ -118,3 +130,5 @@ export function AppCommandPalette() {
 
   return <CommandPalette open={open} onClose={() => setOpen(false)} groups={groups} />;
 }
+
+export type { AppCommandPaletteProps };

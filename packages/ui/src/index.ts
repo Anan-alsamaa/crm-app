@@ -64,6 +64,8 @@ export { PageHeader } from './PageHeader.js';
 export type { PageHeaderProps } from './PageHeader.js';
 export { CommandPalette, useCommandPaletteShortcut } from './CommandPalette.js';
 export type { CommandPaletteProps, CommandGroup, CommandItem } from './CommandPalette.js';
+export { SearchTrigger } from './SearchTrigger.js';
+export type { SearchTriggerProps } from './SearchTrigger.js';
 export { ConfirmDialog } from './ConfirmDialog.js';
 export type { ConfirmDialogProps } from './ConfirmDialog.js';
 export { useFocusTrap } from './useFocusTrap.js';
