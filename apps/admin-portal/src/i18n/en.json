@@ -243,6 +243,7 @@
     "firstName": "First name",
     "lastName": "Last name",
     "role": "Role",
+    "roleHint": "Admin can open this admin portal and manage settings, users, and every conversation. Agent handles only their own assigned queue in the agent portal.",
     "team": "Team",
     "locale": "Locale",
     "status": "Status",

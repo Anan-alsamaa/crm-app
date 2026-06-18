@@ -419,7 +419,14 @@ export function UsersPage() {
                 'Role decides what they can do. Team decides where conversations route.',
             })}
           >
-            <FormField label={t('users.role')} error={errors.role?.message}>
+            <FormField
+              label={t('users.role')}
+              error={errors.role?.message}
+              hint={t('users.roleHint', {
+                defaultValue:
+                  'Admin can open this admin portal and manage settings, users, and every conversation. Agent handles only their own assigned queue in the agent portal.',
+              })}
+            >
               <Controller
                 control={control}
                 name="role"
