@@ -499,8 +499,8 @@ export function Inbox() {
                 .sort((a, b) => (b.last_message_at ?? '').localeCompare(a.last_message_at ?? ''))
                 .slice(0, 4);
               return (
-                <div className="mx-auto flex h-full max-w-2xl flex-col justify-center px-6">
-                  <div className="flex flex-col items-start gap-6">
+                <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center px-6">
+                  <div className="flex flex-col items-center gap-6 text-center">
                     <Pill tone="pink" size="md">
                       <span className="font-semibold">{t('inbox.welcome.queue')}</span>
                       <span className="opacity-70">·</span>
@@ -531,7 +531,7 @@ export function Inbox() {
                     </p>
 
                     {recent.length > 0 && (
-                      <div className="mt-2 w-full">
+                      <div className="mt-2 w-full max-w-md text-start">
                         <p className="mb-3 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                           {t('inbox.welcome.recent')}
                         </p>
