@@ -92,3 +92,6 @@ tools/bull-board/package-lock.json
 tools/load-test/package-lock.json
 tools/screenshot/shots/
 tools/screenshot/package-lock.json
+tools/job-producer/jp.out
+tools/job-producer/jp.err
+tools/job-producer/package-lock.json

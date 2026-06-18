@@ -217,6 +217,8 @@ export const roles: RoleSpec[] = [
       ...readOnly('sla_policies'),
       ...readOnly('directus_users'),
       ...readOnly('contacts'),
+      // CSV import (imports processor) creates new contacts after dedup.
+      { collection: 'contacts', action: 'create' },
       ...readOnly('tags'),
       ...readOnly('custom_fields'),
       ...readOnly('custom_field_values'),
