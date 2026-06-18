@@ -25,12 +25,18 @@ ARG VITE_AI_GATEWAY_URL=http://localhost:8081
 ARG VITE_AI_SVC_TOKEN=
 ARG VITE_YIJI_API_URL=
 ARG VITE_YIJI_API_TOKEN=
+# Job enqueue endpoint (Import CSV / Run report now). Prod: the socket-gateway's
+# HTTP base URL (it exposes authed POST /jobs/*). Dev default: host job-producer.
+ARG VITE_JOB_PRODUCER_URL=http://localhost:3031
+ARG VITE_JOB_PRODUCER_TOKEN=
 ENV VITE_DIRECTUS_URL=$VITE_DIRECTUS_URL \
     VITE_SOCKET_URL=$VITE_SOCKET_URL \
     VITE_AI_GATEWAY_URL=$VITE_AI_GATEWAY_URL \
     VITE_AI_SVC_TOKEN=$VITE_AI_SVC_TOKEN \
     VITE_YIJI_API_URL=$VITE_YIJI_API_URL \
-    VITE_YIJI_API_TOKEN=$VITE_YIJI_API_TOKEN
+    VITE_YIJI_API_TOKEN=$VITE_YIJI_API_TOKEN \
+    VITE_JOB_PRODUCER_URL=$VITE_JOB_PRODUCER_URL \
+    VITE_JOB_PRODUCER_TOKEN=$VITE_JOB_PRODUCER_TOKEN
 RUN pnpm --filter @yiji/admin-portal build
 
 # ---- runner: nginx serving the static build with SPA history fallback ----

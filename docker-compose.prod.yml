@@ -102,6 +102,10 @@ services:
     restart: unless-stopped
     ports:
       - '${SOCKET_GATEWAY_PORT:-8080}:8080'
+      # REST app (PORT+1): /health,/ready,/metrics,/debug,/webhooks/yiji + the
+      # admin enqueue routes POST /jobs/import|report. Behind an LB in real prod,
+      # expose only /jobs/* + /webhooks/* publicly and keep /metrics,/debug internal.
+      - '${SOCKET_GATEWAY_HTTP_PORT:-8082}:8081'
     depends_on:
       directus:
         condition: service_healthy
@@ -209,6 +213,8 @@ services:
         VITE_DIRECTUS_URL: ${VITE_DIRECTUS_URL:-http://localhost:8055}
         VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:8080}
         VITE_AI_GATEWAY_URL: ${VITE_AI_GATEWAY_URL:-http://localhost:8081}
+        # Enqueue endpoint = the socket-gateway HTTP port (Import CSV / Run report).
+        VITE_JOB_PRODUCER_URL: ${VITE_JOB_PRODUCER_URL:-http://localhost:8082}
     restart: unless-stopped
     ports:
       - '${ADMIN_PORTAL_PORT:-8092}:80'

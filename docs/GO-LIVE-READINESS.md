@@ -28,25 +28,30 @@ idempotence on a fresh DB), `scripts/backup-pg.sh` / `restore-pg.sh`. Each Node
 service ships Zod env guards (fail-fast), `/health` + `/ready` + `/metrics`, and
 OpenTelemetry. **The platform is production-engineered.**
 
-## 3. Blocking gap — resolve before cutover
+## 3. Imports/reports enqueue path — RESOLVED
 
-**Manual Imports & "Run report now" have no production enqueue path.** _(owners: infra + frontend)_
+**Manual Imports & "Run report now" now have a production enqueue path** built
+into the socket-gateway (no dev host tool in prod, no extra service).
 
-- The admin portal's Imports and Reports pages post to `VITE_JOB_PRODUCER_URL`
-  (`apps/admin-portal/src/lib/job-producer.ts`), which targets
-  `crm-app-infra/tools/job-producer` — a **dev host tool**. It is **not** in
-  `docker-compose.prod.yml`, the runbook, or CI.
-- What still works in prod without it: **scheduled reports** (the workers
-  self-schedule via `syncScheduledReports`) and the workers _consuming_ the
-  `imports`/`reports` queues. What breaks: the **manual** "Import CSV" submit and
-  the **"Run report now"** button — nothing enqueues those jobs in prod.
-- Decide one before launch:
-  - **(a)** Containerize `job-producer` as a service in `docker-compose.prod.yml`
-    (set `PRODUCER_TOKEN`, bake `VITE_JOB_PRODUCER_URL` + `VITE_JOB_PRODUCER_TOKEN`
-    into the admin-portal build, document it in `PRODUCTION.md`), **or**
-  - **(b)** Fold enqueue into an existing authenticated surface — a small endpoint
-    on the socket-gateway, or a Directus flow/operation — and drop the standalone
-    service. Fewer moving parts; **recommended.**
+- The gateway exposes authenticated `POST /jobs/import` + `POST /jobs/report`
+  (`services/socket-gateway/src/index.ts` + `queue.ts`). Auth = the caller's
+  Directus token, role-gated to `Admin`/`Administrator`; CORS scoped to `/jobs/*`
+  via the gateway `CORS_ORIGIN`. Jobs land on the same `imports`/`reports` queues
+  the workers consume.
+- The admin portal sends the logged-in admin's Directus token as a Bearer
+  (`apps/admin-portal/src/lib/job-producer.ts`) and targets `VITE_JOB_PRODUCER_URL`
+  — the gateway HTTP URL in prod, the host producer (:3031) in dev (identical
+  routes, so **dev is unchanged**).
+- Prod wiring is in `docker-compose.prod.yml` (gateway HTTP port published; admin
+  portal build arg) + documented in
+  [`PRODUCTION.md` → Admin job enqueue](./PRODUCTION.md#admin-job-enqueue-imports--reports).
+- _Scheduled_ reports already worked (workers self-schedule) and are untouched.
+
+**Remaining verification (staging, not provable in this RAM-limited dev box):**
+smoke-test `POST /jobs/import` + `/jobs/report` against a built gateway image —
+expect 401 without a token, 403 for a non-admin token, and `{ ok, jobId }` for an
+admin, with the workers then processing the job. Ensure the LB exposes only
+`/jobs/*` (+ `/webhooks/*`) publicly and keeps `/metrics` + `/debug/*` internal.
 
 ## 4. Standard cutover checklist
 
