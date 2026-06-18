@@ -142,6 +142,14 @@ function PhoneIcon() {
   );
 }
 
+function WhatsAppIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M17.47 14.38c-.3-.15-1.74-.86-2-.96-.27-.1-.46-.15-.66.15-.2.29-.76.95-.93 1.15-.17.2-.34.22-.64.07-.3-.15-1.25-.46-2.39-1.47-.88-.79-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.13.3-.34.45-.51.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.66-1.6-.91-2.19-.24-.57-.48-.49-.66-.5h-.56c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.06 2.87 1.21 3.07c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.62.71.23 1.36.2 1.87.12.57-.08 1.74-.71 1.99-1.4.25-.69.25-1.28.17-1.4-.07-.13-.27-.2-.56-.35zM12.04 2.5C6.79 2.5 2.54 6.75 2.54 12c0 1.67.44 3.3 1.27 4.74L2.5 21.5l4.9-1.28a9.46 9.46 0 0 0 4.63 1.2h.01c5.24 0 9.5-4.26 9.5-9.5 0-2.54-.99-4.92-2.78-6.71A9.44 9.44 0 0 0 12.04 2.5z" />
+    </svg>
+  );
+}
+
 function DownloadIcon() {
   return (
     <svg
@@ -773,6 +781,22 @@ export function Widget({ config }: { config: WidgetConfig }) {
                   </span>
                   <span className="yiji-offline-link-text">
                     <span className="yiji-offline-link-label">{tr.offlineCallLabel}</span>
+                    <span className="yiji-offline-link-value">
+                      {config.fallback?.phone ?? DEFAULT_FALLBACK.phone}
+                    </span>
+                  </span>
+                </a>
+                <a
+                  href={`https://wa.me/${(config.fallback?.phone ?? DEFAULT_FALLBACK.phone).replace(/\D/g, '')}`}
+                  className="yiji-offline-link"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span className="yiji-offline-link-icon" aria-hidden>
+                    <WhatsAppIcon />
+                  </span>
+                  <span className="yiji-offline-link-text">
+                    <span className="yiji-offline-link-label">{tr.offlineWhatsappLabel}</span>
                     <span className="yiji-offline-link-value">
                       {config.fallback?.phone ?? DEFAULT_FALLBACK.phone}
                     </span>

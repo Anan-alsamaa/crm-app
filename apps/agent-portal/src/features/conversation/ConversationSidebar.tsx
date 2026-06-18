@@ -1,6 +1,19 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Avatar, cn, Pill, ResizeHandle, Spinner, formatRelative, useResizable } from '@yiji/ui';
+import {
+  Avatar,
+  Button,
+  cn,
+  Input,
+  Pill,
+  ResizeHandle,
+  Spinner,
+  toast,
+  formatRelative,
+  useResizable,
+} from '@yiji/ui';
 import { useConversation, useLinkedTickets, type ConversationMessage } from '../inbox/api.js';
+import { useUpdateContact } from '../contacts/api.js';
 import { AiPanel } from '../ai/AiPanel.js';
 import { ConversationTags } from './ConversationTags.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
@@ -28,6 +41,23 @@ function SectionLabel({ children, count }: { children: React.ReactNode; count?: 
   );
 }
 
+function PencilIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+      aria-hidden
+    >
+      <path d="M11.5 2.5a1.4 1.4 0 0 1 2 2L6 12l-3 1 1-3 7.5-7.5z" />
+    </svg>
+  );
+}
+
 const TICKET_TONE: Record<string, 'success' | 'warning' | 'muted' | 'primary' | 'neutral'> = {
   open: 'success',
   pending: 'warning',
@@ -46,6 +76,12 @@ export function ConversationSidebar({
   const { t } = useTranslation();
   const convo = useConversation(conversationId);
   const tickets = useLinkedTickets(conversationId);
+  const updateContact = useUpdateContact();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ name: '', email: '', phone: '' });
+  // Drop out of edit mode when switching conversations so a stale draft never
+  // overwrites a different customer.
+  useEffect(() => setEditing(false), [conversationId]);
   const rs = useResizable({
     storageKey: 'yiji.agent.convoSidebarWidth',
     defaultWidth: 320,
@@ -78,6 +114,36 @@ export function ConversationSidebar({
   const c = convo.data;
   const contactName = c.contact?.name ?? t('inbox.unknownContact');
 
+  const startEdit = () => {
+    setDraft({
+      name: c.contact?.name ?? '',
+      email: c.contact?.email ?? '',
+      phone: c.contact?.phone ?? '',
+    });
+    setEditing(true);
+  };
+  const saveContact = async () => {
+    if (!c.contact?.id) return;
+    try {
+      await updateContact.mutateAsync({
+        id: c.contact.id,
+        patch: {
+          name: draft.name.trim() || null,
+          email: draft.email.trim() || null,
+          phone: draft.phone.trim() || null,
+        },
+      });
+      toast.success(
+        t('sidebar.contactSaved', { defaultValue: 'Customer details saved everywhere.' }),
+      );
+      setEditing(false);
+    } catch {
+      toast.error(
+        t('sidebar.contactSaveError', { defaultValue: 'Could not save customer details.' }),
+      );
+    }
+  };
+
   return (
     <aside className={cn('relative shrink-0 overflow-auto', widthClass, className)} {...sizeProps}>
       {handle}
@@ -102,27 +168,93 @@ export function ConversationSidebar({
         </div>
       </div>
 
-      {/* Contact details — borderless key/value list. */}
+      {/* Contact details — editable: agents can correct the customer's name,
+          email or phone; saving persists to Directus and updates everywhere. */}
       <section className="px-6 py-4">
-        <SectionLabel>{t('sidebar.contact')}</SectionLabel>
-        <dl className="space-y-2.5 text-xs">
-          {c.contact?.email && (
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">{t('sidebar.email')}</dt>
-              <dd className="truncate font-medium text-foreground">{c.contact.email}</dd>
-            </div>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            {t('sidebar.contact')}
+          </h3>
+          {c.contact?.id && !editing && (
+            <button
+              type="button"
+              onClick={startEdit}
+              aria-label={t('sidebar.editContact', { defaultValue: 'Edit customer details' })}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              <PencilIcon />
+            </button>
           )}
-          {c.contact?.phone && (
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">{t('sidebar.phone')}</dt>
-              <dd className="tabular-nums font-medium text-foreground">{c.contact.phone}</dd>
+        </div>
+        {editing ? (
+          <div className="space-y-2.5 text-xs">
+            <label className="block">
+              <span className="mb-1 block text-muted-foreground">
+                {t('sidebar.name', { defaultValue: 'Name' })}
+              </span>
+              <Input
+                value={draft.name}
+                onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                placeholder={t('inbox.unknownContact')}
+                aria-label={t('sidebar.name', { defaultValue: 'Name' })}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-muted-foreground">{t('sidebar.email')}</span>
+              <Input
+                type="email"
+                value={draft.email}
+                onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
+                aria-label={t('sidebar.email')}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-muted-foreground">{t('sidebar.phone')}</span>
+              <Input
+                type="tel"
+                value={draft.phone}
+                onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
+                aria-label={t('sidebar.phone')}
+              />
+            </label>
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                size="sm"
+                onClick={() => void saveContact()}
+                loading={updateContact.isPending}
+              >
+                {t('actions.save', { ns: 'common', defaultValue: 'Save' })}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setEditing(false)}
+                disabled={updateContact.isPending}
+              >
+                {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+              </Button>
             </div>
-          )}
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-muted-foreground">{t('sidebar.source')}</dt>
-            <dd className="font-medium text-foreground">{t('sidebar.sourceWidget')}</dd>
           </div>
-        </dl>
+        ) : (
+          <dl className="space-y-2.5 text-xs">
+            {c.contact?.email && (
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-muted-foreground">{t('sidebar.email')}</dt>
+                <dd className="truncate font-medium text-foreground">{c.contact.email}</dd>
+              </div>
+            )}
+            {c.contact?.phone && (
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-muted-foreground">{t('sidebar.phone')}</dt>
+                <dd className="tabular-nums font-medium text-foreground">{c.contact.phone}</dd>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-muted-foreground">{t('sidebar.source')}</dt>
+              <dd className="font-medium text-foreground">{t('sidebar.sourceWidget')}</dd>
+            </div>
+          </dl>
+        )}
       </section>
 
       {/* Tags — the single, interactive home for conversation tags. */}
