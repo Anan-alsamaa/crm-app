@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeftIcon,
@@ -289,6 +289,7 @@ export function TicketsPage() {
 
 function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => void }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const ticket = useTicket(ticketId);
   const events = useTicketEvents(ticketId);
   const update = useUpdateTicket();
@@ -399,6 +400,18 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                   <span className="tabular-nums">
                     opened {new Date(tk.date_created).toLocaleDateString()}
                   </span>
+                </>
+              )}
+              {tk.conversation && (
+                <>
+                  {' · '}
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/?conv=${tk.conversation}`)}
+                    className="font-medium text-primary transition-colors duration-fast ease-out hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded"
+                  >
+                    {t('tickets.viewConversation', { defaultValue: 'View conversation →' })}
+                  </button>
                 </>
               )}
             </div>
