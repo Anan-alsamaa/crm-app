@@ -90,14 +90,14 @@ export function NotificationBell() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'relative inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground',
+          'relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground',
           'transition-[transform,background-color,color] duration-fast ease-out',
           'hover:bg-secondary hover:text-foreground active:scale-95',
         )}
         aria-label={t('notifications.title')}
         aria-expanded={open}
       >
-        <BellIcon size={16} />
+        <BellIcon size={17} />
         {unread.length > 0 && (
           <span
             className="absolute -end-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground"

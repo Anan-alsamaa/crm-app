@@ -37,7 +37,7 @@ export function SoundToggle() {
       aria-label={actionLabel}
       title={actionLabel}
       className={cn(
-        'inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium',
+        'inline-flex h-9 w-9 items-center justify-center rounded-lg',
         'transition-colors duration-fast ease-out',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
         muted
@@ -45,12 +45,7 @@ export function SoundToggle() {
           : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
       )}
     >
-      {muted ? <SoundOffIcon size={16} /> : <SoundOnIcon size={16} />}
-      <span className="hidden sm:inline">
-        {muted
-          ? t('sound.statusMuted', { defaultValue: 'Muted' })
-          : t('sound.statusOn', { defaultValue: 'Sound on' })}
-      </span>
+      {muted ? <SoundOffIcon size={17} /> : <SoundOnIcon size={17} />}
     </button>
   );
 }
