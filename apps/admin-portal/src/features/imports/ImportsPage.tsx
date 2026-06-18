@@ -15,6 +15,7 @@ import {
   ToolbarSpacer,
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
+import { jobProducer } from '../../lib/job-producer.js';
 import { useVendors } from '../vendors/api.js';
 
 /**
@@ -77,27 +78,27 @@ export function ImportsPage() {
   const submitJob = useMutation({
     mutationFn: async () => {
       if (!preview || !vendorId) throw new Error('preview/vendor missing');
-      // The workers service watches the imports queue. In this MVP we
-      // surface the upload + mapping for the admin to verify; production
-      // wiring goes via a Directus extension that enqueues on file flow.
-      // For now we record the manifest as a directus file metadata note
-      // (extension hook can pick it up) — and return success.
-      return {
-        fileId: preview.fileId,
-        vendorId,
-        mapping,
-        rows: preview.sample.length,
-      };
+      // Enqueue an ImportJob on the workers `imports` queue via the host-run
+      // job producer (tools/job-producer). The worker fetches the uploaded
+      // CSV, applies this column mapping, and upserts contacts with per-vendor
+      // dedup. Shape MUST match shared-types ImportJob { fileId, vendorId, mapping }.
+      return jobProducer.enqueueImport({ fileId: preview.fileId, vendorId, mapping });
     },
     onSuccess: (info) => {
       toast.success(
         t('imports.queued', {
-          defaultValue: `Queued ${info.rows}+ rows for import (preview only — wire workers to consume).`,
+          defaultValue: `Import queued (job ${info.jobId}). The worker will process it shortly.`,
         }),
       );
       setPreview(null);
       setMapping({});
     },
+    onError: (err) =>
+      toast.error(
+        t('imports.queueError', {
+          defaultValue: `Could not queue import: ${(err as Error).message}`,
+        }),
+      ),
   });
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

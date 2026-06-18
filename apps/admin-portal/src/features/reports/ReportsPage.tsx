@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useMutation } from '@tanstack/react-query';
 import {
   Button,
   cn,
@@ -27,6 +28,7 @@ import {
 } from './api.js';
 import { useUsers } from '../users/api.js';
 import { useTeams } from '../teams/api.js';
+import { jobProducer } from '../../lib/job-producer.js';
 
 /**
  * Reports admin — list of saved reports + create/edit drawer.
@@ -98,6 +100,25 @@ export function ReportsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(blank());
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // "Run now" — enqueue a ReportJob on the workers `reports` queue via the
+  // host-run job producer (tools/job-producer). The worker runs the
+  // aggregation, renders CSV, emails recipients, and bumps last_run_at.
+  const runNow = useMutation({
+    mutationFn: (reportId: string) => jobProducer.enqueueReport(reportId),
+    onSuccess: (info) =>
+      toast.success(
+        t('reports.runQueued', {
+          defaultValue: `Report queued (job ${info.jobId}). The worker will run it shortly.`,
+        }),
+      ),
+    onError: (err) =>
+      toast.error(
+        t('reports.runError', {
+          defaultValue: `Could not run report: ${(err as Error).message}`,
+        }),
+      ),
+  });
 
   const onDelete = async (): Promise<void> => {
     if (!deletingId) return;
@@ -245,6 +266,8 @@ export function ReportsPage() {
                     setDrawerOpen(true);
                   }}
                   onDelete={() => setDeletingId(r.id)}
+                  onRun={() => runNow.mutate(r.id)}
+                  running={runNow.isPending && runNow.variables === r.id}
                 />
               </li>
             ))}
@@ -415,10 +438,14 @@ function ReportCard({
   r,
   onEdit,
   onDelete,
+  onRun,
+  running,
 }: {
   r: ReportRow;
   onEdit: () => void;
   onDelete: () => void;
+  onRun: () => void;
+  running: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -449,6 +476,10 @@ function ReportCard({
         )}
       </div>
       <div className="flex items-center gap-3 pt-1">
+        <Button type="button" size="sm" variant="secondary" loading={running} onClick={onRun}>
+          {t('reports.runNow', { defaultValue: 'Run now' })}
+        </Button>
+        <ToolbarSpacer />
         <button
           type="button"
           onClick={onEdit}
