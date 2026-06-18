@@ -286,17 +286,24 @@ function Shell({ children }: { children: React.ReactNode }) {
           />
         }
         topBar={
-          <div className="flex w-full items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
+          <div className="flex w-full items-center gap-3">
+            {/* Left: section label */}
+            <div className="flex min-w-0 flex-1 items-center">
+              <span className="hidden truncate text-sm font-semibold tracking-tight text-foreground md:block">
+                {pageTitle}
+              </span>
+            </div>
+            {/* Center: the search field */}
+            <div className="flex w-full max-w-md justify-center">
               <SearchTrigger
+                fullWidth
                 label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
                 aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
                 onClick={() => setPaletteOpen(true)}
               />
-              <span className="hidden truncate text-sm font-semibold tracking-tight text-foreground md:inline">
-                {pageTitle}
-              </span>
             </div>
+            {/* Right: balancing spacer keeps the search centered */}
+            <div className="flex-1" aria-hidden />
           </div>
         }
         resizeStorageKey="yiji.admin.sidebarWidth"

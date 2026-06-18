@@ -15,6 +15,7 @@ import {
   TicketEmptyArt,
   toast,
   Toolbar,
+  ToolbarSpacer,
   useIsDesktop,
 } from '@yiji/ui';
 import type { Priority, TicketStatus } from '@yiji/shared-types';
@@ -28,6 +29,7 @@ import {
   useRemoveTicketAttachment,
 } from './api.js';
 import { useAgents, useTeamOptions } from '../inbox/api.js';
+import { NewTicketDialog } from './NewTicketDialog.js';
 import { resolveMentions } from '../conversation/mentions.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
@@ -62,6 +64,7 @@ export function TicketsPage() {
   const isDesktop = useIsDesktop();
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<TicketFilter>('all');
+  const [creating, setCreating] = useState(false);
 
   // Deep-link support: open a specific ticket from /tickets?id=<id> (command
   // palette, AI search) or /tickets/<id> (notification "View" links).
@@ -156,7 +159,15 @@ export function TicketsPage() {
             );
           })}
         </div>
+        <ToolbarSpacer />
+        <Button type="button" size="sm" onClick={() => setCreating(true)}>
+          {t('tickets.newTicket', { defaultValue: '+ New ticket' })}
+        </Button>
       </Toolbar>
+
+      {creating && (
+        <NewTicketDialog onClose={() => setCreating(false)} onCreated={(id) => setSelected(id)} />
+      )}
 
       {/* Below: list + detail — no card wrapping. Single-column on mobile:
           the list and the detail view swap places. */}
@@ -502,15 +513,31 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 />
               </label>
             </div>
-            {!tk.first_responded_at && (
-              <Button
-                type="button"
-                size="sm"
-                fullWidth
-                onClick={() => patch({ first_responded_at: new Date().toISOString() })}
-              >
-                {t('tickets.markResponded')}
-              </Button>
+            {!tk.first_responded_at ? (
+              <div className="space-y-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  fullWidth
+                  onClick={() => patch({ first_responded_at: new Date().toISOString() })}
+                >
+                  {t('tickets.markResponded', { defaultValue: 'Mark first response' })}
+                </Button>
+                <p className="text-2xs leading-relaxed text-muted-foreground">
+                  {t('tickets.markRespondedHint', {
+                    defaultValue:
+                      'Logs your first reply and stops the first-response SLA timer — separate from the ticket status.',
+                  })}
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-2xs font-medium text-success">
+                <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
+                {t('tickets.firstResponseLogged', {
+                  defaultValue: 'First response logged · {{when}}',
+                  when: formatRelative(tk.first_responded_at),
+                })}
+              </div>
             )}
           </section>
 

@@ -4,10 +4,13 @@ import { SearchIcon } from './Icon.js';
 
 /*
  * SearchTrigger — a search-field-looking button for the top bar that opens the
- * command palette. It is purely a trigger: it renders as a rounded, muted pill
- * with a search icon, label, and a ⌘K / Ctrl K keyboard hint (hidden on small
- * screens). The owning portal wires `onClick` to the same open path Cmd/Ctrl+K
- * uses, so click and keyboard share one palette.
+ * command palette. Purely a trigger: it renders as a rounded search field with a
+ * leading icon, a placeholder-style label, and a ⌘K / Ctrl K hint on the right.
+ * The owning portal wires `onClick` to the same open path Cmd/Ctrl+K uses, so
+ * click and keyboard share one palette.
+ *
+ * `fullWidth` makes it a centered, full-width field (for the middle of the top
+ * bar); the default compact pill is for tight spots like the mobile action row.
  */
 
 export interface SearchTriggerProps extends Omit<
@@ -18,6 +21,8 @@ export interface SearchTriggerProps extends Omit<
   label: string;
   /** Accessible label for screen readers (defaults to `label`). */
   'aria-label'?: string;
+  /** Stretch to fill its container (icon+label left, ⌘K right). */
+  fullWidth?: boolean;
 }
 
 /** True when the platform uses ⌘ (Apple) rather than Ctrl for shortcuts. */
@@ -30,6 +35,7 @@ export function SearchTrigger({
   label,
   className,
   type = 'button',
+  fullWidth = false,
   'aria-label': ariaLabel,
   ...rest
 }: SearchTriggerProps): JSX.Element {
@@ -39,17 +45,20 @@ export function SearchTrigger({
       type={type}
       aria-label={ariaLabel ?? label}
       className={cn(
-        'group inline-flex h-8 items-center gap-2 rounded-lg border border-border bg-secondary/50 ps-2.5 pe-1.5 text-sm text-muted-foreground',
-        'transition-[background-color,border-color,color] duration-fast ease-out',
-        'hover:border-border-strong hover:bg-secondary hover:text-foreground',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+        'group flex items-center gap-2 rounded-xl border border-border/70 bg-secondary/40 text-sm text-muted-foreground',
+        'transition-[background-color,border-color,color,box-shadow] duration-base ease-out',
+        'hover:border-border-strong hover:bg-card hover:text-foreground hover:shadow-sm hover:shadow-foreground/[0.05]',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35',
+        fullWidth ? 'h-9 w-full justify-between ps-3 pe-2' : 'h-8 justify-between ps-2.5 pe-1.5',
         className,
       )}
       {...rest}
     >
-      <SearchIcon size={15} className="shrink-0" />
-      <span className="truncate">{label}</span>
-      <kbd className="ms-1 hidden shrink-0 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-2xs text-muted-foreground sm:inline">
+      <span className="flex min-w-0 items-center gap-2">
+        <SearchIcon size={15} className="shrink-0 transition-colors group-hover:text-primary" />
+        <span className="truncate">{label}</span>
+      </span>
+      <kbd className="ms-2 hidden shrink-0 items-center rounded-md border border-border bg-card/80 px-1.5 py-0.5 font-mono text-2xs text-muted-foreground sm:inline-flex">
         {meta}
       </kbd>
     </button>
