@@ -142,11 +142,14 @@ export function AppShell({
       return (
         <div className="flex h-full text-foreground">
           {railNav}
-          <div className="flex min-w-0 flex-1 flex-col">
-            {/* Slim top bar — just tall enough for the section label + controls,
-                so the content card (and the conversation) gets the height. */}
-            <header className="flex h-10 shrink-0 items-center px-3.5 pt-1.5">{topBar}</header>
-            {mainCard('mx-3 mb-3 mt-0.5')}
+          {/* Content panel: one solid-white surface whose header is a real white
+              navbar (bottom border), with the page flush beneath it — no floating
+              gap or "bubble" between the bar and the content. */}
+          <div className="my-3 me-3 ms-3 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl bg-card shadow-xl shadow-foreground/5 ring-1 ring-foreground/[0.04]">
+            <header className="flex h-14 shrink-0 items-center border-b border-border px-4">
+              {topBar}
+            </header>
+            <main className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</main>
           </div>
         </div>
       );
@@ -163,7 +166,7 @@ export function AppShell({
   return (
     <div className="flex h-full flex-col text-foreground">
       {/* Mobile top bar */}
-      <header className="flex h-14 shrink-0 items-center gap-2 px-3">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-3">
         <button
           type="button"
           onClick={() => setOpen(true)}

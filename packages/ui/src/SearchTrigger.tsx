@@ -4,10 +4,11 @@ import { SearchIcon } from './Icon.js';
 
 /*
  * SearchTrigger — a search-field-looking button for the top bar that opens the
- * command palette. A clean search field: leading magnifier, a "Search…"
- * placeholder, and a plain ⌘ + K hint on the right. It's a trigger (not a real
- * input) — click or Cmd/Ctrl+K opens the one palette, where the actual typing
- * and clearing happen, so the trigger itself has no clear (✕) affordance.
+ * command palette. Styled as an inset search field (subtle border + tinted fill,
+ * no drop shadow) so it sits flush inside the white navbar rather than floating
+ * like a card. Leading magnifier, a "Search…" placeholder, and a plain ⌘ + K
+ * hint. It's a trigger, not a real input — click or Cmd/Ctrl+K opens the one
+ * palette, where the actual typing and clearing happen.
  *
  * `fullWidth` makes it the centered, full-width bar in the middle of the top bar;
  * the default compact form is for tight spots like the mobile action row.
@@ -45,11 +46,10 @@ export function SearchTrigger({
       type={type}
       aria-label={ariaLabel ?? label}
       className={cn(
-        'group flex h-9 items-center gap-2.5 rounded-xl bg-card text-sm text-muted-foreground',
-        'ring-1 ring-border/70 shadow-sm shadow-foreground/[0.03]',
-        'transition-[box-shadow,background-color,color] duration-base ease-out',
-        'hover:ring-border-strong hover:shadow-md hover:shadow-foreground/[0.06]',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35',
+        'group flex h-9 items-center gap-2.5 rounded-lg border border-border bg-secondary/60 text-sm text-muted-foreground',
+        'transition-colors duration-base ease-out',
+        'hover:border-border-strong hover:bg-secondary hover:text-foreground',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
         fullWidth ? 'w-full ps-3 pe-3' : 'ps-3 pe-2.5',
         className,
       )}
@@ -57,7 +57,7 @@ export function SearchTrigger({
     >
       <SearchIcon size={16} className="shrink-0 text-muted-foreground/70" />
       <span className="flex-1 truncate text-start text-muted-foreground/90">{label}</span>
-      <kbd className="hidden shrink-0 font-sans text-xs font-medium tracking-tight text-foreground/55 sm:inline">
+      <kbd className="hidden shrink-0 font-sans text-2xs font-medium tracking-tight text-muted-foreground/80 sm:inline">
         {meta}
       </kbd>
     </button>
