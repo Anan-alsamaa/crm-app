@@ -98,11 +98,13 @@ export const roles: RoleSpec[] = [
     permissions: [
       ...readOnly('vendors'),
       ...readOnly('teams'),
-      // Agents can create custom tags on the fly (and rename/recolour) + read
-      // them, in addition to assigning via the conversations_tags junction below.
+      // Agents can create custom tags on the fly (and rename/recolour), read
+      // them, and delete one from the library (cascades out of all junctions) —
+      // in addition to assigning via the conversations_tags junction below.
       { collection: 'tags', action: 'read' },
       { collection: 'tags', action: 'create' },
       { collection: 'tags', action: 'update' },
+      { collection: 'tags', action: 'delete' },
       ...readOnly('sla_policies'),
       ...readOnly('automation_rules'),
       ...readOnly('custom_fields'),
