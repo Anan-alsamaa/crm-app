@@ -247,6 +247,9 @@ export function Widget({ config }: { config: WidgetConfig }) {
   // Ids we've already requested, so a re-render never double-fetches.
   const attemptedRef = useRef<Set<string>>(new Set());
   const socketRef = useRef<Socket | null>(null);
+  // Live mirror of `open` for the mount-time socket handlers, which otherwise
+  // capture a stale `open` and would count messages read while open as unread.
+  const openRef = useRef(open);
   const convoRef = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -333,7 +336,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
           if (prev.some((m) => m.id === msg.id)) return prev;
           return [...prev, msg];
         });
-        if (msg.senderType !== 'customer' && !open) setUnread((u) => u + 1);
+        if (msg.senderType !== 'customer' && !openRef.current) setUnread((u) => u + 1);
       },
       onHistory: (history) => {
         // Seed the existing thread on (re)connect. Keep any optimistic/live
@@ -357,6 +360,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
   }, []);
 
   useEffect(() => {
+    openRef.current = open;
     if (open) setUnread(0);
   }, [open]);
 
