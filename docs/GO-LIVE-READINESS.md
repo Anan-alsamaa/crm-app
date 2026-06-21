@@ -1,4 +1,4 @@
-# Go-live readiness — 2026-06-18
+# Go-live readiness — 2026-06-21
 
 A current-state assessment to run **before scheduling a production cutover**. The
 timeless "how to deploy/operate" reference is [`PRODUCTION.md`](./PRODUCTION.md)
@@ -27,6 +27,14 @@ CI `deploy.yml` (build + push to GHCR) and `deploy-preflight.yml` (bootstrap
 idempotence on a fresh DB), `scripts/backup-pg.sh` / `restore-pg.sh`. Each Node
 service ships Zod env guards (fail-fast), `/health` + `/ready` + `/metrics`, and
 OpenTelemetry. **The platform is production-engineered.**
+
+**Deploy kit (this pass):** `.env.prod.example` lists every var the prod compose
+needs, grouped `[GENERATE]` / `[PROVIDE]` / `[OPTIONAL]`; `scripts/gen-prod-secrets.sh`
+emits the strong secrets in one shot. Verified: `docker compose -f
+docker-compose.prod.yml config` interpolates cleanly against a fully-populated env
+(including the gateway enqueue endpoint + admin `VITE_JOB_PRODUCER_URL` wiring).
+Bootstrap idempotence stays CI-gated (`deploy-preflight.yml`); images are built +
+pushed by `deploy.yml` (local Docker build is RAM-bound on this box).
 
 ## 3. Imports/reports enqueue path — RESOLVED
 
