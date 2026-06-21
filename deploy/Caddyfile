@@ -1,0 +1,56 @@
+# Yiji CRM - reverse proxy + automatic HTTPS (Caddy).
+#
+# Routes each public hostname to the right internal service and terminates TLS
+# with auto-provisioned Let's Encrypt certificates (renewed automatically).
+# WebSocket upgrades (the socket-gateway) are proxied transparently.
+#
+# Set BASE_DOMAIN + ACME_EMAIL in your --env-file. Point these DNS A/AAAA
+# records at this host BEFORE first boot so the ACME challenge can complete:
+#   agent.$BASE_DOMAIN   admin.$BASE_DOMAIN   api.$BASE_DOMAIN
+#   ws.$BASE_DOMAIN      ai.$BASE_DOMAIN
+#
+# These public URLs must match the VITE_* build args the portal images were
+# built with (see docs/DEPLOYMENT.md):
+#   VITE_DIRECTUS_URL=https://api.$BASE_DOMAIN
+#   VITE_SOCKET_URL=https://ws.$BASE_DOMAIN
+#   VITE_AI_GATEWAY_URL=https://ai.$BASE_DOMAIN
+
+{
+	email {$ACME_EMAIL}
+}
+
+# Agent portal (static SPA)
+agent.{$BASE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy agent-portal:80
+}
+
+# Admin portal (static SPA)
+admin.{$BASE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy admin-portal:80
+}
+
+# Directus - API, auth, and private asset storage (attachments)
+api.{$BASE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy directus:8055
+}
+
+# Socket.IO realtime gateway (WebSocket). Caddy performs the upgrade
+# automatically. When you scale socket-gateway beyond one replica, Socket.IO
+# needs sticky sessions for the long-polling fallback - uncomment lb_policy and
+# the active health check (which probes the gateway's internal :8081 /ready).
+ws.{$BASE_DOMAIN} {
+	reverse_proxy socket-gateway:8080 {
+		# lb_policy cookie
+		# health_uri /ready
+		# health_port 8081
+	}
+}
+
+# AI gateway
+ai.{$BASE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy ai-gateway:8081
+}
