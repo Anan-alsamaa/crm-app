@@ -26,6 +26,29 @@ export interface AttachmentValidationResult {
   reason?: string;
 }
 
+/**
+ * Decode an `attachment:upload` payload's `content` into a Buffer. Socket.IO
+ * may deliver the bytes three ways: an `ArrayBuffer`, a Node `Buffer` /
+ * typed-array view (websocket transport), or a base64 string (polling
+ * transport). Returns null when there is no usable content.
+ *
+ * For an `ArrayBufferView` we copy ONLY the view's window — `byteOffset` +
+ * `byteLength`. Socket.IO hands us a `Buffer` that is frequently a *slice* of a
+ * larger pooled `ArrayBuffer`, so reading `.buffer` wholesale would capture the
+ * wrong bytes and the wrong length, silently corrupting the uploaded file.
+ */
+export function decodeUploadContent(content: unknown): Buffer | null {
+  let buf: Buffer | null = null;
+  if (content instanceof ArrayBuffer) {
+    buf = Buffer.from(content);
+  } else if (ArrayBuffer.isView(content)) {
+    buf = Buffer.from(content.buffer, content.byteOffset, content.byteLength);
+  } else if (typeof content === 'string') {
+    buf = Buffer.from(content, 'base64');
+  }
+  return buf && buf.length > 0 ? buf : null;
+}
+
 /** Build a policy from comma-separated env config. */
 export function parseAttachmentPolicy(maxBytes: number, allowedMimeCsv: string): AttachmentPolicy {
   return {
