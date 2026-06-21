@@ -48,6 +48,9 @@ const AutomationPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import('./features/reports/ReportsPage.js').then((m) => ({ default: m.ReportsPage })),
 );
+const SlaReportsPage = lazy(() =>
+  import('./features/sla-reports/SlaReportsPage.js').then((m) => ({ default: m.SlaReportsPage })),
+);
 const CustomFieldsPage = lazy(() =>
   import('./features/custom-fields/CustomFieldsPage.js').then((m) => ({
     default: m.CustomFieldsPage,
@@ -219,6 +222,11 @@ function Shell({ children }: { children: React.ReactNode }) {
           to: '/dashboard',
           label: t('nav.dashboard', { defaultValue: 'Dashboard' }),
           icon: InboxIcon,
+        },
+        {
+          to: '/sla-reports',
+          label: t('nav.slaReports', { defaultValue: 'SLA reports' }),
+          icon: ClockIcon,
         },
       ],
     },
@@ -418,6 +426,16 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <ReportsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sla-reports"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <SlaReportsPage />
                 </Shell>
               </ProtectedRoute>
             }
