@@ -3,16 +3,19 @@ import { useTranslation } from 'react-i18next';
 import { cn, Skeleton, toast } from '@yiji/ui';
 import { downloadAsset } from '../../lib/directus.js';
 import { useAssetBlobUrl } from '../../lib/useAssetBlobUrl.js';
-import { fileLabel, formatBytes, isImage } from '../../lib/files.js';
+import { fileLabel, formatBytes, isImage, isUnknownType } from '../../lib/files.js';
 import { FileGlyph } from '../../components/FileGlyph.js';
 import { Lightbox } from '../../components/Lightbox.js';
 import type { MessageAttachment } from '../inbox/api.js';
 
 /**
- * Renders a message's attachments. Images become inline thumbnails that open in
- * a lightbox; everything else becomes a type-aware file chip that downloads on
- * click. Files are private in Directus, so previews/downloads fetch the blob
- * with the agent's token rather than relying on an unauthenticated <img>/<a>.
+ * Renders a message's attachments. Images — and attachments whose type isn't
+ * known yet (realtime files arrive as bare ids) — become inline thumbnails that
+ * open in a lightbox; the <img> decode is the real test, so an unknown file
+ * that isn't actually an image degrades to a file chip. Everything else is a
+ * type-aware file chip that downloads on click. Files are private in Directus,
+ * so previews/downloads fetch the blob with the agent's token rather than
+ * relying on an unauthenticated <img>/<a>.
  */
 export function AttachmentChips({
   attachments,
@@ -31,8 +34,13 @@ export function AttachmentChips({
       toast.error(t('conversation.attachFailed', { defaultValue: 'Could not open attachment.' })),
     );
 
-  const images = attachments.filter((a) => isImage(a.type, a.filename));
-  const files = attachments.filter((a) => !isImage(a.type, a.filename));
+  // Preview images inline; also optimistically preview unknown-type attachments
+  // (the <img> decode decides — non-images fall back to a chip), so an inbound
+  // image is never shown as a download chip while its metadata hydrates.
+  const previewable = (a: MessageAttachment) =>
+    isImage(a.type, a.filename) || isUnknownType(a.type, a.filename);
+  const images = attachments.filter(previewable);
+  const files = attachments.filter((a) => !previewable(a));
 
   return (
     <div className={cn('mt-1.5 flex flex-col gap-1.5', align === 'end' && 'items-end')}>
@@ -76,9 +84,13 @@ function ImageThumb({
 }) {
   const { t } = useTranslation();
   const { url, error } = useAssetBlobUrl(a.id, true);
+  // Track <img> decode failures separately: the asset can fetch fine (200) yet
+  // be undecodable bytes (e.g. a file corrupted at rest), in which case the
+  // image renders as a blank box. Degrade those to a file chip too.
+  const [decodeError, setDecodeError] = useState(false);
 
-  // If the thumbnail can't load (perms/network), degrade to a normal file chip.
-  if (error) return <FileChip a={a} onClick={onFallbackDownload} />;
+  // If the thumbnail can't load (perms/network) or decode, degrade to a file chip.
+  if (error || decodeError) return <FileChip a={a} onClick={onFallbackDownload} />;
 
   return (
     <button
@@ -100,6 +112,7 @@ function ImageThumb({
         <img
           src={url}
           alt={a.filename ?? ''}
+          onError={() => setDecodeError(true)}
           className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.04]"
         />
       ) : (

@@ -15,10 +15,17 @@ export interface WidgetStrings {
   attachment: string;
   attachFailed: string;
   removeAttachment: string;
+  download: string;
   close: string;
   /** Idle state when the conversation has no messages yet. */
   emptyTitle: string;
   emptySub: string;
+  /** Returning-customer greeting; `{name}` is replaced with the customer name. */
+  welcomeNamed: string;
+  /** New-customer first greeting bubble (no name on record yet). */
+  welcomeNew: string;
+  /** Returning-customer header greeting (always visible); `{name}` → customer name. */
+  greetingNamed: string;
   /** Footer attribution. */
   poweredBy: string;
   /** CSAT (post-close survey). */
@@ -50,9 +57,13 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     attachment: 'Attachment',
     attachFailed: 'Could not upload the file.',
     removeAttachment: 'Remove attachment',
+    download: 'Download',
     close: 'Close',
     emptyTitle: 'Say hello to start the chat',
     emptySub: 'A real teammate will reply. Typical reply time is a few minutes.',
+    welcomeNamed: 'Welcome {name}, how can we help you?',
+    welcomeNew: 'Hey there 👋 How can we help you?',
+    greetingNamed: 'Welcome back, {name} 👋',
     poweredBy: 'Powered by YIJI CRM',
     csatTitle: 'How was your experience?',
     csatSub: 'Your feedback helps us improve.',
@@ -80,9 +91,13 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     attachment: 'مرفق',
     attachFailed: 'تعذّر رفع الملف.',
     removeAttachment: 'إزالة المرفق',
+    download: 'تنزيل',
     close: 'إغلاق',
     emptyTitle: 'ابدأ المحادثة بقول مرحبًا',
     emptySub: 'سيردّ عليك أحد أعضاء الفريق. عادةً ما يستجيب خلال دقائق.',
+    welcomeNamed: 'مرحبًا {name}، كيف يمكننا مساعدتك؟',
+    welcomeNew: 'مرحبًا 👋 كيف يمكننا مساعدتك؟',
+    greetingNamed: 'مرحبًا بعودتك، {name} 👋',
     poweredBy: 'مدعوم بواسطة YIJI CRM',
     csatTitle: 'كيف كانت تجربتك؟',
     csatSub: 'ملاحظاتك تساعدنا على التحسين.',

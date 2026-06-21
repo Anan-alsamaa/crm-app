@@ -22,6 +22,29 @@ const DEFAULT_FALLBACK = {
   email: 'cs@anan.sa',
 };
 
+// An attachment is an image if its MIME says so, OR (when the MIME is missing)
+// its filename has an image extension — otherwise a null-type PNG would render
+// as a download chip instead of an inline thumbnail.
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|avif|bmp|heic|ico)$/i;
+function looksLikeImage(type?: string | null, name?: string | null): boolean {
+  if ((type ?? '').toLowerCase().startsWith('image/')) return true;
+  if (type) return false;
+  return !!name && IMAGE_EXT.test(name);
+}
+
+// Whether to render an attachment inline as an image (thumbnail + lightbox).
+// True when the MIME says image, the filename looks like an image, OR we have
+// the bytes but no type/extension hint at all (realtime files arrive as bare
+// ids). In the last case the <img> decode is the real test — a genuine
+// non-image falls back to a download chip via onError — so an inbound image is
+// never shown as a download link first.
+function maybeImage(type?: string | null, name?: string | null): boolean {
+  if (looksLikeImage(type, name)) return true;
+  if (type) return false; // explicit non-image MIME
+  if (!name) return true; // bytes, no type, no name → let the decode decide
+  return !/\.[a-z0-9]{1,5}$/i.test(name); // a non-image extension → treat as a file
+}
+
 interface Branding {
   primary?: string;
   secondary?: string;
@@ -30,6 +53,10 @@ interface Branding {
 
 let msgSeq = 0;
 const clientId = () => `c${Date.now()}_${msgSeq++}`;
+
+// Stable id for the synthetic returning-customer greeting bubble, so it's
+// deduped (never added twice) and can be styled distinctly in the thread.
+const GREETING_ID = '__yiji_welcome__';
 
 /**
  * Surface gateway agent-presence to the host page via a window CustomEvent.
@@ -115,6 +142,22 @@ function PhoneIcon() {
   );
 }
 
+function DownloadIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13h10" />
+    </svg>
+  );
+}
+
 function MailIcon() {
   return (
     <svg
@@ -169,6 +212,12 @@ export function Widget({ config }: { config: WidgetConfig }) {
   const [draft, setDraft] = useState('');
   const [branding, setBranding] = useState<Branding>({});
   const [ready, setReady] = useState(false);
+  // The customer's own identity from the gateway `ready` event: a returning
+  // customer (isNew === false) with a name on file gets greeted by name.
+  const [customer, setCustomer] = useState<{ name: string | null; isNew: boolean }>({
+    name: null,
+    isNew: true,
+  });
   const [csat, setCsat] = useState<{ score: number; comment: string; submitted: boolean } | null>(
     null,
   );
@@ -177,6 +226,18 @@ export function Widget({ config }: { config: WidgetConfig }) {
     Array<{ id: string; name: string; type: string; preview?: string }>
   >([]);
   const [uploading, setUploading] = useState(false);
+  // Open image preview (same-page lightbox), and per-id <img> decode failures so
+  // an optimistically-previewed non-image degrades to a download chip.
+  const [lightbox, setLightbox] = useState<{ url: string; name: string | null } | null>(null);
+  const [imgError, setImgError] = useState<Record<string, boolean>>({});
+  // Resolved blob URLs for RECEIVED attachments (agent-sent, or own files after
+  // a reload) — the customer has no Directus token, so the gateway streams the
+  // bytes over the socket via attachment:get and we wrap them in a blob URL.
+  const [resolved, setResolved] = useState<
+    Record<string, { url?: string; type?: string | null; name?: string | null; error?: boolean }>
+  >({});
+  // Ids we've already requested, so a re-render never double-fetches.
+  const attemptedRef = useRef<Set<string>>(new Set());
   const socketRef = useRef<Socket | null>(null);
   const convoRef = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -221,12 +282,36 @@ export function Widget({ config }: { config: WidgetConfig }) {
   useEffect(() => {
     const socket = connectWidget(config.gatewayUrl, config.token, {
       onStatus: setStatus,
-      onReady: ({ conversationId, branding: b, agentsOnline: count }) => {
+      onReady: ({ conversationId, branding: b, agentsOnline: count, contact, isNew }) => {
         convoRef.current = conversationId;
         if (b && typeof b === 'object') setBranding(b as Branding);
         setAgentsOnline(count);
+        setCustomer({ name: contact?.name ?? null, isNew: isNew ?? true });
         setReady(true);
         broadcastPresenceToHost(count);
+        // Drop a greeting into the thread as a real message — personalized for a
+        // returning customer, generic ("Hey there…") for a new one. onReady fires
+        // before messages:history, and onHistory prepends history
+        // (`[...history, ...prev]`), so the greeting lands AFTER the loaded
+        // history — and any message sent afterwards appends below it (pushing the
+        // greeting up), instead of being stuck at the bottom.
+        const name = contact?.name?.trim();
+        const greeting =
+          !(isNew ?? true) && name ? tr.welcomeNamed.replace('{name}', name) : tr.welcomeNew;
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === GREETING_ID)) return prev;
+          return [
+            ...prev,
+            {
+              id: GREETING_ID,
+              conversationId,
+              senderType: 'agent',
+              content: greeting,
+              attachments: [],
+              createdAt: new Date().toISOString(),
+            },
+          ];
+        });
       },
       onAgentsPresence: (count) => {
         setAgentsOnline(count);
@@ -241,6 +326,14 @@ export function Widget({ config }: { config: WidgetConfig }) {
           return [...prev, msg];
         });
         if (msg.senderType !== 'customer' && !open) setUnread((u) => u + 1);
+      },
+      onHistory: (history) => {
+        // Seed the existing thread on (re)connect. Keep any optimistic/live
+        // message that isn't already part of the loaded history (dedupe by id).
+        setMessages((prev) => {
+          const seen = new Set(history.map((m) => m.id));
+          return [...history, ...prev.filter((m) => !seen.has(m.id))];
+        });
       },
       onTyping: setAgentTyping,
       onClosed: () => {
@@ -259,14 +352,45 @@ export function Widget({ config }: { config: WidgetConfig }) {
     if (open) setUnread(0);
   }, [open]);
 
+  // Keep the thread pinned to the latest message. Also runs on `open` and when
+  // attachments resolve (`resolved`): on first open the list mounts AFTER the
+  // history is already in state, and images load async — without re-scrolling
+  // after layout the panel would open stuck at the top instead of where the
+  // conversation left off. Double rAF so we measure scrollHeight post-layout.
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [messages, agentTyping]);
+    if (!open) return;
+    const el = listRef.current;
+    if (!el) return;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        el.scrollTo({ top: el.scrollHeight });
+      }),
+    );
+  }, [messages, agentTyping, open, resolved]);
 
   // Focus the textarea when the panel opens so the customer can type immediately.
   useEffect(() => {
     if (open) requestAnimationFrame(() => textareaRef.current?.focus());
   }, [open]);
+
+  // Dismiss the image lightbox on Escape (capture phase, so nothing downstream
+  // swallows it) and lock background scroll while it's open.
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setLightbox(null);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      document.body.style.overflow = prev;
+    };
+  }, [lightbox]);
 
   const send = () => {
     const content = draft.trim();
@@ -356,6 +480,48 @@ export function Widget({ config }: { config: WidgetConfig }) {
       return prev.filter((p) => p.id !== id);
     });
 
+  // Fetch a received attachment's bytes through the gateway (once per id) and
+  // expose a blob URL the bubble can render/download. Own image uploads already
+  // have a local preview, so they're skipped.
+  const ensureAttachment = (id: string) => {
+    if (attachMetaRef.current[id]?.preview) return;
+    if (attemptedRef.current.has(id)) return;
+    const socket = socketRef.current;
+    if (!socket) return;
+    attemptedRef.current.add(id);
+    socket.timeout(20_000).emit(
+      'attachment:get',
+      { id },
+      (
+        err: Error | null,
+        res?: {
+          ok?: boolean;
+          content?: string; // base64
+          type?: string | null;
+          filename?: string | null;
+        },
+      ) => {
+        if (err || !res?.ok || typeof res.content !== 'string') {
+          setResolved((prev) => ({ ...prev, [id]: { error: true } }));
+          return;
+        }
+        // content is base64 (see the gateway's attachment:get) — decode to bytes.
+        const bin = atob(res.content);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const url = URL.createObjectURL(
+          new Blob([bytes], { type: res.type ?? 'application/octet-stream' }),
+        );
+        setResolved((prev) => ({ ...prev, [id]: { url, type: res.type, name: res.filename } }));
+      },
+    );
+  };
+
+  // Resolve every attachment that appears in the thread (realtime + history).
+  useEffect(() => {
+    for (const m of messages) for (const id of m.attachments ?? []) ensureAttachment(id);
+  }, [messages]);
+
   const onInput = (e: Event) => {
     const target = e.target as HTMLTextAreaElement;
     const value = target.value;
@@ -377,6 +543,10 @@ export function Widget({ config }: { config: WidgetConfig }) {
     [branding],
   );
 
+  // A returning customer (known contact, not their first-ever connect) gets a
+  // personalized greeting — in the header AND as the first chat bubble.
+  const returningName = !customer.isNew && customer.name?.trim() ? customer.name.trim() : null;
+
   return (
     <div
       dir={rtl ? 'rtl' : 'ltr'}
@@ -397,7 +567,11 @@ export function Widget({ config }: { config: WidgetConfig }) {
                   draggable={false}
                 />
                 <div>
-                  <p className="yiji-header-greeting">{tr.greeting}</p>
+                  <p className="yiji-header-greeting">
+                    {!customer.isNew && customer.name?.trim()
+                      ? tr.greetingNamed.replace('{name}', customer.name.trim())
+                      : tr.greeting}
+                  </p>
                   <p className="yiji-header-sub">{tr.subtitle}</p>
                 </div>
               </div>
@@ -439,7 +613,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
           )}
 
           <div className="yiji-messages" ref={listRef}>
-            {messages.length === 0 && ready ? (
+            {messages.length === 0 && ready && !returningName ? (
               <div className="yiji-empty">
                 <EmptyArt />
                 <h3 className="yiji-empty-title">{tr.emptyTitle}</h3>
@@ -456,32 +630,63 @@ export function Widget({ config }: { config: WidgetConfig }) {
                         : m.senderType === 'system'
                           ? 'system'
                           : 'theirs'
-                    }`}
+                    }${
+                      !m.content?.trim() && m.attachments && m.attachments.length > 0 ? ' bare' : ''
+                    }${m.id === GREETING_ID ? ' yiji-msg-greeting' : ''}`}
                   >
                     {m.content}
                     {m.attachments && m.attachments.length > 0 && (
                       <div className="yiji-msg-files">
                         {m.attachments.map((id) => {
                           const meta = attachMetaRef.current[id];
-                          // Own image upload: render the local preview, click to
-                          // open full size in a new tab.
-                          if (meta?.preview) {
+                          const r = resolved[id];
+                          const url = meta?.preview ?? r?.url;
+                          const type = meta?.type ?? r?.type ?? null;
+                          const name = meta?.name ?? r?.name ?? null;
+                          const showImage = !!url && maybeImage(type, name) && !imgError[id];
+                          // Image (own preview or fetched): thumbnail, click opens
+                          // the same-page lightbox (no new tab).
+                          if (showImage) {
                             return (
                               <button
                                 type="button"
                                 className="yiji-msg-image"
                                 key={id}
-                                onClick={() => window.open(meta.preview, '_blank', 'noopener')}
-                                aria-label={meta.name}
+                                onClick={() => setLightbox({ url: url!, name })}
+                                aria-label={name ?? tr.attachment}
                               >
-                                <img src={meta.preview} alt={meta.name} />
+                                <img
+                                  src={url}
+                                  alt={name ?? ''}
+                                  onError={() => setImgError((e) => ({ ...e, [id]: true }))}
+                                />
                               </button>
                             );
                           }
+                          // Non-image (or undecodable) file with bytes available:
+                          // download in place. No target=_blank — the `download`
+                          // attribute saves the file without opening a new tab.
+                          if (url) {
+                            return (
+                              <a
+                                className="yiji-msg-file yiji-msg-file-link"
+                                key={id}
+                                href={url}
+                                download={name ?? 'attachment'}
+                              >
+                                <AttachIcon />
+                                <span>{name ?? tr.attachment}</span>
+                              </a>
+                            );
+                          }
+                          // Still fetching, or failed: a plain chip (with name when known).
                           return (
-                            <span className="yiji-msg-file" key={id}>
+                            <span
+                              className={`yiji-msg-file${r?.error ? '' : ' yiji-msg-file-loading'}`}
+                              key={id}
+                            >
                               <AttachIcon />
-                              <span>{meta?.name ?? tr.attachment}</span>
+                              <span>{name ?? tr.attachment}</span>
                             </span>
                           );
                         })}
@@ -664,6 +869,41 @@ export function Widget({ config }: { config: WidgetConfig }) {
           <p className="yiji-footer">
             <strong>{tr.poweredBy}</strong>
           </p>
+        </div>
+      )}
+      {lightbox && (
+        <div
+          className="yiji-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={lightbox.name ?? tr.attachment}
+          onClick={() => setLightbox(null)}
+        >
+          <div className="yiji-lightbox-bar" onClick={(e) => e.stopPropagation()}>
+            <span className="yiji-lightbox-name">{lightbox.name ?? tr.attachment}</span>
+            <a
+              className="yiji-lightbox-btn"
+              href={lightbox.url}
+              download={lightbox.name ?? 'image'}
+              aria-label={tr.download}
+            >
+              <DownloadIcon />
+            </a>
+            <button
+              type="button"
+              className="yiji-lightbox-btn"
+              onClick={() => setLightbox(null)}
+              aria-label={tr.close}
+            >
+              <CloseIcon />
+            </button>
+          </div>
+          <img
+            className="yiji-lightbox-img"
+            src={lightbox.url}
+            alt={lightbox.name ?? ''}
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
       <button className="yiji-launcher" onClick={() => setOpen((o) => !o)} aria-label={tr.title}>

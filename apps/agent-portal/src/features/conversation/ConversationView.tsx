@@ -74,6 +74,14 @@ export function ConversationView({
   const agents = useAgents();
   const [live, setLive] = useState<ConversationMessage[]>([]);
   const [customerTyping, setCustomerTyping] = useState(false);
+  // Live customer presence for this conversation (gateway `customer:presence`):
+  // null until the first event, then drives the header's online / "New customer"
+  // line. isNew is sticky across an offline transition (the offline event omits
+  // it) so a new customer who closes their tab still reads as new.
+  const [customerPresence, setCustomerPresence] = useState<{
+    online: boolean;
+    isNew: boolean;
+  } | null>(null);
   const [draft, setDraft] = useState('');
   const [internalNote, setInternalNote] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -88,10 +96,15 @@ export function ConversationView({
   const draftRef = useRef<HTMLTextAreaElement | null>(null);
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Last message id we've sent a read:ack for, so opening/viewing a conversation
+  // clears its unread badge once (not on every render/refetch).
+  const lastReadRef = useRef<string | null>(null);
 
   useEffect(() => {
     setLive([]);
     setCustomerTyping(false);
+    setCustomerPresence(null);
+    lastReadRef.current = null;
     setDraft('');
     setInternalNote(false);
     setDetailsOpen(false);
@@ -206,6 +219,19 @@ export function ConversationView({
         if (e.conversationId === conversationId && e.who === 'customer')
           setCustomerTyping(e.isTyping);
       };
+      const onCustomerPresence = (e: {
+        conversationId: string;
+        online: boolean;
+        isNew?: boolean;
+      }) => {
+        if (e.conversationId !== conversationId) return;
+        // Keep isNew across the offline event (which omits it) so a new customer
+        // who closes their tab still reads as "New customer", just offline.
+        setCustomerPresence((prev) => ({
+          online: e.online,
+          isNew: e.isNew ?? prev?.isNew ?? false,
+        }));
+      };
       const onChanged = (e: { conversationId: string }) => {
         if (e.conversationId !== conversationId) return;
         void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
@@ -219,12 +245,14 @@ export function ConversationView({
       socket.on(SOCKET_EVENTS.noteNew, onNoteNew);
       socket.on(SOCKET_EVENTS.noteDeleted, onNoteDeleted);
       socket.on(SOCKET_EVENTS.typingUpdate, onTyping);
+      socket.on(SOCKET_EVENTS.customerPresence, onCustomerPresence);
       socket.on(SOCKET_EVENTS.conversationChanged, onChanged);
       return () => {
         socket.off(SOCKET_EVENTS.messageNew, onNew);
         socket.off(SOCKET_EVENTS.noteNew, onNoteNew);
         socket.off(SOCKET_EVENTS.noteDeleted, onNoteDeleted);
         socket.off(SOCKET_EVENTS.typingUpdate, onTyping);
+        socket.off(SOCKET_EVENTS.customerPresence, onCustomerPresence);
         socket.off(SOCKET_EVENTS.conversationChanged, onChanged);
       };
     })();
@@ -243,6 +271,30 @@ export function ConversationView({
   const threadMessages = useMemo(() => all.filter((m) => !m.is_internal_note), [all]);
   const notes = useMemo(() => all.filter((m) => m.is_internal_note), [all]);
   const grouped = useMemo(() => groupRuns(threadMessages), [threadMessages]);
+
+  // Mark the conversation read on VIEW so its inbox unread badge clears — not
+  // only when the agent replies. The gateway has the read:ack handler
+  // (markConversationRead) but nothing emitted it. Guarded so we only emit when
+  // the latest message changes, and we optimistically zero the badge across all
+  // cached inbox queries so it clears instantly.
+  useEffect(() => {
+    if (threadMessages.length === 0) return;
+    const lastId = threadMessages[threadMessages.length - 1]!.id;
+    if (lastReadRef.current === lastId) return;
+    lastReadRef.current = lastId;
+    void getSocket().then((s) =>
+      s.emit(SOCKET_EVENTS.readAck, { conversationId, lastMessageId: lastId }),
+    );
+    qc.setQueriesData({ queryKey: ['conversations'] }, (old: unknown) =>
+      Array.isArray(old)
+        ? old.map((c) =>
+            c && (c as { id?: string }).id === conversationId
+              ? { ...(c as object), unread_count_agent: 0 }
+              : c,
+          )
+        : old,
+    );
+  }, [conversationId, threadMessages, qc]);
 
   const deleteNote = (noteId: string) => {
     if (!socketRef.current) return;
@@ -495,6 +547,7 @@ export function ConversationView({
         {c && (
           <ConversationToolbar
             conversation={c}
+            customerPresence={customerPresence}
             onBack={onBack}
             onToggleDetails={() => setDetailsOpen(true)}
           />
