@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -34,7 +35,9 @@ import { ConversationSidebar } from '../src/features/conversation/ConversationSi
 function renderSidebar(props = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
   );
   return render(<ConversationSidebar conversationId="c1" {...props} />, { wrapper: Wrapper });
 }

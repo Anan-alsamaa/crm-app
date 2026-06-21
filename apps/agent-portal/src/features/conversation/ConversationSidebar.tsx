@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Avatar,
@@ -76,6 +77,7 @@ export function ConversationSidebar({
   const { t } = useTranslation();
   const convo = useConversation(conversationId);
   const tickets = useLinkedTickets(conversationId);
+  const navigate = useNavigate();
   const updateContact = useUpdateContact();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ name: '', email: '', phone: '' });
@@ -343,6 +345,8 @@ export function ConversationSidebar({
               <li key={tk.id}>
                 <button
                   type="button"
+                  onClick={() => navigate(`/tickets/${tk.id}`)}
+                  title={t('sidebar.openTicket', { defaultValue: 'Open ticket' })}
                   className="block w-full rounded-md px-2 py-2 text-start transition-colors duration-fast ease-out hover:bg-secondary/70"
                 >
                   <div className="truncate text-sm font-medium text-foreground">{tk.subject}</div>
