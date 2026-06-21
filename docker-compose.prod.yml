@@ -22,8 +22,12 @@ x-otel: &otel-env
   # (e.g. http://otel-collector:4318) to turn tracing on.
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
   OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
-  # ESM loader hook required for full auto-instrumentation under tsx/ESM.
-  NODE_OPTIONS: ${NODE_OPTIONS:---import @opentelemetry/instrumentation/hook.mjs}
+  # ESM loader hook for full auto-instrumentation under tsx/ESM. Default OFF:
+  # preloading it crashes the service unless `@opentelemetry/instrumentation` is
+  # resolvable from the app root (it is a transitive dep under pnpm --prod, so it
+  # is not). To enable tracing, install that package as a direct dep AND set
+  # NODE_OPTIONS=--import @opentelemetry/instrumentation/hook.mjs (plus an OTLP endpoint).
+  NODE_OPTIONS: ${NODE_OPTIONS:-}
 
 services:
   postgres:
@@ -89,10 +93,15 @@ services:
       - ./directus/extensions:/directus/extensions
       - ./directus/snapshot:/directus/snapshot
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:8055/server/health']
+      # Use 127.0.0.1 (not localhost): in the directus alpine image `localhost`
+      # resolves to IPv6 ::1, but directus listens on IPv4 0.0.0.0 — so a
+      # localhost healthcheck gets "connection refused" and the whole stack
+      # (everything depends on directus being healthy) never starts.
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8055/server/health']
       interval: 10s
       timeout: 5s
       retries: 12
+      start_period: 60s
 
   socket-gateway:
     image: ${REGISTRY:-ghcr.io/yiji-crm}/socket-gateway:${IMAGE_TAG:-latest}
