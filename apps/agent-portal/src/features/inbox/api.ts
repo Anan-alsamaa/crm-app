@@ -314,6 +314,19 @@ export function useCreateTag() {
       directus.request(
         createItem('tags', { name, color: color ?? '#94a3b8' } as never),
       ) as Promise<{ id: string; name: string; color: string | null }>,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tags'] }),
+    onSuccess: (created) => {
+      // Seed the new tag into the cached list immediately so it is reusable on
+      // the spot — across conversations, without waiting for the refetch — then
+      // invalidate to reconcile with the DB. (Tags persist globally already;
+      // this just removes the brief window where a fresh tag isn't yet listed.)
+      qc.setQueryData<Tag[]>(['tags'], (prev) => {
+        const list = prev ?? [];
+        if (list.some((tg) => tg.id === created.id)) return list;
+        return [...list, { id: created.id, name: created.name, color: created.color }].sort(
+          (a, b) => a.name.localeCompare(b.name),
+        );
+      });
+      void qc.invalidateQueries({ queryKey: ['tags'] });
+    },
   });
 }
