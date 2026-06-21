@@ -47,7 +47,7 @@ const convo = {
   status: 'open',
   priority: 'medium',
   contact: { id: 'k1', name: 'Alice', email: 'alice@example.com', phone: '555-1' },
-  tags: [{ tags_id: { id: 'tg1', name: 'VIP', color: null } }],
+  tags: [{ id: 'j1', tags_id: { id: 'tg1', name: 'VIP', color: null } }],
 };
 
 beforeEach(() => {
