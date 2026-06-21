@@ -47,4 +47,25 @@ describe('customer JWT verifier (T040)', () => {
     const none = jwt.sign(valid, '', { algorithm: 'none' });
     expect(() => verifier.verify(none)).toThrow(CustomerTokenError);
   });
+
+  it('accepts a token with no name — name is optional (host may omit it)', () => {
+    const { name: _n, ...noName } = valid;
+    const claims = verifier.verify(sign(noName));
+    expect(claims.name).toBeUndefined();
+    expect(claims.phone).toBe('+966500000001');
+    expect(claims.customer_id).toBe('c1');
+  });
+
+  it('accepts phone-only (no email, no name) — the guaranteed-field case', () => {
+    const claims = verifier.verify(
+      sign({ vendor_id: 'demo-vendor', customer_id: 'c1', phone: '+966500000002' }),
+    );
+    expect(claims.customer_id).toBe('c1');
+  });
+
+  it('rejects a blank/whitespace-only phone with no email', () => {
+    expect(() =>
+      verifier.verify(sign({ vendor_id: 'demo-vendor', customer_id: 'c1', phone: '   ' })),
+    ).toThrow(/phone or email/);
+  });
 });

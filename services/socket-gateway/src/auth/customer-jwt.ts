@@ -41,8 +41,10 @@ export function createHs256Verifier(secret: string): CustomerVerifier {
       if (!parsed.success) {
         throw new CustomerTokenError('token payload missing required identity fields');
       }
-      // At least one contact identifier is required to dedup a contact.
-      if (!parsed.data.phone && !parsed.data.email) {
+      // At least one USABLE contact identifier is required to dedup a contact.
+      // Trim so a blank/whitespace phone or email doesn't count as present
+      // (name is intentionally optional — the host may omit it or send a dummy).
+      if (!parsed.data.phone?.trim() && !parsed.data.email?.trim()) {
         throw new CustomerTokenError('token must include phone or email');
       }
       return parsed.data;

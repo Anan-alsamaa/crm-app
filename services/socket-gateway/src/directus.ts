@@ -37,10 +37,18 @@ export class GatewayDirectus {
 
   /** Upsert a contact, deduped per vendor by phone then email (SC-007). */
   async upsertContact(vendorUuid: string, claims: CustomerClaims): Promise<string> {
+    // Normalize identity once: a missing OR blank/whitespace name/phone/email is
+    // stored as null (not ""), so the agent UI's `name ?? "Unknown"` fallback and
+    // the phone/email dedup behave consistently. Only customer_id + (usually)
+    // phone are guaranteed by the host — name is often absent or a dummy value.
+    const name = claims.name?.trim() || null;
+    const phone = claims.phone?.trim() || null;
+    const email = claims.email?.trim() || null;
+
     const findExisting = async (): Promise<string | null> => {
       const or: Array<Record<string, unknown>> = [];
-      if (claims.phone) or.push({ phone: { _eq: claims.phone } });
-      if (claims.email) or.push({ email: { _eq: claims.email } });
+      if (phone) or.push({ phone: { _eq: phone } });
+      if (email) or.push({ email: { _eq: email } });
       if (or.length === 0) return null;
       const existing = (await this.client.request(
         readItems('contacts', {
@@ -60,9 +68,9 @@ export class GatewayDirectus {
         createItem('contacts', {
           vendor: vendorUuid,
           external_customer_id: claims.customer_id,
-          name: claims.name ?? null,
-          phone: claims.phone ?? null,
-          email: claims.email ?? null,
+          name,
+          phone,
+          email,
         } as never),
       )) as { id: string };
       return created.id;
