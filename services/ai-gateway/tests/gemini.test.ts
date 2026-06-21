@@ -43,7 +43,12 @@ describe('GeminiProvider', () => {
   });
 
   it('maps quota/rate errors to rate_limited (429)', async () => {
-    generateContent.mockRejectedValueOnce(new Error('Quota exceeded for this project'));
+    // Gemini signals quota with RESOURCE_EXHAUSTED; classification keys off that
+    // (and HTTP status) rather than loose word-matching. No bracketed [429] here,
+    // so it classifies directly without entering the 429/503 retry path.
+    generateContent.mockRejectedValueOnce(
+      new Error('RESOURCE_EXHAUSTED: Quota exceeded for this project'),
+    );
     const provider = new GeminiProvider('key');
     await expect(provider.run(input)).rejects.toMatchObject({ code: 'rate_limited', status: 429 });
   });

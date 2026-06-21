@@ -40,7 +40,7 @@ interface Stubs {
 function makeStubs(over: Partial<Record<keyof GatewayDirectus, unknown>> = {}): Stubs {
   const directus = {
     resolveVendor: vi.fn(async () => ({ id: 'vendor-uuid', colors: { primary: '#abcabc' } })),
-    upsertContact: vi.fn(async () => 'contact-1'),
+    upsertContact: vi.fn(async () => ({ id: 'contact-1', isNew: false, name: null, phone: null })),
     findOrCreateConversation: vi.fn(async () => 'conv-1'),
     persistMessage: vi.fn(async () => ({ id: 'msg-1', createdAt: '2026-01-01T00:00:00.000Z' })),
     deleteInternalNote: vi.fn(async () => true),
