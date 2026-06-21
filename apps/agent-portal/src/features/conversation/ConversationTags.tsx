@@ -39,9 +39,12 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
   const assignedIds = new Set(assigned.map((j) => j.tags_id!.id));
   const atMax = assigned.length >= MAX_TAGS;
   const q = query.trim().toLowerCase();
-  const available = (tags.data ?? [])
-    .filter((tg) => !assignedIds.has(tg.id))
-    .filter((tg) => tg.name.toLowerCase().includes(q));
+  // Junction-row id for each assigned tag, so the picker can toggle one back off.
+  const junctionByTag = new Map(assigned.map((j) => [j.tags_id!.id, j.id]));
+  // Show ALL matching tags — including ones already on this conversation, marked
+  // as added — so a just-created (and auto-applied) tag stays visible here, not
+  // only in other conversations.
+  const matching = (tags.data ?? []).filter((tg) => tg.name.toLowerCase().includes(q));
   const exactMatch = (tags.data ?? []).some((tg) => tg.name.toLowerCase() === q);
   const limitMsg = t('conversation.tagLimit', {
     count: MAX_TAGS,
@@ -200,21 +203,46 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
             </div>
 
             <div className="mt-1 max-h-48 overflow-auto">
-              {available.map((tg) => (
-                <button
-                  key={tg.id}
-                  type="button"
-                  onClick={() => void assign(tg.id)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs text-foreground transition-colors duration-fast hover:bg-secondary"
-                >
-                  <span
-                    aria-hidden
-                    className="h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ background: tg.color ?? '#94a3b8' }}
-                  />
-                  <span className="truncate">{tg.name}</span>
-                </button>
-              ))}
+              {matching.map((tg) => {
+                const isAdded = assignedIds.has(tg.id);
+                return (
+                  <button
+                    key={tg.id}
+                    type="button"
+                    onClick={() =>
+                      isAdded ? void unassign(junctionByTag.get(tg.id)!) : void assign(tg.id)
+                    }
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs transition-colors duration-fast hover:bg-secondary',
+                      isAdded ? 'text-muted-foreground' : 'text-foreground',
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ background: tg.color ?? '#94a3b8' }}
+                    />
+                    <span className="flex-1 truncate">{tg.name}</span>
+                    {isAdded && (
+                      <span className="inline-flex shrink-0 items-center gap-1 text-2xs font-medium text-primary">
+                        <svg
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="h-3 w-3"
+                          aria-hidden
+                        >
+                          <path d="M3.5 8.5l3 3 6-7" />
+                        </svg>
+                        {t('conversation.tagAdded', { defaultValue: 'Added' })}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
 
               {/* Create row — only when the typed name doesn't already exist. */}
               {query.trim() && !exactMatch && (
@@ -233,10 +261,10 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
                 </button>
               )}
 
-              {available.length === 0 && !query.trim() && (
+              {matching.length === 0 && !query.trim() && (
                 <p className="px-2 py-1.5 text-2xs text-muted-foreground">
-                  {t('conversation.allTagsAdded', {
-                    defaultValue: 'All tags added — type to create a new one.',
+                  {t('conversation.noTagsYetHint', {
+                    defaultValue: 'No tags yet — type to create one.',
                   })}
                 </p>
               )}
