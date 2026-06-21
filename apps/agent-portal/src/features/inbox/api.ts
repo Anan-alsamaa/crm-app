@@ -330,3 +330,25 @@ export function useCreateTag() {
     },
   });
 }
+
+/**
+ * Delete a tag from the library entirely. The conversations_tags / contacts_tags /
+ * tickets_tags junctions are ON DELETE CASCADE, so the tag is removed from every
+ * conversation, contact and ticket it was on — a global, irreversible action.
+ * (Requires the Agent role's `tags: delete` permission.)
+ */
+export function useDeleteTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => directus.request(deleteItem('tags', id)),
+    onSuccess: (_d, id) => {
+      qc.setQueryData<Tag[]>(['tags'], (prev) => (prev ?? []).filter((tg) => tg.id !== id));
+      void qc.invalidateQueries({ queryKey: ['tags'] });
+      // The tag cascades out of every junction — refresh anything that renders tags.
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+      void qc.invalidateQueries({ queryKey: ['conversation'] });
+      void qc.invalidateQueries({ queryKey: ['contacts'] });
+      void qc.invalidateQueries({ queryKey: ['contact'] });
+    },
+  });
+}

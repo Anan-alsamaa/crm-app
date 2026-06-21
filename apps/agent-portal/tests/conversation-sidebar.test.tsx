@@ -18,6 +18,7 @@ const inbox = vi.hoisted(() => ({
   useCreateTag: () => ({ mutateAsync: () => Promise.resolve({ id: 't', name: '', color: null }) }),
   useAddTagToConversation: () => ({ mutateAsync: () => Promise.resolve({}) }),
   useRemoveTagFromConversation: () => ({ mutateAsync: () => Promise.resolve({}) }),
+  useDeleteTag: () => ({ mutateAsync: () => Promise.resolve({}), isPending: false }),
 }));
 vi.mock('../src/features/inbox/api.js', () => inbox);
 
