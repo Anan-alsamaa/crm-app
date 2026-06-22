@@ -106,6 +106,19 @@
 [dir='rtl'] .yiji-panel {
   transform-origin: bottom left;
 }
+/* Mobile-first: in practice the widget is always opened on a phone, so the panel
+   fills the whole viewport (native full-screen chat) instead of a small card.
+   Uses 100dvh so it tracks the mobile browser's dynamic toolbar. */
+@media (max-width: 480px) {
+  .yiji-panel {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+}
 @keyframes yiji-enter {
   from {
     opacity: 0;
@@ -184,33 +197,11 @@
   margin-top: 14px;
   display: flex;
   align-items: center;
-  gap: -8px;
-}
-.yiji-header-team-avatars {
-  display: flex;
-}
-.yiji-header-team-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  border: 2px solid var(--yiji-primary);
-  margin-inline-start: -8px;
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(2px);
-}
-.yiji-header-team-avatar:first-child {
-  margin-inline-start: 0;
 }
 .yiji-header-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-inline-start: 10px;
   font-size: 12px;
   opacity: 0.92;
 }

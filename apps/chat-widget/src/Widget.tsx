@@ -592,26 +592,6 @@ export function Widget({ config }: { config: WidgetConfig }) {
               </button>
             </div>
             <div className="yiji-header-team">
-              <div className="yiji-header-team-avatars">
-                <span
-                  className="yiji-header-team-avatar"
-                  style={{ background: 'oklch(0.78 0.10 200)' }}
-                >
-                  YJ
-                </span>
-                <span
-                  className="yiji-header-team-avatar"
-                  style={{ background: 'oklch(0.78 0.10 50)' }}
-                >
-                  SU
-                </span>
-                <span
-                  className="yiji-header-team-avatar"
-                  style={{ background: 'oklch(0.78 0.10 300)' }}
-                >
-                  +
-                </span>
-              </div>
               <span className={`yiji-header-status${agentsOnline === 0 ? ' offline' : ''}`}>
                 {agentsOnline === 0 ? tr.offlineTitle : tr.online}
               </span>
