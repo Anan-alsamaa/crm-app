@@ -32,6 +32,7 @@ export function NotificationBell() {
 
   useEffect(() => {
     let cancelled = false;
+    let cleanup: (() => void) | undefined;
     void (async () => {
       const socket = await getSocket();
       if (cancelled) return;
@@ -39,10 +40,15 @@ export function NotificationBell() {
       socket.on(SOCKET_EVENTS.notificationPushed, refresh);
       socket.on(SOCKET_EVENTS.inboxActivity, refresh);
       const poll = setInterval(refresh, 30_000);
-      return () => clearInterval(poll);
+      cleanup = () => {
+        socket.off(SOCKET_EVENTS.notificationPushed, refresh);
+        socket.off(SOCKET_EVENTS.inboxActivity, refresh);
+        clearInterval(poll);
+      };
     })();
     return () => {
       cancelled = true;
+      cleanup?.();
     };
   }, [qc]);
 

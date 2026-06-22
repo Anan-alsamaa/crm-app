@@ -72,14 +72,17 @@ export function Inbox() {
 
   useEffect(() => {
     let cancelled = false;
+    let cleanup: (() => void) | undefined;
     void (async () => {
       const socket = await getSocket();
       if (cancelled) return;
       const onActivity = () => qc.invalidateQueries({ queryKey: ['conversations'] });
       socket.on(SOCKET_EVENTS.inboxActivity, onActivity);
+      cleanup = () => socket.off(SOCKET_EVENTS.inboxActivity, onActivity);
     })();
     return () => {
       cancelled = true;
+      cleanup?.();
     };
   }, [qc]);
 

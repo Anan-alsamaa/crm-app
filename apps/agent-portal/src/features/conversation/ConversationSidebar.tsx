@@ -272,6 +272,7 @@ export function ConversationSidebar({
       {/* AI assistance */}
       <section className="px-6 py-4">
         <AiPanel
+          key={conversationId}
           conversationId={conversationId}
           vendorId={
             (c as unknown as { vendor?: string | { id: string } }).vendor &&

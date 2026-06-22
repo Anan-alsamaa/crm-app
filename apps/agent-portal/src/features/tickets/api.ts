@@ -149,7 +149,13 @@ export function useCreateTicket() {
   return useMutation({
     mutationFn: (input: CreateTicketInput) =>
       directus.request(createItem('tickets', { ...input, status: 'new' } as never)),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tickets'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['tickets'] });
+      // The conversation sidebar's linked-tickets list keys on
+      // ['linked-tickets', conversationId]; refresh it so a ticket created
+      // from a conversation shows up there without a remount.
+      void qc.invalidateQueries({ queryKey: ['linked-tickets'] });
+    },
   });
 }
 

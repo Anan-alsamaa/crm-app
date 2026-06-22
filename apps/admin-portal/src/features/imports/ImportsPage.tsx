@@ -64,7 +64,7 @@ export function ImportsPage() {
       const autoMap: Record<string, ContactField> = {};
       for (const h of header) {
         const lower = h.toLowerCase();
-        const match = CONTACT_FIELDS.find((cf) => cf === lower || cf.replace('_', '') === lower);
+        const match = CONTACT_FIELDS.find((cf) => cf === lower || cf.replace(/_/g, '') === lower);
         if (match) autoMap[h] = match;
       }
       setMapping(autoMap);

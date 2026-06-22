@@ -85,7 +85,7 @@ function Kpi({ label, value, tone }: { label: string; value: string; tone?: stri
 function downloadCsv(filename: string, rows: (string | number)[][]) {
   const esc = (v: string | number) => {
     const s = String(v ?? '');
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const csv = rows.map((r) => r.map(esc).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
