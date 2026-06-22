@@ -148,7 +148,6 @@ async function main(): Promise<void> {
     perIpLimiter,
     globalLimiter,
     monthlyCap,
-    serviceToken: config.SVC_AI_TOKEN,
   });
 
   await app.listen({ port: config.PORT, host: '0.0.0.0' });

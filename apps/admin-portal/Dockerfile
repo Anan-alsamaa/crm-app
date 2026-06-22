@@ -22,15 +22,9 @@ RUN pnpm install --frozen-lockfile --filter @yiji/admin-portal...
 ARG VITE_DIRECTUS_URL=http://localhost:8055
 ARG VITE_SOCKET_URL=http://localhost:8080
 ARG VITE_AI_GATEWAY_URL=http://localhost:8081
-ARG VITE_AI_SVC_TOKEN=
-ARG VITE_YIJI_API_URL=
-ARG VITE_YIJI_API_TOKEN=
 ENV VITE_DIRECTUS_URL=$VITE_DIRECTUS_URL \
     VITE_SOCKET_URL=$VITE_SOCKET_URL \
-    VITE_AI_GATEWAY_URL=$VITE_AI_GATEWAY_URL \
-    VITE_AI_SVC_TOKEN=$VITE_AI_SVC_TOKEN \
-    VITE_YIJI_API_URL=$VITE_YIJI_API_URL \
-    VITE_YIJI_API_TOKEN=$VITE_YIJI_API_TOKEN
+    VITE_AI_GATEWAY_URL=$VITE_AI_GATEWAY_URL
 RUN pnpm --filter @yiji/admin-portal build
 
 # ---- runner: nginx serving the static build with SPA history fallback ----
