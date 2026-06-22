@@ -175,7 +175,9 @@ export default async function globalSetup(): Promise<void> {
               vendor: vendorId,
               external_customer_id: demoExt,
               name: 'Demo Customer',
-              email: 'demo@example.com',
+              // Canonical demo identity (matches the widget demo.ts + the US6
+              // contact-profile spec's email assertion).
+              email: 'demo.customer@example.com',
             }),
           }),
         );
