@@ -34,12 +34,12 @@ test.describe('US6 — contact profile + commerce panel', () => {
   test('contact list page shows demo contact and exports CSV', async ({ page }) => {
     test.skip(!FULL_STACK, 'requires E2E_FULL_STACK=1 (needs a seeded demo contact)');
     await signIn(page);
-    await page.goto('http://localhost:5173/contacts');
+    // Navigate via the in-app Contacts link (client-side route) — a full
+    // page.goto() reloads, dropping the in-memory access token and forcing a
+    // cookie-restore round-trip (post-H-2) that races page render.
+    await page.getByRole('link', { name: /contacts/i }).click();
+    await expect(page).toHaveURL(/\/contacts$/, { timeout: 20_000 });
 
-    // Title + at least one card. Generous timeout: this is the first navigation
-    // to the lazy /contacts route (dev-server compile) and, post-H-2, a full
-    // navigation reloads → AuthProvider restores the session from the cookie
-    // before the page renders.
     await expect(page.getByRole('heading', { name: /contacts/i }).first()).toBeVisible({
       timeout: 20_000,
     });
@@ -75,7 +75,7 @@ test.describe('US6 — contact profile + commerce panel', () => {
     await expect(page.getByRole('heading', { name: /demo customer/i }).first()).toBeVisible({
       timeout: 10_000,
     });
-    await expect(page.getByText('demo.customer@example.com')).toBeVisible();
+    await expect(page.getByText(/demo\.customer@example\.com/i)).toBeVisible({ timeout: 15_000 });
 
     // Commerce panel (default MockYijiClient): seeded lifetime activity + an order
     await expect(page.getByText(/lifetime activity/i)).toBeVisible();
