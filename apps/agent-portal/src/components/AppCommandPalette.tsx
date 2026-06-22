@@ -17,15 +17,26 @@ import { useTickets } from '../features/tickets/api.js';
 import { useAuth } from '../lib/auth/AuthContext.js';
 
 /**
- * Mounted once at the App shell. Owns the command-palette open/close state,
- * subscribes to the Cmd/Ctrl+K shortcut, and assembles the searchable command
- * list from live inbox / tickets data plus the navigation routes.
+ * Mounted once at the App shell. Subscribes to the Cmd/Ctrl+K shortcut and
+ * assembles the searchable command list from live inbox / tickets data plus the
+ * navigation routes.
+ *
+ * Open state is lifted to the shell so a top-bar search trigger can open the
+ * exact same palette. The shell passes `open` + `onOpenChange`; if omitted the
+ * component falls back to its own state (Cmd/Ctrl+K only).
  */
-export function AppCommandPalette() {
+interface AppCommandPaletteProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPaletteProps = {}) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = onOpenChange ?? setOpenState;
 
   useCommandPaletteShortcut(() => setOpen(true));
 
@@ -126,3 +137,5 @@ export function AppCommandPalette() {
 
   return <CommandPalette open={open} onClose={() => setOpen(false)} groups={groups} />;
 }
+
+export type { AppCommandPaletteProps };

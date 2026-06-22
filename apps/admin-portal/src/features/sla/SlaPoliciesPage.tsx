@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { readItems, createItem, updateItem } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
 import {
@@ -10,6 +10,7 @@ import {
   Drawer,
   DrawerSection,
   EmptyState,
+  ErrorState,
   FormField,
   Input,
   Skeleton,
@@ -68,6 +69,25 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
+const DEFAULT_VALUES: FormValues = {
+  name: '',
+  description: '',
+  first_response_minutes: 30,
+  resolution_minutes: 240,
+  warning_threshold_percent: 80,
+  applies_to_priority: ['medium'],
+  active: true,
+};
+
+/** Mirrors the inline create mutation; patches an existing policy by id. */
+function useUpdateSlaPolicy(qc: QueryClient) {
+  return useMutation({
+    mutationFn: ({ id, values }: { id: string; values: FormValues }) =>
+      directus.request(updateItem('sla_policies', id, values as never)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sla-policies'] }),
+  });
+}
+
 export function SlaPoliciesPage() {
   const { t } = useTranslation();
   const policies = useSlaPolicies();
@@ -76,6 +96,7 @@ export function SlaPoliciesPage() {
     mutationFn: (input: FormValues) => directus.request(createItem('sla_policies', input as never)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sla-policies'] }),
   });
+  const update = useUpdateSlaPolicy(qc);
   const toggleActive = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
       directus.request(updateItem('sla_policies', id, { active } as never)),
@@ -83,6 +104,7 @@ export function SlaPoliciesPage() {
   });
 
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -90,23 +112,49 @@ export function SlaPoliciesPage() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      first_response_minutes: 30,
-      resolution_minutes: 240,
-      warning_threshold_percent: 80,
-      applies_to_priority: ['medium'],
-      active: true,
-    },
+    defaultValues: DEFAULT_VALUES,
   });
+
+  const openCreate = () => {
+    setEditingId(null);
+    reset(DEFAULT_VALUES);
+    setOpen(true);
+  };
+  const openEdit = (p: SlaPolicy) => {
+    setEditingId(p.id);
+    reset({
+      name: p.name,
+      description: p.description ?? '',
+      first_response_minutes: p.first_response_minutes,
+      resolution_minutes: p.resolution_minutes,
+      warning_threshold_percent: p.warning_threshold_percent,
+      applies_to_priority: p.applies_to_priority,
+      active: p.active,
+    });
+    setOpen(true);
+  };
+  const closeDrawer = () => {
+    setOpen(false);
+    setEditingId(null);
+  };
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      await create.mutateAsync(values);
-      reset();
-      setOpen(false);
-      toast.success(t('sla.created'));
+      if (editingId) {
+        await update.mutateAsync({ id: editingId, values });
+        toast.success(t('sla.updated', { defaultValue: 'Policy updated.' }));
+      } else {
+        await create.mutateAsync(values);
+        toast.success(t('sla.created'));
+      }
+      reset(DEFAULT_VALUES);
+      closeDrawer();
     } catch {
-      toast.error(t('sla.createError'));
+      toast.error(
+        editingId
+          ? t('sla.updateError', { defaultValue: 'Could not update policy.' })
+          : t('sla.createError'),
+      );
     }
   });
 
@@ -136,13 +184,22 @@ export function SlaPoliciesPage() {
           </span>
         </span>
         <ToolbarSpacer />
-        <Button type="button" size="sm" onClick={() => setOpen(true)} iconStart={<PlusIcon />}>
+        <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
           {t('sla.create')}
         </Button>
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-3">
-        {policies.isLoading ? (
+        {policies.isError ? (
+          <ErrorState
+            title={t('sla.loadError', { defaultValue: 'Could not load SLA policies' })}
+            message={t('sla.loadErrorHint', {
+              defaultValue: 'Check your connection and try again.',
+            })}
+            retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+            onRetry={() => void policies.refetch()}
+          />
+        ) : policies.isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3 rounded-lg px-2 py-3">
@@ -159,7 +216,7 @@ export function SlaPoliciesPage() {
               defaultValue: 'Create your first SLA policy to start tracking response times.',
             })}
             action={
-              <Button type="button" onClick={() => setOpen(true)} iconStart={<PlusIcon />}>
+              <Button type="button" onClick={openCreate} iconStart={<PlusIcon />}>
                 {t('sla.create')}
               </Button>
             }
@@ -192,18 +249,23 @@ export function SlaPoliciesPage() {
                       </p>
                     )}
                   </div>
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 text-2xs text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={p.active}
-                      onChange={(e) =>
-                        void toggleActive.mutateAsync({ id: p.id, active: e.target.checked })
-                      }
-                      className="h-3.5 w-3.5 rounded-sm border-border-strong bg-input accent-primary"
-                      aria-label={t('sla.active')}
-                    />
-                    <span>{t('sla.active')}</span>
-                  </label>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(p)}>
+                      {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
+                    </Button>
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 text-2xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={p.active}
+                        onChange={(e) =>
+                          void toggleActive.mutateAsync({ id: p.id, active: e.target.checked })
+                        }
+                        className="h-3.5 w-3.5 rounded-sm border-border-strong bg-input accent-primary"
+                        aria-label={t('sla.active')}
+                      />
+                      <span>{t('sla.active')}</span>
+                    </label>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap gap-1.5">
@@ -251,8 +313,8 @@ export function SlaPoliciesPage() {
 
       <Drawer
         open={open}
-        onClose={() => setOpen(false)}
-        title={t('sla.create')}
+        onClose={closeDrawer}
+        title={editingId ? t('sla.edit', { defaultValue: 'Edit policy' }) : t('sla.create')}
         description={t('sla.createHint', {
           defaultValue:
             'Each policy maps priorities to deadlines; the worker schedules warnings + breach events automatically.',
@@ -260,11 +322,13 @@ export function SlaPoliciesPage() {
         width="lg"
         footer={
           <>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+            <Button type="button" variant="ghost" onClick={closeDrawer}>
               {t('actions.cancel', { ns: 'common' })}
             </Button>
             <Button type="submit" form="create-sla-form" loading={isSubmitting}>
-              {t('sla.create')}
+              {editingId
+                ? t('actions.save', { ns: 'common', defaultValue: 'Save' })
+                : t('sla.create')}
             </Button>
           </>
         }

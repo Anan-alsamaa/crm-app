@@ -7,9 +7,11 @@ import {
   Avatar,
   Button,
   cn,
+  ConfirmDialog,
   Drawer,
   DrawerSection,
   EmptyState,
+  ErrorState,
   FormField,
   Input,
   SelectMenu,
@@ -55,6 +57,7 @@ export function UsersPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [search, setSearch] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const {
     register,
@@ -66,12 +69,16 @@ export function UsersPage() {
 
   const openCreate = () => {
     setEditing(null);
+    // Pre-select Agent — the overwhelmingly common case — so creating a teammate
+    // is one click. The field stays visible + changeable. Falls back to empty if
+    // no Agent role exists (forcing an explicit pick).
+    const agentRole = (roles.data ?? []).find((r) => r.name.toLowerCase() === 'agent');
     reset({
       email: '',
       password: '',
       first_name: '',
       last_name: '',
-      role: '',
+      role: agentRole?.id ?? '',
       team: '',
       locale: 'en',
     });
@@ -95,6 +102,15 @@ export function UsersPage() {
   const isSelf = editing?.id === currentUser?.id;
   const isOwner = editing?.role?.name?.toLowerCase() === 'administrator';
   const canDelete = !!editing && !isSelf && !isOwner;
+
+  // Administrator is the system superuser (full schema + permission control) and
+  // must NOT be assignable from the portal — granting it is a privilege-escalation
+  // risk. We drop it from the selectable roles, keeping it only when editing
+  // someone who is ALREADY an Administrator, so their role still displays and is
+  // never silently downgraded on save.
+  const roleOptions = (roles.data ?? [])
+    .filter((r) => r.name.toLowerCase() !== 'administrator' || isOwner)
+    .map((r) => ({ value: r.id, label: r.name }));
 
   const onSubmit = handleSubmit(async (values) => {
     try {
@@ -140,15 +156,10 @@ export function UsersPage() {
 
   const onDelete = async () => {
     if (!editing || !canDelete) return;
-    if (
-      !window.confirm(
-        t('users.confirmDelete', { defaultValue: 'Delete this account permanently?' }),
-      )
-    )
-      return;
     try {
       await deleteUser.mutateAsync(editing.id);
       toast.success(t('users.deleted', { defaultValue: 'User deleted.' }));
+      setConfirmDelete(false);
       setOpen(false);
       setEditing(null);
     } catch {
@@ -234,7 +245,16 @@ export function UsersPage() {
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-3">
-        {users.isLoading ? (
+        {users.isError ? (
+          <ErrorState
+            title={t('users.loadError', { defaultValue: 'Could not load users' })}
+            message={t('users.loadErrorHint', {
+              defaultValue: 'Check your connection and try again.',
+            })}
+            retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+            onRetry={() => void users.refetch()}
+          />
+        ) : users.isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3 rounded-lg px-2 py-3">
@@ -348,7 +368,7 @@ export function UsersPage() {
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => void onDelete()}
+                onClick={() => setConfirmDelete(true)}
                 className="text-destructive hover:bg-destructive/10 me-auto"
               >
                 {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
@@ -399,7 +419,14 @@ export function UsersPage() {
                 'Role decides what they can do. Team decides where conversations route.',
             })}
           >
-            <FormField label={t('users.role')} error={errors.role?.message}>
+            <FormField
+              label={t('users.role')}
+              error={errors.role?.message}
+              hint={t('users.roleHint', {
+                defaultValue:
+                  'Admin can open this admin portal and manage settings, users, and every conversation. Agent handles only their own assigned queue in the agent portal.',
+              })}
+            >
               <Controller
                 control={control}
                 name="role"
@@ -412,7 +439,7 @@ export function UsersPage() {
                     invalid={!!errors.role}
                     aria-label={t('users.role')}
                     placeholder="—"
-                    options={(roles.data ?? []).map((r) => ({ value: r.id, label: r.name }))}
+                    options={roleOptions}
                   />
                 )}
               />
@@ -510,6 +537,17 @@ export function UsersPage() {
           </DrawerSection>
         </form>
       </Drawer>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        destructive
+        title={t('users.confirmDelete', { defaultValue: 'Delete this account permanently?' })}
+        confirmLabel={t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+        cancelLabel={t('actions.cancel', { ns: 'common' })}
+        loading={deleteUser.isPending}
+        onConfirm={() => void onDelete()}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

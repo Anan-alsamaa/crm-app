@@ -10,6 +10,7 @@ import {
   Drawer,
   DrawerSection,
   EmptyState,
+  ErrorState,
   FormField,
   Input,
   Skeleton,
@@ -98,7 +99,16 @@ export function TeamsPage() {
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-3">
-        {teams.isLoading ? (
+        {teams.isError ? (
+          <ErrorState
+            title={t('teams.loadError', { defaultValue: 'Could not load teams' })}
+            message={t('teams.loadErrorHint', {
+              defaultValue: 'Check your connection and try again.',
+            })}
+            retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+            onRetry={() => void teams.refetch()}
+          />
+        ) : teams.isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3 rounded-lg px-2 py-3">

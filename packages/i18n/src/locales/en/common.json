@@ -9,11 +9,13 @@
     "edit": "Edit",
     "create": "Create",
     "search": "Search",
+    "searchPlaceholder": "Search…",
     "send": "Send",
     "close": "Close",
     "loading": "Loading",
     "remove": "Remove",
     "add": "Add",
+    "change": "Change",
     "done": "Done",
     "toggleLanguage": "Toggle language"
   },

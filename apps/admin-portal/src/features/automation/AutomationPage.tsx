@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import {
   Button,
   cn,
+  ConfirmDialog,
   Drawer,
   DrawerSection,
   EmptyState,
+  ErrorState,
   FormField,
   Input,
   Pill,
@@ -104,6 +106,18 @@ export function AutomationPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftRule>(blankRule());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const onDelete = async (): Promise<void> => {
+    if (!deletingId) return;
+    try {
+      await remove.mutateAsync(deletingId);
+      toast.success(t('automation.deleted', { defaultValue: 'Rule deleted.' }));
+      setDeletingId(null);
+    } catch {
+      toast.error(t('automation.deleteError', { defaultValue: 'Could not delete rule.' }));
+    }
+  };
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -190,7 +204,16 @@ export function AutomationPage() {
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-3">
-        {rules.isLoading ? (
+        {rules.isError ? (
+          <ErrorState
+            title={t('automation.loadError', { defaultValue: 'Could not load automation rules' })}
+            message={t('automation.loadErrorHint', {
+              defaultValue: 'Check your connection and try again.',
+            })}
+            retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+            onRetry={() => void rules.refetch()}
+          />
+        ) : rules.isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-20 w-full rounded-2xl" />
@@ -229,14 +252,7 @@ export function AutomationPage() {
                   onToggle={async () => {
                     await update.mutateAsync({ id: r.id, patch: { active: !r.active } });
                   }}
-                  onDelete={async () => {
-                    if (
-                      !confirm(t('automation.confirmDelete', { defaultValue: 'Delete this rule?' }))
-                    )
-                      return;
-                    await remove.mutateAsync(r.id);
-                    toast.success(t('automation.deleted', { defaultValue: 'Rule deleted.' }));
-                  }}
+                  onDelete={() => setDeletingId(r.id)}
                 />
               </li>
             ))}
@@ -375,6 +391,17 @@ export function AutomationPage() {
           </DrawerSection>
         </div>
       </Drawer>
+
+      <ConfirmDialog
+        open={deletingId !== null}
+        destructive
+        title={t('automation.confirmDelete', { defaultValue: 'Delete this rule?' })}
+        confirmLabel={t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+        cancelLabel={t('actions.cancel', { ns: 'common' })}
+        loading={remove.isPending}
+        onConfirm={() => void onDelete()}
+        onCancel={() => setDeletingId(null)}
+      />
     </div>
   );
 }

@@ -111,6 +111,10 @@ services:
     restart: unless-stopped
     ports:
       - '${SOCKET_GATEWAY_PORT:-8080}:8080'
+      # REST app (PORT+1): /health,/ready,/metrics,/debug,/webhooks/yiji + the
+      # admin enqueue routes POST /jobs/import|report. Behind an LB in real prod,
+      # expose only /jobs/* + /webhooks/* publicly and keep /metrics,/debug internal.
+      - '${SOCKET_GATEWAY_HTTP_PORT:-8082}:8081'
     depends_on:
       directus:
         condition: service_healthy
@@ -127,6 +131,9 @@ services:
       YIJI_JWT_SECRET: ${YIJI_JWT_SECRET:?set a strong YIJI_JWT_SECRET}
       SVC_GATEWAY_TOKEN: ${SVC_GATEWAY_TOKEN:?set SVC_GATEWAY_TOKEN}
       CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal hostnames}
+      # Widget socket CORS — defaults to '*' (the widget embeds on any vendor
+      # site; the signed customer JWT is the gate). Set a list to restrict.
+      WIDGET_CORS_ORIGIN: ${WIDGET_CORS_ORIGIN:-*}
       # Inbound webhook signature secret (empty => endpoint disabled/503).
       YIJI_WEBHOOK_SECRET: ${YIJI_WEBHOOK_SECRET:-}
       WEBHOOK_TOLERANCE_SEC: ${WEBHOOK_TOLERANCE_SEC:-300}
@@ -218,6 +225,8 @@ services:
         VITE_DIRECTUS_URL: ${VITE_DIRECTUS_URL:-http://localhost:8055}
         VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:8080}
         VITE_AI_GATEWAY_URL: ${VITE_AI_GATEWAY_URL:-http://localhost:8081}
+        # Enqueue endpoint = the socket-gateway HTTP port (Import CSV / Run report).
+        VITE_JOB_PRODUCER_URL: ${VITE_JOB_PRODUCER_URL:-http://localhost:8082}
     restart: unless-stopped
     ports:
       - '${ADMIN_PORTAL_PORT:-8092}:80'

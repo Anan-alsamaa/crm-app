@@ -39,6 +39,7 @@ export interface WidgetStrings {
   offlineTitle: string;
   offlineBody: string;
   offlineCallLabel: string;
+  offlineWhatsappLabel: string;
   offlineEmailLabel: string;
 }
 
@@ -75,6 +76,7 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     offlineBody:
       'Unfortunately, our agents are offline now. Please contact us directly and we will get back to you as soon as possible.',
     offlineCallLabel: 'Call us',
+    offlineWhatsappLabel: 'WhatsApp',
     offlineEmailLabel: 'Email us',
   },
   ar: {
@@ -109,6 +111,7 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     offlineBody:
       'للأسف، وكلاؤنا غير متصلين في الوقت الحالي. يرجى التواصل معنا مباشرةً وسنعاود التواصل في أقرب وقت.',
     offlineCallLabel: 'اتصل بنا',
+    offlineWhatsappLabel: 'واتساب',
     offlineEmailLabel: 'راسلنا بالبريد',
   },
 };

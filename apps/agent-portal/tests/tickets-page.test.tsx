@@ -94,8 +94,10 @@ describe('TicketsPage', () => {
     hooks.useTickets.mockReturnValue({ data: [ticket], isLoading: false });
     renderPage();
     await userEvent.click(screen.getByText('Refund please'));
-    // Detail header shows the contact name and the SLA section.
-    await waitFor(() => expect(screen.getByText('tickets.markResponded')).toBeInTheDocument());
+    // Detail header shows the contact name and the SLA section. The first-response
+    // action renders its defaultValue ("Mark first response") in tests since no
+    // locale resources are loaded.
+    await waitFor(() => expect(screen.getByText('Mark first response')).toBeInTheDocument());
     // Detail-only: the description and the SLA section heading.
     expect(screen.getByText('I want a refund')).toBeInTheDocument();
     expect(screen.getByText('SLA')).toBeInTheDocument();

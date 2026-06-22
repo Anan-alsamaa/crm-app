@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -9,6 +9,7 @@ import {
   cn,
   ErrorBoundary,
   InboxIcon,
+  SearchTrigger,
   SettingsIcon,
   SignOutIcon,
   Spinner,
@@ -46,6 +47,9 @@ const AutomationPage = lazy(() =>
 );
 const ReportsPage = lazy(() =>
   import('./features/reports/ReportsPage.js').then((m) => ({ default: m.ReportsPage })),
+);
+const SlaReportsPage = lazy(() =>
+  import('./features/sla-reports/SlaReportsPage.js').then((m) => ({ default: m.SlaReportsPage })),
 );
 const CustomFieldsPage = lazy(() =>
   import('./features/custom-fields/CustomFieldsPage.js').then((m) => ({
@@ -207,6 +211,9 @@ function MobileBrand() {
 function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const location = useLocation();
+  // Command-palette open state is lifted here so the top-bar search trigger and
+  // the Cmd/Ctrl+K shortcut both drive the one palette instance below.
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const sections: NavSection[] = [
     {
       heading: t('nav.overview', { defaultValue: 'Overview' }),
@@ -215,6 +222,11 @@ function Shell({ children }: { children: React.ReactNode }) {
           to: '/dashboard',
           label: t('nav.dashboard', { defaultValue: 'Dashboard' }),
           icon: InboxIcon,
+        },
+        {
+          to: '/sla-reports',
+          label: t('nav.slaReports', { defaultValue: 'SLA reports' }),
+          icon: ClockIcon,
         },
       ],
     },
@@ -264,11 +276,44 @@ function Shell({ children }: { children: React.ReactNode }) {
       ],
     },
   ];
+  // Current section label — anchors the left of the top bar beside the search
+  // box so the bar reads as context-left / actions-right.
+  const pageTitle =
+    sections.flatMap((s) => s.items).find((it) => location.pathname.startsWith(it.to))?.label ?? '';
   return (
     <>
       <AppShell
         rail={(ctx) => <Rail ctx={ctx} sections={sections} />}
         topBarBrand={<MobileBrand />}
+        topBarActions={
+          <SearchTrigger
+            label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
+            aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
+            onClick={() => setPaletteOpen(true)}
+            className="hidden sm:inline-flex"
+          />
+        }
+        topBar={
+          <div className="flex w-full items-center gap-3">
+            {/* Left: section label */}
+            <div className="flex min-w-0 flex-1 items-center">
+              <span className="hidden truncate text-sm font-semibold tracking-tight text-foreground md:block">
+                {pageTitle}
+              </span>
+            </div>
+            {/* Center: the search field */}
+            <div className="flex w-full max-w-md justify-center">
+              <SearchTrigger
+                fullWidth
+                label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
+                aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
+                onClick={() => setPaletteOpen(true)}
+              />
+            </div>
+            {/* Right: balancing spacer keeps the search centered */}
+            <div className="flex-1" aria-hidden />
+          </div>
+        }
         resizeStorageKey="yiji.admin.sidebarWidth"
         navLabel={t('nav.primary', { defaultValue: 'Primary navigation' })}
         menuLabel={t('nav.openMenu', { defaultValue: 'Open menu' })}
@@ -292,7 +337,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </Suspense>
         </ErrorBoundary>
       </AppShell>
-      <AppCommandPalette />
+      <AppCommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <AppKeyboardShortcuts />
       <Toaster position="bottom" />
     </>
@@ -381,6 +426,16 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <ReportsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sla-reports"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <SlaReportsPage />
                 </Shell>
               </ProtectedRoute>
             }

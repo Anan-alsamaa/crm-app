@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { readItems, readItem, createItem, deleteItem } from '@directus/sdk';
+import { readItems, readItem, createItem, updateItem, deleteItem } from '@directus/sdk';
 import { directus } from '../../lib/directus.js';
 
 /** A tag attached to a contact via the contacts_tags junction. */
@@ -155,6 +155,36 @@ export function useContactTickets(contactId: string) {
           limit: -1,
         }),
       ) as Promise<ContactTimelineTicket[]>,
+  });
+}
+
+/**
+ * Update a contact's core details (name / email / phone). Persists to the
+ * Directus `contacts` collection — the single source of truth — so the change
+ * shows everywhere the contact is read: the inbox list, the conversation
+ * sidebar, the contacts page, and linked tickets. Requires the Agent role's
+ * `contacts: update` permission (granted in the role matrix).
+ */
+export function useUpdateContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: { name?: string | null; email?: string | null; phone?: string | null };
+    }) => directus.request(updateItem('contacts', id, patch as never)),
+    onSuccess: (_d, vars) => {
+      void qc.invalidateQueries({ queryKey: ['contact', vars.id] });
+      void qc.invalidateQueries({ queryKey: ['contacts'] });
+      // The contact is embedded in conversations (sidebar + inbox list) and in
+      // contact timelines — refresh those so the edited name/email/phone shows
+      // immediately, not just on the contacts page.
+      void qc.invalidateQueries({ queryKey: ['conversation'] });
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+      void qc.invalidateQueries({ queryKey: ['contact-conversations'] });
+    },
   });
 }
 

@@ -9,11 +9,13 @@
     "edit": "تعديل",
     "create": "إنشاء",
     "search": "بحث",
+    "searchPlaceholder": "بحث…",
     "send": "إرسال",
     "close": "إغلاق",
     "loading": "جارٍ التحميل",
     "remove": "إزالة",
     "add": "إضافة",
+    "change": "تغيير",
     "done": "تم",
     "toggleLanguage": "تبديل اللغة"
   },
