@@ -32,9 +32,19 @@
 	}
 }
 
+# Content-Security-Policy for the SPAs. Verified safe against the built portals
+# (script-src 'self' — Vite emits no inline scripts; only a same-origin module).
+# style-src allows 'unsafe-inline' for React/Tailwind inline styles. connect-src
+# is the api/ws/ai origins the portals talk to. If you change hostnames or add a
+# CDN/font host, update this accordingly.
+(spa_csp) {
+	header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.{$BASE_DOMAIN}; font-src 'self' data:; connect-src 'self' https://api.{$BASE_DOMAIN} https://ai.{$BASE_DOMAIN} https://ws.{$BASE_DOMAIN} wss://ws.{$BASE_DOMAIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+}
+
 # Agent portal (static SPA)
 agent.{$BASE_DOMAIN} {
 	import sechdrs
+	import spa_csp
 	header X-Frame-Options "DENY"
 	encode zstd gzip
 	reverse_proxy agent-portal:80
@@ -43,6 +53,7 @@ agent.{$BASE_DOMAIN} {
 # Admin portal (static SPA)
 admin.{$BASE_DOMAIN} {
 	import sechdrs
+	import spa_csp
 	header X-Frame-Options "DENY"
 	encode zstd gzip
 	reverse_proxy admin-portal:80
