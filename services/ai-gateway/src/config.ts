@@ -14,6 +14,12 @@ const schema = z
     SVC_AI_TOKEN: z.string().min(1, 'SVC_AI_TOKEN is required'),
     GEMINI_API_KEY: z.string().optional().default(''),
     GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
+    /**
+     * Yiji commerce API — proxied server-side so the API key never reaches the
+     * browser (replaces the old VITE_YIJI_API_TOKEN). Empty URL => mock client.
+     */
+    YIJI_API_URL: z.string().default(''),
+    YIJI_API_KEY: z.string().default(''),
     /** Per-user requests per minute. */
     AI_PER_USER_RPM: numericEnv(20),
     /** Per-IP requests per minute (anti-abuse layer in front of per-user). */

@@ -16,7 +16,9 @@ import { AiConfigStore } from './aiconfig/index.js';
 import { SlidingWindowLimiter, MonthlyCap } from './ratelimit/index.js';
 import { ResponseCache } from './cache/index.js';
 import { GatewayDirectus } from './directus/index.js';
+import { registerCommerceRoutes } from './commerce/index.js';
 import { Registry } from './metrics.js';
+import { createYijiClient } from '@yiji/shared-types';
 import type { AIProvider } from './provider/types.js';
 
 /** Reachability ping to Directus /server/health with a hard timeout. */
@@ -76,7 +78,14 @@ async function main(): Promise<void> {
     'HTTP request latency in seconds.',
   );
 
-  const app = Fastify({ loggerInstance: logger as unknown as FastifyBaseLogger });
+  // bodyLimit caps every request body at 64 KiB. AI endpoints only ever carry a
+  // conversation id plus an optional short draft/query string; this bounds the
+  // untrusted text forwarded to the (paid, rate-limited) LLM and blocks oversized
+  // payloads as a cheap DoS / cost-amplification guard. Default Fastify is 1 MiB.
+  const app = Fastify({
+    loggerInstance: logger as unknown as FastifyBaseLogger,
+    bodyLimit: 64 * 1024,
+  });
   // CORS allow-list — comma-separated origins or `*` (dev only).
   const corsOrigins =
     config.CORS_ORIGIN === '*'
@@ -141,8 +150,12 @@ async function main(): Promise<void> {
     perIpLimiter,
     globalLimiter,
     monthlyCap,
-    serviceToken: config.SVC_AI_TOKEN,
   });
+
+  // Commerce proxy (Yiji order/payment/shipment lookups) — server-side so the
+  // Yiji API key never reaches the browser. Empty YIJI_API_URL => mock client.
+  const yiji = createYijiClient({ apiUrl: config.YIJI_API_URL, token: config.YIJI_API_KEY });
+  await registerCommerceRoutes(app, { directus, yiji });
 
   await app.listen({ port: config.PORT, host: '0.0.0.0' });
   logger.info(`ai-gateway listening on :${config.PORT}`);

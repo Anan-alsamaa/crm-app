@@ -1,22 +1,21 @@
-import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { cn, Pill, Skeleton } from '@yiji/ui';
-import { createYijiClient } from '@yiji/shared-types';
 import type {
   YijiOrder,
   YijiPaymentStatus,
   YijiPurchaseActivity,
   YijiShipmentTracking,
 } from '@yiji/shared-types';
+import { commerce, type CommerceClient } from '../../lib/commerce-client.js';
 
 /**
  * Commerce side panel.
  *
- * Consumes the YijiClient (mock in dev, HTTP when VITE_YIJI_API_URL is set).
- * Renders lifetime value + recent orders, with per-order payment + shipment
- * status pulled inline. Every section degrades gracefully — if YijiClient
- * returns null the panel shows a soft "Commerce data unavailable" notice
+ * Consumes the ai-gateway commerce PROXY (C-2) — the Yiji API key stays on the
+ * server. Renders lifetime value + recent orders, with per-order payment +
+ * shipment status pulled inline. Every section degrades gracefully — if the
+ * proxy returns null the panel shows a soft "Commerce data unavailable" notice
  * rather than crashing.
  */
 
@@ -24,9 +23,6 @@ interface Props {
   yijiVendorId: string;
   externalCustomerId: string;
 }
-
-const apiUrl = (import.meta.env.VITE_YIJI_API_URL as string | undefined) ?? '';
-const apiToken = (import.meta.env.VITE_YIJI_API_TOKEN as string | undefined) ?? '';
 
 const ORDER_TONE: Record<
   string,
@@ -58,7 +54,7 @@ function formatMoney(amount: number, currency: string): string {
 
 export function CommercePanel({ yijiVendorId, externalCustomerId }: Props) {
   const { t } = useTranslation();
-  const client = useMemo(() => createYijiClient({ apiUrl, token: apiToken }), []);
+  const client = commerce;
 
   const activity = useQuery({
     queryKey: ['yiji-activity', yijiVendorId, externalCustomerId],
@@ -179,7 +175,7 @@ function OrderCard({
   yijiVendorId,
 }: {
   order: YijiOrder;
-  client: ReturnType<typeof createYijiClient>;
+  client: CommerceClient;
   yijiVendorId: string;
 }) {
   const { t } = useTranslation();

@@ -1,9 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AI_ENDPOINTS } from '@yiji/shared-types';
+
+// ai-client now authenticates with the agent's Directus SESSION token (C-1) —
+// no static browser service token. Stub auth.getToken so the Bearer is set.
+vi.mock('../src/lib/directus.js', () => ({
+  auth: { getToken: vi.fn(async () => 'agent-access-token') },
+}));
+
 import { ai, type AiCaller } from '../src/lib/ai-client.js';
 
 /** ai-client is a thin fetch wrapper. Stub global fetch and assert each method
- * targets the right endpoint with caller headers, plus the error mapping. */
+ * targets the right endpoint with the session Bearer, plus the error mapping. */
 
 const fetchMock = vi.fn();
 const caller: AiCaller = { userId: 'u-1', vendorId: 'v-1' };
@@ -25,11 +32,13 @@ describe('ai-client happy paths', () => {
     expect(out).toEqual({ summary: 'done' });
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(String(url)).toContain(AI_ENDPOINTS.summarizeConversation);
-    expect((init as RequestInit).headers).toMatchObject({
-      authorization: expect.stringContaining('Bearer'),
-      'x-yiji-user': 'u-1',
+    const headers = (init as RequestInit).headers as Record<string, string>;
+    expect(headers).toMatchObject({
+      authorization: 'Bearer agent-access-token',
       'x-yiji-vendor': 'v-1',
     });
+    // C-1: identity is derived server-side; the client no longer sends x-yiji-user.
+    expect(headers).not.toHaveProperty('x-yiji-user');
   });
 
   it('routes each helper to its endpoint', async () => {
