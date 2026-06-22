@@ -327,6 +327,38 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
       expect((await err).code).toBe('persist_failed');
     });
 
+    it('message:send from a customer is REJECTED when targeting another conversation (IDOR)', async () => {
+      // A customer socket is bound to conv-1 at handshake (stub returns conv-1).
+      // Emitting with a different conversationId must be refused, not persisted —
+      // otherwise it is cross-tenant message injection.
+      harness = await startGateway(makeStubs());
+      const customer = await connectCustomerReady(harness.port, sockets);
+      const err = waitFor<{ code: string }>(customer, SOCKET_EVENTS.error);
+      customer.emit(SOCKET_EVENTS.messageSend, {
+        conversationId: 'conv-SOMEONE-ELSE',
+        content: 'cross-tenant attempt',
+        clientMsgId: 'x',
+      });
+      expect((await err).code).toBe('forbidden');
+      await new Promise((r) => setTimeout(r, 20));
+      expect(harness.stubs.directus.persistMessage).not.toHaveBeenCalled();
+    });
+
+    it('message:send from a customer into its OWN conversation still persists', async () => {
+      harness = await startGateway(makeStubs());
+      const customer = await connectCustomerReady(harness.port, sockets);
+      const got = waitFor<{ id: string }>(customer, SOCKET_EVENTS.messageNew);
+      customer.emit(SOCKET_EVENTS.messageSend, {
+        conversationId: 'conv-1',
+        content: 'legit message',
+        clientMsgId: 'ok',
+      });
+      await got;
+      expect(harness.stubs.directus.persistMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ conversationId: 'conv-1', senderType: 'customer' }),
+      );
+    });
+
     it('note:add (agent) broadcasts note:new', async () => {
       harness = await startGateway(makeStubs());
       const agent = await connectedAgent();

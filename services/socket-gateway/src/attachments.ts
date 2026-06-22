@@ -27,6 +27,31 @@ export interface AttachmentValidationResult {
 }
 
 /**
+ * Sanitize a client-supplied attachment filename before it is stored and later
+ * offered to an agent as a download name. Takes the basename only (no path
+ * traversal), strips ASCII control characters and Unicode bidi-override
+ * codepoints (which can disguise the real extension — e.g. an RTL override that
+ * makes "photo<U+202E>gpj.exe" render as "photoexe.jpg"), caps the length, and
+ * falls back to "upload" when nothing usable remains.
+ *
+ * Filtering is done by code point (not a literal regex) so no raw control
+ * characters live in this source file.
+ */
+export function sanitizeFilename(input: unknown): string {
+  if (typeof input !== 'string') return 'upload';
+  const base = input.split(/[/\\]/).pop() ?? '';
+  let cleaned = '';
+  for (const ch of base) {
+    const c = ch.codePointAt(0) ?? 0;
+    const isControl = c < 0x20 || c === 0x7f;
+    const isBidi = (c >= 0x202a && c <= 0x202e) || (c >= 0x2066 && c <= 0x2069);
+    if (!isControl && !isBidi) cleaned += ch;
+  }
+  const safe = cleaned.trim().replace(/^\.+/, '').slice(0, 200);
+  return safe.length > 0 ? safe : 'upload';
+}
+
+/**
  * Decode an `attachment:upload` payload's `content` into a Buffer. Socket.IO
  * may deliver the bytes three ways: an `ArrayBuffer`, a Node `Buffer` /
  * typed-array view (websocket transport), or a base64 string (polling

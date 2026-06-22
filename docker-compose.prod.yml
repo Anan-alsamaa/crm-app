@@ -61,7 +61,11 @@ services:
     image: directus/directus:11
     restart: unless-stopped
     ports:
-      - '${DIRECTUS_PORT:-8055}:8055'
+      # Bind to loopback only: the public edge is Caddy (deploy/docker-compose.proxy.yml),
+      # which reaches this service over the internal network by name. Publishing on
+      # 0.0.0.0 would expose plaintext HTTP directly, bypassing TLS/HSTS. For a
+      # no-proxy deploy, front it with your own LB and keep this on 127.0.0.1.
+      - '127.0.0.1:${DIRECTUS_PORT:-8055}:8055'
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,6 +84,13 @@ services:
       DB_USER: ${DB_USER:?set DB_USER}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
       REDIS: ${REDIS_URL:-redis://redis:6379}
+      # Brute-force / abuse protection on ALL Directus routes, including
+      # /auth/login (the portals authenticate directly against Directus). Off by
+      # default in Directus — enable it in prod, backed by Redis so the limit is
+      # shared across Directus replicas.
+      RATE_LIMITER_ENABLED: 'true'
+      RATE_LIMITER_STORE: redis
+      RATE_LIMITER_REDIS: ${REDIS_URL:-redis://redis:6379}
       CACHE_ENABLED: 'true'
       CACHE_STORE: redis
       # Invalidate read cache on writes (read-after-write consistency).
@@ -87,16 +98,23 @@ services:
       WEBSOCKETS_ENABLED: 'true'
       CORS_ENABLED: 'true'
       CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal hostnames}
+      # Cookie-mode auth (H-2): allow credentialed CORS + set the refresh cookie
+      # Secure/SameSite. Portals + Directus share the BASE_DOMAIN (same-site), so
+      # SameSite=lax is sent on the cross-subdomain refresh call. If you host the
+      # portals on a DIFFERENT registrable domain, set this to 'none'.
+      CORS_CREDENTIALS: 'true'
+      REFRESH_TOKEN_COOKIE_SAME_SITE: ${REFRESH_TOKEN_COOKIE_SAME_SITE:-lax}
+      REFRESH_TOKEN_COOKIE_SECURE: 'true'
       STORAGE_LOCATIONS: ${STORAGE_LOCATIONS:-local}
     volumes:
       - directus_uploads:/directus/uploads
       - ./directus/extensions:/directus/extensions
       - ./directus/snapshot:/directus/snapshot
     healthcheck:
-      # Use 127.0.0.1 (not localhost): in the directus alpine image `localhost`
-      # resolves to IPv6 ::1, but directus listens on IPv4 0.0.0.0 — so a
-      # localhost healthcheck gets "connection refused" and the whole stack
-      # (everything depends on directus being healthy) never starts.
+      # Use 127.0.0.1 (not localhost): inside the container `localhost` can
+      # resolve to IPv6 ::1 first, but Directus binds IPv4 0.0.0.0 only, so the
+      # probe would get ECONNREFUSED and the container would never report
+      # healthy — blocking every service that depends_on it.
       test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8055/server/health']
       interval: 10s
       timeout: 5s
@@ -110,11 +128,10 @@ services:
       dockerfile: services/socket-gateway/Dockerfile
     restart: unless-stopped
     ports:
-      - '${SOCKET_GATEWAY_PORT:-8080}:8080'
-      # REST app (PORT+1): /health,/ready,/metrics,/debug,/webhooks/yiji + the
-      # admin enqueue routes POST /jobs/import|report. Behind an LB in real prod,
-      # expose only /jobs/* + /webhooks/* publicly and keep /metrics,/debug internal.
-      - '${SOCKET_GATEWAY_HTTP_PORT:-8082}:8081'
+      - '127.0.0.1:${SOCKET_GATEWAY_PORT:-8080}:8080' # socket.io; loopback, public edge is Caddy
+      # REST app (PORT+1): /health,/ready,/metrics,/debug,/webhooks/yiji + the admin
+      # enqueue routes POST /jobs/import|report. Loopback; Caddy exposes only /jobs/* + /webhooks/*.
+      - '127.0.0.1:${SOCKET_GATEWAY_HTTP_PORT:-8082}:8081'
     depends_on:
       directus:
         condition: service_healthy
@@ -176,7 +193,7 @@ services:
       dockerfile: services/ai-gateway/Dockerfile
     restart: unless-stopped
     ports:
-      - '${AI_GATEWAY_PORT:-8081}:8081'
+      - '127.0.0.1:${AI_GATEWAY_PORT:-8081}:8081' # loopback only; public edge is Caddy
     depends_on:
       directus:
         condition: service_healthy
@@ -192,6 +209,9 @@ services:
       DIRECTUS_AI_TOKEN: ${DIRECTUS_AI_TOKEN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+      # Yiji commerce proxy (C-2) — key stays server-side, never in the browser.
+      YIJI_API_URL: ${YIJI_API_URL:-}
+      YIJI_API_KEY: ${YIJI_API_KEY:-}
       CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal hostnames}
       OTEL_SERVICE_NAME: ai-gateway
 
@@ -211,7 +231,7 @@ services:
         VITE_AI_GATEWAY_URL: ${VITE_AI_GATEWAY_URL:-http://localhost:8081}
     restart: unless-stopped
     ports:
-      - '${AGENT_PORTAL_PORT:-8090}:80'
+      - '127.0.0.1:${AGENT_PORTAL_PORT:-8090}:80' # loopback only; public edge is Caddy
     depends_on:
       directus:
         condition: service_healthy
@@ -229,7 +249,7 @@ services:
         VITE_JOB_PRODUCER_URL: ${VITE_JOB_PRODUCER_URL:-http://localhost:8082}
     restart: unless-stopped
     ports:
-      - '${ADMIN_PORTAL_PORT:-8092}:80'
+      - '127.0.0.1:${ADMIN_PORTAL_PORT:-8092}:80' # loopback only; public edge is Caddy
     depends_on:
       directus:
         condition: service_healthy

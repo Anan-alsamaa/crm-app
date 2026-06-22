@@ -209,7 +209,9 @@ Highlights:
   portal: inbox, conversations, notes, AI panel, tickets, notifications.
 - **[docs/USER_GUIDE_ADMIN.md](./docs/USER_GUIDE_ADMIN.md)** — configuration:
   users, teams, vendors, SLA, automation, reports, custom fields, imports, AI.
-- **[docs/PRODUCTION.md](./docs/PRODUCTION.md)** — deployment runbook.
+- **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)** — opinionated step-by-step deploy
+  guide (single-host Docker Compose + auto-TLS), rollback, upgrades, scaling.
+- **[docs/PRODUCTION.md](./docs/PRODUCTION.md)** — deployment runbook (full reference).
 - **[docs/AUDITS.md](./docs/AUDITS.md)** — pre-release audit runbook: accessibility
   (WCAG), performance, horizontal scaling, and the quickstart smoke test.
 

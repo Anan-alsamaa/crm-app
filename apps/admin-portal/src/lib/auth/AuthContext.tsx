@@ -15,10 +15,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Restore the session from the httpOnly refresh cookie (H-2): the access token
+  // is in memory only, so refresh first on a cold load.
   useEffect(() => {
     let active = true;
     void (async () => {
-      const me = await auth.me();
+      const me = await auth.restore();
       if (active) {
         setUser(me);
         setLoading(false);

@@ -19,11 +19,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // On mount, try to restore a session (auto-refresh handles expired tokens).
+  // On mount, restore the session from the httpOnly refresh cookie (H-2): the
+  // access token is in memory only, so it's gone after a reload — refresh first.
   useEffect(() => {
     let active = true;
     void (async () => {
-      const me = await auth.me();
+      const me = await auth.restore();
       if (active) {
         setUser(me);
         setLoading(false);

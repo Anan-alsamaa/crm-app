@@ -43,7 +43,9 @@ RUN pnpm --filter @yiji/admin-portal build
 FROM nginx:1.27-alpine AS runner
 COPY --from=builder /app/apps/admin-portal/dist /usr/share/nginx/html
 # SPA fallback (client-side routing) + a cheap /health for container probes.
-RUN printf 'server {\n  listen 80;\n  server_name _;\n  root /usr/share/nginx/html;\n  location = /health { return 200 "ok"; add_header Content-Type text/plain; }\n  location / { try_files $uri $uri/ /index.html; }\n}\n' > /etc/nginx/conf.d/default.conf
+# Baseline security headers baked in so the image is safe even if served without
+# the Caddy edge. HSTS is intentionally left to the TLS terminator (Caddy).
+RUN printf 'server {\n  listen 80;\n  server_name _;\n  root /usr/share/nginx/html;\n  add_header X-Content-Type-Options "nosniff" always;\n  add_header X-Frame-Options "DENY" always;\n  add_header Referrer-Policy "strict-origin-when-cross-origin" always;\n  location = /health { return 200 "ok"; add_header Content-Type text/plain; }\n  location / { try_files $uri $uri/ /index.html; }\n}\n' > /etc/nginx/conf.d/default.conf
 EXPOSE 80
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1/health || exit 1
