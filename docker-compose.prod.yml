@@ -57,7 +57,11 @@ services:
     image: directus/directus:11
     restart: unless-stopped
     ports:
-      - '${DIRECTUS_PORT:-8055}:8055'
+      # Bind to loopback only: the public edge is Caddy (deploy/docker-compose.proxy.yml),
+      # which reaches this service over the internal network by name. Publishing on
+      # 0.0.0.0 would expose plaintext HTTP directly, bypassing TLS/HSTS. For a
+      # no-proxy deploy, front it with your own LB and keep this on 127.0.0.1.
+      - '127.0.0.1:${DIRECTUS_PORT:-8055}:8055'
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,6 +80,13 @@ services:
       DB_USER: ${DB_USER:?set DB_USER}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
       REDIS: ${REDIS_URL:-redis://redis:6379}
+      # Brute-force / abuse protection on ALL Directus routes, including
+      # /auth/login (the portals authenticate directly against Directus). Off by
+      # default in Directus — enable it in prod, backed by Redis so the limit is
+      # shared across Directus replicas.
+      RATE_LIMITER_ENABLED: 'true'
+      RATE_LIMITER_STORE: redis
+      RATE_LIMITER_REDIS: ${REDIS_URL:-redis://redis:6379}
       CACHE_ENABLED: 'true'
       CACHE_STORE: redis
       # Invalidate read cache on writes (read-after-write consistency).
@@ -105,7 +116,7 @@ services:
       dockerfile: services/socket-gateway/Dockerfile
     restart: unless-stopped
     ports:
-      - '${SOCKET_GATEWAY_PORT:-8080}:8080'
+      - '127.0.0.1:${SOCKET_GATEWAY_PORT:-8080}:8080' # loopback only; public edge is Caddy
     depends_on:
       directus:
         condition: service_healthy
@@ -164,7 +175,7 @@ services:
       dockerfile: services/ai-gateway/Dockerfile
     restart: unless-stopped
     ports:
-      - '${AI_GATEWAY_PORT:-8081}:8081'
+      - '127.0.0.1:${AI_GATEWAY_PORT:-8081}:8081' # loopback only; public edge is Caddy
     depends_on:
       directus:
         condition: service_healthy
@@ -199,7 +210,7 @@ services:
         VITE_AI_GATEWAY_URL: ${VITE_AI_GATEWAY_URL:-http://localhost:8081}
     restart: unless-stopped
     ports:
-      - '${AGENT_PORTAL_PORT:-8090}:80'
+      - '127.0.0.1:${AGENT_PORTAL_PORT:-8090}:80' # loopback only; public edge is Caddy
     depends_on:
       directus:
         condition: service_healthy
@@ -215,7 +226,7 @@ services:
         VITE_AI_GATEWAY_URL: ${VITE_AI_GATEWAY_URL:-http://localhost:8081}
     restart: unless-stopped
     ports:
-      - '${ADMIN_PORTAL_PORT:-8092}:80'
+      - '127.0.0.1:${ADMIN_PORTAL_PORT:-8092}:80' # loopback only; public edge is Caddy
     depends_on:
       directus:
         condition: service_healthy

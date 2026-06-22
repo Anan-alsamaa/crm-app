@@ -158,13 +158,23 @@ checks real readiness (downstream deps reachable), not just "container running":
 Then sign in at `https://admin.crm.example.com` with your `DIRECTUS_ADMIN_*`
 credentials and confirm the agent portal loads at `https://agent.crm.example.com`.
 
-## 7. Lock down the edge (recommended)
+## 7. Lock down the edge
 
-Once Caddy is the public entry point, you don't need the raw service ports
-exposed to the world. Either firewall ports `8055/8080/8081/8090/8092` to
-localhost, or drop the `ports:` mappings from `docker-compose.prod.yml` (the
-proxy reaches services over the internal compose network by name). Keep only
-`80/443` open.
+`docker-compose.prod.yml` already binds every service port to **`127.0.0.1`**
+(loopback), so Directus/gateway/ai-gateway/portals are **not** reachable on the
+host's public interface — only Caddy (`80/443`) is. Caddy reaches the services
+over the internal compose network by name, so this needs no extra config.
+
+Caddy also sets **HSTS** + baseline security headers (see `deploy/Caddyfile`),
+and the Directus service has its **rate limiter enabled** (brute-force
+protection on `/auth/login`). Remaining hardening to do per the
+[PRODUCTION.md security checklist](./PRODUCTION.md): a tuned Content-Security-Policy
+on the portals, and forwarding Directus auth logs to your aggregator to alert on
+failed-login spikes.
+
+If you deploy **without** the Caddy overlay, front the services with your own
+LB/proxy and keep the loopback bindings (or firewall the host) so nothing serves
+plaintext on a public port.
 
 ---
 

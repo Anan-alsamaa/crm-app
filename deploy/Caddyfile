@@ -19,20 +19,38 @@
 	email {$ACME_EMAIL}
 }
 
+# Shared security headers. HSTS forces HTTPS for a year (incl. subdomains); the
+# rest are conservative, app-safe defaults. A Content-Security-Policy is
+# intentionally NOT set here because it must be tuned to the SPA's asset/API
+# origins and tested per portal — see docs/PRODUCTION.md security checklist.
+(sechdrs) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
 # Agent portal (static SPA)
 agent.{$BASE_DOMAIN} {
+	import sechdrs
+	header X-Frame-Options "DENY"
 	encode zstd gzip
 	reverse_proxy agent-portal:80
 }
 
 # Admin portal (static SPA)
 admin.{$BASE_DOMAIN} {
+	import sechdrs
+	header X-Frame-Options "DENY"
 	encode zstd gzip
 	reverse_proxy admin-portal:80
 }
 
 # Directus - API, auth, and private asset storage (attachments)
 api.{$BASE_DOMAIN} {
+	import sechdrs
 	encode zstd gzip
 	reverse_proxy directus:8055
 }
@@ -42,6 +60,7 @@ api.{$BASE_DOMAIN} {
 # needs sticky sessions for the long-polling fallback - uncomment lb_policy and
 # the active health check (which probes the gateway's internal :8081 /ready).
 ws.{$BASE_DOMAIN} {
+	import sechdrs
 	reverse_proxy socket-gateway:8080 {
 		# lb_policy cookie
 		# health_uri /ready
@@ -51,6 +70,7 @@ ws.{$BASE_DOMAIN} {
 
 # AI gateway
 ai.{$BASE_DOMAIN} {
+	import sechdrs
 	encode zstd gzip
 	reverse_proxy ai-gateway:8081
 }

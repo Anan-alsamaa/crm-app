@@ -76,7 +76,14 @@ async function main(): Promise<void> {
     'HTTP request latency in seconds.',
   );
 
-  const app = Fastify({ loggerInstance: logger as unknown as FastifyBaseLogger });
+  // bodyLimit caps every request body at 64 KiB. AI endpoints only ever carry a
+  // conversation id plus an optional short draft/query string; this bounds the
+  // untrusted text forwarded to the (paid, rate-limited) LLM and blocks oversized
+  // payloads as a cheap DoS / cost-amplification guard. Default Fastify is 1 MiB.
+  const app = Fastify({
+    loggerInstance: logger as unknown as FastifyBaseLogger,
+    bodyLimit: 64 * 1024,
+  });
   // CORS allow-list — comma-separated origins or `*` (dev only).
   const corsOrigins =
     config.CORS_ORIGIN === '*'

@@ -3,6 +3,7 @@ import {
   validateAttachments,
   parseAttachmentPolicy,
   decodeUploadContent,
+  sanitizeFilename,
   type AttachmentMeta,
 } from '../src/attachments.js';
 
@@ -18,6 +19,41 @@ describe('parseAttachmentPolicy', () => {
   it('trims, lowercases and drops empties', () => {
     expect(policy.maxBytes).toBe(1_000_000);
     expect(policy.allowedMime).toEqual(['image/png', 'image/jpeg', 'application/pdf']);
+  });
+});
+
+describe('sanitizeFilename', () => {
+  it('strips path components (no traversal)', () => {
+    expect(sanitizeFilename('../../etc/passwd')).toBe('passwd');
+    expect(sanitizeFilename('C:\\Windows\\System32\\evil.dll')).toBe('evil.dll');
+    expect(sanitizeFilename('/var/log/secret.txt')).toBe('secret.txt');
+  });
+
+  it('removes control + bidi-override characters that disguise the extension', () => {
+    // U+202E (RTL override) makes "photo<RLO>gpj.exe" render as "photoexe.jpg".
+    const rlo = String.fromCharCode(0x202e);
+    const out = sanitizeFilename(`photo${rlo}gpj.exe`);
+    expect(out).toBe('photogpj.exe');
+    expect(out).not.toContain(rlo);
+    // An ASCII control char (BEL, 0x07) is stripped too.
+    expect(sanitizeFilename(`a${String.fromCharCode(7)}bc.png`)).toBe('abc.png');
+  });
+
+  it('caps length and trims surrounding whitespace', () => {
+    expect(sanitizeFilename('  spaced.png  ')).toBe('spaced.png');
+    expect(sanitizeFilename('x'.repeat(500)).length).toBe(200);
+  });
+
+  it('falls back to "upload" for empty / non-string / dot-only input', () => {
+    expect(sanitizeFilename('')).toBe('upload');
+    expect(sanitizeFilename('...')).toBe('upload');
+    expect(sanitizeFilename(undefined)).toBe('upload');
+    expect(sanitizeFilename(42)).toBe('upload');
+    expect(sanitizeFilename('/')).toBe('upload');
+  });
+
+  it('keeps ordinary unicode filenames', () => {
+    expect(sanitizeFilename('فاتورة.pdf')).toBe('فاتورة.pdf');
   });
 });
 
