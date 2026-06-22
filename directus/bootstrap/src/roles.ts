@@ -123,7 +123,15 @@ export const roles: RoleSpec[] = [
       { collection: 'conversations', action: 'update', permissions: ASSIGNED_OR_UNASSIGNED },
       { collection: 'messages', action: 'create' },
       { collection: 'messages', action: 'read' },
-      { collection: 'messages', action: 'update' },
+      // NOTE (H-3): `messages.update` is intentionally NOT granted to agents.
+      // Messages are an immutable chat record; agents must not edit historical
+      // content (tampering), and the app never PATCHes a message via the agent
+      // token — the gateway is the sole writer (service token).
+      //
+      // FOLLOW-UP (tenant isolation): `messages.read` + `contacts.read` are still
+      // unfiltered (all-vendor), matching the current shared-inbox design.
+      // Scoping them per vendor/team is a product decision + a core read-path
+      // change that must be integration-tested before rollout.
       // tickets: scoped to assigned agent
       {
         collection: 'tickets',
