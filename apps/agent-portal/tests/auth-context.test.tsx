@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 
 const { authMock, disconnectSocket, setSessionExpiredHandler } = vi.hoisted(() => ({
-  authMock: { me: vi.fn(), login: vi.fn(), logout: vi.fn() },
+  authMock: { me: vi.fn(), restore: vi.fn(), login: vi.fn(), logout: vi.fn() },
   disconnectSocket: vi.fn(),
   setSessionExpiredHandler: vi.fn(),
 }));
@@ -38,6 +38,7 @@ const me = { id: '1', email: 'agent@x.com', first_name: null, last_name: null, s
 
 beforeEach(() => {
   authMock.me.mockReset();
+  authMock.restore.mockReset();
   authMock.login.mockReset();
   authMock.logout.mockReset();
   disconnectSocket.mockReset();
@@ -46,7 +47,7 @@ beforeEach(() => {
 
 describe('AuthProvider / useAuth', () => {
   it('restores the session on mount', async () => {
-    authMock.me.mockResolvedValue(me);
+    authMock.restore.mockResolvedValue(me);
     render(
       <AuthProvider>
         <Consumer />
@@ -56,7 +57,7 @@ describe('AuthProvider / useAuth', () => {
   });
 
   it('shows anon when no session is restored', async () => {
-    authMock.me.mockResolvedValue(null);
+    authMock.restore.mockResolvedValue(null);
     render(
       <AuthProvider>
         <Consumer />
@@ -66,7 +67,8 @@ describe('AuthProvider / useAuth', () => {
   });
 
   it('login authenticates and loads the user', async () => {
-    authMock.me.mockResolvedValueOnce(null).mockResolvedValueOnce(me);
+    authMock.restore.mockResolvedValue(null); // cold load: no session
+    authMock.me.mockResolvedValue(me); // login() then loads the user
     authMock.login.mockResolvedValue(undefined);
     render(
       <AuthProvider>
@@ -80,7 +82,7 @@ describe('AuthProvider / useAuth', () => {
   });
 
   it('logout drops the socket then revokes the token', async () => {
-    authMock.me.mockResolvedValue(me);
+    authMock.restore.mockResolvedValue(me);
     authMock.logout.mockResolvedValue(undefined);
     render(
       <AuthProvider>
@@ -95,7 +97,7 @@ describe('AuthProvider / useAuth', () => {
   });
 
   it('clears the session when the gateway reports the token expired', async () => {
-    authMock.me.mockResolvedValue(me);
+    authMock.restore.mockResolvedValue(me);
     authMock.logout.mockResolvedValue(undefined);
     render(
       <AuthProvider>

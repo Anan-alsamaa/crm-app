@@ -67,6 +67,11 @@ services:
       # CORS_ORIGIN=true reflects the request origin (works with credentials).
       CORS_ENABLED: 'true'
       CORS_ORIGIN: 'true'
+      # Cookie-mode auth (H-2): the portals send credentials, so CORS must allow
+      # them and the refresh cookie must be settable over http on localhost.
+      CORS_CREDENTIALS: 'true'
+      REFRESH_TOKEN_COOKIE_SAME_SITE: lax
+      REFRESH_TOKEN_COOKIE_SECURE: 'false'
       STORAGE_LOCATIONS: local
       STORAGE_LOCAL_DRIVER: local
       STORAGE_LOCAL_ROOT: /directus/uploads

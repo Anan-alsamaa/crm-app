@@ -94,6 +94,13 @@ services:
       WEBSOCKETS_ENABLED: 'true'
       CORS_ENABLED: 'true'
       CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal hostnames}
+      # Cookie-mode auth (H-2): allow credentialed CORS + set the refresh cookie
+      # Secure/SameSite. Portals + Directus share the BASE_DOMAIN (same-site), so
+      # SameSite=lax is sent on the cross-subdomain refresh call. If you host the
+      # portals on a DIFFERENT registrable domain, set this to 'none'.
+      CORS_CREDENTIALS: 'true'
+      REFRESH_TOKEN_COOKIE_SAME_SITE: ${REFRESH_TOKEN_COOKIE_SAME_SITE:-lax}
+      REFRESH_TOKEN_COOKIE_SECURE: 'true'
       STORAGE_LOCATIONS: ${STORAGE_LOCATIONS:-local}
     volumes:
       - directus_uploads:/directus/uploads
