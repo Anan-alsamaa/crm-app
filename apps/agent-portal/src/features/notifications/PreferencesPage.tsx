@@ -181,7 +181,7 @@ export function PreferencesPage() {
           <Spinner />
         </div>
       ) : (
-        <div className="mx-auto w-full max-w-3xl flex-1 overflow-auto px-6 py-8 space-y-6 sm:px-10">
+        <div className="mx-auto w-full max-w-3xl flex-1 overflow-auto px-5 py-6 space-y-5 sm:px-8">
           {/* New-message sound — a per-browser toggle, kept visually distinct
               from the server-saved channel rows below. */}
           <section className="space-y-3">
@@ -192,7 +192,7 @@ export function PreferencesPage() {
               <p className="text-sm text-foreground/80">{t('sound.prefHint')}</p>
             </div>
             <ul className="rounded-2xl bg-card/60 shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04] px-5">
-              <li className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between first:pt-4 last:pb-4">
+              <li className="flex flex-col gap-2.5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <span
                     className={cn(
@@ -266,7 +266,7 @@ export function PreferencesPage() {
                   return (
                     <li
                       key={type}
-                      className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between first:pt-0 last:pb-0"
+                      className="flex flex-col gap-2.5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-3">
                         {Icon && (
