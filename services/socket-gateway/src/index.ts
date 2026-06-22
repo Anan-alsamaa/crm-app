@@ -61,16 +61,22 @@ async function main(): Promise<void> {
   const logger = pino({ level: config.LOG_LEVEL, name: 'socket-gateway' });
 
   const httpServer = createServer();
-  // CORS_ORIGIN may be '*' or a comma-separated allow-list. Socket.IO treats a
-  // bare string as a single literal origin, so split the list into an array —
-  // otherwise every browser Origin is rejected when an explicit list is set.
-  const corsOrigin =
-    config.CORS_ORIGIN.trim() === '*'
+  // A CORS value may be '*' or a comma-separated allow-list. Socket.IO + our
+  // /jobs handler treat a bare string as a single literal origin, so split a
+  // list into an array — otherwise every browser Origin is rejected.
+  const parseCors = (v: string): '*' | string[] =>
+    v.trim() === '*'
       ? '*'
-      : config.CORS_ORIGIN.split(',')
+      : v
+          .split(',')
           .map((o) => o.trim())
           .filter(Boolean);
-  const io = new SocketServer(httpServer, { cors: { origin: corsOrigin } });
+  // Two surfaces, two policies: the customer widget socket is embedded on
+  // arbitrary vendor sites (defaults to '*', gated by the signed JWT), while the
+  // admin/AI REST (e.g. POST /jobs/*) stays pinned to CORS_ORIGIN.
+  const corsOrigin = parseCors(config.CORS_ORIGIN);
+  const widgetCorsOrigin = parseCors(config.WIDGET_CORS_ORIGIN);
+  const io = new SocketServer(httpServer, { cors: { origin: widgetCorsOrigin } });
 
   // --- Metrics ---
   const metrics = new Registry();

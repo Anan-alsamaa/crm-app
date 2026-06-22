@@ -122,6 +122,9 @@ services:
       YIJI_JWT_SECRET: ${YIJI_JWT_SECRET:?set a strong YIJI_JWT_SECRET}
       SVC_GATEWAY_TOKEN: ${SVC_GATEWAY_TOKEN:?set SVC_GATEWAY_TOKEN}
       CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal hostnames}
+      # Widget socket CORS — defaults to '*' (the widget embeds on any vendor
+      # site; the signed customer JWT is the gate). Set a list to restrict.
+      WIDGET_CORS_ORIGIN: ${WIDGET_CORS_ORIGIN:-*}
       # Inbound webhook signature secret (empty => endpoint disabled/503).
       YIJI_WEBHOOK_SECRET: ${YIJI_WEBHOOK_SECRET:-}
       WEBHOOK_TOLERANCE_SEC: ${WEBHOOK_TOLERANCE_SEC:-300}

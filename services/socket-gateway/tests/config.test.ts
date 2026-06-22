@@ -62,7 +62,14 @@ const base = {
 
 function withEnv(overrides: Record<string, string | undefined>, fn: () => void): void {
   const saved: Record<string, string | undefined> = {};
-  const keys = ['NODE_ENV', 'CORS_ORIGIN', 'REDIS_ENABLED', 'YIJI_JWT_SECRET', 'SVC_GATEWAY_TOKEN'];
+  const keys = [
+    'NODE_ENV',
+    'CORS_ORIGIN',
+    'WIDGET_CORS_ORIGIN',
+    'REDIS_ENABLED',
+    'YIJI_JWT_SECRET',
+    'SVC_GATEWAY_TOKEN',
+  ];
   for (const k of keys) saved[k] = process.env[k];
   try {
     for (const k of keys) delete process.env[k];
@@ -95,6 +102,14 @@ describe('socket-gateway config prod guards', () => {
   it('rejects wildcard CORS in production', () => {
     withEnv({ NODE_ENV: 'production', ...base, CORS_ORIGIN: '*' }, () => {
       expect(() => loadConfig()).toThrow(/CORS_ORIGIN/);
+    });
+  });
+
+  it('allows wildcard WIDGET_CORS_ORIGIN in production (widget embeds anywhere)', () => {
+    withEnv({ NODE_ENV: 'production', ...base, WIDGET_CORS_ORIGIN: '*' }, () => {
+      const cfg = loadConfig();
+      expect(cfg.WIDGET_CORS_ORIGIN).toBe('*'); // customer socket: JWT-gated, origin-open
+      expect(cfg.CORS_ORIGIN).toBe('https://agent.example.com'); // admin/AI: still strict
     });
   });
 

@@ -17,9 +17,14 @@ const schema = z
     REDIS_ENABLED: booleanEnv(true),
     YIJI_JWT_SECRET: z.string().min(1, 'YIJI_JWT_SECRET is required'),
     SVC_GATEWAY_TOKEN: z.string().min(1, 'SVC_GATEWAY_TOKEN is required'),
-    // CORS allow-list — comma-separated exact origins or `*` (dev only).
-    // Production refuses `*`.
+    // CORS allow-list for the ADMIN/AI surfaces (the REST app — /jobs/* enqueue,
+    // etc.). Comma-separated exact origins; production refuses `*`.
     CORS_ORIGIN: z.string().default('*'),
+    // CORS for the CUSTOMER widget Socket.IO handshake. The widget is embedded on
+    // arbitrary vendor storefronts, so this defaults to `*` and MAY remain `*` in
+    // production — the connection is authenticated by the signed customer JWT, not
+    // by its origin. Set an explicit list only if the widget lives on known domains.
+    WIDGET_CORS_ORIGIN: z.string().default('*'),
     LOG_LEVEL: z.string().default('info'),
     // Inbound webhook HMAC secret. When empty, POST /webhooks/yiji returns 503
     // (not configured) so the endpoint is never an unauthenticated open door.
