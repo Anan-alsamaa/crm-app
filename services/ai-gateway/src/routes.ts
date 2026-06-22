@@ -61,6 +61,9 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
       return authenticate(req, deps.serviceToken);
     } catch (err) {
       if (err instanceof AuthError) {
+        // Audit: surface bad/missing service tokens and missing identity headers
+        // so credential-stuffing of the gateway is detectable in the logs.
+        app.log.warn({ ip: req.ip, status: err.status, reason: err.message }, 'ai auth rejected');
         void reply.code(err.status).send({ error: err.message });
         return null;
       }
@@ -94,6 +97,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (deps.perIpLimiter && clientIp) {
       const ipVerdict = await deps.perIpLimiter.check(`ip:${clientIp}`);
       if (!ipVerdict.allowed) {
+        app.log.warn({ scope: 'ip', ip: clientIp, endpoint }, 'ai rate limited');
         void reply.code(429).send({
           error: 'rate_limited',
           scope: 'ip',
@@ -104,6 +108,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     }
     const userVerdict = await deps.perUserLimiter.check(`user:${caller.userId}`);
     if (!userVerdict.allowed) {
+      app.log.warn({ scope: 'user', userId: caller.userId, endpoint }, 'ai rate limited');
       void reply.code(429).send({
         error: 'rate_limited',
         scope: 'user',
@@ -113,6 +118,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     }
     const globalVerdict = await deps.globalLimiter.check('global');
     if (!globalVerdict.allowed) {
+      app.log.warn({ scope: 'global', endpoint }, 'ai rate limited');
       void reply.code(429).send({
         error: 'rate_limited',
         scope: 'global',
@@ -127,6 +133,10 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
       config.monthlyCap,
     );
     if (!capVerdict.allowed) {
+      app.log.warn(
+        { vendorId: caller.vendorId, used: capVerdict.used, cap: capVerdict.cap },
+        'ai monthly cap reached',
+      );
       void reply.code(429).send({
         error: 'monthly_cap_reached',
         used: capVerdict.used,
