@@ -70,6 +70,27 @@ async function idempotent(label: string, fn: () => Promise<unknown>): Promise<vo
   }
 }
 
+/**
+ * Like idempotent(), but for operations that are a no-op IN EFFECT on re-run —
+ * metadata-only updates (e.g. updateRelation wiring) that always succeed and
+ * converge to the same state. Logs `=` (never `+`) so the idempotence check
+ * (check-idempotence.mjs fails on any `+` in the second apply) stays honest.
+ */
+async function ensure(label: string, fn: () => Promise<unknown>): Promise<void> {
+  try {
+    await fn();
+    console.log(`  = ${label}`);
+  } catch (err) {
+    const msg = errorMessage(err);
+    if (/exist|duplicate|unique|already/i.test(msg)) {
+      console.log(`  = ${label} (exists)`);
+    } else {
+      console.error(`  ! ${label}: ${msg}`);
+      throw err;
+    }
+  }
+}
+
 /** Map our FieldType to a Directus field-creation payload. */
 function fieldPayload(spec: FieldSpec) {
   const special: string[] = [];
@@ -276,7 +297,9 @@ async function applyJunctions(client: AnyClient): Promise<void> {
           } as never),
         ),
       );
-      await idempotent(`wire ${j.junction}.${j.fieldA} one_field=${j.aliasA}`, () =>
+      // Metadata-only re-application — always succeeds, no-op in effect. Use
+      // ensure() so it logs `=`, not `+` (else the idempotence check trips).
+      await ensure(`wire ${j.junction}.${j.fieldA} one_field=${j.aliasA}`, () =>
         client.request(
           updateRelation(j.junction, j.fieldA, {
             meta: { one_field: j.aliasA, junction_field: j.fieldB },
@@ -524,14 +547,26 @@ async function applyConstraints(): Promise<void> {
   try {
     for (const sql of constraintStatements) {
       // Log `=` vs `+` honestly so the idempotence check (check-idempotence.mjs)
-      // can assert "second apply created nothing" — `CREATE ... IF NOT EXISTS`
-      // succeeds either way, so we must probe pg_indexes to know which happened.
-      const name = sql.match(/INDEX\s+(?:IF NOT EXISTS\s+)?(\w+)/i)?.[1];
+      // can assert "second apply created nothing". `CREATE ... IF NOT EXISTS`,
+      // `CREATE OR REPLACE FUNCTION` and `DROP+CREATE TRIGGER` all succeed on a
+      // re-run, so probe the catalog to know whether the object already existed.
+      // (Previously only INDEX was probed, so the function + trigger statements
+      // always logged `+` and tripped the idempotence gate on every second run.)
+      let name: string | undefined;
       let existed = false;
-      if (name) {
+      if ((name = sql.match(/INDEX\s+(?:IF NOT EXISTS\s+)?(\w+)/i)?.[1])) {
         const { rowCount } = await pool.query('SELECT 1 FROM pg_indexes WHERE indexname = $1', [
           name,
         ]);
+        existed = (rowCount ?? 0) > 0;
+      } else if ((name = sql.match(/CREATE\s+TRIGGER\s+(\w+)/i)?.[1])) {
+        const { rowCount } = await pool.query(
+          'SELECT 1 FROM pg_trigger WHERE tgname = $1 AND NOT tgisinternal',
+          [name],
+        );
+        existed = (rowCount ?? 0) > 0;
+      } else if ((name = sql.match(/FUNCTION\s+(\w+)/i)?.[1])) {
+        const { rowCount } = await pool.query('SELECT 1 FROM pg_proc WHERE proname = $1', [name]);
         existed = (rowCount ?? 0) > 0;
       }
       await pool.query(sql);
