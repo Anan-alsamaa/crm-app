@@ -70,6 +70,24 @@ async function idempotent(label: string, fn: () => Promise<unknown>): Promise<vo
   }
 }
 
+/**
+ * For metadata-only operations that re-run every pass and are idempotent in
+ * EFFECT rather than via an "already exists" error — e.g. `updateRelation`
+ * (always succeeds; re-applying the same meta changes nothing). They must be
+ * logged with the neutral `=` prefix, NOT `+`: the idempotence check
+ * (check-idempotence.mjs) flags every `+` line on the second apply as drift, so
+ * an always-succeeding update would falsely fail it.
+ */
+async function synced(label: string, fn: () => Promise<unknown>): Promise<void> {
+  try {
+    await fn();
+    console.log(`  = ${label} (synced)`);
+  } catch (err) {
+    console.error(`  ! ${label}: ${errorMessage(err)}`);
+    throw err;
+  }
+}
+
 /** Map our FieldType to a Directus field-creation payload. */
 function fieldPayload(spec: FieldSpec) {
   const special: string[] = [];
@@ -276,7 +294,7 @@ async function applyJunctions(client: AnyClient): Promise<void> {
           } as never),
         ),
       );
-      await idempotent(`wire ${j.junction}.${j.fieldA} one_field=${j.aliasA}`, () =>
+      await synced(`wire ${j.junction}.${j.fieldA} one_field=${j.aliasA}`, () =>
         client.request(
           updateRelation(j.junction, j.fieldA, {
             meta: { one_field: j.aliasA, junction_field: j.fieldB },
@@ -536,7 +554,15 @@ async function applyConstraints(): Promise<void> {
       }
       await pool.query(sql);
       const label = name ?? sql.split('\n')[0]?.trim();
-      console.log(existed ? `  = ${label} (exists)` : `  + ${label}`);
+      // Index statements were probed above (existed?). Everything else here is
+      // CREATE OR REPLACE FUNCTION / DROP TRIGGER IF EXISTS — idempotent in
+      // EFFECT (re-running changes nothing), so report it as synced, not created;
+      // otherwise the always-run DDL trips the idempotence check on the 2nd pass.
+      if (!name) {
+        console.log(`  = ${label} (synced)`);
+      } else {
+        console.log(existed ? `  = ${label} (exists)` : `  + ${label}`);
+      }
     }
   } finally {
     await pool.end();

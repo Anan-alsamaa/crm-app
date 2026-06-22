@@ -140,7 +140,9 @@ jobs:
       # Frontend public vars
       VITE_DIRECTUS_URL: http://localhost:8055
       VITE_SOCKET_URL: http://localhost:8080
-      VITE_AI_GATEWAY_URL: http://localhost:8081
+      # ai-gateway on 8091 — 8081 is taken by the socket-gateway's health server
+      # (PORT+1). The commerce panel (C-2) proxies Yiji lookups through it.
+      VITE_AI_GATEWAY_URL: http://localhost:8091
       # E2E agent creds — globalSetup seeds this user, but it runs in a separate
       # process from the Playwright workers, so process.env set there doesn't
       # reach the specs. Define them at job level (must match globalSetup's
@@ -281,6 +283,11 @@ jobs:
         run: |
           REDIS_ENABLED=false PORT=8080 \
             pnpm --filter @yiji/socket-gateway dev > gateway.log 2>&1 &
+          # ai-gateway on 8091 backs the contact-profile commerce panel (C-2
+          # proxy). No GEMINI/YIJI keys → AI 503s + commerce uses the mock client.
+          PORT=8091 DIRECTUS_INTERNAL_URL=http://localhost:8055 \
+          REDIS_URL="$REDIS_URL" SVC_AI_TOKEN="$SVC_AI_TOKEN" CORS_ORIGIN='*' \
+            pnpm --filter @yiji/ai-gateway dev > ai-gateway.log 2>&1 &
           pnpm --filter @yiji/agent-portal dev > agent-portal.log 2>&1 &
           pnpm --filter @yiji/admin-portal dev > admin-portal.log 2>&1 &
           pnpm --filter @yiji/chat-widget dev > chat-widget.log 2>&1 &
@@ -293,6 +300,7 @@ jobs:
         run: |
           for entry in \
             "http://localhost:8081/health|gateway-health" \
+            "http://localhost:8091/health|ai-gateway" \
             "http://localhost:5173|agent-portal" \
             "http://localhost:5174|admin-portal" \
             "http://localhost:5175|chat-widget"; do
@@ -337,6 +345,7 @@ jobs:
           name: service-logs
           path: |
             gateway.log
+            ai-gateway.log
             agent-portal.log
             admin-portal.log
             chat-widget.log
