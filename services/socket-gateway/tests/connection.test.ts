@@ -40,11 +40,14 @@ interface Stubs {
 function makeStubs(over: Partial<Record<keyof GatewayDirectus, unknown>> = {}): Stubs {
   const directus = {
     resolveVendor: vi.fn(async () => ({ id: 'vendor-uuid', colors: { primary: '#abcabc' } })),
-    upsertContact: vi.fn(async () => 'contact-1'),
-    findOrCreateConversation: vi.fn(async () => 'conv-1'),
+    upsertContact: vi.fn(async () => ({ id: 'contact-1', isNew: true, name: null, phone: null })),
+    findOrCreateConversation: vi.fn(async () => ({ id: 'conv-1', created: true })),
     persistMessage: vi.fn(async () => ({ id: 'msg-1', createdAt: '2026-01-01T00:00:00.000Z' })),
     deleteInternalNote: vi.fn(async () => true),
     listAgentConversationIds: vi.fn(async () => ['conv-1']),
+    loadConversationMessages: vi.fn(async () => []),
+    getConversationStatus: vi.fn(async () => 'open'),
+    getConversationAttachment: vi.fn(async () => null),
     ...over,
   } as unknown as GatewayDirectus;
 
@@ -189,6 +192,30 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
         'vendor-uuid',
         'contact-1',
       );
+    });
+
+    it('seeds a returning customer with messages:history', async () => {
+      harness = await startGateway(
+        makeStubs({
+          loadConversationMessages: vi.fn(async () => [
+            {
+              id: 'm1',
+              senderType: 'customer',
+              content: 'earlier message',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              attachments: [],
+            },
+          ]),
+        }),
+      );
+      const client = openClient(harness.port, { kind: 'customer', token: 't' });
+      sockets.push(client);
+      const history = await waitFor<{ conversationId: string; messages: Array<{ id: string }> }>(
+        client,
+        'messages:history',
+      );
+      expect(history.conversationId).toBe('conv-1');
+      expect(history.messages[0]!.id).toBe('m1');
     });
 
     it('rejects a customer when the vendor is unknown/inactive', async () => {
@@ -353,6 +380,22 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
       const got = waitFor<{ conversationId: string }>(a2, SOCKET_EVENTS.inboxActivity);
       a1.emit(SOCKET_EVENTS.conversationUpdated, { conversationId: 'conv-99' });
       expect((await got).conversationId).toBe('conv-99');
+    });
+
+    it('conversation:updated that closes a conversation notifies the customer (CSAT)', async () => {
+      harness = await startGateway(
+        makeStubs({ getConversationStatus: vi.fn(async () => 'closed') }),
+      );
+      const customer = await connectCustomerReady(harness.port, sockets); // joins conv-1
+      const agent = await connectedAgent();
+      const closed = waitFor<{ conversationId: string; status: string }>(
+        customer,
+        'conversation:closed',
+      );
+      agent.emit(SOCKET_EVENTS.conversationUpdated, { conversationId: 'conv-1' });
+      const evt = await closed;
+      expect(evt.conversationId).toBe('conv-1');
+      expect(evt.status).toBe('closed');
     });
   });
 

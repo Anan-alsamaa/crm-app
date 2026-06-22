@@ -41,30 +41,37 @@ describe('GatewayDirectus.resolveVendor', () => {
 });
 
 describe('GatewayDirectus.upsertContact', () => {
-  it('returns the existing contact id when one matches phone/email', async () => {
-    request.mockResolvedValueOnce([{ id: 'contact-existing' }]);
-    const id = await makeGateway().upsertContact('vendor-uuid', baseClaims);
-    expect(id).toBe('contact-existing');
+  it('resumes the existing contact (isNew:false) with its STORED name', async () => {
+    request.mockResolvedValueOnce([
+      { id: 'contact-existing', name: 'Stored Name', phone: '+15550001' },
+    ]);
+    const res = await makeGateway().upsertContact('vendor-uuid', baseClaims);
+    expect(res).toEqual({
+      id: 'contact-existing',
+      isNew: false,
+      name: 'Stored Name',
+      phone: '+15550001',
+    });
     expect(request).toHaveBeenCalledTimes(1); // no create call
   });
 
-  it('creates a new contact when none exists', async () => {
+  it('creates a new contact (isNew:true) when none exists', async () => {
     request
       .mockResolvedValueOnce([]) // lookup miss
       .mockResolvedValueOnce({ id: 'contact-new' }); // create
-    const id = await makeGateway().upsertContact('vendor-uuid', baseClaims);
-    expect(id).toBe('contact-new');
+    const res = await makeGateway().upsertContact('vendor-uuid', baseClaims);
+    expect(res).toEqual({ id: 'contact-new', isNew: true, name: 'Demo', phone: '+15550001' });
     expect(request).toHaveBeenCalledTimes(2);
   });
 
   it('still creates a contact when claims carry only an email', async () => {
     request.mockResolvedValueOnce([]).mockResolvedValueOnce({ id: 'c2' });
-    const id = await makeGateway().upsertContact('vendor-uuid', {
+    const res = await makeGateway().upsertContact('vendor-uuid', {
       vendor_id: 'yiji-v',
       customer_id: 'ext-2',
       email: 'only@example.com',
     });
-    expect(id).toBe('c2');
+    expect(res).toEqual({ id: 'c2', isNew: true, name: null, phone: null });
   });
 
   it('recovers from a concurrent-create unique violation by re-querying', async () => {
@@ -75,9 +82,10 @@ describe('GatewayDirectus.upsertContact', () => {
           { message: 'Value for field "vendor, phone" in collection "contacts" has to be unique.' },
         ],
       }) // create loses the race
-      .mockResolvedValueOnce([{ id: 'contact-raced' }]); // re-query finds the winner's row
-    const id = await makeGateway().upsertContact('vendor-uuid', baseClaims);
-    expect(id).toBe('contact-raced');
+      .mockResolvedValueOnce([{ id: 'contact-raced', name: null, phone: '+15550001' }]); // re-query finds the winner
+    const res = await makeGateway().upsertContact('vendor-uuid', baseClaims);
+    expect(res.id).toBe('contact-raced');
+    expect(res.isNew).toBe(false);
     expect(request).toHaveBeenCalledTimes(3);
   });
 
@@ -93,17 +101,17 @@ describe('GatewayDirectus.upsertContact', () => {
 });
 
 describe('GatewayDirectus.findOrCreateConversation', () => {
-  it('resumes the open conversation when one exists', async () => {
+  it('resumes the open conversation (created:false) when one exists', async () => {
     request.mockResolvedValueOnce([{ id: 'conv-open' }]);
-    const id = await makeGateway().findOrCreateConversation('vendor-uuid', 'contact-1');
-    expect(id).toBe('conv-open');
+    const res = await makeGateway().findOrCreateConversation('vendor-uuid', 'contact-1');
+    expect(res).toEqual({ id: 'conv-open', created: false });
     expect(request).toHaveBeenCalledTimes(1);
   });
 
-  it('creates a new conversation when none is open', async () => {
+  it('creates a new conversation (created:true) when none is open', async () => {
     request.mockResolvedValueOnce([]).mockResolvedValueOnce({ id: 'conv-new' });
-    const id = await makeGateway().findOrCreateConversation('vendor-uuid', 'contact-1');
-    expect(id).toBe('conv-new');
+    const res = await makeGateway().findOrCreateConversation('vendor-uuid', 'contact-1');
+    expect(res).toEqual({ id: 'conv-new', created: true });
     expect(request).toHaveBeenCalledTimes(2);
   });
 });
@@ -150,5 +158,60 @@ describe('GatewayDirectus.listAgentConversationIds', () => {
   it('maps rows to a flat id array', async () => {
     request.mockResolvedValueOnce([{ id: 'a' }, { id: 'b' }]);
     expect(await makeGateway().listAgentConversationIds('agent-1')).toEqual(['a', 'b']);
+  });
+});
+
+describe('GatewayDirectus.loadConversationMessages', () => {
+  it('returns visible messages with attachment ids grouped from the junction', async () => {
+    request
+      .mockResolvedValueOnce([
+        {
+          id: 'm1',
+          sender_type: 'customer',
+          content: 'hi',
+          date_created: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'm2',
+          sender_type: 'agent',
+          content: 'hello',
+          date_created: '2026-01-01T00:01:00.000Z',
+        },
+      ]) // messages
+      .mockResolvedValueOnce([
+        { messages_id: 'm1', directus_files_id: 'f1' },
+        { messages_id: 'm1', directus_files_id: 'f2' },
+      ]); // messages_files junction
+    const msgs = await makeGateway().loadConversationMessages('conv-1');
+    expect(msgs).toEqual([
+      {
+        id: 'm1',
+        senderType: 'customer',
+        content: 'hi',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        attachments: ['f1', 'f2'],
+      },
+      {
+        id: 'm2',
+        senderType: 'agent',
+        content: 'hello',
+        createdAt: '2026-01-01T00:01:00.000Z',
+        attachments: [],
+      },
+    ]);
+  });
+
+  it('short-circuits (no junction read) when there are no messages', async () => {
+    request.mockResolvedValueOnce([]);
+    expect(await makeGateway().loadConversationMessages('conv-1')).toEqual([]);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('GatewayDirectus.getConversationAttachment', () => {
+  it('returns null (no meta read, no asset fetch) when the file is not in the conversation', async () => {
+    request.mockResolvedValueOnce([]); // authorization lookup miss
+    expect(await makeGateway().getConversationAttachment('conv-1', 'f-x')).toBeNull();
+    expect(request).toHaveBeenCalledTimes(1);
   });
 });

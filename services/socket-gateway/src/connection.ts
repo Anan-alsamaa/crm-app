@@ -25,7 +25,11 @@ interface SocketData {
   vendorId?: string; // CRM vendor UUID
   vendorColors?: unknown;
   contactId?: string;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  contactIsNew?: boolean;
   conversationId?: string;
+  conversationCreated?: boolean;
   agentId?: string;
 }
 
@@ -115,13 +119,17 @@ export function registerConnection(deps: ConnectionDeps): void {
       const claims = verifier.verify(auth.token);
       const vendor = await directus.resolveVendor(claims.vendor_id);
       if (!vendor) throw new CustomerTokenError('unknown or inactive vendor');
-      const contactId = await directus.upsertContact(vendor.id, claims);
-      const conversationId = await directus.findOrCreateConversation(vendor.id, contactId);
+      const contact = await directus.upsertContact(vendor.id, claims);
+      const conversation = await directus.findOrCreateConversation(vendor.id, contact.id);
       data.kind = 'customer';
       data.vendorId = vendor.id;
       data.vendorColors = vendor.colors;
-      data.contactId = contactId;
-      data.conversationId = conversationId;
+      data.contactId = contact.id;
+      data.contactName = contact.name;
+      data.contactPhone = contact.phone;
+      data.contactIsNew = contact.isNew;
+      data.conversationId = conversation.id;
+      data.conversationCreated = conversation.created;
       return next();
     } catch (err) {
       // Surface the REAL cause. Directus SDK rejects with a non-Error object
@@ -165,7 +173,8 @@ export function registerConnection(deps: ConnectionDeps): void {
   logger.info('connection handlers registered');
 }
 
-async function onCustomerConnect(socket: Socket, { io }: ConnectionDeps): Promise<void> {
+async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<void> {
+  const { io, directus, producer, logger } = deps;
   const data = socket.data as SocketData;
   if (!data.conversationId || !data.vendorId) return;
   await socket.join(rooms.conversation(data.conversationId));
@@ -176,13 +185,33 @@ async function onCustomerConnect(socket: Socket, { io }: ConnectionDeps): Promis
     online,
   });
   // Tell the widget which conversation it is attached to + vendor branding,
-  // plus the current agent-online count so it can render the offline
-  // fallback on connect without waiting for the next agents:presence pulse.
+  // the current agent-online count (so it can render the offline fallback on
+  // connect without waiting for the next agents:presence pulse), and the
+  // contact identity so a returning, named customer is greeted by name.
   socket.emit('ready', {
     conversationId: data.conversationId,
     branding: data.vendorColors ?? null,
     agentsOnline: agentPresence.distinctOnline(),
+    contact: { name: data.contactName ?? null, phone: data.contactPhone ?? null },
+    isNew: data.contactIsNew ?? true,
   });
+  // Seed the existing thread so a returning customer (or a reconnect) sees their
+  // history instead of a blank panel. Best-effort: a failure just means no seed.
+  try {
+    const history = await directus.loadConversationMessages(data.conversationId);
+    if (history.length > 0) {
+      socket.emit('messages:history', { conversationId: data.conversationId, messages: history });
+    }
+  } catch (err) {
+    logger.warn({ err }, 'failed to load conversation history');
+  }
+  // A brand-new conversation fires the conversation_created automation trigger
+  // (assignment / keyword rules) exactly once; a resumed one already fired it.
+  if (data.conversationCreated) {
+    await producer
+      .conversationCreated(data.conversationId)
+      .catch((err) => logger.warn({ err }, 'conversationCreated enqueue failed'));
+  }
 }
 
 async function onAgentConnect(socket: Socket, { directus }: ConnectionDeps): Promise<void> {
@@ -319,6 +348,29 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     } catch (err) {
       logger.error({ err }, 'attachment upload failed');
       respond({ ok: false, error: 'upload failed' });
+    }
+  });
+
+  // Fetch a received attachment's bytes for the customer widget (which has no
+  // Directus session of its own). Authorized: the file must belong to a message
+  // in THIS socket's conversation, so a crafted id can't read another
+  // conversation's files. Agents fetch attachments directly via their own
+  // Directus token, so this path is customer-only.
+  //   emit('attachment:get', { id }, (err, res) => ...)
+  //   ack res: { ok:true, content: base64, type, filename } | { ok:false, error }
+  socket.on('attachment:get', async (raw: unknown, ack?: (res: unknown) => void) => {
+    const respond = typeof ack === 'function' ? ack : () => undefined;
+    if (data.kind !== 'customer' || !data.conversationId)
+      return respond({ ok: false, error: 'unauthorized' });
+    const fileId = (raw as { id?: unknown })?.id;
+    if (typeof fileId !== 'string' || !fileId) return respond({ ok: false, error: 'bad request' });
+    try {
+      const file = await directus.getConversationAttachment(data.conversationId, fileId);
+      if (!file) return respond({ ok: false, error: 'not found' });
+      respond({ ok: true, content: file.content, type: file.type, filename: file.filename });
+    } catch (err) {
+      logger.error({ err }, 'attachment:get failed');
+      respond({ ok: false, error: 'fetch failed' });
     }
   });
 
@@ -460,7 +512,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   // sees the change: peers in the conversation room get conversation:changed
   // (refetch this thread); everyone in agents:all gets inbox:activity (refresh
   // their inbox list).
-  socket.on(SOCKET_EVENTS.conversationUpdated, (raw: unknown) => {
+  socket.on(SOCKET_EVENTS.conversationUpdated, async (raw: unknown) => {
     if (data.kind !== 'agent') return;
     const parsed = TypingSignal.safeParse(raw);
     if (!parsed.success) return;
@@ -469,5 +521,18 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       .to(rooms.conversation(conversationId))
       .emit(SOCKET_EVENTS.conversationChanged, { conversationId });
     io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId });
+    // If the update closed/resolved the conversation, tell the customer widget
+    // (in the conversation room) so it surfaces the post-chat CSAT survey.
+    try {
+      const status = await directus.getConversationStatus(conversationId);
+      if (status === 'closed' || status === 'resolved') {
+        io.to(rooms.conversation(conversationId)).emit('conversation:closed', {
+          conversationId,
+          status,
+        });
+      }
+    } catch (err) {
+      logger.warn({ err }, 'conversation:closed status check failed');
+    }
   });
 }

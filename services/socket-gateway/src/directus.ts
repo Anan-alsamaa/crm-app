@@ -18,9 +18,15 @@ import type { AttachmentMeta } from './attachments.js';
  */
 export class GatewayDirectus {
   private readonly client: YijiDirectusClient;
+  private readonly url: string;
+  private readonly token: string;
 
   constructor(url: string, token: string) {
     this.client = createServiceClient({ url, token });
+    // Kept for the raw asset fetch in getConversationAttachment (the SDK has no
+    // "read file bytes" helper — we GET /assets/:id with the service token).
+    this.url = url;
+    this.token = token;
   }
 
   /** Resolve the CRM vendor UUID from the Yiji external vendor id (must be active). */
@@ -35,8 +41,18 @@ export class GatewayDirectus {
     return rows[0] ?? null;
   }
 
-  /** Upsert a contact, deduped per vendor by phone then email (SC-007). */
-  async upsertContact(vendorUuid: string, claims: CustomerClaims): Promise<string> {
+  /**
+   * Upsert a contact, deduped per vendor by phone then email (SC-007). Returns
+   * the id plus `isNew` (was created now vs. resumed) and the contact's stored
+   * name/phone — the gateway feeds these into the widget's `ready` event so a
+   * returning customer is greeted by name. For a resumed contact we return the
+   * STORED name (which may have been set/edited by an agent), not the token's —
+   * the customer JWT often carries a blank name.
+   */
+  async upsertContact(
+    vendorUuid: string,
+    claims: CustomerClaims,
+  ): Promise<{ id: string; isNew: boolean; name: string | null; phone: string | null }> {
     // Normalize identity once: a missing OR blank/whitespace name/phone/email is
     // stored as null (not ""), so the agent UI's `name ?? "Unknown"` fallback and
     // the phone/email dedup behave consistently. Only customer_id + (usually)
@@ -45,7 +61,11 @@ export class GatewayDirectus {
     const phone = claims.phone?.trim() || null;
     const email = claims.email?.trim() || null;
 
-    const findExisting = async (): Promise<string | null> => {
+    const findExisting = async (): Promise<{
+      id: string;
+      name: string | null;
+      phone: string | null;
+    } | null> => {
       const or: Array<Record<string, unknown>> = [];
       if (phone) or.push({ phone: { _eq: phone } });
       if (email) or.push({ email: { _eq: email } });
@@ -53,15 +73,21 @@ export class GatewayDirectus {
       const existing = (await this.client.request(
         readItems('contacts', {
           filter: { vendor: { _eq: vendorUuid }, _or: or },
-          fields: ['id'],
+          fields: ['id', 'name', 'phone'],
           limit: 1,
         }),
-      )) as Array<{ id: string }>;
-      return existing[0]?.id ?? null;
+      )) as Array<{ id: string; name: string | null; phone: string | null }>;
+      return existing[0] ?? null;
     };
 
-    const existingId = await findExisting();
-    if (existingId) return existingId;
+    const existing = await findExisting();
+    if (existing)
+      return {
+        id: existing.id,
+        isNew: false,
+        name: existing.name ?? null,
+        phone: existing.phone ?? null,
+      };
 
     try {
       const created = (await this.client.request(
@@ -73,7 +99,7 @@ export class GatewayDirectus {
           email,
         } as never),
       )) as { id: string };
-      return created.id;
+      return { id: created.id, isNew: true, name, phone };
     } catch (err) {
       // The widget reconnects aggressively, so multiple onboarding flows can
       // race: each reads "not found" then races to create the same contact,
@@ -81,13 +107,21 @@ export class GatewayDirectus {
       // That's not a real failure — re-query and return the contact the
       // winning create produced. Only rethrow if it genuinely doesn't exist.
       const raced = await findExisting();
-      if (raced) return raced;
+      if (raced)
+        return { id: raced.id, isNew: false, name: raced.name ?? null, phone: raced.phone ?? null };
       throw err;
     }
   }
 
-  /** Return the contact's open conversation, or create a new one. */
-  async findOrCreateConversation(vendorUuid: string, contactId: string): Promise<string> {
+  /**
+   * Return the contact's open conversation, or create a new one. `created` is
+   * true only when a fresh conversation was inserted — the caller uses it to
+   * fire the `conversation_created` automation trigger exactly once.
+   */
+  async findOrCreateConversation(
+    vendorUuid: string,
+    contactId: string,
+  ): Promise<{ id: string; created: boolean }> {
     const open = (await this.client.request(
       readItems('conversations', {
         filter: { contact: { _eq: contactId }, status: { _eq: 'open' } },
@@ -96,7 +130,7 @@ export class GatewayDirectus {
         limit: 1,
       }),
     )) as Array<{ id: string }>;
-    if (open[0]) return open[0].id;
+    if (open[0]) return { id: open[0].id, created: false };
 
     const created = (await this.client.request(
       createItem('conversations', {
@@ -108,7 +142,7 @@ export class GatewayDirectus {
         last_message_at: new Date().toISOString(),
       } as never),
     )) as { id: string };
-    return created.id;
+    return { id: created.id, created: true };
   }
 
   /** Persist a message and bump conversation activity. Returns the new message. */
@@ -289,5 +323,114 @@ export class GatewayDirectus {
       }),
     )) as Array<{ id: string }>;
     return rows.map((r) => r.id);
+  }
+
+  /**
+   * Load a conversation's visible message thread (customer + agent messages,
+   * excluding internal notes) for the widget's `messages:history` seed on
+   * (re)connect. Attachment ids come from the messages_files junction (there is
+   * no alias field on `messages`); a denied junction read fails soft to no chips.
+   */
+  async loadConversationMessages(
+    conversationId: string,
+  ): Promise<
+    Array<{
+      id: string;
+      senderType: SenderType;
+      content: string;
+      createdAt: string;
+      attachments: string[];
+    }>
+  > {
+    const msgs = (await this.client.request(
+      readItems('messages', {
+        filter: { conversation: { _eq: conversationId }, is_internal_note: { _eq: false } },
+        fields: ['id', 'sender_type', 'content', 'date_created'],
+        sort: ['date_created'],
+        limit: 200,
+      }),
+    )) as Array<{ id: string; sender_type: SenderType; content: string; date_created: string }>;
+    if (msgs.length === 0) return [];
+
+    const byMessage = new Map<string, string[]>();
+    try {
+      const links = (await this.client.request(
+        readItems('messages_files', {
+          filter: { messages_id: { _in: msgs.map((m) => m.id) } },
+          fields: ['messages_id', 'directus_files_id'],
+          limit: -1,
+        }),
+      )) as Array<{ messages_id: string; directus_files_id: string | null }>;
+      for (const l of links) {
+        if (!l.directus_files_id) continue;
+        const arr = byMessage.get(l.messages_id) ?? [];
+        arr.push(l.directus_files_id);
+        byMessage.set(l.messages_id, arr);
+      }
+    } catch {
+      // Junction read denied (older permission set) — thread still loads, sans attachments.
+    }
+
+    return msgs.map((m) => ({
+      id: m.id,
+      senderType: m.sender_type,
+      content: m.content,
+      createdAt: m.date_created,
+      attachments: byMessage.get(m.id) ?? [],
+    }));
+  }
+
+  /** Current status of a conversation (used to detect close/resolve for CSAT). */
+  async getConversationStatus(conversationId: string): Promise<string | null> {
+    const rows = (await this.client.request(
+      readItems('conversations', {
+        filter: { id: { _eq: conversationId } },
+        fields: ['status'],
+        limit: 1,
+      }),
+    )) as Array<{ status: string | null }>;
+    return rows[0]?.status ?? null;
+  }
+
+  /**
+   * Fetch an attachment's bytes (base64) for the customer widget, but only if
+   * the file is linked to a message in the given conversation — so a crafted
+   * file id can't read another conversation's attachments. Returns null when
+   * unauthorized / missing.
+   */
+  async getConversationAttachment(
+    conversationId: string,
+    fileId: string,
+  ): Promise<{ content: string; type: string | null; filename: string | null } | null> {
+    const links = (await this.client.request(
+      readItems('messages_files', {
+        filter: {
+          directus_files_id: { _eq: fileId },
+          messages_id: { conversation: { _eq: conversationId } },
+        },
+        fields: ['messages_id'],
+        limit: 1,
+      }),
+    )) as Array<{ messages_id: string }>;
+    if (links.length === 0) return null;
+
+    const meta = (await this.client.request(
+      readFiles({
+        filter: { id: { _eq: fileId } },
+        fields: ['type', 'filename_download'],
+        limit: 1,
+      }),
+    )) as Array<{ type: string | null; filename_download: string | null }>;
+
+    const res = await fetch(`${this.url}/assets/${encodeURIComponent(fileId)}`, {
+      headers: { Authorization: `Bearer ${this.token}` },
+    });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    return {
+      content: buf.toString('base64'),
+      type: meta[0]?.type ?? null,
+      filename: meta[0]?.filename_download ?? null,
+    };
   }
 }
