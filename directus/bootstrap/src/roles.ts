@@ -236,6 +236,13 @@ export const roles: RoleSpec[] = [
     appAccess: false,
     adminAccess: false,
     serviceTokenEnv: 'SVC_AI_TOKEN',
-    permissions: [...readOnly('conversations'), ...readOnly('messages')],
+    permissions: [
+      ...readOnly('conversations'),
+      ...readOnly('messages'),
+      // C-1: the gateway resolves which role ids are admin roles (to gate the AI
+      // admin endpoints from the caller's VERIFIED Directus role). Needs read on
+      // directus_roles via the service token.
+      { collection: 'directus_roles', action: 'read' },
+    ],
   },
 ];

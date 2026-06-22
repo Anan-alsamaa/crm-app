@@ -343,3 +343,125 @@ jobs:
       - name: Dump Directus logs on failure
         if: failure()
         run: docker logs directus | tail -200 || true
+
+  # Integration gate for the C-1/C-2 auth contract. Unlike the UI e2e job this is
+  # API-level (no browser, no portals, not flaky) and BLOCKING — it boots a real
+  # Directus + the ai-gateway and asserts: a static/no token is rejected, a valid
+  # Directus SESSION token is accepted, the commerce proxy works, and admin is
+  # derived from the verified Directus role (not a client header).
+  auth-contract:
+    name: AI/commerce auth contract (C-1/C-2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: yiji_crm
+          POSTGRES_USER: directus
+          POSTGRES_PASSWORD: directus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U directus -d yiji_crm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DIRECTUS_KEY: ci-test-directus-key-not-secret-32c
+      DIRECTUS_SECRET: ci-test-directus-secret-not-secret
+      DIRECTUS_ADMIN_EMAIL: e.habibi@anan.sa
+      DIRECTUS_ADMIN_PASSWORD: '123456'
+      DIRECTUS_PUBLIC_URL: http://localhost:8055
+      DIRECTUS_URL: http://localhost:8055
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_DATABASE: yiji_crm
+      DB_USER: directus
+      DB_PASSWORD: directus
+      REDIS_URL: redis://localhost:6379
+      SVC_GATEWAY_TOKEN: dev-gateway-token-for-local-only
+      SVC_WORKERS_TOKEN: dev-workers-token-for-local-only
+      SVC_AI_TOKEN: dev-ai-token-for-local-only
+      AI_URL: http://localhost:8091
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start Directus
+        run: |
+          docker run -d --name directus --network=host \
+            -e KEY=$DIRECTUS_KEY -e SECRET=$DIRECTUS_SECRET \
+            -e ADMIN_EMAIL=$DIRECTUS_ADMIN_EMAIL -e ADMIN_PASSWORD=$DIRECTUS_ADMIN_PASSWORD \
+            -e PUBLIC_URL=$DIRECTUS_PUBLIC_URL \
+            -e DB_CLIENT=pg -e DB_HOST=localhost -e DB_PORT=5432 \
+            -e DB_DATABASE=$DB_DATABASE -e DB_USER=$DB_USER -e DB_PASSWORD=$DB_PASSWORD \
+            -e REDIS=$REDIS_URL \
+            -e CACHE_ENABLED=true -e CACHE_STORE=redis -e CACHE_AUTO_PURGE=true \
+            -e CORS_ENABLED=true -e CORS_ORIGIN=true \
+            -v ${{ github.workspace }}/directus/extensions:/directus/extensions \
+            -v ${{ github.workspace }}/directus/snapshot:/directus/snapshot \
+            directus/directus:11
+
+      - name: Wait for Directus to be healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8055/server/health > /dev/null; then exit 0; fi
+            sleep 5
+          done
+          echo "Directus failed to become healthy"; docker logs directus | tail -100; exit 1
+
+      - name: Bootstrap Directus schema + roles + service tokens
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=30 300 pnpm --filter @yiji/directus-bootstrap apply
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ] || [ "$code" -eq 124 ]; then
+            echo "bootstrap done (exit $code)"
+          else
+            echo "bootstrap failed ($code)"; exit "$code"
+          fi
+
+      - name: Start ai-gateway
+        run: |
+          PORT=8091 \
+          DIRECTUS_INTERNAL_URL=http://localhost:8055 \
+          REDIS_URL=$REDIS_URL \
+          SVC_AI_TOKEN=$SVC_AI_TOKEN \
+          CORS_ORIGIN='*' \
+            pnpm --filter @yiji/ai-gateway dev > ai-gateway.log 2>&1 &
+          echo "ai-gateway launched"
+
+      - name: Wait for ai-gateway
+        run: |
+          for i in $(seq 1 45); do
+            if curl -sf http://localhost:8091/health > /dev/null; then echo "ai-gateway up"; exit 0; fi
+            sleep 2
+          done
+          echo "ai-gateway failed to come up"; tail -n 100 ai-gateway.log || true; exit 1
+
+      - name: Run auth-contract assertions
+        run: node .github/scripts/ai-auth-contract.mjs
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          echo "----- ai-gateway.log -----"; tail -n 100 ai-gateway.log || true
+          echo "----- directus -----"; docker logs directus | tail -100 || true
