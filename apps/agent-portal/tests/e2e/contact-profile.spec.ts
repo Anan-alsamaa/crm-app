@@ -57,7 +57,11 @@ test.describe('US6 — contact profile + commerce panel', () => {
   test('profile shows identity + commerce panel with seeded order data', async ({ page }) => {
     test.skip(!FULL_STACK, 'requires E2E_FULL_STACK=1');
     await signIn(page);
-    await page.goto('http://localhost:5173/contacts');
+    // Navigate via the in-app Contacts link (client-side route) rather than a
+    // full page.goto() — post-H-2, a hard reload drops the in-memory access token
+    // and forces a cookie-restore round-trip, which races the click below.
+    await page.getByRole('link', { name: /contacts/i }).click();
+    await expect(page).toHaveURL(/\/contacts$/, { timeout: 20_000 });
     await page
       .getByText(/demo customer/i)
       .first()
