@@ -15,6 +15,7 @@ const hooks = vi.hoisted(() => ({
   useContact: vi.fn(),
   useContactConversations: vi.fn(),
   useContactTickets: vi.fn(),
+  useUpdateContact: () => ({ mutateAsync: () => Promise.resolve({}), isPending: false }),
 }));
 vi.mock('../src/features/contacts/api.js', () => hooks);
 vi.mock('../src/features/contacts/CommercePanel.js', () => ({

@@ -1,14 +1,43 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Avatar, cn, formatRelative, Pill, Skeleton, Toolbar, ToolbarSpacer } from '@yiji/ui';
+import {
+  Avatar,
+  Button,
+  cn,
+  formatRelative,
+  Input,
+  Pill,
+  Skeleton,
+  toast,
+  Toolbar,
+  ToolbarSpacer,
+} from '@yiji/ui';
 import {
   useContact,
   useContactConversations,
   useContactTickets,
+  useUpdateContact,
   type ContactTimelineConversation,
   type ContactTimelineTicket,
 } from './api.js';
+
+function PencilIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+      aria-hidden
+    >
+      <path d="M11.5 2.5a1.4 1.4 0 0 1 2 2L6 12l-3 1 1-3 7.5-7.5z" />
+    </svg>
+  );
+}
 import { CommercePanel } from './CommercePanel.js';
 import { ContactTags } from './ContactTags.js';
 
@@ -48,6 +77,36 @@ export function ContactProfilePage() {
   const contact = useContact(id);
   const conversations = useContactConversations(id);
   const tickets = useContactTickets(id);
+  const updateContact = useUpdateContact();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ name: '', email: '', phone: '' });
+  // Leave edit mode when navigating to a different contact.
+  useEffect(() => setEditing(false), [id]);
+
+  const startEdit = () => {
+    const c = contact.data;
+    if (!c) return;
+    setDraft({ name: c.name ?? '', email: c.email ?? '', phone: c.phone ?? '' });
+    setEditing(true);
+  };
+  const saveContact = async () => {
+    const c = contact.data;
+    if (!c) return;
+    try {
+      await updateContact.mutateAsync({
+        id: c.id,
+        patch: {
+          name: draft.name.trim() || null,
+          email: draft.email.trim() || null,
+          phone: draft.phone.trim() || null,
+        },
+      });
+      toast.success(t('contacts.saved', { defaultValue: 'Customer details saved.' }));
+      setEditing(false);
+    } catch {
+      toast.error(t('contacts.saveError', { defaultValue: 'Could not save customer details.' }));
+    }
+  };
 
   const timeline = useMemo<TimelineItem[]>(() => {
     const items: TimelineItem[] = [];
@@ -102,7 +161,7 @@ export function ContactProfilePage() {
         <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 p-6 sm:p-10 lg:grid-cols-[1fr_360px]">
           {/* Left column: identity + timeline */}
           <div className="space-y-6">
-            <IdentityCard />
+            {IdentityCard()}
             <TimelineSection
               loading={conversations.isLoading || tickets.isLoading}
               items={timeline}
@@ -144,33 +203,102 @@ export function ContactProfilePage() {
         <div className="flex items-start gap-4">
           <Avatar name={c.name} email={c.email} size="lg" />
           <div className="min-w-0 flex-1 space-y-1.5">
-            <div className="flex items-baseline gap-2">
-              <h2 className="text-xl font-semibold tracking-tight text-foreground truncate">
-                {c.name ?? c.email}
-              </h2>
-              {metaTier && <Pill tone="primary">{metaTier}</Pill>}
-            </div>
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-0.5 text-xs sm:grid-cols-2">
-              {c.email && (
-                <Row label={t('contacts.email', { defaultValue: 'Email' })} value={c.email} />
-              )}
-              {c.phone && (
-                <Row label={t('contacts.phone', { defaultValue: 'Phone' })} value={c.phone} />
-              )}
-              {c.vendor?.name && (
-                <Row
-                  label={t('contacts.vendor', { defaultValue: 'Vendor' })}
-                  value={c.vendor.name}
-                />
-              )}
-              {c.external_customer_id && (
-                <Row
-                  label={t('contacts.externalId', { defaultValue: 'External ID' })}
-                  value={c.external_customer_id}
-                />
-              )}
-            </dl>
+            {editing ? (
+              <div className="space-y-3">
+                <label className="block text-xs">
+                  <span className="mb-1 block text-muted-foreground">
+                    {t('contacts.name', { defaultValue: 'Name' })}
+                  </span>
+                  <Input
+                    value={draft.name}
+                    onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                    placeholder={t('contacts.unknown', { defaultValue: 'Unknown contact' })}
+                    aria-label={t('contacts.name', { defaultValue: 'Name' })}
+                  />
+                </label>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-xs">
+                    <span className="mb-1 block text-muted-foreground">
+                      {t('contacts.email', { defaultValue: 'Email' })}
+                    </span>
+                    <Input
+                      type="email"
+                      value={draft.email}
+                      onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
+                      aria-label={t('contacts.email', { defaultValue: 'Email' })}
+                    />
+                  </label>
+                  <label className="block text-xs">
+                    <span className="mb-1 block text-muted-foreground">
+                      {t('contacts.phone', { defaultValue: 'Phone' })}
+                    </span>
+                    <Input
+                      type="tel"
+                      value={draft.phone}
+                      onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
+                      aria-label={t('contacts.phone', { defaultValue: 'Phone' })}
+                    />
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    onClick={() => void saveContact()}
+                    loading={updateContact.isPending}
+                  >
+                    {t('actions.save', { ns: 'common', defaultValue: 'Save' })}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditing(false)}
+                    disabled={updateContact.isPending}
+                  >
+                    {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-xl font-semibold tracking-tight text-foreground truncate">
+                    {c.name ?? c.email}
+                  </h2>
+                  {metaTier && <Pill tone="primary">{metaTier}</Pill>}
+                </div>
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-0.5 text-xs sm:grid-cols-2">
+                  {c.email && (
+                    <Row label={t('contacts.email', { defaultValue: 'Email' })} value={c.email} />
+                  )}
+                  {c.phone && (
+                    <Row label={t('contacts.phone', { defaultValue: 'Phone' })} value={c.phone} />
+                  )}
+                  {c.vendor?.name && (
+                    <Row
+                      label={t('contacts.vendor', { defaultValue: 'Vendor' })}
+                      value={c.vendor.name}
+                    />
+                  )}
+                  {c.external_customer_id && (
+                    <Row
+                      label={t('contacts.externalId', { defaultValue: 'External ID' })}
+                      value={c.external_customer_id}
+                    />
+                  )}
+                </dl>
+              </>
+            )}
           </div>
+          {!editing && (
+            <button
+              type="button"
+              onClick={startEdit}
+              aria-label={t('contacts.editContact', { defaultValue: 'Edit contact' })}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              <PencilIcon />
+            </button>
+          )}
         </div>
       </div>
     );
