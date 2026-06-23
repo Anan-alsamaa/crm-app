@@ -95,3 +95,6 @@ tools/screenshot/package-lock.json
 tools/job-producer/jp.out
 tools/job-producer/jp.err
 tools/job-producer/package-lock.json
+
+# Local ngrok tunnel config — tied to a personal ngrok account's reserved domain
+ngrok-tunnels.yml

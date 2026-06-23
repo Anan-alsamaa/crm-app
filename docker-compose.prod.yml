@@ -94,6 +94,36 @@ services:
       timeout: 5s
       retries: 12
 
+  # One-shot schema/roles/service-token apply. Runs ONLY when explicitly
+  # invoked (it carries the `bootstrap` profile, so `up` never starts it):
+  #   docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm bootstrap
+  # Idempotent — re-run after a restore or to rotate SVC_* tokens. Builds from
+  # source like the services, so the host needs only Docker + the repo (no Node).
+  bootstrap:
+    profiles: ['bootstrap']
+    image: ${REGISTRY:-ghcr.io/yiji-crm}/bootstrap:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: directus/bootstrap/Dockerfile
+    restart: 'no'
+    depends_on:
+      directus:
+        condition: service_healthy
+    environment:
+      DIRECTUS_INTERNAL_URL: ${DIRECTUS_INTERNAL_URL:-http://directus:8055}
+      DIRECTUS_ADMIN_EMAIL: ${DIRECTUS_ADMIN_EMAIL:?set DIRECTUS_ADMIN_EMAIL}
+      DIRECTUS_ADMIN_PASSWORD: ${DIRECTUS_ADMIN_PASSWORD:?set DIRECTUS_ADMIN_PASSWORD}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_DATABASE: ${DB_DATABASE:-yiji_crm}
+      DB_USER: ${DB_USER:?set DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      # Seeded as each service user's static token (must match what the
+      # gateway/workers/ai-gateway present to Directus).
+      SVC_GATEWAY_TOKEN: ${SVC_GATEWAY_TOKEN:?set SVC_GATEWAY_TOKEN}
+      SVC_WORKERS_TOKEN: ${SVC_WORKERS_TOKEN:?set SVC_WORKERS_TOKEN}
+      SVC_AI_TOKEN: ${SVC_AI_TOKEN:?set SVC_AI_TOKEN}
+
   socket-gateway:
     image: ${REGISTRY:-ghcr.io/yiji-crm}/socket-gateway:${IMAGE_TAG:-latest}
     build:
