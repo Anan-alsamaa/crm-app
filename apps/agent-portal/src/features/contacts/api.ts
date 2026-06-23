@@ -76,6 +76,50 @@ export function useContacts() {
   });
 }
 
+/**
+ * Server-side contact search for pickers (e.g. the New ticket dialog). Unlike
+ * {@link useContacts} — which loads the whole directory — this filters in
+ * Directus by phone / name / email and caps the result, so it stays fast even
+ * with thousands of contacts. Phone is the primary key here: many customers
+ * have no name, so the picker is search-driven and starts empty.
+ *
+ * Disabled until the term has at least 2 characters, so a contact must be
+ * looked up (typically by phone number) rather than scrolled from a full list.
+ */
+export function useContactSearch(term: string) {
+  const q = term.trim();
+  return useQuery({
+    queryKey: ['contacts-search', q],
+    enabled: q.length >= 2,
+    queryFn: () =>
+      directus.request(
+        readItems('contacts', {
+          fields: [
+            'id',
+            'external_customer_id',
+            'name',
+            'phone',
+            'email',
+            'metadata',
+            'date_created',
+            'vendor.id',
+            'vendor.name',
+            'vendor.yiji_vendor_id',
+          ],
+          filter: {
+            _or: [
+              { phone: { _icontains: q } },
+              { name: { _icontains: q } },
+              { email: { _icontains: q } },
+            ],
+          },
+          sort: ['-date_created'],
+          limit: 25,
+        }),
+      ) as Promise<ContactRow[]>,
+  });
+}
+
 export function useContact(id: string) {
   return useQuery({
     queryKey: ['contact', id],

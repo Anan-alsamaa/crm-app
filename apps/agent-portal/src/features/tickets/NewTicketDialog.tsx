@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Avatar,
@@ -13,7 +13,7 @@ import {
 } from '@yiji/ui';
 import type { Priority } from '@yiji/shared-types';
 import { useCreateTicket } from './api.js';
-import { useContacts } from '../contacts/api.js';
+import { useContactSearch, type ContactRow } from '../contacts/api.js';
 import { useAgents } from '../inbox/api.js';
 
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
@@ -33,11 +33,12 @@ interface Props {
 export function NewTicketDialog({ onClose, onCreated }: Props) {
   const { t } = useTranslation();
   const createTicket = useCreateTicket();
-  const contacts = useContacts();
   const agents = useAgents();
 
   const [search, setSearch] = useState('');
-  const [contactId, setContactId] = useState<string | null>(null);
+  // The chosen contact is held in full (not just an id) because the search
+  // results that produced it are cleared once the term changes.
+  const [selectedContact, setSelectedContact] = useState<ContactRow | null>(null);
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('medium');
@@ -52,22 +53,15 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const list = contacts.data ?? [];
-  const selectedContact = useMemo(
-    () => list.find((c) => c.id === contactId) ?? null,
-    [list, contactId],
-  );
+  // Search the full directory server-side (by phone / name / email) rather than
+  // loading every contact — scales to thousands. Starts empty: the agent must
+  // search (typically by phone) before any contact is shown.
+  const term = search.trim();
+  const tooShort = term.length < 2;
+  const contactSearch = useContactSearch(search);
+  const matches = contactSearch.data ?? [];
 
-  // Filter the contact list by name/email/phone — same fields the inbox search
-  // covers. Capped so a large directory stays responsive in the picker.
-  const matches = useMemo(() => {
-    const s = search.trim().toLowerCase();
-    const base = s
-      ? list.filter((c) => [c.name, c.email, c.phone].some((v) => v?.toLowerCase().includes(s)))
-      : list;
-    return base.slice(0, 50);
-  }, [list, search]);
-
+  const contactId = selectedContact?.id ?? null;
   const vendorId = selectedContact?.vendor?.id ?? null;
   const canSubmit = !!subject.trim() && !!contactId && !!vendorId && !submitting;
 
@@ -134,11 +128,14 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
                 <Avatar name={selectedContact.name} email={selectedContact.email} size="sm" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-foreground">
-                    {selectedContact.name ?? selectedContact.email ?? selectedContact.id}
+                    {selectedContact.name ??
+                      selectedContact.phone ??
+                      selectedContact.email ??
+                      selectedContact.id}
                   </div>
-                  {selectedContact.email && (
+                  {(selectedContact.phone ?? selectedContact.email) && (
                     <div className="truncate text-xs text-muted-foreground">
-                      {selectedContact.email}
+                      {selectedContact.phone ?? selectedContact.email}
                     </div>
                   )}
                 </div>
@@ -147,7 +144,7 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setContactId(null);
+                    setSelectedContact(null);
                     setSearch('');
                   }}
                 >
@@ -161,53 +158,65 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder={t('tickets.contactSearch', {
-                    defaultValue: 'Search contacts by name, email, or phone…',
+                    defaultValue: 'Search by phone number, name, or email…',
                   })}
                   autoComplete="off"
+                  inputMode="tel"
                 />
-                <div className="max-h-52 overflow-auto rounded-xl ring-1 ring-foreground/[0.05]">
-                  {contacts.isLoading ? (
-                    <div className="flex items-center justify-center py-6 text-muted-foreground">
-                      <Spinner size={16} />
-                    </div>
-                  ) : matches.length > 0 ? (
-                    <ul className="divide-y divide-foreground/[0.04]">
-                      {matches.map((c) => (
-                        <li key={c.id}>
-                          <button
-                            type="button"
-                            onClick={() => setContactId(c.id)}
-                            className={cn(
-                              'flex w-full items-center gap-2.5 px-3 py-2 text-start transition-colors duration-fast ease-out hover:bg-secondary',
-                              !c.vendor && 'opacity-60',
-                            )}
-                          >
-                            <Avatar name={c.name} email={c.email} size="sm" />
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-medium text-foreground">
-                                {c.name ?? c.email ?? c.id}
-                              </div>
-                              {c.email && (
-                                <div className="truncate text-xs text-muted-foreground">
-                                  {c.email}
-                                </div>
+                {/* Empty until the agent searches. Phone is the primary lookup —
+                    many contacts have no name — so we don't list the whole
+                    directory (which would also be unworkable at thousands). */}
+                {tooShort ? (
+                  <p className="rounded-xl px-3 py-6 text-center text-xs text-muted-foreground ring-1 ring-foreground/[0.05]">
+                    {t('tickets.contactSearchPrompt', {
+                      defaultValue: 'Type a phone number or name to find a contact.',
+                    })}
+                  </p>
+                ) : (
+                  <div className="max-h-52 overflow-auto rounded-xl ring-1 ring-foreground/[0.05]">
+                    {contactSearch.isFetching ? (
+                      <div className="flex items-center justify-center py-6 text-muted-foreground">
+                        <Spinner size={16} />
+                      </div>
+                    ) : matches.length > 0 ? (
+                      <ul className="divide-y divide-foreground/[0.04]">
+                        {matches.map((c) => (
+                          <li key={c.id}>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedContact(c)}
+                              className={cn(
+                                'flex w-full items-center gap-2.5 px-3 py-2 text-start transition-colors duration-fast ease-out hover:bg-secondary',
+                                !c.vendor && 'opacity-60',
                               )}
-                            </div>
-                            {!c.vendor && (
-                              <span className="shrink-0 text-2xs text-muted-foreground">
-                                {t('tickets.noVendor', { defaultValue: 'No vendor' })}
-                              </span>
-                            )}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-                      {t('tickets.noContacts', { defaultValue: 'No matching contacts.' })}
-                    </p>
-                  )}
-                </div>
+                            >
+                              <Avatar name={c.name} email={c.email} size="sm" />
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-medium text-foreground">
+                                  {c.name ?? c.phone ?? c.email ?? c.id}
+                                </div>
+                                {(c.phone ?? c.email) && (
+                                  <div className="truncate text-xs text-muted-foreground">
+                                    {c.phone ?? c.email}
+                                  </div>
+                                )}
+                              </div>
+                              {!c.vendor && (
+                                <span className="shrink-0 text-2xs text-muted-foreground">
+                                  {t('tickets.noVendor', { defaultValue: 'No vendor' })}
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                        {t('tickets.noContacts', { defaultValue: 'No matching contacts.' })}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </FormField>

@@ -12,6 +12,7 @@ vi.mock('../src/lib/directus.js', () => ({ directus: { request } }));
 
 import {
   useContacts,
+  useContactSearch,
   useContact,
   useContactConversations,
   useContactTickets,
@@ -35,6 +36,20 @@ describe('contacts api — query hooks', () => {
     const { result } = renderHook(() => useContacts(), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual([{ id: 'k1', name: 'Alice' }]);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('useContactSearch stays disabled until the term is long enough', () => {
+    const { result } = renderHook(() => useContactSearch('a'), { wrapper: wrapper() });
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('useContactSearch fetches matching contacts once the term is long enough', async () => {
+    request.mockResolvedValueOnce([{ id: 'k1', name: 'Alice', phone: '+966500000001' }]);
+    const { result } = renderHook(() => useContactSearch('5000'), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toHaveLength(1);
     expect(request).toHaveBeenCalledTimes(1);
   });
 
