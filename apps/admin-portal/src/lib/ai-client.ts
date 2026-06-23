@@ -1,30 +1,30 @@
 import type { AiFeatureConfig } from '@yiji/shared-types';
+import { auth } from './directus.js';
 
 /**
  * Thin fetch wrapper for the ai-gateway admin endpoints.
  *
- * Token + caller identity ride in headers — exactly what the gateway's
- * `authenticate()` expects. Throws on non-2xx so TanStack Query can show
- * the error directly.
+ * Auth: we send the admin's own **Directus access token** as a Bearer token; the
+ * gateway verifies it and derives admin status from the user's Directus role
+ * server-side. No service token is shipped to the browser, and the old
+ * self-asserted `x-yiji-admin` header is gone (the gateway ignores it).
  */
 
 const GATEWAY_URL =
   (import.meta.env.VITE_AI_GATEWAY_URL as string | undefined) ?? 'http://localhost:8081';
-const SVC_TOKEN = (import.meta.env.VITE_AI_SVC_TOKEN as string | undefined) ?? '';
 
 interface CallerHeaders {
-  userId: string;
-  /** Optional. Admin config is global; defaults to 'global'. */
+  userId?: string;
+  /** Optional cap bucket to inspect; admin config itself is global. */
   vendorId?: string;
 }
 
-function headers(c: CallerHeaders): HeadersInit {
+async function authHeaders(c: CallerHeaders): Promise<HeadersInit> {
+  const token = await auth.getToken();
   return {
     'content-type': 'application/json',
-    authorization: `Bearer ${SVC_TOKEN}`,
-    'x-yiji-user': c.userId,
+    ...(token ? { authorization: `Bearer ${token}` } : {}),
     'x-yiji-vendor': c.vendorId ?? 'global',
-    'x-yiji-admin': '1',
   };
 }
 
@@ -44,7 +44,7 @@ async function fetchJson<T>(url: string, init: RequestInit): Promise<T> {
 
 export const aiAdmin = {
   async getConfig(c: CallerHeaders): Promise<typeof AiFeatureConfig._type> {
-    return fetchJson(`${GATEWAY_URL}/admin/config`, { headers: headers(c) });
+    return fetchJson(`${GATEWAY_URL}/admin/config`, { headers: await authHeaders(c) });
   },
   async putConfig(
     c: CallerHeaders,
@@ -52,11 +52,11 @@ export const aiAdmin = {
   ): Promise<typeof AiFeatureConfig._type> {
     return fetchJson(`${GATEWAY_URL}/admin/config`, {
       method: 'PUT',
-      headers: headers(c),
+      headers: await authHeaders(c),
       body: JSON.stringify(next),
     });
   },
   async getUsage(c: CallerHeaders): Promise<{ used: number; cap: number }> {
-    return fetchJson(`${GATEWAY_URL}/admin/usage`, { headers: headers(c) });
+    return fetchJson(`${GATEWAY_URL}/admin/usage`, { headers: await authHeaders(c) });
   },
 };

@@ -71,23 +71,20 @@ async function idempotent(label: string, fn: () => Promise<unknown>): Promise<vo
 }
 
 /**
- * Like idempotent(), but for operations that are a no-op IN EFFECT on re-run —
- * metadata-only updates (e.g. updateRelation wiring) that always succeed and
- * converge to the same state. Logs `=` (never `+`) so the idempotence check
- * (check-idempotence.mjs fails on any `+` in the second apply) stays honest.
+ * For metadata-only operations that re-run every pass and are idempotent in
+ * EFFECT rather than via an "already exists" error — e.g. `updateRelation`
+ * (always succeeds; re-applying the same meta changes nothing). They must be
+ * logged with the neutral `=` prefix, NOT `+`: the idempotence check
+ * (check-idempotence.mjs) flags every `+` line on the second apply as drift, so
+ * an always-succeeding update would falsely fail it.
  */
-async function ensure(label: string, fn: () => Promise<unknown>): Promise<void> {
+async function synced(label: string, fn: () => Promise<unknown>): Promise<void> {
   try {
     await fn();
-    console.log(`  = ${label}`);
+    console.log(`  = ${label} (synced)`);
   } catch (err) {
-    const msg = errorMessage(err);
-    if (/exist|duplicate|unique|already/i.test(msg)) {
-      console.log(`  = ${label} (exists)`);
-    } else {
-      console.error(`  ! ${label}: ${msg}`);
-      throw err;
-    }
+    console.error(`  ! ${label}: ${errorMessage(err)}`);
+    throw err;
   }
 }
 
@@ -298,8 +295,8 @@ async function applyJunctions(client: AnyClient): Promise<void> {
         ),
       );
       // Metadata-only re-application — always succeeds, no-op in effect. Use
-      // ensure() so it logs `=`, not `+` (else the idempotence check trips).
-      await ensure(`wire ${j.junction}.${j.fieldA} one_field=${j.aliasA}`, () =>
+      // synced() so it logs `=`, not `+` (else the idempotence check trips).
+      await synced(`wire ${j.junction}.${j.fieldA} one_field=${j.aliasA}`, () =>
         client.request(
           updateRelation(j.junction, j.fieldA, {
             meta: { one_field: j.aliasA, junction_field: j.fieldB },
@@ -571,7 +568,15 @@ async function applyConstraints(): Promise<void> {
       }
       await pool.query(sql);
       const label = name ?? sql.split('\n')[0]?.trim();
-      console.log(existed ? `  = ${label} (exists)` : `  + ${label}`);
+      // Index statements were probed above (existed?). Everything else here is
+      // CREATE OR REPLACE FUNCTION / DROP TRIGGER IF EXISTS — idempotent in
+      // EFFECT (re-running changes nothing), so report it as synced, not created;
+      // otherwise the always-run DDL trips the idempotence check on the 2nd pass.
+      if (!name) {
+        console.log(`  = ${label} (synced)`);
+      } else {
+        console.log(existed ? `  = ${label} (exists)` : `  + ${label}`);
+      }
     }
   } finally {
     await pool.end();

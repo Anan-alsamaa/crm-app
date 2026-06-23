@@ -40,7 +40,12 @@ interface Stubs {
 function makeStubs(over: Partial<Record<keyof GatewayDirectus, unknown>> = {}): Stubs {
   const directus = {
     resolveVendor: vi.fn(async () => ({ id: 'vendor-uuid', colors: { primary: '#abcabc' } })),
-    upsertContact: vi.fn(async () => 'contact-1'),
+    upsertContact: vi.fn(async () => ({
+      id: 'contact-1',
+      isNew: true,
+      name: null,
+      phone: null,
+    })),
     findOrCreateConversation: vi.fn(async () => 'conv-1'),
     persistMessage: vi.fn(async () => ({ id: 'msg-1', createdAt: '2026-01-01T00:00:00.000Z' })),
     deleteInternalNote: vi.fn(async () => true),
@@ -298,6 +303,38 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
         clientMsgId: 'm',
       });
       expect((await err).code).toBe('persist_failed');
+    });
+
+    it('message:send from a customer is REJECTED when targeting another conversation (IDOR)', async () => {
+      // A customer socket is bound to conv-1 at handshake (stub returns conv-1).
+      // Emitting with a different conversationId must be refused, not persisted —
+      // otherwise it is cross-tenant message injection.
+      harness = await startGateway(makeStubs());
+      const customer = await connectCustomerReady(harness.port, sockets);
+      const err = waitFor<{ code: string }>(customer, SOCKET_EVENTS.error);
+      customer.emit(SOCKET_EVENTS.messageSend, {
+        conversationId: 'conv-SOMEONE-ELSE',
+        content: 'cross-tenant attempt',
+        clientMsgId: 'x',
+      });
+      expect((await err).code).toBe('forbidden');
+      await new Promise((r) => setTimeout(r, 20));
+      expect(harness.stubs.directus.persistMessage).not.toHaveBeenCalled();
+    });
+
+    it('message:send from a customer into its OWN conversation still persists', async () => {
+      harness = await startGateway(makeStubs());
+      const customer = await connectCustomerReady(harness.port, sockets);
+      const got = waitFor<{ id: string }>(customer, SOCKET_EVENTS.messageNew);
+      customer.emit(SOCKET_EVENTS.messageSend, {
+        conversationId: 'conv-1',
+        content: 'legit message',
+        clientMsgId: 'ok',
+      });
+      await got;
+      expect(harness.stubs.directus.persistMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ conversationId: 'conv-1', senderType: 'customer' }),
+      );
     });
 
     it('note:add (agent) broadcasts note:new', async () => {

@@ -10,17 +10,15 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-// Stub the Yiji client factory; keep all other shared-types exports real.
+// Stub the commerce proxy client (the panel now calls the ai-gateway proxy via
+// lib/commerce-client, not the Yiji API directly).
 const client = vi.hoisted(() => ({
   getPurchaseActivity: vi.fn(),
   getOrders: vi.fn(),
   getPaymentStatus: vi.fn(),
   getShipmentTracking: vi.fn(),
 }));
-vi.mock('@yiji/shared-types', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@yiji/shared-types')>();
-  return { ...actual, createYijiClient: () => client };
-});
+vi.mock('../src/lib/commerce-client.js', () => ({ commerce: client }));
 
 import { CommercePanel } from '../src/features/contacts/CommercePanel.js';
 

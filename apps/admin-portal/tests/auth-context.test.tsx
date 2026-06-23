@@ -6,6 +6,7 @@ import React from 'react';
 
 const authMock = vi.hoisted(() => ({
   me: vi.fn(),
+  restore: vi.fn(),
   login: vi.fn(),
   logout: vi.fn(),
 }));
@@ -19,6 +20,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 beforeEach(() => {
   authMock.me.mockReset();
+  authMock.restore.mockReset();
   authMock.login.mockReset();
   authMock.logout.mockReset();
 });
@@ -54,14 +56,15 @@ function Probe() {
 
 describe('AuthProvider', () => {
   it('loads the current user on mount', async () => {
-    authMock.me.mockResolvedValue({ id: '1', email: 'me@x.com' });
+    authMock.restore.mockResolvedValue({ id: '1', email: 'me@x.com' });
     render(<Probe />, { wrapper });
     await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
     expect(screen.getByTestId('user').textContent).toBe('me@x.com');
   });
 
   it('login then logout updates the user', async () => {
-    authMock.me.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: '1', email: 'me@x.com' });
+    authMock.restore.mockResolvedValue(null); // cold load: no session
+    authMock.me.mockResolvedValue({ id: '1', email: 'me@x.com' }); // login() loads the user
     authMock.login.mockResolvedValue(undefined);
     authMock.logout.mockResolvedValue(undefined);
     render(<Probe />, { wrapper });

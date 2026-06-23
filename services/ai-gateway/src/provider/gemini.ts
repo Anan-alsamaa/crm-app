@@ -77,7 +77,10 @@ function classifyGeminiError(err: unknown): AiProviderError {
   const msg = (err as Error)?.message ?? 'unknown';
   const status = parseHttpStatus(msg);
 
-  if (status === 429 || /RESOURCE_EXHAUSTED|exceeded your.*quota|too many requests/i.test(msg)) {
+  if (
+    status === 429 ||
+    /RESOURCE_EXHAUSTED|quota exceeded|exceeded your.*quota|too many requests/i.test(msg)
+  ) {
     return new AiProviderError(msg, 'rate_limited', 429);
   }
   if (status === 401 || status === 403 || /api key|unauthorized|permission denied/i.test(msg)) {

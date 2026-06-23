@@ -72,6 +72,11 @@ services:
       # CORS_ORIGIN=true reflects the request origin (works with credentials).
       CORS_ENABLED: 'true'
       CORS_ORIGIN: 'true'
+      # Cookie-mode auth (H-2): the portals send credentials, so CORS must allow
+      # them and the refresh cookie must be settable over http on localhost.
+      CORS_CREDENTIALS: 'true'
+      REFRESH_TOKEN_COOKIE_SAME_SITE: lax
+      REFRESH_TOKEN_COOKIE_SECURE: 'false'
       STORAGE_LOCATIONS: local
       STORAGE_LOCAL_DRIVER: local
       STORAGE_LOCAL_ROOT: /directus/uploads
@@ -80,7 +85,11 @@ services:
       - ./directus/extensions:/directus/extensions
       - ./directus/snapshot:/directus/snapshot
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:8055/server/health']
+      # Use 127.0.0.1 (not localhost): inside the container `localhost` can
+      # resolve to IPv6 ::1 first, but Directus binds IPv4 0.0.0.0 only, so the
+      # probe would get ECONNREFUSED and the container would never report
+      # healthy — blocking every service that depends_on it.
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8055/server/health']
       interval: 10s
       timeout: 5s
       retries: 12

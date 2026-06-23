@@ -118,6 +118,10 @@ try {
     PUBLIC_URL: DIR_URL,
     CORS_ENABLED: 'true',
     CORS_ORIGIN: 'true',
+    // Cookie-mode auth (H-2): credentialed CORS + http-localhost refresh cookie.
+    CORS_CREDENTIALS: 'true',
+    REFRESH_TOKEN_COOKIE_SAME_SITE: 'lax',
+    REFRESH_TOKEN_COOKIE_SECURE: 'false',
     WEBSOCKETS_ENABLED: 'true',
     // Throwaway instance: in-memory cache/rate-limiter, no Redis. Strip any
     // inherited REDIS vars so Directus doesn't try to connect (and crash) on

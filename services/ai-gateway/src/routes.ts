@@ -13,7 +13,7 @@ import {
   type LeadScoreResponse,
 } from '@yiji/shared-types';
 import { z } from 'zod';
-import { authenticate, AuthError, type Caller } from './auth/index.js';
+import { verifyCaller, AuthError, type Caller } from './auth/index.js';
 import { AiConfigStore, FEATURE_BY_ENDPOINT } from './aiconfig/index.js';
 import { SlidingWindowLimiter, MonthlyCap } from './ratelimit/index.js';
 import { ResponseCache } from './cache/index.js';
@@ -33,7 +33,6 @@ export interface RouteDeps {
   perIpLimiter?: SlidingWindowLimiter;
   globalLimiter: SlidingWindowLimiter;
   monthlyCap: MonthlyCap;
-  serviceToken: string;
 }
 
 type Json = Record<string, unknown>;
@@ -55,12 +54,16 @@ function parseJson<T>(text: string, schema: z.ZodType<T>): T {
 }
 
 export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
-  /** Auth gate — must run BEFORE body validation. */
-  function authOrReply(req: FastifyRequest, reply: FastifyReply): Caller | null {
+  /** Auth gate — verifies the caller's Directus session. Runs BEFORE body
+   *  validation. Returns null (and replies) on failure. */
+  async function authOrReply(req: FastifyRequest, reply: FastifyReply): Promise<Caller | null> {
     try {
-      return authenticate(req, deps.serviceToken);
+      return await verifyCaller(req, deps.directus);
     } catch (err) {
       if (err instanceof AuthError) {
+        // Audit: surface missing/invalid sessions so credential-stuffing of the
+        // gateway is detectable in the logs.
+        app.log.warn({ ip: req.ip, status: err.status, reason: err.message }, 'ai auth rejected');
         void reply.code(err.status).send({ error: err.message });
         return null;
       }
@@ -94,6 +97,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (deps.perIpLimiter && clientIp) {
       const ipVerdict = await deps.perIpLimiter.check(`ip:${clientIp}`);
       if (!ipVerdict.allowed) {
+        app.log.warn({ scope: 'ip', ip: clientIp, endpoint }, 'ai rate limited');
         void reply.code(429).send({
           error: 'rate_limited',
           scope: 'ip',
@@ -104,6 +108,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     }
     const userVerdict = await deps.perUserLimiter.check(`user:${caller.userId}`);
     if (!userVerdict.allowed) {
+      app.log.warn({ scope: 'user', userId: caller.userId, endpoint }, 'ai rate limited');
       void reply.code(429).send({
         error: 'rate_limited',
         scope: 'user',
@@ -113,6 +118,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     }
     const globalVerdict = await deps.globalLimiter.check('global');
     if (!globalVerdict.allowed) {
+      app.log.warn({ scope: 'global', endpoint }, 'ai rate limited');
       void reply.code(429).send({
         error: 'rate_limited',
         scope: 'global',
@@ -127,6 +133,10 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
       config.monthlyCap,
     );
     if (!capVerdict.allowed) {
+      app.log.warn(
+        { vendorId: caller.vendorId, used: capVerdict.used, cap: capVerdict.cap },
+        'ai monthly cap reached',
+      );
       void reply.code(429).send({
         error: 'monthly_cap_reached',
         used: capVerdict.used,
@@ -170,7 +180,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
 
   /* ── /summarize-conversation ─────────────────────────────────────── */
   app.post(AI_ENDPOINTS.summarizeConversation, async (req, reply) => {
-    const caller = authOrReply(req, reply);
+    const caller = await authOrReply(req, reply);
     if (!caller) return;
     const body = ConversationRef.safeParse(req.body);
     if (!body.success)
@@ -201,7 +211,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
 
   /* ── /suggest-reply ─────────────────────────────────────────────── */
   app.post(AI_ENDPOINTS.suggestReply, async (req, reply) => {
-    const caller = authOrReply(req, reply);
+    const caller = await authOrReply(req, reply);
     if (!caller) return;
     const body = SuggestReplyRequest.safeParse(req.body);
     if (!body.success)
@@ -232,7 +242,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
 
   /* ── /analyze-sentiment ─────────────────────────────────────────── */
   app.post(AI_ENDPOINTS.analyzeSentiment, async (req, reply) => {
-    const caller = authOrReply(req, reply);
+    const caller = await authOrReply(req, reply);
     if (!caller) return;
     const body = ConversationRef.safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
@@ -266,7 +276,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
 
   /* ── /detect-intent ─────────────────────────────────────────────── */
   app.post(AI_ENDPOINTS.detectIntent, async (req, reply) => {
-    const caller = authOrReply(req, reply);
+    const caller = await authOrReply(req, reply);
     if (!caller) return;
     const body = ConversationRef.safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
@@ -297,7 +307,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
 
   /* ── /extract-entities ─────────────────────────────────────────── */
   app.post(AI_ENDPOINTS.extractEntities, async (req, reply) => {
-    const caller = authOrReply(req, reply);
+    const caller = await authOrReply(req, reply);
     if (!caller) return;
     const body = ConversationRef.safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
@@ -330,7 +340,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
 
   /* ── /semantic-search ─────────────────────────────────────────── */
   app.post(AI_ENDPOINTS.semanticSearch, async (req, reply) => {
-    const caller = authOrReply(req, reply);
+    const caller = await authOrReply(req, reply);
     if (!caller) return;
     const body = SemanticSearchRequest.safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
@@ -368,7 +378,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
 
   /* ── /score-lead ─────────────────────────────────────────────── */
   app.post(AI_ENDPOINTS.scoreLead, async (req, reply) => {
-    const caller = authOrReply(req, reply);
+    const caller = await authOrReply(req, reply);
     if (!caller) return;
     const body = ConversationRef.safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
@@ -399,25 +409,15 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
 
   /* ── Admin: GET / PUT config ─────────────────────────────────── */
   app.get('/admin/config', async (req, reply) => {
-    let caller: Caller;
-    try {
-      caller = authenticate(req, deps.serviceToken);
-    } catch (err) {
-      if (err instanceof AuthError) return reply.code(err.status).send({ error: err.message });
-      throw err;
-    }
+    const caller = await authOrReply(req, reply);
+    if (!caller) return;
     if (!caller.isAdmin) return reply.code(403).send({ error: 'admin_required' });
     return reply.send(await deps.configStore.get());
   });
 
   app.put('/admin/config', async (req, reply) => {
-    let caller: Caller;
-    try {
-      caller = authenticate(req, deps.serviceToken);
-    } catch (err) {
-      if (err instanceof AuthError) return reply.code(err.status).send({ error: err.message });
-      throw err;
-    }
+    const caller = await authOrReply(req, reply);
+    if (!caller) return;
     if (!caller.isAdmin) return reply.code(403).send({ error: 'admin_required' });
     try {
       const next = await deps.configStore.set(req.body);
@@ -427,17 +427,14 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     }
   });
 
-  // Used by the admin UI to show current usage against the monthly cap.
+  // Used by the admin UI to show current usage against the monthly cap. The
+  // vendor bucket to inspect is supplied explicitly (admin is verified).
   app.get('/admin/usage', async (req, reply) => {
-    let caller: Caller;
-    try {
-      caller = authenticate(req, deps.serviceToken);
-    } catch (err) {
-      if (err instanceof AuthError) return reply.code(err.status).send({ error: err.message });
-      throw err;
-    }
+    const caller = await authOrReply(req, reply);
+    if (!caller) return;
     if (!caller.isAdmin) return reply.code(403).send({ error: 'admin_required' });
-    const used = await deps.monthlyCap.currentUsage(`vendor:${caller.vendorId}`);
+    const vendorId = (req.query as { vendorId?: string } | undefined)?.vendorId ?? caller.vendorId;
+    const used = await deps.monthlyCap.currentUsage(`vendor:${vendorId}`);
     const config = await deps.configStore.get();
     return reply.send({ used, cap: config.monthlyCap });
   });

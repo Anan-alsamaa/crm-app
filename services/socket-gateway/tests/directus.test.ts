@@ -44,7 +44,8 @@ describe('GatewayDirectus.upsertContact', () => {
   it('returns the existing contact id when one matches phone/email', async () => {
     request.mockResolvedValueOnce([{ id: 'contact-existing' }]);
     const id = await makeGateway().upsertContact('vendor-uuid', baseClaims);
-    expect(id).toBe('contact-existing');
+    expect(id.id).toBe('contact-existing');
+    expect(id.isNew).toBe(false);
     expect(request).toHaveBeenCalledTimes(1); // no create call
   });
 
@@ -53,7 +54,8 @@ describe('GatewayDirectus.upsertContact', () => {
       .mockResolvedValueOnce([]) // lookup miss
       .mockResolvedValueOnce({ id: 'contact-new' }); // create
     const id = await makeGateway().upsertContact('vendor-uuid', baseClaims);
-    expect(id).toBe('contact-new');
+    expect(id.id).toBe('contact-new');
+    expect(id.isNew).toBe(true);
     expect(request).toHaveBeenCalledTimes(2);
   });
 
@@ -64,7 +66,7 @@ describe('GatewayDirectus.upsertContact', () => {
       customer_id: 'ext-2',
       email: 'only@example.com',
     });
-    expect(id).toBe('c2');
+    expect(id.id).toBe('c2');
   });
 
   it('recovers from a concurrent-create unique violation by re-querying', async () => {
@@ -77,7 +79,7 @@ describe('GatewayDirectus.upsertContact', () => {
       }) // create loses the race
       .mockResolvedValueOnce([{ id: 'contact-raced' }]); // re-query finds the winner's row
     const id = await makeGateway().upsertContact('vendor-uuid', baseClaims);
-    expect(id).toBe('contact-raced');
+    expect(id.id).toBe('contact-raced');
     expect(request).toHaveBeenCalledTimes(3);
   });
 
