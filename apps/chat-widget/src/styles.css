@@ -11,7 +11,9 @@
   --yiji-primary: var(--brand-primary, #0f8d8f);
   --yiji-secondary: var(--brand-secondary, #ec4899);
   --yiji-ink: #1d2129;
-  --yiji-muted: #6b7280;
+  /* Darkened from #6b7280: clears WCAG AA (4.5:1) for 12px meta text on the
+     surface-2 / tinted chip backgrounds, where #6b7280 fell to ~4.06:1. */
+  --yiji-muted: #5b616b;
   --yiji-surface: #ffffff;
   --yiji-surface-2: #f8fafc;
   --yiji-border: rgba(17, 24, 39, 0.1);
@@ -106,6 +108,19 @@
 [dir='rtl'] .yiji-panel {
   transform-origin: bottom left;
 }
+/* Mobile-first: in practice the widget is always opened on a phone, so the panel
+   fills the whole viewport (native full-screen chat) instead of a small card.
+   Uses 100dvh so it tracks the mobile browser's dynamic toolbar. */
+@media (max-width: 480px) {
+  .yiji-panel {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+}
 @keyframes yiji-enter {
   from {
     opacity: 0;
@@ -184,33 +199,11 @@
   margin-top: 14px;
   display: flex;
   align-items: center;
-  gap: -8px;
-}
-.yiji-header-team-avatars {
-  display: flex;
-}
-.yiji-header-team-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  border: 2px solid var(--yiji-primary);
-  margin-inline-start: -8px;
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(2px);
-}
-.yiji-header-team-avatar:first-child {
-  margin-inline-start: 0;
 }
 .yiji-header-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-inline-start: 10px;
   font-size: 12px;
   opacity: 0.92;
 }
@@ -272,6 +265,12 @@
   gap: 6px;
   background: var(--yiji-surface);
 }
+/* The thread is a focusable scroll region (keyboard users can scroll it), so it
+   needs a visible focus ring — never a silent tab stop. */
+.yiji-messages:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--yiji-primary) 60%, transparent);
+  outline-offset: -2px;
+}
 .yiji-empty {
   flex: 1;
   display: flex;
@@ -319,7 +318,11 @@
 }
 .yiji-msg.mine {
   align-self: flex-end;
-  background: var(--yiji-primary);
+  /* Deepen the tenant brand toward black so white 14px text clears WCAG AA.
+     The raw brand teal (#0F8D8F ≈ 4.01:1) is too light for body text on a
+     filled bubble — the same call the host-page CTA makes. color-mix keeps
+     this driven by the per-tenant --yiji-primary instead of a hardcoded teal. */
+  background: color-mix(in oklab, var(--yiji-primary) 80%, black);
   color: #fff;
   border-bottom-end-radius: 4px;
   /* Soft teal-tinted lift so the customer's own messages read as raised,
@@ -332,6 +335,12 @@
   color: var(--yiji-ink);
   border-bottom-start-radius: 4px;
 }
+/* Returning-customer welcome — a warm, brand-tinted first bubble so it reads as
+   a greeting rather than a normal agent reply. */
+.yiji-msg.theirs.yiji-msg-greeting {
+  background: color-mix(in oklab, var(--yiji-primary) 10%, var(--yiji-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--yiji-primary) 18%, transparent);
+}
 .yiji-msg.system {
   align-self: center;
   max-width: 90%;
@@ -340,6 +349,14 @@
   font-size: 12.5px;
   text-align: center;
   padding: 4px 10px;
+}
+/* Attachment-only message: drop the bubble chrome so the thumbnail/chip stands
+   alone (matches the agent portal), instead of sitting in a tinted bubble. */
+.yiji-msg.bare {
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  border-radius: 0;
 }
 .yiji-typing {
   align-self: flex-start;
@@ -603,6 +620,112 @@
   }
   .yiji-msg-image:hover {
     transform: none;
+  }
+}
+.yiji-msg-file-link {
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  transition: background-color 160ms ease;
+}
+.yiji-msg-file-link:hover {
+  background: color-mix(in oklab, currentColor 18%, transparent);
+}
+.yiji-msg-file-loading {
+  opacity: 0.6;
+}
+
+/* ───── Image lightbox (same-page full-screen preview) ───── */
+.yiji-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483001;
+  display: flex;
+  flex-direction: column;
+  background: rgba(17, 24, 39, 0.84);
+  backdrop-filter: blur(8px);
+  cursor: zoom-out;
+  animation: yiji-lb-fade 160ms var(--yiji-ease) both;
+}
+.yiji-lightbox-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  color: #fff;
+  cursor: default;
+}
+.yiji-lightbox-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+.yiji-lightbox-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 160ms var(--yiji-ease);
+}
+.yiji-lightbox-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+.yiji-lightbox-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.yiji-lightbox-img {
+  flex: 1;
+  min-height: 0;
+  max-width: 100%;
+  object-fit: contain;
+  padding: 0 16px 22px;
+  cursor: default;
+  animation: yiji-lb-scale 200ms var(--yiji-ease) both;
+}
+@keyframes yiji-lb-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes yiji-lb-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .yiji-lightbox,
+  .yiji-lightbox-img {
+    animation: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .yiji-msg-file-loading {
+    animation: yiji-att-pulse 1.2s ease-in-out infinite;
+  }
+}
+@keyframes yiji-att-pulse {
+  50% {
+    opacity: 0.32;
   }
 }
 

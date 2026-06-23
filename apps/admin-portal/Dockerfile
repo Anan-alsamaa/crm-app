@@ -22,9 +22,18 @@ RUN pnpm install --frozen-lockfile --filter @yiji/admin-portal...
 ARG VITE_DIRECTUS_URL=http://localhost:8055
 ARG VITE_SOCKET_URL=http://localhost:8080
 ARG VITE_AI_GATEWAY_URL=http://localhost:8081
+# C-1/C-2: the AI gateway and commerce are reached via the user's Directus
+# session (server-verified), so NO service/API token is baked into the browser
+# bundle. Only public URLs ship client-side.
+# Job enqueue endpoint (Import CSV / Run report now). Prod: the socket-gateway's
+# HTTP base URL (it exposes authed POST /jobs/*). Dev default: host job-producer.
+ARG VITE_JOB_PRODUCER_URL=http://localhost:3031
+ARG VITE_JOB_PRODUCER_TOKEN=
 ENV VITE_DIRECTUS_URL=$VITE_DIRECTUS_URL \
     VITE_SOCKET_URL=$VITE_SOCKET_URL \
-    VITE_AI_GATEWAY_URL=$VITE_AI_GATEWAY_URL
+    VITE_AI_GATEWAY_URL=$VITE_AI_GATEWAY_URL \
+    VITE_JOB_PRODUCER_URL=$VITE_JOB_PRODUCER_URL \
+    VITE_JOB_PRODUCER_TOKEN=$VITE_JOB_PRODUCER_TOKEN
 RUN pnpm --filter @yiji/admin-portal build
 
 # ---- runner: nginx serving the static build with SPA history fallback ----

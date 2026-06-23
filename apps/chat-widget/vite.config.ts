@@ -71,7 +71,9 @@ function widgetHostPage(secret: string, gatewayUrl: string): Plugin {
         async function mint(id) {
           var header = b64uStr(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
           var now = Math.floor(Date.now() / 1000);
-          var payload = b64uStr(JSON.stringify(Object.assign({}, id, { iat: now, exp: now + 7200 })));
+          // 12h TTL: a local QA harness shouldn't lose its session every 2h.
+          // (A real host page receives a platform-signed token instead.)
+          var payload = b64uStr(JSON.stringify(Object.assign({}, id, { iat: now, exp: now + 43200 })));
           var data = header + '.' + payload;
           var key = await crypto.subtle.importKey(
             'raw', new TextEncoder().encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
@@ -109,7 +111,18 @@ export default defineConfig(({ mode }) => {
       jsx: 'automatic',
       jsxImportSource: 'preact',
     },
-    server: { port: 5175 },
+    server: {
+      port: 5175,
+      // Expose to ngrok/LAN. allowedHosts lets vite accept the ngrok Host header
+      // (vite 6 blocks unknown hosts otherwise → "Blocked request"). The proxy
+      // forwards the widget's socket — which connects to the SAME public origin
+      // (VITE_SOCKET_URL) — to the local gateway, incl. the WebSocket upgrade.
+      host: true,
+      allowedHosts: true,
+      proxy: {
+        '/socket.io': { target: 'http://localhost:8080', ws: true, changeOrigin: true },
+      },
+    },
     plugins: [widgetHostPage(secret, gatewayUrl)],
     build: {
       lib: {

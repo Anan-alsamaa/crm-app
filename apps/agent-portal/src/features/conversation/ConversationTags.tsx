@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cn, CloseIcon, toast } from '@yiji/ui';
+import { cn, CloseIcon, ConfirmDialog, toast } from '@yiji/ui';
 import { SOCKET_EVENTS } from '@yiji/shared-types';
 import {
   useTags,
   useAddTagToConversation,
   useRemoveTagFromConversation,
   useCreateTag,
+  useDeleteTag,
   type InboxConversation,
+  type Tag,
 } from '../inbox/api.js';
 import { getSocket } from '../../lib/socket.js';
 
@@ -31,17 +33,22 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
   const addTag = useAddTagToConversation();
   const removeTag = useRemoveTagFromConversation();
   const createTag = useCreateTag();
+  const deleteTag = useDeleteTag();
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<Tag | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const assigned = conversation.tags?.filter((j) => j.tags_id) ?? [];
   const assignedIds = new Set(assigned.map((j) => j.tags_id!.id));
   const atMax = assigned.length >= MAX_TAGS;
   const q = query.trim().toLowerCase();
-  const available = (tags.data ?? [])
-    .filter((tg) => !assignedIds.has(tg.id))
-    .filter((tg) => tg.name.toLowerCase().includes(q));
+  // Junction-row id for each assigned tag, so the picker can toggle one back off.
+  const junctionByTag = new Map(assigned.map((j) => [j.tags_id!.id, j.id]));
+  // Show ALL matching tags — including ones already on this conversation, marked
+  // as added — so a just-created (and auto-applied) tag stays visible here, not
+  // only in other conversations.
+  const matching = (tags.data ?? []).filter((tg) => tg.name.toLowerCase().includes(q));
   const exactMatch = (tags.data ?? []).some((tg) => tg.name.toLowerCase() === q);
   const limitMsg = t('conversation.tagLimit', {
     count: MAX_TAGS,
@@ -100,6 +107,22 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
     try {
       await removeTag.mutateAsync({ junctionId, conversationId: conversation.id });
       await broadcastUpdate(conversation.id);
+    } catch {
+      toast.error(t('errors.updateFailed', { ns: 'common' }));
+    }
+  };
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    try {
+      await deleteTag.mutateAsync(pendingDelete.id);
+      await broadcastUpdate(conversation.id);
+      toast.success(
+        t('conversation.tagDeleted', {
+          name: pendingDelete.name,
+          defaultValue: `Deleted “${pendingDelete.name}” everywhere.`,
+        }),
+      );
+      setPendingDelete(null);
     } catch {
       toast.error(t('errors.updateFailed', { ns: 'common' }));
     }
@@ -200,21 +223,76 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
             </div>
 
             <div className="mt-1 max-h-48 overflow-auto">
-              {available.map((tg) => (
-                <button
-                  key={tg.id}
-                  type="button"
-                  onClick={() => void assign(tg.id)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs text-foreground transition-colors duration-fast hover:bg-secondary"
-                >
-                  <span
-                    aria-hidden
-                    className="h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ background: tg.color ?? '#94a3b8' }}
-                  />
-                  <span className="truncate">{tg.name}</span>
-                </button>
-              ))}
+              {matching.map((tg) => {
+                const isAdded = assignedIds.has(tg.id);
+                return (
+                  <div
+                    key={tg.id}
+                    className="group/tag flex items-center rounded-md pe-1 transition-colors duration-fast hover:bg-secondary"
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        isAdded ? void unassign(junctionByTag.get(tg.id)!) : void assign(tg.id)
+                      }
+                      className={cn(
+                        'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs',
+                        isAdded ? 'text-muted-foreground' : 'text-foreground',
+                      )}
+                    >
+                      <span
+                        aria-hidden
+                        className="h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{ background: tg.color ?? '#94a3b8' }}
+                      />
+                      <span className="flex-1 truncate">{tg.name}</span>
+                      {isAdded && (
+                        <span className="inline-flex shrink-0 items-center gap-1 text-2xs font-medium text-primary">
+                          <svg
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="h-3 w-3"
+                            aria-hidden
+                          >
+                            <path d="M3.5 8.5l3 3 6-7" />
+                          </svg>
+                          {t('conversation.tagAdded', { defaultValue: 'Added' })}
+                        </span>
+                      )}
+                    </button>
+                    {/* Delete from the library entirely (global, cascades). */}
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(tg)}
+                      aria-label={t('conversation.deleteTag', {
+                        name: tg.name,
+                        defaultValue: `Delete “${tg.name}” from the library`,
+                      })}
+                      title={t('conversation.deleteTagTitle', {
+                        defaultValue: 'Delete tag everywhere',
+                      })}
+                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity duration-fast hover:bg-destructive/10 hover:text-destructive focus:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive/40 group-hover/tag:opacity-100"
+                    >
+                      <svg
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-3.5 w-3.5"
+                        aria-hidden
+                      >
+                        <path d="M3 4h10M6.5 4V2.5h3V4M5 4l.5 9a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1L11 4M7 7v4M9 7v4" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
 
               {/* Create row — only when the typed name doesn't already exist. */}
               {query.trim() && !exactMatch && (
@@ -233,10 +311,10 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
                 </button>
               )}
 
-              {available.length === 0 && !query.trim() && (
+              {matching.length === 0 && !query.trim() && (
                 <p className="px-2 py-1.5 text-2xs text-muted-foreground">
-                  {t('conversation.allTagsAdded', {
-                    defaultValue: 'All tags added — type to create a new one.',
+                  {t('conversation.noTagsYetHint', {
+                    defaultValue: 'No tags yet — type to create one.',
                   })}
                 </p>
               )}
@@ -253,6 +331,24 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
           </button>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        destructive
+        title={t('conversation.deleteTagConfirm', {
+          name: pendingDelete?.name ?? '',
+          defaultValue: `Delete “${pendingDelete?.name ?? ''}” everywhere?`,
+        })}
+        description={t('conversation.deleteTagWarning', {
+          defaultValue:
+            'This removes the tag from every conversation, contact and ticket it’s on. It can’t be undone.',
+        })}
+        confirmLabel={t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+        cancelLabel={t('actions.cancel', { ns: 'common' })}
+        loading={deleteTag.isPending}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

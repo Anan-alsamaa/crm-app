@@ -329,6 +329,35 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
 - **TLS** terminates at the LB/proxy in front of every HTTP service; WebSockets
   terminate over WSS with sticky sessions (see [Scaling](#scaling)).
 
+## Admin job enqueue (imports & reports)
+
+The admin portal's **Import CSV** and **Run report now** actions enqueue BullMQ
+jobs that the workers consume. Browsers can't talk to Redis, so they POST to the
+**socket-gateway's HTTP app** (the `PORT+1` listener), which authenticates the
+caller and enqueues:
+
+- `POST /jobs/import` — body `{ fileId, vendorId, mapping }` → `imports` queue.
+- `POST /jobs/report` — body `{ reportId }` → `reports` queue.
+
+Auth: the portal sends the logged-in admin's **Directus access token** as a
+`Bearer`; the gateway validates it via Directus `/users/me` and requires an
+`Admin`/`Administrator` role (401/403 otherwise). CORS for `/jobs/*` uses the
+gateway's `CORS_ORIGIN` allow-list. _Scheduled_ reports do **not** use this path
+— the workers self-schedule them.
+
+Wiring:
+
+- Build the admin portal with `VITE_JOB_PRODUCER_URL` = the gateway's public HTTP
+  base URL (the prod compose defaults it to the published `:8082` → container
+  `:8081`). No client token is baked — auth is the admin's own session.
+- **LB/ingress:** the gateway's HTTP port also serves `/metrics`, `/debug/*`,
+  `/health`, `/ready`, and `/webhooks/yiji`. Expose **only** `/jobs/*` (and
+  `/webhooks/*` if used) publicly; keep `/metrics` + `/debug/*` on the internal
+  network.
+- In dev, `VITE_JOB_PRODUCER_URL` instead points at the host
+  `crm-app-infra/tools/job-producer` (:3031), which exposes the identical routes;
+  the Bearer header is simply ignored there.
+
 ## Backups & disaster recovery
 
 Postgres is the only system of record. Scripts live in `scripts/`:

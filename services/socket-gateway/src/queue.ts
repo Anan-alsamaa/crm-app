@@ -1,7 +1,13 @@
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import type { Logger } from 'pino';
-import { QUEUES, type AutomationJob } from '@yiji/shared-types';
+import {
+  QUEUES,
+  DEFAULT_JOB_OPTIONS,
+  type AutomationJob,
+  type ImportJob,
+  type ReportJob,
+} from '@yiji/shared-types';
 
 /**
  * Side-effect job producer. Emits BullMQ jobs (automation, etc.) for the workers
@@ -13,6 +19,11 @@ export interface SideEffectProducer {
   /** `content` is carried into the automation context so keyword rules
    *  (condition `{field: 'context.message', op: 'contains', ...}`) can match. */
   messageReceived(conversationId: string, content?: string): Promise<void>;
+  /** Admin-triggered: enqueue a contact CSV import. Returns the BullMQ job id,
+   *  or null when the queue is disabled (no Redis) so callers can surface 503. */
+  enqueueImport(job: ImportJob): Promise<string | null>;
+  /** Admin-triggered: enqueue a "run now" for a saved report. */
+  enqueueReport(job: ReportJob): Promise<string | null>;
   close(): Promise<void>;
 }
 
@@ -24,11 +35,21 @@ class NoopProducer implements SideEffectProducer {
   async messageReceived(): Promise<void> {
     this.logger.debug('side-effect skipped (Redis disabled): message_received');
   }
+  async enqueueImport(): Promise<string | null> {
+    this.logger.warn('enqueue import skipped (Redis disabled)');
+    return null;
+  }
+  async enqueueReport(): Promise<string | null> {
+    this.logger.warn('enqueue report skipped (Redis disabled)');
+    return null;
+  }
   async close(): Promise<void> {}
 }
 
 class BullProducer implements SideEffectProducer {
   private readonly automation: Queue;
+  private readonly imports: Queue;
+  private readonly reports: Queue;
   private readonly connection: Redis;
   constructor(redisUrl: string) {
     // Same auto-reconnect posture as the Socket.IO Redis clients.
@@ -41,6 +62,18 @@ class BullProducer implements SideEffectProducer {
       /* swallow — retried by retryStrategy; logged once by BullMQ */
     });
     this.automation = new Queue(QUEUES.automation, { connection: this.connection });
+    // Admin-triggered enqueue (imports/reports) lands on the same queues the
+    // workers consume — the job NAME is cosmetic; the queue + data shape match.
+    this.imports = new Queue(QUEUES.imports, { connection: this.connection });
+    this.reports = new Queue(QUEUES.reports, { connection: this.connection });
+  }
+  async enqueueImport(job: ImportJob): Promise<string | null> {
+    const added = await this.imports.add('import', job, DEFAULT_JOB_OPTIONS);
+    return added.id ?? null;
+  }
+  async enqueueReport(job: ReportJob): Promise<string | null> {
+    const added = await this.reports.add('run-now', job, DEFAULT_JOB_OPTIONS);
+    return added.id ?? null;
   }
   async conversationCreated(conversationId: string): Promise<void> {
     const job: AutomationJob = {
@@ -62,6 +95,8 @@ class BullProducer implements SideEffectProducer {
   }
   async close(): Promise<void> {
     await this.automation.close();
+    await this.imports.close();
+    await this.reports.close();
     await this.connection.quit();
   }
 }

@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useMutation } from '@tanstack/react-query';
 import {
   Button,
   cn,
+  ConfirmDialog,
   Drawer,
   DrawerSection,
   EmptyState,
+  ErrorState,
   FormField,
   Input,
   SelectMenu,
@@ -25,6 +28,7 @@ import {
 } from './api.js';
 import { useUsers } from '../users/api.js';
 import { useTeams } from '../teams/api.js';
+import { jobProducer } from '../../lib/job-producer.js';
 
 /**
  * Reports admin — list of saved reports + create/edit drawer.
@@ -95,6 +99,36 @@ export function ReportsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(blank());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // "Run now" — enqueue a ReportJob on the workers `reports` queue via the
+  // host-run job producer (tools/job-producer). The worker runs the
+  // aggregation, renders CSV, emails recipients, and bumps last_run_at.
+  const runNow = useMutation({
+    mutationFn: (reportId: string) => jobProducer.enqueueReport(reportId),
+    onSuccess: (info) =>
+      toast.success(
+        t('reports.runQueued', {
+          defaultValue: `Report queued (job ${info.jobId}). The worker will run it shortly.`,
+        }),
+      ),
+    onError: (err) =>
+      toast.error(
+        t('reports.runError', {
+          defaultValue: `Could not run report: ${(err as Error).message}`,
+        }),
+      ),
+  });
+
+  const onDelete = async (): Promise<void> => {
+    if (!deletingId) return;
+    try {
+      await remove.mutateAsync(deletingId);
+      setDeletingId(null);
+    } catch {
+      toast.error(t('reports.deleteError', { defaultValue: 'Could not delete report.' }));
+    }
+  };
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -186,7 +220,16 @@ export function ReportsPage() {
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-3">
-        {reports.isLoading ? (
+        {reports.isError ? (
+          <ErrorState
+            title={t('reports.loadError', { defaultValue: 'Could not load reports' })}
+            message={t('reports.loadErrorHint', {
+              defaultValue: 'Check your connection and try again.',
+            })}
+            retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+            onRetry={() => void reports.refetch()}
+          />
+        ) : reports.isLoading ? (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-28 w-full rounded-2xl" />
@@ -222,13 +265,9 @@ export function ReportsPage() {
                     setEditingId(r.id);
                     setDrawerOpen(true);
                   }}
-                  onDelete={async () => {
-                    if (
-                      !confirm(t('reports.confirmDelete', { defaultValue: 'Delete this report?' }))
-                    )
-                      return;
-                    await remove.mutateAsync(r.id);
-                  }}
+                  onDelete={() => setDeletingId(r.id)}
+                  onRun={() => runNow.mutate(r.id)}
+                  running={runNow.isPending && runNow.variables === r.id}
                 />
               </li>
             ))}
@@ -380,6 +419,17 @@ export function ReportsPage() {
           </DrawerSection>
         </div>
       </Drawer>
+
+      <ConfirmDialog
+        open={deletingId !== null}
+        destructive
+        title={t('reports.confirmDelete', { defaultValue: 'Delete this report?' })}
+        confirmLabel={t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+        cancelLabel={t('actions.cancel', { ns: 'common' })}
+        loading={remove.isPending}
+        onConfirm={() => void onDelete()}
+        onCancel={() => setDeletingId(null)}
+      />
     </div>
   );
 }
@@ -388,10 +438,14 @@ function ReportCard({
   r,
   onEdit,
   onDelete,
+  onRun,
+  running,
 }: {
   r: ReportRow;
   onEdit: () => void;
   onDelete: () => void;
+  onRun: () => void;
+  running: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -422,6 +476,10 @@ function ReportCard({
         )}
       </div>
       <div className="flex items-center gap-3 pt-1">
+        <Button type="button" size="sm" variant="secondary" loading={running} onClick={onRun}>
+          {t('reports.runNow', { defaultValue: 'Run now' })}
+        </Button>
+        <ToolbarSpacer />
         <button
           type="button"
           onClick={onEdit}

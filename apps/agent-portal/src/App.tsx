@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -8,6 +8,7 @@ import {
   cn,
   ErrorBoundary,
   InboxIcon,
+  SearchTrigger,
   SettingsIcon,
   SignOutIcon,
   Spinner,
@@ -200,6 +201,9 @@ function MobileBrand() {
 function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const location = useLocation();
+  // Command-palette open state is lifted here so the top-bar search trigger and
+  // the Cmd/Ctrl+K shortcut both drive the one palette instance below.
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const sections: NavSection[] = [
     {
       heading: t('nav.work', { defaultValue: 'Work' }),
@@ -233,20 +237,41 @@ function Shell({ children }: { children: React.ReactNode }) {
         rail={(ctx) => <Rail ctx={ctx} sections={sections} />}
         topBarBrand={<MobileBrand />}
         topBarActions={
-          <div className="flex items-center gap-0.5 text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <SearchTrigger
+              label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
+              aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
+              onClick={() => setPaletteOpen(true)}
+              className="hidden sm:inline-flex"
+            />
+            <span className="mx-0.5 hidden h-5 w-px bg-border sm:block" aria-hidden />
             <NotificationBell />
             <SoundToggle />
             <LanguageToggle />
           </div>
         }
         topBar={
-          <div className="flex w-full items-center justify-between gap-3">
-            <span className="truncate text-sm font-semibold tracking-tight text-foreground">
-              {pageTitle}
-            </span>
-            <div className="flex items-center gap-1 text-muted-foreground">
+          <div className="flex w-full items-center gap-3">
+            {/* Left: section label */}
+            <div className="flex min-w-0 flex-1 items-center">
+              <span className="hidden truncate text-sm font-semibold tracking-tight text-foreground md:block">
+                {pageTitle}
+              </span>
+            </div>
+            {/* Center: the search field */}
+            <div className="flex w-full max-w-md justify-center">
+              <SearchTrigger
+                fullWidth
+                label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
+                aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
+                onClick={() => setPaletteOpen(true)}
+              />
+            </div>
+            {/* Right: utility controls */}
+            <div className="flex flex-1 items-center justify-end gap-1 text-muted-foreground">
               <NotificationBell />
               <SoundToggle />
+              <span className="mx-1 h-5 w-px bg-border" aria-hidden />
               <LanguageToggle />
             </div>
           </div>
@@ -274,7 +299,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </Suspense>
         </ErrorBoundary>
       </AppShell>
-      <AppCommandPalette />
+      <AppCommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <AppKeyboardShortcuts />
       <NewMessageSound />
       <Toaster position="bottom" />

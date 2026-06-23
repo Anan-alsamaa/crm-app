@@ -17,12 +17,7 @@ import { CustomerTokenError } from './auth/customer-jwt.js';
 import { validateAgentToken } from './auth/agent-jwt.js';
 import type { SideEffectProducer } from './queue.js';
 import { createAgentPresence } from './agent-presence.js';
-import {
-  validateAttachments,
-  decodeUploadContent,
-  sanitizeFilename,
-  type AttachmentPolicy,
-} from './attachments.js';
+import { validateAttachments, type AttachmentPolicy } from './attachments.js';
 import { createTokenBucket } from './rate-limit.js';
 
 interface SocketData {
@@ -32,8 +27,9 @@ interface SocketData {
   contactId?: string;
   contactName?: string | null;
   contactPhone?: string | null;
-  isNewContact?: boolean; // true on the customer's first-ever contact
+  contactIsNew?: boolean;
   conversationId?: string;
+  conversationCreated?: boolean;
   agentId?: string;
 }
 
@@ -88,41 +84,6 @@ function removePresence(vendorId: string, id: string): string[] {
 }
 
 /**
- * Customer presence per conversation (this gateway instance): which customer
- * sockets are connected, plus whether that customer was new on connect. Drives
- * the agent header's live "{name} is online" / "New customer" line, and lets an
- * agent who opens a conversation learn the current state immediately.
- */
-const convPresence = new Map<string, { sockets: Set<string>; isNew: boolean }>();
-function customerConnected(conversationId: string, socketId: string, isNew: boolean): boolean {
-  const entry = convPresence.get(conversationId) ?? { sockets: new Set<string>(), isNew };
-  entry.sockets.add(socketId);
-  entry.isNew = isNew;
-  convPresence.set(conversationId, entry);
-  return entry.isNew;
-}
-function customerDisconnected(conversationId: string, socketId: string): boolean {
-  const entry = convPresence.get(conversationId);
-  if (!entry) return false;
-  entry.sockets.delete(socketId);
-  if (entry.sockets.size > 0) return true; // another tab still open
-  convPresence.delete(conversationId);
-  return false;
-}
-function emitCustomerPresence(
-  io: import('socket.io').Server,
-  conversationId: string,
-  online: boolean,
-  isNew?: boolean,
-): void {
-  io.to(rooms.conversation(conversationId)).emit(SOCKET_EVENTS.customerPresence, {
-    conversationId,
-    online,
-    ...(isNew !== undefined ? { isNew } : {}),
-  });
-}
-
-/**
  * Singleton agent-presence tracker. Module-level so all handlers share state.
  * The full state machine + invariants are documented in ./agent-presence.ts.
  */
@@ -159,15 +120,16 @@ export function registerConnection(deps: ConnectionDeps): void {
       const vendor = await directus.resolveVendor(claims.vendor_id);
       if (!vendor) throw new CustomerTokenError('unknown or inactive vendor');
       const contact = await directus.upsertContact(vendor.id, claims);
-      const conversationId = await directus.findOrCreateConversation(vendor.id, contact.id);
+      const conversation = await directus.findOrCreateConversation(vendor.id, contact.id);
       data.kind = 'customer';
       data.vendorId = vendor.id;
       data.vendorColors = vendor.colors;
       data.contactId = contact.id;
       data.contactName = contact.name;
       data.contactPhone = contact.phone;
-      data.isNewContact = contact.isNew;
-      data.conversationId = conversationId;
+      data.contactIsNew = contact.isNew;
+      data.conversationId = conversation.id;
+      data.conversationCreated = conversation.created;
       return next();
     } catch (err) {
       // Surface the REAL cause. Directus SDK rejects with a non-Error object
@@ -200,12 +162,6 @@ export function registerConnection(deps: ConnectionDeps): void {
           vendorId: data.vendorId,
           online,
         });
-        // Flip the conversation header to "offline" once the customer's last
-        // tab is gone (a reload that reconnects keeps another socket alive).
-        if (data.conversationId) {
-          const stillOnline = customerDisconnected(data.conversationId, socket.id);
-          if (!stillOnline) emitCustomerPresence(io, data.conversationId, false);
-        }
       } else if (data.kind === 'agent') {
         // Transport-level disconnect: schedule a grace timer. If a reload
         // reconnects within OFFLINE_GRACE_MS, the timer is cancelled and we
@@ -217,10 +173,8 @@ export function registerConnection(deps: ConnectionDeps): void {
   logger.info('connection handlers registered');
 }
 
-async function onCustomerConnect(
-  socket: Socket,
-  { io, directus, logger }: ConnectionDeps,
-): Promise<void> {
+async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<void> {
+  const { io, directus, producer, logger } = deps;
   const data = socket.data as SocketData;
   if (!data.conversationId || !data.vendorId) return;
   await socket.join(rooms.conversation(data.conversationId));
@@ -230,31 +184,33 @@ async function onCustomerConnect(
     vendorId: data.vendorId,
     online,
   });
-  // Mark the customer online for this conversation and tell the agents viewing
-  // it (header "{name} is online" / "New customer").
-  const isNew = customerConnected(data.conversationId, socket.id, data.isNewContact ?? false);
-  emitCustomerPresence(io, data.conversationId, true, isNew);
   // Tell the widget which conversation it is attached to + vendor branding,
-  // plus the current agent-online count so it can render the offline
-  // fallback on connect without waiting for the next agents:presence pulse.
-  // Also carry the customer's own name + new/returning status so the widget
-  // can greet a returning customer by name.
+  // the current agent-online count (so it can render the offline fallback on
+  // connect without waiting for the next agents:presence pulse), and the
+  // contact identity so a returning, named customer is greeted by name.
   socket.emit('ready', {
     conversationId: data.conversationId,
     branding: data.vendorColors ?? null,
     agentsOnline: agentPresence.distinctOnline(),
     contact: { name: data.contactName ?? null, phone: data.contactPhone ?? null },
-    isNew: data.isNewContact ?? false,
+    isNew: data.contactIsNew ?? true,
   });
-  // Seed the widget with the existing thread so a returning customer sees their
-  // history instead of a blank panel (the agent portal already loads this).
+  // Seed the existing thread so a returning customer (or a reconnect) sees their
+  // history instead of a blank panel. Best-effort: a failure just means no seed.
   try {
-    const messages = await directus.listConversationMessages(data.conversationId);
-    if (messages.length > 0) {
-      socket.emit('messages:history', { conversationId: data.conversationId, messages });
+    const history = await directus.loadConversationMessages(data.conversationId);
+    if (history.length > 0) {
+      socket.emit('messages:history', { conversationId: data.conversationId, messages: history });
     }
   } catch (err) {
-    logger.warn({ err }, 'failed to load conversation history for widget');
+    logger.warn({ err }, 'failed to load conversation history');
+  }
+  // A brand-new conversation fires the conversation_created automation trigger
+  // (assignment / keyword rules) exactly once; a resumed one already fired it.
+  if (data.conversationCreated) {
+    await producer
+      .conversationCreated(data.conversationId)
+      .catch((err) => logger.warn({ err }, 'conversationCreated enqueue failed'));
   }
 }
 
@@ -275,10 +231,6 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   // One token bucket per socket — throttles inbound write events (message:send,
   // note:add) to a burst + sustained rate.
   const writeBucket = createTokenBucket(rateLimit.capacity, rateLimit.refillPerSec);
-  // Separate, more generous bucket for attachment:get reads — opening a
-  // conversation can fan out several asset fetches at once, and reads are
-  // cheaper than writes, so they shouldn't compete with the message budget.
-  const readBucket = createTokenBucket(rateLimit.capacity * 3, rateLimit.refillPerSec * 3);
 
   // Explicit logout signal from an agent. We mirror the disconnect cleanup
   // up-front so the host-page "agents online" pill flips immediately —
@@ -323,18 +275,6 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     if (!parsed.success)
       return socket.emit(SOCKET_EVENTS.error, { code: 'bad_payload', message: 'invalid message' });
     const { conversationId, content, attachments, clientMsgId } = parsed.data;
-    // IDOR guard: a customer socket is bound to exactly ONE conversation at
-    // handshake (data.conversationId). Never let a client-supplied id target
-    // another customer's conversation — that would be cross-tenant message
-    // injection. Agents operate the shared inbox and may act on conversations
-    // they've opened (see conversation:subscribe), so this only constrains
-    // customers.
-    if (data.kind === 'customer' && conversationId !== data.conversationId) {
-      return socket.emit(SOCKET_EVENTS.error, {
-        code: 'forbidden',
-        message: 'conversation not accessible',
-      });
-    }
     try {
       // Attachment validation (MIME allow-list + size cap) before persisting.
       if (attachments && attachments.length > 0) {
@@ -390,10 +330,14 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     const respond = typeof ack === 'function' ? ack : () => undefined;
     if (!writeBucket.tryRemove()) return respond({ ok: false, error: 'rate_limited' });
     const data = raw as { filename?: unknown; mimetype?: unknown; content?: unknown };
-    const filename = sanitizeFilename(data?.filename);
+    const filename = typeof data?.filename === 'string' ? data.filename : 'upload';
     const mimetype = typeof data?.mimetype === 'string' ? data.mimetype.toLowerCase() : '';
-    const buf = decodeUploadContent(data?.content);
-    if (!buf) return respond({ ok: false, error: 'no file content' });
+    let buf: Buffer | null = null;
+    if (data?.content instanceof ArrayBuffer) buf = Buffer.from(data.content);
+    else if (ArrayBuffer.isView(data?.content as ArrayBufferView))
+      buf = Buffer.from((data.content as ArrayBufferView).buffer);
+    else if (typeof data?.content === 'string') buf = Buffer.from(data.content, 'base64');
+    if (!buf || buf.length === 0) return respond({ ok: false, error: 'no file content' });
     if (!attachmentPolicy.allowedMime.includes(mimetype))
       return respond({ ok: false, error: `type "${mimetype || 'unknown'}" not allowed` });
     if (buf.length > attachmentPolicy.maxBytes)
@@ -407,43 +351,26 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     }
   });
 
-  // Attachment download — the mirror of the upload above. Customers have no
-  // Directus account, so they can't fetch a private /assets/:id themselves; the
-  // gateway streams the bytes on their behalf, but ONLY for files that belong
-  // to their own conversation (authorization via attachmentInConversation).
-  //   emit('attachment:get', { id }, (res) => ...)
-  //   ack res: { ok:true, content:ArrayBuffer, type, filename } | { ok:false, error }
+  // Fetch a received attachment's bytes for the customer widget (which has no
+  // Directus session of its own). Authorized: the file must belong to a message
+  // in THIS socket's conversation, so a crafted id can't read another
+  // conversation's files. Agents fetch attachments directly via their own
+  // Directus token, so this path is customer-only.
+  //   emit('attachment:get', { id }, (err, res) => ...)
+  //   ack res: { ok:true, content: base64, type, filename } | { ok:false, error }
   socket.on('attachment:get', async (raw: unknown, ack?: (res: unknown) => void) => {
     const respond = typeof ack === 'function' ? ack : () => undefined;
-    if (!readBucket.tryRemove()) return respond({ ok: false, error: 'rate_limited' });
-    const id = (raw as { id?: unknown })?.id;
-    if (typeof id !== 'string' || !id) return respond({ ok: false, error: 'bad_request' });
+    if (data.kind !== 'customer' || !data.conversationId)
+      return respond({ ok: false, error: 'unauthorized' });
+    const fileId = (raw as { id?: unknown })?.id;
+    if (typeof fileId !== 'string' || !fileId) return respond({ ok: false, error: 'bad request' });
     try {
-      // Customers may only read attachments from their own conversation. Agents
-      // already hold Directus asset access via their own token, so the gateway
-      // doesn't restrict them further here.
-      if (data.kind === 'customer') {
-        if (
-          !data.conversationId ||
-          !(await directus.attachmentInConversation(id, data.conversationId))
-        )
-          return respond({ ok: false, error: 'forbidden' });
-      }
-      const file = await directus.fetchFileBytes(id);
-      if (!file) return respond({ ok: false, error: 'not_found' });
-      // Send bytes as a base64 STRING, not a raw Buffer: binary ack payloads
-      // arrive corrupted in the browser socket.io client (engine.io's binary
-      // framing differs across the websocket/polling transports), so a plain
-      // JSON string is the only reliable transport here.
-      respond({
-        ok: true,
-        content: file.content.toString('base64'),
-        type: file.type,
-        filename: file.filename,
-      });
+      const file = await directus.getConversationAttachment(data.conversationId, fileId);
+      if (!file) return respond({ ok: false, error: 'not found' });
+      respond({ ok: true, content: file.content, type: file.type, filename: file.filename });
     } catch (err) {
       logger.error({ err }, 'attachment:get failed');
-      respond({ ok: false, error: 'fetch_failed' });
+      respond({ ok: false, error: 'fetch failed' });
     }
   });
 
@@ -528,8 +455,6 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     socket.on(evt, (raw: unknown) => {
       const parsed = TypingSignal.safeParse(raw);
       if (!parsed.success) return;
-      // IDOR guard: customers may only signal typing on their bound conversation.
-      if (data.kind === 'customer' && parsed.data.conversationId !== data.conversationId) return;
       socket.to(rooms.conversation(parsed.data.conversationId)).emit(SOCKET_EVENTS.typingUpdate, {
         conversationId: parsed.data.conversationId,
         who: data.kind,
@@ -541,9 +466,6 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   socket.on(SOCKET_EVENTS.readAck, (raw: unknown) => {
     const parsed = ReadAck.safeParse(raw);
     if (!parsed.success) return;
-    // IDOR guard: a customer may only ack reads on its own bound conversation
-    // (otherwise a customer could spoof read receipts into another thread).
-    if (data.kind === 'customer' && parsed.data.conversationId !== data.conversationId) return;
     // An agent reading the thread clears its unread counter. Fire-and-forget;
     // a failed reset is non-fatal (next agent message resets it anyway).
     if (data.kind === 'agent') {
@@ -582,19 +504,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     if (data.kind !== 'agent') return;
     const parsed = TypingSignal.safeParse(raw);
     if (!parsed.success) return;
-    const { conversationId } = parsed.data;
-    void socket.join(rooms.conversation(conversationId));
-    // Replay the customer's current presence to just this agent so the header
-    // reflects reality the moment they open the conversation — without it,
-    // "online"/"New customer" would only appear on the next connect/disconnect.
-    const entry = convPresence.get(conversationId);
-    if (entry && entry.sockets.size > 0) {
-      socket.emit(SOCKET_EVENTS.customerPresence, {
-        conversationId,
-        online: true,
-        isNew: entry.isNew,
-      });
-    }
+    void socket.join(rooms.conversation(parsed.data.conversationId));
   });
 
   // After an agent PATCHes a conversation (assignment / status / priority /
@@ -602,7 +512,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   // sees the change: peers in the conversation room get conversation:changed
   // (refetch this thread); everyone in agents:all gets inbox:activity (refresh
   // their inbox list).
-  socket.on(SOCKET_EVENTS.conversationUpdated, (raw: unknown) => {
+  socket.on(SOCKET_EVENTS.conversationUpdated, async (raw: unknown) => {
     if (data.kind !== 'agent') return;
     const parsed = TypingSignal.safeParse(raw);
     if (!parsed.success) return;
@@ -611,5 +521,18 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       .to(rooms.conversation(conversationId))
       .emit(SOCKET_EVENTS.conversationChanged, { conversationId });
     io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId });
+    // If the update closed/resolved the conversation, tell the customer widget
+    // (in the conversation room) so it surfaces the post-chat CSAT survey.
+    try {
+      const status = await directus.getConversationStatus(conversationId);
+      if (status === 'closed' || status === 'resolved') {
+        io.to(rooms.conversation(conversationId)).emit('conversation:closed', {
+          conversationId,
+          status,
+        });
+      }
+    } catch (err) {
+      logger.warn({ err }, 'conversation:closed status check failed');
+    }
   });
 }

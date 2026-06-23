@@ -8,12 +8,23 @@ import { z } from 'zod';
  * and identity-field sanity are all checked. Query params are never trusted.
  */
 
+/**
+ * The host may send an optional field as absent, JSON null, or an empty/whitespace
+ * string — normalize all of those to "absent" so they never fail validation.
+ */
+const blankToUndefined = (v: unknown): unknown =>
+  v == null || (typeof v === 'string' && v.trim() === '') ? undefined : v;
+
 export const CustomerClaims = z.object({
   vendor_id: z.string().min(1),
   customer_id: z.string().min(1),
-  phone: z.string().optional(),
-  email: z.string().email().optional(),
-  name: z.string().optional(),
+  // Phone is the ONLY mandatory contact identifier. null/absent normalize to
+  // undefined; an empty/whitespace string is left to fail the explicit check in
+  // verify() (so the error is clear).
+  phone: z.preprocess((v) => (v == null ? undefined : v), z.string().optional()),
+  // Name + email are optional and may be absent, null, or empty.
+  name: z.preprocess(blankToUndefined, z.string().optional()),
+  email: z.preprocess(blankToUndefined, z.string().email().optional()),
   iat: z.number().optional(),
   exp: z.number().optional(),
 });
@@ -41,9 +52,11 @@ export function createHs256Verifier(secret: string): CustomerVerifier {
       if (!parsed.success) {
         throw new CustomerTokenError('token payload missing required identity fields');
       }
-      // At least one contact identifier is required to dedup a contact.
-      if (!parsed.data.phone && !parsed.data.email) {
-        throw new CustomerTokenError('token must include phone or email');
+      // Phone is the ONLY mandatory contact identifier — the host guarantees it.
+      // Name + email are optional (absent/null/empty are normalized to undefined
+      // above). A blank/whitespace-only phone is treated as missing.
+      if (!parsed.data.phone?.trim()) {
+        throw new CustomerTokenError('token must include a phone number');
       }
       return parsed.data;
     },

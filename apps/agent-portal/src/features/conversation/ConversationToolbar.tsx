@@ -21,13 +21,22 @@ async function broadcastUpdate(conversationId: string): Promise<void> {
 
 interface Props {
   conversation: InboxConversation;
+  /** Live customer presence for this conversation (gateway `customer:presence`).
+   *  null until the first event — then drives the "{name} is online" /
+   *  "New customer" header line. */
+  customerPresence?: { online: boolean; isNew: boolean } | null;
   /** Mobile-only: return to the inbox list (single-column view). */
   onBack?: () => void;
   /** Mobile-only: open the conversation details/notes panel. */
   onToggleDetails?: () => void;
 }
 
-export function ConversationToolbar({ conversation, onBack, onToggleDetails }: Props) {
+export function ConversationToolbar({
+  conversation,
+  customerPresence,
+  onBack,
+  onToggleDetails,
+}: Props) {
   const { t } = useTranslation();
   const agents = useAgents();
   const teams = useTeamOptions();
@@ -49,7 +58,42 @@ export function ConversationToolbar({ conversation, onBack, onToggleDetails }: P
     }
   };
 
-  const contactName = conversation.contact?.name ?? conversation.contact?.email ?? 'Customer';
+  const contact = conversation.contact;
+  // A new customer (gateway created the contact on first contact) leads with the
+  // phone number — we may not have a name yet — plus a "New customer" tag. A
+  // returning customer leads with their name and a live online/offline state.
+  // With no live presence (e.g. an old thread opened while the customer is
+  // offline) we fall back to the plain stored identity.
+  const isNew = customerPresence?.isNew ?? false;
+  const primaryLabel = isNew
+    ? (contact?.phone ??
+      contact?.name ??
+      t('conversation.newCustomer', { defaultValue: 'New customer' }))
+    : (contact?.name ??
+      contact?.email ??
+      contact?.phone ??
+      t('inbox.unknownContact', { defaultValue: 'Customer' }));
+  const statusLine = isNew ? (
+    <span className="inline-flex items-center gap-1 font-medium text-primary">
+      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
+      {t('conversation.newCustomer', { defaultValue: 'New customer' })}
+    </span>
+  ) : customerPresence ? (
+    <span className="inline-flex items-center gap-1">
+      <span
+        aria-hidden
+        className={cn(
+          'h-1.5 w-1.5 rounded-full',
+          customerPresence.online ? 'bg-success' : 'bg-muted-foreground/40',
+        )}
+      />
+      {customerPresence.online
+        ? t('conversation.online', { defaultValue: 'Online' })
+        : t('conversation.offline', { defaultValue: 'Offline' })}
+    </span>
+  ) : (
+    (contact?.email ?? contact?.phone ?? null)
+  );
 
   // Read-only at-a-glance tag strip; full management lives in the details sidebar.
   const tagChips = conversation.tags?.filter((j) => j.tags_id) ?? [];
@@ -95,12 +139,8 @@ export function ConversationToolbar({ conversation, onBack, onToggleDetails }: P
           />
         </span>
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-foreground">{contactName}</div>
-          {conversation.contact?.email && (
-            <div className="truncate text-xs text-muted-foreground">
-              {conversation.contact.email}
-            </div>
-          )}
+          <div className="truncate text-sm font-semibold text-foreground">{primaryLabel}</div>
+          {statusLine && <div className="truncate text-xs text-muted-foreground">{statusLine}</div>}
           {/* At-a-glance tags (read-only). Hidden on small screens to keep the
               identity compact; managed in the details sidebar. */}
           {tagChips.length > 0 && (

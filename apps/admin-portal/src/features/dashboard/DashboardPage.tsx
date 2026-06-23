@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cn, SelectMenu, Skeleton, Toolbar, ToolbarSpacer } from '@yiji/ui';
+import { cn, ErrorState, SelectMenu, Skeleton, Toolbar, ToolbarSpacer } from '@yiji/ui';
 import { useDashboardMetrics, type DashboardMetrics } from './api.js';
 
 const RANGES = [7, 30, 90];
@@ -148,7 +148,16 @@ export function DashboardPage() {
 
       <div className="flex-1 overflow-auto p-5 sm:p-6">
         <div className="mx-auto max-w-6xl space-y-5">
-          {m.isLoading || !m.data ? (
+          {m.isError ? (
+            <ErrorState
+              title={t('dashboard.loadError', { defaultValue: 'Could not load metrics' })}
+              message={t('dashboard.loadErrorHint', {
+                defaultValue: 'Check your connection and try again.',
+              })}
+              retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+              onRetry={() => void m.refetch()}
+            />
+          ) : m.isLoading || !m.data ? (
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-24 rounded-2xl" />

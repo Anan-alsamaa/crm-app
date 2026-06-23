@@ -3,6 +3,25 @@
 @tailwind utilities;
 
 /*
+ * Global reduced-motion guard (WCAG 2.3.3 / accessibility).
+ * Many animated surfaces (modals, dropdowns, toasts, entrances) use the
+ * `animate-*` utilities WITHOUT a `motion-safe:` prefix, so they would still
+ * animate for users who request reduced motion. This one rule makes ALL
+ * animation/transition/scroll motion respect that OS-level preference, so we
+ * never have to remember the prefix per call site.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
  * YIJI CRM — single brand palette.
  *
  * Brand color: #0F8D8F — a deep, calm teal. Translates to OKLCH ≈

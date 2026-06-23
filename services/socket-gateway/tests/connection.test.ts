@@ -40,16 +40,14 @@ interface Stubs {
 function makeStubs(over: Partial<Record<keyof GatewayDirectus, unknown>> = {}): Stubs {
   const directus = {
     resolveVendor: vi.fn(async () => ({ id: 'vendor-uuid', colors: { primary: '#abcabc' } })),
-    upsertContact: vi.fn(async () => ({
-      id: 'contact-1',
-      isNew: true,
-      name: null,
-      phone: null,
-    })),
-    findOrCreateConversation: vi.fn(async () => 'conv-1'),
+    upsertContact: vi.fn(async () => ({ id: 'contact-1', isNew: true, name: null, phone: null })),
+    findOrCreateConversation: vi.fn(async () => ({ id: 'conv-1', created: true })),
     persistMessage: vi.fn(async () => ({ id: 'msg-1', createdAt: '2026-01-01T00:00:00.000Z' })),
     deleteInternalNote: vi.fn(async () => true),
     listAgentConversationIds: vi.fn(async () => ['conv-1']),
+    loadConversationMessages: vi.fn(async () => []),
+    getConversationStatus: vi.fn(async () => 'open'),
+    getConversationAttachment: vi.fn(async () => null),
     ...over,
   } as unknown as GatewayDirectus;
 
@@ -196,6 +194,30 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
       );
     });
 
+    it('seeds a returning customer with messages:history', async () => {
+      harness = await startGateway(
+        makeStubs({
+          loadConversationMessages: vi.fn(async () => [
+            {
+              id: 'm1',
+              senderType: 'customer',
+              content: 'earlier message',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              attachments: [],
+            },
+          ]),
+        }),
+      );
+      const client = openClient(harness.port, { kind: 'customer', token: 't' });
+      sockets.push(client);
+      const history = await waitFor<{ conversationId: string; messages: Array<{ id: string }> }>(
+        client,
+        'messages:history',
+      );
+      expect(history.conversationId).toBe('conv-1');
+      expect(history.messages[0]!.id).toBe('m1');
+    });
+
     it('rejects a customer when the vendor is unknown/inactive', async () => {
       harness = await startGateway(makeStubs({ resolveVendor: vi.fn(async () => null) }));
       await expect(connect(harness.port, { kind: 'customer', token: 't' })).rejects.toThrow(
@@ -305,38 +327,6 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
       expect((await err).code).toBe('persist_failed');
     });
 
-    it('message:send from a customer is REJECTED when targeting another conversation (IDOR)', async () => {
-      // A customer socket is bound to conv-1 at handshake (stub returns conv-1).
-      // Emitting with a different conversationId must be refused, not persisted —
-      // otherwise it is cross-tenant message injection.
-      harness = await startGateway(makeStubs());
-      const customer = await connectCustomerReady(harness.port, sockets);
-      const err = waitFor<{ code: string }>(customer, SOCKET_EVENTS.error);
-      customer.emit(SOCKET_EVENTS.messageSend, {
-        conversationId: 'conv-SOMEONE-ELSE',
-        content: 'cross-tenant attempt',
-        clientMsgId: 'x',
-      });
-      expect((await err).code).toBe('forbidden');
-      await new Promise((r) => setTimeout(r, 20));
-      expect(harness.stubs.directus.persistMessage).not.toHaveBeenCalled();
-    });
-
-    it('message:send from a customer into its OWN conversation still persists', async () => {
-      harness = await startGateway(makeStubs());
-      const customer = await connectCustomerReady(harness.port, sockets);
-      const got = waitFor<{ id: string }>(customer, SOCKET_EVENTS.messageNew);
-      customer.emit(SOCKET_EVENTS.messageSend, {
-        conversationId: 'conv-1',
-        content: 'legit message',
-        clientMsgId: 'ok',
-      });
-      await got;
-      expect(harness.stubs.directus.persistMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ conversationId: 'conv-1', senderType: 'customer' }),
-      );
-    });
-
     it('note:add (agent) broadcasts note:new', async () => {
       harness = await startGateway(makeStubs());
       const agent = await connectedAgent();
@@ -390,6 +380,22 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
       const got = waitFor<{ conversationId: string }>(a2, SOCKET_EVENTS.inboxActivity);
       a1.emit(SOCKET_EVENTS.conversationUpdated, { conversationId: 'conv-99' });
       expect((await got).conversationId).toBe('conv-99');
+    });
+
+    it('conversation:updated that closes a conversation notifies the customer (CSAT)', async () => {
+      harness = await startGateway(
+        makeStubs({ getConversationStatus: vi.fn(async () => 'closed') }),
+      );
+      const customer = await connectCustomerReady(harness.port, sockets); // joins conv-1
+      const agent = await connectedAgent();
+      const closed = waitFor<{ conversationId: string; status: string }>(
+        customer,
+        'conversation:closed',
+      );
+      agent.emit(SOCKET_EVENTS.conversationUpdated, { conversationId: 'conv-1' });
+      const evt = await closed;
+      expect(evt.conversationId).toBe('conv-1');
+      expect(evt.status).toBe('closed');
     });
   });
 

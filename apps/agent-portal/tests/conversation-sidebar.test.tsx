@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -18,6 +19,7 @@ const inbox = vi.hoisted(() => ({
   useCreateTag: () => ({ mutateAsync: () => Promise.resolve({ id: 't', name: '', color: null }) }),
   useAddTagToConversation: () => ({ mutateAsync: () => Promise.resolve({}) }),
   useRemoveTagFromConversation: () => ({ mutateAsync: () => Promise.resolve({}) }),
+  useDeleteTag: () => ({ mutateAsync: () => Promise.resolve({}), isPending: false }),
 }));
 vi.mock('../src/features/inbox/api.js', () => inbox);
 
@@ -33,7 +35,9 @@ import { ConversationSidebar } from '../src/features/conversation/ConversationSi
 function renderSidebar(props = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
   );
   return render(<ConversationSidebar conversationId="c1" {...props} />, { wrapper: Wrapper });
 }
@@ -43,7 +47,7 @@ const convo = {
   status: 'open',
   priority: 'medium',
   contact: { id: 'k1', name: 'Alice', email: 'alice@example.com', phone: '555-1' },
-  tags: [{ tags_id: { id: 'tg1', name: 'VIP', color: null } }],
+  tags: [{ id: 'j1', tags_id: { id: 'tg1', name: 'VIP', color: null } }],
 };
 
 beforeEach(() => {

@@ -2,90 +2,135 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Yiji Support — we&rsquo;re here to help</title>
-    <meta name="theme-color" content="#0F8D8F" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Yiji Support</title>
+    <meta name="theme-color" content="#ffffff" />
     <link rel="icon" type="image/png" href="/yiji-logo.png" />
     <link rel="apple-touch-icon" href="/yiji-logo.png" />
-    <meta
-      name="description"
-      content="Yiji customer support. Chat with our team, or reach us directly by phone or email."
-    />
+    <meta name="description" content="Yiji customer support: chat, call, or email our team." />
     <style>
       :root {
-        --bg: oklch(0.985 0.002 230);
+        --bg: oklch(0.965 0.003 250); /* soft app background so cards pop */
         --card: #ffffff;
         --ink: oklch(0.18 0.005 250);
-        --muted: oklch(0.46 0.010 250);
-        --border: oklch(0.22 0.005 250 / 0.10);
-        --border-strong: oklch(0.22 0.005 250 / 0.18);
-        --primary: oklch(0.58 0.097 196);     /* YIJI #0F8D8F */
-        --primary-soft: oklch(0.58 0.097 196 / 0.08);
+        --muted: oklch(0.455 0.012 250); /* dark enough for 12–13px text to clear 4.5:1 on --bg */
+        --border: oklch(0.22 0.005 250 / 0.09);
+        --primary: oklch(0.58 0.097 196); /* YIJI #0F8D8F */
+        --primary-soft: oklch(0.58 0.097 196 / 0.1);
         --primary-ink: oklch(0.42 0.097 196);
       }
-      * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; }
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
       body {
         font-family:
-          'SF Pro Text', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
-          Roboto, 'Helvetica Neue', Arial, sans-serif;
-        background:
-          radial-gradient(at 8% 0%, oklch(0.58 0.097 196 / 0.08) 0%, transparent 45%),
-          radial-gradient(at 92% 100%, oklch(0.66 0.18 30 / 0.06) 0%, transparent 50%),
-          var(--bg);
-        background-attachment: fixed;
+          'SF Pro Text',
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          'Helvetica Neue',
+          Arial,
+          sans-serif;
+        background: var(--bg);
         color: var(--ink);
-        line-height: 1.55;
-        min-height: 100vh;
-        font-feature-settings: 'cv11', 'ss01';
+        line-height: 1.5;
+        min-height: 100dvh;
         -webkit-font-smoothing: antialiased;
+        font-feature-settings: 'cv11', 'ss01';
       }
-      a { color: inherit; text-decoration: none; }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
 
-      /* ───── Top bar ───── */
+      /* ───── App bar (in-app screen header: back · title · status) ───── */
       .top {
-        position: sticky; top: 0; z-index: 10;
-        background: rgba(255, 255, 255, 0.82);
-        backdrop-filter: blur(10px);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: rgba(255, 255, 255, 0.86);
+        backdrop-filter: saturate(180%) blur(12px);
         border-bottom: 1px solid var(--border);
-        padding: 14px 28px;
-        display: flex; align-items: center; gap: 12px;
+        padding: 10px 12px;
+        padding-top: max(10px, env(safe-area-inset-top));
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
-      .brand {
-        display: flex; align-items: center; gap: 10px;
+      .back-btn {
+        width: 38px;
+        height: 38px;
+        margin-inline-start: -4px;
+        border: none;
+        background: transparent;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        color: var(--ink);
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background-color 160ms ease;
+      }
+      .back-btn:active {
+        background: oklch(0.22 0.005 250 / 0.1);
+      }
+      .back-btn svg {
+        width: 22px;
+        height: 22px;
+      }
+      [dir='rtl'] .back-btn svg {
+        transform: scaleX(-1);
       }
       .brand-mark {
-        width: 34px; height: 34px;
-        border-radius: 9px;
-        background: rgba(255, 255, 255, 0.96);
-        display: grid; place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        background: #fff;
+        display: grid;
+        place-items: center;
         flex-shrink: 0;
         box-shadow: 0 1px 3px oklch(0.22 0.005 250 / 0.08);
       }
-      .brand-mark img { width: 26px; height: 26px; display: block; }
-      .brand-name {
+      .brand-mark img {
+        width: 22px;
+        height: 22px;
+        display: block;
+      }
+      .screen-title {
         font-weight: 600;
-        font-size: 15.5px;
+        font-size: 16.5px;
         letter-spacing: -0.015em;
       }
-      .brand-name span { color: var(--muted); font-weight: 400; }
-      .top-spacer { flex: 1; }
+      .top-spacer {
+        flex: 1;
+      }
       .top-status {
-        display: inline-flex; align-items: center; gap: 6px;
-        font-size: 12.5px;
-        padding: 6px 11px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        padding: 5px 10px;
         border-radius: 999px;
         font-weight: 500;
-        background: rgba(74, 222, 128, 0.1);
+        background: rgba(74, 222, 128, 0.12);
         color: oklch(0.45 0.15 145);
-        transition: background-color 200ms ease, color 200ms ease;
+        white-space: nowrap;
       }
       .top-status::before {
         content: '';
-        width: 6px; height: 6px; border-radius: 999px;
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
         background: oklch(0.55 0.18 145);
         box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.18);
-        transition: background-color 200ms ease, box-shadow 200ms ease;
       }
       .top-status.is-offline {
         background: rgba(234, 179, 8, 0.12);
@@ -104,296 +149,451 @@
         box-shadow: 0 0 0 3px oklch(0.22 0.005 250 / 0.08);
       }
 
-      /* ───── Hero ───── */
-      .page {
-        max-width: 980px;
+      /* ───── Screen body ───── */
+      .screen {
+        max-width: 560px;
         margin: 0 auto;
-        padding: 56px 28px 80px;
+        padding: 18px 16px calc(40px + env(safe-area-inset-bottom));
       }
-      .hero {
+
+      .lead {
+        padding: 4px 4px 0;
+      }
+      .lead-title {
+        margin: 0;
+        font-size: 21px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .lead-sub {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        max-width: 40ch;
+      }
+
+      /* Primary action: start chat */
+      .chat-card {
+        margin-top: 16px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 13px;
         text-align: start;
-        max-width: 720px;
+        /* Deeper teal than the brand accent so white title AND sub clear WCAG on
+           a filled CTA (the brand #0F8D8F is too light for 12.5px white). */
+        background: linear-gradient(150deg, oklch(0.55 0.1 196), oklch(0.485 0.106 196));
+        color: #fff;
+        border: none;
+        border-radius: 16px;
+        padding: 15px 16px;
+        cursor: pointer;
+        box-shadow: 0 8px 22px oklch(0.55 0.1 196 / 0.3);
+        transition:
+          transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
+          box-shadow 150ms;
       }
-      .hero-eyebrow {
+      .chat-card:active {
+        transform: scale(0.985);
+        box-shadow: 0 4px 14px oklch(0.58 0.097 196 / 0.22);
+      }
+      .chat-card-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.18);
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+      .chat-card-icon svg {
+        width: 21px;
+        height: 21px;
+      }
+      .chat-card-main {
+        flex: 1;
+        min-width: 0;
+      }
+      .chat-card-title {
+        display: block;
+        font-weight: 600;
+        font-size: 16px;
+      }
+      .chat-card-sub {
+        display: block;
         font-size: 12.5px;
+        opacity: 0.92;
+        margin-top: 2px;
+      }
+      .chat-card-arrow svg {
+        width: 18px;
+        height: 18px;
+        opacity: 0.9;
+      }
+      [dir='rtl'] .chat-card-arrow svg {
+        transform: scaleX(-1);
+      }
+
+      /* Grouped lists (settings-style) */
+      .group {
+        margin-top: 26px;
+      }
+      .group-label {
+        margin: 0 0 8px;
+        padding-inline-start: 6px;
+        font-size: 11.5px;
         font-weight: 600;
         letter-spacing: 0.06em;
         text-transform: uppercase;
-        color: var(--primary-ink);
-        background: var(--primary-soft);
-        display: inline-block;
-        padding: 6px 12px;
-        border-radius: 999px;
-      }
-      h1 {
-        font-size: clamp(2rem, 5vw, 3.25rem);
-        font-weight: 700;
-        letter-spacing: -0.025em;
-        line-height: 1.1;
-        margin: 18px 0 0;
-        max-width: 18ch;
-        text-wrap: balance;
-      }
-      .hero-lede {
-        margin-top: 18px;
-        font-size: clamp(1rem, 1.4vw, 1.15rem);
-        color: var(--muted);
-        max-width: 56ch;
-      }
-      .hero-cta {
-        margin-top: 28px;
-        display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
-      }
-      .hero-cta-primary {
-        background: var(--ink);
-        color: #fff;
-        font-weight: 600;
-        font-size: 14.5px;
-        padding: 12px 22px;
-        border-radius: 12px;
-        border: none;
-        cursor: pointer;
-        display: inline-flex; align-items: center; gap: 8px;
-        transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
-      }
-      .hero-cta-primary:active { transform: scale(0.97); }
-      .hero-cta-hint { font-size: 13px; color: var(--muted); }
-
-      /* ───── Direct contact cards ───── */
-      .contacts-head {
-        margin-top: 60px;
-        display: flex; flex-direction: column; gap: 6px;
-      }
-      .contacts-eyebrow {
-        font-size: 12px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        font-weight: 600;
         color: var(--muted);
       }
-      .contacts-title {
-        font-size: clamp(1.4rem, 2.5vw, 1.75rem);
-        font-weight: 600;
-        letter-spacing: -0.015em;
-        line-height: 1.2;
-        max-width: 32ch;
-      }
-      .contacts-grid {
-        margin-top: 20px;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: 14px;
-      }
-      .contact {
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 20px 22px;
-        text-decoration: none;
-        color: inherit;
-        display: flex; flex-direction: column; gap: 6px;
-        transition: border-color 160ms, transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
-      }
-      .contact:hover {
-        border-color: var(--border-strong);
-        transform: translateY(-2px);
-      }
-      .contact-icon {
-        width: 36px; height: 36px;
-        border-radius: 10px;
-        display: grid; place-items: center;
-        background: var(--primary-soft);
-        color: var(--primary-ink);
-        margin-bottom: 8px;
-      }
-      .contact-icon svg { width: 18px; height: 18px; }
-      .contact-label {
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        font-weight: 600;
-        color: var(--muted);
-      }
-      .contact-value {
-        font-size: 17px;
-        font-weight: 600;
-        letter-spacing: -0.005em;
-        font-variant-numeric: tabular-nums;
-      }
-      [dir='rtl'] .contact-value { unicode-bidi: plaintext; }
-      .contact-meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
-
-      /* ───── FAQ teaser ───── */
-      .faq {
-        margin-top: 56px;
-        display: flex; flex-direction: column; gap: 12px;
-      }
-      .faq-item {
+      .list {
         background: var(--card);
         border: 1px solid var(--border);
         border-radius: 14px;
-        padding: 16px 20px;
+        overflow: hidden;
       }
-      .faq-q {
-        font-size: 14.5px;
+      .list > * + * {
+        border-top: 1px solid var(--border);
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        padding: 13px 14px;
+        color: inherit;
+      }
+      .row:active {
+        background: oklch(0.22 0.005 250 / 0.04);
+      }
+      .row-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        background: var(--primary-soft);
+        color: var(--primary-ink);
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+      .row-icon svg {
+        width: 17px;
+        height: 17px;
+      }
+      .row-icon-wa {
+        background: rgba(37, 211, 102, 0.14);
+        color: #128c3e;
+      }
+      .row-icon-wa svg {
+        width: 19px;
+        height: 19px;
+      }
+      .row-main {
+        flex: 1;
+        min-width: 0;
+      }
+      .row-title {
+        display: block;
         font-weight: 600;
-        letter-spacing: -0.005em;
-        margin: 0 0 4px;
+        font-size: 14.5px;
       }
-      .faq-a {
-        font-size: 13.5px;
+      .row-sub {
+        display: block;
+        font-size: 12.5px;
         color: var(--muted);
-        margin: 0;
+        margin-top: 1px;
+      }
+      [dir='rtl'] .row-sub {
+        unicode-bidi: plaintext;
+      }
+      .row-chev {
+        color: var(--muted);
+        opacity: 0.55;
+        flex-shrink: 0;
+        display: grid;
+        place-items: center;
+      }
+      .row-chev svg {
+        width: 18px;
+        height: 18px;
+      }
+      [dir='rtl'] .row-chev svg {
+        transform: scaleX(-1);
+      }
+
+      /* FAQ accordion rows */
+      .faq-row > summary {
+        list-style: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 13px 14px;
+        font-weight: 600;
+        font-size: 14px;
+      }
+      .faq-row > summary::-webkit-details-marker {
+        display: none;
+      }
+      .faq-plus {
+        color: var(--muted);
+        flex-shrink: 0;
+        font-size: 18px;
+        line-height: 1;
+        transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      .faq-row[open] > summary .faq-plus {
+        transform: rotate(45deg);
+      }
+      .faq-body {
+        padding: 0 14px 13px;
+        font-size: 13px;
+        color: var(--muted);
         line-height: 1.55;
       }
 
-      /* ───── Footer ───── */
-      .footer {
-        margin-top: 56px;
-        padding-top: 24px;
-        border-top: 1px solid var(--border);
-        font-size: 12.5px; color: var(--muted);
-        display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-        justify-content: space-between;
+      .app-footer {
+        margin-top: 26px;
+        text-align: center;
+        font-size: 11.5px;
+        color: var(--muted);
       }
-      .footer-brand { color: var(--ink); font-weight: 600; }
 
-      /* ───── Mobile ───── */
-      @media (max-width: 640px) {
-        .top { padding: 12px 16px; }
-        .top-status { padding: 5px 10px; font-size: 12px; }
-        .page { padding: 32px 18px 56px; }
-        .hero-cta-primary { padding: 11px 18px; font-size: 14px; }
-        .contacts-head { margin-top: 40px; }
-        .contacts-grid { grid-template-columns: 1fr; gap: 10px; }
-        .contact { padding: 16px 18px; }
-        .faq { margin-top: 40px; gap: 10px; }
-        .footer {
-          flex-direction: column;
-          align-items: flex-start;
-          margin-top: 40px;
+      /* Keyboard focus: visible ring (never rely on the removed default). */
+      .back-btn:focus-visible,
+      .chat-card:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 3px;
+      }
+      .row:focus-visible,
+      .faq-row > summary:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: -2px;
+      }
+
+      /* Motion is enhancement, not a gate. Honor the OS setting. */
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+        }
+        .chat-card:active {
+          transform: none;
         }
       }
     </style>
   </head>
   <body>
     <header class="top">
-      <a class="brand" href="#">
-        <span class="brand-mark"><img src="/yiji-logo.png" alt="Yiji" /></span>
-        <span class="brand-name">Yiji <span>· Support</span></span>
-      </a>
+      <button
+        class="back-btn"
+        type="button"
+        aria-label="Back to Yiji"
+        onclick="window.history.length > 1 ? window.history.back() : window.close()"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden
+        >
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </button>
+      <span class="brand-mark"><img src="/yiji-logo.png" alt="Yiji" /></span>
+      <span class="screen-title">Yiji Support</span>
       <span class="top-spacer"></span>
-      <span class="top-status is-pending" id="status-badge">Checking team availability…</span>
+      <span class="top-status is-pending" id="status-badge">Checking…</span>
     </header>
 
-    <main class="page">
-      <section class="hero">
-        <span class="hero-eyebrow">Customer support</span>
-        <h1>We&rsquo;re here to help with anything Yiji.</h1>
-        <p class="hero-lede">
-          Chat with our team, or reach out directly by phone or email — your message
-          goes straight to the same support desk either way. Most replies arrive within
-          a few minutes during business hours.
+    <main class="screen">
+      <div class="lead">
+        <h1 class="lead-title">How can we help?</h1>
+        <p class="lead-sub">
+          Chat with our team. Most replies arrive within a few minutes during business hours.
         </p>
-        <div class="hero-cta">
-          <button
-            class="hero-cta-primary"
-            type="button"
-            onclick="document.querySelector('.yiji-launcher')?.click()"
+      </div>
+
+      <button
+        class="chat-card"
+        type="button"
+        onclick="document.querySelector('.yiji-launcher')?.click()"
+      >
+        <span class="chat-card-icon" aria-hidden>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
           >
-            Start a chat
-            <span aria-hidden>→</span>
-          </button>
-          <span class="hero-cta-hint">Or call · email below</span>
+            <path
+              d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"
+            />
+          </svg>
+        </span>
+        <span class="chat-card-main">
+          <span class="chat-card-title">Start a live chat</span>
+          <span class="chat-card-sub">Real teammates · typically reply in minutes</span>
+        </span>
+        <span class="chat-card-arrow" aria-hidden>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </span>
+      </button>
+
+      <section class="group">
+        <h2 class="group-label">Other ways to reach us</h2>
+        <div class="list">
+          <a class="row" href="tel:+966555980402">
+            <span class="row-icon" aria-hidden>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92Z"
+                />
+              </svg>
+            </span>
+            <span class="row-main">
+              <span class="row-title">Call us</span>
+              <span class="row-sub">+966 55 598 0402 · Sun–Thu, 8 AM–6 PM</span>
+            </span>
+            <span class="row-chev" aria-hidden
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M9 6l6 6-6 6" /></svg
+            ></span>
+          </a>
+          <a class="row" href="https://wa.me/966555980402" target="_blank" rel="noopener">
+            <span class="row-icon row-icon-wa" aria-hidden>
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.004c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.13a8.23 8.23 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.54 3.7-8.23 8.25-8.23 2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.41 5.82c0 4.54-3.7 8.23-8.25 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.12-.16.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.01-.38.11-.5.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.4-.42-.56-.42l-.48-.01c-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z"
+                />
+              </svg>
+            </span>
+            <span class="row-main">
+              <span class="row-title">WhatsApp</span>
+              <span class="row-sub">+966 55 598 0402 · chat on WhatsApp</span>
+            </span>
+            <span class="row-chev" aria-hidden
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M9 6l6 6-6 6" /></svg
+            ></span>
+          </a>
+          <a class="row" href="mailto:cs@anan.sa">
+            <span class="row-icon" aria-hidden>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
+                <path d="m3 6 9 7 9-7" />
+              </svg>
+            </span>
+            <span class="row-main">
+              <span class="row-title">Email us</span>
+              <span class="row-sub">cs@anan.sa · replies within a business day</span>
+            </span>
+            <span class="row-chev" aria-hidden
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M9 6l6 6-6 6" /></svg
+            ></span>
+          </a>
         </div>
       </section>
 
-      <section>
-        <div class="contacts-head">
-          <span class="contacts-eyebrow">Reach the support desk</span>
-          <h2 class="contacts-title">Prefer phone or email? We answer on every channel.</h2>
-        </div>
-        <div class="contacts-grid">
-          <a class="contact" href="tel:+966555980402">
-            <span class="contact-icon" aria-hidden>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92Z" />
-              </svg>
-            </span>
-            <span class="contact-label">Call us</span>
-            <span class="contact-value">+966 55 598 0402</span>
-            <span class="contact-meta">Sunday – Thursday · 8 AM – 6 PM</span>
-          </a>
-          <a class="contact" href="mailto:cs@anan.sa">
-            <span class="contact-icon" aria-hidden>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/>
-                <path d="m3 6 9 7 9-7"/>
-              </svg>
-            </span>
-            <span class="contact-label">Email us</span>
-            <span class="contact-value">cs@anan.sa</span>
-            <span class="contact-meta">We aim to reply within one business day</span>
-          </a>
-          <a class="contact" href="#" onclick="event.preventDefault(); document.querySelector('.yiji-launcher')?.click();">
-            <span class="contact-icon" aria-hidden>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"/>
-              </svg>
-            </span>
-            <span class="contact-label">Live chat</span>
-            <span class="contact-value">Open chat now</span>
-            <span class="contact-meta">Real teammates · typical reply in minutes</span>
-          </a>
+      <section class="group">
+        <h2 class="group-label">Common questions</h2>
+        <div class="list">
+          <details class="faq-row">
+            <summary>When are agents available?<span class="faq-plus" aria-hidden>+</span></summary>
+            <div class="faq-body">
+              Sunday–Thursday, 8 AM–6 PM (KSA). Outside these hours you can still send a message,
+              and we’ll pick it up first thing the next business day.
+            </div>
+          </details>
+          <details class="faq-row">
+            <summary>
+              Will my conversation be saved?<span class="faq-plus" aria-hidden>+</span>
+            </summary>
+            <div class="faq-body">
+              Yes. Every chat is attached to your account, so any teammate can pick up where the
+              last one left off. You never repeat yourself.
+            </div>
+          </details>
+          <details class="faq-row">
+            <summary>Is my information secure?<span class="faq-plus" aria-hidden>+</span></summary>
+            <div class="faq-body">
+              All chat is over an encrypted connection and your identity is verified by your Yiji
+              account before the conversation starts.
+            </div>
+          </details>
         </div>
       </section>
 
-      <section class="faq">
-        <div class="faq-item">
-          <p class="faq-q">When are agents available?</p>
-          <p class="faq-a">Sunday – Thursday, 8 AM – 6 PM (KSA). Outside these hours you can still
-            send a message — we&rsquo;ll pick it up first thing the next business day.</p>
-        </div>
-        <div class="faq-item">
-          <p class="faq-q">Will my conversation be saved?</p>
-          <p class="faq-a">Yes. Every chat is attached to your account so any teammate can pick
-            up where the previous one left off — you never have to repeat yourself.</p>
-        </div>
-        <div class="faq-item">
-          <p class="faq-q">Is my information secure?</p>
-          <p class="faq-a">All chat is over an encrypted connection and your identity is verified
-            by your Yiji account before the conversation starts. No third-party trackers.</p>
-        </div>
-      </section>
-
-      <footer class="footer">
-        <div>
-          <span class="footer-brand">© Yiji</span> · Customer support
-        </div>
-        <div>
-          <a href="https://yiji-app.com" target="_blank" rel="noopener">yiji-app.com</a>
-        </div>
-      </footer>
+      <p class="app-footer">© Yiji · Customer support</p>
     </main>
 
     <script>
-      // Mirror the gateway's live agent-presence onto the top-bar status
-      // pill. The widget dispatches `yiji:agents-presence` on `window` every
-      // time the count changes (and once on initial connect via the `ready`
-      // event). Until the first event arrives, the badge stays in its
-      // neutral "Checking…" state so we don't lie either direction.
+      // Mirror the gateway's live agent-presence onto the header status pill.
       (function () {
         var badge = document.getElementById('status-badge');
         if (!badge) return;
         window.addEventListener('yiji:agents-presence', function (e) {
-          var count = (e && e.detail && typeof e.detail.count === 'number') ? e.detail.count : 0;
+          var count = e && e.detail && typeof e.detail.count === 'number' ? e.detail.count : 0;
           badge.classList.remove('is-pending');
           if (count > 0) {
             badge.classList.remove('is-offline');
-            badge.textContent = 'We’re online now';
+            badge.textContent = 'We’re online';
           } else {
             badge.classList.add('is-offline');
-            badge.textContent = 'Our team is offline right now';
+            badge.textContent = 'Team offline';
           }
         });
       })();

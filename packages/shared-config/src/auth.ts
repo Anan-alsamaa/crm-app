@@ -26,7 +26,30 @@ export interface AuthUser {
   last_name: string | null;
   status: string;
   role: { id: string; name: string } | null;
+  /**
+   * Whether this user has Directus admin access. In Directus 11 admin access is
+   * a property of *policies* (attached to the role and/or directly to the user),
+   * not the role name — so this is the authoritative signal for admin gating.
+   */
+  admin_access: boolean;
 }
+
+/** Shape of a policy junction row as returned by readMe (role + direct). */
+interface PolicyLink {
+  policy: { admin_access: boolean | null } | null;
+}
+interface RawMe {
+  id: string;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  status: string;
+  role: { id: string; name: string; policies?: PolicyLink[] } | null;
+  policies?: PolicyLink[];
+}
+
+const grantsAdmin = (links: PolicyLink[] | undefined): boolean =>
+  (links ?? []).some((l) => l.policy?.admin_access === true);
 
 export interface AuthClientOptions {
   url: string;
@@ -50,11 +73,29 @@ export function createAuthClient({ url, storage }: AuthClientOptions) {
 
   async function me(): Promise<AuthUser | null> {
     try {
-      return (await client.request(
+      const raw = (await client.request(
         readMe({
-          fields: ['id', 'email', 'first_name', 'last_name', 'status', { role: ['id', 'name'] }],
+          fields: [
+            'id',
+            'email',
+            'first_name',
+            'last_name',
+            'status',
+            // role.policies + direct policies carry admin_access in Directus 11.
+            { role: ['id', 'name', { policies: [{ policy: ['admin_access'] }] }] },
+            { policies: [{ policy: ['admin_access'] }] },
+          ],
         }),
-      )) as AuthUser;
+      )) as RawMe;
+      return {
+        id: raw.id,
+        email: raw.email,
+        first_name: raw.first_name,
+        last_name: raw.last_name,
+        status: raw.status,
+        role: raw.role ? { id: raw.role.id, name: raw.role.name } : null,
+        admin_access: grantsAdmin(raw.role?.policies) || grantsAdmin(raw.policies),
+      };
     } catch {
       return null;
     }
@@ -76,7 +117,7 @@ export function createAuthClient({ url, storage }: AuthClientOptions) {
     async getToken(): Promise<string | null> {
       return client.getToken();
     },
-    /** Current user with role name, or null if not authenticated. */
+    /** Current user with role name + computed admin_access, or null if not authenticated. */
     me,
     /**
      * Restore a session on cold load. The access token lives in memory only, so

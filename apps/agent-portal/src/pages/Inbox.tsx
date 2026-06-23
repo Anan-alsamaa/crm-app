@@ -7,6 +7,7 @@ import {
   Button,
   cn,
   ConversationPlaceholderArt,
+  ErrorState,
   formatRelative,
   GhostSelect,
   InboxEmptyArt,
@@ -71,14 +72,17 @@ export function Inbox() {
 
   useEffect(() => {
     let cancelled = false;
+    let cleanup: (() => void) | undefined;
     void (async () => {
       const socket = await getSocket();
       if (cancelled) return;
       const onActivity = () => qc.invalidateQueries({ queryKey: ['conversations'] });
       socket.on(SOCKET_EVENTS.inboxActivity, onActivity);
+      cleanup = () => socket.off(SOCKET_EVENTS.inboxActivity, onActivity);
     })();
     return () => {
       cancelled = true;
+      cleanup?.();
     };
   }, [qc]);
 
@@ -334,7 +338,16 @@ export function Inbox() {
 
           {/* List — no borders between rows; hover bg + active bg do the work. */}
           <div className="flex-1 overflow-auto">
-            {conversations.isLoading ? (
+            {conversations.isError ? (
+              <ErrorState
+                title={t('inbox.loadError', { defaultValue: 'Could not load conversations' })}
+                message={t('inbox.loadErrorHint', {
+                  defaultValue: 'Check your connection and try again.',
+                })}
+                retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+                onRetry={() => void conversations.refetch()}
+              />
+            ) : conversations.isLoading ? (
               <ul className="px-2 pt-2 space-y-1">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <li key={i} className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5">
@@ -489,8 +502,8 @@ export function Inbox() {
                 .sort((a, b) => (b.last_message_at ?? '').localeCompare(a.last_message_at ?? ''))
                 .slice(0, 4);
               return (
-                <div className="mx-auto flex h-full max-w-2xl flex-col justify-center px-6">
-                  <div className="flex flex-col items-start gap-6">
+                <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center px-6">
+                  <div className="flex flex-col items-center gap-6 text-center">
                     <Pill tone="pink" size="md">
                       <span className="font-semibold">{t('inbox.welcome.queue')}</span>
                       <span className="opacity-70">·</span>
@@ -521,7 +534,7 @@ export function Inbox() {
                     </p>
 
                     {recent.length > 0 && (
-                      <div className="mt-2 w-full">
+                      <div className="mt-2 w-full max-w-md text-start">
                         <p className="mb-3 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                           {t('inbox.welcome.recent')}
                         </p>

@@ -32,6 +32,7 @@ export function NotificationBell() {
 
   useEffect(() => {
     let cancelled = false;
+    let cleanup: (() => void) | undefined;
     void (async () => {
       const socket = await getSocket();
       if (cancelled) return;
@@ -39,10 +40,15 @@ export function NotificationBell() {
       socket.on(SOCKET_EVENTS.notificationPushed, refresh);
       socket.on(SOCKET_EVENTS.inboxActivity, refresh);
       const poll = setInterval(refresh, 30_000);
-      return () => clearInterval(poll);
+      cleanup = () => {
+        socket.off(SOCKET_EVENTS.notificationPushed, refresh);
+        socket.off(SOCKET_EVENTS.inboxActivity, refresh);
+        clearInterval(poll);
+      };
     })();
     return () => {
       cancelled = true;
+      cleanup?.();
     };
   }, [qc]);
 
@@ -90,14 +96,14 @@ export function NotificationBell() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'relative inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground',
+          'relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground',
           'transition-[transform,background-color,color] duration-fast ease-out',
           'hover:bg-secondary hover:text-foreground active:scale-95',
         )}
         aria-label={t('notifications.title')}
         aria-expanded={open}
       >
-        <BellIcon size={16} />
+        <BellIcon size={17} />
         {unread.length > 0 && (
           <span
             className="absolute -end-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground"

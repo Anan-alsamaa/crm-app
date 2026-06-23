@@ -9,14 +9,21 @@
  */
 import './telemetry.js'; // MUST be first: starts OTel before http/ioredis load.
 import { createServer } from 'node:http';
-import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
+import Fastify, {
+  type FastifyBaseLogger,
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from 'fastify';
 import { Redis } from 'ioredis';
 import { Server as SocketServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import pino from 'pino';
+import { ImportJob, ReportJob } from '@yiji/shared-types';
 import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
 import { createHs256Verifier } from './auth/customer-jwt.js';
+import { validateAgentToken } from './auth/agent-jwt.js';
 import { createProducer } from './queue.js';
 import { registerConnection, getAgentPresenceSnapshot } from './connection.js';
 import { Registry } from './metrics.js';
@@ -54,24 +61,22 @@ async function main(): Promise<void> {
   const logger = pino({ level: config.LOG_LEVEL, name: 'socket-gateway' });
 
   const httpServer = createServer();
-  // CORS_ORIGIN may be '*' or a comma-separated allow-list. Socket.IO treats a
-  // bare string as a single literal origin, so split the list into an array —
-  // otherwise every browser Origin is rejected when an explicit list is set.
-  const corsOrigin =
-    config.CORS_ORIGIN.trim() === '*'
+  // A CORS value may be '*' or a comma-separated allow-list. Socket.IO + our
+  // /jobs handler treat a bare string as a single literal origin, so split a
+  // list into an array — otherwise every browser Origin is rejected.
+  const parseCors = (v: string): '*' | string[] =>
+    v.trim() === '*'
       ? '*'
-      : config.CORS_ORIGIN.split(',')
+      : v
+          .split(',')
           .map((o) => o.trim())
           .filter(Boolean);
-  const io = new SocketServer(httpServer, {
-    cors: { origin: corsOrigin },
-    // Socket.IO's default maxHttpBufferSize is ~1MB, which silently DISCONNECTED
-    // the socket on any larger payload — capping attachment uploads (and the
-    // base64 `attachment:get` responses) to ~1MB regardless of the 10MB policy,
-    // so high-res images failed or had to be sent tiny. Allow the configured
-    // attachment limit plus headroom for base64's ~1.34x inflation + envelope.
-    maxHttpBufferSize: config.ATTACHMENT_MAX_BYTES * 2,
-  });
+  // Two surfaces, two policies: the customer widget socket is embedded on
+  // arbitrary vendor sites (defaults to '*', gated by the signed JWT), while the
+  // admin/AI REST (e.g. POST /jobs/*) stays pinned to CORS_ORIGIN.
+  const corsOrigin = parseCors(config.CORS_ORIGIN);
+  const widgetCorsOrigin = parseCors(config.WIDGET_CORS_ORIGIN);
+  const io = new SocketServer(httpServer, { cors: { origin: widgetCorsOrigin } });
 
   // --- Metrics ---
   const metrics = new Registry();
@@ -136,6 +141,34 @@ async function main(): Promise<void> {
 
   const app = Fastify({ loggerInstance: logger as unknown as FastifyBaseLogger });
   applySecurityHeaders(app);
+
+  // CORS for the admin-triggered enqueue endpoints (POST /jobs/* from the admin
+  // portal running in a browser). Every other endpoint here is internal or
+  // server-to-server, so CORS stays scoped to /jobs/*. The allow-list is the
+  // same CORS_ORIGIN the Socket.IO server uses.
+  const allowCorsOrigin = (originHeader: string | string[] | undefined): string | null => {
+    const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader;
+    if (corsOrigin === '*') return '*';
+    return origin && corsOrigin.includes(origin) ? origin : null;
+  };
+  app.addHook('onRequest', async (req, reply) => {
+    if (!req.url.startsWith('/jobs/')) return;
+    const allow = allowCorsOrigin(req.headers.origin);
+    if (allow) {
+      reply.header('Access-Control-Allow-Origin', allow);
+      reply.header('Vary', 'Origin');
+      reply.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', 'content-type, authorization, x-producer-token');
+      reply.header('Access-Control-Max-Age', '600');
+    }
+    if (req.method === 'OPTIONS') return reply.code(204).send();
+  });
+  // The global security onSend sets CORP: same-origin; relax it to cross-origin
+  // for /jobs/* so the cross-origin admin portal can read the JSON response.
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (req.url.startsWith('/jobs/')) reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+    return payload;
+  });
 
   // Replace the default JSON parser with one that also retains the raw body, so
   // the webhook HMAC can be computed over the exact bytes the sender signed.
@@ -204,6 +237,50 @@ async function main(): Promise<void> {
     // Signature verified. Downstream processing (fan-out / enqueue) is wired by
     // the consuming pipeline; we acknowledge receipt here.
     return reply.code(202).send({ status: 'accepted', event });
+  });
+
+  // Admin-triggered job enqueue (admin portal → gateway). "Import CSV" and
+  // "Run report now" post here; the gateway enqueues onto the same BullMQ queues
+  // the workers consume (job NAME is cosmetic — queue + data shape must match).
+  // Auth: the caller's Directus access token must resolve to Admin/Administrator.
+  // (Scheduled reports are enqueued by the workers themselves, not this path.)
+  const ADMIN_ROLES = new Set(['Admin', 'Administrator']);
+  const requireAdmin = async (req: FastifyRequest, reply: FastifyReply): Promise<boolean> => {
+    const raw = req.headers['authorization'];
+    const header = Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
+    const token = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
+    if (!token) {
+      await reply.code(401).send({ ok: false, error: 'missing bearer token' });
+      return false;
+    }
+    const identity = await validateAgentToken(config.DIRECTUS_INTERNAL_URL, token);
+    if (!identity || !identity.role || !ADMIN_ROLES.has(identity.role)) {
+      await reply.code(403).send({ ok: false, error: 'admin role required' });
+      return false;
+    }
+    return true;
+  };
+  app.post('/jobs/import', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return reply;
+    const parsed = ImportJob.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ ok: false, error: 'invalid import job payload' });
+    const jobId = await producer.enqueueImport(parsed.data);
+    if (jobId === null)
+      return reply.code(503).send({ ok: false, error: 'queue disabled (no Redis)' });
+    logger.info({ jobId }, 'admin enqueued contact import');
+    return reply.send({ ok: true, jobId });
+  });
+  app.post('/jobs/report', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return reply;
+    const parsed = ReportJob.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ ok: false, error: 'invalid report job payload' });
+    const jobId = await producer.enqueueReport(parsed.data);
+    if (jobId === null)
+      return reply.code(503).send({ ok: false, error: 'queue disabled (no Redis)' });
+    logger.info({ jobId }, 'admin enqueued report run');
+    return reply.send({ ok: true, jobId });
   });
   // Diagnostic: inspect which agents the gateway thinks are currently
   // online (and how many sockets each is holding). Useful for chasing the
