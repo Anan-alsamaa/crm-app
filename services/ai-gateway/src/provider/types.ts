@@ -40,7 +40,12 @@ export interface AIProvider {
 export class AiProviderError extends Error {
   constructor(
     message: string,
-    readonly code: 'not_configured' | 'upstream' | 'rate_limited' | 'invalid_response',
+    readonly code:
+      | 'not_configured'
+      | 'upstream'
+      | 'rate_limited'
+      | 'provider_unavailable'
+      | 'invalid_response',
     readonly status: number = 502,
   ) {
     super(message);

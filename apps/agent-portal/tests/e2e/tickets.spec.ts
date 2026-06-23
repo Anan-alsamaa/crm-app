@@ -64,26 +64,24 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   await agent.getByRole('button', { name: /mark first response sent/i }).click();
   await expect(agent.getByText(/responded at/i)).toBeVisible({ timeout: 10_000 });
 
-  // 6. Change status to resolved → confirm a status_changed audit row appears.
-  // (ticket_events for status_changed are written by the worker / Directus
-  // flow in a later phase; for this E2E we accept that the UI reflects the
-  // new status persistently and the history panel rendered.)
-  await agent
-    .getByLabel(/status/i)
-    .first()
-    .selectOption('resolved');
-  await agent.reload();
-  await agent.locator('aside li button').first().click();
-  await expect(agent.getByLabel(/status/i).first()).toHaveValue('resolved');
+  // 6. Change status to resolved. The ticket status control is a custom combobox
+  // (SelectMenu, aria-label "Status"), not a native <select> — open it and pick
+  // the option. The trigger then reflects the persisted status (onChange →
+  // patch → query invalidation).
+  const statusSelect = agent.getByRole('combobox', { name: 'Status', exact: true });
+  await statusSelect.click();
+  await agent.getByRole('option', { name: 'Resolved' }).click();
+  await expect(statusSelect).toContainText('Resolved');
 });
 
 test('agent visits notification preferences page and saves', async ({ page }) => {
   await signInAgent(page);
   await page.getByRole('link', { name: /preferences/i }).click();
   await expect(page.getByRole('heading', { name: /notification preferences/i })).toBeVisible();
-  // Change one type to in-app only and save.
-  const selects = page.locator('select');
-  await selects.first().selectOption('in_app');
+  // Change one type to in-app only and save. The channel pickers are custom
+  // comboboxes (SelectMenu) now, not native <select>s.
+  await page.getByRole('combobox').first().click();
+  await page.getByRole('option', { name: /in.?app/i }).click();
   await page.getByRole('button', { name: /save/i }).click();
   await expect(page.getByText(/preferences saved/i)).toBeVisible({ timeout: 10_000 });
 });

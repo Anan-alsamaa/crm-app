@@ -1,0 +1,16 @@
+{
+  "name": "yiji-job-producer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Host-run BullMQ job producer for the Yiji CRM imports/reports queues (enqueues jobs the Dockerised workers consume; connects to Redis on the dev host port).",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "bullmq": "^5.34.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "ioredis": "^5.4.2"
+  }
+}

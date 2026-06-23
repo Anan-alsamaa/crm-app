@@ -8,28 +8,25 @@ import type {
   SummaryResponse,
 } from '@yiji/shared-types';
 import { AI_ENDPOINTS } from '@yiji/shared-types';
+import { auth } from './directus.js';
 
 /**
  * Thin fetch wrapper for the ai-gateway from the agent portal.
- * Token + caller identity ride in headers exactly as the gateway expects.
+ *
+ * Auth: we send the agent's own **Directus access token** as a Bearer token; the
+ * gateway verifies it against Directus and derives the user id + admin role
+ * server-side. No service token is shipped to the browser, and identity/role are
+ * NOT asserted via headers (the gateway ignores those). `x-yiji-vendor` is sent
+ * only as the monthly-cap bucket hint.
  */
 
 const GATEWAY_URL =
   (import.meta.env.VITE_AI_GATEWAY_URL as string | undefined) ?? 'http://localhost:8081';
-const SVC_TOKEN = (import.meta.env.VITE_AI_SVC_TOKEN as string | undefined) ?? '';
 
 export interface AiCaller {
+  /** Kept for call-site compatibility; identity is derived server-side. */
   userId: string;
   vendorId: string;
-}
-
-function headers(c: AiCaller): HeadersInit {
-  return {
-    'content-type': 'application/json',
-    authorization: `Bearer ${SVC_TOKEN}`,
-    'x-yiji-user': c.userId,
-    'x-yiji-vendor': c.vendorId,
-  };
 }
 
 export interface AiError extends Error {
@@ -39,9 +36,14 @@ export interface AiError extends Error {
 }
 
 async function post<T>(c: AiCaller, path: string, body: unknown): Promise<T> {
+  const token = await auth.getToken();
   const res = await fetch(`${GATEWAY_URL}${path}`, {
     method: 'POST',
-    headers: headers(c),
+    headers: {
+      'content-type': 'application/json',
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      'x-yiji-vendor': c.vendorId,
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) {

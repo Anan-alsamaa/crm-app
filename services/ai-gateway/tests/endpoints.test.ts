@@ -10,7 +10,11 @@ import { ResponseCache } from '../src/cache/index.js';
 import type { AIProvider, AiRunInput, AiRunOutput } from '../src/provider/types.js';
 import type { GatewayDirectus, ConversationContext } from '../src/directus/index.js';
 
-const TOKEN = 'test-svc-token';
+// Session tokens the stub Directus recognises. Auth is now a VERIFIED Directus
+// session — the gateway resolves the token to a user + role server-side, so a
+// client can no longer self-assert identity or admin via headers.
+const AGENT_TOKEN = 'agent-session-token';
+const ADMIN_TOKEN = 'admin-session-token';
 
 class StubProvider implements AIProvider {
   readonly name = 'stub';
@@ -26,6 +30,14 @@ function stubDirectus(ctx: ConversationContext | null): GatewayDirectus {
   return {
     async getConversation() {
       return ctx;
+    },
+    async whoAmI(token: string) {
+      if (token === AGENT_TOKEN) return { id: 'u-1', role: 'role-agent' };
+      if (token === ADMIN_TOKEN) return { id: 'u-admin', role: 'role-admin' };
+      return null; // unknown/expired token
+    },
+    async adminRoleIds() {
+      return new Set(['role-admin']);
     },
   } as unknown as GatewayDirectus;
 }
@@ -73,14 +85,16 @@ async function buildApp(
     perUserLimiter: new SlidingWindowLimiter(redis, 60_000, 100, 'rl:user'),
     globalLimiter: new SlidingWindowLimiter(redis, 60_000, 1000, 'rl:global'),
     monthlyCap: new MonthlyCap(redis),
-    serviceToken: TOKEN,
   });
   return { app, provider, redis };
 }
 
 const auth = {
-  authorization: `Bearer ${TOKEN}`,
-  'x-yiji-user': 'u-1',
+  authorization: `Bearer ${AGENT_TOKEN}`,
+  'x-yiji-vendor': 'v-1',
+};
+const adminAuth = {
+  authorization: `Bearer ${ADMIN_TOKEN}`,
   'x-yiji-vendor': 'v-1',
 };
 
@@ -102,6 +116,16 @@ describe('AI endpoints', () => {
       });
       expect(res.statusCode).toBe(401);
     }
+  });
+
+  it('rejects an invalid/expired session token (C-1: no static browser token)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: AI_ENDPOINTS.summarizeConversation,
+      headers: { authorization: 'Bearer not-a-real-session', 'x-yiji-vendor': 'v-1' },
+      payload: { conversationId: FAKE_CONV.id },
+    });
+    expect(res.statusCode).toBe(401);
   });
 
   it('summarize: returns summary + redacts PII outbound', async () => {
@@ -265,26 +289,30 @@ describe('AI endpoints', () => {
 });
 
 describe('admin endpoints', () => {
-  it('GET /admin/config requires X-Yiji-Admin', async () => {
+  it('GET /admin/config: non-admin session is 403; a spoofed x-yiji-admin header is IGNORED', async () => {
     const { app } = await buildApp();
+    // plain agent session → 403
     const r1 = await app.inject({ method: 'GET', url: '/admin/config', headers: auth });
     expect(r1.statusCode).toBe(403);
+    // agent session that *claims* admin via header → still 403 (header not trusted)
     const r2 = await app.inject({
       method: 'GET',
       url: '/admin/config',
       headers: { ...auth, 'x-yiji-admin': '1' },
     });
-    expect(r2.statusCode).toBe(200);
-    expect(r2.json().summarize).toBe(true); // default
+    expect(r2.statusCode).toBe(403);
+    // a verified admin session → 200
+    const r3 = await app.inject({ method: 'GET', url: '/admin/config', headers: adminAuth });
+    expect(r3.statusCode).toBe(200);
+    expect(r3.json().summarize).toBe(true); // default
   });
 
-  it('PUT /admin/config persists toggles', async () => {
+  it('PUT /admin/config persists toggles (verified admin)', async () => {
     const { app, redis } = await buildApp();
-    const headers = { ...auth, 'x-yiji-admin': '1' };
     const r = await app.inject({
       method: 'PUT',
       url: '/admin/config',
-      headers,
+      headers: adminAuth,
       payload: { suggestReply: false, monthlyCap: 5000 },
     });
     expect(r.statusCode).toBe(200);
@@ -295,12 +323,12 @@ describe('admin endpoints', () => {
     expect(JSON.parse(raw!).suggestReply).toBe(false);
   });
 
-  it('GET /admin/usage returns used + cap', async () => {
+  it('GET /admin/usage returns used + cap (verified admin)', async () => {
     const { app } = await buildApp();
     const r = await app.inject({
       method: 'GET',
       url: '/admin/usage',
-      headers: { ...auth, 'x-yiji-admin': '1' },
+      headers: adminAuth,
     });
     expect(r.statusCode).toBe(200);
     expect(r.json()).toEqual({ used: 0, cap: 0 });

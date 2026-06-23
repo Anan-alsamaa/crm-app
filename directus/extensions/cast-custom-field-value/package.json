@@ -1,0 +1,12 @@
+{
+  "name": "directus-extension-cast-custom-field-value",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "JSON-encodes string custom_field_values.value before write so text/select/date custom fields store as valid JSON (Postgres json column + cast-json read).",
+  "directus:extension": {
+    "type": "hook",
+    "path": "index.js",
+    "source": "index.js",
+    "host": "^11.0.0"
+  }
+}

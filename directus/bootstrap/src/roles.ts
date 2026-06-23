@@ -98,11 +98,13 @@ export const roles: RoleSpec[] = [
     permissions: [
       ...readOnly('vendors'),
       ...readOnly('teams'),
-      // Agents can create custom tags on the fly (and rename/recolour) + read
-      // them, in addition to assigning via the conversations_tags junction below.
+      // Agents can create custom tags on the fly (and rename/recolour), read
+      // them, and delete one from the library (cascades out of all junctions) —
+      // in addition to assigning via the conversations_tags junction below.
       { collection: 'tags', action: 'read' },
       { collection: 'tags', action: 'create' },
       { collection: 'tags', action: 'update' },
+      { collection: 'tags', action: 'delete' },
       ...readOnly('sla_policies'),
       ...readOnly('automation_rules'),
       ...readOnly('custom_fields'),
@@ -123,7 +125,15 @@ export const roles: RoleSpec[] = [
       { collection: 'conversations', action: 'update', permissions: ASSIGNED_OR_UNASSIGNED },
       { collection: 'messages', action: 'create' },
       { collection: 'messages', action: 'read' },
-      { collection: 'messages', action: 'update' },
+      // NOTE (H-3): `messages.update` is intentionally NOT granted to agents.
+      // Messages are an immutable chat record; agents must not edit historical
+      // content (tampering), and the app never PATCHes a message via the agent
+      // token — the gateway is the sole writer (service token).
+      //
+      // FOLLOW-UP (tenant isolation): `messages.read` + `contacts.read` are still
+      // unfiltered (all-vendor), matching the current shared-inbox design.
+      // Scoping them per vendor/team is a product decision + a core read-path
+      // change that must be integration-tested before rollout.
       // tickets: scoped to assigned agent
       {
         collection: 'tickets',
@@ -217,6 +227,8 @@ export const roles: RoleSpec[] = [
       ...readOnly('sla_policies'),
       ...readOnly('directus_users'),
       ...readOnly('contacts'),
+      // CSV import (imports processor) creates new contacts after dedup.
+      { collection: 'contacts', action: 'create' },
       ...readOnly('tags'),
       ...readOnly('custom_fields'),
       ...readOnly('custom_field_values'),
@@ -228,6 +240,13 @@ export const roles: RoleSpec[] = [
     appAccess: false,
     adminAccess: false,
     serviceTokenEnv: 'SVC_AI_TOKEN',
-    permissions: [...readOnly('conversations'), ...readOnly('messages')],
+    permissions: [
+      ...readOnly('conversations'),
+      ...readOnly('messages'),
+      // C-1: the gateway resolves which role ids are admin roles (to gate the AI
+      // admin endpoints from the caller's VERIFIED Directus role). Needs read on
+      // directus_roles via the service token.
+      { collection: 'directus_roles', action: 'read' },
+    ],
   },
 ];

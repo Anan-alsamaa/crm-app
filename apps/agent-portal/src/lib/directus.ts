@@ -1,4 +1,4 @@
-import { createAuthClient, browserAuthStorage } from '@yiji/shared-config';
+import { createAuthClient } from '@yiji/shared-config';
 
 export const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_URL ?? 'http://localhost:8055';
 
@@ -28,10 +28,9 @@ export async function downloadAsset(fileId: string, filename?: string): Promise<
   URL.revokeObjectURL(url);
 }
 
-export const auth = createAuthClient({
-  url: DIRECTUS_URL,
-  storage: browserAuthStorage('yiji_agent_auth', localStorage),
-});
+// H-2: no storage arg → in-memory access token only; the refresh token lives in
+// an httpOnly cookie set by Directus (unreadable by JS).
+export const auth = createAuthClient({ url: DIRECTUS_URL });
 
 /** Authenticated Directus client for reads (conversations, messages, ...). */
 export const directus = auth.client;

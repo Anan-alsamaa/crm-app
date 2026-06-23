@@ -152,6 +152,60 @@ export default async function globalSetup(): Promise<void> {
         );
       }
       console.log('[e2e-setup] seeded 2 open conversations for demo-vendor');
+
+      // Canonical "Demo Customer" (external_customer_id 'demo-customer-1') used by
+      // the US6 contact-profile + US7 custom-fields specs (gated on E2E_FULL_STACK).
+      // MockYijiClient returns commerce data (lifetime value + orders) for this id
+      // under demo-vendor, so the commerce panel renders without a real Yiji
+      // backend. Idempotent: fixed external id, so create-once across runs.
+      const demoExt = 'demo-customer-1';
+      const demoFound = await json<{ data: Array<{ id: string }> }>(
+        await fetchT(
+          `${DIRECTUS}/items/contacts?filter[vendor][_eq]=${vendorId}&filter[external_customer_id][_eq]=${demoExt}&fields=id&limit=1`,
+          { headers },
+        ),
+      );
+      let demoContactId = demoFound.data[0]?.id;
+      if (!demoContactId) {
+        const demoContact = await json<{ data: { id: string } }>(
+          await fetchT(`${DIRECTUS}/items/contacts`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              vendor: vendorId,
+              external_customer_id: demoExt,
+              name: 'Demo Customer',
+              // Canonical demo identity (matches the widget demo.ts + the US6
+              // contact-profile spec's email assertion).
+              email: 'demo.customer@example.com',
+            }),
+          }),
+        );
+        demoContactId = demoContact.data.id;
+      }
+      const demoConvo = await json<{ data: Array<{ id: string }> }>(
+        await fetchT(
+          `${DIRECTUS}/items/conversations?filter[contact][_eq]=${demoContactId}&fields=id&limit=1`,
+          { headers },
+        ),
+      );
+      if (!demoConvo.data[0]) {
+        await json(
+          await fetchT(`${DIRECTUS}/items/conversations`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              vendor: vendorId,
+              contact: demoContactId,
+              status: 'open',
+              priority: 'medium',
+              unread_count_agent: 1,
+              last_message_at: new Date().toISOString(),
+            }),
+          }),
+        );
+      }
+      console.log('[e2e-setup] ensured Demo Customer contact + conversation');
     }
   } catch (err) {
     console.warn('[e2e-setup] conversation seed failed (specs may fall back):', err);

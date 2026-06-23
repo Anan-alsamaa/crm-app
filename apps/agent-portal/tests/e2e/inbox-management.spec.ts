@@ -24,24 +24,23 @@ test('agent changes status, priority, and assignment then sees them persist', as
   await firstConvo.waitFor({ timeout: 15_000 });
   await firstConvo.click();
 
-  // Wait for the toolbar to render.
-  await expect(page.getByLabel(/status/i).first()).toBeVisible({ timeout: 10_000 });
+  // The toolbar Status/Priority controls are custom comboboxes (SelectMenu), not
+  // native <select>s — open them and pick an option. Exact name 'Status' targets
+  // the toolbar control, not the inbox's "All statuses" filter.
+  const statusSelect = page.getByRole('combobox', { name: 'Status', exact: true });
+  const prioritySelect = page.getByRole('combobox', { name: 'Priority', exact: true });
+  await expect(statusSelect).toBeVisible({ timeout: 10_000 });
 
-  // Change status to pending, priority to high.
-  await page
-    .getByLabel(/status/i)
-    .first()
-    .selectOption('pending');
-  await page
-    .getByLabel(/priority/i)
-    .first()
-    .selectOption('high');
+  // Change status to Pending, priority to High.
+  await statusSelect.click();
+  await page.getByRole('option', { name: 'Pending' }).click();
+  await prioritySelect.click();
+  await page.getByRole('option', { name: 'High' }).click();
 
-  // Verify the toolbar reflects the persisted values (no reload — Directus
-  // session can be flaky under parallel-worker load; the onSuccess query
-  // invalidation already refetches the live state from the server).
-  await expect(page.getByLabel(/status/i).first()).toHaveValue('pending');
-  await expect(page.getByLabel(/priority/i).first()).toHaveValue('high');
+  // The trigger reflects the persisted value (no reload — the onSuccess query
+  // invalidation refetches the live state; the trigger shows the chosen label).
+  await expect(statusSelect).toContainText('Pending');
+  await expect(prioritySelect).toContainText('High');
 });
 
 test('agent toggles internal note mode and sees the amber styling', async ({ page }) => {

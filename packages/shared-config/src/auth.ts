@@ -8,8 +8,15 @@ import {
 
 /**
  * Directus auth client for the portals (login / refresh / logout / me).
- * Token storage is injected (the browser passes a localStorage-backed store)
- * so this module stays DOM-free and usable from any environment.
+ *
+ * Auth mode is COOKIE (H-2): Directus stores the long-lived refresh token in an
+ * httpOnly, Secure, SameSite cookie that JavaScript cannot read, so an XSS bug
+ * can't exfiltrate a persistent credential. Only the short-lived access token is
+ * held in memory (default in-memory storage — nothing is written to
+ * localStorage). On a cold page load the access token is gone, so `restore()`
+ * refreshes from the cookie first. Requires the Directus server to send
+ * `Access-Control-Allow-Credentials` (CORS_CREDENTIALS=true) and the requests to
+ * use `credentials: 'include'` (set below).
  */
 
 export interface AuthUser {
@@ -46,13 +53,53 @@ const grantsAdmin = (links: PolicyLink[] | undefined): boolean =>
 
 export interface AuthClientOptions {
   url: string;
-  storage: AuthenticationStorage;
+  /**
+   * Optional token store. Defaults to in-memory (H-2). Tests may inject a stub;
+   * production should leave it unset so the access token never persists.
+   */
+  storage?: AuthenticationStorage;
 }
 
 export function createAuthClient({ url, storage }: AuthClientOptions) {
   const client = createDirectus(url)
-    .with(authentication('json', { storage, autoRefresh: true }))
-    .with(rest());
+    .with(
+      authentication('cookie', {
+        credentials: 'include',
+        autoRefresh: true,
+        ...(storage ? { storage } : {}),
+      }),
+    )
+    .with(rest({ credentials: 'include' }));
+
+  async function me(): Promise<AuthUser | null> {
+    try {
+      const raw = (await client.request(
+        readMe({
+          fields: [
+            'id',
+            'email',
+            'first_name',
+            'last_name',
+            'status',
+            // role.policies + direct policies carry admin_access in Directus 11.
+            { role: ['id', 'name', { policies: [{ policy: ['admin_access'] }] }] },
+            { policies: [{ policy: ['admin_access'] }] },
+          ],
+        }),
+      )) as RawMe;
+      return {
+        id: raw.id,
+        email: raw.email,
+        first_name: raw.first_name,
+        last_name: raw.last_name,
+        status: raw.status,
+        role: raw.role ? { id: raw.role.id, name: raw.role.name } : null,
+        admin_access: grantsAdmin(raw.role?.policies) || grantsAdmin(raw.policies),
+      };
+    } catch {
+      return null;
+    }
+  }
 
   return {
     /** Underlying Directus client (already authenticated after login). */
@@ -71,34 +118,19 @@ export function createAuthClient({ url, storage }: AuthClientOptions) {
       return client.getToken();
     },
     /** Current user with role name + computed admin_access, or null if not authenticated. */
-    async me(): Promise<AuthUser | null> {
+    me,
+    /**
+     * Restore a session on cold load. The access token lives in memory only, so
+     * first refresh from the httpOnly cookie; returns null when there is no
+     * valid session cookie (i.e. genuinely logged out).
+     */
+    async restore(): Promise<AuthUser | null> {
       try {
-        const me = (await client.request(
-          readMe({
-            fields: [
-              'id',
-              'email',
-              'first_name',
-              'last_name',
-              'status',
-              // role.policies + direct policies carry admin_access in Directus 11.
-              { role: ['id', 'name', { policies: [{ policy: ['admin_access'] }] }] },
-              { policies: [{ policy: ['admin_access'] }] },
-            ],
-          }),
-        )) as RawMe;
-        return {
-          id: me.id,
-          email: me.email,
-          first_name: me.first_name,
-          last_name: me.last_name,
-          status: me.status,
-          role: me.role ? { id: me.role.id, name: me.role.name } : null,
-          admin_access: grantsAdmin(me.role?.policies) || grantsAdmin(me.policies),
-        };
+        await client.refresh();
       } catch {
         return null;
       }
+      return me();
     },
   };
 }

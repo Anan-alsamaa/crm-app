@@ -34,11 +34,14 @@ test.describe('US6 — contact profile + commerce panel', () => {
   test('contact list page shows demo contact and exports CSV', async ({ page }) => {
     test.skip(!FULL_STACK, 'requires E2E_FULL_STACK=1 (needs a seeded demo contact)');
     await signIn(page);
-    await page.goto('http://localhost:5173/contacts');
+    // Navigate via the in-app Contacts link (client-side route) — a full
+    // page.goto() reloads, dropping the in-memory access token and forcing a
+    // cookie-restore round-trip (post-H-2) that races page render.
+    await page.getByRole('link', { name: /contacts/i }).click();
+    await expect(page).toHaveURL(/\/contacts$/, { timeout: 20_000 });
 
-    // Title + at least one card
     await expect(page.getByRole('heading', { name: /contacts/i }).first()).toBeVisible({
-      timeout: 10_000,
+      timeout: 20_000,
     });
     const card = page.getByText(/demo customer/i).first();
     await expect(card).toBeVisible({ timeout: 10_000 });
@@ -54,7 +57,11 @@ test.describe('US6 — contact profile + commerce panel', () => {
   test('profile shows identity + commerce panel with seeded order data', async ({ page }) => {
     test.skip(!FULL_STACK, 'requires E2E_FULL_STACK=1');
     await signIn(page);
-    await page.goto('http://localhost:5173/contacts');
+    // Navigate via the in-app Contacts link (client-side route) rather than a
+    // full page.goto() — post-H-2, a hard reload drops the in-memory access token
+    // and forces a cookie-restore round-trip, which races the click below.
+    await page.getByRole('link', { name: /contacts/i }).click();
+    await expect(page).toHaveURL(/\/contacts$/, { timeout: 20_000 });
     await page
       .getByText(/demo customer/i)
       .first()
@@ -63,11 +70,12 @@ test.describe('US6 — contact profile + commerce panel', () => {
     // URL navigates to /contacts/<id>
     await expect(page).toHaveURL(/\/contacts\/[0-9a-f-]+$/i, { timeout: 10_000 });
 
-    // Identity card
-    await expect(page.getByRole('heading', { name: /demo customer/i })).toBeVisible({
+    // Identity card. The name renders in both an h1 (page title) and an h2
+    // (identity card), so scope to the first to avoid a strict-mode double match.
+    await expect(page.getByRole('heading', { name: /demo customer/i }).first()).toBeVisible({
       timeout: 10_000,
     });
-    await expect(page.getByText('demo.customer@example.com')).toBeVisible();
+    await expect(page.getByText(/demo\.customer@example\.com/i)).toBeVisible({ timeout: 15_000 });
 
     // Commerce panel (default MockYijiClient): seeded lifetime activity + an order
     await expect(page.getByText(/lifetime activity/i)).toBeVisible();
@@ -105,7 +113,7 @@ test.describe('US6 — contact profile + commerce panel', () => {
     });
     await page.goto('http://localhost:5173/contacts/00000000-0000-0000-0000-000000000001');
 
-    await expect(page.getByRole('heading', { name: /unlinked customer/i })).toBeVisible({
+    await expect(page.getByRole('heading', { name: /unlinked customer/i }).first()).toBeVisible({
       timeout: 10_000,
     });
     await expect(page.getByText(/no yiji customer linked/i)).toBeVisible();
