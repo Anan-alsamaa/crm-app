@@ -41,6 +41,9 @@ export function connectWidget(url: string, token: string, cb: SocketCallbacks): 
   const socket = io(url, {
     auth: { kind: 'customer', token },
     transports: ['websocket', 'polling'],
+    // Harmless off-ngrok; lets the polling handshake skip ngrok-free's browser
+    // interstitial when the widget is served through an ngrok tunnel.
+    extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
     reconnection: true,
     reconnectionDelay: 500,
     reconnectionDelayMax: 10_000,
