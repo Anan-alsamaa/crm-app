@@ -79,7 +79,7 @@ DIRECTUS_PUBLIC_URL=https://directus.yourcompany.com
 DIRECTUS_INTERNAL_URL=http://127.0.0.1:8055
 REDIS_URL=redis://127.0.0.1:6379
 AI_GATEWAY_URL=http://127.0.0.1:8085
-DB_HOST=postgres            # used by Directus (in the Docker network) only
+DB_HOST=127.0.0.1           # host tools (the bootstrap) reach the PUBLISHED port; the Directus *container* uses 'postgres' (hardcoded in its docker run, step 2)
 CORS_ORIGIN=https://agent.yourcompany.com,https://admin.yourcompany.com
 # portal build args (baked, non-secret):
 VITE_DIRECTUS_URL=https://directus.yourcompany.com
@@ -96,8 +96,10 @@ VITE_JOB_PRODUCER_URL=https://gateway.yourcompany.com
 set -a && . ./.env.prod && set +a          # load secrets into this shell
 docker network create yiji-net 2>/dev/null || true
 
-# Postgres — internal to the network (only Directus talks to it)
+# Postgres — Directus reaches it by name over the network; the loopback publish
+# lets the host-run bootstrap (step 3) open its direct pg connection for raw SQL.
 docker run -d --name postgres --network yiji-net --restart unless-stopped \
+  -p 127.0.0.1:5432:5432 \
   -e POSTGRES_DB="$DB_DATABASE" -e POSTGRES_USER="$DB_USER" -e POSTGRES_PASSWORD="$DB_PASSWORD" \
   -v postgres_data:/var/lib/postgresql/data \
   --health-cmd="pg_isready -U $DB_USER -d $DB_DATABASE" --health-interval=10s \
@@ -140,19 +142,22 @@ until curl -sf http://127.0.0.1:8055/server/health >/dev/null; do sleep 2; done;
 
 ## 3. Directus bootstrap (schema + roles + flows, then seed)
 
-Apply the collections/relations/roles/flows the app expects (idempotent), per the
-existing bootstrap tool in `directus/bootstrap`:
+Apply the collections/relations/roles/flows the app expects (idempotent). The
+bootstrap (`@yiji/directus-bootstrap`) logs in as the Directus admin **and** opens a
+direct Postgres connection for raw constraint SQL, so it reads `DIRECTUS_INTERNAL_URL`,
+`DIRECTUS_ADMIN_EMAIL` / `DIRECTUS_ADMIN_PASSWORD`, and `DB_*` from the environment —
+all already in `.env.prod` (with `DB_HOST=127.0.0.1` from step 1, so it reaches the
+published Postgres port from the host). It's a workspace package — no separate
+install/`.env` file needed:
 
 ```bash
-cd directus/bootstrap
-cp .env.example .env   # point DIRECTUS_URL=http://127.0.0.1:8055 + admin creds
-pnpm install --frozen-lockfile
-pnpm apply             # applies schema/roles/flows; see directus/bootstrap/README.md
-cd /opt/yiji/crm-app
+set -a && . ./.env.prod && set +a
+pnpm --filter @yiji/directus-bootstrap apply     # schema + roles + flows (idempotent; safe to re-run each deploy)
+pnpm --filter @yiji/directus-bootstrap verify    # optional: assert the role/permission matrix
 ```
 
-See `docs/PRODUCTION.md` → "First-run bootstrap" for the exact env + the optional
-demo seed. Start production with **real data empty** (don't run the demo seed).
+Start production with **real data empty** — do NOT run `seed:demo` (it creates the
+demo vendor/agent/conversations for local testing).
 
 ---
 
@@ -223,8 +228,9 @@ sudo cp -r apps/admin-portal/dist/* /var/www/admin/
 ```
 
 The **chat widget** is embedded on vendor sites: `pnpm --filter @yiji/chat-widget build`
-produces `apps/chat-widget/dist/embed.js` — host it on any static URL/CDN and give
-vendors the `<script>` snippet (it connects to `gateway.yourcompany.com`).
+produces a single IIFE bundle **`apps/chat-widget/dist/yiji-chat-widget.js`** (exposing
+`window.YijiChat`) plus a demo `index.html`. Host the `.js` on any static URL/CDN and
+give vendors the `<script>` snippet (it connects to `gateway.yourcompany.com`).
 
 ---
 
@@ -233,15 +239,24 @@ vendors the `<script>` snippet (it connects to `gateway.yourcompany.com`).
 `/etc/nginx/sites-available/yiji` (symlink into `sites-enabled`, then `nginx -t && systemctl reload nginx`):
 
 ```nginx
-# Portals — SPA fallback to index.html
+# Portals — SPA fallback + the security headers the official portal image sets
+# (apps/*/Dockerfile). Keep these in parity with that nginx config.
 server {
   server_name agent.yourcompany.com;
   root /var/www/agent; index index.html;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "DENY" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+  location = /health { return 200 "ok"; add_header Content-Type text/plain; }
   location / { try_files $uri $uri/ /index.html; }
 }
 server {
   server_name admin.yourcompany.com;
   root /var/www/admin; index index.html;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "DENY" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+  location = /health { return 200 "ok"; add_header Content-Type text/plain; }
   location / { try_files $uri $uri/ /index.html; }
 }
 
