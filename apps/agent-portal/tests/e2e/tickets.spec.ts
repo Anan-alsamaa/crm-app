@@ -60,8 +60,9 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   await ticketRow.click();
   await expect(agent.getByRole('heading', { name: subject })).toBeVisible();
 
-  // 5. Mark first response sent → button disappears and "Responded at" shows.
-  await agent.getByRole('button', { name: /mark first response sent/i }).click();
+  // 5. Mark the first response → the "Mark first response" button is replaced by
+  // the logged-confirmation, and the first-response SLA card flips to "Responded at".
+  await agent.getByRole('button', { name: /mark first response/i }).click();
   await expect(agent.getByText(/responded at/i)).toBeVisible({ timeout: 10_000 });
 
   // 6. Change status to resolved. The ticket status control is a custom combobox
