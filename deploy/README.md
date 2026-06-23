@@ -98,17 +98,27 @@ docker compose -f deploy/docker-compose.infra.yml --env-file .env.prod run --rm 
 
 ## 3. Build the frontends (static)
 
+The apps live in this same repo (self-contained), so build them from the repo
+root. `build-frontend.sh` builds agent/admin/widget and strips the widget's dev
+demo host page so the public widget host serves only the embeddable assets.
+
 ```bash
-pwsh ./build-frontend.ps1            # builds agent/admin/widget from crm-app-frontend
+# From the repo root, with .env.prod's VITE_* exported (set -a; . .env.prod; set +a):
+bash deploy/build-frontend.sh
 # Point nginx at the built dist dirs (symlink or copy), e.g.:
 sudo mkdir -p /srv/yiji
-sudo ln -sfn "$PWD/../crm-app-frontend/apps/agent-portal/dist"  /srv/yiji/agent-portal/dist
-sudo ln -sfn "$PWD/../crm-app-frontend/apps/admin-portal/dist"  /srv/yiji/admin-portal/dist
-sudo ln -sfn "$PWD/../crm-app-frontend/apps/chat-widget/dist"   /srv/yiji/chat-widget/dist
+sudo ln -sfn "$PWD/apps/agent-portal/dist"  /srv/yiji/agent-portal/dist
+sudo ln -sfn "$PWD/apps/admin-portal/dist"  /srv/yiji/admin-portal/dist
+sudo ln -sfn "$PWD/apps/chat-widget/dist"   /srv/yiji/chat-widget/dist
 ```
 
 > Rebuild whenever `VITE_*` (the domain) or the frontend code changes — those
 > URLs are compiled into the bundle.
+>
+> ⚠️ `build-frontend.ps1` is a **Windows local-demo** helper only: it regenerates
+> the widget host page and bakes `YIJI_JWT_SECRET` into it to mint a browser-side
+> demo token. Never run it for a public deploy — that secret must stay server-side
+> (only the gateway/storefront uses it). Use `build-frontend.sh` in production.
 
 ## 4. Start the Node services (PM2)
 
@@ -144,7 +154,7 @@ pm2 status
 ## Operations
 
 - **Update app code:** `git pull` → `pnpm install` → `pm2 reload all`. For
-  frontend changes: re-run `build-frontend.ps1` (nginx serves the new files).
+  frontend changes: re-run `bash deploy/build-frontend.sh` (nginx serves the new files).
 - **Rotate service tokens:** update `.env.prod` → re-run the `bootstrap` step →
   `pm2 reload all`.
 - **Backups:** `docker compose -f deploy/docker-compose.infra.yml exec postgres \
