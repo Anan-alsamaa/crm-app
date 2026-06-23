@@ -1,3 +1,4 @@
+import { readAssetBlob } from '@directus/sdk';
 import { createAuthClient } from '@yiji/shared-config';
 
 export const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_URL ?? 'http://localhost:8055';
@@ -8,16 +9,15 @@ export function assetUrl(fileId: string): string {
 }
 
 /**
- * Download an attachment. Directus files are private, so a bare <a>/<img> would
- * 403 — we fetch with the agent's bearer token and hand the browser a blob URL.
+ * Download an attachment. Directus files are private, so we pull the bytes
+ * through the authenticated SDK client (`directus.request`) — NOT a manual
+ * fetch with auth.getToken(). Under H-2 cookie auth the access token is
+ * in-memory and short-lived; the SDK transparently refreshes it (and sends the
+ * credentialed cookie), whereas a hand-rolled fetch breaks the moment the token
+ * goes stale — which silently turned every image into a download-only chip.
  */
 export async function downloadAsset(fileId: string, filename?: string): Promise<void> {
-  const token = await auth.getToken();
-  const res = await fetch(`${assetUrl(fileId)}?download`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) throw new Error(`asset_download_${res.status}`);
-  const blob = await res.blob();
+  const blob = await directus.request(readAssetBlob(fileId));
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

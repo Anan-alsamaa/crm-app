@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
-import { assetUrl, auth } from './directus.js';
+import { readAssetBlob } from '@directus/sdk';
+import { directus } from './directus.js';
 
 /**
- * Directus files are private, so an <img src> would 403. This fetches the asset
- * with the agent's bearer token once per file id and hands back an object URL,
- * ref-counted across components so the same image isn't downloaded twice and
- * the blob URL is revoked only when the last viewer unmounts.
+ * Directus files are private, so an <img src> would 403. This pulls the asset
+ * bytes through the authenticated SDK client (which, under H-2 cookie auth,
+ * refreshes the short-lived in-memory access token and sends the credentialed
+ * cookie) once per file id and hands back an object URL, ref-counted across
+ * components so the same image isn't downloaded twice and the blob URL is
+ * revoked only when the last viewer unmounts. A manual fetch + auth.getToken()
+ * silently 401s once the token goes stale → images fell back to file chips.
  */
 
 const cache = new Map<string, { url: string; refs: number }>();
@@ -20,12 +24,8 @@ async function acquire(fileId: string): Promise<string> {
   let p = inflight.get(fileId);
   if (!p) {
     p = (async () => {
-      const token = await auth.getToken();
-      const res = await fetch(assetUrl(fileId), {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error(`asset_${res.status}`);
-      return URL.createObjectURL(await res.blob());
+      const blob = await directus.request(readAssetBlob(fileId));
+      return URL.createObjectURL(blob);
     })();
     inflight.set(fileId, p);
   }
