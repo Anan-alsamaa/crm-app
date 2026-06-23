@@ -38,11 +38,14 @@ const base: Omit<AuthUser, 'role'> = {
   first_name: null,
   last_name: null,
   status: 'active',
+  admin_access: false,
 };
 
 const agent: AuthUser = { ...base, role: { id: 'r1', name: 'Agent' } };
 const administrator: AuthUser = { ...base, role: { id: 'r2', name: 'Administrator' } };
 const admin: AuthUser = { ...base, role: { id: 'r3', name: 'Admin' } };
+// Admin via Directus admin_access policy, on a non-"Administrator" role name.
+const policyAdmin: AuthUser = { ...base, admin_access: true, role: { id: 'r4', name: 'Owner' } };
 
 const DENIED = /does not have administrator access/i;
 
@@ -76,6 +79,13 @@ describe('ProtectedRoute (admin portal role-based access control)', () => {
     useAuthMock.mockReturnValue({ user: admin, loading: false });
     renderGuard();
     expect(screen.getByText('admin dashboard')).toBeInTheDocument();
+  });
+
+  it('grants access via admin_access even when the role is not named Administrator', () => {
+    useAuthMock.mockReturnValue({ user: policyAdmin, loading: false });
+    renderGuard();
+    expect(screen.getByText('admin dashboard')).toBeInTheDocument();
+    expect(screen.queryByText(DENIED)).not.toBeInTheDocument();
   });
 
   it('denies an unrecognized service role', () => {
