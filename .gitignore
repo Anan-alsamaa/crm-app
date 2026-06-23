@@ -98,3 +98,10 @@ tools/job-producer/package-lock.json
 
 # Local ngrok tunnel config — tied to a personal ngrok account's reserved domain
 ngrok-tunnels.yml
+
+# Local production-rehearsal artifacts (machine-specific; the shared deploy is
+# Docker-only). .env.prod.smoke also carries real shared secrets.
+.env.prod.smoke
+ecosystem.hybrid.config.cjs
+deploy/nginx.local.conf
+stream details.txt
