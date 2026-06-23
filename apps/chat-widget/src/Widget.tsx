@@ -604,7 +604,14 @@ export function Widget({ config }: { config: WidgetConfig }) {
             </div>
           )}
 
-          <div className="yiji-messages" ref={listRef}>
+          <div
+            className="yiji-messages"
+            ref={listRef}
+            role="log"
+            aria-label={tr.title}
+            aria-live="polite"
+            tabIndex={0}
+          >
             {messages.length === 0 && ready && !returningName ? (
               <div className="yiji-empty">
                 <EmptyArt />
