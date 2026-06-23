@@ -58,8 +58,13 @@ test('admin creates a team then a user assigned to it', async ({ page }) => {
   const userDrawer = page.getByRole('dialog');
   await userDrawer.locator('input[name="email"]').fill(email);
   await userDrawer.locator('input[name="password"]').fill('password123');
-  await userDrawer.locator('select[name="role"]').selectOption({ label: 'Agent' });
-  await userDrawer.locator('select[name="team"]').selectOption({ label: teamName });
+  // Role/Team are custom comboboxes (SelectMenu), not native <select>s. Open the
+  // combobox (scoped to the drawer) and click the option (rendered in a portal
+  // on document.body, so query options at the page level).
+  await userDrawer.getByRole('combobox', { name: /role/i }).click();
+  await page.getByRole('option', { name: 'Agent', exact: true }).click();
+  await userDrawer.getByRole('combobox', { name: /team/i }).click();
+  await page.getByRole('option', { name: teamName }).click();
   await userDrawer.getByRole('button', { name: /create user/i }).click();
   // Wait for the success notice, then for the row to appear in the refetched table.
   await expect(page.getByText(/user created/i)).toBeVisible({ timeout: 10_000 });
