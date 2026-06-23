@@ -241,23 +241,51 @@ give vendors the `<script>` snippet (it connects to `gateway.yourcompany.com`).
 ```nginx
 # Portals — SPA fallback + the security headers the official portal image sets
 # (apps/*/Dockerfile). Keep these in parity with that nginx config.
+#
+# Caching: serve the SPA shell (index.html / the `/` fallback) `no-cache` so a
+# new build's asset hashes are picked up on the next reload — otherwise the
+# browser keeps a stale index.html pointing at an old bundle and fixes appear
+# not to apply until the cache is cleared. The content-hashed `/assets/*` files
+# are immutable (the filename changes on rebuild), so cache them for a year.
+# NB: an `add_header` inside a `location` cancels inheritance of the
+# server-level `add_header`s, so the security headers are repeated per location.
 server {
   server_name agent.yourcompany.com;
   root /var/www/agent; index index.html;
-  add_header X-Content-Type-Options "nosniff" always;
-  add_header X-Frame-Options "DENY" always;
-  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
   location = /health { return 200 "ok"; add_header Content-Type text/plain; }
-  location / { try_files $uri $uri/ /index.html; }
+  location /assets/ {
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    try_files $uri =404;
+  }
+  location / {
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Cache-Control "no-cache" always;
+    try_files $uri $uri/ /index.html;
+  }
 }
 server {
   server_name admin.yourcompany.com;
   root /var/www/admin; index index.html;
-  add_header X-Content-Type-Options "nosniff" always;
-  add_header X-Frame-Options "DENY" always;
-  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
   location = /health { return 200 "ok"; add_header Content-Type text/plain; }
-  location / { try_files $uri $uri/ /index.html; }
+  location /assets/ {
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    try_files $uri =404;
+  }
+  location / {
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Cache-Control "no-cache" always;
+    try_files $uri $uri/ /index.html;
+  }
 }
 
 # Directus
