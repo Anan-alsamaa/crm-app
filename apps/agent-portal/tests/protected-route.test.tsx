@@ -34,6 +34,7 @@ const agent: AuthUser = {
   last_name: null,
   status: 'active',
   role: { id: 'r1', name: 'Agent' },
+  admin_access: false,
 };
 
 describe('ProtectedRoute (agent portal permission guard)', () => {

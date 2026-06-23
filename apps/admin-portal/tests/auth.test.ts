@@ -10,14 +10,20 @@ const base: Omit<AuthUser, 'role'> = {
   first_name: null,
   last_name: null,
   status: 'active',
+  admin_access: false,
 };
 
-describe('isAdmin (admin portal role guard)', () => {
-  it('admits Administrator and Admin', () => {
+describe('isAdmin (admin portal admin guard)', () => {
+  it('admits users with admin_access regardless of role name', () => {
+    // Directus 11 admin signal — the role need not be literally "Administrator".
+    expect(isAdmin({ ...base, admin_access: true, role: { id: 'r', name: 'Owner' } })).toBe(true);
+    expect(isAdmin({ ...base, admin_access: true, role: null })).toBe(true);
+  });
+  it('admits Administrator and Admin by name (fallback)', () => {
     expect(isAdmin({ ...base, role: { id: 'r', name: 'Administrator' } })).toBe(true);
     expect(isAdmin({ ...base, role: { id: 'r', name: 'Admin' } })).toBe(true);
   });
-  it('rejects Agent, service roles, and null', () => {
+  it('rejects non-admins (no admin_access, non-admin role) and null', () => {
     expect(isAdmin({ ...base, role: { id: 'r', name: 'Agent' } })).toBe(false);
     expect(isAdmin({ ...base, role: { id: 'r', name: 'svc-workers' } })).toBe(false);
     expect(isAdmin(null)).toBe(false);

@@ -52,8 +52,14 @@ export function useAuth(): AuthState {
   return ctx;
 }
 
-/** Admin portal only admits Administrator and Admin roles. */
+/**
+ * The admin portal admits any user with Directus admin access. The authoritative
+ * signal is `admin_access` (from the user's policies — Directus 11's model);
+ * the role-name allowlist is kept only as a non-regressing fallback for setups
+ * where the policy graph isn't readable but the role is conventionally named.
+ */
 export const ADMIN_ROLES = ['Administrator', 'Admin'];
 export function isAdmin(user: AuthUser | null): boolean {
-  return !!user?.role && ADMIN_ROLES.includes(user.role.name);
+  if (!user) return false;
+  return user.admin_access || (!!user.role && ADMIN_ROLES.includes(user.role.name));
 }
