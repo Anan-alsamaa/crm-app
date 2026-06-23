@@ -111,7 +111,18 @@ export default defineConfig(({ mode }) => {
       jsx: 'automatic',
       jsxImportSource: 'preact',
     },
-    server: { port: 5175 },
+    server: {
+      port: 5175,
+      // Expose to ngrok/LAN. allowedHosts lets vite accept the ngrok Host header
+      // (vite 6 blocks unknown hosts otherwise → "Blocked request"). The proxy
+      // forwards the widget's socket — which connects to the SAME public origin
+      // (VITE_SOCKET_URL) — to the local gateway, incl. the WebSocket upgrade.
+      host: true,
+      allowedHosts: true,
+      proxy: {
+        '/socket.io': { target: 'http://localhost:8080', ws: true, changeOrigin: true },
+      },
+    },
     plugins: [widgetHostPage(secret, gatewayUrl)],
     build: {
       lib: {
