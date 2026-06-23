@@ -1,0 +1,133 @@
+# Yiji CRM — INFRA tier (Docker). Final deployment architecture:
+#
+#   Docker (this file):  Postgres 16, Redis 7, Directus 11
+#   PM2  (../ecosystem.config.cjs):  socket-gateway, ai-gateway, workers
+#   nginx + certbot (./nginx/):  serve the SPAs + reverse-proxy + TLS on :443
+#
+# Only Redis (127.0.0.1:6379) and Directus (127.0.0.1:8055) are published to the
+# LOOPBACK interface so the host-side PM2 services + nginx can reach them.
+# Postgres is never published — it is reachable only on the internal compose
+# network (Directus connects to it by service name). Nothing here is exposed
+# publicly; the only public surface is nginx (:80/:443).
+#
+#   Up:        docker compose -f deploy/docker-compose.infra.yml --env-file .env.prod up -d
+#   Bootstrap: docker compose -f deploy/docker-compose.infra.yml --env-file .env.prod \
+#                run --rm bootstrap        # schema + roles + service tokens (idempotent)
+#   Down:      docker compose -f deploy/docker-compose.infra.yml down   (add -v to wipe data)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # No `ports:` — internal network only (Directus reaches it by service name).
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-yiji_crm}
+      POSTGRES_USER: ${DB_USER:?set DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set a strong DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-directus} -d ${DB_DATABASE:-yiji_crm}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--save', '60', '1000']
+    # Loopback only — the PM2 services (host) connect via redis://127.0.0.1:6379.
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  directus:
+    image: directus/directus:11
+    restart: unless-stopped
+    # Loopback only — public access is via nginx (https://api.$DOMAIN → here).
+    ports:
+      - '127.0.0.1:8055:8055'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      KEY: ${DIRECTUS_KEY:?set DIRECTUS_KEY}
+      SECRET: ${DIRECTUS_SECRET:?set DIRECTUS_SECRET}
+      ADMIN_EMAIL: ${DIRECTUS_ADMIN_EMAIL:?set DIRECTUS_ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${DIRECTUS_ADMIN_PASSWORD:?set a strong DIRECTUS_ADMIN_PASSWORD}
+      PUBLIC_URL: ${DIRECTUS_PUBLIC_URL:?set DIRECTUS_PUBLIC_URL (https://api.$DOMAIN)}
+      # In-network connections (service names), NOT the loopback values the PM2
+      # host services use.
+      DB_CLIENT: pg
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_DATABASE: ${DB_DATABASE:-yiji_crm}
+      DB_USER: ${DB_USER:?set DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      REDIS: redis://redis:6379
+      CACHE_ENABLED: 'true'
+      CACHE_STORE: redis
+      CACHE_AUTO_PURGE: 'true'
+      WEBSOCKETS_ENABLED: 'true'
+      CORS_ENABLED: 'true'
+      CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal origins}
+      # Cookie-mode auth (H-2): credentialed CORS + Secure/SameSite refresh cookie.
+      # Portals + API share the base domain (same-site) → SameSite=lax is sent on
+      # the cross-subdomain refresh; nginx terminates TLS so the cookie is Secure.
+      CORS_CREDENTIALS: 'true'
+      REFRESH_TOKEN_COOKIE_SAME_SITE: ${REFRESH_TOKEN_COOKIE_SAME_SITE:-lax}
+      REFRESH_TOKEN_COOKIE_SECURE: 'true'
+      # Brute-force protection on /auth/login (H-5), backed by Redis.
+      RATE_LIMITER_ENABLED: 'true'
+      RATE_LIMITER_STORE: redis
+      RATE_LIMITER_REDIS: redis://redis:6379
+      STORAGE_LOCATIONS: ${STORAGE_LOCATIONS:-local}
+    volumes:
+      - directus_uploads:/directus/uploads
+      - ../directus/extensions:/directus/extensions
+      - ../directus/snapshot:/directus/snapshot
+    healthcheck:
+      # 127.0.0.1 (not localhost): inside the container localhost may resolve to
+      # IPv6 ::1 first, but Directus binds IPv4 0.0.0.0 — the probe would hang.
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8055/server/health']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # One-shot schema/roles/service-token apply (idempotent). Carries the
+  # `bootstrap` profile, so `up` never starts it — run it explicitly after the
+  # stack is healthy (and again to rotate SVC_* tokens or after a DB restore).
+  bootstrap:
+    profiles: ['bootstrap']
+    build:
+      context: ..
+      dockerfile: directus/bootstrap/Dockerfile
+    restart: 'no'
+    depends_on:
+      directus:
+        condition: service_healthy
+    environment:
+      DIRECTUS_INTERNAL_URL: http://directus:8055
+      DIRECTUS_ADMIN_EMAIL: ${DIRECTUS_ADMIN_EMAIL:?set DIRECTUS_ADMIN_EMAIL}
+      DIRECTUS_ADMIN_PASSWORD: ${DIRECTUS_ADMIN_PASSWORD:?set DIRECTUS_ADMIN_PASSWORD}
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_DATABASE: ${DB_DATABASE:-yiji_crm}
+      DB_USER: ${DB_USER:?set DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      SVC_GATEWAY_TOKEN: ${SVC_GATEWAY_TOKEN:?set SVC_GATEWAY_TOKEN}
+      SVC_WORKERS_TOKEN: ${SVC_WORKERS_TOKEN:?set SVC_WORKERS_TOKEN}
+      SVC_AI_TOKEN: ${SVC_AI_TOKEN:?set SVC_AI_TOKEN}
+
+volumes:
+  postgres_data:
+  redis_data:
+  directus_uploads:

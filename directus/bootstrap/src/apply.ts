@@ -294,6 +294,8 @@ async function applyJunctions(client: AnyClient): Promise<void> {
           } as never),
         ),
       );
+      // Metadata-only re-application — always succeeds, no-op in effect. Use
+      // synced() so it logs `=`, not `+` (else the idempotence check trips).
       await synced(`wire ${j.junction}.${j.fieldA} one_field=${j.aliasA}`, () =>
         client.request(
           updateRelation(j.junction, j.fieldA, {
@@ -542,14 +544,26 @@ async function applyConstraints(): Promise<void> {
   try {
     for (const sql of constraintStatements) {
       // Log `=` vs `+` honestly so the idempotence check (check-idempotence.mjs)
-      // can assert "second apply created nothing" — `CREATE ... IF NOT EXISTS`
-      // succeeds either way, so we must probe pg_indexes to know which happened.
-      const name = sql.match(/INDEX\s+(?:IF NOT EXISTS\s+)?(\w+)/i)?.[1];
+      // can assert "second apply created nothing". `CREATE ... IF NOT EXISTS`,
+      // `CREATE OR REPLACE FUNCTION` and `DROP+CREATE TRIGGER` all succeed on a
+      // re-run, so probe the catalog to know whether the object already existed.
+      // (Previously only INDEX was probed, so the function + trigger statements
+      // always logged `+` and tripped the idempotence gate on every second run.)
+      let name: string | undefined;
       let existed = false;
-      if (name) {
+      if ((name = sql.match(/INDEX\s+(?:IF NOT EXISTS\s+)?(\w+)/i)?.[1])) {
         const { rowCount } = await pool.query('SELECT 1 FROM pg_indexes WHERE indexname = $1', [
           name,
         ]);
+        existed = (rowCount ?? 0) > 0;
+      } else if ((name = sql.match(/CREATE\s+TRIGGER\s+(\w+)/i)?.[1])) {
+        const { rowCount } = await pool.query(
+          'SELECT 1 FROM pg_trigger WHERE tgname = $1 AND NOT tgisinternal',
+          [name],
+        );
+        existed = (rowCount ?? 0) > 0;
+      } else if ((name = sql.match(/FUNCTION\s+(\w+)/i)?.[1])) {
+        const { rowCount } = await pool.query('SELECT 1 FROM pg_proc WHERE proname = $1', [name]);
         existed = (rowCount ?? 0) > 0;
       }
       await pool.query(sql);

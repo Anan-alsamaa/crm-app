@@ -1,21 +1,27 @@
 /*
- * Yiji CRM — local production-like process model (pm2).
+ * Yiji CRM — PM2 process model (final deployment architecture).
  *
- * Supervises the whole stack with NODE_ENV=production, strict config (real
- * secrets from .env.prod), autorestart, and per-process memory caps so a leak
- * or spike restarts ONE process instead of OOM-killing the machine.
+ * PM2 supervises ONLY the three Node services. The infra tier (Postgres, Redis,
+ * Directus) runs in Docker (deploy/docker-compose.infra.yml) on loopback, and
+ * the SPAs are served by nginx (deploy/nginx/) — neither is a PM2 process here.
+ *
+ *   Layer  Component         Runs as   Listens (loopback)
+ *   -----  ----------------  --------  --------------------------------------
+ *   App    socket-gateway    PM2       127.0.0.1:8080 (socket) + 8081 (http)
+ *   App    ai-gateway        PM2       127.0.0.1:8085
+ *   App    workers           PM2       — (BullMQ consumer, no port)
  *
  *   Start:   pm2 start ecosystem.config.cjs
- *   Status:  pm2 status   |   Logs: pm2 logs   |   Stop: pm2 delete all
+ *   Status:  pm2 status   |   Logs: pm2 logs   |   Reload: pm2 reload all
+ *   Boot:    pm2 startup && pm2 save     (survive server reboots)
  *
- * Postgres (5432) and Redis (6390) are expected to be already running natively.
+ * Secrets come from .env.prod (gitignored). The infra tier must be up first:
+ *   docker compose -f deploy/docker-compose.infra.yml --env-file .env.prod up -d
  */
 const fs = require('fs');
 const path = require('path');
 
 const INFRA = __dirname;
-const FRONTEND = path.resolve(INFRA, '..', 'crm-app-frontend');
-const SERVE = path.join(process.env.APPDATA || '', 'npm', 'node_modules', 'serve', 'build', 'main.js');
 
 // Parse .env.prod (real secrets; gitignored).
 const env = {};
@@ -24,8 +30,12 @@ for (const line of fs.readFileSync(path.join(INFRA, '.env.prod'), 'utf8').split(
   if (m) env[m[1]] = m[2].trim();
 }
 
-const dist = (app) => path.join(FRONTEND, 'apps', app, 'dist');
-const tsService = (name, port, extra) => ({
+// Loopback endpoints of the Dockerised infra tier.
+const REDIS_URL = env.REDIS_URL || 'redis://127.0.0.1:6379';
+const DIRECTUS_INTERNAL_URL = env.DIRECTUS_INTERNAL_URL || 'http://127.0.0.1:8055';
+const AI_GATEWAY_PORT = env.AI_GATEWAY_PORT || '8085';
+
+const tsService = (name, extra) => ({
   name,
   cwd: path.join(INFRA, 'services', name),
   script: 'src/index.ts',
@@ -33,80 +43,56 @@ const tsService = (name, port, extra) => ({
   node_args: '--import tsx',
   autorestart: true,
   max_memory_restart: '500M',
+  // Back off if a service crash-loops (bad config / dependency down).
+  exp_backoff_restart_delay: 200,
   env: Object.assign(
     {
       NODE_ENV: 'production',
-      DIRECTUS_INTERNAL_URL: env.DIRECTUS_INTERNAL_URL,
-      REDIS_URL: env.REDIS_URL,
+      DIRECTUS_INTERNAL_URL,
+      REDIS_URL,
       CORS_ORIGIN: env.CORS_ORIGIN,
     },
-    port ? { PORT: String(port) } : {},
     extra,
   ),
-});
-const staticSite = (name, port) => ({
-  name,
-  script: SERVE,
-  interpreter: 'node',
-  args: `-s "${dist(name)}" -l ${port} --no-clipboard --no-port-switching`,
-  autorestart: true,
-  max_memory_restart: '250M',
 });
 
 module.exports = {
   apps: [
-    {
-      name: 'directus',
-      cwd: path.join(INFRA, '.directus-prod'),
-      script: 'node_modules/directus/cli.js',
-      args: 'start',
-      interpreter: 'node',
-      autorestart: true,
-      max_memory_restart: '1200M',
-      env: {
-        KEY: env.DIRECTUS_KEY,
-        SECRET: env.DIRECTUS_SECRET,
-        ADMIN_EMAIL: env.DIRECTUS_ADMIN_EMAIL,
-        ADMIN_PASSWORD: env.DIRECTUS_ADMIN_PASSWORD,
-        PUBLIC_URL: env.DIRECTUS_PUBLIC_URL,
-        PORT: '8055',
-        DB_CLIENT: 'pg',
-        DB_HOST: env.DB_HOST,
-        DB_PORT: env.DB_PORT,
-        DB_DATABASE: env.DB_DATABASE,
-        DB_USER: env.DB_USER,
-        DB_PASSWORD: env.DB_PASSWORD,
-        REDIS: env.REDIS_URL,
-        CACHE_ENABLED: 'true',
-        CACHE_STORE: 'redis',
-        CACHE_AUTO_PURGE: 'true',
-        WEBSOCKETS_ENABLED: 'true',
-        CORS_ENABLED: 'true',
-        CORS_ORIGIN: env.CORS_ORIGIN,
-        STORAGE_LOCATIONS: 'local',
-        EXTENSIONS_PATH: path.join(INFRA, 'directus', 'extensions'),
-      },
-    },
-    tsService('socket-gateway', 8080, {
+    // Socket.IO on PORT (8080); health/metrics/webhooks on PORT+1 (8081).
+    tsService('socket-gateway', {
+      PORT: '8080',
       REDIS_ENABLED: 'true',
+      DIRECTUS_URL: env.DIRECTUS_PUBLIC_URL,
       YIJI_JWT_SECRET: env.YIJI_JWT_SECRET,
       SVC_GATEWAY_TOKEN: env.SVC_GATEWAY_TOKEN,
+      YIJI_WEBHOOK_SECRET: env.YIJI_WEBHOOK_SECRET || '',
+      WEBHOOK_TOLERANCE_SEC: env.WEBHOOK_TOLERANCE_SEC || '300',
+      ATTACHMENT_MAX_BYTES: env.ATTACHMENT_MAX_BYTES || '10485760',
+      ATTACHMENT_ALLOWED_MIME:
+        env.ATTACHMENT_ALLOWED_MIME ||
+        'image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain',
+      MSG_RATE_CAPACITY: env.MSG_RATE_CAPACITY || '20',
+      MSG_RATE_REFILL_PER_SEC: env.MSG_RATE_REFILL_PER_SEC || '5',
     }),
-    tsService('ai-gateway', 8091, {
+    tsService('ai-gateway', {
+      PORT: AI_GATEWAY_PORT,
       SVC_AI_TOKEN: env.SVC_AI_TOKEN,
-      GEMINI_API_KEY: env.GEMINI_API_KEY,
-      GEMINI_MODEL: env.GEMINI_MODEL,
+      DIRECTUS_AI_TOKEN: env.DIRECTUS_AI_TOKEN || '',
+      GEMINI_API_KEY: env.GEMINI_API_KEY || '',
+      GEMINI_MODEL: env.GEMINI_MODEL || 'gemini-2.5-flash',
+      // C-2 commerce proxy (empty URL → server-side mock client).
+      YIJI_API_URL: env.YIJI_API_URL || '',
+      YIJI_API_KEY: env.YIJI_API_KEY || '',
     }),
-    tsService('workers', null, {
+    tsService('workers', {
       SVC_WORKERS_TOKEN: env.SVC_WORKERS_TOKEN,
-      AI_GATEWAY_URL: 'http://localhost:8091',
+      AI_GATEWAY_URL: `http://127.0.0.1:${AI_GATEWAY_PORT}`,
       SVC_AI_TOKEN: env.SVC_AI_TOKEN,
       SMTP_HOST: env.SMTP_HOST,
-      SMTP_PORT: env.SMTP_PORT,
-      SMTP_FROM: env.SMTP_FROM,
+      SMTP_PORT: env.SMTP_PORT || '587',
+      SMTP_USER: env.SMTP_USER || '',
+      SMTP_PASSWORD: env.SMTP_PASSWORD || '',
+      SMTP_FROM: env.SMTP_FROM || 'Yiji Support <support@example.com>',
     }),
-    staticSite('agent-portal', 5173),
-    staticSite('admin-portal', 5174),
-    staticSite('chat-widget', 5175),
   ],
 };

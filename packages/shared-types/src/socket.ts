@@ -13,12 +13,18 @@ const idSchema = z.union([z.string(), z.number()]).transform(String);
  */
 
 // --- Client → Server ---
-export const MessageSend = z.object({
-  conversationId: idSchema,
-  content: z.string().min(1),
-  attachments: z.array(z.string()).optional(),
-  clientMsgId: z.string(),
-});
+export const MessageSend = z
+  .object({
+    conversationId: idSchema,
+    // Content may be empty for an attachment-only message; the refine below
+    // still rejects a message that has neither text nor an attachment.
+    content: z.string(),
+    attachments: z.array(z.string()).optional(),
+    clientMsgId: z.string(),
+  })
+  .refine((d) => d.content.trim().length > 0 || (d.attachments?.length ?? 0) > 0, {
+    message: 'message must have text or at least one attachment',
+  });
 export type MessageSend = z.infer<typeof MessageSend>;
 
 export const NoteAdd = z.object({
@@ -89,6 +95,17 @@ export const PresenceUpdate = z.object({
 });
 export type PresenceUpdate = z.infer<typeof PresenceUpdate>;
 
+/** Server → conversation room. Customer connect/disconnect, delivered to the
+ * agents viewing that conversation — powers the header's "{name} is online" /
+ * "New customer" line. `isNew` is true only on the customer's first-ever
+ * contact (the gateway had to create the contact row). */
+export const CustomerPresence = z.object({
+  conversationId: idSchema,
+  online: z.boolean(),
+  isNew: z.boolean().optional(),
+});
+export type CustomerPresence = z.infer<typeof CustomerPresence>;
+
 export const SocketError = z.object({ code: z.string(), message: z.string() });
 export type SocketError = z.infer<typeof SocketError>;
 
@@ -117,6 +134,9 @@ export const SOCKET_EVENTS = {
   agentAssigned: 'agent:assigned',
   conversationStatusChanged: 'conversation:status_changed',
   presenceUpdate: 'presence:update',
+  /** Server → conversation room. Customer online/offline for the agents
+   * viewing that conversation (header "is online" / "New customer"). */
+  customerPresence: 'customer:presence',
   /** Server → client. Agent-presence pulse broadcast to every vendor room
    * so customer widgets can render an "agents offline" fallback. */
   agentsPresence: 'agents:presence',

@@ -30,6 +30,9 @@ interface SocketData {
   vendorId?: string; // CRM vendor UUID
   vendorColors?: unknown;
   contactId?: string;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  isNewContact?: boolean; // true on the customer's first-ever contact
   conversationId?: string;
   agentId?: string;
 }
@@ -85,6 +88,41 @@ function removePresence(vendorId: string, id: string): string[] {
 }
 
 /**
+ * Customer presence per conversation (this gateway instance): which customer
+ * sockets are connected, plus whether that customer was new on connect. Drives
+ * the agent header's live "{name} is online" / "New customer" line, and lets an
+ * agent who opens a conversation learn the current state immediately.
+ */
+const convPresence = new Map<string, { sockets: Set<string>; isNew: boolean }>();
+function customerConnected(conversationId: string, socketId: string, isNew: boolean): boolean {
+  const entry = convPresence.get(conversationId) ?? { sockets: new Set<string>(), isNew };
+  entry.sockets.add(socketId);
+  entry.isNew = isNew;
+  convPresence.set(conversationId, entry);
+  return entry.isNew;
+}
+function customerDisconnected(conversationId: string, socketId: string): boolean {
+  const entry = convPresence.get(conversationId);
+  if (!entry) return false;
+  entry.sockets.delete(socketId);
+  if (entry.sockets.size > 0) return true; // another tab still open
+  convPresence.delete(conversationId);
+  return false;
+}
+function emitCustomerPresence(
+  io: import('socket.io').Server,
+  conversationId: string,
+  online: boolean,
+  isNew?: boolean,
+): void {
+  io.to(rooms.conversation(conversationId)).emit(SOCKET_EVENTS.customerPresence, {
+    conversationId,
+    online,
+    ...(isNew !== undefined ? { isNew } : {}),
+  });
+}
+
+/**
  * Singleton agent-presence tracker. Module-level so all handlers share state.
  * The full state machine + invariants are documented in ./agent-presence.ts.
  */
@@ -120,12 +158,15 @@ export function registerConnection(deps: ConnectionDeps): void {
       const claims = verifier.verify(auth.token);
       const vendor = await directus.resolveVendor(claims.vendor_id);
       if (!vendor) throw new CustomerTokenError('unknown or inactive vendor');
-      const contactId = await directus.upsertContact(vendor.id, claims);
-      const conversationId = await directus.findOrCreateConversation(vendor.id, contactId);
+      const contact = await directus.upsertContact(vendor.id, claims);
+      const conversationId = await directus.findOrCreateConversation(vendor.id, contact.id);
       data.kind = 'customer';
       data.vendorId = vendor.id;
       data.vendorColors = vendor.colors;
-      data.contactId = contactId;
+      data.contactId = contact.id;
+      data.contactName = contact.name;
+      data.contactPhone = contact.phone;
+      data.isNewContact = contact.isNew;
       data.conversationId = conversationId;
       return next();
     } catch (err) {
@@ -159,6 +200,12 @@ export function registerConnection(deps: ConnectionDeps): void {
           vendorId: data.vendorId,
           online,
         });
+        // Flip the conversation header to "offline" once the customer's last
+        // tab is gone (a reload that reconnects keeps another socket alive).
+        if (data.conversationId) {
+          const stillOnline = customerDisconnected(data.conversationId, socket.id);
+          if (!stillOnline) emitCustomerPresence(io, data.conversationId, false);
+        }
       } else if (data.kind === 'agent') {
         // Transport-level disconnect: schedule a grace timer. If a reload
         // reconnects within OFFLINE_GRACE_MS, the timer is cancelled and we
@@ -170,7 +217,10 @@ export function registerConnection(deps: ConnectionDeps): void {
   logger.info('connection handlers registered');
 }
 
-async function onCustomerConnect(socket: Socket, { io }: ConnectionDeps): Promise<void> {
+async function onCustomerConnect(
+  socket: Socket,
+  { io, directus, logger }: ConnectionDeps,
+): Promise<void> {
   const data = socket.data as SocketData;
   if (!data.conversationId || !data.vendorId) return;
   await socket.join(rooms.conversation(data.conversationId));
@@ -180,14 +230,32 @@ async function onCustomerConnect(socket: Socket, { io }: ConnectionDeps): Promis
     vendorId: data.vendorId,
     online,
   });
+  // Mark the customer online for this conversation and tell the agents viewing
+  // it (header "{name} is online" / "New customer").
+  const isNew = customerConnected(data.conversationId, socket.id, data.isNewContact ?? false);
+  emitCustomerPresence(io, data.conversationId, true, isNew);
   // Tell the widget which conversation it is attached to + vendor branding,
   // plus the current agent-online count so it can render the offline
   // fallback on connect without waiting for the next agents:presence pulse.
+  // Also carry the customer's own name + new/returning status so the widget
+  // can greet a returning customer by name.
   socket.emit('ready', {
     conversationId: data.conversationId,
     branding: data.vendorColors ?? null,
     agentsOnline: agentPresence.distinctOnline(),
+    contact: { name: data.contactName ?? null, phone: data.contactPhone ?? null },
+    isNew: data.isNewContact ?? false,
   });
+  // Seed the widget with the existing thread so a returning customer sees their
+  // history instead of a blank panel (the agent portal already loads this).
+  try {
+    const messages = await directus.listConversationMessages(data.conversationId);
+    if (messages.length > 0) {
+      socket.emit('messages:history', { conversationId: data.conversationId, messages });
+    }
+  } catch (err) {
+    logger.warn({ err }, 'failed to load conversation history for widget');
+  }
 }
 
 async function onAgentConnect(socket: Socket, { directus }: ConnectionDeps): Promise<void> {
@@ -207,6 +275,10 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   // One token bucket per socket — throttles inbound write events (message:send,
   // note:add) to a burst + sustained rate.
   const writeBucket = createTokenBucket(rateLimit.capacity, rateLimit.refillPerSec);
+  // Separate, more generous bucket for attachment:get reads — opening a
+  // conversation can fan out several asset fetches at once, and reads are
+  // cheaper than writes, so they shouldn't compete with the message budget.
+  const readBucket = createTokenBucket(rateLimit.capacity * 3, rateLimit.refillPerSec * 3);
 
   // Explicit logout signal from an agent. We mirror the disconnect cleanup
   // up-front so the host-page "agents online" pill flips immediately —
@@ -332,6 +404,46 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     } catch (err) {
       logger.error({ err }, 'attachment upload failed');
       respond({ ok: false, error: 'upload failed' });
+    }
+  });
+
+  // Attachment download — the mirror of the upload above. Customers have no
+  // Directus account, so they can't fetch a private /assets/:id themselves; the
+  // gateway streams the bytes on their behalf, but ONLY for files that belong
+  // to their own conversation (authorization via attachmentInConversation).
+  //   emit('attachment:get', { id }, (res) => ...)
+  //   ack res: { ok:true, content:ArrayBuffer, type, filename } | { ok:false, error }
+  socket.on('attachment:get', async (raw: unknown, ack?: (res: unknown) => void) => {
+    const respond = typeof ack === 'function' ? ack : () => undefined;
+    if (!readBucket.tryRemove()) return respond({ ok: false, error: 'rate_limited' });
+    const id = (raw as { id?: unknown })?.id;
+    if (typeof id !== 'string' || !id) return respond({ ok: false, error: 'bad_request' });
+    try {
+      // Customers may only read attachments from their own conversation. Agents
+      // already hold Directus asset access via their own token, so the gateway
+      // doesn't restrict them further here.
+      if (data.kind === 'customer') {
+        if (
+          !data.conversationId ||
+          !(await directus.attachmentInConversation(id, data.conversationId))
+        )
+          return respond({ ok: false, error: 'forbidden' });
+      }
+      const file = await directus.fetchFileBytes(id);
+      if (!file) return respond({ ok: false, error: 'not_found' });
+      // Send bytes as a base64 STRING, not a raw Buffer: binary ack payloads
+      // arrive corrupted in the browser socket.io client (engine.io's binary
+      // framing differs across the websocket/polling transports), so a plain
+      // JSON string is the only reliable transport here.
+      respond({
+        ok: true,
+        content: file.content.toString('base64'),
+        type: file.type,
+        filename: file.filename,
+      });
+    } catch (err) {
+      logger.error({ err }, 'attachment:get failed');
+      respond({ ok: false, error: 'fetch_failed' });
     }
   });
 
@@ -470,7 +582,19 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     if (data.kind !== 'agent') return;
     const parsed = TypingSignal.safeParse(raw);
     if (!parsed.success) return;
-    void socket.join(rooms.conversation(parsed.data.conversationId));
+    const { conversationId } = parsed.data;
+    void socket.join(rooms.conversation(conversationId));
+    // Replay the customer's current presence to just this agent so the header
+    // reflects reality the moment they open the conversation — without it,
+    // "online"/"New customer" would only appear on the next connect/disconnect.
+    const entry = convPresence.get(conversationId);
+    if (entry && entry.sockets.size > 0) {
+      socket.emit(SOCKET_EVENTS.customerPresence, {
+        conversationId,
+        online: true,
+        isNew: entry.isNew,
+      });
+    }
   });
 
   // After an agent PATCHes a conversation (assignment / status / priority /

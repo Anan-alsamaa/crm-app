@@ -9,6 +9,21 @@
 #   - Redis on :6390 (standalone — pm2 can't supervise a Windows .exe)
 #   - pm2 stack from ecosystem.config.cjs: directus, socket-gateway, ai-gateway,
 #     workers, agent-portal, admin-portal, chat-widget
+param([switch]$Force)
+
+# SAFETY GUARD (added 2026-06-14): Yiji CRM now runs the Docker backend
+# (`docker compose up -d` from crm-app-infra) + frontends via `pnpm dev`, per PRD §21.
+# This native pm2 stack conflicts on ports 8080 / 5173-5175 and must NOT run beside Docker.
+# Refuse by default; pass -Force only if you deliberately want the legacy native stack.
+if (-not $Force) {
+  Write-Warning 'start-prod.ps1 is DISABLED: the project runs via Docker (backend) + pnpm dev (frontends).'
+  Write-Warning 'The native pm2 stack conflicts on ports 8080/5173-5175.'
+  Write-Warning 'Backend:  docker compose up -d            (from crm-app-infra)'
+  Write-Warning 'Frontend: pnpm --filter "@yiji/agent-portal" --filter "@yiji/admin-portal" --filter "@yiji/chat-widget" --parallel dev'
+  Write-Warning 'If you truly need the legacy native stack, re-run:  ./start-prod.ps1 -Force'
+  exit 1
+}
+
 $ErrorActionPreference = 'Stop'
 $infra = $PSScriptRoot
 $redisDir = Join-Path (Split-Path $infra -Parent) 'crm-app-frontend\.redis-win'

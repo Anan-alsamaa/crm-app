@@ -23,6 +23,11 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     command: ['redis-server', '--appendonly', 'yes']
+    # Dev-only: publish to the host so RedisInsight / redis-cli / Bull Board can
+    # connect at localhost:6380 (6379 is taken by a separate local Redis). This
+    # maps the host's 6380 to the container's 6379. Do NOT publish in production.
+    ports:
+      - '127.0.0.1:6380:6379'
     volumes:
       - redis_data:/data
     healthcheck:

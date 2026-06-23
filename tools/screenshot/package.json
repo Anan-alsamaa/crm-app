@@ -1,0 +1,13 @@
+{
+  "name": "yiji-screenshot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Puppeteer screenshot tool — captures the Yiji CRM portals (logged in) + widget to support visual checks during development.",
+  "scripts": {
+    "shot": "node index.mjs"
+  },
+  "dependencies": {
+    "puppeteer": "^23.0.0"
+  }
+}

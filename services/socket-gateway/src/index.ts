@@ -63,7 +63,15 @@ async function main(): Promise<void> {
       : config.CORS_ORIGIN.split(',')
           .map((o) => o.trim())
           .filter(Boolean);
-  const io = new SocketServer(httpServer, { cors: { origin: corsOrigin } });
+  const io = new SocketServer(httpServer, {
+    cors: { origin: corsOrigin },
+    // Socket.IO's default maxHttpBufferSize is ~1MB, which silently DISCONNECTED
+    // the socket on any larger payload — capping attachment uploads (and the
+    // base64 `attachment:get` responses) to ~1MB regardless of the 10MB policy,
+    // so high-res images failed or had to be sent tiny. Allow the configured
+    // attachment limit plus headroom for base64's ~1.34x inflation + envelope.
+    maxHttpBufferSize: config.ATTACHMENT_MAX_BYTES * 2,
+  });
 
   // --- Metrics ---
   const metrics = new Registry();
