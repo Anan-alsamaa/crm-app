@@ -331,9 +331,7 @@ export class GatewayDirectus {
    * (re)connect. Attachment ids come from the messages_files junction (there is
    * no alias field on `messages`); a denied junction read fails soft to no chips.
    */
-  async loadConversationMessages(
-    conversationId: string,
-  ): Promise<
+  async loadConversationMessages(conversationId: string): Promise<
     Array<{
       id: string;
       senderType: SenderType;
