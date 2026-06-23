@@ -170,6 +170,49 @@ Rules:
 
 ## Standing up the stack
 
+### Deploy on a fresh server (Docker-only)
+
+The model: the server has **Docker** and a copy of the **repo** — nothing else.
+The base components (Postgres, Redis, Directus) are **pulled** as public images;
+the custom parts (gateway, workers, ai-gateway, portals, bootstrap) are **built
+from source on the server**. Nothing is hand-shipped — no `docker save`/`load`,
+no registry required.
+
+Prerequisites on the box: Docker Engine + the Compose plugin
+(`docker --version && docker compose version`), and the repo present
+(`git clone …`). That's it — no host Node/pnpm.
+
+```bash
+cd <repo>
+cp .env.prod.example .env.prod      # then edit: real secrets (see "Required env")
+chmod 600 .env.prod
+
+# Build the custom images from source, pull the public ones, seed Directus, run.
+docker compose -f docker-compose.prod.yml --env-file .env.prod build
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d postgres redis directus
+docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm bootstrap
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+
+# Verify
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps
+```
+
+Notes / gotchas:
+
+- **Always `build` (or use `--build`) before `up`.** The custom services also list
+  a registry `image:` tag for the optional CI path; if you `up` without having
+  built and the image isn't local, Docker tries to _pull_ `ghcr.io/...` and fails.
+  Building first makes that tag a purely local name.
+- **Portal URLs bake at build time.** `VITE_DIRECTUS_URL` / `VITE_SOCKET_URL` /
+  `VITE_AI_GATEWAY_URL` are read as build args into the static SPA bundles —
+  set the real public URLs in `.env.prod` _before_ `build`; rebuild if they change.
+- **TLS / domain:** the compose exposes raw HTTP ports. For a public domain put a
+  reverse proxy (Caddy/nginx) in front for HTTPS, and use sticky sessions if you
+  scale `socket-gateway` (see [CORS & security](#cors--security-headers) and
+  [Scaling](#scaling)).
+- **Managed DB/Redis:** delete the `postgres`/`redis` services and point
+  `DB_HOST` / `REDIS_URL` at the managed endpoints.
+
 ### Single host (docker compose)
 
 `docker-compose.prod.yml` is additive — `docker-compose.yml` stays the working
@@ -178,15 +221,22 @@ strict secrets, and image refs (with a build fallback).
 
 ```bash
 # 1. Put real secrets in .env.prod (chmod 600, never committed).
-# 2. Build or pull images.
+# 2. Build images FROM SOURCE on this host (no registry, nothing to ship).
 docker compose -f docker-compose.prod.yml --env-file .env.prod build
-# 3. Boot infra + Directus.
+# 3. Boot infra + Directus (postgres/redis/directus are pulled public images).
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d postgres redis directus
 # 4. Bootstrap schema, roles, service tokens, and project owner (idempotent).
-DIRECTUS_URL=$DIRECTUS_PUBLIC_URL pnpm --filter @yiji/directus-bootstrap apply
+#    Runs as a one-shot container, so the host needs only Docker — no Node/pnpm.
+docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm bootstrap
 # 5. Boot the services.
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 ```
+
+> The `bootstrap` service carries a `bootstrap` profile, so `up` never starts it;
+> it only runs when you invoke it explicitly with `run --rm` (step 4). Re-run that
+> one command any time to reconcile schema after a restore or to rotate `SVC_*`
+> tokens. If you prefer to run it from a Node toolchain on the host instead of the
+> container, the equivalent is `pnpm --filter @yiji/directus-bootstrap apply`.
 
 In a managed environment, delete the `postgres`/`redis` services from the prod
 compose and point `DB_HOST` / `REDIS_URL` at the managed endpoints.
