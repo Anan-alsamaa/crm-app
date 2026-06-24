@@ -468,6 +468,8 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     socket.on(evt, (raw: unknown) => {
       const parsed = TypingSignal.safeParse(raw);
       if (!parsed.success) return;
+      // IDOR guard: customers may only signal typing on their bound conversation.
+      if (data.kind === 'customer' && parsed.data.conversationId !== data.conversationId) return;
       socket.to(rooms.conversation(parsed.data.conversationId)).emit(SOCKET_EVENTS.typingUpdate, {
         conversationId: parsed.data.conversationId,
         who: data.kind,
@@ -479,6 +481,8 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   socket.on(SOCKET_EVENTS.readAck, (raw: unknown) => {
     const parsed = ReadAck.safeParse(raw);
     if (!parsed.success) return;
+    // IDOR guard: a customer may only ack reads on its own bound conversation.
+    if (data.kind === 'customer' && parsed.data.conversationId !== data.conversationId) return;
     // An agent reading the thread clears its unread counter. Fire-and-forget;
     // a failed reset is non-fatal (next agent message resets it anyway).
     if (data.kind === 'agent') {
