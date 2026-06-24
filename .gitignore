@@ -80,6 +80,7 @@ dump.rdb
 coverage-buckets.mjs
 
 .env.prod
+.env.staging
 .directus-prod/
 .load-env.ps1
 directus/local/data.db*
