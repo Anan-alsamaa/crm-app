@@ -54,8 +54,11 @@ dump.rdb
 .idea/
 .vscode/
 
-# Claude Code session config (user-specific)
-.claude/
+# Claude Code session config (user-specific) — but DO ship project slash commands
+# (e.g. /incident) so the server's Claude has them.
+.claude/*
+!.claude/commands/
+!.claude/commands/**
 
 # Spec-Kit tooling (local-only)
 .specify/extensions/
@@ -105,3 +108,7 @@ ngrok-tunnels.yml
 ecosystem.hybrid.config.cjs
 deploy/nginx.local.conf
 stream details.txt
+
+# Incident-response runtime output (captured logs may contain sensitive data)
+scripts/incident/reports/
+var/
