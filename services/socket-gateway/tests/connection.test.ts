@@ -146,6 +146,19 @@ function waitFor<T = unknown>(client: ClientSocket, event: string, ms = 5000): P
   });
 }
 
+/** Resolve iff `event` is NOT received within `ms`; reject if it arrives. Used
+ * to assert an IDOR-blocked signal never reaches the foreign conversation room. */
+function expectNoEvent(client: ClientSocket, event: string, ms = 150): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onEvent = () => reject(new Error(`unexpected ${event} received`));
+    client.once(event, onEvent);
+    setTimeout(() => {
+      client.off(event, onEvent);
+      resolve();
+    }, ms);
+  });
+}
+
 describe('socket-gateway connection handler (mocked Directus)', () => {
   let harness: Harness;
   const sockets: ClientSocket[] = [];
@@ -451,6 +464,41 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
       const got = waitFor<{ conversationId: string }>(c2, SOCKET_EVENTS.readAck);
       c1.emit(SOCKET_EVENTS.readAck, { conversationId: 'conv-1', lastMessageId: 'msg-1' });
       expect((await got).conversationId).toBe('conv-1');
+    });
+
+    // Plants an agent listener in a foreign conversation room (conv-OTHER) via
+    // conversation:subscribe, then has a customer bound to conv-1 try to spoof a
+    // signal into conv-OTHER. The IDOR guard must drop it silently.
+    async function agentSubscribedTo(conversationId: string): Promise<ClientSocket> {
+      mockedValidateAgentToken.mockResolvedValue({ id: 'agent-sub', role: 'agent' });
+      const agent = await connect(harness.port, { kind: 'agent', token: 'good' });
+      sockets.push(agent);
+      agent.emit(SOCKET_EVENTS.conversationSubscribe, { conversationId });
+      await new Promise((r) => setTimeout(r, 30)); // let the room join settle
+      return agent;
+    }
+
+    it('typing:start from a customer into ANOTHER conversation is dropped (IDOR)', async () => {
+      harness = await startGateway(makeStubs());
+      const customer = await connectCustomerReady(harness.port, sockets); // bound to conv-1
+      const agent = await agentSubscribedTo('conv-OTHER');
+
+      const noLeak = expectNoEvent(agent, SOCKET_EVENTS.typingUpdate, 150);
+      customer.emit(SOCKET_EVENTS.typingStart, { conversationId: 'conv-OTHER' });
+      await noLeak; // resolves only if the agent never received the spoofed typing
+    });
+
+    it('read:ack from a customer into ANOTHER conversation is dropped (IDOR)', async () => {
+      harness = await startGateway(makeStubs());
+      const customer = await connectCustomerReady(harness.port, sockets); // bound to conv-1
+      const agent = await agentSubscribedTo('conv-OTHER');
+
+      const noLeak = expectNoEvent(agent, SOCKET_EVENTS.readAck, 150);
+      customer.emit(SOCKET_EVENTS.readAck, {
+        conversationId: 'conv-OTHER',
+        lastMessageId: 'msg-1',
+      });
+      await noLeak; // resolves only if the forged read receipt never reached conv-OTHER
     });
   });
 
