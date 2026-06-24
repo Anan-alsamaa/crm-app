@@ -7,7 +7,8 @@
 ```bash
 pnpm install                      # install all workspace deps
 cp .env.example .env              # populate secrets (see reference below)
-docker compose up -d              # directus + postgres + redis + socket-gateway + workers + ai-gateway
+docker compose --profile app up -d  # full backend: directus + postgres + redis + socket-gateway + workers + ai-gateway
+                                    # (omit `--profile app` for infra only; app tier then runs under PM2)
 pnpm --filter directus-bootstrap apply   # apply schema snapshot + seed roles/service accounts
 ```
 Wait for Directus health, then sign in at http://localhost:8055 with the dev owner credentials.

@@ -46,6 +46,13 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Security helper call-site guard
+        # Fails CI if a security helper (sanitizeFilename, decodeUploadContent)
+        # is exported but has no runtime call site in non-test source — the exact
+        # regression merge ecd655c introduced (helper present + tested, but the
+        # upload handler stopped calling it).
+        run: pnpm guard:security-callsites
+
       - name: Unit tests + coverage (services & packages)
         run: pnpm test:coverage
 
