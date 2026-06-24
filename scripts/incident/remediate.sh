@@ -38,9 +38,14 @@ BRANCH="fix/incident-$TS"
 git checkout -b "$BRANCH" >/dev/null 2>&1 || git checkout "$BRANCH"
 echo "→ working on branch $BRANCH"
 
-# Unattended cron use needs --dangerously-skip-permissions; interactive use can
-# drop it. acceptEdits + Bash lets Claude edit and run the test gate itself.
-CLAUDE_FLAGS="${CLAUDE_FLAGS:---permission-mode acceptEdits --allowedTools Read,Edit,Write,Grep,Glob,Bash}"
+# This runs UNATTENDED (cron/respond.sh), so Claude must use its tools without
+# permission prompts — hence --dangerously-skip-permissions by default. The
+# compensating controls are real: it works only on a throwaway fix/incident-*
+# branch, the prompt forbids editing .env*/secrets and destructive commands, and
+# the independent typecheck+test gate below refuses to mark a bad fix deployable.
+# For a supervised/interactive run, override to tighten, e.g.:
+#   CLAUDE_FLAGS="--permission-mode acceptEdits --allowedTools Read,Edit,Grep,Glob,Bash"
+CLAUDE_FLAGS="${CLAUDE_FLAGS:---dangerously-skip-permissions}"
 
 PROMPT="$(cat <<EOF
 You are the on-call engineer for the Yiji CRM (a pnpm/TypeScript monorepo:
