@@ -95,6 +95,11 @@ services:
       retries: 12
 
   socket-gateway:
+    # Node tier runs via PM2 (ecosystem.config.cjs), NOT Docker — see deploy/README.md.
+    # Behind the 'node' profile so `docker compose up -d` brings up only the infra
+    # tier (postgres/redis/directus) and never builds this image or clashes with PM2
+    # on :8080. To run the all-Docker stack instead: `docker compose --profile node up -d`.
+    profiles: ['node']
     build:
       context: .
       dockerfile: services/socket-gateway/Dockerfile
@@ -115,6 +120,8 @@ services:
       SVC_GATEWAY_TOKEN: ${SVC_GATEWAY_TOKEN}
 
   workers:
+    # Node tier runs via PM2, not Docker. Behind the 'node' profile (see socket-gateway).
+    profiles: ['node']
     build:
       context: .
       dockerfile: services/workers/Dockerfile
@@ -136,6 +143,8 @@ services:
       SMTP_FROM: ${SMTP_FROM}
 
   ai-gateway:
+    # Node tier runs via PM2, not Docker. Behind the 'node' profile (see socket-gateway).
+    profiles: ['node']
     build:
       context: .
       dockerfile: services/ai-gateway/Dockerfile
