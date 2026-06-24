@@ -94,7 +94,16 @@ services:
       timeout: 5s
       retries: 12
 
+  # ── App tier (opt-in) ──────────────────────────────────────────────────────
+  # The app services are gated behind the `app` profile so a bare
+  # `docker compose up -d` starts INFRA ONLY (postgres/redis/directus). This is
+  # the hybrid local topology: infra in Docker, the app tier under PM2
+  # (crm-app/ecosystem.config.cjs). Running them here too would collide with PM2
+  # (port 8080 bind clash; a duplicate `workers` double-consumes the BullMQ queue).
+  #   Hybrid (default):   docker compose up -d              # infra only
+  #   Full Docker stack:  docker compose --profile app up -d
   socket-gateway:
+    profiles: ['app']
     build:
       context: .
       dockerfile: services/socket-gateway/Dockerfile
@@ -115,6 +124,7 @@ services:
       SVC_GATEWAY_TOKEN: ${SVC_GATEWAY_TOKEN}
 
   workers:
+    profiles: ['app']
     build:
       context: .
       dockerfile: services/workers/Dockerfile
@@ -136,6 +146,7 @@ services:
       SMTP_FROM: ${SMTP_FROM}
 
   ai-gateway:
+    profiles: ['app']
     build:
       context: .
       dockerfile: services/ai-gateway/Dockerfile

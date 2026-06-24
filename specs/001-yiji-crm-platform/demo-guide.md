@@ -14,7 +14,7 @@
 **Start the backend, then the portals:**
 ```bash
 # 1. Backend (wait ~30s for "directus healthy")
-cd crm-app-infra && docker compose up -d
+cd crm-app-infra && docker compose --profile app up -d   # full backend in Docker
 
 # 2. Portals
 cd ../crm-app-frontend && pnpm --filter "@yiji/agent-portal" --filter "@yiji/admin-portal" --filter "@yiji/chat-widget" --parallel dev
@@ -115,8 +115,8 @@ Key points to land:
 
 | Symptom | Fix |
 |---|---|
-| Widget/agent "offline", messages not flowing | Backend likely down. `cd crm-app-infra && docker compose ps` → if unhealthy: `docker compose up -d` |
-| Docker engine itself down (`npipe` error) | `Restart-Service com.docker.service -Force`, wait ~30s, then `docker compose up -d` |
+| Widget/agent "offline", messages not flowing | Backend likely down. `cd crm-app-infra && docker compose ps` → if unhealthy: `docker compose --profile app up -d` |
+| Docker engine itself down (`npipe` error) | `Restart-Service com.docker.service -Force`, wait ~30s, then `docker compose --profile app up -d` |
 | A portal not loading (5173/4/5) | Restart dev servers: `pnpm --filter … --parallel dev` (see §0) |
 | AI panel shows "unavailable" | `GEMINI_API_KEY` not set — skip that step; everything else is independent |
 | Everything sluggish / a crash | RAM pressure — close other apps; the stack alone is fine, it's the box that's tight |
