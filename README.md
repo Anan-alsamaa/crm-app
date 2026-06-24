@@ -83,7 +83,9 @@ from your `.env`.
 
 ```bash
 cp .env.example .env             # edit secrets + admin creds
-docker compose up                # postgres, redis, directus, gateway, workers, ai-gateway
+docker compose --profile app up  # FULL stack: postgres, redis, directus, gateway, workers, ai-gateway
+                                 # (omit `--profile app` for INFRA ONLY — the hybrid
+                                 #  setup where PM2 runs the app tier; see start-infra.ps1)
 pnpm install
 pnpm --filter @yiji/agent-portal dev
 pnpm --filter @yiji/admin-portal dev
