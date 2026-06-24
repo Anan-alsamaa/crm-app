@@ -9,6 +9,24 @@ is to (optionally) describe the symptom and to approve the deploy — not to pat
 This is intentional: fixes are reproducible, test-gated, and captured in git
 history instead of ad-hoc edits on a server.
 
+## Two lanes: code vs operational
+
+Not every incident is a code bug. There are two remediation lanes — pick by
+symptom, or just describe it and Claude will tell you if you picked the wrong one:
+
+| Lane            | Use when…                                                                                                                      | Entry point                                                          | What Claude does                                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Code**        | the app behaves wrong / throws (a logic or build bug)                                                                          | `/incident` · `scripts/incident/respond.sh`                          | fixes on a `fix/incident-*` branch, **gated by typecheck + tests**; you reload                                  |
+| **Operational** | a service is down / crash-looping, a container died, schema/roles not applied, a token is wrong, nginx needs reload, disk full | `/ops "<what's wrong>"` · `scripts/incident/ops.sh "<what's wrong>"` | **performs the safe runtime fix** (restart / reload / re-bootstrap) and verifies — no code change, no test gate |
+
+The operational lane is the one you drive by **telling Claude the issue**: it
+auto-collects the same system context, diagnoses from your description + that
+context, and acts within a safe allowlist (PM2 restart/reload, infra container
+restart, idempotent re-bootstrap, validated `nginx -s reload`, safe log
+cleanup). For anything that touches **secrets, data, or the host** it stops and
+hands you the exact command + why — it never edits `.env*`, prunes volumes, or
+restarts the Docker daemon on its own.
+
 ## What you need on the server (once)
 
 - **Claude Code CLI** on PATH (`claude --version`) + `ANTHROPIC_API_KEY` exported.
@@ -53,20 +71,30 @@ self-healing — enable only once you trust it).
 From the repo on the server:
 
 ```bash
+# CODE issue (app misbehaving) — fix on a branch, test-gated:
 scripts/incident/respond.sh "agents get a 403 right after logging in"
-# …or, fully automatic (no description):
-scripts/incident/respond.sh
+scripts/incident/respond.sh                       # fully automatic (no description)
+
+# OPERATIONAL issue (service down / misconfig / restart) — runtime fix + verify:
+scripts/incident/ops.sh "directus keeps restarting after the deploy"
+scripts/incident/ops.sh "the inbox won't load for any agent"
 ```
 
-### C. Interactive — open Claude and use the slash command
+For an operational incident a description is recommended (it tells Claude what
+the _symptom_ is); it still auto-collects the full system context regardless.
+
+### C. Interactive — open Claude and use a slash command
 
 ```bash
 cd /opt/yiji/crm-app && claude
-> /incident agents can't see the dashboard
+> /incident agents can't see the dashboard      # code lane
+> /ops directus is in a restart loop            # operational lane
 ```
 
-`/incident` (defined in `.claude/commands/incident.md`) runs the same
-collect → diagnose → fix → test → hand-off flow, conversationally.
+`/incident` (`.claude/commands/incident.md`) → collect → diagnose → fix → test →
+hand-off. `/ops` (`.claude/commands/ops.md`) → collect → diagnose → perform the
+safe runtime remediation → verify. Both auto-attach the system context, so you
+can describe the symptom loosely (or not at all) and let Claude work it out.
 
 ## Guardrails (built in)
 
@@ -76,6 +104,12 @@ collect → diagnose → fix → test → hand-off flow, conversationally.
 - Claude is instructed to **never** edit `.env*`, print secrets, or run
   destructive/irreversible commands, and to report (not guess) when the cause is
   config/infra rather than code.
+- **Operational lane (`/ops`, `ops.sh`):** acts only within a safe allowlist
+  (PM2 restart/reload, infra container restart, idempotent re-bootstrap, validated
+  `nginx` reload, safe log cleanup). It stops and hands you the exact command for
+  anything touching **secrets, data, or the host** (no `.env` edits, no
+  `down -v`/volume prune, no daemon restart/reboot), and bounces genuine code bugs
+  back to the code lane.
 - Deploy is the hybrid reload: `git pull` → `pnpm install --frozen-lockfile` (if
   deps changed) → `pm2 reload all` (zero-downtime); rebuild a portal/widget only
   if it changed (`build-frontend.ps1`).
