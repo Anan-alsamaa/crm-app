@@ -20,6 +20,12 @@ const client = vi.hoisted(() => ({
 }));
 vi.mock('../src/lib/commerce-client.js', () => ({ commerce: client }));
 
+// OrderAssistCard (rendered inside CommercePanel) calls useAuth(); the panel is
+// mounted here without an AuthProvider, so stub the hook to a signed-in agent.
+vi.mock('../src/lib/auth/AuthContext.js', () => ({
+  useAuth: () => ({ user: { id: 'agent-1' } }),
+}));
+
 import { CommercePanel } from '../src/features/contacts/CommercePanel.js';
 
 function renderPanel(props: { yijiVendorId: string; externalCustomerId: string }) {
