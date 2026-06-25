@@ -8,6 +8,8 @@ export interface AvatarProps extends HTMLAttributes<HTMLSpanElement> {
   name?: string | null;
   /** Email to fall back on when name is empty. */
   email?: string | null;
+  /** Phone to fall back on when name and email are empty (phone-only customers). */
+  phone?: string | null;
   size?: Size;
   /** Optional image URL; if it fails to load, falls through to initials. */
   src?: string | null;
@@ -34,33 +36,41 @@ function hueFor(seed: string): number {
   return HUES[h % HUES.length]!;
 }
 
-function initialsOf(name?: string | null, email?: string | null): string {
+function initialsOf(name?: string | null, email?: string | null, phone?: string | null): string {
   const source = (name ?? '').trim() || (email ?? '').split('@')[0] || '';
-  if (!source) return '?';
-  const parts = source.split(/[\s._-]+/).filter(Boolean);
-  const first = parts[0];
-  const second = parts[1];
-  if (first && second) {
-    return ((first[0] ?? '') + (second[0] ?? '')).toUpperCase();
+  if (source) {
+    const parts = source.split(/[\s._-]+/).filter(Boolean);
+    const first = parts[0];
+    const second = parts[1];
+    if (first && second) {
+      return ((first[0] ?? '') + (second[0] ?? '')).toUpperCase();
+    }
+    return source.slice(0, 2).toUpperCase();
   }
-  return source.slice(0, 2).toUpperCase();
+  // Phone-only customer: use the last two digits so each number reads as a
+  // distinct, recognizable avatar instead of a generic "?".
+  const digits = (phone ?? '').replace(/\D/g, '');
+  if (digits.length >= 2) return digits.slice(-2);
+  if (digits.length === 1) return digits;
+  return '?';
 }
 
 export function Avatar({
   name,
   email,
+  phone,
   size = 'sm',
   src,
   className,
   ...rest
 }: AvatarProps): JSX.Element {
-  const seed = (name || email || 'anon').toLowerCase();
+  const seed = (name || email || phone || 'anon').toLowerCase();
   const hue = hueFor(seed);
   // Lightness 0.50 + chroma 0.17 keeps white text at >= 4.5:1 (WCAG AA)
   // across every hue stop. Green hues around 130 sit at 4.23 at 0.55;
   // dropping to 0.50 covers the full spectrum with margin.
   const bg = `oklch(0.50 0.17 ${hue})`;
-  const initials = initialsOf(name, email);
+  const initials = initialsOf(name, email, phone);
 
   return (
     <span
