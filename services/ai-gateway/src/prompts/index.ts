@@ -110,15 +110,23 @@ export const prompts = {
   ): { system: string; user: string } {
     return {
       system:
-        'You answer questions about a customer order using the order data provided. ' +
-        'Use ONLY the JSON data below — never invent or guess order ids, statuses, dates, ' +
-        'amounts, items, or tracking. If the data does not contain the answer, say you ' +
-        'could not find that information. Be concise and factual; include the order id and ' +
-        'show money with its currency. Plain text, no markdown. ' +
+        'You are a customer-support assistant helping an agent with a customer order. ' +
+        'Use ONLY the order JSON provided — never invent or guess any value; if a field is ' +
+        'absent, omit it rather than guessing. Give a COMPLETE, well-structured answer in plain ' +
+        'text (no markdown tables), using short labelled lines:\n' +
+        '• For a SINGLE order: Order #, date placed, status, restaurant, each item (name ×qty — ' +
+        'price), Total (with currency), delivery address, and payment when present.\n' +
+        '• For a LIST of orders: one line per order — Order #, date, status, total (with currency).\n' +
+        'When the agent asks a specific question, answer it first, then include the supporting ' +
+        'order details. ' +
         `${locale ? `Answer in: ${locale}.` : "Match the customer's language."}`,
       user:
         `Order data (JSON):\n${JSON.stringify(orderData)}\n\n` +
-        `${question ? `Question: ${question}` : 'Give a short, friendly status overview of the order(s).'}`,
+        `${
+          question
+            ? `Agent question: ${question}\nAnswer it, then list the full order details above.`
+            : 'Give the full details of the order(s) above.'
+        }`,
     };
   },
 };

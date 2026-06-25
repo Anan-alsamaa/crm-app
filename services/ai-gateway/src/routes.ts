@@ -59,6 +59,19 @@ function parseJson<T>(text: string, schema: z.ZodType<T>): T {
   }
 }
 
+/** Format an order's ISO placedAt to a human date for the model grounding so
+ *  PII redaction doesn't mistake its digit run for a phone number. The API
+ *  response still returns the raw ISO. */
+function groundOrder(o: YijiOrder): YijiOrder {
+  if (!o.placedAt) return o;
+  const d = new Date(o.placedAt);
+  if (Number.isNaN(d.getTime())) return o;
+  return {
+    ...o,
+    placedAt: d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+  };
+}
+
 export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   /** Auth gate — verifies the caller's Directus session. Runs BEFORE body
    *  validation. Returns null (and replies) on failure. */
@@ -438,12 +451,12 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
         deps.yiji.getPaymentStatus(vendorId, orderId),
         deps.yiji.getShipmentTracking(vendorId, orderId),
       ]);
-      grounding = { order, payment, shipment };
+      grounding = { order: groundOrder(order), payment, shipment };
       sig = `${order.orderId}:${order.status}:${payment?.status ?? ''}:${shipment?.status ?? ''}`;
     } else {
       orders = await deps.yiji.getOrders(vendorId, customerId as string, { limit: limit ?? 4 });
       if (!orders.length) return reply.code(404).send({ error: 'no_orders' });
-      grounding = { orders };
+      grounding = { orders: orders.map(groundOrder) };
       sig = orders.map((o) => `${o.orderId}:${o.status}`).join(',');
     }
 

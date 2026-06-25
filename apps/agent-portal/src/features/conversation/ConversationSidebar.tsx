@@ -14,8 +14,9 @@ import {
   useResizable,
 } from '@yiji/ui';
 import { useConversation, useLinkedTickets, type ConversationMessage } from '../inbox/api.js';
-import { useUpdateContact } from '../contacts/api.js';
+import { useContact, useUpdateContact } from '../contacts/api.js';
 import { AiPanel } from '../ai/AiPanel.js';
+import { OrderAssistCard } from '../commerce/OrderAssistCard.js';
 import { ConversationTags } from './ConversationTags.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 
@@ -79,6 +80,10 @@ export function ConversationSidebar({
   const tickets = useLinkedTickets(conversationId);
   const navigate = useNavigate();
   const updateContact = useUpdateContact();
+  // Pull the contact's Yiji ids (external_customer_id + vendor.yiji_vendor_id) so
+  // the agent can retrieve orders without leaving the inbox. Called before the
+  // early returns; the query is disabled until a contact id exists.
+  const contact = useContact(convo.data?.contact?.id ?? '');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ name: '', email: '', phone: '' });
   // Drop out of edit mode when switching conversations so a stale draft never
@@ -274,6 +279,16 @@ export function ConversationSidebar({
       <section className="px-6 py-4">
         <CustomFieldsSection entityType="conversation" entityId={conversationId} />
       </section>
+
+      {/* Orders — live Yiji commerce data + AI retrieval, in the inbox */}
+      {contact.data?.external_customer_id && contact.data?.vendor?.yiji_vendor_id && (
+        <section className="px-6 py-4">
+          <OrderAssistCard
+            yijiVendorId={contact.data.vendor.yiji_vendor_id}
+            externalCustomerId={contact.data.external_customer_id}
+          />
+        </section>
+      )}
 
       {/* AI assistance */}
       <section className="px-6 py-4">
