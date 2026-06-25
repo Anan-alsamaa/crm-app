@@ -31,6 +31,7 @@ export interface YijiOrder {
   restaurantName?: string;
   deliveryAddress?: string;
   paymentStatus?: string;
+  paymentMode?: string;
   customerPhone?: string;
 }
 

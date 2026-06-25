@@ -239,8 +239,21 @@ const YIJI_ORDER_STATUS: Record<number, string> = {
   17: 'pending_pos_accepted',
   65: 'arrived',
 };
-// NOTE: the paymentStatus / paymentMode enums are NOT yet provided by Yiji, so
-// their raw numeric codes are passed through UNMAPPED (no guessed labels).
+/** Yiji PaymentStatus enum (provided by Yiji). */
+const YIJI_PAYMENT_STATUS: Record<number, string> = {
+  0: 'not_paid',
+  1: 'paid',
+};
+/** Yiji PaymentMode enum (provided by Yiji). */
+const YIJI_PAYMENT_MODE: Record<number, string> = {
+  1: 'cash',
+  2: 'credit_card',
+  3: 'apple_pay',
+  4: 'pay_later',
+  5: 'mada',
+  6: 'visa',
+  7: 'master',
+};
 
 interface RawYijiOrder {
   id: number;
@@ -283,8 +296,14 @@ function mapYijiOrder(raw: RawYijiOrder): YijiOrder {
     })),
     restaurantName: raw.restaurantName ?? raw.brandName ?? undefined,
     deliveryAddress: raw.deliveryAddress?.fullAddress ?? undefined,
-    // Raw paymentStatus code (enum not yet provided) — labelled once Yiji shares it.
-    paymentStatus: raw.paymentStatus != null ? String(raw.paymentStatus) : undefined,
+    paymentStatus:
+      raw.paymentStatus != null
+        ? (YIJI_PAYMENT_STATUS[raw.paymentStatus] ?? `status_${raw.paymentStatus}`)
+        : undefined,
+    paymentMode:
+      raw.paymentMode != null
+        ? (YIJI_PAYMENT_MODE[raw.paymentMode] ?? `mode_${raw.paymentMode}`)
+        : undefined,
     customerPhone: raw.customerPhoneNumber ?? undefined,
   };
 }
@@ -353,11 +372,16 @@ export class HttpYijiClient implements YijiClient {
       `/api/Order/GetOrderAsync/${encodeURIComponent(orderId)}`,
     );
     if (!raw || raw.id == null) return null;
-    // Raw codes (paymentStatus/paymentMode enums not yet provided by Yiji).
     return {
       orderId: String(raw.id),
-      status: raw.paymentStatus != null ? String(raw.paymentStatus) : 'unknown',
-      method: raw.paymentMode != null ? String(raw.paymentMode) : undefined,
+      status:
+        raw.paymentStatus != null
+          ? (YIJI_PAYMENT_STATUS[raw.paymentStatus] ?? `status_${raw.paymentStatus}`)
+          : 'unknown',
+      method:
+        raw.paymentMode != null
+          ? (YIJI_PAYMENT_MODE[raw.paymentMode] ?? `mode_${raw.paymentMode}`)
+          : undefined,
     };
   }
 
