@@ -207,6 +207,96 @@ export interface HttpYijiClientOptions {
   timeoutMs?: number;
 }
 
+/**
+ * Live Yiji order API (https://order.yiji-app.com). The platform is food
+ * delivery, so the order carries restaurant/items/payment/delivery inline and
+ * there is no separate payment- or parcel-tracking endpoint. Two endpoints:
+ *   GET /api/Order/GetOrderAsync/{orderId}   → one order
+ *   GET /api/Order/GetOrderByUser/{userId}   → all of a user's orders
+ * `userId` here is the contact's external_customer_id (the customer_id the
+ * widget passes). `vendorId` is unused by this API (kept for interface parity).
+ */
+
+/** Numeric status codes → readable labels. Best-effort — confirm with Yiji. */
+const YIJI_ORDER_STATUS: Record<number, string> = {
+  0: 'created',
+  1: 'confirmed',
+  2: 'preparing',
+  3: 'ready',
+  4: 'dispatched',
+  5: 'on_the_way',
+  6: 'delivered',
+  10: 'delivered',
+  11: 'cancelled',
+  12: 'refunded',
+};
+const YIJI_PAYMENT_STATUS: Record<number, string> = {
+  0: 'pending',
+  1: 'paid',
+  2: 'failed',
+  3: 'refunded',
+};
+const YIJI_PAYMENT_MODE: Record<number, string> = {
+  1: 'cash',
+  2: 'card',
+  3: 'apple_pay',
+  4: 'wallet',
+};
+
+interface RawYijiOrder {
+  id: number;
+  orderStatus?: number;
+  paymentStatus?: number;
+  paymentMode?: number;
+  total?: number;
+  creationTime?: string;
+  orderStatusDate?: string;
+  restaurantName?: string | null;
+  brandName?: string | null;
+  customerPhoneNumber?: string | null;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  deliveryAddress?: { fullAddress?: string | null } | null;
+  orderItems?: Array<{
+    id?: number;
+    idChooseableItem?: number;
+    itemName?: string;
+    quantity?: number;
+    itemPrice?: number;
+  }> | null;
+}
+
+function mapYijiOrder(raw: RawYijiOrder): YijiOrder {
+  return {
+    orderId: String(raw.id),
+    status:
+      raw.orderStatus != null
+        ? (YIJI_ORDER_STATUS[raw.orderStatus] ?? `status_${raw.orderStatus}`)
+        : 'unknown',
+    total: raw.total ?? 0,
+    currency: 'SAR', // Yiji amounts are SAR; the API returns no currency code.
+    placedAt: raw.creationTime ?? raw.orderStatusDate ?? '',
+    items: (raw.orderItems ?? []).map((it) => ({
+      sku: String(it.idChooseableItem ?? it.id ?? ''),
+      name: it.itemName ?? 'item',
+      qty: it.quantity ?? 1,
+      price: it.itemPrice ?? 0,
+    })),
+    restaurantName: raw.restaurantName ?? raw.brandName ?? undefined,
+    deliveryAddress: raw.deliveryAddress?.fullAddress ?? undefined,
+    paymentStatus:
+      raw.paymentStatus != null
+        ? (YIJI_PAYMENT_STATUS[raw.paymentStatus] ?? `payment_${raw.paymentStatus}`)
+        : undefined,
+    customerPhone: raw.customerPhoneNumber ?? undefined,
+  };
+}
+
+/** Newest-first by placed date (ISO strings sort chronologically). */
+function byNewest(a: YijiOrder, b: YijiOrder): number {
+  return a.placedAt < b.placedAt ? 1 : a.placedAt > b.placedAt ? -1 : 0;
+}
+
 export class HttpYijiClient implements YijiClient {
   private readonly baseUrl: string;
   private readonly token?: string;
@@ -241,50 +331,85 @@ export class HttpYijiClient implements YijiClient {
     }
   }
 
-  getCustomer(vendorId: string, externalCustomerId: string): Promise<YijiCustomer | null> {
-    return this.fetch<YijiCustomer>(
-      `/v1/vendors/${encodeURIComponent(vendorId)}/customers/${encodeURIComponent(externalCustomerId)}`,
+  async getOrder(_vendorId: string, orderId: string): Promise<YijiOrder | null> {
+    const raw = await this.fetch<RawYijiOrder>(
+      `/api/Order/GetOrderAsync/${encodeURIComponent(orderId)}`,
     );
+    return raw && raw.id != null ? mapYijiOrder(raw) : null;
   }
 
   async getOrders(
-    vendorId: string,
+    _vendorId: string,
     externalCustomerId: string,
     opts: { limit?: number } = {},
   ): Promise<YijiOrder[]> {
-    const q = opts.limit ? `?limit=${opts.limit}` : '';
-    return (
-      (await this.fetch<YijiOrder[]>(
-        `/v1/vendors/${encodeURIComponent(vendorId)}/customers/${encodeURIComponent(externalCustomerId)}/orders${q}`,
-      )) ?? []
+    const raw = await this.fetch<RawYijiOrder[]>(
+      `/api/Order/GetOrderByUser/${encodeURIComponent(externalCustomerId)}`,
     );
+    if (!Array.isArray(raw)) return [];
+    const mapped = raw.map(mapYijiOrder).sort(byNewest);
+    return opts.limit ? mapped.slice(0, opts.limit) : mapped;
   }
 
-  getOrder(vendorId: string, orderId: string): Promise<YijiOrder | null> {
-    return this.fetch<YijiOrder>(
-      `/v1/vendors/${encodeURIComponent(vendorId)}/orders/${encodeURIComponent(orderId)}`,
+  async getPaymentStatus(_vendorId: string, orderId: string): Promise<YijiPaymentStatus | null> {
+    const raw = await this.fetch<RawYijiOrder>(
+      `/api/Order/GetOrderAsync/${encodeURIComponent(orderId)}`,
     );
+    if (!raw || raw.id == null) return null;
+    return {
+      orderId: String(raw.id),
+      status:
+        raw.paymentStatus != null
+          ? (YIJI_PAYMENT_STATUS[raw.paymentStatus] ?? `payment_${raw.paymentStatus}`)
+          : 'unknown',
+      method:
+        raw.paymentMode != null
+          ? (YIJI_PAYMENT_MODE[raw.paymentMode] ?? `mode_${raw.paymentMode}`)
+          : undefined,
+    };
   }
 
-  getPaymentStatus(vendorId: string, orderId: string): Promise<YijiPaymentStatus | null> {
-    return this.fetch<YijiPaymentStatus>(
-      `/v1/vendors/${encodeURIComponent(vendorId)}/orders/${encodeURIComponent(orderId)}/payment`,
-    );
+  async getShipmentTracking(
+    _vendorId: string,
+    _orderId: string,
+  ): Promise<YijiShipmentTracking | null> {
+    // Food delivery — no parcel-tracking endpoint; the order status conveys
+    // fulfillment. Return null so the UI degrades gracefully.
+    return null;
   }
 
-  getShipmentTracking(vendorId: string, orderId: string): Promise<YijiShipmentTracking | null> {
-    return this.fetch<YijiShipmentTracking>(
-      `/v1/vendors/${encodeURIComponent(vendorId)}/orders/${encodeURIComponent(orderId)}/shipment`,
-    );
-  }
-
-  getPurchaseActivity(
-    vendorId: string,
+  async getPurchaseActivity(
+    _vendorId: string,
     externalCustomerId: string,
   ): Promise<YijiPurchaseActivity | null> {
-    return this.fetch<YijiPurchaseActivity>(
-      `/v1/vendors/${encodeURIComponent(vendorId)}/customers/${encodeURIComponent(externalCustomerId)}/activity`,
+    const raw = await this.fetch<RawYijiOrder[]>(
+      `/api/Order/GetOrderByUser/${encodeURIComponent(externalCustomerId)}`,
     );
+    if (!Array.isArray(raw) || raw.length === 0) return null;
+    const mapped = raw.map(mapYijiOrder).sort(byNewest);
+    return {
+      externalCustomerId,
+      lifetimeValue: mapped.reduce((sum, o) => sum + (o.total || 0), 0),
+      orderCount: mapped.length,
+      lastOrderAt: mapped[0]?.placedAt,
+      recent: mapped.slice(0, 3),
+    };
+  }
+
+  async getCustomer(_vendorId: string, externalCustomerId: string): Promise<YijiCustomer | null> {
+    const raw = await this.fetch<RawYijiOrder[]>(
+      `/api/Order/GetOrderByUser/${encodeURIComponent(externalCustomerId)}`,
+    );
+    const first = Array.isArray(raw)
+      ? raw.find((o) => o.customerPhoneNumber || o.customerName || o.customerEmail)
+      : null;
+    if (!first) return null;
+    return {
+      externalCustomerId,
+      name: first.customerName ?? undefined,
+      phone: first.customerPhoneNumber ?? undefined,
+      email: first.customerEmail ?? undefined,
+    };
   }
 }
 

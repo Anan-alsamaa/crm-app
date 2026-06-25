@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { createYijiClient, HttpYijiClient, MockYijiClient, type YijiOrder } from '../src/index.js';
+import { createYijiClient, HttpYijiClient, MockYijiClient } from '../src/index.js';
 
 describe('createYijiClient factory', () => {
   it('returns MockYijiClient when no apiUrl is set', () => {
@@ -78,15 +78,19 @@ describe('HttpYijiClient', () => {
     global.fetch = fetchOriginal;
   });
 
-  it('calls the expected URL for getCustomer', async () => {
+  it('getCustomer derives the customer from the Yiji user order list', async () => {
     fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ externalCustomerId: 'c1', name: 'Test' }), { status: 200 }),
+      new Response(
+        JSON.stringify([{ id: 1, customerName: 'Test', customerPhoneNumber: '+966500000000' }]),
+        { status: 200 },
+      ),
     );
     const client = new HttpYijiClient({ baseUrl: 'https://api.example.com' });
     const c = await client.getCustomer('v1', 'c1');
     expect(c?.name).toBe('Test');
+    expect(c?.phone).toBe('+966500000000');
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.example.com/v1/vendors/v1/customers/c1',
+      'https://api.example.com/api/Order/GetOrderByUser/c1',
       expect.objectContaining({ headers: expect.objectContaining({ accept: 'application/json' }) }),
     );
   });
@@ -126,12 +130,22 @@ describe('HttpYijiClient', () => {
     expect(result).toEqual([]);
   });
 
-  it('forwards limit as a query string', async () => {
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+  it('applies the limit client-side (GetOrderByUser, no query string)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          { id: 3, creationTime: '2026-03-01T00:00:00Z' },
+          { id: 2, creationTime: '2026-02-01T00:00:00Z' },
+          { id: 1, creationTime: '2026-01-01T00:00:00Z' },
+        ]),
+        { status: 200 },
+      ),
+    );
     const client = new HttpYijiClient({ baseUrl: 'https://api.example.com' });
-    await client.getOrders('v1', 'c1', { limit: 5 });
+    const result = await client.getOrders('v1', 'c1', { limit: 2 });
+    expect(result).toHaveLength(2);
     const url = fetchMock.mock.calls[0]?.[0] as string;
-    expect(url).toContain('?limit=5');
+    expect(url).toBe('https://api.example.com/api/Order/GetOrderByUser/c1');
   });
 
   it('aborts after configured timeout', async () => {
@@ -147,21 +161,27 @@ describe('HttpYijiClient', () => {
     expect(result).toBeNull();
   });
 
-  it('returns array shape for orders directly', async () => {
-    const fakeOrders: YijiOrder[] = [
-      {
-        orderId: 'O1',
-        status: 'placed',
-        total: 10,
-        currency: 'USD',
-        placedAt: '2026-01-01T00:00:00Z',
-        items: [],
-      },
-    ];
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(fakeOrders), { status: 200 }));
+  it('maps the raw Yiji order array (id, status code, items)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: 1,
+            orderStatus: 10,
+            total: 10,
+            creationTime: '2026-01-01T00:00:00Z',
+            orderItems: [{ idChooseableItem: 9, itemName: 'Pasta', quantity: 1, itemPrice: 10 }],
+          },
+        ]),
+        { status: 200 },
+      ),
+    );
     const client = new HttpYijiClient({ baseUrl: 'https://api.example.com' });
     const result = await client.getOrders('v1', 'c1');
     expect(result).toHaveLength(1);
-    expect(result[0]?.orderId).toBe('O1');
+    expect(result[0]?.orderId).toBe('1');
+    expect(result[0]?.status).toBe('delivered');
+    expect(result[0]?.currency).toBe('SAR');
+    expect(result[0]?.items[0]?.name).toBe('Pasta');
   });
 });

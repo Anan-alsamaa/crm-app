@@ -27,6 +27,11 @@ export interface YijiOrder {
   currency: string;
   placedAt: string; // ISO 8601
   items: YijiOrderItem[];
+  // Optional enrichment populated by the live Yiji API (absent in mock fixtures).
+  restaurantName?: string;
+  deliveryAddress?: string;
+  paymentStatus?: string;
+  customerPhone?: string;
 }
 
 export interface YijiPaymentStatus {
