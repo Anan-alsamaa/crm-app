@@ -378,7 +378,10 @@ export function Inbox() {
                     const active = selected === c.id;
                     const unread = c.unread_count_agent > 0;
                     const displayName =
-                      c.contact?.name || c.contact?.email || t('inbox.unknownContact');
+                      c.contact?.name ||
+                      c.contact?.phone ||
+                      c.contact?.email ||
+                      t('inbox.unknownContact');
                     return (
                       <li
                         key={c.id}
@@ -402,7 +405,12 @@ export function Inbox() {
                           onClick={() => setSelected(c.id)}
                           className="flex flex-1 items-start gap-3 px-3 py-2.5 text-start"
                         >
-                          <Avatar name={c.contact?.name} email={c.contact?.email} size="sm" />
+                          <Avatar
+                            name={c.contact?.name}
+                            email={c.contact?.email}
+                            phone={c.contact?.phone}
+                            size="sm"
+                          />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-baseline justify-between gap-2">
                               <span
@@ -541,7 +549,10 @@ export function Inbox() {
                         <ul className="space-y-1">
                           {recent.map((c) => {
                             const name =
-                              c.contact?.name || c.contact?.email || t('inbox.unknownContact');
+                              c.contact?.name ||
+                              c.contact?.phone ||
+                              c.contact?.email ||
+                              t('inbox.unknownContact');
                             return (
                               <li key={c.id}>
                                 <button
@@ -552,6 +563,7 @@ export function Inbox() {
                                   <Avatar
                                     name={c.contact?.name}
                                     email={c.contact?.email}
+                                    phone={c.contact?.phone}
                                     size="sm"
                                   />
                                   <span className="flex-1 truncate text-sm font-medium text-foreground">

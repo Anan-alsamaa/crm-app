@@ -70,8 +70,8 @@ export function ConversationToolbar({
       contact?.name ??
       t('conversation.newCustomer', { defaultValue: 'New customer' }))
     : (contact?.name ??
-      contact?.email ??
       contact?.phone ??
+      contact?.email ??
       t('inbox.unknownContact', { defaultValue: 'Customer' }));
   const statusLine = isNew ? (
     <span className="inline-flex items-center gap-1 font-medium text-primary">
@@ -129,7 +129,12 @@ export function ConversationToolbar({
           priority live in the controls on the right, so no duplicate pills. */}
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <span className="relative shrink-0">
-          <Avatar name={conversation.contact?.name} email={conversation.contact?.email} size="md" />
+          <Avatar
+            name={conversation.contact?.name}
+            email={conversation.contact?.email}
+            phone={conversation.contact?.phone}
+            size="md"
+          />
           <span
             className={cn(
               'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-card',

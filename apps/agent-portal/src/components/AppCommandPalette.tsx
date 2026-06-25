@@ -84,9 +84,17 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
         heading: t('cmd.conversations', { defaultValue: 'Conversations' }),
         items: (conversations.data ?? []).slice(0, 8).map((c) => ({
           id: `conv-${c.id}`,
-          label: c.contact?.name || c.contact?.email || t('inbox.unknownContact'),
+          label:
+            c.contact?.name || c.contact?.phone || c.contact?.email || t('inbox.unknownContact'),
           meta: c.contact?.email || c.contact?.phone || undefined,
-          icon: <Avatar name={c.contact?.name} email={c.contact?.email} size="xs" />,
+          icon: (
+            <Avatar
+              name={c.contact?.name}
+              email={c.contact?.email}
+              phone={c.contact?.phone}
+              size="xs"
+            />
+          ),
           keywords: [c.contact?.email ?? '', c.contact?.phone ?? '', c.status, c.priority].filter(
             Boolean,
           ) as string[],
@@ -102,7 +110,7 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
         items: (tickets.data ?? []).slice(0, 8).map((tk) => ({
           id: `ticket-${tk.id}`,
           label: tk.subject,
-          meta: tk.contact?.name || tk.contact?.email || undefined,
+          meta: tk.contact?.name || tk.contact?.phone || tk.contact?.email || undefined,
           icon: <TicketIcon size={14} />,
           keywords: [tk.status, tk.priority, tk.contact?.email ?? ''].filter(Boolean) as string[],
           onSelect: () => navigate(`/tickets?id=${tk.id}`),

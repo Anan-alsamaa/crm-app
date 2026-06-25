@@ -38,12 +38,15 @@ interface CustomerIdentity {
   name?: string;
 }
 
+// Phone is the ONLY mandatory identifier (the gateway enforces this). By default
+// the demo is a phone-ONLY customer — no name, no email — so the agent inbox shows
+// the phone number as the contact's display name until an agent saves a real name.
+// Name and email are optional: pass them via URL params to test the "present" case,
+// e.g. ?name=Ahmed&email=ahmed@example.com (they're then forwarded to the CRM).
 const DEFAULT_IDENTITY: CustomerIdentity = {
   vendor_id: 'demo-vendor',
-  customer_id: 'demo-customer-1',
-  phone: '+966500000001',
-  email: 'demo.customer@example.com',
-  name: 'Demo Customer',
+  customer_id: 'demo-customer-phone',
+  phone: '+966555123456',
 };
 
 function resolveIdentity(): CustomerIdentity {

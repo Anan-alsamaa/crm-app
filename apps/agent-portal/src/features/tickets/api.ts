@@ -18,7 +18,7 @@ export interface TicketRow {
   assigned_agent: string | null;
   assigned_team: string | null;
   conversation: string | null;
-  contact: { id: string; name: string | null; email: string | null } | null;
+  contact: { id: string; name: string | null; email: string | null; phone: string | null } | null;
   first_response_due_at: string | null;
   resolution_due_at: string | null;
   first_responded_at: string | null;
@@ -54,7 +54,7 @@ export function useTickets() {
             'resolution_due_at',
             'first_responded_at',
             'date_created',
-            { contact: ['id', 'name', 'email'] },
+            { contact: ['id', 'name', 'email', 'phone'] },
           ],
           sort: ['-date_created'],
         }),
@@ -83,7 +83,7 @@ export function useTicket(id: string | null) {
             'resolution_due_at',
             'first_responded_at',
             'date_created',
-            { contact: ['id', 'name', 'email'] },
+            { contact: ['id', 'name', 'email', 'phone'] },
             {
               attachments: ['id', { directus_files_id: ['id', 'filename_download', 'type'] }],
             },

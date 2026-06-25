@@ -114,7 +114,8 @@ export function ConversationSidebar({
     );
   if (!convo.data) return null;
   const c = convo.data;
-  const contactName = c.contact?.name ?? t('inbox.unknownContact');
+  const contactName =
+    c.contact?.name ?? c.contact?.phone ?? c.contact?.email ?? t('inbox.unknownContact');
 
   const startEdit = () => {
     setDraft({
@@ -160,7 +161,12 @@ export function ConversationSidebar({
           }}
         />
         <div className="relative flex flex-col items-center gap-3 text-center">
-          <Avatar name={c.contact?.name} email={c.contact?.email} size="lg" />
+          <Avatar
+            name={c.contact?.name}
+            email={c.contact?.email}
+            phone={c.contact?.phone}
+            size="lg"
+          />
           <div className="space-y-1.5">
             <h3 className="text-lg font-bold tracking-tight text-foreground">{contactName}</h3>
             <Pill tone="pink" size="sm">

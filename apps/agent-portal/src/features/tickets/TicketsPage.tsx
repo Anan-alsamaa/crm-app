@@ -218,7 +218,12 @@ export function TicketsPage() {
                               : 'bg-card/40 ring-1 ring-foreground/[0.03] hover:bg-card hover:shadow-sm hover:shadow-foreground/[0.06] hover:-translate-y-px',
                           )}
                         >
-                          <Avatar name={tk.contact?.name} email={tk.contact?.email} size="sm" />
+                          <Avatar
+                            name={tk.contact?.name}
+                            email={tk.contact?.email}
+                            phone={tk.contact?.phone}
+                            size="sm"
+                          />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-baseline justify-between gap-2">
                               <span className="truncate text-sm font-medium text-foreground">
@@ -387,7 +392,12 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
       {/* Identity card — avatar + subject + contact + status pills */}
       <header className="space-y-4">
         <div className="flex items-start gap-4">
-          <Avatar name={tk.contact?.name} email={tk.contact?.email} size="lg" />
+          <Avatar
+            name={tk.contact?.name}
+            email={tk.contact?.email}
+            phone={tk.contact?.phone}
+            size="lg"
+          />
           <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <Pill tone={statusTone[tk.status]} dot>
@@ -403,7 +413,10 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
               {tk.subject}
             </h2>
             <div className="text-xs text-muted-foreground">
-              {tk.contact?.name ?? tk.contact?.email ?? t('inbox.unknownContact')}
+              {tk.contact?.name ??
+                tk.contact?.phone ??
+                tk.contact?.email ??
+                t('inbox.unknownContact')}
               {tk.date_created && (
                 <>
                   {' '}
