@@ -54,10 +54,16 @@ function widgetHostPage(secret: string, gatewayUrl: string): Plugin {
         };
         function identity() {
           var q = new URL(location.href).searchParams;
+          var phone = q.get('phone') || DEFAULTS.phone;
+          // customer_id is REQUIRED by the gateway. The Yiji app should pass the
+          // real customer id (?customer_id=...); when only a phone is supplied,
+          // derive a stable per-phone id so each customer is distinct (and so a
+          // customer_id is always present for order lookups).
+          var customerId = q.get('customer_id') || (phone ? 'cust-' + phone.replace(/\\D/g, '') : DEFAULTS.customer_id);
           return {
             vendor_id: q.get('vendor_id') || DEFAULTS.vendor_id,
-            customer_id: q.get('customer_id') || DEFAULTS.customer_id,
-            phone: q.get('phone') || DEFAULTS.phone,
+            customer_id: customerId,
+            phone: phone,
             email: q.get('email') || DEFAULTS.email,
             name: q.get('name') || DEFAULTS.name,
           };

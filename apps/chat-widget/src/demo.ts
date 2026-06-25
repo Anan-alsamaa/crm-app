@@ -53,10 +53,17 @@ function resolveIdentity(): CustomerIdentity {
   const url = new URL(window.location.href);
   const q = url.searchParams;
   const get = (k: string): string | undefined => q.get(k) ?? undefined;
+  const phone = get('phone') ?? DEFAULT_IDENTITY.phone;
+  // customer_id is REQUIRED by the gateway. Prefer the host-supplied id; when
+  // only a phone is given, derive a stable per-phone id so each customer is
+  // distinct and a customer_id is always present (used for order lookups).
+  const customer_id =
+    get('customer_id') ??
+    (phone ? `cust-${phone.replace(/\D/g, '')}` : DEFAULT_IDENTITY.customer_id);
   return {
     vendor_id: get('vendor_id') ?? DEFAULT_IDENTITY.vendor_id,
-    customer_id: get('customer_id') ?? DEFAULT_IDENTITY.customer_id,
-    phone: get('phone') ?? DEFAULT_IDENTITY.phone,
+    customer_id,
+    phone,
     email: get('email') ?? DEFAULT_IDENTITY.email,
     name: get('name') ?? DEFAULT_IDENTITY.name,
   };
