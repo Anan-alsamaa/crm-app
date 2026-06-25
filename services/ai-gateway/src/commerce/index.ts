@@ -61,6 +61,15 @@ export async function registerCommerceRoutes(
     return reply.send({ data: await deps.yiji.getOrders(vendorId, customerId, { limit }) });
   });
 
+  app.get('/commerce/order', async (req, reply) => {
+    if (!(await requireAgent(req, reply))) return;
+    const q = req.query as Record<string, string | undefined>;
+    const vendorId = str(q.vendorId);
+    const orderId = str(q.orderId);
+    if (!vendorId || !orderId) return reply.code(400).send({ error: 'missing_params' });
+    return reply.send({ data: await deps.yiji.getOrder(vendorId, orderId) });
+  });
+
   app.get('/commerce/payment', async (req, reply) => {
     if (!(await requireAgent(req, reply))) return;
     const q = req.query as Record<string, string | undefined>;

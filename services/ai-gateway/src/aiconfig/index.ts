@@ -41,4 +41,5 @@ export const FEATURE_BY_ENDPOINT: Record<string, keyof typeof AiFeatureConfig._t
   '/extract-entities': 'extractEntities',
   '/semantic-search': 'semanticSearch',
   '/score-lead': 'scoreLead',
+  '/order-assist': 'orderAssist',
 };

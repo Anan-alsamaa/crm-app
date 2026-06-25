@@ -141,6 +141,11 @@ async function main(): Promise<void> {
     return metrics.render();
   });
 
+  // Commerce client (Yiji order/payment/shipment lookups) — server-side so the
+  // Yiji API key never reaches the browser. Empty YIJI_API_URL => mock client.
+  // Shared by the commerce proxy AND the /order-assist AI endpoint.
+  const yiji = createYijiClient({ apiUrl: config.YIJI_API_URL, token: config.YIJI_API_KEY });
+
   await registerAiRoutes(app, {
     provider,
     directus,
@@ -150,11 +155,9 @@ async function main(): Promise<void> {
     perIpLimiter,
     globalLimiter,
     monthlyCap,
+    yiji,
   });
 
-  // Commerce proxy (Yiji order/payment/shipment lookups) — server-side so the
-  // Yiji API key never reaches the browser. Empty YIJI_API_URL => mock client.
-  const yiji = createYijiClient({ apiUrl: config.YIJI_API_URL, token: config.YIJI_API_KEY });
   await registerCommerceRoutes(app, { directus, yiji });
 
   await app.listen({ port: config.PORT, host: '0.0.0.0' });

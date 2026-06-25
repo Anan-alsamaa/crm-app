@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import RedisMock from 'ioredis-mock';
 import type { Redis } from 'ioredis';
-import { AI_ENDPOINTS } from '@yiji/shared-types';
+import { AI_ENDPOINTS, type YijiClient, type YijiOrder } from '@yiji/shared-types';
 import { registerAiRoutes } from '../src/routes.js';
 import { AiConfigStore } from '../src/aiconfig/index.js';
 import { SlidingWindowLimiter, MonthlyCap } from '../src/ratelimit/index.js';
@@ -66,10 +66,40 @@ const FAKE_CONV: ConversationContext = {
   ],
 };
 
+const FAKE_ORDER: YijiOrder = {
+  orderId: 'O-1',
+  status: 'shipped',
+  total: 348.5,
+  currency: 'SAR',
+  placedAt: '2026-05-30T11:42:00Z',
+  items: [{ sku: 'BG-001', name: 'Linen tote', qty: 1, price: 199 }],
+};
+const STUB_YIJI: YijiClient = {
+  async getCustomer() {
+    return null;
+  },
+  async getOrders() {
+    return [FAKE_ORDER];
+  },
+  async getOrder(_v: string, orderId: string) {
+    return orderId === 'O-1' ? FAKE_ORDER : null;
+  },
+  async getPaymentStatus() {
+    return { orderId: 'O-1', status: 'captured' };
+  },
+  async getShipmentTracking() {
+    return { orderId: 'O-1', status: 'in_transit', events: [] };
+  },
+  async getPurchaseActivity() {
+    return null;
+  },
+};
+
 async function buildApp(
   opts: {
     provider?: AIProvider;
     ctx?: ConversationContext | null;
+    yiji?: YijiClient;
   } = {},
 ): Promise<{ app: FastifyInstance; provider: StubProvider; redis: Redis }> {
   const provider = (opts.provider as StubProvider) ?? new StubProvider();
@@ -85,6 +115,7 @@ async function buildApp(
     perUserLimiter: new SlidingWindowLimiter(redis, 60_000, 100, 'rl:user'),
     globalLimiter: new SlidingWindowLimiter(redis, 60_000, 1000, 'rl:global'),
     monthlyCap: new MonthlyCap(redis),
+    yiji: opts.yiji ?? STUB_YIJI,
   });
   return { app, provider, redis };
 }
@@ -246,6 +277,55 @@ describe('AI endpoints', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().results).toHaveLength(1);
+  });
+
+  it('order-assist: fetches a specific order and answers grounded in it', async () => {
+    provider.reply = 'Order O-1 (Linen tote, SAR 348.50) shipped on May 30 and is in transit.';
+    const res = await app.inject({
+      method: 'POST',
+      url: AI_ENDPOINTS.orderAssist,
+      headers: auth,
+      payload: { vendorId: 'demo-vendor', orderId: 'O-1', question: 'Where is my order?' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().answer).toMatch(/O-1/);
+    expect(res.json().order.orderId).toBe('O-1');
+    // the live order data was grounded into the (redacted) prompt
+    expect(provider.calls[0]!.user).toContain('O-1');
+  });
+
+  it('order-assist: returns the latest orders by customerId', async () => {
+    provider.reply = 'The customer has 1 recent order: O-1 (shipped).';
+    const res = await app.inject({
+      method: 'POST',
+      url: AI_ENDPOINTS.orderAssist,
+      headers: auth,
+      payload: { vendorId: 'demo-vendor', customerId: 'demo-customer-1', limit: 4 },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().orders).toHaveLength(1);
+  });
+
+  it('order-assist: 404 when the order does not exist (provider not called)', async () => {
+    provider.reply = 'never';
+    const res = await app.inject({
+      method: 'POST',
+      url: AI_ENDPOINTS.orderAssist,
+      headers: auth,
+      payload: { vendorId: 'demo-vendor', orderId: 'NOPE' },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it('order-assist: 400 when neither orderId nor customerId is supplied', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: AI_ENDPOINTS.orderAssist,
+      headers: auth,
+      payload: { vendorId: 'demo-vendor' },
+    });
+    expect(res.statusCode).toBe(400);
   });
 
   it('404 when conversation does not exist', async () => {

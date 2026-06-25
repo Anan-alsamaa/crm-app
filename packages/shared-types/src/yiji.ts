@@ -65,6 +65,8 @@ export interface YijiClient {
     externalCustomerId: string,
     opts?: { limit?: number },
   ): Promise<YijiOrder[]>;
+  /** Fetch a single order's full data by id. Returns null if not found. */
+  getOrder(yijiVendorId: string, orderId: string): Promise<YijiOrder | null>;
   getPaymentStatus(yijiVendorId: string, orderId: string): Promise<YijiPaymentStatus | null>;
   getShipmentTracking(yijiVendorId: string, orderId: string): Promise<YijiShipmentTracking | null>;
   getPurchaseActivity(

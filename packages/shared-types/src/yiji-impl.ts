@@ -168,6 +168,16 @@ export class MockYijiClient implements YijiClient {
     return opts.limit ? all.slice(0, opts.limit) : all;
   }
 
+  async getOrder(vendorId: string, orderId: string): Promise<YijiOrder | null> {
+    const prefix = `${vendorId}::`;
+    for (const [k, orders] of this.fixtures.ordersByCustomer) {
+      if (!k.startsWith(prefix)) continue;
+      const found = orders.find((o) => o.orderId === orderId);
+      if (found) return found;
+    }
+    return null;
+  }
+
   async getPaymentStatus(vendorId: string, orderId: string): Promise<YijiPaymentStatus | null> {
     return this.fixtures.paymentsByOrder.get(key(vendorId, orderId)) ?? null;
   }
@@ -247,6 +257,12 @@ export class HttpYijiClient implements YijiClient {
       (await this.fetch<YijiOrder[]>(
         `/v1/vendors/${encodeURIComponent(vendorId)}/customers/${encodeURIComponent(externalCustomerId)}/orders${q}`,
       )) ?? []
+    );
+  }
+
+  getOrder(vendorId: string, orderId: string): Promise<YijiOrder | null> {
+    return this.fetch<YijiOrder>(
+      `/v1/vendors/${encodeURIComponent(vendorId)}/orders/${encodeURIComponent(orderId)}`,
     );
   }
 

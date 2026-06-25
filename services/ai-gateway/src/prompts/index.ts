@@ -102,4 +102,23 @@ export const prompts = {
       user: thread(ctx),
     };
   },
+
+  orderAssist(
+    orderData: unknown,
+    question: string | undefined,
+    locale: string | undefined,
+  ): { system: string; user: string } {
+    return {
+      system:
+        'You answer questions about a customer order using the order data provided. ' +
+        'Use ONLY the JSON data below — never invent or guess order ids, statuses, dates, ' +
+        'amounts, items, or tracking. If the data does not contain the answer, say you ' +
+        'could not find that information. Be concise and factual; include the order id and ' +
+        'show money with its currency. Plain text, no markdown. ' +
+        `${locale ? `Answer in: ${locale}.` : "Match the customer's language."}`,
+      user:
+        `Order data (JSON):\n${JSON.stringify(orderData)}\n\n` +
+        `${question ? `Question: ${question}` : 'Give a short, friendly status overview of the order(s).'}`,
+    };
+  },
 };

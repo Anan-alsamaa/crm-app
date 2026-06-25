@@ -19,6 +19,17 @@ const yiji: any = {
   getPurchaseActivity: async () => ({ lifetimeValue: 100, orderCount: 2, lastOrderAt: null }),
   getOrders: async (_v: string, _c: string, opts: { limit?: number }) =>
     Array.from({ length: opts.limit ?? 6 }, (_, i) => ({ orderId: `O-${i}` })),
+  getOrder: async (_v: string, orderId: string) =>
+    orderId === 'O-1'
+      ? {
+          orderId: 'O-1',
+          status: 'shipped',
+          total: 50,
+          currency: 'SAR',
+          placedAt: '2026-01-01T00:00:00Z',
+          items: [],
+        }
+      : null,
   getPaymentStatus: async () => ({ status: 'captured' }),
   getShipmentTracking: async () => null,
 };
@@ -79,5 +90,22 @@ describe('commerce proxy', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().data).toHaveLength(50);
+  });
+
+  it('GET /commerce/order returns a single order by id (400 without orderId)', async () => {
+    const ok = await app.inject({
+      method: 'GET',
+      url: '/commerce/order?vendorId=v1&orderId=O-1',
+      headers: auth,
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().data.orderId).toBe('O-1');
+
+    const missing = await app.inject({
+      method: 'GET',
+      url: '/commerce/order?vendorId=v1',
+      headers: auth,
+    });
+    expect(missing.statusCode).toBe(400);
   });
 });

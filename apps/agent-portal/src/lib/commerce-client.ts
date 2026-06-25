@@ -37,6 +37,8 @@ export const commerce = {
       customerId,
       ...(opts.limit ? { limit: String(opts.limit) } : {}),
     }),
+  getOrder: (vendorId: string, orderId: string) =>
+    get<YijiOrder | null>('/commerce/order', { vendorId, orderId }),
   getPaymentStatus: (vendorId: string, orderId: string) =>
     get<YijiPaymentStatus | null>('/commerce/payment', { vendorId, orderId }),
   getShipmentTracking: (vendorId: string, orderId: string) =>
