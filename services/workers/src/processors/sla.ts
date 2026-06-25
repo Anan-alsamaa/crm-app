@@ -34,7 +34,9 @@ function isDone(t: TicketRow): boolean {
 }
 
 function jobId(ticketId: string, deadline: Deadline, kind: 'warning' | 'breach'): string {
-  return `${ticketId}:${deadline}:${kind}`;
+  // BullMQ (v5.50+) rejects custom job ids containing ':' (its redis key
+  // delimiter), so use '-' separators.
+  return `${ticketId}-${deadline}-${kind}`;
 }
 
 /** Schedule (or update) warning + breach delayed jobs for one deadline. */
@@ -185,7 +187,7 @@ export async function processSlaJob(
 export async function scheduleReconcile(slaQueue: Queue, everyMs: number): Promise<void> {
   await slaQueue.add('reconcile', { ticketId: '', kind: 'reconcile' } as SlaJob, {
     repeat: { every: everyMs },
-    jobId: 'sla:reconcile',
+    jobId: 'sla-reconcile',
   });
 }
 

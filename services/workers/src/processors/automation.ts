@@ -298,7 +298,9 @@ export async function runInactivitySweep(deps: InactivitySweepDeps): Promise<voi
       _depth: 0,
     };
     await deps.automationQueue.add('inactivity', job, {
-      jobId: `inact:${c.id}:${c.last_message_at}`,
+      // BullMQ rejects ':' in custom job ids; last_message_at is an ISO
+      // timestamp (contains ':'), so strip all colons from the composed id.
+      jobId: `inact-${c.id}-${c.last_message_at}`.replace(/:/g, '-'),
       removeOnComplete: false,
       removeOnFail: false,
     });
@@ -323,7 +325,7 @@ export async function scheduleInactivitySweep(
     } as AutomationJob,
     {
       repeat: { every: everyMs },
-      jobId: 'automation:inactivity-sweep',
+      jobId: 'automation-inactivity-sweep',
       removeOnComplete: true,
       removeOnFail: true,
     },

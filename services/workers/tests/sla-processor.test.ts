@@ -96,10 +96,10 @@ describe('runReconcile (T067)', () => {
     expect(q.slaQueue.add).toHaveBeenCalledTimes(4);
     const ids = q.sla.map((j) => (j.opts as { jobId: string }).jobId).sort();
     expect(ids).toEqual([
-      't1:first_response:breach',
-      't1:first_response:warning',
-      't1:resolution:breach',
-      't1:resolution:warning',
+      't1-first_response-breach',
+      't1-first_response-warning',
+      't1-resolution-breach',
+      't1-resolution-warning',
     ]);
   });
 
@@ -115,7 +115,7 @@ describe('runReconcile (T067)', () => {
     };
     await runReconcile(deps);
     const ids = q.sla.map((j) => (j.opts as { jobId: string }).jobId).sort();
-    expect(ids).toEqual(['t1:resolution:breach', 't1:resolution:warning']);
+    expect(ids).toEqual(['t1-resolution-breach', 't1-resolution-warning']);
   });
 
   it('skips resolved or closed tickets entirely', async () => {
