@@ -217,31 +217,30 @@ export interface HttpYijiClientOptions {
  * widget passes). `vendorId` is unused by this API (kept for interface parity).
  */
 
-/** Numeric status codes → readable labels. Best-effort — confirm with Yiji. */
+/** Yiji OrderStatus enum (provided by Yiji — exact values). */
 const YIJI_ORDER_STATUS: Record<number, string> = {
-  0: 'created',
-  1: 'confirmed',
-  2: 'preparing',
-  3: 'ready',
-  4: 'dispatched',
-  5: 'on_the_way',
-  6: 'delivered',
-  10: 'delivered',
-  11: 'cancelled',
-  12: 'refunded',
+  0: 'initial',
+  1: 'pending_payment',
+  2: 'received',
+  3: 'finding_driver',
+  4: 'driver_accepted',
+  5: 'in_kitchen',
+  6: 'manual',
+  7: 'ready_to_pickup',
+  8: 'in_delivery',
+  9: 'delivered',
+  10: 'closed',
+  11: 'canceled',
+  12: 'force_cancel',
+  13: 'force_closed',
+  14: 'not_valid',
+  15: 'paid',
+  16: 'pos_accepted',
+  17: 'pending_pos_accepted',
+  65: 'arrived',
 };
-const YIJI_PAYMENT_STATUS: Record<number, string> = {
-  0: 'pending',
-  1: 'paid',
-  2: 'failed',
-  3: 'refunded',
-};
-const YIJI_PAYMENT_MODE: Record<number, string> = {
-  1: 'cash',
-  2: 'card',
-  3: 'apple_pay',
-  4: 'wallet',
-};
+// NOTE: the paymentStatus / paymentMode enums are NOT yet provided by Yiji, so
+// their raw numeric codes are passed through UNMAPPED (no guessed labels).
 
 interface RawYijiOrder {
   id: number;
@@ -284,10 +283,8 @@ function mapYijiOrder(raw: RawYijiOrder): YijiOrder {
     })),
     restaurantName: raw.restaurantName ?? raw.brandName ?? undefined,
     deliveryAddress: raw.deliveryAddress?.fullAddress ?? undefined,
-    paymentStatus:
-      raw.paymentStatus != null
-        ? (YIJI_PAYMENT_STATUS[raw.paymentStatus] ?? `payment_${raw.paymentStatus}`)
-        : undefined,
+    // Raw paymentStatus code (enum not yet provided) — labelled once Yiji shares it.
+    paymentStatus: raw.paymentStatus != null ? String(raw.paymentStatus) : undefined,
     customerPhone: raw.customerPhoneNumber ?? undefined,
   };
 }
@@ -356,16 +353,11 @@ export class HttpYijiClient implements YijiClient {
       `/api/Order/GetOrderAsync/${encodeURIComponent(orderId)}`,
     );
     if (!raw || raw.id == null) return null;
+    // Raw codes (paymentStatus/paymentMode enums not yet provided by Yiji).
     return {
       orderId: String(raw.id),
-      status:
-        raw.paymentStatus != null
-          ? (YIJI_PAYMENT_STATUS[raw.paymentStatus] ?? `payment_${raw.paymentStatus}`)
-          : 'unknown',
-      method:
-        raw.paymentMode != null
-          ? (YIJI_PAYMENT_MODE[raw.paymentMode] ?? `mode_${raw.paymentMode}`)
-          : undefined,
+      status: raw.paymentStatus != null ? String(raw.paymentStatus) : 'unknown',
+      method: raw.paymentMode != null ? String(raw.paymentMode) : undefined,
     };
   }
 

@@ -167,7 +167,7 @@ describe('HttpYijiClient', () => {
         JSON.stringify([
           {
             id: 1,
-            orderStatus: 10,
+            orderStatus: 9,
             total: 10,
             creationTime: '2026-01-01T00:00:00Z',
             orderItems: [{ idChooseableItem: 9, itemName: 'Pasta', quantity: 1, itemPrice: 10 }],
