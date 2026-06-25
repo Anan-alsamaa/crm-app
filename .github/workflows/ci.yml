@@ -9,10 +9,13 @@ on:
   pull_request:
   workflow_dispatch: # allows running the full-stack E2E job on demand
 
-# Newer pushes cancel in-flight runs for the same branch. Keying on head_ref
-# (set on PRs) collapses a branch's push+PR runs into one group.
+# Newer pushes cancel in-flight runs for the SAME trigger+branch. Including
+# github.event_name keeps push, pull_request and manual (workflow_dispatch)
+# runs in SEPARATE groups, so a manual E2E re-run no longer cancels the branch's
+# push run (which showed up as confusing "cancelled" CI). Rapid pushes to the
+# same branch still supersede each other (saves runner time).
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
