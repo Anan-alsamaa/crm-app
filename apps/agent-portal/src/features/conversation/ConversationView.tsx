@@ -521,7 +521,8 @@ export function ConversationView({
     );
 
   const c = conversation.data;
-  const contactName = c?.contact?.name ?? c?.contact?.email ?? t('inbox.unknownContact');
+  const contactName =
+    c?.contact?.name ?? c?.contact?.phone ?? c?.contact?.email ?? t('inbox.unknownContact');
 
   const dayLabel = (iso: string | null): string => {
     if (!iso) return '';
@@ -604,6 +605,7 @@ export function ConversationView({
                     <Avatar
                       name={isAgent ? 'You' : c?.contact?.name}
                       email={isAgent ? undefined : c?.contact?.email}
+                      phone={isAgent ? undefined : c?.contact?.phone}
                       size="sm"
                       className={cn(isAgent && isNote && 'ring-2 ring-warning/40 ring-offset-1')}
                     />
@@ -698,7 +700,12 @@ export function ConversationView({
 
             {customerTyping && (
               <div className="flex gap-2.5">
-                <Avatar name={c?.contact?.name} email={c?.contact?.email} size="sm" />
+                <Avatar
+                  name={c?.contact?.name}
+                  email={c?.contact?.email}
+                  phone={c?.contact?.phone}
+                  size="sm"
+                />
                 <div className="rounded-[18px] rounded-es-sm bg-secondary px-3.5 py-2.5">
                   <span className="flex items-center gap-1" aria-hidden>
                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse" />

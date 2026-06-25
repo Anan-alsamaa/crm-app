@@ -125,7 +125,12 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
           >
             {selectedContact ? (
               <div className="flex items-center gap-2.5 rounded-xl bg-secondary px-3 py-2 ring-1 ring-foreground/[0.05]">
-                <Avatar name={selectedContact.name} email={selectedContact.email} size="sm" />
+                <Avatar
+                  name={selectedContact.name}
+                  email={selectedContact.email}
+                  phone={selectedContact.phone}
+                  size="sm"
+                />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-foreground">
                     {selectedContact.name ??
@@ -190,7 +195,7 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
                                 !c.vendor && 'opacity-60',
                               )}
                             >
-                              <Avatar name={c.name} email={c.email} size="sm" />
+                              <Avatar name={c.name} email={c.email} phone={c.phone} size="sm" />
                               <div className="min-w-0 flex-1">
                                 <div className="truncate text-sm font-medium text-foreground">
                                   {c.name ?? c.phone ?? c.email ?? c.id}

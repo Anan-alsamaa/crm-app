@@ -131,6 +131,7 @@ export function ContactProfilePage() {
 
   const fullName =
     contact.data?.name ??
+    contact.data?.phone ??
     contact.data?.email ??
     t('contacts.unknown', { defaultValue: 'Unknown contact' });
 
@@ -201,7 +202,7 @@ export function ContactProfilePage() {
     return (
       <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] p-6">
         <div className="flex items-start gap-4">
-          <Avatar name={c.name} email={c.email} size="lg" />
+          <Avatar name={c.name} email={c.email} phone={c.phone} size="lg" />
           <div className="min-w-0 flex-1 space-y-1.5">
             {editing ? (
               <div className="space-y-3">
@@ -262,7 +263,7 @@ export function ContactProfilePage() {
               <>
                 <div className="flex items-baseline gap-2">
                   <h2 className="text-xl font-semibold tracking-tight text-foreground truncate">
-                    {c.name ?? c.email}
+                    {c.name ?? c.phone ?? c.email}
                   </h2>
                   {metaTier && <Pill tone="primary">{metaTier}</Pill>}
                 </div>

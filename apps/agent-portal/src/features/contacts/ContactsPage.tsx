@@ -191,7 +191,13 @@ export function ContactsPage() {
                       'focus-visible:outline-none focus-visible:bg-secondary/60',
                     )}
                   >
-                    <Avatar name={c.name} email={c.email} size="sm" className="shrink-0" />
+                    <Avatar
+                      name={c.name}
+                      email={c.email}
+                      phone={c.phone}
+                      size="sm"
+                      className="shrink-0"
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-foreground">{name}</div>
                       {c.email && (
