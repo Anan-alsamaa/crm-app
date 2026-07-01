@@ -296,6 +296,10 @@ export function LatestOrder({ vendorId, customerId }: { vendorId: string; custom
     staleTime: 60_000,
   });
 
+  // Not linked to a Yiji customer — render nothing rather than a misleading
+  // "no orders" (the query is disabled, so there is nothing to show).
+  if (!vendorId || !customerId) return null;
+
   const list = orders.data ?? [];
   const newest = list[0];
   const sameDay = newest
@@ -352,6 +356,8 @@ export function CustomerOrders({
     queryFn: () => commerce.getOrders(vendorId, customerId, { limit }),
     staleTime: 60_000,
   });
+
+  if (!vendorId || !customerId) return null;
 
   return (
     <div className="space-y-2">
