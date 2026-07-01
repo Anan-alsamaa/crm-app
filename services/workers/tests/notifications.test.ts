@@ -15,6 +15,11 @@ function makeRepo(prefs: Record<string, string>, email: string | null = 'user-1@
       created.push(input);
       return { id: `n-${created.length}` };
     },
+    markEmailDelivered: async (id) => {
+      // model the real repo: the row is stamped delivered only after a real send
+      const idx = Number(id.replace('n-', '')) - 1;
+      if (created[idx]) created[idx]!.channelEmailDeliveredAt = new Date().toISOString();
+    },
   };
   return { repo, created };
 }
@@ -89,6 +94,8 @@ describe('processNotificationJob (T068)', () => {
     await processNotificationJob(JOB, { notifications: repo, mail, logger });
     expect(created).toHaveLength(1);
     expect(created[0]!.channelInappDeliveredAt).toBeTruthy();
+    // BUG FIX: no address ⇒ NOT marked delivered (was stamped delivered at creation).
+    expect(created[0]!.channelEmailDeliveredAt).toBeUndefined();
     expect(sent).toHaveLength(0);
   });
 
@@ -118,5 +125,7 @@ describe('processNotificationJob (T068)', () => {
     await processNotificationJob(JOB, { notifications: repo, mail, logger });
     expect(created).toHaveLength(1);
     expect(created[0]!.channelInappDeliveredAt).toBeTruthy();
+    // BUG FIX: a failed send must NOT be marked delivered.
+    expect(created[0]!.channelEmailDeliveredAt).toBeUndefined();
   });
 });

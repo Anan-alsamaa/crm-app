@@ -71,4 +71,6 @@ export interface NotificationsRepo {
     channelInappDeliveredAt?: string;
     channelEmailDeliveredAt?: string;
   }): Promise<{ id: string }>;
+  /** Stamp channel_email_delivered_at AFTER a successful send (never at creation). */
+  markEmailDelivered(id: string): Promise<void>;
 }

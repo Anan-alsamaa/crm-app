@@ -48,7 +48,8 @@ export async function processNotificationJob(
     link,
     payload,
     channelInappDeliveredAt: inApp ? now : undefined,
-    channelEmailDeliveredAt: email ? now : undefined,
+    // Email delivery is stamped only AFTER a successful send (below), never at
+    // creation — a requested email with no address, or a failed send, is not delivered.
   });
   if (inApp) deps.onInAppCreated?.({ id: created.id, recipient: recipientId, type });
 
@@ -64,6 +65,7 @@ export async function processNotificationJob(
     } else {
       try {
         await deps.mail.send({ to, subject: title, text: body });
+        await deps.notifications.markEmailDelivered(created.id);
       } catch (err) {
         deps.logger.warn(
           { err: err instanceof Error ? err.message : String(err) },

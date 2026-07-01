@@ -127,5 +127,12 @@ export function createNotificationsRepo(client: YijiDirectusClient): Notificatio
       )) as { id: string };
       return { id: row.id };
     },
+    async markEmailDelivered(id) {
+      await client.request(
+        updateItem('notifications', id, {
+          channel_email_delivered_at: new Date().toISOString(),
+        } as never),
+      );
+    },
   };
 }
