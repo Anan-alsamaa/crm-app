@@ -39,6 +39,7 @@ describe('GeminiProvider', () => {
     expect(out).toEqual({ text: 'hello', model: 'gemini-1.5-pro' });
     expect(getGenerativeModel).toHaveBeenCalledWith(
       expect.objectContaining({ model: 'gemini-1.5-pro', systemInstruction: 'You are helpful' }),
+      expect.objectContaining({ timeout: expect.any(Number) }),
     );
   });
 

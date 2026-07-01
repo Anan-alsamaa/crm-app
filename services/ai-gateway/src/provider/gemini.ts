@@ -2,6 +2,12 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { AIProvider, AiRunInput, AiRunOutput } from './types.js';
 import { AiProviderError } from './types.js';
 
+// Bound a single Gemini call so a hung upstream can't block the (paid,
+// rate-limited) request path indefinitely. Directus calls already use a 5s
+// AbortSignal; generation legitimately takes longer, so allow 25s. A timeout is
+// not a 503/429, so the retry loop below will not re-issue it.
+const REQUEST_TIMEOUT_MS = 25_000;
+
 /**
  * Gemini provider — wraps @google/generative-ai. The `system` prompt becomes
  * a systemInstruction; the `user` prompt is the single content message.
@@ -23,14 +29,17 @@ export class GeminiProvider implements AIProvider {
   }
 
   async run(input: AiRunInput): Promise<AiRunOutput> {
-    const model = this.client.getGenerativeModel({
-      model: this.model,
-      systemInstruction: input.system,
-      generationConfig: {
-        temperature: input.temperature ?? 0.4,
-        maxOutputTokens: input.maxOutputTokens ?? 1024,
+    const model = this.client.getGenerativeModel(
+      {
+        model: this.model,
+        systemInstruction: input.system,
+        generationConfig: {
+          temperature: input.temperature ?? 0.4,
+          maxOutputTokens: input.maxOutputTokens ?? 1024,
+        },
       },
-    });
+      { timeout: REQUEST_TIMEOUT_MS },
+    );
     // Gemini's free/shared tiers return transient 503 "model overloaded"
     // spikes. Retry a couple of times with backoff before surfacing so a
     // single spike doesn't fail the agent's request.
