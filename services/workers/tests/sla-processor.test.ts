@@ -29,12 +29,12 @@ function makeRepo(tickets: TicketRow[], policies: SlaPolicyRow[]) {
 
 function makeQueues() {
   const sla: Array<{ name: string; data: unknown; opts: unknown }> = [];
-  const notifications: Array<{ name: string; data: unknown }> = [];
+  const notifications: Array<{ name: string; data: unknown; opts?: { jobId?: string } }> = [];
   const slaQueue = {
     add: vi.fn(async (name, data, opts) => sla.push({ name, data, opts })),
   } as unknown as Queue;
   const notificationsQueue = {
-    add: vi.fn(async (name, data) => notifications.push({ name, data })),
+    add: vi.fn(async (name, data, opts) => notifications.push({ name, data, opts })),
   } as unknown as Queue;
   return { slaQueue, notificationsQueue, sla, notifications };
 }
@@ -148,6 +148,8 @@ describe('runWarning + runBreach (T067)', () => {
     ]);
     expect(q.notifications).toHaveLength(1);
     expect((q.notifications[0]?.data as { type: string }).type).toBe('sla_warning');
+    // Deterministic jobId so a retry / stalled re-run doesn't double-notify.
+    expect(q.notifications[0]?.opts?.jobId).toBe('slanotif-sla_warning-t1-first_response');
   });
 
   it('writes sla_breached event + enqueues a sla_breach notification', async () => {
@@ -164,6 +166,7 @@ describe('runWarning + runBreach (T067)', () => {
       { ticket: 't1', type: 'sla_breached', payload: { deadline: 'resolution' } },
     ]);
     expect((q.notifications[0]?.data as { type: string }).type).toBe('sla_breach');
+    expect(q.notifications[0]?.opts?.jobId).toBe('slanotif-sla_breach-t1-resolution');
   });
 
   it('no-op when first-response warning fires after the agent has already responded', async () => {

@@ -55,12 +55,16 @@ async function main(): Promise<void> {
   //    side effect, so a thrown-error retry starts from a clean slate; its
   //    notification enqueues also carry deterministic jobIds so a stalled re-run
   //    can't duplicate them.
-  // reports / sla / ai stay at BullMQ's default attempts:1 pending their own review.
+  //  - sla: reconcile patches idempotent values + schedules warning/breach via
+  //    deterministic jobIds; a warning/breach re-run only re-creates a low-harm
+  //    audit event, and its notification enqueue now carries a deterministic jobId.
+  // reports / ai stay at BullMQ's default attempts:1 pending their own review.
   const RETRY = { attempts: 3, backoff: { type: 'exponential' as const, delay: 2000 } };
   const retryableQueues = new Set<string>([
     QUEUES.notifications,
     QUEUES.imports,
     QUEUES.automation,
+    QUEUES.sla,
   ]);
   const queues = Object.fromEntries(
     queueNames.map((name) => [

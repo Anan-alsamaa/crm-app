@@ -93,7 +93,11 @@ async function enqueueNotification(
     link: `/tickets/${ticket.id}`,
     payload: { ticketId: ticket.id, deadline },
   };
-  await deps.notificationsQueue.add(type, job);
+  // Deterministic id per (type, ticket, deadline) so a retry / stalled re-run of
+  // the warning/breach job does not enqueue a duplicate SLA notification.
+  await deps.notificationsQueue.add(type, job, {
+    jobId: `slanotif-${type}-${ticket.id}-${deadline}`,
+  });
 }
 
 // ---------------- reconcile ----------------
