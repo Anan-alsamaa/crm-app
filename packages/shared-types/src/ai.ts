@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { Locale } from './enums.js';
-import type { YijiOrder } from './yiji.js';
 
 /**
  * AI gateway request/response contracts (contracts/ai-gateway.openapi.yaml).
@@ -15,7 +14,6 @@ export const AI_ENDPOINTS = {
   extractEntities: '/extract-entities',
   semanticSearch: '/semantic-search',
   scoreLead: '/score-lead',
-  orderAssist: '/order-assist',
 } as const;
 export type AiEndpoint = (typeof AI_ENDPOINTS)[keyof typeof AI_ENDPOINTS];
 
@@ -64,35 +62,6 @@ export type SemanticSearchResponse = z.infer<typeof SemanticSearchResponse>;
 export const LeadScoreResponse = z.object({ score: z.number(), signals: z.array(z.string()) });
 export type LeadScoreResponse = z.infer<typeof LeadScoreResponse>;
 
-/**
- * In-chat order retrieval. Fetch a specific order (orderId) or the customer's
- * latest orders (customerId), then have the assistant answer grounded in that
- * live commerce data. At least one of orderId/customerId is required.
- */
-export const OrderAssistRequest = z
-  .object({
-    vendorId: z.string().min(1),
-    customerId: z.string().min(1).optional(),
-    orderId: z.string().min(1).optional(),
-    question: z.string().max(2000).optional(),
-    limit: z.number().int().min(1).max(10).optional(),
-    locale: Locale.optional(),
-  })
-  .refine((d) => Boolean(d.customerId) || Boolean(d.orderId), {
-    message: 'customerId or orderId is required',
-  });
-export type OrderAssistRequest = z.infer<typeof OrderAssistRequest>;
-
-export interface OrderAssistResponse {
-  /** Natural-language answer grounded in the order data below. */
-  answer: string;
-  /** Present when orderId was supplied — the resolved order. */
-  order?: YijiOrder;
-  /** Present when customerId was supplied — the latest N orders. */
-  orders?: YijiOrder[];
-  cached?: boolean;
-}
-
 /** Admin-configurable AI feature flags + monthly usage cap (read by gateway). */
 export const AiFeatureConfig = z.object({
   summarize: z.boolean().default(true),
@@ -102,7 +71,6 @@ export const AiFeatureConfig = z.object({
   extractEntities: z.boolean().default(true),
   semanticSearch: z.boolean().default(true),
   scoreLead: z.boolean().default(true),
-  orderAssist: z.boolean().default(true),
   monthlyCap: z.number().int().nonnegative().default(0), // 0 = unlimited
 });
 export type AiFeatureConfig = z.infer<typeof AiFeatureConfig>;

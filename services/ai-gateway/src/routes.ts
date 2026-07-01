@@ -4,7 +4,6 @@ import {
   ConversationRef,
   SuggestReplyRequest,
   SemanticSearchRequest,
-  OrderAssistRequest,
   type SummaryResponse,
   type SuggestReplyResponse,
   type SentimentResponse,
@@ -12,9 +11,6 @@ import {
   type EntitiesResponse,
   type SemanticSearchResponse,
   type LeadScoreResponse,
-  type OrderAssistResponse,
-  type YijiClient,
-  type YijiOrder,
 } from '@yiji/shared-types';
 import { z } from 'zod';
 import { verifyCaller, AuthError, type Caller } from './auth/index.js';
@@ -37,8 +33,6 @@ export interface RouteDeps {
   perIpLimiter?: SlidingWindowLimiter;
   globalLimiter: SlidingWindowLimiter;
   monthlyCap: MonthlyCap;
-  /** Commerce client for in-chat order retrieval (mock or real Yiji API). */
-  yiji: YijiClient;
 }
 
 type Json = Record<string, unknown>;
@@ -57,19 +51,6 @@ function parseJson<T>(text: string, schema: z.ZodType<T>): T {
       502,
     );
   }
-}
-
-/** Format an order's ISO placedAt to a human date for the model grounding so
- *  PII redaction doesn't mistake its digit run for a phone number. The API
- *  response still returns the raw ISO. */
-function groundOrder(o: YijiOrder): YijiOrder {
-  if (!o.placedAt) return o;
-  const d = new Date(o.placedAt);
-  if (Number.isNaN(d.getTime())) return o;
-  return {
-    ...o,
-    placedAt: d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
-  };
 }
 
 export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
@@ -421,77 +402,6 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
         (text) => parseJson(text, schema),
       );
       return reply.send(result);
-    } catch (err) {
-      handleProviderError(reply, err);
-    }
-  });
-
-  /* ── /order-assist ──────────────────────────────────────────────
-   * In-chat order retrieval: fetch live commerce data (a specific order by id,
-   * or the customer's latest orders by external customer id) and have the model
-   * answer the question grounded ONLY in that data. The Yiji key stays
-   * server-side; the agent never sees it. */
-  app.post(AI_ENDPOINTS.orderAssist, async (req, reply) => {
-    const caller = await authOrReply(req, reply);
-    if (!caller) return;
-    const body = OrderAssistRequest.safeParse(req.body);
-    if (!body.success)
-      return reply.code(400).send({ error: 'invalid_body', issues: body.error.format() });
-    const { vendorId, customerId, orderId, question, limit, locale } = body.data;
-
-    // Resolve the live order data first (before the model call).
-    let order: YijiOrder | null = null;
-    let orders: YijiOrder[] | undefined;
-    let grounding: unknown;
-    let sig: string;
-    if (orderId) {
-      order = await deps.yiji.getOrder(vendorId, orderId);
-      if (!order) return reply.code(404).send({ error: 'order_not_found' });
-      const [payment, shipment] = await Promise.all([
-        deps.yiji.getPaymentStatus(vendorId, orderId),
-        deps.yiji.getShipmentTracking(vendorId, orderId),
-      ]);
-      grounding = { order: groundOrder(order), payment, shipment };
-      sig = `${order.orderId}:${order.status}:${payment?.status ?? ''}:${shipment?.status ?? ''}`;
-    } else {
-      orders = await deps.yiji.getOrders(vendorId, customerId as string, { limit: limit ?? 4 });
-      if (!orders.length) return reply.code(404).send({ error: 'no_orders' });
-      grounding = { orders: orders.map(groundOrder) };
-      sig = orders.map((o) => `${o.orderId}:${o.status}`).join(',');
-    }
-
-    // The order-state signature is in the cache key so a status change
-    // invalidates a previously cached answer.
-    const cacheKey = `order-assist:${vendorId}:${orderId ?? customerId}:${question ?? ''}:${locale ?? ''}:${sig}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.orderAssist, cacheKey, req.ip);
-    if (!gateRes) return;
-    if (gateRes.cached) {
-      const cached = gateRes.cached as { answer: string };
-      const resp: OrderAssistResponse = {
-        answer: cached.answer,
-        order: order ?? undefined,
-        orders,
-        cached: true,
-      };
-      return reply.send(resp);
-    }
-
-    const p = prompts.orderAssist(grounding, question, locale);
-    try {
-      const result = await runWith(
-        AI_ENDPOINTS.orderAssist,
-        cacheKey,
-        p.system,
-        p.user,
-        z.object({ answer: z.string() }),
-        (text) => ({ answer: text.trim() }),
-      );
-      const resp: OrderAssistResponse = {
-        answer: result.answer,
-        order: order ?? undefined,
-        orders,
-      };
-      return reply.send(resp);
     } catch (err) {
       handleProviderError(reply, err);
     }
