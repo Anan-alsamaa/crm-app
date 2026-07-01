@@ -23,6 +23,16 @@ export const constraintStatements: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket ON ticket_events (ticket);`,
   `CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications (recipient);`,
 
+  // Hot-path filter/sort indexes: status, vendor scoping, and assignment. Every
+  // SLA sweep, inbox query, inactivity sweep, "assigned to me" view, and report
+  // filters on these; the FK columns are created is_indexed:false by the schema apply.
+  `CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets (status);`,
+  `CREATE INDEX IF NOT EXISTS idx_tickets_vendor ON tickets (vendor);`,
+  `CREATE INDEX IF NOT EXISTS idx_tickets_assigned_team ON tickets (assigned_team);`,
+  `CREATE INDEX IF NOT EXISTS idx_conversations_vendor ON conversations (vendor);`,
+  `CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations (status);`,
+  `CREATE INDEX IF NOT EXISTS idx_conversations_assigned_agent ON conversations (assigned_agent);`,
+
   // One CSAT response per conversation.
   `CREATE UNIQUE INDEX IF NOT EXISTS uq_csat_conversation
      ON csat_responses (conversation);`,
