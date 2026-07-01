@@ -120,5 +120,7 @@ if (new URL(window.location.href).searchParams.get('debug') === '1') {
   renderIdentityCard(identity);
 }
 void mintDevToken(identity).then((token) => {
-  YijiChat.init({ gatewayUrl: GATEWAY_URL, token, locale: 'en' });
+  // autoOpen: the support page opens straight into the chat — the customer
+  // followed a "Chat with us" link, so no extra launcher click is needed.
+  YijiChat.init({ gatewayUrl: GATEWAY_URL, token, locale: 'en', autoOpen: true });
 });

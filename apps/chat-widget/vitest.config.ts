@@ -13,17 +13,24 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     passWithNoTests: true,
+    setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['tests/e2e/**', '**/node_modules/**'],
-    // Coverage is measured so the widget appears in `pnpm verify` and its gap is
-    // visible. No thresholds yet: the widget has no unit suite, so gating here
-    // would be a false red — the number itself (currently ~0%) is the signal.
-    // Add thresholds once a suite exists (embed init, token identity, demo mint).
+    // Coverage is enforced (suite covers socket, embed, demo, i18n, and the
+    // Widget component). Thresholds sit below the current numbers (~78% lines /
+    // 82% branches / 65% funcs) with headroom so honest churn doesn't red the
+    // gate, while blocking regressions.
     coverage: {
       provider: 'v8',
-      reporter: ['text-summary', 'json-summary', 'lcov'],
+      reporter: ['text', 'text-summary', 'json-summary', 'lcov'],
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/vite-env.d.ts', '**/*.d.ts'],
+      thresholds: {
+        lines: 70,
+        statements: 70,
+        functions: 60,
+        branches: 75,
+      },
     },
   },
 });
