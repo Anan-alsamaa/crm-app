@@ -54,24 +54,29 @@ export async function processNotificationJob(
   if (inApp) deps.onInAppCreated?.({ id: created.id, recipient: recipientId, type });
 
   if (email) {
-    // Resolve the recipient's actual email address — the job payload only
-    // carries the user id. Skip (don't misfire to a user id) if unknown.
-    const to = await deps.notifications.getUserEmail(recipientId);
-    if (!to) {
-      deps.logger.warn(
-        { recipientId, type },
-        'email channel requested but recipient has no email; in-app row already written',
-      );
-    } else {
-      try {
+    // Best-effort: the durable in-app row is already written. Every step here —
+    // resolving the address, the SMTP send, stamping delivery — is wrapped so it
+    // can NOT throw out of the job. Otherwise BullMQ (which now retries this queue)
+    // would re-run the job and re-create the in-app row (duplicate) + re-send the
+    // email. With this guard, a retry only fires when createNotification itself
+    // failed (no row yet), which is safe.
+    try {
+      // The job payload only carries the user id; skip if we can't resolve one.
+      const to = await deps.notifications.getUserEmail(recipientId);
+      if (!to) {
+        deps.logger.warn(
+          { recipientId, type },
+          'email channel requested but recipient has no email; in-app row already written',
+        );
+      } else {
         await deps.mail.send({ to, subject: title, text: body });
         await deps.notifications.markEmailDelivered(created.id);
-      } catch (err) {
-        deps.logger.warn(
-          { err: err instanceof Error ? err.message : String(err) },
-          'email send failed; in-app row already written',
-        );
       }
+    } catch (err) {
+      deps.logger.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'email delivery failed; in-app row already written',
+      );
     }
   }
 }

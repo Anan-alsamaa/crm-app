@@ -128,4 +128,21 @@ describe('processNotificationJob (T068)', () => {
     // BUG FIX: a failed send must NOT be marked delivered.
     expect(created[0]!.channelEmailDeliveredAt).toBeUndefined();
   });
+
+  it('email-lookup failure is swallowed so a retry cannot duplicate (retry-safe)', async () => {
+    const { repo, created } = makeRepo({ sla_warning: 'both' });
+    // Resolving the address blips (e.g. Directus briefly down). With retries now
+    // enabled on the notifications queue this must NOT throw — otherwise the retry
+    // would re-create the in-app row + re-send. The row is still written once.
+    repo.getUserEmail = async () => {
+      throw new Error('directus down');
+    };
+    const { mail } = makeMail();
+    await expect(
+      processNotificationJob(JOB, { notifications: repo, mail, logger }),
+    ).resolves.toBeUndefined();
+    expect(created).toHaveLength(1);
+    expect(created[0]!.channelInappDeliveredAt).toBeTruthy();
+    expect(created[0]!.channelEmailDeliveredAt).toBeUndefined();
+  });
 });

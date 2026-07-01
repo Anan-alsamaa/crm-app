@@ -45,8 +45,23 @@ async function main(): Promise<void> {
   // One Queue per queue name (used by SLA processor to schedule warning/breach
   // and to enqueue notifications cross-queue).
   const queueNames = Object.values(QUEUES) as QueueName[];
+  // Retries (attempts + exponential backoff) are enabled ONLY for the
+  // notifications queue: its job is idempotent under retry (see notifications.ts —
+  // nothing after the in-app row insert throws, so a retry never double-sends).
+  // The other queues stay at BullMQ's default attempts:1 because their jobs create
+  // rows/events that would DUPLICATE on a blind retry (imports rows, automation
+  // ticket_events); retrying them safely needs per-job dedup keys — tracked as a
+  // follow-up, deliberately not enabled here.
   const queues = Object.fromEntries(
-    queueNames.map((name) => [name, new Queue(name, { connection })]),
+    queueNames.map((name) => [
+      name,
+      new Queue(name, {
+        connection,
+        ...(name === QUEUES.notifications
+          ? { defaultJobOptions: { attempts: 3, backoff: { type: 'exponential', delay: 2000 } } }
+          : {}),
+      }),
+    ]),
   ) as Record<QueueName, Queue>;
 
   // --- Metrics ---
@@ -105,6 +120,10 @@ async function main(): Promise<void> {
     },
     inactivityMinutes,
   };
+  // Bounded parallelism per queue. Jobs are independent, so concurrency is safe
+  // (unlike retries) — it just lets a worker process several jobs at once instead
+  // of strictly one at a time (BullMQ's default). Tune via WORKER_CONCURRENCY.
+  const workerConcurrency = Number(process.env.WORKER_CONCURRENCY ?? 5);
   const workers = queueNames.map(
     (queue) =>
       new Worker(
@@ -113,7 +132,7 @@ async function main(): Promise<void> {
           const processor = processors[queue];
           await processor(job, deps);
         },
-        { connection },
+        { connection, concurrency: workerConcurrency },
       ),
   );
   for (const w of workers) {
