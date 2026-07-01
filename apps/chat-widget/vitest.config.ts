@@ -15,5 +15,15 @@ export default defineConfig({
     passWithNoTests: true,
     include: ['tests/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['tests/e2e/**', '**/node_modules/**'],
+    // Coverage is measured so the widget appears in `pnpm verify` and its gap is
+    // visible. No thresholds yet: the widget has no unit suite, so gating here
+    // would be a false red — the number itself (currently ~0%) is the signal.
+    // Add thresholds once a suite exists (embed init, token identity, demo mint).
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary', 'json-summary', 'lcov'],
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/vite-env.d.ts', '**/*.d.ts'],
+    },
   },
 });
