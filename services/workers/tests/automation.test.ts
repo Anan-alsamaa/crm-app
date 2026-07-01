@@ -94,7 +94,7 @@ describe('evalAllConditions', () => {
 
 describe('processAutomationJob', () => {
   let requests: Array<{ collection?: string; payload?: unknown }>;
-  let notifAdds: Array<{ name: string; data: unknown }>;
+  let notifAdds: Array<{ name: string; data: unknown; opts?: { jobId?: string } }>;
   let deps: AutomationDeps;
   let nextRules: AutomationRuleRow[];
 
@@ -115,8 +115,8 @@ describe('processAutomationJob', () => {
     } as unknown as YijiDirectusClient;
 
     const notifQueue = {
-      add: vi.fn(async (name: string, data: unknown) => {
-        notifAdds.push({ name, data });
+      add: vi.fn(async (name: string, data: unknown, opts?: { jobId?: string }) => {
+        notifAdds.push({ name, data, opts });
       }),
     } as unknown as Queue;
     const autoQueue = { add: vi.fn() } as unknown as Queue;
@@ -168,6 +168,9 @@ describe('processAutomationJob', () => {
     await processAutomationJob(makeJob(), deps);
     expect(notifAdds).toHaveLength(1);
     expect(notifAdds[0]?.data).toMatchObject({ recipientId: 'u1', type: 'automation' });
+    // Deterministic jobId (automation job id + recipient + type) so a retry /
+    // stalled re-run de-duplicates instead of double-notifying.
+    expect(notifAdds[0]?.opts?.jobId).toBe('autonotif-j1-u1-automation');
   });
 
   it('skips actions when conditions do not match', async () => {

@@ -153,16 +153,25 @@ async function executeAction(
         );
       }
       return;
-    case 'send_notification':
-      await notificationsQueue.add('send', {
-        recipientId: action.params.recipientId as string,
-        type: (action.params.type as string) ?? 'automation',
-        title: (action.params.title as string) ?? 'Automation',
-        body: (action.params.body as string) ?? '',
-        link: action.params.link as string | undefined,
-        payload: { entityId, entityType, automation: true },
-      });
+    case 'send_notification': {
+      const recipientId = action.params.recipientId as string;
+      const notifType = (action.params.type as string) ?? 'automation';
+      await notificationsQueue.add(
+        'send',
+        {
+          recipientId,
+          type: notifType,
+          title: (action.params.title as string) ?? 'Automation',
+          body: (action.params.body as string) ?? '',
+          link: action.params.link as string | undefined,
+          payload: { entityId, entityType, automation: true },
+        },
+        // Deterministic id: a re-run of this automation job (retry/stall) enqueues
+        // the same jobId, so BullMQ de-duplicates instead of double-notifying.
+        { jobId: `autonotif-${job.id}-${recipientId}-${notifType}` },
+      );
       return;
+    }
     case 'escalate':
       // Escalate = raise priority (default urgent) on the entity, and notify a
       // recipient if one is configured. Records as an `escalation` notification.
@@ -171,14 +180,19 @@ async function executeAction(
         await directus.request(updateItem(entityType + 's', entityId, { priority } as never));
       }
       if (action.params.recipientId) {
-        await notificationsQueue.add('send', {
-          recipientId: action.params.recipientId as string,
-          type: 'escalation',
-          title: (action.params.title as string) ?? 'Escalation',
-          body: (action.params.body as string) ?? `Escalated ${entityType} ${entityId}`,
-          link: action.params.link as string | undefined,
-          payload: { entityId, entityType, automation: true, escalated: true },
-        });
+        const recipientId = action.params.recipientId as string;
+        await notificationsQueue.add(
+          'send',
+          {
+            recipientId,
+            type: 'escalation',
+            title: (action.params.title as string) ?? 'Escalation',
+            body: (action.params.body as string) ?? `Escalated ${entityType} ${entityId}`,
+            link: action.params.link as string | undefined,
+            payload: { entityId, entityType, automation: true, escalated: true },
+          },
+          { jobId: `autonotif-${job.id}-${recipientId}-escalation` },
+        );
       }
       return;
     default:

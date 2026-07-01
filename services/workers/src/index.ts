@@ -45,21 +45,29 @@ async function main(): Promise<void> {
   // One Queue per queue name (used by SLA processor to schedule warning/breach
   // and to enqueue notifications cross-queue).
   const queueNames = Object.values(QUEUES) as QueueName[];
-  // Retries (attempts + exponential backoff) are enabled ONLY for the
-  // notifications queue: its job is idempotent under retry (see notifications.ts —
-  // nothing after the in-app row insert throws, so a retry never double-sends).
-  // The other queues stay at BullMQ's default attempts:1 because their jobs create
-  // rows/events that would DUPLICATE on a blind retry (imports rows, automation
-  // ticket_events); retrying them safely needs per-job dedup keys — tracked as a
-  // follow-up, deliberately not enabled here.
+  // Retries (attempts + exponential backoff) are enabled per queue only where the
+  // job has been reviewed idempotent under retry:
+  //  - notifications: the email block is fully best-effort, so a retry only re-runs
+  //    when the in-app row insert failed (no row yet) — never a double send.
+  //  - imports: each row is lookup-then-create and contacts carry unique
+  //    (vendor, phone|email) constraints, so a re-run finds + skips imported rows.
+  //  - automation: processAutomationJob only throws at the rules fetch, BEFORE any
+  //    side effect, so a thrown-error retry starts from a clean slate; its
+  //    notification enqueues also carry deterministic jobIds so a stalled re-run
+  //    can't duplicate them.
+  // reports / sla / ai stay at BullMQ's default attempts:1 pending their own review.
+  const RETRY = { attempts: 3, backoff: { type: 'exponential' as const, delay: 2000 } };
+  const retryableQueues = new Set<string>([
+    QUEUES.notifications,
+    QUEUES.imports,
+    QUEUES.automation,
+  ]);
   const queues = Object.fromEntries(
     queueNames.map((name) => [
       name,
       new Queue(name, {
         connection,
-        ...(name === QUEUES.notifications
-          ? { defaultJobOptions: { attempts: 3, backoff: { type: 'exponential', delay: 2000 } } }
-          : {}),
+        ...(retryableQueues.has(name) ? { defaultJobOptions: RETRY } : {}),
       }),
     ]),
   ) as Record<QueueName, Queue>;
