@@ -18,6 +18,18 @@ const BIZ_9_5_MON_FRI: BusinessHours = {
   },
 };
 
+// Saudi work week: Sun–Thu, 09:00–17:00 LOCAL (Asia/Riyadh = UTC+3, no DST).
+const BIZ_RIYADH_SUN_THU: BusinessHours = {
+  timezone: 'Asia/Riyadh',
+  days: {
+    '0': [['09:00', '17:00']],
+    '1': [['09:00', '17:00']],
+    '2': [['09:00', '17:00']],
+    '3': [['09:00', '17:00']],
+    '4': [['09:00', '17:00']],
+  },
+};
+
 describe('computeDueAt (T066)', () => {
   it('24/7: dueAt is start + minutes', () => {
     const start = new Date('2026-06-01T10:00:00Z');
@@ -51,6 +63,29 @@ describe('computeDueAt (T066)', () => {
 
   it('throws when business_hours has no windows at all', () => {
     expect(() => computeDueAt(new Date(), 30, { timezone: 'UTC', days: {} })).toThrow(/no windows/);
+  });
+});
+
+describe('computeDueAt — local timezone (Asia/Riyadh, UTC+3)', () => {
+  it('windows are interpreted in local time, not UTC', () => {
+    // 06:00Z = 09:00 Riyadh (Mon, at open) + 60 min → 10:00 Riyadh = 07:00Z.
+    const due = computeDueAt(new Date('2026-06-01T06:00:00Z'), 60, BIZ_RIYADH_SUN_THU);
+    expect(due.toISOString()).toBe('2026-06-01T07:00:00.000Z');
+  });
+
+  it('a ticket before LOCAL open jumps to local open (differs from a UTC reading)', () => {
+    // 05:00Z = 08:00 Riyadh (before the 09:00 local open). Deadline = 09:30 Riyadh
+    // = 06:30Z. A UTC reading of the same window would give 09:30Z — this asserts
+    // the local-time behaviour (the bug that was fixed).
+    const due = computeDueAt(new Date('2026-06-01T05:00:00Z'), 30, BIZ_RIYADH_SUN_THU);
+    expect(due.toISOString()).toBe('2026-06-01T06:30:00.000Z');
+  });
+
+  it('spills across the Saudi weekend (Fri/Sat closed) to Sunday', () => {
+    // Thu 16:30 Riyadh (13:30Z) + 60: 30 min to 17:00 Thu close, then Fri + Sat
+    // are closed, resume Sun 09:00 Riyadh + 30 → 09:30 Riyadh = 06:30Z Sunday.
+    const due = computeDueAt(new Date('2026-06-04T13:30:00Z'), 60, BIZ_RIYADH_SUN_THU);
+    expect(due.toISOString()).toBe('2026-06-07T06:30:00.000Z');
   });
 });
 

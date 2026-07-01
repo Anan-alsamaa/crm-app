@@ -2,42 +2,110 @@
  * SLA deadline computation (research D-04).
  *
  * - `businessHours = null` ⇒ continuous (24/7): `dueAt = start + minutes`.
- * - `businessHours` provided ⇒ deadline shifts to only count business-hour
- *   minutes (skipping nights / weekends per the per-day window list).
+ * - `businessHours` provided ⇒ the deadline counts only business-hour minutes.
+ *   The per-day windows AND the weekday are interpreted in the policy's IANA
+ *   `timezone` (e.g. 'Asia/Riyadh'), NOT in UTC — a 09:00–17:00 Sun–Thu policy
+ *   means 09:00–17:00 *local* time. UTC offsets (and DST, where applicable) are
+ *   resolved via `Intl.DateTimeFormat`, so results are correct for any zone; a
+ *   `timezone: 'UTC'` policy behaves exactly as plain UTC.
  *
- * Pure & deterministic so it can be unit-tested without a clock.
+ * Pure & deterministic (no ambient clock) so it can be unit-tested.
  */
 export interface BusinessHours {
-  /** IANA timezone name, e.g. 'Asia/Riyadh'. Used only as documentation here;
-   *  the windowing math runs in UTC for determinism. Real-world deployments
-   *  pre-translate windows into UTC offsets when the policy is authored. */
+  /** IANA timezone name, e.g. 'Asia/Riyadh'. The weekday keys + window times
+   *  below are interpreted in THIS zone. */
   timezone: string;
   /** Map of weekday → array of `[openHHMM, closeHHMM]` windows. Keys are '0'..'6'
-   *  with 0=Sunday. Empty / missing key ⇒ closed all day. */
+   *  with 0=Sunday (local weekday). Empty / missing key ⇒ closed all day. */
   days: Record<string, Array<[string, string]>>;
 }
 
-function parseHHMM(hhmm: string): { h: number; m: number } {
+/** Minutes since midnight for an 'HH:MM' string ('17:00' → 1020, '24:00' → 1440). */
+function parseHHMM(hhmm: string): number {
   const [h, m] = hhmm.split(':').map((v) => Number(v));
-  return { h: h ?? 0, m: m ?? 0 };
+  return (h ?? 0) * 60 + (m ?? 0);
 }
 
-/** Window minutes since midnight UTC for a given Date's day. */
-function windowsForDay(day: Date, hours: BusinessHours): Array<[number, number]> {
-  const dow = day.getUTCDay();
-  const raw = hours.days[String(dow)] ?? [];
-  return raw.map(([open, close]) => {
-    const o = parseHHMM(open);
-    const c = parseHHMM(close);
-    return [o.h * 60 + o.m, c.h * 60 + c.m] as [number, number];
-  });
-}
-
-/** Sets a Date to midnight UTC of the same calendar day, then advances `addDays`. */
-function midnightUtc(d: Date, addDays = 0): Date {
-  return new Date(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + addDays, 0, 0, 0, 0),
+/** Offset (local − UTC) in minutes for `instant` in `tz`, DST-aware. */
+function tzOffsetMinutes(instant: Date, tz: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
+  const asIfUtc = Date.UTC(
+    get('year'),
+    get('month') - 1,
+    get('day'),
+    get('hour'),
+    get('minute'),
+    get('second'),
   );
+  return Math.round((asIfUtc - instant.getTime()) / 60_000);
+}
+
+const WEEKDAY: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+/** Local wall-clock parts of a UTC `instant` in `tz`. weekday: 0=Sun..6=Sat. */
+function tzParts(
+  instant: Date,
+  tz: string,
+): {
+  year: number;
+  month: number; // 1..12
+  day: number;
+  weekday: number;
+  minutesIntoDay: number;
+} {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hourCycle: 'h23',
+    weekday: 'short',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant);
+  const get = (t: string) => parts.find((p) => p.type === t)!.value;
+  return {
+    year: Number(get('year')),
+    month: Number(get('month')),
+    day: Number(get('day')),
+    weekday: WEEKDAY[get('weekday')] ?? 0,
+    minutesIntoDay: Number(get('hour')) * 60 + Number(get('minute')) + Number(get('second')) / 60,
+  };
+}
+
+/** UTC instant for `minutesIntoDay` after local midnight of (year,month,day) in `tz`. */
+function zonedToUtc(
+  year: number,
+  month: number,
+  day: number,
+  minutesIntoDay: number,
+  tz: string,
+): Date {
+  const h = Math.floor(minutesIntoDay / 60);
+  const m = Math.floor(minutesIntoDay % 60);
+  const s = Math.round((minutesIntoDay - h * 60 - m) * 60);
+  const guessMs = Date.UTC(year, month - 1, day, h, m, s);
+  // Subtract the zone offset to get the UTC instant; one refinement pass covers
+  // the rare case where the offset differs across a DST boundary.
+  let utcMs = guessMs - tzOffsetMinutes(new Date(guessMs), tz) * 60_000;
+  utcMs = guessMs - tzOffsetMinutes(new Date(utcMs), tz) * 60_000;
+  return new Date(utcMs);
+}
+
+function windowsForWeekday(weekday: number, hours: BusinessHours): Array<[number, number]> {
+  const raw = hours.days[String(weekday)] ?? [];
+  return raw.map(([open, close]) => [parseHHMM(open), parseHHMM(close)] as [number, number]);
 }
 
 /**
@@ -53,33 +121,31 @@ export function computeDueAt(start: Date, minutes: number, hours: BusinessHours 
     throw new Error('SLA business_hours has no windows — would never reach the deadline');
   }
 
+  const tz = hours.timezone || 'UTC';
   let remaining = minutes;
   let cursor = start;
-  for (let i = 0; i < 60 && remaining > 0; i++) {
-    const today = midnightUtc(cursor);
-    const minutesIntoDay = (cursor.getTime() - today.getTime()) / 60_000;
-    const windows = windowsForDay(cursor, hours);
 
-    for (const [openMin, closeMin] of windows) {
+  // One iteration per local day; 366 days is an ample horizon for any real SLA.
+  for (let i = 0; i < 366 && remaining > 0; i++) {
+    const p = tzParts(cursor, tz);
+    for (const [openMin, closeMin] of windowsForWeekday(p.weekday, hours)) {
       if (remaining <= 0) break;
-      if (minutesIntoDay >= closeMin) continue; // already past this window
-      const enter = Math.max(minutesIntoDay, openMin);
+      if (p.minutesIntoDay >= closeMin) continue; // already past this window
+      const enter = Math.max(p.minutesIntoDay, openMin);
       const available = closeMin - enter;
       if (available <= 0) continue;
       if (available >= remaining) {
-        // Deadline falls inside this window.
-        return new Date(today.getTime() + (enter + remaining) * 60_000);
+        // Deadline falls inside this window — convert local wall-clock → UTC.
+        return zonedToUtc(p.year, p.month, p.day, enter + remaining, tz);
       }
       remaining -= available;
-      // advance cursor past this window so the outer loop continues
-      cursor = new Date(today.getTime() + closeMin * 60_000);
     }
-    // Move to start of next day.
-    cursor = midnightUtc(cursor, 1);
+    // Advance to local midnight of the next day.
+    cursor = zonedToUtc(p.year, p.month, p.day + 1, 0, tz);
   }
 
   throw new Error(
-    'SLA deadline did not fit within 60 days of business hours — check policy + windows',
+    'SLA deadline did not fit within a year of business hours — check policy + windows',
   );
 }
 
