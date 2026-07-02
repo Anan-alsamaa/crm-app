@@ -1,0 +1,31 @@
+{
+  "collection": "compensation_requests",
+  "meta": {
+    "collection": "compensation_requests",
+    "icon": "receipt_long",
+    "note": "Customer compensation requests submitted through the app",
+    "display_template": "{{request_code}} – {{status}}",
+    "hidden": false,
+    "singleton": false,
+    "translations": null,
+    "archive_field": null,
+    "archive_app_filter": true,
+    "archive_value": "archived",
+    "unarchive_value": "draft",
+    "sort_field": null,
+    "accountability": "all",
+    "color": null,
+    "item_duplication_fields": null,
+    "sort": 2,
+    "group": null,
+    "collapse": "open",
+    "preview_url": null,
+    "versioning": false,
+    "hidden_for_roles": null
+  },
+  "schema": {
+    "schema": "public",
+    "name": "compensation_requests",
+    "comment": null
+  }
+}
