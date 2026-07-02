@@ -88,7 +88,8 @@ function widgetHostPage(secret: string, gatewayUrl: string): Plugin {
           return data + '.' + b64u(sig);
         }
         mint(identity()).then(function (token) {
-          window.YijiChat.init({ gatewayUrl: GATEWAY, token: token, locale: 'en' });
+          // autoOpen: this is a dedicated support page — land straight in the chat.
+          window.YijiChat.init({ gatewayUrl: GATEWAY, token: token, locale: 'en', autoOpen: true });
         });
       })();
     </script>`;
