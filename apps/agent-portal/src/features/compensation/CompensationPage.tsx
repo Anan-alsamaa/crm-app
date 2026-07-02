@@ -21,7 +21,7 @@ import {
   type CompensationRow,
   type CompensationStatus,
 } from './api.js';
-import { actionsForStatus, type CompAction } from './actions.js';
+import { COMPENSATION_ACTIONS, type CompAction, type CompLinkType } from './actions.js';
 
 const STATUS_TONE: Record<CompensationStatus, 'warning' | 'primary' | 'success' | 'destructive'> = {
   Pending: 'warning',
@@ -30,11 +30,10 @@ const STATUS_TONE: Record<CompensationStatus, 'warning' | 'primary' | 'success' 
   Rejected: 'destructive',
 };
 
-const BTN_VARIANT: Record<CompAction['tone'], 'default' | 'brand' | 'secondary' | 'destructive'> = {
+const BTN_VARIANT: Record<CompLinkType, 'default' | 'brand' | 'destructive'> = {
   primary: 'default',
+  danger: 'destructive',
   success: 'brand',
-  destructive: 'destructive',
-  neutral: 'secondary',
 };
 
 function money(n: number | null | undefined): string {
@@ -209,7 +208,8 @@ function RequestDetail({ id }: { id: string }) {
     return (
       <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
         <Button variant="ghost" size="sm" onClick={() => navigate('/compensation')}>
-          <ArrowLeftIcon size={16} /> {t('compensation.back', { defaultValue: 'Back' })}
+          <ArrowLeftIcon size={16} className="rtl:-scale-x-100" />{' '}
+          {t('compensation.back', { defaultValue: 'Back' })}
         </Button>
         <p className="mt-4 text-sm text-muted-foreground">
           {t('compensation.notFound', { defaultValue: 'Request not found.' })}
@@ -222,7 +222,8 @@ function RequestDetail({ id }: { id: string }) {
     <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6 sm:px-6">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => navigate('/compensation')}>
-          <ArrowLeftIcon size={16} /> {t('compensation.back', { defaultValue: 'Back' })}
+          <ArrowLeftIcon size={16} className="rtl:-scale-x-100" />{' '}
+          {t('compensation.back', { defaultValue: 'Back' })}
         </Button>
         <span className="font-mono text-sm text-muted-foreground">
           {r.request_code ?? r.id.slice(0, 8)}
@@ -330,16 +331,8 @@ function ActionPanel({ request }: { request: CompensationRow }) {
   const [form, setForm] = useState<Record<string, string>>({});
   const [err, setErr] = useState<string | null>(null);
 
-  const actions = actionsForStatus(request.status);
-  if (actions.length === 0) {
-    return (
-      <div className="rounded-2xl bg-secondary/40 px-5 py-3 text-xs text-muted-foreground">
-        {t('compensation.terminal', {
-          defaultValue: 'This request is closed — no further actions.',
-        })}
-      </div>
-    );
-  }
+  // Exact mirror of the Directus admin button bar — all actions, fixed order.
+  const actions = COMPENSATION_ACTIONS;
 
   const open = (a: CompAction) => {
     setActive(a);
@@ -353,7 +346,9 @@ function ActionPanel({ request }: { request: CompensationRow }) {
     for (const inp of active.inputs) {
       const raw = (form[inp.field] ?? '').trim();
       if (inp.required && !raw) {
-        setErr(t('compensation.required', { defaultValue: `${inp.label} is required.` }));
+        setErr(
+          t('compensation.required', { label: inp.label, defaultValue: '{{label}} is required.' }),
+        );
         return;
       }
       if (!raw) continue;
@@ -361,7 +356,12 @@ function ActionPanel({ request }: { request: CompensationRow }) {
         try {
           inputs[inp.field] = JSON.parse(raw);
         } catch {
-          setErr(t('compensation.badJson', { defaultValue: `${inp.label} must be valid JSON.` }));
+          setErr(
+            t('compensation.badJson', {
+              label: inp.label,
+              defaultValue: '{{label}} must be valid JSON.',
+            }),
+          );
           return;
         }
       } else {
@@ -372,7 +372,9 @@ function ActionPanel({ request }: { request: CompensationRow }) {
       { flowId: active.flowId, requestId: request.id, inputs },
       {
         onSuccess: () => {
-          toast.success(t('compensation.done', { defaultValue: `${active.label} done.` }));
+          toast.success(
+            t('compensation.done', { label: active.label, defaultValue: '{{label}} done.' }),
+          );
           setActive(null);
         },
         onError: () =>
@@ -391,7 +393,7 @@ function ActionPanel({ request }: { request: CompensationRow }) {
           <Button
             key={a.key}
             size="sm"
-            variant={BTN_VARIANT[a.tone]}
+            variant={BTN_VARIANT[a.type]}
             onClick={() => open(a)}
             disabled={trigger.isPending}
           >

@@ -88,44 +88,35 @@ describe('Compensation queue', () => {
   });
 });
 
-describe('Compensation detail — actions per status', () => {
-  it('Pending shows Acknowledge + Reject, not Accept/Calculate', () => {
-    h.request = { data: { ...reqBase, status: 'Pending' }, isLoading: false };
-    renderAt('/compensation/req-1');
-    expect(screen.getByRole('button', { name: 'Acknowledge' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'Calculate compensation' }),
-    ).not.toBeInTheDocument();
-  });
+// Exact mirror of the Directus admin `links-ycdmfv` button bar.
+const EXPECTED_BAR = [
+  'Acknowledge',
+  'Accept',
+  'Reject',
+  'Calculate Compensation',
+  'Generate Coupon',
+  'User Assign Coupon',
+  'Close task',
+];
 
-  it('In Progress shows the full action set incl. Accept + Generate coupon', () => {
-    h.request = { data: { ...reqBase, status: 'In Progress' }, isLoading: false };
-    renderAt('/compensation/req-1');
-    for (const label of [
-      'Calculate compensation',
-      'Generate coupon',
-      'Assign coupon',
-      'Accept',
-      'Reject',
-    ]) {
-      expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+describe('Compensation detail — action bar mirrors Directus exactly', () => {
+  it('renders all 7 buttons in the exact order, for every status', () => {
+    for (const status of ['Pending', 'In Progress', 'Approved', 'Rejected']) {
+      h.request = { data: { ...reqBase, status }, isLoading: false };
+      const { unmount } = renderAt('/compensation/req-1');
+      const bar = screen
+        .getAllByRole('button')
+        .map((b) => b.textContent?.trim())
+        .filter((x) => EXPECTED_BAR.includes(x ?? ''));
+      expect(bar).toEqual(EXPECTED_BAR);
+      unmount();
     }
   });
 
-  it('Approved still offers Refund (post-approval), but not the earlier steps', () => {
-    h.request = { data: { ...reqBase, status: 'Approved' }, isLoading: false };
+  it('does not render actions that are not in the production bar (e.g. Refund)', () => {
+    h.request = { data: { ...reqBase, status: 'In Progress' }, isLoading: false };
     renderAt('/compensation/req-1');
-    expect(screen.getByRole('button', { name: 'Refund amount' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Acknowledge' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
-  });
-
-  it('terminal status (Rejected) offers no actions', () => {
-    h.request = { data: { ...reqBase, status: 'Rejected' }, isLoading: false };
-    renderAt('/compensation/req-1');
-    expect(screen.getByText('This request is closed — no further actions.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refund amount' })).not.toBeInTheDocument();
   });
 });
 
@@ -157,6 +148,18 @@ describe('Compensation detail — triggering flows', () => {
     expect(h.mutate.mock.calls[0]![0]).toMatchObject({
       flowId: '9335c8fb-5744-43cc-9964-6fa0de0bb4d1',
       inputs: { reason: 'Out of SLA' },
+    });
+  });
+
+  it('Close task triggers the same flow as Accept (6482d337)', async () => {
+    h.request = { data: { ...reqBase, status: 'In Progress' }, isLoading: false };
+    renderAt('/compensation/req-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Close task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(h.mutate).toHaveBeenCalled());
+    expect(h.mutate.mock.calls[0]![0]).toMatchObject({
+      flowId: '6482d337-286e-4606-98de-21b734796b84',
+      requestId: 'req-1',
     });
   });
 });
