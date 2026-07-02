@@ -64,9 +64,14 @@ function Stat({
 }
 
 function VolumeBars({ series }: { series: DashboardMetrics['volumeSeries'] }) {
+  const { t } = useTranslation();
   const max = Math.max(1, ...series.map((s) => s.count));
   if (series.length === 0)
-    return <p className="py-8 text-center text-sm text-muted-foreground">No activity in range.</p>;
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        {t('dashboard.noActivity', { defaultValue: 'No activity in range.' })}
+      </p>
+    );
   return (
     <div className="flex h-28 items-end gap-1">
       {series.map((s) => (
@@ -88,9 +93,14 @@ function RankList({
   rows: Array<{ id: string; name: string; value: number }>;
   unit: string;
 }) {
+  const { t } = useTranslation();
   const max = Math.max(1, ...rows.map((r) => r.value));
   if (rows.length === 0)
-    return <p className="py-6 text-center text-sm text-muted-foreground">No data yet.</p>;
+    return (
+      <p className="py-6 text-center text-sm text-muted-foreground">
+        {t('dashboard.noData', { defaultValue: 'No data yet.' })}
+      </p>
+    );
   return (
     <ul className="space-y-2.5">
       {rows.map((r) => (
@@ -210,7 +220,11 @@ export function DashboardPage() {
                 <Card title={t('dashboard.byStatus', { defaultValue: 'Conversations by status' })}>
                   <ul className="space-y-2.5">
                     {Object.entries(m.data.conversationsByStatus).length === 0 && (
-                      <p className="text-sm text-muted-foreground">No conversations in range.</p>
+                      <p className="text-sm text-muted-foreground">
+                        {t('dashboard.noConversations', {
+                          defaultValue: 'No conversations in range.',
+                        })}
+                      </p>
                     )}
                     {Object.entries(m.data.conversationsByStatus)
                       .sort(([, a], [, b]) => b - a)

@@ -204,7 +204,9 @@ export function AiPanel({ conversationId, vendorId, draft, locale, onReplySugges
       {active === 'entities' && entities.data && (
         <ResultCard label={t('ai.action.entities', { defaultValue: 'Entities' })}>
           {entities.data.entities.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No entities detected.</p>
+            <p className="text-xs text-muted-foreground">
+              {t('ai.noEntities', { defaultValue: 'No entities detected.' })}
+            </p>
           ) : (
             <ul className="space-y-1.5">
               {entities.data.entities.map((e, i) => (

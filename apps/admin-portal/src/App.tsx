@@ -97,7 +97,9 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
               <span>Yiji</span>
               <span className="text-rail-foreground/70 font-normal">CRM</span>
             </div>
-            <div className="text-2xs text-rail-foreground/75 mt-0.5">Admin console</div>
+            <div className="text-2xs text-rail-foreground/75 mt-0.5">
+              {t('app.console', { defaultValue: 'Admin console' })}
+            </div>
           </div>
         )}
       </div>

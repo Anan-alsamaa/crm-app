@@ -115,7 +115,9 @@ export function Login() {
               <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
                 {t('login.title', { defaultValue: 'Sign in to YIJI CRM Admin' })}
               </h1>
-              <p className="text-sm text-muted-foreground">Administrator access required.</p>
+              <p className="text-sm text-muted-foreground">
+                {t('login.subtitle', { defaultValue: 'Administrator access required.' })}
+              </p>
             </div>
           </div>
 

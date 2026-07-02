@@ -12,7 +12,8 @@
     "hidePassword": "Hide",
     "showPassword": "Reveal",
     "secure": "Every action audit-logged",
-    "help": "Trouble signing in? Talk to your system administrator."
+    "help": "Trouble signing in? Talk to your system administrator.",
+    "subtitle": "Administrator access required."
   },
   "nav": {
     "overview": "Overview",
@@ -57,7 +58,10 @@
     "resolvedUnit": "resolved",
     "convsUnit": "convos",
     "loadError": "Could not load metrics",
-    "loadErrorHint": "Check your connection and try again."
+    "loadErrorHint": "Check your connection and try again.",
+    "noActivity": "No activity in range.",
+    "noData": "No data yet.",
+    "noConversations": "No conversations in range."
   },
   "automation": {
     "title": "Automation",
@@ -215,7 +219,9 @@
     "primary": "Primary color",
     "secondary": "Secondary color",
     "preview": "Preview",
-    "status": "Status"
+    "status": "Status",
+    "previewGreeting": "Hi there",
+    "previewSub": "We're here to help."
   },
   "aiConfig": {
     "title": "AI assistance",
@@ -367,5 +373,8 @@
     "range": "Date range",
     "subtitle": "First-response & resolution SLA — drill from agent into tickets",
     "title": "SLA reports"
+  },
+  "app": {
+    "console": "Admin console"
   }
 }

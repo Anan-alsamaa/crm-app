@@ -82,7 +82,9 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
               <span>Yiji</span>
               <span className="text-rail-foreground/70 font-normal">CRM</span>
             </div>
-            <div className="text-2xs text-rail-foreground/75 mt-0.5">Agent workspace</div>
+            <div className="text-2xs text-rail-foreground/75 mt-0.5">
+              {t('app.workspace', { defaultValue: 'Agent workspace' })}
+            </div>
           </div>
         )}
       </div>

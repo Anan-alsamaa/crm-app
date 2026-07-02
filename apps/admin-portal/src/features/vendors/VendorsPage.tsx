@@ -484,8 +484,12 @@ function BrandPreview({ primary, secondary }: { primary?: string; secondary?: st
           background: `radial-gradient(at 0% 0%, ${s}aa 0%, transparent 55%), radial-gradient(at 100% 100%, ${p} 0%, ${p} 60%, transparent 100%), ${p}`,
         }}
       >
-        <div className="text-sm font-semibold tracking-tight">Hi there</div>
-        <div className="mt-1 text-xs opacity-80">We&apos;re here to help.</div>
+        <div className="text-sm font-semibold tracking-tight">
+          {t('vendors.previewGreeting', { defaultValue: 'Hi there' })}
+        </div>
+        <div className="mt-1 text-xs opacity-80">
+          {t('vendors.previewSub', { defaultValue: "We're here to help." })}
+        </div>
       </div>
     </div>
   );

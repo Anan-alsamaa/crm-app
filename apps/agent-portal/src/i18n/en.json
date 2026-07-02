@@ -65,7 +65,8 @@
     "search": {
       "placeholder": "Search conversations…",
       "empty": "No matching conversations."
-    }
+    },
+    "noEntities": "No entities detected."
   },
   "login": {
     "title": "Sign in to YIJI CRM",
@@ -374,5 +375,8 @@
     "terminal": "This request is closed — no further actions.",
     "title": "Compensation",
     "type": "Type"
+  },
+  "app": {
+    "workspace": "Agent workspace"
   }
 }
