@@ -1,0 +1,245 @@
+[
+  {
+    "collection": "compensation_requests",
+    "field": "complaint_image",
+    "related_collection": "directus_files",
+    "schema": {
+      "constraint_name": "compensation_requests_complaint_image_foreign",
+      "table": "compensation_requests",
+      "column": "complaint_image",
+      "foreign_key_schema": "public",
+      "foreign_key_table": "directus_files",
+      "foreign_key_column": "id",
+      "on_update": "NO ACTION",
+      "on_delete": "SET NULL"
+    },
+    "meta": {
+      "id": 115,
+      "many_collection": "compensation_requests",
+      "many_field": "complaint_image",
+      "one_collection": "directus_files",
+      "one_field": null,
+      "one_collection_field": null,
+      "one_allowed_collections": null,
+      "junction_field": null,
+      "sort_field": null,
+      "one_deselect_action": "nullify"
+    }
+  },
+  {
+    "collection": "compensation_requests",
+    "field": "inprogress_by",
+    "related_collection": "directus_users",
+    "schema": {
+      "constraint_name": "compensation_requests_inprogress_by_foreign",
+      "table": "compensation_requests",
+      "column": "inprogress_by",
+      "foreign_key_schema": "public",
+      "foreign_key_table": "directus_users",
+      "foreign_key_column": "id",
+      "on_update": "NO ACTION",
+      "on_delete": "SET NULL"
+    },
+    "meta": {
+      "id": 119,
+      "many_collection": "compensation_requests",
+      "many_field": "inprogress_by",
+      "one_collection": "directus_users",
+      "one_field": null,
+      "one_collection_field": null,
+      "one_allowed_collections": null,
+      "junction_field": null,
+      "sort_field": null,
+      "one_deselect_action": "nullify"
+    }
+  },
+  {
+    "collection": "compensation_requests",
+    "field": "coupons",
+    "related_collection": "Com_Coupons",
+    "schema": {
+      "constraint_name": "compensation_requests_coupons_foreign",
+      "table": "compensation_requests",
+      "column": "coupons",
+      "foreign_key_schema": "public",
+      "foreign_key_table": "Com_Coupons",
+      "foreign_key_column": "id",
+      "on_update": "NO ACTION",
+      "on_delete": "SET NULL"
+    },
+    "meta": {
+      "id": 116,
+      "many_collection": "compensation_requests",
+      "many_field": "coupons",
+      "one_collection": "Com_Coupons",
+      "one_field": null,
+      "one_collection_field": null,
+      "one_allowed_collections": null,
+      "junction_field": null,
+      "sort_field": null,
+      "one_deselect_action": "nullify"
+    }
+  },
+  {
+    "collection": "compensation_requests",
+    "field": "com_issue",
+    "related_collection": "com_issues_list",
+    "schema": {
+      "constraint_name": "compensation_requests_com_issue_foreign",
+      "table": "compensation_requests",
+      "column": "com_issue",
+      "foreign_key_schema": "public",
+      "foreign_key_table": "com_issues_list",
+      "foreign_key_column": "id",
+      "on_update": "NO ACTION",
+      "on_delete": "SET NULL"
+    },
+    "meta": {
+      "id": 113,
+      "many_collection": "compensation_requests",
+      "many_field": "com_issue",
+      "one_collection": "com_issues_list",
+      "one_field": null,
+      "one_collection_field": null,
+      "one_allowed_collections": null,
+      "junction_field": null,
+      "sort_field": null,
+      "one_deselect_action": "nullify"
+    }
+  },
+  {
+    "collection": "Compensation_Request_items",
+    "field": "compensation_request_id",
+    "related_collection": "compensation_requests",
+    "schema": {
+      "constraint_name": "compensation_request_items_compensation_request_id_foreign",
+      "table": "Compensation_Request_items",
+      "column": "compensation_request_id",
+      "foreign_key_schema": "public",
+      "foreign_key_table": "compensation_requests",
+      "foreign_key_column": "id",
+      "on_update": "NO ACTION",
+      "on_delete": "SET NULL"
+    },
+    "meta": {
+      "id": 118,
+      "many_collection": "Compensation_Request_items",
+      "many_field": "compensation_request_id",
+      "one_collection": "compensation_requests",
+      "one_field": "items",
+      "one_collection_field": null,
+      "one_allowed_collections": null,
+      "junction_field": null,
+      "sort_field": null,
+      "one_deselect_action": "nullify"
+    }
+  },
+  {
+    "collection": "compensation_requests",
+    "field": "user_created",
+    "related_collection": "directus_users",
+    "schema": {
+      "constraint_name": "compensation_requests_user_created_foreign",
+      "table": "compensation_requests",
+      "column": "user_created",
+      "foreign_key_schema": "public",
+      "foreign_key_table": "directus_users",
+      "foreign_key_column": "id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION"
+    },
+    "meta": {
+      "id": 111,
+      "many_collection": "compensation_requests",
+      "many_field": "user_created",
+      "one_collection": "directus_users",
+      "one_field": null,
+      "one_collection_field": null,
+      "one_allowed_collections": null,
+      "junction_field": null,
+      "sort_field": null,
+      "one_deselect_action": "nullify"
+    }
+  },
+  {
+    "collection": "compensation_requests",
+    "field": "user_updated",
+    "related_collection": "directus_users",
+    "schema": {
+      "constraint_name": "compensation_requests_user_updated_foreign",
+      "table": "compensation_requests",
+      "column": "user_updated",
+      "foreign_key_schema": "public",
+      "foreign_key_table": "directus_users",
+      "foreign_key_column": "id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION"
+    },
+    "meta": {
+      "id": 112,
+      "many_collection": "compensation_requests",
+      "many_field": "user_updated",
+      "one_collection": "directus_users",
+      "one_field": null,
+      "one_collection_field": null,
+      "one_allowed_collections": null,
+      "junction_field": null,
+      "sort_field": null,
+      "one_deselect_action": "nullify"
+    }
+  },
+  {
+    "collection": "compensation_requests",
+    "field": "complaint_type",
+    "related_collection": "Com_Issue_Categories",
+    "schema": {
+      "constraint_name": "compensation_requests_complaint_type_foreign",
+      "table": "compensation_requests",
+      "column": "complaint_type",
+      "foreign_key_schema": "public",
+      "foreign_key_table": "Com_Issue_Categories",
+      "foreign_key_column": "id",
+      "on_update": "NO ACTION",
+      "on_delete": "SET NULL"
+    },
+    "meta": {
+      "id": 114,
+      "many_collection": "compensation_requests",
+      "many_field": "complaint_type",
+      "one_collection": "Com_Issue_Categories",
+      "one_field": null,
+      "one_collection_field": null,
+      "one_allowed_collections": null,
+      "junction_field": null,
+      "sort_field": null,
+      "one_deselect_action": "nullify"
+    }
+  },
+  {
+    "collection": "compensation_requests",
+    "field": "declined_by",
+    "related_collection": "directus_users",
+    "schema": {
+      "constraint_name": "compensation_requests_declined_by_foreign",
+      "table": "compensation_requests",
+      "column": "declined_by",
+      "foreign_key_schema": "public",
+      "foreign_key_table": "directus_users",
+      "foreign_key_column": "id",
+      "on_update": "NO ACTION",
+      "on_delete": "SET NULL"
+    },
+    "meta": {
+      "id": 137,
+      "many_collection": "compensation_requests",
+      "many_field": "declined_by",
+      "one_collection": "directus_users",
+      "one_field": null,
+      "one_collection_field": null,
+      "one_allowed_collections": null,
+      "junction_field": null,
+      "sort_field": null,
+      "one_deselect_action": "nullify"
+    }
+  }
+]

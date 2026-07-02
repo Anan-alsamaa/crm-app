@@ -5,6 +5,7 @@ import {
   AppShell,
   type AppShellRailContext,
   Avatar,
+  ClockIcon,
   cn,
   ErrorBoundary,
   InboxIcon,
@@ -41,6 +42,11 @@ const PreferencesPage = lazy(() =>
 );
 const ContactsPage = lazy(() =>
   import('./features/contacts/ContactsPage.js').then((m) => ({ default: m.ContactsPage })),
+);
+const CompensationPage = lazy(() =>
+  import('./features/compensation/CompensationPage.js').then((m) => ({
+    default: m.CompensationPage,
+  })),
 );
 const ContactProfilePage = lazy(() =>
   import('./features/contacts/ContactProfilePage.js').then((m) => ({
@@ -217,6 +223,11 @@ function Shell({ children }: { children: React.ReactNode }) {
           label: t('nav.contacts', { defaultValue: 'Contacts' }),
           icon: UsersIcon,
         },
+        {
+          to: '/compensation',
+          label: t('nav.compensation', { defaultValue: 'Compensation' }),
+          icon: ClockIcon,
+        },
       ],
     },
     {
@@ -371,6 +382,26 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <ContactProfilePage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/compensation"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <CompensationPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/compensation/:id"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <CompensationPage />
                 </Shell>
               </ProtectedRoute>
             }
