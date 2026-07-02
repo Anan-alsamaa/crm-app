@@ -55,7 +55,12 @@ portal triggers by id and works against whatever `VITE_DIRECTUS_URL` points at.
 # creds default to the local dev admin; override via env if needed
 node directus/compensation-clone/apply-local.mjs     # 5 collections + relations
 node directus/compensation-clone/standin-flows.mjs   # 7 safe stand-in flows (same ids)
+node directus/compensation-clone/layout-local.mjs   # admin form layout: tabs, super-header, action-button bar (matches prod)
 node directus/compensation-clone/seed.mjs            # synthetic sample requests
 ```
 
 All three are idempotent. Nothing here writes to production.
+
+## Directus admin buttons (parity note)
+
+The action buttons on the item page come from the `links-ycdmfv` (presentation-links, actionType=flow) + `header-crt4xp` (super-header) fields, rendered by MARKETPLACE EXTENSIONS. Production has 17 extensions; a fresh local Directus has fewer. If the buttons render as a fallback locally, install the matching interface extensions (Super Header + the flow-action links interface) via Settings → Marketplace, then reload. The fields + flow ids are already in place, so once the extensions are present the buttons appear and trigger the SAFE local stand-in flows.
