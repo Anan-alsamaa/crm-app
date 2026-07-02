@@ -8,6 +8,13 @@ export interface WidgetConfig {
   token: string;
   locale?: WidgetLocale;
   /**
+   * Open the chat panel immediately on load instead of showing only the
+   * launcher. Host pages that embed the widget on a dedicated support page
+   * (e.g. a "Chat with us" link) set this so the customer lands straight in
+   * the conversation. Defaults to false (launcher-first).
+   */
+  autoOpen?: boolean;
+  /**
    * Fallback contact details surfaced when no support agent is online.
    * Host pages can override per vendor; defaults match the Yiji CS desk.
    */
@@ -210,7 +217,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
   const tr = t(locale);
   const rtl = isRtl(locale);
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(config.autoOpen ?? false);
   const [status, setStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'error'>(
     'connecting',
   );
