@@ -96,7 +96,8 @@ export function ImportsPage() {
     onError: (err) =>
       toast.error(
         t('imports.queueError', {
-          defaultValue: `Could not queue import: ${(err as Error).message}`,
+          message: (err as Error).message,
+          defaultValue: 'Could not queue import: {{message}}',
         }),
       ),
   });

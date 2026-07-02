@@ -217,7 +217,11 @@ export function SlaReportsPage() {
             aria-label={t('slaReports.range', { defaultValue: 'Date range' })}
             options={RANGE_DAYS.map((d) => ({
               value: String(d),
-              label: t('slaReports.lastDays', { count: d, defaultValue: `Last ${d} days` }),
+              label: t('slaReports.lastDays', {
+                count: d,
+                days: d,
+                defaultValue: 'Last {{days}} days',
+              }),
             }))}
           />
         </div>

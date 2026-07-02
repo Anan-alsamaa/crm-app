@@ -109,13 +109,15 @@ export function ReportsPage() {
     onSuccess: (info) =>
       toast.success(
         t('reports.runQueued', {
-          defaultValue: `Report queued (job ${info.jobId}). The worker will run it shortly.`,
+          jobId: info.jobId,
+          defaultValue: 'Report queued (job {{jobId}}). The worker will run it shortly.',
         }),
       ),
     onError: (err) =>
       toast.error(
         t('reports.runError', {
-          defaultValue: `Could not run report: ${(err as Error).message}`,
+          message: (err as Error).message,
+          defaultValue: 'Could not run report: {{message}}',
         }),
       ),
   });

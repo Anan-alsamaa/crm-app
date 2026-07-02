@@ -33,7 +33,8 @@
     "closeMenu": "Close menu",
     "signedInAs": "Signed in as {{name}}",
     "workspace": "Workspace",
-    "policies": "Policies"
+    "policies": "Policies",
+    "slaReports": "SLA reports"
   },
   "dashboard": {
     "title": "Overview",
@@ -54,7 +55,9 @@
     "topAgents": "Agent productivity",
     "topVendors": "Vendor activity",
     "resolvedUnit": "resolved",
-    "convsUnit": "convos"
+    "convsUnit": "convos",
+    "loadError": "Could not load metrics",
+    "loadErrorHint": "Check your connection and try again."
   },
   "automation": {
     "title": "Automation",
@@ -91,7 +94,12 @@
     "act": "act",
     "enable": "enable",
     "disable": "disable",
-    "confirmDelete": "Delete this rule?"
+    "confirmDelete": "Delete this rule?",
+    "action": "Action",
+    "deleteError": "Could not delete rule.",
+    "loadError": "Could not load automation rules",
+    "loadErrorHint": "Check your connection and try again.",
+    "operator": "Operator"
   },
   "reports": {
     "title": "Reports",
@@ -125,7 +133,13 @@
     "recipientsShort": "recipients",
     "lastRun": "Last run",
     "neverRun": "Never run",
-    "confirmDelete": "Delete this report?"
+    "confirmDelete": "Delete this report?",
+    "deleteError": "Could not delete report.",
+    "loadError": "Could not load reports",
+    "loadErrorHint": "Check your connection and try again.",
+    "runError": "Could not run report: {{message}}",
+    "runNow": "Run now",
+    "runQueued": "Report queued (job {{jobId}}). The worker will run it shortly."
   },
   "customFields": {
     "title": "Custom fields",
@@ -151,7 +165,10 @@
     "required": "Required",
     "requiredShort": "required",
     "order": "Display order",
-    "confirmDelete": "Delete this field?"
+    "confirmDelete": "Delete this field?",
+    "deleteError": "Could not delete field.",
+    "loadError": "Could not load custom fields",
+    "loadErrorHint": "Check your connection and try again."
   },
   "imports": {
     "title": "Import contacts",
@@ -166,7 +183,8 @@
     "queue": "Queue import",
     "queued": "Import queued.",
     "empty": "Upload a CSV to begin",
-    "emptyHint": "Map columns to contact fields, preview the first rows, then queue the import."
+    "emptyHint": "Map columns to contact fields, preview the first rows, then queue the import.",
+    "queueError": "Could not queue import: {{message}}"
   },
   "vendors": {
     "title": "Vendors",
@@ -234,7 +252,12 @@
     "sectionDeadlines": "Deadlines",
     "sectionDeadlinesHint": "Time targets are in minutes. Warnings fire at the threshold % of each deadline.",
     "sectionPriorities": "Applies to priorities",
-    "sectionPrioritiesHint": "Tickets with these priorities will be governed by this policy."
+    "sectionPrioritiesHint": "Tickets with these priorities will be governed by this policy.",
+    "edit": "Edit policy",
+    "loadError": "Could not load SLA policies",
+    "loadErrorHint": "Check your connection and try again.",
+    "updateError": "Could not update policy.",
+    "updated": "Policy updated."
   },
   "users": {
     "title": "Users",
@@ -274,7 +297,9 @@
     "sectionAccessHint": "Role decides what they can do. Team decides where conversations route.",
     "sectionCredentials": "Credentials & locale",
     "sectionCredentialsHint": "Set an initial password and their default UI language.",
-    "passwordHint": "At least 6 characters."
+    "passwordHint": "At least 6 characters.",
+    "loadError": "Could not load users",
+    "loadErrorHint": "Check your connection and try again."
   },
   "teams": {
     "title": "Teams",
@@ -292,7 +317,9 @@
     "descriptionHint": "A short blurb about what this team handles.",
     "sectionMembers": "Members",
     "sectionMembersHint": "Assign members from the Users page after creating the team.",
-    "membersHelper": "You can assign agents to this team from the Users page once the team is created."
+    "membersHelper": "You can assign agents to this team from the Users page once the team is created.",
+    "loadError": "Could not load teams",
+    "loadErrorHint": "Check your connection and try again."
   },
   "cmd": {
     "pages": "Pages",
@@ -307,5 +334,38 @@
     "commandPalette": "Command palette",
     "showShortcuts": "Show this help",
     "closeDialogs": "Close dialogs"
+  },
+  "actions": {
+    "retry": "Retry"
+  },
+  "slaReports": {
+    "breached": "Breached",
+    "byAgent": "By agent",
+    "byTicket": "By ticket",
+    "colAgent": "Agent",
+    "colAvgReply": "Avg 1st reply",
+    "colBreaches": "Breaches",
+    "colFirstResponse": "First response",
+    "colPriority": "Priority",
+    "colReplyTime": "1st reply",
+    "colResolution": "Resolution",
+    "colStatus": "Status",
+    "colTicket": "Ticket",
+    "colTickets": "Tickets",
+    "drillHint": "Click an agent to see their tickets.",
+    "empty": "No tickets in this window",
+    "emptyHint": "Widen the date range, or wait for tickets with SLA targets to land.",
+    "exportCsv": "Export CSV",
+    "filteredBy": "Agent:",
+    "kpiBreaches": "Breaches",
+    "kpiFirstResponse": "First-response SLA",
+    "kpiResolution": "Resolution SLA",
+    "kpiTickets": "Tickets",
+    "lastDays": "Last {{days}} days",
+    "met": "Met",
+    "pending": "Pending",
+    "range": "Date range",
+    "subtitle": "First-response & resolution SLA — drill from agent into tickets",
+    "title": "SLA reports"
   }
 }

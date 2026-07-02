@@ -25,7 +25,11 @@
     "conversation": "Conversation",
     "ticket": "Ticket",
     "noHistory": "No conversations or tickets yet.",
-    "allContacts": "Contacts"
+    "allContacts": "Contacts",
+    "editContact": "Edit contact",
+    "name": "Name",
+    "saveError": "Could not save customer details.",
+    "saved": "Customer details saved."
   },
   "commerce": {
     "title": "Commerce",
@@ -39,7 +43,12 @@
     "noOrders": "No orders yet.",
     "payment": "payment",
     "shipment": "shipment",
-    "moreItems": "more"
+    "moreItems": "more",
+    "ask": "Ask",
+    "askAi": "Ask AI about orders",
+    "askPlaceholder": "Ask about the order(s)…",
+    "orderIdLabel": "Order ID (optional)",
+    "orderIdPlaceholder": "Order ID (blank = latest orders)"
   },
   "ai": {
     "title": "AI assistance",
@@ -80,7 +89,8 @@
     "closeMenu": "Close menu",
     "signedInAs": "Signed in as {{name}}",
     "work": "Work",
-    "account": "Account"
+    "account": "Account",
+    "compensation": "Compensation"
   },
   "inbox": {
     "title": "Shared Inbox",
@@ -119,7 +129,9 @@
       "recent": "Recent activity",
       "zeroArt": "New conversations will land here as customers reach out through the widget, email, or other channels."
     },
-    "resizeList": "Resize conversation list"
+    "resizeList": "Resize conversation list",
+    "loadError": "Could not load conversations",
+    "loadErrorHint": "Check your connection and try again."
   },
   "conversation": {
     "replyPlaceholder": "Type a reply…",
@@ -168,7 +180,14 @@
       "note": "Internal note"
     },
     "sendHint": "to send",
-    "newlineHint": "for newline"
+    "newlineHint": "for newline",
+    "deleteTag": "Delete “{{name}}” from the library",
+    "deleteTagConfirm": "Delete “{{name}}” everywhere?",
+    "deleteTagTitle": "Delete tag everywhere",
+    "deleteTagWarning": "This removes the tag from every conversation, contact and ticket it’s on. It can’t be undone.",
+    "noTagsYetHint": "No tags yet — type to create one.",
+    "tagAdded": "Added",
+    "tagDeleted": "Deleted “{{name}}” everywhere."
   },
   "sidebar": {
     "contact": "Contact",
@@ -183,7 +202,12 @@
     "internalNotes": "Internal notes",
     "noNotes": "No internal notes yet.",
     "removeNote": "Remove note",
-    "resizePanel": "Resize details panel"
+    "resizePanel": "Resize details panel",
+    "contactSaveError": "Could not save customer details.",
+    "contactSaved": "Customer details saved everywhere.",
+    "editContact": "Edit customer details",
+    "name": "Name",
+    "openTicket": "Open ticket"
   },
   "tickets": {
     "title": "Tickets",
@@ -235,7 +259,9 @@
     "overdue": "overdue",
     "emptyHint": "Tickets are created from conversations that need follow-up.",
     "selectHint": "Pick a ticket on the left to see its workflow, SLA timeline, and history.",
-    "slaSection": "SLA"
+    "slaSection": "SLA",
+    "contactSearchPrompt": "Type a phone number or name to find a contact.",
+    "viewConversation": "View conversation →"
   },
   "notifications": {
     "title": "Notifications",
@@ -275,7 +301,10 @@
       "none": "None"
     },
     "saved": "Preferences saved.",
-    "error": "Could not save preferences."
+    "error": "Could not save preferences.",
+    "group": {
+      "sound": "Sound"
+    }
   },
   "cmd": {
     "pages": "Pages",
@@ -306,5 +335,44 @@
     "prefHint": "Play a short chime in this browser when a new message arrives.",
     "on": "On",
     "off": "Off"
+  },
+  "actions": {
+    "retry": "Retry"
+  },
+  "compensation": {
+    "actionError": "Action failed. Try again.",
+    "actions": "Actions",
+    "all": "All",
+    "back": "Back",
+    "badJson": "{{label}} must be valid JSON.",
+    "brand": "Brand",
+    "claimed": "Claimed amount",
+    "complaint": "Complaint",
+    "confirm": "Confirm this action?",
+    "coupon": "Coupon",
+    "customer": "Customer",
+    "declineReason": "Decline reason",
+    "deliveryFee": "Delivery fee",
+    "done": "{{label}} done.",
+    "empty": "No compensation requests",
+    "emptyHint": "Requests submitted by customers will appear here.",
+    "final": "Final value",
+    "issue": "Issue",
+    "items": "Items with issue",
+    "loadError": "Could not load compensation requests.",
+    "mobile": "Mobile",
+    "name": "Name",
+    "notFound": "Request not found.",
+    "order": "Order",
+    "orderTotal": "Order total",
+    "required": "{{label}} is required.",
+    "resolution": "Compensation",
+    "restaurant": "Restaurant",
+    "run": "Confirm",
+    "subtitle": "Review customer compensation requests and run each step.",
+    "suggested": "Suggested",
+    "terminal": "This request is closed — no further actions.",
+    "title": "Compensation",
+    "type": "Type"
   }
 }
