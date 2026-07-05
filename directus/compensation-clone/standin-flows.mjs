@@ -80,6 +80,12 @@ for (const a of contract.actions) {
       collection: 'compensation_requests',
       key: '{{$trigger.body.keys}}',
       payload: PAYLOAD[a.key] ?? {},
+      // Run the write with full access, not the triggering agent's perms.
+      // The agent is granted READ-only on compensation_requests (see
+      // grant-agent-perms.mjs); without this the update is FORBIDDEN and the
+      // action silently no-ops. Mirrors prod, where the real flows run
+      // privileged and the agent only triggers them.
+      permissions: '$full',
     },
   });
   if (!op.ok) { console.log(`✗ op ${a.key} (${op.status})`); continue; }
