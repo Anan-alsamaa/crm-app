@@ -37,14 +37,20 @@ async function api(method, path, body) {
 }
 
 // The item-update payload each stand-in applies (mirrors the prod status effect).
+// Each action sets its OWN status so the workflow stage is always visible.
+// (The UI's Accept button uses the `approve` flow; Close uses the `refund` flow.)
 const PAYLOAD = {
-  acknowledge: { status: 'In Progress', inprogress_at: '$NOW' },
-  calculate: { suggested_compensation_value: '5', request_frequency: 1 },
-  generate_coupon: { coupon_code: 'LOCAL-DEV-COUPON', status: 'In Progress' },
-  assign_coupon: { status: 'In Progress' },
-  approve: { status: 'Approved', approved_at: '$NOW' },
+  acknowledge: { status: 'Acknowledged', inprogress_at: '$NOW' },
+  calculate: {
+    status: 'Calculating Compensation',
+    suggested_compensation_value: '5',
+    request_frequency: 1,
+  },
+  generate_coupon: { status: 'Generating Coupon', coupon_code: 'LOCAL-DEV-COUPON' },
+  assign_coupon: { status: 'Assign Coupon to User' },
+  approve: { status: 'Accepted', approved_at: '$NOW' },
   reject: { status: 'Rejected', declined_at: '$NOW' },
-  refund: { status: 'Approved' },
+  refund: { status: 'Closed' },
 };
 
 await login();

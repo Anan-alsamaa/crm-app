@@ -64,7 +64,9 @@ export const COMPENSATION_ACTIONS: CompAction[] = [
   {
     key: 'close',
     label: 'Close task',
-    flowId: '6482d337-286e-4606-98de-21b734796b84',
+    // Dedicated flow (the ex-"refund" flow) so Close sets its own "Closed"
+    // status distinct from Accept's "Accepted".
+    flowId: '13011877-701e-4d9c-b31e-711d196d097e',
     type: 'success',
   },
 ];

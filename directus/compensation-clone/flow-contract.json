@@ -1,7 +1,16 @@
 {
   "_comment": "Agent-facing compensation workflow. Each action is a Directus MANUAL flow triggered via POST /flows/trigger/{id} with body { collection: 'compensation_requests', keys: [<requestId>], ...inputs }. IDs are identical in production and in the local clone (preserved on purpose) so the portal is environment-agnostic — it targets VITE_DIRECTUS_URL. Real execution (incl. the Yiji CreateCoupon call) happens on the Directus the portal points at; local stand-in flows perform only the status transition, no external calls.",
   "collection": "compensation_requests",
-  "statuses": ["Pending", "In Progress", "Approved", "Rejected"],
+  "statuses": [
+    "Pending",
+    "Acknowledged",
+    "Calculating Compensation",
+    "Generating Coupon",
+    "Assign Coupon to User",
+    "Accepted",
+    "Closed",
+    "Rejected"
+  ],
   "actions": [
     {
       "key": "acknowledge",

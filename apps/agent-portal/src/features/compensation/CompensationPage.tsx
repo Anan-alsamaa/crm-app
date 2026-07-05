@@ -13,10 +13,17 @@ import {
 } from './api.js';
 import { COMPENSATION_ACTIONS, type CompAction, type CompLinkType } from './actions.js';
 
-const STATUS_TONE: Record<CompensationStatus, 'warning' | 'primary' | 'success' | 'destructive'> = {
+const STATUS_TONE: Record<
+  CompensationStatus,
+  'warning' | 'neutral' | 'primary' | 'success' | 'muted' | 'destructive'
+> = {
   Pending: 'warning',
-  'In Progress': 'primary',
-  Approved: 'success',
+  Acknowledged: 'neutral',
+  'Calculating Compensation': 'primary',
+  'Generating Coupon': 'primary',
+  'Assign Coupon to User': 'primary',
+  Accepted: 'success',
+  Closed: 'muted',
   Rejected: 'destructive',
 };
 
