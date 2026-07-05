@@ -1,17 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import {
-  ArrowLeftIcon,
-  Button,
-  cn,
-  EmptyState,
-  Input,
-  Pill,
-  Skeleton,
-  Textarea,
-  toast,
-} from '@yiji/ui';
+import { ArrowLeftIcon, Button, cn, EmptyState, Pill, Skeleton, toast } from '@yiji/ui';
 import {
   useCompensationRequests,
   useCompensationRequest,
@@ -327,58 +317,23 @@ function RequestDetail({ id }: { id: string }) {
 function ActionPanel({ request }: { request: CompensationRow }) {
   const { t } = useTranslation();
   const trigger = useTriggerCompensationFlow();
-  const [active, setActive] = useState<CompAction | null>(null);
-  const [form, setForm] = useState<Record<string, string>>({});
-  const [err, setErr] = useState<string | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
 
-  // Exact mirror of the Directus admin button bar — all actions, fixed order.
-  const actions = COMPENSATION_ACTIONS;
-
-  const open = (a: CompAction) => {
-    setActive(a);
-    setForm({});
-    setErr(null);
-  };
-
-  const submit = () => {
-    if (!active) return;
-    const inputs: Record<string, unknown> = {};
-    for (const inp of active.inputs) {
-      const raw = (form[inp.field] ?? '').trim();
-      if (inp.required && !raw) {
-        setErr(
-          t('compensation.required', { label: inp.label, defaultValue: '{{label}} is required.' }),
-        );
-        return;
-      }
-      if (!raw) continue;
-      if (inp.type === 'json') {
-        try {
-          inputs[inp.field] = JSON.parse(raw);
-        } catch {
-          setErr(
-            t('compensation.badJson', {
-              label: inp.label,
-              defaultValue: '{{label}} must be valid JSON.',
-            }),
-          );
-          return;
-        }
-      } else {
-        inputs[inp.field] = raw;
-      }
-    }
+  // Thin trigger surface: one click fires this record's Directus flow. No confirm
+  // step, no inputs — Directus owns all the logic (calculations, coupon
+  // generation, the Yiji calls). The portal just POSTs { collection, keys }.
+  const run = (a: CompAction) => {
+    setPendingKey(a.key);
     trigger.mutate(
-      { flowId: active.flowId, requestId: request.id, inputs },
+      { flowId: a.flowId, requestId: request.id },
       {
-        onSuccess: () => {
+        onSuccess: () =>
           toast.success(
-            t('compensation.done', { label: active.label, defaultValue: '{{label}} done.' }),
-          );
-          setActive(null);
-        },
+            t('compensation.done', { label: a.label, defaultValue: '{{label}} done.' }),
+          ),
         onError: () =>
           toast.error(t('compensation.actionError', { defaultValue: 'Action failed. Try again.' })),
+        onSettled: () => setPendingKey(null),
       },
     );
   };
@@ -389,71 +344,19 @@ function ActionPanel({ request }: { request: CompensationRow }) {
         {t('compensation.actions', { defaultValue: 'Actions' })}
       </h3>
       <div className="flex flex-wrap gap-2">
-        {actions.map((a) => (
+        {COMPENSATION_ACTIONS.map((a) => (
           <Button
             key={a.key}
             size="sm"
             variant={BTN_VARIANT[a.type]}
-            onClick={() => open(a)}
+            onClick={() => run(a)}
+            loading={pendingKey === a.key}
             disabled={trigger.isPending}
           >
             {a.label}
           </Button>
         ))}
       </div>
-
-      {active && (
-        <div className="mt-4 space-y-3 rounded-xl bg-secondary/40 px-4 py-3">
-          <div className="text-sm font-medium text-foreground">{active.label}</div>
-          {active.inputs.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              {active.confirm ??
-                t('compensation.confirm', { defaultValue: 'Confirm this action?' })}
-            </p>
-          ) : (
-            <div className="space-y-2.5">
-              {active.inputs.map((inp) => (
-                <label key={inp.field} className="block">
-                  <span className="mb-1 block text-2xs text-muted-foreground">
-                    {inp.label}
-                    {inp.required ? ' *' : ''}
-                  </span>
-                  {inp.type === 'text' || inp.type === 'json' ? (
-                    <Textarea
-                      value={form[inp.field] ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, [inp.field]: e.target.value }))}
-                      rows={inp.type === 'json' ? 3 : 2}
-                      placeholder={inp.type === 'json' ? '{ }' : ''}
-                      aria-label={inp.label}
-                    />
-                  ) : (
-                    <Input
-                      type={inp.type === 'dateTime' ? 'datetime-local' : 'text'}
-                      value={form[inp.field] ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, [inp.field]: e.target.value }))}
-                      aria-label={inp.label}
-                    />
-                  )}
-                </label>
-              ))}
-            </div>
-          )}
-          {err && <p className="text-xs text-destructive">{err}</p>}
-          <div className="flex items-center gap-2">
-            <Button size="sm" onClick={submit} loading={trigger.isPending}>
-              {t('compensation.run', { defaultValue: 'Confirm' })}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setActive(null)}
-              disabled={trigger.isPending}
-            >
-              {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
-            </Button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -43,7 +43,7 @@ const PAYLOAD = {
   generate_coupon: { coupon_code: 'LOCAL-DEV-COUPON', status: 'In Progress' },
   assign_coupon: { status: 'In Progress' },
   approve: { status: 'Approved', approved_at: '$NOW' },
-  reject: { status: 'Rejected', declined_at: '$NOW', decline_reason: '{{$trigger.reason}}' },
+  reject: { status: 'Rejected', declined_at: '$NOW' },
   refund: { status: 'Approved' },
 };
 
