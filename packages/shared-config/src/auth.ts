@@ -72,33 +72,48 @@ export function createAuthClient({ url, storage }: AuthClientOptions) {
     .with(rest({ credentials: 'include' }));
 
   async function me(): Promise<AuthUser | null> {
+    // Identity + role name is the reliable core and MUST load for a valid
+    // session. It is fetched on its own so that a hiccup computing admin_access
+    // (below) can never null out the whole user — which previously locked a real
+    // admin out of the admin portal ("Your account does not have administrator
+    // access") on any transient Directus slowness or policy-graph read quirk.
+    let raw: RawMe;
     try {
-      const raw = (await client.request(
+      raw = (await client.request(
         readMe({
+          fields: ['id', 'email', 'first_name', 'last_name', 'status', { role: ['id', 'name'] }],
+        }),
+      )) as RawMe;
+    } catch {
+      return null; // genuinely unauthenticated / Directus unreachable
+    }
+    // admin_access is computed from the policy graph as a SEPARATE, best-effort
+    // step. If it fails, we leave it false and let isAdmin()'s role-name
+    // allowlist decide — an admin is never falsely locked out by a policy read.
+    let admin_access = false;
+    try {
+      const acc = (await client.request(
+        readMe({
+          // role.policies + direct policies carry admin_access in Directus 11.
           fields: [
-            'id',
-            'email',
-            'first_name',
-            'last_name',
-            'status',
-            // role.policies + direct policies carry admin_access in Directus 11.
-            { role: ['id', 'name', { policies: [{ policy: ['admin_access'] }] }] },
+            { role: [{ policies: [{ policy: ['admin_access'] }] }] },
             { policies: [{ policy: ['admin_access'] }] },
           ],
         }),
       )) as RawMe;
-      return {
-        id: raw.id,
-        email: raw.email,
-        first_name: raw.first_name,
-        last_name: raw.last_name,
-        status: raw.status,
-        role: raw.role ? { id: raw.role.id, name: raw.role.name } : null,
-        admin_access: grantsAdmin(raw.role?.policies) || grantsAdmin(raw.policies),
-      };
+      admin_access = grantsAdmin(acc.role?.policies) || grantsAdmin(acc.policies);
     } catch {
-      return null;
+      /* keep admin_access=false; isAdmin() falls back to the role-name allowlist */
     }
+    return {
+      id: raw.id,
+      email: raw.email,
+      first_name: raw.first_name,
+      last_name: raw.last_name,
+      status: raw.status,
+      role: raw.role ? { id: raw.role.id, name: raw.role.name } : null,
+      admin_access,
+    };
   }
 
   return {
