@@ -89,7 +89,22 @@ for (const a of contract.actions) {
     },
   });
   if (!op.ok) { console.log(`✗ op ${a.key} (${op.status})`); continue; }
-  // Wire the trigger to the operation.
+  // A terminal transform op so the flow returns an OBJECT ({ ok: true }), not the
+  // bare updated id. @directus/sdk v17's request() does `'data' in <response>`,
+  // which throws a TypeError on a string primitive — the trigger 200s and the
+  // write lands, but the portal's SDK call throws and shows "Action failed".
+  // Returning an object keeps the SDK's response parsing happy.
+  const ret = await api('POST', '/operations', {
+    flow: a.flowId,
+    name: 'Return OK',
+    key: 'return_ok',
+    type: 'transform',
+    position_x: 37,
+    position_y: 1,
+    options: { json: { ok: true } },
+  });
+  if (ret.ok) await api('PATCH', `/operations/${op.json.data.id}`, { resolve: ret.json.data.id });
+  // Wire the trigger to the entry (item-update) operation.
   await api('PATCH', `/flows/${a.flowId}`, { operation: op.json.data.id });
   console.log(`+ stand-in flow ${a.key} (${a.flowId})`);
 }
