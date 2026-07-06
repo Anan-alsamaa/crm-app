@@ -58,13 +58,21 @@ async function main(): Promise<void> {
   //  - sla: reconcile patches idempotent values + schedules warning/breach via
   //    deterministic jobIds; a warning/breach re-run only re-creates a low-harm
   //    audit event, and its notification enqueue now carries a deterministic jobId.
-  // reports / ai stay at BullMQ's default attempts:1 pending their own review.
+  //  - reports: generation is a pure read+aggregate; both the email send and the
+  //    last_run_at stamp are best-effort (caught), so the job only throws before
+  //    the send — a retry re-generates + emails once, never a double report.
+  //  - ai: each kind calls the AI gateway (cached per-input at the gateway) then
+  //    does a single idempotent updateItem (overwrite of ai_summary / ai_lead_*),
+  //    so a retry re-derives + overwrites — never a duplicate side effect.
+  // Every queue has now passed an idempotency review, so retries are fleet-wide.
   const RETRY = { attempts: 3, backoff: { type: 'exponential' as const, delay: 2000 } };
   const retryableQueues = new Set<string>([
     QUEUES.notifications,
     QUEUES.imports,
     QUEUES.automation,
     QUEUES.sla,
+    QUEUES.reports,
+    QUEUES.ai,
   ]);
   const queues = Object.fromEntries(
     queueNames.map((name) => [
