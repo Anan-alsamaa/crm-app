@@ -7,7 +7,19 @@ import React from 'react';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (k: string, o?: { defaultValue?: string }) => o?.defaultValue ?? k,
+    // Return the defaultValue and interpolate {{param}} placeholders like real
+    // i18next (e.g. 'Last {{days}} days' + { days: 7 } → 'Last 7 days'), so
+    // interpolated labels render their concrete text.
+    t: (k: string, o?: Record<string, unknown> & { defaultValue?: string }) => {
+      let s = (o?.defaultValue ?? k) as string;
+      if (o) {
+        for (const [key, val] of Object.entries(o)) {
+          if (key === 'defaultValue') continue;
+          s = s.replace(new RegExp(`{{\\s*${key}\\s*}}`, 'g'), String(val));
+        }
+      }
+      return s;
+    },
   }),
 }));
 
