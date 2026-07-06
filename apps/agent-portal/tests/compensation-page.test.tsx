@@ -17,7 +17,16 @@ const h = vi.hoisted(() => ({
   mutate: vi.fn(),
 }));
 vi.mock('../src/features/compensation/api.js', () => ({
-  COMPENSATION_STATUSES: ['Pending', 'In Progress', 'Approved', 'Rejected'],
+  COMPENSATION_STATUSES: [
+    'Pending',
+    'Acknowledged',
+    'Calculating Compensation',
+    'Generating Coupon',
+    'Assign Coupon to User',
+    'Accepted',
+    'Closed',
+    'Rejected',
+  ],
   useCompensationRequests: () => h.requests,
   useCompensationRequest: () => h.request,
   useCompensationItems: () => h.items,
@@ -59,7 +68,10 @@ beforeEach(() => {
   h.requests = { data: [], isLoading: false, isError: false };
   h.request = { data: null, isLoading: false };
   h.items = { data: [] };
-  h.mutate = vi.fn((_vars, opts) => opts?.onSuccess?.());
+  h.mutate = vi.fn((_vars, opts) => {
+    opts?.onSuccess?.();
+    opts?.onSettled?.();
+  });
 });
 
 describe('Compensation queue', () => {
@@ -67,7 +79,7 @@ describe('Compensation queue', () => {
     h.requests = {
       data: [
         { ...reqBase, id: 'a', request_code: 'CR-A', status: 'Pending' },
-        { ...reqBase, id: 'b', request_code: 'CR-B', status: 'Approved' },
+        { ...reqBase, id: 'b', request_code: 'CR-B', status: 'Accepted' },
       ],
       isLoading: false,
       isError: false,
@@ -76,8 +88,8 @@ describe('Compensation queue', () => {
     expect(screen.getByText('CR-A')).toBeInTheDocument();
     expect(screen.getByText('CR-B')).toBeInTheDocument();
 
-    // Filter to Approved → only CR-B remains.
-    fireEvent.click(screen.getByRole('button', { name: 'Approved' }));
+    // Filter to Accepted → only CR-B remains.
+    fireEvent.click(screen.getByRole('button', { name: 'Accepted' }));
     expect(screen.queryByText('CR-A')).not.toBeInTheDocument();
     expect(screen.getByText('CR-B')).toBeInTheDocument();
   });
@@ -88,78 +100,66 @@ describe('Compensation queue', () => {
   });
 });
 
-// Exact mirror of the Directus admin `links-ycdmfv` button bar.
-const EXPECTED_BAR = [
-  'Acknowledge',
-  'Accept',
-  'Reject',
-  'Calculate Compensation',
-  'Generate Coupon',
-  'User Assign Coupon',
-  'Close task',
+// Exact mirror of the Directus admin `links-ycdmfv` button bar (order + labels).
+const BAR: Array<[label: string, flowId: string]> = [
+  ['Acknowledge', 'f6fc9809-e036-40e8-921c-b1aae3fa4ef5'],
+  ['Accept', '6482d337-286e-4606-98de-21b734796b84'],
+  ['Reject', '9335c8fb-5744-43cc-9964-6fa0de0bb4d1'],
+  ['Calculate Compensation', '90a0639c-1c2d-4eeb-814f-4a4885625ea0'],
+  ['Generate Coupon', 'fd7dd27e-fcbe-4447-9864-82817da5fc78'],
+  ['User Assign Coupon', '9a09201e-ef25-4202-8afc-5088873b5905'],
+  ['Close task', '13011877-701e-4d9c-b31e-711d196d097e'],
 ];
 
 describe('Compensation detail — action bar mirrors Directus exactly', () => {
   it('renders all 7 buttons in the exact order, for every status', () => {
-    for (const status of ['Pending', 'In Progress', 'Approved', 'Rejected']) {
+    const labels = BAR.map(([l]) => l);
+    for (const status of ['Pending', 'Acknowledged', 'Accepted', 'Rejected']) {
       h.request = { data: { ...reqBase, status }, isLoading: false };
       const { unmount } = renderAt('/compensation/req-1');
       const bar = screen
         .getAllByRole('button')
         .map((b) => b.textContent?.trim())
-        .filter((x) => EXPECTED_BAR.includes(x ?? ''));
-      expect(bar).toEqual(EXPECTED_BAR);
+        .filter((x) => labels.includes(x ?? ''));
+      expect(bar).toEqual(labels);
       unmount();
     }
   });
 
-  it('does not render actions that are not in the production bar (e.g. Refund)', () => {
-    h.request = { data: { ...reqBase, status: 'In Progress' }, isLoading: false };
+  it('does not render actions outside the production bar (e.g. Refund)', () => {
+    h.request = { data: { ...reqBase, status: 'Pending' }, isLoading: false };
     renderAt('/compensation/req-1');
     expect(screen.queryByRole('button', { name: 'Refund amount' })).not.toBeInTheDocument();
   });
 });
 
-describe('Compensation detail — triggering flows', () => {
-  it('Acknowledge (no inputs) triggers its flow after confirm', async () => {
+describe('Compensation detail — one-click flow triggers (thin surface)', () => {
+  it('each button fires its flow directly — no confirm step, no inputs', async () => {
     h.request = { data: { ...reqBase, status: 'Pending' }, isLoading: false };
     renderAt('/compensation/req-1');
-    fireEvent.click(screen.getByRole('button', { name: 'Acknowledge' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-    await waitFor(() => expect(h.mutate).toHaveBeenCalled());
-    expect(h.mutate.mock.calls[0]![0]).toMatchObject({
-      flowId: 'f6fc9809-e036-40e8-921c-b1aae3fa4ef5',
-      requestId: 'req-1',
-      inputs: {},
-    });
+
+    // No confirm/inputs anywhere — one click = one flow run.
+    expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Reason')).not.toBeInTheDocument();
+
+    for (const [label, flowId] of BAR) {
+      h.mutate.mockClear();
+      fireEvent.click(screen.getByRole('button', { name: label }));
+      await waitFor(() => expect(h.mutate).toHaveBeenCalledTimes(1));
+      const arg = h.mutate.mock.calls[0]![0];
+      expect(arg).toEqual({ flowId, requestId: 'req-1' });
+      expect(arg).not.toHaveProperty('inputs');
+    }
   });
 
-  it('Reject requires a reason before it will trigger', async () => {
-    h.request = { data: { ...reqBase, status: 'Pending' }, isLoading: false };
-    renderAt('/compensation/req-1');
-    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
-    // Confirm with empty reason → validation error, no trigger.
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-    expect(h.mutate).not.toHaveBeenCalled();
-    // Fill reason → triggers with the reason input.
-    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Out of SLA' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-    await waitFor(() => expect(h.mutate).toHaveBeenCalled());
-    expect(h.mutate.mock.calls[0]![0]).toMatchObject({
-      flowId: '9335c8fb-5744-43cc-9964-6fa0de0bb4d1',
-      inputs: { reason: 'Out of SLA' },
-    });
-  });
-
-  it('Close task triggers the same flow as Accept (6482d337)', async () => {
-    h.request = { data: { ...reqBase, status: 'In Progress' }, isLoading: false };
+  it('Close task uses its own flow id (13011877), distinct from Accept', async () => {
+    h.request = { data: { ...reqBase, status: 'Accepted' }, isLoading: false };
     renderAt('/compensation/req-1');
     fireEvent.click(screen.getByRole('button', { name: 'Close task' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(h.mutate).toHaveBeenCalled());
     expect(h.mutate.mock.calls[0]![0]).toMatchObject({
-      flowId: '6482d337-286e-4606-98de-21b734796b84',
-      requestId: 'req-1',
+      flowId: '13011877-701e-4d9c-b31e-711d196d097e',
     });
+    expect(h.mutate.mock.calls[0]![0].flowId).not.toBe('6482d337-286e-4606-98de-21b734796b84');
   });
 });
