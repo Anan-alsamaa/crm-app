@@ -2,7 +2,6 @@ import type {
   EntitiesResponse,
   IntentResponse,
   LeadScoreResponse,
-  OrderAssistResponse,
   SemanticSearchResponse,
   SentimentResponse,
   SuggestReplyResponse,
@@ -87,21 +86,4 @@ export const ai = {
     post<SemanticSearchResponse>(c, AI_ENDPOINTS.semanticSearch, { query, limit }),
   scoreLead: (c: AiCaller, conversationId: string) =>
     post<LeadScoreResponse>(c, AI_ENDPOINTS.scoreLead, { conversationId }),
-  /**
-   * In-chat order retrieval: pass an orderId for a specific order, or a
-   * customerId (the contact's external_customer_id) for the latest N orders.
-   * The gateway fetches live commerce data server-side and returns a grounded
-   * answer plus the raw order(s).
-   */
-  orderAssist: (
-    c: AiCaller,
-    opts: {
-      vendorId: string;
-      customerId?: string;
-      orderId?: string;
-      question?: string;
-      limit?: number;
-      locale?: string;
-    },
-  ) => post<OrderAssistResponse>(c, AI_ENDPOINTS.orderAssist, opts),
 };

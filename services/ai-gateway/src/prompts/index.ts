@@ -102,31 +102,4 @@ export const prompts = {
       user: thread(ctx),
     };
   },
-
-  orderAssist(
-    orderData: unknown,
-    question: string | undefined,
-    locale: string | undefined,
-  ): { system: string; user: string } {
-    return {
-      system:
-        'You are a customer-support assistant helping an agent with a customer order. ' +
-        'Use ONLY the order JSON provided — never invent or guess any value; if a field is ' +
-        'absent, omit it rather than guessing. Give a COMPLETE, well-structured answer in plain ' +
-        'text (no markdown tables), using short labelled lines:\n' +
-        '• For a SINGLE order: Order #, date placed, status, restaurant, each item (name ×qty — ' +
-        'price), Total (with currency), delivery address, and payment when present.\n' +
-        '• For a LIST of orders: one line per order — Order #, date, status, total (with currency).\n' +
-        'When the agent asks a specific question, answer it first, then include the supporting ' +
-        'order details. ' +
-        `${locale ? `Answer in: ${locale}.` : "Match the customer's language."}`,
-      user:
-        `Order data (JSON):\n${JSON.stringify(orderData)}\n\n` +
-        `${
-          question
-            ? `Agent question: ${question}\nAnswer it, then list the full order details above.`
-            : 'Give the full details of the order(s) above.'
-        }`,
-    };
-  },
 };
