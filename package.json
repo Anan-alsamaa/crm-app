@@ -20,6 +20,9 @@
     "test:e2e": "playwright test",
     "test:e2e:local": "node tests/e2e-local/run.mjs",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:apps": "pnpm -r --if-present test:coverage",
+    "verify": "node scripts/verify.mjs",
+    "verify:e2e": "node scripts/verify.mjs --e2e",
     "dev": "pnpm -r --parallel --if-present dev",
     "prepare": "husky || true"
   },
