@@ -1,5 +1,5 @@
 {
-  "_comment": "Agent-facing compensation workflow. Each action is a Directus MANUAL flow triggered via POST /flows/trigger/{id} with body { collection: 'compensation_requests', keys: [<requestId>], ...inputs }. IDs are identical in production and in the local clone (preserved on purpose) so the portal is environment-agnostic — it targets VITE_DIRECTUS_URL. Real execution (incl. the Yiji CreateCoupon call) happens on the Directus the portal points at; local stand-in flows perform only the status transition, no external calls.",
+  "_comment": "Agent-facing compensation workflow. Each action is a Directus MANUAL flow triggered via POST /flows/trigger/{id} with body { collection: 'compensation_requests', keys: [<requestId>] }. The portal is a THIN trigger surface — one click = one flow run, NO inputs (all logic, incl. any coupon form / Yiji CreateCoupon call, lives in the Directus flow). Flow IDs are identical in production and the local clone (preserved on purpose) so the portal is environment-agnostic — it targets VITE_DIRECTUS_URL. Local stand-in flows perform only the status transition, no external calls. `key` values map to standin-flows.mjs's PAYLOAD table; do not rename without updating it.",
   "collection": "compensation_requests",
   "statuses": [
     "Pending",
@@ -17,64 +17,49 @@
       "label": "Acknowledge",
       "flowId": "f6fc9809-e036-40e8-921c-b1aae3fa4ef5",
       "inputs": [],
-      "effect": "status -> In Progress; stamps inprogress_at / inprogress_by",
-      "availableWhen": ["Pending"]
+      "effect": "status -> Acknowledged; stamps inprogress_at"
     },
     {
       "key": "calculate",
       "label": "Calculate compensation",
       "flowId": "90a0639c-1c2d-4eeb-814f-4a4885625ea0",
       "inputs": [],
-      "effect": "computes request_frequency + suggested_compensation_value",
-      "availableWhen": ["In Progress"]
+      "effect": "status -> Calculating Compensation; fills request_frequency + suggested_compensation_value"
     },
     {
       "key": "generate_coupon",
       "label": "Generate coupon",
       "flowId": "fd7dd27e-fcbe-4447-9864-82817da5fc78",
-      "inputs": [
-        { "field": "coupon_name", "type": "string", "required": true },
-        { "field": "coupon_code", "type": "string", "required": true },
-        { "field": "side", "type": "json", "required": true },
-        { "field": "date_from", "type": "dateTime", "required": true },
-        { "field": "date_to", "type": "dateTime", "required": false },
-        { "field": "time_form", "type": "dateTime", "required": false },
-        { "field": "time_to", "type": "dateTime", "required": false }
-      ],
-      "effect": "PROD: calls Yiji CreateCoupon, creates Com_Coupons row, links it (coupons) + sets coupon_code",
-      "availableWhen": ["In Progress"]
+      "inputs": [],
+      "effect": "status -> Generating Coupon; sets coupon_code (PROD: calls Yiji CreateCoupon, creates Com_Coupons row, links it)"
     },
     {
       "key": "assign_coupon",
       "label": "Assign coupon",
       "flowId": "9a09201e-ef25-4202-8afc-5088873b5905",
       "inputs": [],
-      "effect": "links the generated/selected coupon to the request",
-      "availableWhen": ["In Progress"]
+      "effect": "status -> Assign Coupon to User; links the coupon to the request"
     },
     {
       "key": "approve",
       "label": "Accept",
       "flowId": "6482d337-286e-4606-98de-21b734796b84",
       "inputs": [],
-      "effect": "status -> Approved; stamps approved_at (terminal)",
-      "availableWhen": ["In Progress"]
+      "effect": "status -> Accepted; stamps approved_at"
     },
     {
       "key": "reject",
       "label": "Reject",
       "flowId": "9335c8fb-5744-43cc-9964-6fa0de0bb4d1",
-      "inputs": [{ "field": "reason", "type": "text", "required": true }],
-      "effect": "status -> Rejected; stamps declined_at / declined_by / decline_reason (terminal)",
-      "availableWhen": ["Pending", "In Progress"]
+      "inputs": [],
+      "effect": "status -> Rejected; stamps declined_at (PROD flow captures a reason)"
     },
     {
       "key": "refund",
-      "label": "Refund amount",
+      "label": "Close task",
       "flowId": "13011877-701e-4d9c-b31e-711d196d097e",
-      "inputs": [{ "field": "reason", "type": "text", "required": false }],
-      "effect": "script-driven refund of the compensation amount",
-      "availableWhen": ["In Progress", "Approved"]
+      "inputs": [],
+      "effect": "status -> Closed (this is the portal's 'Close task' button)"
     }
   ]
 }

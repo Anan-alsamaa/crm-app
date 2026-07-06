@@ -24,21 +24,24 @@ See `flow-contract.json`. Each agent action is a manual flow triggered by:
 
 ```
 POST {DIRECTUS_URL}/flows/trigger/{flowId}
-{ "collection": "compensation_requests", "keys": ["<requestId>"], ...inputs }
+{ "collection": "compensation_requests", "keys": ["<requestId>"] }
 ```
 
-Flow **IDs are identical in prod and local** (preserved on purpose), so the
-portal triggers by id and works against whatever `VITE_DIRECTUS_URL` points at.
+The portal is a **thin trigger surface**: one click = one flow run, **no inputs**
+— all logic lives in the Directus flow. Flow **IDs are identical in prod and
+local** (preserved on purpose), so the portal triggers by id and works against
+whatever `VITE_DIRECTUS_URL` points at. Button order/labels mirror the prod
+`links-ycdmfv` bar exactly (see `apps/agent-portal/.../compensation/actions.ts`).
 
-| Action                 | Effect                             | Inputs                                          |
-| ---------------------- | ---------------------------------- | ----------------------------------------------- |
-| Acknowledge            | → In Progress                      | —                                               |
-| Calculate compensation | fills suggested value              | —                                               |
-| Generate coupon        | **prod:** Yiji CreateCoupon + link | coupon_name, coupon_code, side, date_from(+opt) |
-| Assign coupon          | links coupon                       | —                                               |
-| Accept                 | → Approved                         | —                                               |
-| Reject                 | → Rejected                         | reason\*                                        |
-| Refund amount          | refund                             | reason                                          |
+| Button (portal)        | Flow id   | Effect (status →)                                  |
+| ---------------------- | --------- | -------------------------------------------------- |
+| Acknowledge            | f6fc9809… | Acknowledged                                       |
+| Accept                 | 6482d337… | Accepted                                           |
+| Reject                 | 9335c8fb… | Rejected                                           |
+| Calculate Compensation | 90a0639c… | Calculating Compensation (+ suggested value)       |
+| Generate Coupon        | fd7dd27e… | Generating Coupon (prod: Yiji CreateCoupon + link) |
+| User Assign Coupon     | 9a09201e… | Assign Coupon to User                              |
+| Close task             | 13011877… | Closed                                             |
 
 ## Prod vs local execution
 
@@ -53,14 +56,15 @@ portal triggers by id and works against whatever `VITE_DIRECTUS_URL` points at.
 
 ```bash
 # creds default to the local dev admin; override via env if needed
-node directus/compensation-clone/apply-local.mjs     # 5 collections + relations
-node directus/compensation-clone/standin-flows.mjs   # 7 safe stand-in flows (same ids)
-node directus/compensation-clone/layout-local.mjs   # admin form layout: tabs, super-header, action-button bar (matches prod)
-node directus/compensation-clone/seed.mjs            # synthetic sample requests
+node directus/compensation-clone/apply-local.mjs      # 5 collections + relations
+node directus/compensation-clone/standin-flows.mjs    # 7 safe stand-in flows (same ids)
+node directus/compensation-clone/layout-local.mjs     # admin form layout: tabs, super-header, button bar
+node directus/compensation-clone/grant-agent-perms.mjs # Agent role: read on the 5 collections (portal queue)
+node directus/compensation-clone/seed.mjs             # synthetic sample requests
 ```
 
-All three are idempotent. Nothing here writes to production.
+All are idempotent. Nothing here writes to production.
 
 ## Directus admin buttons (parity note)
 
-The action buttons on the item page come from the `links-ycdmfv` (presentation-links, actionType=flow) + `header-crt4xp` (super-header) fields, rendered by MARKETPLACE EXTENSIONS. Production has 17 extensions; a fresh local Directus has fewer. If the buttons render as a fallback locally, install the matching interface extensions (Super Header + the flow-action links interface) via Settings → Marketplace, then reload. The fields + flow ids are already in place, so once the extensions are present the buttons appear and trigger the SAFE local stand-in flows.
+The action buttons on the item page come from the `links-ycdmfv` (presentation-links, actionType=flow) + `header-crt4xp` (super-header) fields. `presentation-links` is core Directus; `super-header` is a marketplace extension (`@directus-labs/super-header-interface`) that a fresh local Directus may lack. It's installed in this environment (dropped into `crm-app-infra/directus/extensions/`); on a fresh setup, install it via Settings → Marketplace (or npm pack into that folder) + restart Directus. The fields + flow ids are already in place, so the buttons render and trigger the SAFE local stand-in flows.

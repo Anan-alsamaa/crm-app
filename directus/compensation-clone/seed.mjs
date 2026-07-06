@@ -49,14 +49,14 @@ const REQUESTS = [
     items: [{ name: 'Large Fries', quantity: 1, price: 15 }, { name: 'Cola 330ml', quantity: 1, price: 10 }],
   },
   {
-    request_code: 'CR-1002', status: 'In Progress', customer_name: 'Khalid M.', customer_mobile: '+966500000022',
+    request_code: 'CR-1002', status: 'Acknowledged', customer_name: 'Khalid M.', customer_mobile: '+966500000022',
     customer_id: 'cust-1002', order_id: 'ORD-77088', order_total: 142, delivery_fee: 0,
     brand_name: 'Pasta House', restaurant_name: 'Pasta House - Malaz', complaint_type: 'late-delivery',
     description: 'Order arrived 50 minutes late and cold.', user_complaint_amount: 40,
     suggested_compensation_value: '20', items: [],
   },
   {
-    request_code: 'CR-1003', status: 'Approved', customer_name: 'Noura F.', customer_mobile: '+966500000033',
+    request_code: 'CR-1003', status: 'Accepted', customer_name: 'Noura F.', customer_mobile: '+966500000033',
     customer_id: 'cust-1003', order_id: 'ORD-76950', order_total: 60, delivery_fee: 10,
     brand_name: 'Sushi Bar', restaurant_name: 'Sushi Bar - Nakheel', complaint_type: 'missing-items',
     description: 'Wasabi and ginger missing.', final_compensation_value: 15, coupon_code: 'DEV-APPROVED-15', items: [],
