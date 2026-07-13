@@ -24,14 +24,26 @@ See `flow-contract.json`. Each agent action is a manual flow triggered by:
 
 ```
 POST {DIRECTUS_URL}/flows/trigger/{flowId}
-{ "collection": "compensation_requests", "keys": ["<requestId>"] }
+{ "collection": "compensation_requests", "keys": ["<requestId>"], ...inputs }
 ```
 
-The portal is a **thin trigger surface**: one click = one flow run, **no inputs**
-— all logic lives in the Directus flow. Flow **IDs are identical in prod and
-local** (preserved on purpose), so the portal triggers by id and works against
-whatever `VITE_DIRECTUS_URL` points at. Button order/labels mirror the prod
-`links-ycdmfv` bar exactly (see `apps/agent-portal/.../compensation/actions.ts`).
+The portal is the **trigger surface**; all logic lives in the Directus flow.
+Most actions are **one-click** (no inputs). The few prod flows that require the
+operator to fill fields in Directus' manual-trigger dialog present those **same
+fields as a form in the portal** (see each action's `inputs` in
+`apps/agent-portal/.../compensation/actions.ts`) and send the values in the
+trigger body — so nothing has to be typed in Directus:
+
+| Action          | Manual inputs (required\*)                                                     |
+| --------------- | ------------------------------------------------------------------------------ |
+| Reject          | reason\*                                                                       |
+| Generate Coupon | coupon_name\*, coupon_code\*, side\*, date_from\*, date_to, time_form, time_to |
+| Close task      | reason                                                                         |
+
+Flow **IDs are identical in prod and local** (preserved on purpose), so the
+portal triggers by id and works against whatever `VITE_DIRECTUS_URL` points at.
+Button order/labels/inputs mirror the prod `links-ycdmfv` bar + each flow's
+trigger dialog exactly.
 
 | Button (portal)        | Flow id   | Effect (status →)                                  |
 | ---------------------- | --------- | -------------------------------------------------- |
@@ -57,7 +69,7 @@ whatever `VITE_DIRECTUS_URL` points at. Button order/labels mirror the prod
 ```bash
 # creds default to the local dev admin; override via env if needed
 node directus/compensation-clone/apply-local.mjs      # 5 collections + relations
-node directus/compensation-clone/standin-flows.mjs    # 7 safe stand-in flows (same ids)
+node directus/compensation-clone/standin-flows.mjs    # 7 safe stand-in flows (same ids); add --force to recreate after changing inputs
 node directus/compensation-clone/layout-local.mjs     # admin form layout: tabs, super-header, button bar
 node directus/compensation-clone/grant-agent-perms.mjs # Agent role: read on the 5 collections (portal queue)
 node directus/compensation-clone/seed.mjs             # synthetic sample requests

@@ -4,9 +4,13 @@
  * identically against local and prod). Each stand-in performs only the visible
  * status/field transition via a single item-update; it makes NO external calls
  * (the production flows call the real Yiji CreateCoupon API — never replicated
- * locally). Idempotent: skips a flow if its id already exists.
+ * locally). Flows that require manual inputs (reject reason, the coupon form,
+ * close reason) declare those fields on the trigger and echo the relevant ones
+ * back into the record via {{$trigger.body.<field>}}. Idempotent: skips a flow
+ * if its id already exists; pass --force to delete + recreate every flow (use
+ * after changing inputs/payloads so existing local flows pick up the changes).
  *
- *   node directus/compensation-clone/standin-flows.mjs
+ *   node directus/compensation-clone/standin-flows.mjs [--force]
  */
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -16,7 +20,34 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const LOCAL = process.env.DIRECTUS_URL ?? 'http://localhost:8055';
 const EMAIL = process.env.DIRECTUS_ADMIN_EMAIL ?? 'e.habibi@anan.sa';
 const PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD ?? '123456';
+const FORCE = process.argv.includes('--force');
 const contract = JSON.parse(readFileSync(join(HERE, 'flow-contract.json'), 'utf8'));
+
+// Map a contract input `type` to a Directus manual-trigger field definition, so
+// the local admin's trigger dialog mirrors prod. (The manual trigger does NOT
+// enforce these at the API level — the portal validates required inputs — but a
+// faithful dialog keeps local ≈ prod for anyone poking at Directus directly.)
+function triggerField(i) {
+  const base = { field: i.field, name: i.label ?? i.field };
+  switch (i.type) {
+    case 'text':
+      return { ...base, type: 'text', meta: { interface: 'input-multiline', required: !!i.required } };
+    case 'dateTime':
+      return { ...base, type: 'dateTime', meta: { interface: 'datetime', required: !!i.required } };
+    case 'select':
+      return {
+        ...base,
+        type: 'json',
+        meta: {
+          interface: 'select-dropdown',
+          required: !!i.required,
+          options: { choices: i.choices ?? [] },
+        },
+      };
+    default:
+      return { ...base, type: 'string', meta: { interface: 'input', required: !!i.required } };
+  }
+}
 
 let TOKEN;
 async function login() {
@@ -39,6 +70,9 @@ async function api(method, path, body) {
 // The item-update payload each stand-in applies (mirrors the prod status effect).
 // Each action sets its OWN status so the workflow stage is always visible.
 // (The UI's Accept button uses the `approve` flow; Close uses the `refund` flow.)
+// Fields prefixed with `{{$trigger.body.` are interpolated from the trigger
+// body — i.e. the values the operator filled in the portal form. This is how the
+// UI-collected inputs land on the record (reason, the entered coupon code).
 const PAYLOAD = {
   acknowledge: { status: 'Acknowledged', inprogress_at: '$NOW' },
   calculate: {
@@ -46,17 +80,27 @@ const PAYLOAD = {
     suggested_compensation_value: '5',
     request_frequency: 1,
   },
-  generate_coupon: { status: 'Generating Coupon', coupon_code: 'LOCAL-DEV-COUPON' },
+  generate_coupon: {
+    status: 'Generating Coupon',
+    coupon_code: '{{$trigger.body.coupon_code}}',
+  },
   assign_coupon: { status: 'Assign Coupon to User' },
   approve: { status: 'Accepted', approved_at: '$NOW' },
-  reject: { status: 'Rejected', declined_at: '$NOW' },
+  reject: { status: 'Rejected', declined_at: '$NOW', decline_reason: '{{$trigger.body.reason}}' },
   refund: { status: 'Closed' },
 };
 
 await login();
 for (const a of contract.actions) {
   const cur = await api('GET', `/flows/${a.flowId}?fields=id`);
-  if (cur.ok) { console.log(`= flow ${a.key} (${a.flowId}) exists — skip`); continue; }
+  if (cur.ok) {
+    if (!FORCE) { console.log(`= flow ${a.key} (${a.flowId}) exists — skip`); continue; }
+    // --force: delete so we recreate with the current inputs/payload. Deleting a
+    // flow cascades to its operations.
+    const del = await api('DELETE', `/flows/${a.flowId}`);
+    console.log(del.ok ? `↻ recreating flow ${a.key} (${a.flowId})` : `✗ delete ${a.key} (${del.status})`);
+    if (!del.ok) continue;
+  }
   // Create the flow with the production id preserved.
   const flow = await api('POST', '/flows', {
     id: a.flowId,
@@ -68,9 +112,7 @@ for (const a of contract.actions) {
     options: {
       collections: ['compensation_requests'],
       requireConfirmation: true,
-      ...(a.inputs.length
-        ? { fields: a.inputs.map((i) => ({ field: i.field, type: i.type === 'text' ? 'text' : 'string', name: i.field, meta: { interface: i.type === 'text' ? 'input-multiline' : 'input', required: !!i.required } })) }
-        : {}),
+      ...(a.inputs.length ? { fields: a.inputs.map(triggerField) } : {}),
     },
   });
   if (!flow.ok) { console.log(`✗ flow ${a.key} (${flow.status}) ${JSON.stringify(flow.json).slice(0, 200)}`); continue; }

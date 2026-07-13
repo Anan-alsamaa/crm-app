@@ -5,7 +5,17 @@ import React from 'react';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_k: string, o?: { defaultValue?: string }) => o?.defaultValue ?? _k,
+    // Return the defaultValue with any {{param}} placeholders interpolated from
+    // the passed options (so "Confirm {{label}}" renders "Confirm Reject").
+    t: (_k: string, o?: Record<string, unknown>) => {
+      let s = (o?.defaultValue as string | undefined) ?? _k;
+      if (o) {
+        for (const [k, v] of Object.entries(o)) {
+          if (k !== 'defaultValue') s = s.replace(new RegExp(`{{${k}}}`, 'g'), String(v));
+        }
+      }
+      return s;
+    },
   }),
 }));
 
@@ -133,33 +143,106 @@ describe('Compensation detail — action bar mirrors Directus exactly', () => {
   });
 });
 
-describe('Compensation detail — one-click flow triggers (thin surface)', () => {
-  it('each button fires its flow directly — no confirm step, no inputs', async () => {
+// Actions with NO prod manual inputs stay one-click.
+const ONE_CLICK: Array<[label: string, flowId: string]> = [
+  ['Acknowledge', 'f6fc9809-e036-40e8-921c-b1aae3fa4ef5'],
+  ['Accept', '6482d337-286e-4606-98de-21b734796b84'],
+  ['Calculate Compensation', '90a0639c-1c2d-4eeb-814f-4a4885625ea0'],
+  ['User Assign Coupon', '9a09201e-ef25-4202-8afc-5088873b5905'],
+];
+
+describe('Compensation detail — one-click actions (no prod inputs)', () => {
+  it('fire their flow directly with no confirm step and no inputs', async () => {
     h.request = { data: { ...reqBase, status: 'Pending' }, isLoading: false };
     renderAt('/compensation/req-1');
 
-    // No confirm/inputs anywhere — one click = one flow run.
-    expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Reason')).not.toBeInTheDocument();
-
-    for (const [label, flowId] of BAR) {
+    for (const [label, flowId] of ONE_CLICK) {
       h.mutate.mockClear();
       fireEvent.click(screen.getByRole('button', { name: label }));
       await waitFor(() => expect(h.mutate).toHaveBeenCalledTimes(1));
       const arg = h.mutate.mock.calls[0]![0];
-      expect(arg).toEqual({ flowId, requestId: 'req-1' });
-      expect(arg).not.toHaveProperty('inputs');
+      expect(arg.flowId).toBe(flowId);
+      expect(arg.requestId).toBe('req-1');
+      expect(arg.inputs).toBeUndefined();
     }
+    // No form was opened for any of them.
+    expect(screen.queryByRole('button', { name: /^Confirm / })).not.toBeInTheDocument();
+  });
+});
+
+describe('Compensation detail — actions with manual inputs open a form', () => {
+  it('Reject requires a reason before it fires, then sends it', async () => {
+    h.request = { data: { ...reqBase, status: 'Acknowledged' }, isLoading: false };
+    renderAt('/compensation/req-1');
+
+    // The Reject button opens a form instead of firing immediately.
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    expect(h.mutate).not.toHaveBeenCalled();
+    const confirm = screen.getByRole('button', { name: 'Confirm Reject' });
+
+    // Submitting with an empty required field is blocked.
+    fireEvent.click(confirm);
+    expect(h.mutate).not.toHaveBeenCalled();
+    expect(screen.getByText('This field is required.')).toBeInTheDocument();
+
+    // Fill the reason → it fires with the value in `inputs`.
+    fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: 'Duplicate claim' } });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(h.mutate).toHaveBeenCalledTimes(1));
+    expect(h.mutate.mock.calls[0]![0]).toEqual({
+      flowId: '9335c8fb-5744-43cc-9964-6fa0de0bb4d1',
+      requestId: 'req-1',
+      inputs: { reason: 'Duplicate claim' },
+    });
   });
 
-  it('Close task uses its own flow id (13011877), distinct from Accept', async () => {
+  it('Generate Coupon collects the coupon form and sends every filled field', async () => {
+    h.request = { data: { ...reqBase, status: 'Calculating Compensation' }, isLoading: false };
+    renderAt('/compensation/req-1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Coupon' }));
+    fireEvent.change(screen.getByLabelText(/Coupon Name/), { target: { value: 'Sorry Coupon' } });
+    fireEvent.change(screen.getByLabelText(/Coupon Code/), { target: { value: 'SORRY10' } });
+    fireEvent.change(screen.getByLabelText(/Side/), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText(/Date From/), {
+      target: { value: '2026-07-13T10:00' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Generate Coupon' }));
+
+    await waitFor(() => expect(h.mutate).toHaveBeenCalledTimes(1));
+    expect(h.mutate.mock.calls[0]![0]).toEqual({
+      flowId: 'fd7dd27e-fcbe-4447-9864-82817da5fc78',
+      requestId: 'req-1',
+      inputs: {
+        coupon_name: 'Sorry Coupon',
+        coupon_code: 'SORRY10',
+        side: '1',
+        date_from: '2026-07-13T10:00',
+      },
+    });
+  });
+
+  it('Generate Coupon blocks until the required fields are filled', () => {
+    h.request = { data: { ...reqBase, status: 'Calculating Compensation' }, isLoading: false };
+    renderAt('/compensation/req-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Coupon' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Generate Coupon' }));
+    expect(h.mutate).not.toHaveBeenCalled();
+    // coupon_name, coupon_code, side, date_from are all required → 4 errors.
+    expect(screen.getAllByText('This field is required.')).toHaveLength(4);
+  });
+
+  it('Close task uses its own flow id (13011877); its reason is optional', async () => {
     h.request = { data: { ...reqBase, status: 'Accepted' }, isLoading: false };
     renderAt('/compensation/req-1');
+
     fireEvent.click(screen.getByRole('button', { name: 'Close task' }));
-    await waitFor(() => expect(h.mutate).toHaveBeenCalled());
-    expect(h.mutate.mock.calls[0]![0]).toMatchObject({
-      flowId: '13011877-701e-4d9c-b31e-711d196d097e',
-    });
-    expect(h.mutate.mock.calls[0]![0].flowId).not.toBe('6482d337-286e-4606-98de-21b734796b84');
+    // Optional reason → confirming with it empty still fires (with no inputs).
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Close task' }));
+    await waitFor(() => expect(h.mutate).toHaveBeenCalledTimes(1));
+    const arg = h.mutate.mock.calls[0]![0];
+    expect(arg.flowId).toBe('13011877-701e-4d9c-b31e-711d196d097e');
+    expect(arg.flowId).not.toBe('6482d337-286e-4606-98de-21b734796b84');
+    expect(arg.inputs).toEqual({});
   });
 });

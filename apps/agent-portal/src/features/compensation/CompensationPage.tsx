@@ -1,7 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeftIcon, Button, cn, EmptyState, Pill, Skeleton, toast } from '@yiji/ui';
+import {
+  ArrowLeftIcon,
+  Button,
+  cn,
+  EmptyState,
+  FormField,
+  Input,
+  Pill,
+  Select,
+  Skeleton,
+  Textarea,
+  toast,
+} from '@yiji/ui';
 import {
   useCompensationRequests,
   useCompensationRequest,
@@ -11,7 +23,12 @@ import {
   type CompensationRow,
   type CompensationStatus,
 } from './api.js';
-import { COMPENSATION_ACTIONS, type CompAction, type CompLinkType } from './actions.js';
+import {
+  COMPENSATION_ACTIONS,
+  type CompAction,
+  type CompInput,
+  type CompLinkType,
+} from './actions.js';
 
 const STATUS_TONE: Record<
   CompensationStatus,
@@ -325,25 +342,42 @@ function ActionPanel({ request }: { request: CompensationRow }) {
   const { t } = useTranslation();
   const trigger = useTriggerCompensationFlow();
   const [pendingKey, setPendingKey] = useState<string | null>(null);
+  // The action whose input form is open (null = none). Only actions with
+  // `inputs` open a form; the rest fire on click.
+  const [formKey, setFormKey] = useState<string | null>(null);
 
-  // Thin trigger surface: one click fires this record's Directus flow. No confirm
-  // step, no inputs — Directus owns all the logic (calculations, coupon
-  // generation, the Yiji calls). The portal just POSTs { collection, keys }.
-  const run = (a: CompAction) => {
+  // Fire this record's Directus flow. Actions with no manual inputs are
+  // one-click; actions with inputs pass the operator's values as the flow
+  // trigger body (the SAME fields prod's manual-trigger dialog asks for), so
+  // Directus still owns all the logic — the portal only collects + forwards.
+  const run = (a: CompAction, inputs?: Record<string, unknown>) => {
     setPendingKey(a.key);
     trigger.mutate(
-      { flowId: a.flowId, requestId: request.id },
+      { flowId: a.flowId, requestId: request.id, inputs },
       {
-        onSuccess: () =>
+        onSuccess: () => {
+          setFormKey(null);
           toast.success(
             t('compensation.done', { label: a.label, defaultValue: '{{label}} done.' }),
-          ),
+          );
+        },
         onError: () =>
           toast.error(t('compensation.actionError', { defaultValue: 'Action failed. Try again.' })),
         onSettled: () => setPendingKey(null),
       },
     );
   };
+
+  const onClick = (a: CompAction) => {
+    if (a.inputs.length === 0) {
+      run(a);
+      return;
+    }
+    // Toggle the form for this action (close it if it's already open).
+    setFormKey((k) => (k === a.key ? null : a.key));
+  };
+
+  const openAction = COMPENSATION_ACTIONS.find((a) => a.key === formKey) ?? null;
 
   return (
     <div className="rounded-2xl bg-card/70 px-5 py-4 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04]">
@@ -356,15 +390,157 @@ function ActionPanel({ request }: { request: CompensationRow }) {
             key={a.key}
             size="sm"
             variant={BTN_VARIANT[a.type]}
-            onClick={() => run(a)}
+            onClick={() => onClick(a)}
             loading={pendingKey === a.key}
-            disabled={trigger.isPending}
+            disabled={trigger.isPending && pendingKey !== a.key}
+            aria-expanded={a.inputs.length > 0 ? formKey === a.key : undefined}
           >
             {a.label}
           </Button>
         ))}
       </div>
+
+      {openAction && (
+        <ActionForm
+          key={openAction.key}
+          action={openAction}
+          pending={pendingKey === openAction.key}
+          onCancel={() => setFormKey(null)}
+          onSubmit={(inputs) => run(openAction, inputs)}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * The input form for an action whose prod flow requires manual fields. Renders
+ * one control per `action.inputs` entry, enforces `required`, and hands the
+ * collected values back so they ride along with the flow trigger.
+ */
+function ActionForm({
+  action,
+  pending,
+  onCancel,
+  onSubmit,
+}: {
+  action: CompAction;
+  pending: boolean;
+  onCancel: () => void;
+  onSubmit: (inputs: Record<string, unknown>) => void;
+}) {
+  const { t } = useTranslation();
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+
+  const set = (field: string, v: string) => {
+    setValues((prev) => ({ ...prev, [field]: v }));
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: false }));
+  };
+
+  const submit = () => {
+    const nextErrors: Record<string, boolean> = {};
+    for (const inp of action.inputs) {
+      if (inp.required && !(values[inp.field] ?? '').trim()) nextErrors[inp.field] = true;
+    }
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    // Only forward fields the operator actually filled — matches Directus'
+    // manual trigger, which omits untouched optional inputs.
+    const inputs: Record<string, unknown> = {};
+    for (const inp of action.inputs) {
+      const v = (values[inp.field] ?? '').trim();
+      if (v) inputs[inp.field] = v;
+    }
+    onSubmit(inputs);
+  };
+
+  return (
+    <form
+      className="mt-4 space-y-3 rounded-xl bg-secondary/30 p-4 ring-1 ring-foreground/[0.04]"
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      <p className="text-xs font-medium text-foreground">
+        {t('compensation.formTitle', {
+          label: action.label,
+          defaultValue: '{{label}} — fill the required fields',
+        })}
+      </p>
+      {action.inputs.map((inp) => (
+        <ActionInput
+          key={inp.field}
+          input={inp}
+          value={values[inp.field] ?? ''}
+          invalid={errors[inp.field] ?? false}
+          onChange={(v) => set(inp.field, v)}
+        />
+      ))}
+      <div className="flex gap-2 pt-1">
+        <Button type="submit" size="sm" variant={BTN_VARIANT[action.type]} loading={pending}>
+          {t('compensation.submit', { label: action.label, defaultValue: 'Confirm {{label}}' })}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel} disabled={pending}>
+          {t('compensation.cancel', { defaultValue: 'Cancel' })}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function ActionInput({
+  input,
+  value,
+  invalid,
+  onChange,
+}: {
+  input: CompInput;
+  value: string;
+  invalid: boolean;
+  onChange: (v: string) => void;
+}) {
+  const { t } = useTranslation();
+  const label = (
+    <>
+      {input.label}
+      {input.required && <span className="text-destructive"> *</span>}
+    </>
+  );
+  const error = invalid
+    ? t('compensation.required', { defaultValue: 'This field is required.' })
+    : undefined;
+
+  return (
+    <FormField label={label} error={error}>
+      {input.kind === 'text' ? (
+        <Textarea
+          value={value}
+          invalid={invalid}
+          onChange={(e) => onChange(e.currentTarget.value)}
+        />
+      ) : input.kind === 'select' ? (
+        <Select value={value} invalid={invalid} onChange={(e) => onChange(e.currentTarget.value)}>
+          <option value="">
+            {t('compensation.selectPlaceholder', { defaultValue: 'Select…' })}
+          </option>
+          {(input.choices ?? []).map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.text}
+            </option>
+          ))}
+        </Select>
+      ) : (
+        <Input
+          type={input.kind === 'dateTime' ? 'datetime-local' : 'text'}
+          value={value}
+          invalid={invalid}
+          onChange={(e) => onChange(e.currentTarget.value)}
+        />
+      )}
+    </FormField>
   );
 }
 

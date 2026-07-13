@@ -1,5 +1,5 @@
 {
-  "_comment": "Agent-facing compensation workflow. Each action is a Directus MANUAL flow triggered via POST /flows/trigger/{id} with body { collection: 'compensation_requests', keys: [<requestId>] }. The portal is a THIN trigger surface — one click = one flow run, NO inputs (all logic, incl. any coupon form / Yiji CreateCoupon call, lives in the Directus flow). Flow IDs are identical in production and the local clone (preserved on purpose) so the portal is environment-agnostic — it targets VITE_DIRECTUS_URL. Local stand-in flows perform only the status transition, no external calls. `key` values map to standin-flows.mjs's PAYLOAD table; do not rename without updating it.",
+  "_comment": "Agent-facing compensation workflow. Each action is a Directus MANUAL flow triggered via POST /flows/trigger/{id} with body { collection: 'compensation_requests', keys: [<requestId>], ...inputs }. Most actions are one-click (inputs: []). A few prod flows require the operator to fill fields in Directus' manual-trigger dialog — those SAME fields are declared in `inputs` and collected by the portal (apps/agent-portal/src/features/compensation/actions.ts), then sent with the trigger, so nothing is typed in Directus. Flow IDs are identical in production and the local clone (preserved on purpose) so the portal is environment-agnostic — it targets VITE_DIRECTUS_URL. Local stand-in flows perform only the status transition, no external calls, and echo the relevant inputs back into the record. `key` values map to standin-flows.mjs's PAYLOAD table; do not rename without updating it. Input `type` mirrors the Directus field type; `kind` (in the portal's actions.ts) mirrors how it renders.",
   "collection": "compensation_requests",
   "statuses": [
     "Pending",
@@ -30,8 +30,22 @@
       "key": "generate_coupon",
       "label": "Generate coupon",
       "flowId": "fd7dd27e-fcbe-4447-9864-82817da5fc78",
-      "inputs": [],
-      "effect": "status -> Generating Coupon; sets coupon_code (PROD: calls Yiji CreateCoupon, creates Com_Coupons row, links it)"
+      "inputs": [
+        { "field": "coupon_name", "type": "string", "required": true, "label": "Coupon Name" },
+        { "field": "coupon_code", "type": "string", "required": true, "label": "Coupon Code" },
+        {
+          "field": "side",
+          "type": "select",
+          "required": true,
+          "label": "Side",
+          "choices": [{ "text": "ww", "value": "1" }]
+        },
+        { "field": "date_from", "type": "dateTime", "required": true, "label": "Date From" },
+        { "field": "date_to", "type": "dateTime", "required": false, "label": "Date To" },
+        { "field": "time_form", "type": "dateTime", "required": false, "label": "Time From" },
+        { "field": "time_to", "type": "dateTime", "required": false, "label": "Time To" }
+      ],
+      "effect": "status -> Generating Coupon; sets coupon_code from input (PROD: calls Yiji CreateCoupon, creates Com_Coupons row, links it)"
     },
     {
       "key": "assign_coupon",
@@ -51,15 +65,15 @@
       "key": "reject",
       "label": "Reject",
       "flowId": "9335c8fb-5744-43cc-9964-6fa0de0bb4d1",
-      "inputs": [],
-      "effect": "status -> Rejected; stamps declined_at (PROD flow captures a reason)"
+      "inputs": [{ "field": "reason", "type": "text", "required": true, "label": "Reason" }],
+      "effect": "status -> Rejected; stamps declined_at; stores reason in decline_reason"
     },
     {
       "key": "refund",
       "label": "Close task",
       "flowId": "13011877-701e-4d9c-b31e-711d196d097e",
-      "inputs": [],
-      "effect": "status -> Closed (this is the portal's 'Close task' button)"
+      "inputs": [{ "field": "reason", "type": "text", "required": false, "label": "Reason" }],
+      "effect": "status -> Closed (this is the portal's 'Close task' button); reason is passed to the flow"
     }
   ]
 }
