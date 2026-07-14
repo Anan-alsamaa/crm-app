@@ -21,10 +21,12 @@ import {
   useTriggerCompensationFlow,
   useComIssues,
   useComplaintCategories,
-  useUpdateRequestClassification,
+  useUpdateRequest,
   COMPENSATION_STATUSES,
   type CompensationRow,
   type CompensationStatus,
+  type IssueItem,
+  type RequestPatch,
 } from './api.js';
 import {
   COMPENSATION_ACTIONS,
@@ -268,21 +270,34 @@ function RequestDetail({ id }: { id: string }) {
             label={t('compensation.restaurant', { defaultValue: 'Restaurant' })}
             value={r.restaurant_name ?? '—'}
           />
-          <Row
-            label={t('compensation.orderTotal', { defaultValue: 'Order total' })}
-            value={money(r.order_total)}
-          />
-          <Row
-            label={t('compensation.deliveryFee', { defaultValue: 'Delivery fee' })}
-            value={money(r.delivery_fee)}
-          />
+          <div className="mt-1 space-y-2">
+            <EditableAmount
+              request={r}
+              field="order_total"
+              label={t('compensation.orderTotal', { defaultValue: 'Order total (SAR)' })}
+            />
+            <EditableAmount
+              request={r}
+              field="delivery_fee"
+              label={t('compensation.deliveryFee', { defaultValue: 'Delivery fee (SAR)' })}
+              hint={t('compensation.deliveryFeeHint', {
+                defaultValue: 'Used by DELIVERY-type compensation rules.',
+              })}
+            />
+          </div>
         </Section>
         <Section title={t('compensation.complaint', { defaultValue: 'Complaint' })}>
           <ClassificationEditor request={r} />
-          <Row
-            label={t('compensation.claimed', { defaultValue: 'Claimed amount' })}
-            value={money(r.user_complaint_amount)}
-          />
+          <div className="mt-1">
+            <EditableAmount
+              request={r}
+              field="user_complaint_amount"
+              label={t('compensation.claimed', { defaultValue: 'Claimed amount (SAR)' })}
+              hint={t('compensation.claimedHint', {
+                defaultValue: 'Used by PERCENT-type compensation rules.',
+              })}
+            />
+          </div>
           {r.description && (
             <p className="mt-2 whitespace-pre-wrap text-xs text-foreground/90">{r.description}</p>
           )}
@@ -309,8 +324,10 @@ function RequestDetail({ id }: { id: string }) {
         </Section>
       </div>
 
+      <ItemsEditor request={r} />
+
       {items && items.length > 0 && (
-        <Section title={t('compensation.items', { defaultValue: 'Items with issue' })}>
+        <Section title={t('compensation.orderItems', { defaultValue: 'Order line items' })}>
           <ul className="space-y-1 text-xs">
             {items.map((it) => (
               <li key={it.id} className="flex items-baseline justify-between gap-2">
@@ -341,7 +358,7 @@ function ClassificationEditor({ request }: { request: CompensationRow }) {
   const { t } = useTranslation();
   const { data: categories } = useComplaintCategories();
   const { data: issues } = useComIssues();
-  const update = useUpdateRequestClassification();
+  const update = useUpdateRequest();
   const [catId, setCatId] = useState<string>(request.complaint_type?.id ?? '');
   const [issueId, setIssueId] = useState<string>(request.com_issue?.id ?? '');
 
@@ -354,7 +371,7 @@ function ClassificationEditor({ request }: { request: CompensationRow }) {
 
   const save = (patch: { com_issue?: string | null; complaint_type?: string | null }) =>
     update.mutate(
-      { requestId: request.id, ...patch },
+      { requestId: request.id, patch },
       {
         onError: () =>
           toast.error(
@@ -409,6 +426,157 @@ function ClassificationEditor({ request }: { request: CompensationRow }) {
         </Select>
       </FormField>
     </div>
+  );
+}
+
+/* ── Order / amounts + items editors (data the calc rules read) ──────── */
+
+type AmountField = 'order_total' | 'delivery_fee' | 'user_complaint_amount';
+
+/**
+ * An inline-editable currency amount that the compensation rules read
+ * (DELIVERY → delivery_fee, PERCENT → user_complaint_amount, …). Saves on blur,
+ * only when changed. Agent policy permits these fields; other writes go via flows.
+ */
+function EditableAmount({
+  request,
+  field,
+  label,
+  hint,
+}: {
+  request: CompensationRow;
+  field: AmountField;
+  label: string;
+  hint?: string;
+}) {
+  const { t } = useTranslation();
+  const update = useUpdateRequest();
+  const [val, setVal] = useState<string>(request[field] == null ? '' : String(request[field]));
+
+  const save = () => {
+    const trimmed = val.trim();
+    const num = trimmed === '' ? null : Number(trimmed);
+    if (num !== null && Number.isNaN(num)) return;
+    if ((num ?? null) === (request[field] ?? null)) return; // unchanged
+    update.mutate(
+      { requestId: request.id, patch: { [field]: num } as RequestPatch },
+      {
+        onError: () =>
+          toast.error(t('compensation.saveError', { defaultValue: 'Could not save. Try again.' })),
+      },
+    );
+  };
+
+  return (
+    <FormField label={label} hint={hint}>
+      <Input
+        type="number"
+        inputMode="decimal"
+        step="0.01"
+        value={val}
+        onChange={(e) => setVal(e.currentTarget.value)}
+        onBlur={save}
+      />
+    </FormField>
+  );
+}
+
+/**
+ * Editor for `items_with_issue` — the JSON list an ITEMS-rule calculation sums
+ * (Σ price). Ops add/remove rows and edit name/price/quantity; the whole array
+ * is saved on blur / add / remove.
+ */
+function ItemsEditor({ request }: { request: CompensationRow }) {
+  const { t } = useTranslation();
+  const update = useUpdateRequest();
+  const [items, setItems] = useState<IssueItem[]>(() => request.items_with_issue ?? []);
+
+  const persist = (next: IssueItem[]) => {
+    setItems(next);
+    update.mutate(
+      { requestId: request.id, patch: { items_with_issue: next } },
+      {
+        onError: () =>
+          toast.error(t('compensation.saveError', { defaultValue: 'Could not save. Try again.' })),
+      },
+    );
+  };
+  const edit = (i: number, key: keyof IssueItem, raw: string) =>
+    setItems((prev) =>
+      prev.map((it, idx) =>
+        idx === i
+          ? { ...it, [key]: key === 'name' ? raw : raw.trim() === '' ? null : Number(raw) }
+          : it,
+      ),
+    );
+  const total = items.reduce((s, it) => s + (Number(it.price) || 0), 0);
+
+  return (
+    <Section title={t('compensation.itemsWithIssue', { defaultValue: 'Items with issue' })}>
+      <p className="mb-2 text-2xs text-muted-foreground">
+        {t('compensation.itemsWithIssueHint', {
+          defaultValue: 'Used by ITEMS-type compensation rules (sums the prices below).',
+        })}
+      </p>
+      {items.length > 0 && (
+        <ul className="mb-2 space-y-1.5">
+          {items.map((it, i) => (
+            <li key={i} className="flex items-center gap-1.5">
+              <Input
+                className="flex-1"
+                placeholder={t('compensation.itemName', { defaultValue: 'Item' })}
+                value={it.name ?? ''}
+                onChange={(e) => edit(i, 'name', e.currentTarget.value)}
+                onBlur={() => persist(items)}
+              />
+              <Input
+                className="w-16"
+                type="number"
+                inputMode="numeric"
+                placeholder="Qty"
+                value={it.quantity ?? ''}
+                onChange={(e) => edit(i, 'quantity', e.currentTarget.value)}
+                onBlur={() => persist(items)}
+              />
+              <Input
+                className="w-24"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                placeholder={t('compensation.price', { defaultValue: 'Price' })}
+                value={it.price ?? ''}
+                onChange={(e) => edit(i, 'price', e.currentTarget.value)}
+                onBlur={() => persist(items)}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label={t('compensation.removeItem', { defaultValue: 'Remove item' })}
+                onClick={() => persist(items.filter((_, idx) => idx !== i))}
+              >
+                ✕
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex items-center justify-between">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => persist([...items, { name: '', quantity: 1, price: null }])}
+        >
+          + {t('compensation.addItem', { defaultValue: 'Add item' })}
+        </Button>
+        {items.length > 0 && (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {t('compensation.itemsTotal', { defaultValue: 'Total' })}: {money(total)}
+          </span>
+        )}
+      </div>
+    </Section>
   );
 }
 

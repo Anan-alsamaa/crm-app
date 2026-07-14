@@ -67,24 +67,38 @@ for (const collection of COLLECTIONS) {
   console.log(`${r.ok ? '+' : '✗'} read ${collection} (${r.status})${r.ok ? '' : ' ' + JSON.stringify(r.json).slice(0, 200)}`);
 }
 
-// NARROW update: ops must classify a request from the portal (they have no
-// Directus access), so allow updating ONLY the two classification fields that
-// drive the workflow — com_issue (SLA + compensation rules) and complaint_type.
-// Everything else stays read-only; all status/value writes still happen through
-// the flows ($full). Field-scoped so ops can't edit money, status, etc.
-const CLASSIFY_FIELDS = ['com_issue', 'complaint_type'];
-const hasUpdate = existing.some((p) => p.collection === 'compensation_requests' && p.action === 'update');
-if (hasUpdate) {
-  console.log('= update compensation_requests already granted');
+// NARROW update: ops prepare a request for the workflow from the portal (they
+// have no Directus access), so allow updating ONLY the workflow-INPUT fields —
+// the classification that drives the flows (com_issue = SLA + rules,
+// complaint_type) and the order/items data the compensation rules read
+// (order_total, delivery_fee, user_complaint_amount, items_with_issue).
+// Everything else (status, computed values, coupons) stays read-only and is
+// written only by the flows ($full). Field-scoped so ops can't edit status/money
+// outside these inputs.
+const OPS_EDITABLE_FIELDS = [
+  'com_issue',
+  'complaint_type',
+  'order_total',
+  'delivery_fee',
+  'user_complaint_amount',
+  'items_with_issue',
+];
+const updatePerm = (
+  await api('GET', `/permissions?fields=id,fields&filter[policy][_eq]=${policy.id}&filter[collection][_eq]=compensation_requests&filter[action][_eq]=update&limit=1`)
+).json.data?.[0];
+if (updatePerm) {
+  // Expand an earlier (narrower) grant to the full editable set.
+  const r = await api('PATCH', `/permissions/${updatePerm.id}`, { fields: OPS_EDITABLE_FIELDS });
+  console.log(`${r.ok ? '~' : '✗'} update compensation_requests fields -> [${OPS_EDITABLE_FIELDS.join(',')}] (${r.status})`);
 } else {
   const r = await api('POST', '/permissions', {
     policy: policy.id,
     collection: 'compensation_requests',
     action: 'update',
-    fields: CLASSIFY_FIELDS,
+    fields: OPS_EDITABLE_FIELDS,
     permissions: {},
     validation: {},
   });
-  console.log(`${r.ok ? '+' : '✗'} update compensation_requests[${CLASSIFY_FIELDS.join(',')}] (${r.status})${r.ok ? '' : ' ' + JSON.stringify(r.json).slice(0, 200)}`);
+  console.log(`${r.ok ? '+' : '✗'} update compensation_requests[${OPS_EDITABLE_FIELDS.join(',')}] (${r.status})${r.ok ? '' : ' ' + JSON.stringify(r.json).slice(0, 200)}`);
 }
 console.log('agent permissions applied.');

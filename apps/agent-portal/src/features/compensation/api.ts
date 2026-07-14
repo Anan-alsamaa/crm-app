@@ -47,6 +47,7 @@ export interface CompensationRow {
   final_compensation_value: number | null;
   coupon_code: string | null;
   decline_reason: string | null;
+  items_with_issue: IssueItem[] | null;
   inprogress_at: string | null;
   approved_at: string | null;
   declined_at: string | null;
@@ -61,6 +62,13 @@ export interface CompensationItem {
   name: string | null;
   quantity: number | null;
   price: number | null;
+}
+
+/** One row of the `items_with_issue` JSON field (what ITEMS-rule calc sums). */
+export interface IssueItem {
+  name?: string | null;
+  price?: number | null;
+  quantity?: number | null;
 }
 
 const LIST_FIELDS = [
@@ -91,6 +99,7 @@ const DETAIL_FIELDS = [
   'amount',
   'coupon_code',
   'decline_reason',
+  'items_with_issue',
   'inprogress_at',
   'approved_at',
   'declined_at',
@@ -185,28 +194,28 @@ export function useComplaintCategories() {
 }
 
 /**
- * Set a request's classification (com_issue / complaint_type) from the portal.
- * The Agent policy allows updating ONLY these two fields; every other write still
- * goes through the flows. This is what lets ops prepare a request for the
- * workflow buttons without touching Directus.
+ * Update the ops-editable fields of a request from the portal. The Agent policy
+ * permits updating ONLY the workflow-input fields — classification (com_issue,
+ * complaint_type) and the order/items data the compensation rules read
+ * (order_total, delivery_fee, user_complaint_amount, items_with_issue). Every
+ * other write (status, coupons, computed values) still goes through the flows,
+ * so ops prepare a request for the workflow buttons without touching Directus.
  */
-export function useUpdateRequestClassification() {
+export type RequestPatch = Partial<{
+  com_issue: string | null;
+  complaint_type: string | null;
+  order_total: number | null;
+  delivery_fee: number | null;
+  user_complaint_amount: number | null;
+  items_with_issue: IssueItem[];
+}>;
+
+export function useUpdateRequest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      requestId,
-      com_issue,
-      complaint_type,
-    }: {
-      requestId: string;
-      com_issue?: string | null;
-      complaint_type?: string | null;
-    }) =>
+    mutationFn: ({ requestId, patch }: { requestId: string; patch: RequestPatch }) =>
       directus.request(
-        updateItem('compensation_requests', requestId, {
-          ...(com_issue !== undefined ? { com_issue } : {}),
-          ...(complaint_type !== undefined ? { complaint_type } : {}),
-        } as Record<string, unknown>),
+        updateItem('compensation_requests', requestId, patch as Record<string, unknown>),
       ),
     onSuccess: (_d, vars) => {
       void qc.invalidateQueries({ queryKey: ['compensation-request', vars.requestId] });

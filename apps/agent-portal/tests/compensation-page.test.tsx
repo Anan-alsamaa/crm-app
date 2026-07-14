@@ -45,7 +45,7 @@ vi.mock('../src/features/compensation/api.js', () => ({
       { id: '2', name: 'Food Quality' },
     ],
   }),
-  useUpdateRequestClassification: () => ({ mutate: h.classify }),
+  useUpdateRequest: () => ({ mutate: h.classify }),
 }));
 
 import { CompensationPage } from '../src/features/compensation/CompensationPage.js';
@@ -187,7 +187,7 @@ describe('Compensation detail — classification (related data ops enter)', () =
     // Issue select is populated from the catalog; picking one persists com_issue.
     fireEvent.change(screen.getByLabelText('Issue'), { target: { value: 'iss-1' } });
     expect(h.classify).toHaveBeenCalledWith(
-      expect.objectContaining({ requestId: 'req-1', com_issue: 'iss-1' }),
+      expect.objectContaining({ requestId: 'req-1', patch: { com_issue: 'iss-1' } }),
       expect.anything(),
     );
   });
@@ -197,7 +197,35 @@ describe('Compensation detail — classification (related data ops enter)', () =
     renderAt('/compensation/req-1');
     fireEvent.change(screen.getByLabelText('Category'), { target: { value: '1' } });
     expect(h.classify).toHaveBeenCalledWith(
-      expect.objectContaining({ requestId: 'req-1', complaint_type: '1' }),
+      expect.objectContaining({
+        requestId: 'req-1',
+        patch: expect.objectContaining({ complaint_type: '1' }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('editing the claimed amount saves user_complaint_amount on blur', () => {
+    h.request = { data: { ...reqBase, status: 'Pending' }, isLoading: false };
+    renderAt('/compensation/req-1');
+    const input = screen.getByLabelText(/Claimed amount/);
+    fireEvent.change(input, { target: { value: '75' } });
+    fireEvent.blur(input);
+    expect(h.classify).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'req-1', patch: { user_complaint_amount: 75 } }),
+      expect.anything(),
+    );
+  });
+
+  it('adding an item saves items_with_issue', () => {
+    h.request = { data: { ...reqBase, status: 'Pending', items_with_issue: [] }, isLoading: false };
+    renderAt('/compensation/req-1');
+    fireEvent.click(screen.getByRole('button', { name: /Add item/ }));
+    expect(h.classify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: 'req-1',
+        patch: { items_with_issue: [{ name: '', quantity: 1, price: null }] },
+      }),
       expect.anything(),
     );
   });
