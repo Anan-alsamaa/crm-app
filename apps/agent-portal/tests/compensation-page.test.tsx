@@ -25,6 +25,7 @@ const h = vi.hoisted(() => ({
   request: { data: null as unknown, isLoading: false },
   items: { data: [] as unknown[] },
   mutate: vi.fn(),
+  classify: vi.fn(),
 }));
 vi.mock('../src/features/compensation/api.js', () => ({
   COMPENSATION_STATUSES: ['Pending', 'In Progress', 'Approved', 'Rejected'],
@@ -32,6 +33,19 @@ vi.mock('../src/features/compensation/api.js', () => ({
   useCompensationRequest: () => h.request,
   useCompensationItems: () => h.items,
   useTriggerCompensationFlow: () => ({ mutate: h.mutate, isPending: false }),
+  useComIssues: () => ({
+    data: [
+      { id: 'iss-1', name: 'Cold food', com_issue_category: '2' },
+      { id: 'iss-2', name: 'Late by 50m', com_issue_category: '1' },
+    ],
+  }),
+  useComplaintCategories: () => ({
+    data: [
+      { id: '1', name: 'Late Delivery' },
+      { id: '2', name: 'Food Quality' },
+    ],
+  }),
+  useUpdateRequestClassification: () => ({ mutate: h.classify }),
 }));
 
 import { CompensationPage } from '../src/features/compensation/CompensationPage.js';
@@ -73,6 +87,7 @@ beforeEach(() => {
     opts?.onSuccess?.();
     opts?.onSettled?.();
   });
+  h.classify = vi.fn();
 });
 
 describe('Compensation queue', () => {
@@ -158,6 +173,33 @@ describe('Compensation detail — one-click actions (no prod inputs)', () => {
     }
     // No form was opened for any of them.
     expect(screen.queryByRole('button', { name: /^Confirm / })).not.toBeInTheDocument();
+  });
+});
+
+describe('Compensation detail — classification (related data ops enter)', () => {
+  it('selecting an Issue saves com_issue on the request', () => {
+    // Start unclassified so every catalog Issue is offered.
+    h.request = {
+      data: { ...reqBase, status: 'Pending', complaint_type: null, com_issue: null },
+      isLoading: false,
+    };
+    renderAt('/compensation/req-1');
+    // Issue select is populated from the catalog; picking one persists com_issue.
+    fireEvent.change(screen.getByLabelText('Issue'), { target: { value: 'iss-1' } });
+    expect(h.classify).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'req-1', com_issue: 'iss-1' }),
+      expect.anything(),
+    );
+  });
+
+  it('selecting a Category saves complaint_type', () => {
+    h.request = { data: { ...reqBase, status: 'Pending' }, isLoading: false };
+    renderAt('/compensation/req-1');
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: '1' } });
+    expect(h.classify).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'req-1', complaint_type: '1' }),
+      expect.anything(),
+    );
   });
 });
 

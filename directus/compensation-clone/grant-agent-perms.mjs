@@ -66,4 +66,25 @@ for (const collection of COLLECTIONS) {
   });
   console.log(`${r.ok ? '+' : '✗'} read ${collection} (${r.status})${r.ok ? '' : ' ' + JSON.stringify(r.json).slice(0, 200)}`);
 }
-console.log('agent read permissions applied.');
+
+// NARROW update: ops must classify a request from the portal (they have no
+// Directus access), so allow updating ONLY the two classification fields that
+// drive the workflow — com_issue (SLA + compensation rules) and complaint_type.
+// Everything else stays read-only; all status/value writes still happen through
+// the flows ($full). Field-scoped so ops can't edit money, status, etc.
+const CLASSIFY_FIELDS = ['com_issue', 'complaint_type'];
+const hasUpdate = existing.some((p) => p.collection === 'compensation_requests' && p.action === 'update');
+if (hasUpdate) {
+  console.log('= update compensation_requests already granted');
+} else {
+  const r = await api('POST', '/permissions', {
+    policy: policy.id,
+    collection: 'compensation_requests',
+    action: 'update',
+    fields: CLASSIFY_FIELDS,
+    permissions: {},
+    validation: {},
+  });
+  console.log(`${r.ok ? '+' : '✗'} update compensation_requests[${CLASSIFY_FIELDS.join(',')}] (${r.status})${r.ok ? '' : ' ' + JSON.stringify(r.json).slice(0, 200)}`);
+}
+console.log('agent permissions applied.');

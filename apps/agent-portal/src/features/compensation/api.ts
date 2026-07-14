@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { readItems, triggerFlow } from '@directus/sdk';
+import { readItems, triggerFlow, updateItem } from '@directus/sdk';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -141,6 +141,77 @@ export function useCompensationItems(id: string | null) {
           limit: -1,
         }),
       ) as Promise<CompensationItem[]>,
+  });
+}
+
+/**
+ * The Issue catalog — the "related data" ops classify a request with. The chosen
+ * Issue (com_issue) drives the SLA timers (Acknowledge/Approve) and the
+ * compensation rules (Calculate). Ops have no Directus access, so they pick it
+ * here. `com_issue_category` links an issue to its complaint category.
+ */
+export interface ComIssueOption {
+  id: string;
+  name: string | null;
+  com_issue_category: string | null;
+}
+export interface CategoryOption {
+  id: string;
+  name: string | null;
+}
+
+export function useComIssues() {
+  return useQuery({
+    queryKey: ['com-issues'],
+    queryFn: () =>
+      directus.request(
+        readItems('com_issues_list', {
+          fields: ['id', 'name', 'com_issue_category'],
+          sort: ['name'],
+          limit: -1,
+        }),
+      ) as Promise<ComIssueOption[]>,
+  });
+}
+
+export function useComplaintCategories() {
+  return useQuery({
+    queryKey: ['complaint-categories'],
+    queryFn: () =>
+      directus.request(
+        readItems('Com_Issue_Categories', { fields: ['id', 'name'], sort: ['name'], limit: -1 }),
+      ) as Promise<CategoryOption[]>,
+  });
+}
+
+/**
+ * Set a request's classification (com_issue / complaint_type) from the portal.
+ * The Agent policy allows updating ONLY these two fields; every other write still
+ * goes through the flows. This is what lets ops prepare a request for the
+ * workflow buttons without touching Directus.
+ */
+export function useUpdateRequestClassification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      requestId,
+      com_issue,
+      complaint_type,
+    }: {
+      requestId: string;
+      com_issue?: string | null;
+      complaint_type?: string | null;
+    }) =>
+      directus.request(
+        updateItem('compensation_requests', requestId, {
+          ...(com_issue !== undefined ? { com_issue } : {}),
+          ...(complaint_type !== undefined ? { complaint_type } : {}),
+        } as Record<string, unknown>),
+      ),
+    onSuccess: (_d, vars) => {
+      void qc.invalidateQueries({ queryKey: ['compensation-request', vars.requestId] });
+      void qc.invalidateQueries({ queryKey: ['compensation-requests'] });
+    },
   });
 }
 

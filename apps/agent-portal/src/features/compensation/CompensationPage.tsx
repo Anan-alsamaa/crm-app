@@ -19,6 +19,9 @@ import {
   useCompensationRequest,
   useCompensationItems,
   useTriggerCompensationFlow,
+  useComIssues,
+  useComplaintCategories,
+  useUpdateRequestClassification,
   COMPENSATION_STATUSES,
   type CompensationRow,
   type CompensationStatus,
@@ -275,14 +278,7 @@ function RequestDetail({ id }: { id: string }) {
           />
         </Section>
         <Section title={t('compensation.complaint', { defaultValue: 'Complaint' })}>
-          <Row
-            label={t('compensation.type', { defaultValue: 'Type' })}
-            value={r.complaint_type?.name ?? '—'}
-          />
-          <Row
-            label={t('compensation.issue', { defaultValue: 'Issue' })}
-            value={r.com_issue?.name ?? '—'}
-          />
+          <ClassificationEditor request={r} />
           <Row
             label={t('compensation.claimed', { defaultValue: 'Claimed amount' })}
             value={money(r.user_complaint_amount)}
@@ -328,6 +324,90 @@ function RequestDetail({ id }: { id: string }) {
           </ul>
         </Section>
       )}
+    </div>
+  );
+}
+
+/* ── Classification editor (the request's "related data") ────────────── */
+
+/**
+ * Lets ops set the request's Category + Issue from the portal — the related data
+ * the workflow buttons read: the Issue (com_issue) drives the SLA timers
+ * (Acknowledge/Approve) and the compensation rules (Calculate). Ops have no
+ * Directus access, so this is the only place they can classify a request. The
+ * Agent policy permits updating only these two fields; auto-saves on change.
+ */
+function ClassificationEditor({ request }: { request: CompensationRow }) {
+  const { t } = useTranslation();
+  const { data: categories } = useComplaintCategories();
+  const { data: issues } = useComIssues();
+  const update = useUpdateRequestClassification();
+  const [catId, setCatId] = useState<string>(request.complaint_type?.id ?? '');
+  const [issueId, setIssueId] = useState<string>(request.com_issue?.id ?? '');
+
+  // Only offer Issues that belong to the chosen Category (all if none chosen).
+  const issueOptions = useMemo(
+    () =>
+      (issues ?? []).filter((i) => !catId || String(i.com_issue_category ?? '') === String(catId)),
+    [issues, catId],
+  );
+
+  const save = (patch: { com_issue?: string | null; complaint_type?: string | null }) =>
+    update.mutate(
+      { requestId: request.id, ...patch },
+      {
+        onError: () =>
+          toast.error(
+            t('compensation.classifyError', { defaultValue: 'Could not save. Try again.' }),
+          ),
+      },
+    );
+
+  const onCategory = (v: string) => {
+    setCatId(v);
+    // Drop the Issue if it no longer belongs to the newly chosen Category.
+    const keep = (issues ?? []).some(
+      (i) => i.id === issueId && String(i.com_issue_category ?? '') === String(v),
+    );
+    if (!keep) setIssueId('');
+    save({ complaint_type: v || null, ...(keep ? {} : { com_issue: null }) });
+  };
+  const onIssue = (v: string) => {
+    setIssueId(v);
+    save({ com_issue: v || null });
+  };
+
+  return (
+    <div className="mb-1 space-y-2">
+      <FormField label={t('compensation.type', { defaultValue: 'Category' })}>
+        <Select value={catId} onChange={(e) => onCategory(e.currentTarget.value)}>
+          <option value="">
+            {t('compensation.unclassified', { defaultValue: 'Unclassified' })}
+          </option>
+          {(categories ?? []).map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name ?? c.id}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField
+        label={t('compensation.issue', { defaultValue: 'Issue' })}
+        hint={t('compensation.issueHint', {
+          defaultValue: 'Drives the SLA timers and the compensation calculation.',
+        })}
+      >
+        <Select value={issueId} onChange={(e) => onIssue(e.currentTarget.value)}>
+          <option value="">
+            {t('compensation.selectIssue', { defaultValue: 'Select an issue…' })}
+          </option>
+          {issueOptions.map((i) => (
+            <option key={i.id} value={i.id}>
+              {i.name ?? i.id}
+            </option>
+          ))}
+        </Select>
+      </FormField>
     </div>
   );
 }

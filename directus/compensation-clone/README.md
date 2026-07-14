@@ -122,7 +122,17 @@ node directus/compensation-clone/seed.mjs             # synthetic sample request
   # the Com_Issues_c rules collection (+o2m), one SLA + com_issue + FIXED rule,
   # and links the sample requests to that com_issue.
   node directus/compensation-clone/backfill-ref-data.mjs
+
+  # OR clone the FULL prod issue catalog so ops can pick a real Issue in the
+  # portal (24 issues / 6 categories / 20 rules / 4 SLAs, FK-remapped):
+  PROD_DIRECTUS_URL=… PROD_DIRECTUS_TOKEN=… node directus/compensation-clone/clone-issue-catalog.mjs
   ```
+
+  Ops classify a request (Category + Issue) directly in the agent-portal detail
+  page — the Issue is the "related data" the buttons read (SLA timers +
+  compensation rules). The Agent policy permits updating ONLY `com_issue` /
+  `complaint_type` (see `grant-agent-perms.mjs`); every other write still goes
+  through the flows, so ops never need Directus.
 
   Verified end-to-end after backfill: Pending → Acknowledge (In Progress + SLA
   minutes) → Calculate (frequency + suggested/final from the rule) → Generate
