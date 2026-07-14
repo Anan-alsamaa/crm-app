@@ -94,6 +94,29 @@ node directus/compensation-clone/grant-agent-perms.mjs # Agent role: read on the
 node directus/compensation-clone/seed.mjs             # synthetic sample requests
 ```
 
+### Two ways to build the local flows
+
+- **`standin-flows.mjs`** (offline, self-contained) — builds observable-equivalent
+  flows with simplified, null-guarded exec logic. They run on ANY local record,
+  even without prod-like reference data. Best for portal development.
+- **`clone-prod-flows.mjs`** (exact replica, needs prod READ-ONLY creds) —
+  reproduces prod's real operation graph verbatim (same op keys, exec code,
+  wiring, canvas positions) so the local Directus admin shows an IDENTICAL flow.
+  Only three documented adaptations: write/read ops `$trigger`→`$full` (the portal
+  triggers as the read-only Agent), the Yiji `request` op is cloned but DISABLED
+  (never calls the real API), and a terminal `return_ok` (SDK compat).
+
+  ```bash
+  PROD_DIRECTUS_URL=… PROD_DIRECTUS_TOKEN=… node directus/compensation-clone/clone-prod-flows.mjs
+  ```
+
+  > The exact clone runs prod's verbatim exec code, which reads related data
+  > (`com_issue.sla.response_hours` / `resolution_hours`, `com_issue.Com_Issues_c`
+  > rules, `frequency_window_days`). Local sample requests have no `com_issue`
+  > linked and `sla_policies` lacks those fields, so the exact flows no-op until
+  > that reference data is backfilled. Use `standin-flows.mjs` if you just need
+  > working buttons without prod-like data.
+
 All are idempotent. Nothing here writes to production.
 
 ## Directus admin buttons (parity note)
