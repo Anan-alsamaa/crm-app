@@ -112,10 +112,22 @@ node directus/compensation-clone/seed.mjs             # synthetic sample request
 
   > The exact clone runs prod's verbatim exec code, which reads related data
   > (`com_issue.sla.response_hours` / `resolution_hours`, `com_issue.Com_Issues_c`
-  > rules, `frequency_window_days`). Local sample requests have no `com_issue`
-  > linked and `sla_policies` lacks those fields, so the exact flows no-op until
-  > that reference data is backfilled. Use `standin-flows.mjs` if you just need
-  > working buttons without prod-like data.
+  > rules, `frequency_window_days`). Local reuses the CRM's own `sla_policies`
+  > (different shape) and never cloned the rules collection, so run the backfill
+  > below to make the exact flows execute. Use `standin-flows.mjs` instead if you
+  > just need working buttons without prod-like data.
+
+  ```bash
+  # additive + idempotent: adds sla_policies.response_hours/resolution_hours,
+  # the Com_Issues_c rules collection (+o2m), one SLA + com_issue + FIXED rule,
+  # and links the sample requests to that com_issue.
+  node directus/compensation-clone/backfill-ref-data.mjs
+  ```
+
+  Verified end-to-end after backfill: Pending → Acknowledge (In Progress + SLA
+  minutes) → Calculate (frequency + suggested/final from the rule) → Generate
+  Coupon (Com_Coupons created + linked, Yiji call disabled) → Approve (Approved +
+  solved SLA). Reject stores decline_reason; Close task is a no-op (prod parity).
 
 All are idempotent. Nothing here writes to production.
 
