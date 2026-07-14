@@ -12,25 +12,16 @@ import { directus } from '../../lib/directus.js';
  * Directus stays the source of truth; the portal is just the trigger surface.
  */
 
-// One status per workflow action — each Directus flow sets its own (see
-// directus/compensation-clone/standin-flows.mjs + flow-contract.json).
-export type CompensationStatus =
-  | 'Pending'
-  | 'Acknowledged'
-  | 'Calculating Compensation'
-  | 'Generating Coupon'
-  | 'Assign Coupon to User'
-  | 'Accepted'
-  | 'Closed'
-  | 'Rejected';
+// EXACT production status enum (compensation_requests.status, default 'Pending').
+// Only Acknowledge (-> In Progress), Approve (-> Approved) and Reject
+// (-> Rejected) move status; Calculate/Generate/Assign set fields without
+// changing it; Close task has no effect. See flow-contract.json + prod snapshots
+// in directus/compensation-clone/schema/prod-flow-*.json.
+export type CompensationStatus = 'Pending' | 'In Progress' | 'Approved' | 'Rejected';
 export const COMPENSATION_STATUSES: CompensationStatus[] = [
   'Pending',
-  'Acknowledged',
-  'Calculating Compensation',
-  'Generating Coupon',
-  'Assign Coupon to User',
-  'Accepted',
-  'Closed',
+  'In Progress',
+  'Approved',
   'Rejected',
 ];
 

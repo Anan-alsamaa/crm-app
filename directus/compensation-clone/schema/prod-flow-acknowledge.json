@@ -1,0 +1,77 @@
+{
+  "flow": {
+    "id": "f6fc9809-e036-40e8-921c-b1aae3fa4ef5",
+    "name": "CR->Acknowledge",
+    "icon": "bolt",
+    "status": "active",
+    "trigger": "manual",
+    "accountability": "all",
+    "options": {
+      "collections": ["compensation_requests"],
+      "requireConfirmation": true,
+      "async": true
+    },
+    "operation": "6e3600f8-754a-4e83-a0a5-b49dac40b0ad"
+  },
+  "operations": [
+    {
+      "id": "4565b884-a017-4cdb-a085-f3c7433c2de8",
+      "name": "Update Data",
+      "key": "item_update_iwbon",
+      "type": "item-update",
+      "position_x": 31,
+      "position_y": 1,
+      "resolve": null,
+      "reject": null,
+      "options": {
+        "permissions": "$trigger",
+        "emitEvents": false,
+        "collection": "compensation_requests",
+        "key": "{{$trigger.body.keys}}",
+        "payload": {
+          "status": "In Progress",
+          "status_date": "{{$last.current_timestamp}}",
+          "inprogress_at": "{{$last.current_timestamp}}",
+          "inprogress_by": "{{$accountability.user}}",
+          "inprogress_sla_violation": "{{$last.sla_breached}}",
+          "inprogress_sla_minutes": "{{$last.elapsed_minutes}}",
+          "updated_at": "{{$last.current_timestamp}}",
+          "date_updated": "{{$last.current_timestamp}}"
+        }
+      }
+    },
+    {
+      "id": "6e3600f8-754a-4e83-a0a5-b49dac40b0ad",
+      "name": "Read Data",
+      "key": "reat_item_cr",
+      "type": "item-read",
+      "position_x": 6,
+      "position_y": 17,
+      "resolve": "97876215-e86c-4589-b66b-e6f75e33103f",
+      "reject": null,
+      "options": {
+        "permissions": "$trigger",
+        "emitEvents": false,
+        "collection": "compensation_requests",
+        "key": "{{$trigger.body.keys}}",
+        "query": {
+          "fields": ["date_created", "com_issue.sla.*"]
+        }
+      }
+    },
+    {
+      "id": "97876215-e86c-4589-b66b-e6f75e33103f",
+      "name": "Run Script",
+      "key": "exec_80xye",
+      "type": "exec",
+      "position_x": 25,
+      "position_y": 18,
+      "resolve": "4565b884-a017-4cdb-a085-f3c7433c2de8",
+      "reject": null,
+      "options": {
+        "code": "module.exports = async function (data) {\n\n  const slaResponseMinutes = data.reat_item_cr.com_issue.sla.response_hours;\n\n  const now = new Date();\n  const currentTimestamp = now.toISOString();\n\n  const ticketCreatedAt = new Date(data.reat_item_cr.date_created);\n\n  // elapsed time since ticket creation (minutes)\n  const elapsedMinutes = Math.floor((now - ticketCreatedAt) / 60000);\n\n  const isSlaBreached = elapsedMinutes > slaResponseMinutes;\n\n  return {\n    current_timestamp: currentTimestamp,\n    elapsed_minutes: elapsedMinutes,\n    sla_response_minutes: slaResponseMinutes,\n    sla_breached: isSlaBreached\n  };\n};"
+      }
+    }
+  ],
+  "ordered_keys": ["reat_item_cr", "exec_80xye", "item_update_iwbon"]
+}

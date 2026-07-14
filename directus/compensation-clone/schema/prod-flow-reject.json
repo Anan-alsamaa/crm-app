@@ -1,0 +1,66 @@
+{
+  "flow": {
+    "id": "9335c8fb-5744-43cc-9964-6fa0de0bb4d1",
+    "name": "CR->Reject",
+    "icon": "bolt",
+    "status": "active",
+    "trigger": "manual",
+    "accountability": "all",
+    "options": {
+      "collections": ["compensation_requests"],
+      "requireConfirmation": true,
+      "fields": [
+        {
+          "field": "reason",
+          "name": "Reason",
+          "type": "text",
+          "meta": {
+            "interface": "input-multiline",
+            "width": "full",
+            "required": true
+          }
+        }
+      ]
+    },
+    "operation": "ec7293ed-1351-41bf-832f-9bff6f0c1f93"
+  },
+  "operations": [
+    {
+      "id": "7580a2cc-a8e8-4d2c-a247-c07b3f644b0b",
+      "name": "Update Data",
+      "key": "item_update_iwbon",
+      "type": "item-update",
+      "position_x": 37,
+      "position_y": 1,
+      "resolve": null,
+      "reject": null,
+      "options": {
+        "permissions": "$trigger",
+        "emitEvents": true,
+        "collection": "compensation_requests",
+        "key": "{{$trigger.body.keys}}",
+        "payload": {
+          "status": "Rejected",
+          "status_date": "{{$last.current_timestamp}}",
+          "declined_at": "{{$last.current_timestamp}}",
+          "declined_by": "{{$accountability.user}}",
+          "decline_reason": "{{$trigger.body.reason}}"
+        }
+      }
+    },
+    {
+      "id": "ec7293ed-1351-41bf-832f-9bff6f0c1f93",
+      "name": "Run Script",
+      "key": "exec_80xye",
+      "type": "exec",
+      "position_x": 17,
+      "position_y": 16,
+      "resolve": "7580a2cc-a8e8-4d2c-a247-c07b3f644b0b",
+      "reject": null,
+      "options": {
+        "code": "module.exports = async function (data) {\n\n  const now = new Date();\n  const currentTimestamp = now.toISOString();\n\n\n \n\n  return {\n    current_timestamp: currentTimestamp,\n   };\n};"
+      }
+    }
+  ],
+  "ordered_keys": ["exec_80xye", "item_update_iwbon"]
+}

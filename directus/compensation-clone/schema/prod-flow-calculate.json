@@ -1,0 +1,139 @@
+{
+  "flow": {
+    "id": "90a0639c-1c2d-4eeb-814f-4a4885625ea0",
+    "name": "CR->Calculate Compensation",
+    "icon": "bolt",
+    "status": "active",
+    "trigger": "manual",
+    "accountability": "all",
+    "options": {
+      "collections": ["compensation_requests"],
+      "requireConfirmation": true
+    },
+    "operation": "603edaee-03f4-43a6-b127-a8e049bfa79d"
+  },
+  "operations": [
+    {
+      "id": "118c1614-93b6-400c-b35f-896d752e01fe",
+      "name": "required_frequency",
+      "key": "required_frequency",
+      "type": "exec",
+      "position_x": 35,
+      "position_y": 2,
+      "resolve": "e5fbdd02-2ebd-483e-a853-7960f087faee",
+      "reject": null,
+      "options": {
+        "code": "module.exports = async function(data) {\n\t// Do something...\n   // if(data.item_read_nm6c3.com_issue.Com_Issues_c.length>0){}\n   // const  f_from = data.item_read_nm6c3.frequrency_from || 0 ; \n    //const  f_to = data.item_read_nm6c3.frequrency_to || 0 ; \n    const f_days = data.item_read_nm6c3.com_issue.frequency_window_days || 60;\n    const request_date = new Date(data.item_read_nm6c3.date_created);\n\n    const from_date = new Date(request_date);\n    from_date.setDate(from_date.getDate() - f_days);\n\n\t\n    return {f_days,from_date:from_date.toISOString(),to_date:request_date.toISOString()};\n}"
+      }
+    },
+    {
+      "id": "5f7f989d-a8d0-4170-bd68-86418ddcb2b8",
+      "name": "Run Script (Core Logic)",
+      "key": "run_script_core_logic",
+      "type": "exec",
+      "position_x": 10,
+      "position_y": 19,
+      "resolve": "6e193471-9f77-4ff2-b5ea-fb6b25465989",
+      "reject": null,
+      "options": {
+        "code": "module.exports = async function(data) {\n\t// Do something...\n     const com_rules = data.item_read_nm6c3.com_issue.Com_Issues_c\n     const selected_rule = com_rules[0];\n    if(com_rules.length>1) {\n   const frequency_count = data.get_req_frequency[0].count;\n        if(frequency_count>1) {\n   selected_rule = com_rules.find(rule => {\n        return (\n            frequency_count >= (rule.frequrency_from || 0) &&\n            frequency_count <= (rule.frequrency_to || Infinity)\n        );\n    });\n        }\n    \n    }\n        \n   \nlet amount = 0;\n\nswitch (selected_rule.compensation_type) {\n  case \"DELIVERY\":\n    amount = data.item_read_nm6c3.delivery_fee > 0\n      ? data.item_read_nm6c3.delivery_fee\n      : selected_rule.fallback_value;\n    break;\n\n  case \"ORDER\":\n    amount = selected_rule.max_amount\n      ? Math.min(data.item_read_nm6c3.order_value, selected_rule.max_amount)\n      : data.$trigger.order_value;\n    break;\n\n  case \"FIXED\":\n    amount = selected_rule.fixed_amount;\n    break;\n\n  case \"PERCENT\":\n       if(data.item_read_nm6c3.order_value ==null || data.item_read_nm6c3.order_value <=0) {\n           if(data.item_read_nm6c3.user_complaint_amount !=null && data.item_read_nm6c3.user_complaint_amount >0){\n            amount = (data.item_read_nm6c3.user_complaint_amount * selected_rule.percentage) / 100; }\n       }\n        else \n        { amount = (data.item_read_nm6c3.order_value * selected_rule.percentage) / 100;\n        }\n    if (selected_rule.max_amount) amount = Math.min(amount, selected_rule.max_amount);\n    break;\n\n  case \"ITEMS\":\n    amount = data.item_read_nm6c3.items_with_issue.reduce(\n      (sum, item) => sum + item.price, 0\n    );\n    break;\n\n  case \"COMPOSITE\":\n    amount = selected_rule.components.reduce((sum, c) => {\n      if (c.type === \"ORDER\") {\n        return sum + Math.min(data.$trigger.order_value, c.max_amount);\n      }\n      if (c.type === \"PERCENT\") {\n        return sum + Math.min(\n          (data.item_read_nm6c3.order_value * c.percentage) / 100,\n          c.max_amount\n        );\n      }\n      return sum;\n    }, 0);\n    break;\n}\n\nreturn {\n  suggested_compensation: {\n     user_complaint_amount: data.$trigger.user_complaint_amount,\n    type: selected_rule.compensation_type,\n    amount:Math.round(amount)\n  }\n};\n\n}"
+      }
+    },
+    {
+      "id": "603edaee-03f4-43a6-b127-a8e049bfa79d",
+      "name": "Read Data",
+      "key": "item_read_nm6c3",
+      "type": "item-read",
+      "position_x": 18,
+      "position_y": 2,
+      "resolve": "118c1614-93b6-400c-b35f-896d752e01fe",
+      "reject": null,
+      "options": {
+        "permissions": "$trigger",
+        "emitEvents": false,
+        "collection": "compensation_requests",
+        "query": {
+          "fields": ["*", "com_issue.*", "com_issue.Com_Issues_c.*"]
+        },
+        "key": "{{$trigger.body.keys}}"
+      }
+    },
+    {
+      "id": "6e193471-9f77-4ff2-b5ea-fb6b25465989",
+      "name": "update_request",
+      "key": "update_request",
+      "type": "item-update",
+      "position_x": 29,
+      "position_y": 20,
+      "resolve": null,
+      "reject": null,
+      "options": {
+        "permissions": "$trigger",
+        "emitEvents": true,
+        "key": "{{$trigger.body.keys}}",
+        "collection": "compensation_requests",
+        "payload": {
+          "request_frequency": "{{get_req_frequency[0].count}}",
+          "suggested_compensation_value": "{{run_script_core_logic.suggested_compensation.amount}}",
+          "final_compensation_value": "{{run_script_core_logic.suggested_compensation.amount}}",
+          "calculate_compensation": true
+        }
+      }
+    },
+    {
+      "id": "e2fe4e5e-8877-4da8-89c6-fee710d95703",
+      "name": "log",
+      "key": "log",
+      "type": "log",
+      "position_x": 50,
+      "position_y": 18,
+      "resolve": null,
+      "reject": null,
+      "options": {
+        "message": "{{$last}}"
+      }
+    },
+    {
+      "id": "e5fbdd02-2ebd-483e-a853-7960f087faee",
+      "name": "get_req_frequency",
+      "key": "get_req_frequency",
+      "type": "item-read",
+      "position_x": 53,
+      "position_y": 2,
+      "resolve": "5f7f989d-a8d0-4170-bd68-86418ddcb2b8",
+      "reject": null,
+      "options": {
+        "permissions": "$trigger",
+        "emitEvents": false,
+        "collection": "compensation_requests",
+        "query": {
+          "filter": {
+            "status": {
+              "_eq": "approved"
+            },
+            "com_issue": {
+              "_eq": "{{item_read_nm6c3.com_issue.id}}"
+            },
+            "approved_at": {
+              "_between": ["{{required_frequency.from_date}}", "{{required_frequency.to_date}}"]
+            },
+            "customer_id": {
+              "_eq": "{{item_read_nm6c3.customer_id}}"
+            }
+          },
+          "aggregate": {
+            "count": "*"
+          }
+        }
+      }
+    }
+  ],
+  "ordered_keys": [
+    "item_read_nm6c3",
+    "required_frequency",
+    "get_req_frequency",
+    "run_script_core_logic",
+    "update_request",
+    "log"
+  ]
+}

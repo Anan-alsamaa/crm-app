@@ -1,0 +1,74 @@
+{
+  "flow": {
+    "id": "6482d337-286e-4606-98de-21b734796b84",
+    "name": "CR->Approve",
+    "icon": "bolt",
+    "status": "active",
+    "trigger": "manual",
+    "accountability": "all",
+    "options": {
+      "collections": ["compensation_requests"],
+      "requireConfirmation": true
+    },
+    "operation": "92efedfe-37a8-450a-81ba-f9fe65bc2613"
+  },
+  "operations": [
+    {
+      "id": "3e1ff3f8-05d2-49d5-acb4-c99a74f4c42d",
+      "name": "Run Script",
+      "key": "exec_80xye",
+      "type": "exec",
+      "position_x": 25,
+      "position_y": 18,
+      "resolve": "7e2a7fea-513e-4a4f-ae64-53168e087dea",
+      "reject": null,
+      "options": {
+        "code": "module.exports = async function (data) {\n\n  const slaMinutes = data.reat_item_cr.com_issue.sla.resolution_hours;\n\n  const now = new Date();\n  const currentTimestamp = now.toISOString();\n\n  const ticketCreatedAt = new Date(data.reat_item_cr.date_created);\n\n  // elapsed time since ticket creation (minutes)\n  const elapsedMinutes = Math.floor((now - ticketCreatedAt) / 60000);\n\n  const isSlaBreached = elapsedMinutes > slaMinutes;\n\n  return {\n    current_timestamp: currentTimestamp,\n    elapsed_minutes: elapsedMinutes,\n    sla_minutes: slaMinutes,\n    sla_breached: isSlaBreached\n  };\n};"
+      }
+    },
+    {
+      "id": "7e2a7fea-513e-4a4f-ae64-53168e087dea",
+      "name": "Update Data",
+      "key": "item_update_iwbon",
+      "type": "item-update",
+      "position_x": 31,
+      "position_y": 1,
+      "resolve": null,
+      "reject": null,
+      "options": {
+        "permissions": "$trigger",
+        "emitEvents": false,
+        "collection": "compensation_requests",
+        "key": "{{$trigger.body.keys}}",
+        "payload": {
+          "status": "Approved",
+          "status_date": "{{$last.current_timestamp}}",
+          "approved_at": "{{$last.current_timestamp}}",
+          "approved_by": "{{$accountability.user}}",
+          "solved_sla_violation": "{{$last.sla_breached}}",
+          "solved_sla_minutes": "{{$last.elapsed_minutes}}"
+        }
+      }
+    },
+    {
+      "id": "92efedfe-37a8-450a-81ba-f9fe65bc2613",
+      "name": "Read Data",
+      "key": "reat_item_cr",
+      "type": "item-read",
+      "position_x": 6,
+      "position_y": 17,
+      "resolve": "3e1ff3f8-05d2-49d5-acb4-c99a74f4c42d",
+      "reject": null,
+      "options": {
+        "permissions": "$trigger",
+        "emitEvents": false,
+        "collection": "compensation_requests",
+        "key": "{{$trigger.body.keys}}",
+        "query": {
+          "fields": ["date_created", "com_issue.sla.*"]
+        }
+      }
+    }
+  ],
+  "ordered_keys": ["reat_item_cr", "exec_80xye", "item_update_iwbon"]
+}

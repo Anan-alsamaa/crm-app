@@ -1,30 +1,22 @@
 {
-  "_comment": "Agent-facing compensation workflow. Each action is a Directus MANUAL flow triggered via POST /flows/trigger/{id} with body { collection: 'compensation_requests', keys: [<requestId>], ...inputs }. Most actions are one-click (inputs: []). A few prod flows require the operator to fill fields in Directus' manual-trigger dialog — those SAME fields are declared in `inputs` and collected by the portal (apps/agent-portal/src/features/compensation/actions.ts), then sent with the trigger, so nothing is typed in Directus. Flow IDs are identical in production and the local clone (preserved on purpose) so the portal is environment-agnostic — it targets VITE_DIRECTUS_URL. Local stand-in flows perform only the status transition, no external calls, and echo the relevant inputs back into the record. `key` values map to standin-flows.mjs's PAYLOAD table; do not rename without updating it. Input `type` mirrors the Directus field type; `kind` (in the portal's actions.ts) mirrors how it renders.",
+  "_comment": "Agent-facing compensation workflow. Each action is a Directus MANUAL flow triggered via POST /flows/trigger/{id} with body { collection: 'compensation_requests', keys: [<requestId>], ...inputs }. Most actions are one-click (inputs: []). A few prod flows require the operator to fill fields in Directus' manual-trigger dialog — those SAME fields are declared in `inputs` and collected by the portal (apps/agent-portal/src/features/compensation/actions.ts), then sent with the trigger, so nothing is typed in Directus. Flow IDs are identical in production and the local clone (preserved on purpose) so the portal is environment-agnostic — it targets VITE_DIRECTUS_URL. Local stand-in flows (standin-flows.mjs) mirror the prod pipelines stage-for-stage (item-read -> exec -> item-update, item-create) to produce the exact same status/field transitions, but make NO external calls. `key` values map to standin-flows.mjs's PIPELINES table; do not rename without updating it. Input `type` mirrors the Directus field type; `kind` (in the portal's actions.ts) mirrors how it renders. Prod pipelines are snapshotted read-only in schema/prod-flow-*.json.",
   "collection": "compensation_requests",
-  "statuses": [
-    "Pending",
-    "Acknowledged",
-    "Calculating Compensation",
-    "Generating Coupon",
-    "Assign Coupon to User",
-    "Accepted",
-    "Closed",
-    "Rejected"
-  ],
+  "_statuses_comment": "EXACT prod status enum (compensation_requests.status, default Pending). Only Acknowledge/Approve/Reject change status; Calculate/Generate/Assign set fields+flags without moving status; Refund (Close task) has no prod operations and no effect.",
+  "statuses": ["Pending", "In Progress", "Approved", "Rejected"],
   "actions": [
     {
       "key": "acknowledge",
       "label": "Acknowledge",
       "flowId": "f6fc9809-e036-40e8-921c-b1aae3fa4ef5",
       "inputs": [],
-      "effect": "status -> Acknowledged; stamps inprogress_at"
+      "effect": "status -> In Progress; stamps status_date, inprogress_at, inprogress_by, inprogress_sla_violation, inprogress_sla_minutes, updated_at, date_updated"
     },
     {
       "key": "calculate",
       "label": "Calculate compensation",
       "flowId": "90a0639c-1c2d-4eeb-814f-4a4885625ea0",
       "inputs": [],
-      "effect": "status -> Calculating Compensation; fills request_frequency + suggested_compensation_value"
+      "effect": "NO status change; sets request_frequency, suggested_compensation_value, final_compensation_value, calculate_compensation=true (prod runs a frequency + rules engine; local derives value from claimed amount)"
     },
     {
       "key": "generate_coupon",
@@ -45,35 +37,43 @@
         { "field": "time_form", "type": "dateTime", "required": false, "label": "Time From" },
         { "field": "time_to", "type": "dateTime", "required": false, "label": "Time To" }
       ],
-      "effect": "status -> Generating Coupon; sets coupon_code from input (PROD: calls Yiji CreateCoupon, creates Com_Coupons row, links it)"
+      "effect": "NO status change; creates a Com_Coupons row from the inputs (Name+Code) and links it via `coupons` (portal reads coupons.Code). PROD additionally POSTs to the Yiji AddCoupon HTTP API — NOT replicated locally — and writes a phantom `generate_coupon` flag (a non-readable prod column) which is omitted locally."
     },
     {
       "key": "assign_coupon",
       "label": "Assign coupon",
       "flowId": "9a09201e-ef25-4202-8afc-5088873b5905",
       "inputs": [],
-      "effect": "status -> Assign Coupon to User; links the coupon to the request"
+      "effect": "NO status change; re-links the already-linked coupon (idempotent). Prod also writes the phantom `generate_coupon` flag (omitted locally), so there is no distinct observable change."
     },
     {
       "key": "approve",
       "label": "Accept",
       "flowId": "6482d337-286e-4606-98de-21b734796b84",
       "inputs": [],
-      "effect": "status -> Accepted; stamps approved_at"
+      "effect": "status -> Approved; stamps status_date, approved_at, solved_sla_violation, solved_sla_minutes. Prod also writes phantom `approved_by` (a non-readable prod column), omitted locally."
     },
     {
       "key": "reject",
       "label": "Reject",
       "flowId": "9335c8fb-5744-43cc-9964-6fa0de0bb4d1",
       "inputs": [{ "field": "reason", "type": "text", "required": true, "label": "Reason" }],
-      "effect": "status -> Rejected; stamps declined_at; stores reason in decline_reason"
+      "effect": "status -> Rejected; stamps status_date, declined_at, declined_by; stores reason in decline_reason"
     },
     {
       "key": "refund",
       "label": "Close task",
       "flowId": "13011877-701e-4d9c-b31e-711d196d097e",
-      "inputs": [{ "field": "reason", "type": "text", "required": false, "label": "Reason" }],
-      "effect": "status -> Closed (this is the portal's 'Close task' button); reason is passed to the flow"
+      "inputs": [
+        {
+          "field": "reason",
+          "type": "text",
+          "required": false,
+          "label": "Reason",
+          "interface": "input-rich-text-html"
+        }
+      ],
+      "effect": "NO effect — prod's 'CR->Refund amount' flow has ZERO operations. The optional reason field exists on the trigger but nothing is written."
     }
   ]
 }

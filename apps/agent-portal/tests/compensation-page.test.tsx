@@ -27,16 +27,7 @@ const h = vi.hoisted(() => ({
   mutate: vi.fn(),
 }));
 vi.mock('../src/features/compensation/api.js', () => ({
-  COMPENSATION_STATUSES: [
-    'Pending',
-    'Acknowledged',
-    'Calculating Compensation',
-    'Generating Coupon',
-    'Assign Coupon to User',
-    'Accepted',
-    'Closed',
-    'Rejected',
-  ],
+  COMPENSATION_STATUSES: ['Pending', 'In Progress', 'Approved', 'Rejected'],
   useCompensationRequests: () => h.requests,
   useCompensationRequest: () => h.request,
   useCompensationItems: () => h.items,
@@ -89,7 +80,7 @@ describe('Compensation queue', () => {
     h.requests = {
       data: [
         { ...reqBase, id: 'a', request_code: 'CR-A', status: 'Pending' },
-        { ...reqBase, id: 'b', request_code: 'CR-B', status: 'Accepted' },
+        { ...reqBase, id: 'b', request_code: 'CR-B', status: 'Approved' },
       ],
       isLoading: false,
       isError: false,
@@ -98,8 +89,8 @@ describe('Compensation queue', () => {
     expect(screen.getByText('CR-A')).toBeInTheDocument();
     expect(screen.getByText('CR-B')).toBeInTheDocument();
 
-    // Filter to Accepted → only CR-B remains.
-    fireEvent.click(screen.getByRole('button', { name: 'Accepted' }));
+    // Filter to Approved → only CR-B remains.
+    fireEvent.click(screen.getByRole('button', { name: 'Approved' }));
     expect(screen.queryByText('CR-A')).not.toBeInTheDocument();
     expect(screen.getByText('CR-B')).toBeInTheDocument();
   });
@@ -124,7 +115,7 @@ const BAR: Array<[label: string, flowId: string]> = [
 describe('Compensation detail — action bar mirrors Directus exactly', () => {
   it('renders all 7 buttons in the exact order, for every status', () => {
     const labels = BAR.map(([l]) => l);
-    for (const status of ['Pending', 'Acknowledged', 'Accepted', 'Rejected']) {
+    for (const status of ['Pending', 'In Progress', 'Approved', 'Rejected']) {
       h.request = { data: { ...reqBase, status }, isLoading: false };
       const { unmount } = renderAt('/compensation/req-1');
       const bar = screen
@@ -172,7 +163,7 @@ describe('Compensation detail — one-click actions (no prod inputs)', () => {
 
 describe('Compensation detail — actions with manual inputs open a form', () => {
   it('Reject requires a reason before it fires, then sends it', async () => {
-    h.request = { data: { ...reqBase, status: 'Acknowledged' }, isLoading: false };
+    h.request = { data: { ...reqBase, status: 'In Progress' }, isLoading: false };
     renderAt('/compensation/req-1');
 
     // The Reject button opens a form instead of firing immediately.
@@ -197,7 +188,7 @@ describe('Compensation detail — actions with manual inputs open a form', () =>
   });
 
   it('Generate Coupon collects the coupon form and sends every filled field', async () => {
-    h.request = { data: { ...reqBase, status: 'Calculating Compensation' }, isLoading: false };
+    h.request = { data: { ...reqBase, status: 'In Progress' }, isLoading: false };
     renderAt('/compensation/req-1');
 
     fireEvent.click(screen.getByRole('button', { name: 'Generate Coupon' }));
@@ -223,7 +214,7 @@ describe('Compensation detail — actions with manual inputs open a form', () =>
   });
 
   it('Generate Coupon blocks until the required fields are filled', () => {
-    h.request = { data: { ...reqBase, status: 'Calculating Compensation' }, isLoading: false };
+    h.request = { data: { ...reqBase, status: 'In Progress' }, isLoading: false };
     renderAt('/compensation/req-1');
     fireEvent.click(screen.getByRole('button', { name: 'Generate Coupon' }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm Generate Coupon' }));
@@ -233,7 +224,7 @@ describe('Compensation detail — actions with manual inputs open a form', () =>
   });
 
   it('Close task uses its own flow id (13011877); its reason is optional', async () => {
-    h.request = { data: { ...reqBase, status: 'Accepted' }, isLoading: false };
+    h.request = { data: { ...reqBase, status: 'Approved' }, isLoading: false };
     renderAt('/compensation/req-1');
 
     fireEvent.click(screen.getByRole('button', { name: 'Close task' }));

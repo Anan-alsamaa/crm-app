@@ -1,14 +1,27 @@
 /**
- * Creates SAFE local stand-in copies of the 7 agent compensation flows, with the
- * SAME flow IDs as production (so the portal — which triggers flows by id — works
- * identically against local and prod). Each stand-in performs only the visible
- * status/field transition via a single item-update; it makes NO external calls
- * (the production flows call the real Yiji CreateCoupon API — never replicated
- * locally). Flows that require manual inputs (reject reason, the coupon form,
- * close reason) declare those fields on the trigger and echo the relevant ones
- * back into the record via {{$trigger.body.<field>}}. Idempotent: skips a flow
- * if its id already exists; pass --force to delete + recreate every flow (use
- * after changing inputs/payloads so existing local flows pick up the changes).
+ * Local stand-in copies of the production compensation Flows, with the SAME flow
+ * IDs as prod (so the portal — which triggers flows by id — works identically
+ * against local and prod). Each stand-in mirrors the EXACT observable prod
+ * pipeline "at all stages": the same status transitions and the same field
+ * writes, staged through the same kinds of operations (item-read → exec →
+ * item-update, item-create, …). The only things intentionally NOT replicated
+ * are external calls — prod's Generate-Coupon flow also POSTs to the Yiji
+ * `AddCoupon` HTTP API; locally we create + link the coupon record but make NO
+ * outbound request. Snapshots of the real prod pipelines live in
+ * schema/prod-flow-*.json (see extract-prod-flows.mjs, read-only).
+ *
+ * Exact prod status model (compensation_requests.status ∈
+ * Pending | In Progress | Approved | Rejected):
+ *   Acknowledge      → In Progress  (+ inprogress_at/by, SLA breach + minutes)
+ *   Calculate        → (no status change) request_frequency + suggested/final value
+ *   Generate Coupon  → (no status change) creates Com_Coupons, links coupons
+ *   Assign Coupon    → (no status change) generate_coupon flag
+ *   Approve ("Accept")→ Approved      (+ approved_at/by, solved SLA fields)
+ *   Reject           → Rejected       (+ declined_at/by, decline_reason)
+ *   Refund ("Close") → (no operations in prod — no effect)
+ *
+ * Idempotent: skips a flow if its id exists; pass --force to delete + recreate
+ * (use after changing a pipeline/inputs so existing local flows pick it up).
  *
  *   node directus/compensation-clone/standin-flows.mjs [--force]
  */
@@ -22,6 +35,31 @@ const EMAIL = process.env.DIRECTUS_ADMIN_EMAIL ?? 'e.habibi@anan.sa';
 const PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD ?? '123456';
 const FORCE = process.argv.includes('--force');
 const contract = JSON.parse(readFileSync(join(HERE, 'flow-contract.json'), 'utf8'));
+
+let TOKEN;
+async function login() {
+  const r = await fetch(`${LOCAL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+  });
+  TOKEN = (await r.json()).data.access_token;
+}
+async function api(method, path, body) {
+  const r = await fetch(`${LOCAL}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const txt = await r.text();
+  let json;
+  try {
+    json = txt ? JSON.parse(txt) : null;
+  } catch {
+    json = txt;
+  }
+  return { ok: r.ok, status: r.status, json };
+}
 
 // Map a contract input `type` to a Directus manual-trigger field definition, so
 // the local admin's trigger dialog mirrors prod. (The manual trigger does NOT
@@ -49,54 +87,147 @@ function triggerField(i) {
   }
 }
 
-let TOKEN;
-async function login() {
-  const r = await fetch(`${LOCAL}/auth/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
-  });
-  TOKEN = (await r.json()).data.access_token;
-}
-async function api(method, path, body) {
-  const r = await fetch(`${LOCAL}${path}`, {
-    method, headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const txt = await r.text();
-  let json; try { json = txt ? JSON.parse(txt) : null; } catch { json = txt; }
-  return { ok: r.ok, status: r.status, json };
-}
+const CR = 'compensation_requests';
+const KEY = '{{$trigger.body.keys}}';
 
-// The item-update payload each stand-in applies (mirrors the prod status effect).
-// Each action sets its OWN status so the workflow stage is always visible.
-// (The UI's Accept button uses the `approve` flow; Close uses the `refund` flow.)
-// Fields prefixed with `{{$trigger.body.` are interpolated from the trigger
-// body — i.e. the values the operator filled in the portal form. This is how the
-// UI-collected inputs land on the record (reason, the entered coupon code).
-const PAYLOAD = {
-  acknowledge: { status: 'Acknowledged', inprogress_at: '$NOW' },
-  calculate: {
-    status: 'Calculating Compensation',
-    suggested_compensation_value: '5',
-    request_frequency: 1,
-  },
-  generate_coupon: {
-    status: 'Generating Coupon',
-    coupon_code: '{{$trigger.body.coupon_code}}',
-  },
-  assign_coupon: { status: 'Assign Coupon to User' },
-  approve: { status: 'Accepted', approved_at: '$NOW' },
-  reject: { status: 'Rejected', declined_at: '$NOW', decline_reason: '{{$trigger.body.reason}}' },
-  refund: { status: 'Closed' },
+// Exec that stamps a timestamp + elapsed/SLA figures from the read record. The
+// SLA hours come from com_issue.sla when present (as in prod); when absent
+// locally it degrades to no breach instead of throwing. `readKey` is the key of
+// the preceding item-read op; `hoursField` is the sla field prod uses.
+const slaExec = (readKey, hoursField) => `module.exports = async function (data) {
+  const rec = (data && data.${readKey}) || {};
+  const sla = (rec.com_issue && rec.com_issue.sla) || {};
+  const hours = sla.${hoursField};
+  const now = new Date();
+  const created = rec.date_created ? new Date(rec.date_created) : now;
+  const elapsedMinutes = Math.floor((now - created) / 60000);
+  const slaMinutes = (hours == null) ? null : Number(hours) * 60;
+  const slaBreached = (slaMinutes == null) ? false : elapsedMinutes > slaMinutes;
+  return {
+    current_timestamp: now.toISOString(),
+    elapsed_minutes: String(elapsedMinutes),
+    sla_breached: String(slaBreached),
+  };
+};`;
+
+// Simplified compensation calculation. Prod runs frequency + a rules engine over
+// com_issue.Com_Issues_c; locally we derive a plausible value from the claimed
+// amount so the same fields land (frequency defaults to 1).
+const calcExec = (readKey) => `module.exports = async function (data) {
+  const rec = (data && data.${readKey}) || {};
+  const base = Number(rec.user_complaint_amount != null ? rec.user_complaint_amount : (rec.order_total || 0));
+  const amount = Math.round((isFinite(base) ? base : 0) * 100) / 100;
+  return { frequency: 1, amount: String(amount) };
+};`;
+
+// Each flow's pipeline (ordered). item-update / item-create run with $full
+// permissions because the triggering agent is read-only on these collections
+// (mirrors prod, where flows run privileged and the agent only triggers them).
+const upd = (payload) => ({ type: 'item-update', options: { collection: CR, key: KEY, payload, permissions: '$full' } });
+
+const PIPELINES = {
+  acknowledge: [
+    { key: 'read_cr', type: 'item-read', options: { collection: CR, key: KEY, query: { fields: ['date_created', 'com_issue.sla.*'] } } },
+    { key: 'calc_sla', type: 'exec', options: { code: slaExec('read_cr', 'response_hours') } },
+    {
+      key: 'apply',
+      ...upd({
+        status: 'In Progress',
+        status_date: '{{calc_sla.current_timestamp}}',
+        inprogress_at: '{{calc_sla.current_timestamp}}',
+        inprogress_by: '{{$accountability.user}}',
+        inprogress_sla_violation: '{{calc_sla.sla_breached}}',
+        inprogress_sla_minutes: '{{calc_sla.elapsed_minutes}}',
+        updated_at: '{{calc_sla.current_timestamp}}',
+        date_updated: '{{calc_sla.current_timestamp}}',
+      }),
+    },
+  ],
+  calculate: [
+    { key: 'read_cr', type: 'item-read', options: { collection: CR, key: KEY, query: { fields: ['*', 'com_issue.*'] } } },
+    { key: 'calc', type: 'exec', options: { code: calcExec('read_cr') } },
+    {
+      key: 'apply',
+      ...upd({
+        request_frequency: '{{calc.frequency}}',
+        suggested_compensation_value: '{{calc.amount}}',
+        final_compensation_value: '{{calc.amount}}',
+        calculate_compensation: true,
+      }),
+    },
+  ],
+  generate_coupon: [
+    // Prod creates the coupon, links it, then POSTs to Yiji AddCoupon. Locally we
+    // create + link the Com_Coupons row from the operator's inputs and STOP — no
+    // outbound request. (Prod also sets `generate_coupon:true`, but that column
+    // is NOT a real/readable field in prod — it's a phantom write dropped by
+    // Directus — so we don't replicate it; it would just error the update.)
+    {
+      key: 'mk_coupon',
+      type: 'item-create',
+      options: {
+        collection: 'Com_Coupons',
+        payload: { Name: '{{$trigger.body.coupon_name}}', Code: '{{$trigger.body.coupon_code}}' },
+        permissions: '$full',
+      },
+    },
+    {
+      // item-create returns an ARRAY of created keys — prod links via
+      // {{$last[0]}}; the portal then reads the linked coupon's Code (coupons.Code).
+      key: 'apply',
+      ...upd({ coupons: '{{mk_coupon[0]}}' }),
+    },
+  ],
+  // Prod re-links the (already-linked) coupon and sets the phantom
+  // `generate_coupon` flag — so there's no distinct observable change. We mirror
+  // the idempotent re-link and omit the phantom flag.
+  assign_coupon: [
+    { key: 'read_cr', type: 'item-read', options: { collection: CR, key: KEY, query: { fields: ['coupons'] } } },
+    { key: 'apply', ...upd({ coupons: '{{read_cr.coupons}}' }) },
+  ],
+  approve: [
+    { key: 'read_cr', type: 'item-read', options: { collection: CR, key: KEY, query: { fields: ['date_created', 'com_issue.sla.*'] } } },
+    { key: 'calc_sla', type: 'exec', options: { code: slaExec('read_cr', 'resolution_hours') } },
+    {
+      key: 'apply',
+      // Prod also writes `approved_by`, but that column is NOT a real/readable
+      // field in prod (phantom write) — omitted here so the update doesn't error.
+      ...upd({
+        status: 'Approved',
+        status_date: '{{calc_sla.current_timestamp}}',
+        approved_at: '{{calc_sla.current_timestamp}}',
+        solved_sla_violation: '{{calc_sla.sla_breached}}',
+        solved_sla_minutes: '{{calc_sla.elapsed_minutes}}',
+      }),
+    },
+  ],
+  reject: [
+    { key: 'ts', type: 'exec', options: { code: 'module.exports = async function () { return { current_timestamp: new Date().toISOString() }; };' } },
+    {
+      key: 'apply',
+      ...upd({
+        status: 'Rejected',
+        status_date: '{{ts.current_timestamp}}',
+        declined_at: '{{ts.current_timestamp}}',
+        declined_by: '{{$accountability.user}}',
+        decline_reason: '{{$trigger.body.reason}}',
+      }),
+    },
+  ],
+  // Prod's "CR->Refund amount" flow has zero operations — Close task has no
+  // record effect. We keep the pipeline empty (only the terminal return-ok is
+  // added below so the portal's SDK call resolves).
+  refund: [],
 };
 
 await login();
 for (const a of contract.actions) {
   const cur = await api('GET', `/flows/${a.flowId}?fields=id`);
   if (cur.ok) {
-    if (!FORCE) { console.log(`= flow ${a.key} (${a.flowId}) exists — skip`); continue; }
-    // --force: delete so we recreate with the current inputs/payload. Deleting a
-    // flow cascades to its operations.
+    if (!FORCE) {
+      console.log(`= flow ${a.key} (${a.flowId}) exists — skip`);
+      continue;
+    }
     const del = await api('DELETE', `/flows/${a.flowId}`);
     console.log(del.ok ? `↻ recreating flow ${a.key} (${a.flowId})` : `✗ delete ${a.key} (${del.status})`);
     if (!del.ok) continue;
@@ -110,50 +241,52 @@ for (const a of contract.actions) {
     trigger: 'manual',
     accountability: 'all',
     options: {
-      collections: ['compensation_requests'],
+      collections: [CR],
       requireConfirmation: true,
       ...(a.inputs.length ? { fields: a.inputs.map(triggerField) } : {}),
     },
   });
-  if (!flow.ok) { console.log(`✗ flow ${a.key} (${flow.status}) ${JSON.stringify(flow.json).slice(0, 200)}`); continue; }
-  // One item-update operation that applies the transition to the triggered keys.
-  const op = await api('POST', '/operations', {
-    flow: a.flowId,
-    name: 'Apply transition',
-    key: 'apply_transition',
-    type: 'item-update',
-    position_x: 19,
-    position_y: 1,
-    options: {
-      collection: 'compensation_requests',
-      key: '{{$trigger.body.keys}}',
-      payload: PAYLOAD[a.key] ?? {},
-      // Run the write with full access, not the triggering agent's perms.
-      // The agent is granted READ-only on compensation_requests (see
-      // grant-agent-perms.mjs); without this the update is FORBIDDEN and the
-      // action silently no-ops. Mirrors prod, where the real flows run
-      // privileged and the agent only triggers them.
-      permissions: '$full',
-    },
-  });
-  if (!op.ok) { console.log(`✗ op ${a.key} (${op.status})`); continue; }
-  // A terminal transform op so the flow returns an OBJECT ({ ok: true }), not the
-  // bare updated id. @directus/sdk v17's request() does `'data' in <response>`,
-  // which throws a TypeError on a string primitive — the trigger 200s and the
-  // write lands, but the portal's SDK call throws and shows "Action failed".
-  // Returning an object keeps the SDK's response parsing happy.
-  const ret = await api('POST', '/operations', {
-    flow: a.flowId,
-    name: 'Return OK',
-    key: 'return_ok',
-    type: 'transform',
-    position_x: 37,
-    position_y: 1,
-    options: { json: { ok: true } },
-  });
-  if (ret.ok) await api('PATCH', `/operations/${op.json.data.id}`, { resolve: ret.json.data.id });
-  // Wire the trigger to the entry (item-update) operation.
-  await api('PATCH', `/flows/${a.flowId}`, { operation: op.json.data.id });
-  console.log(`+ stand-in flow ${a.key} (${a.flowId})`);
+  if (!flow.ok) {
+    console.log(`✗ flow ${a.key} (${flow.status}) ${JSON.stringify(flow.json).slice(0, 200)}`);
+    continue;
+  }
+
+  // Create the pipeline ops in order, then a terminal return-ok transform so the
+  // flow returns an OBJECT ({ ok: true }) — @directus/sdk v17 request() does
+  // `'data' in <response>`, which throws on the bare id/string a flow would
+  // otherwise return. Wire each op's resolve to the next; set the trigger entry.
+  const specs = [
+    ...PIPELINES[a.key],
+    { key: 'return_ok', type: 'transform', options: { json: { ok: true } } },
+  ];
+  const ids = [];
+  let x = 19;
+  let failed = false;
+  for (const spec of specs) {
+    const op = await api('POST', '/operations', {
+      flow: a.flowId,
+      name: spec.key,
+      key: spec.key,
+      type: spec.type,
+      position_x: x,
+      position_y: 1,
+      options: spec.options ?? {},
+    });
+    if (!op.ok) {
+      console.log(`✗ op ${a.key}.${spec.key} (${op.status}) ${JSON.stringify(op.json).slice(0, 160)}`);
+      failed = true;
+      break;
+    }
+    ids.push(op.json.data.id);
+    x += 18;
+  }
+  if (failed) continue;
+  // Chain resolve pointers.
+  for (let i = 0; i < ids.length - 1; i++) {
+    await api('PATCH', `/operations/${ids[i]}`, { resolve: ids[i + 1] });
+  }
+  // Wire the trigger to the first op.
+  await api('PATCH', `/flows/${a.flowId}`, { operation: ids[0] });
+  console.log(`+ stand-in flow ${a.key} (${a.flowId}) — ${ids.length - 1} stage(s) + return-ok`);
 }
-console.log('stand-in flows applied.');
+console.log('stand-in flows applied (mirroring prod transitions; no external calls).');

@@ -1,0 +1,32 @@
+{
+  "flow": {
+    "id": "13011877-701e-4d9c-b31e-711d196d097e",
+    "name": "CR->Refund amount",
+    "icon": "bolt",
+    "status": "active",
+    "trigger": "manual",
+    "accountability": "all",
+    "options": {
+      "collections": ["compensation_requests"],
+      "requireConfirmation": true,
+      "fields": [
+        {
+          "field": "reason",
+          "type": "text",
+          "name": "reason",
+          "meta": {
+            "interface": "input-rich-text-html",
+            "width": "full",
+            "options": {
+              "customFormats": null,
+              "tinymceOverrides": null
+            }
+          }
+        }
+      ]
+    },
+    "operation": null
+  },
+  "operations": [],
+  "ordered_keys": []
+}

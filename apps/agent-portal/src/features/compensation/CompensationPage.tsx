@@ -35,12 +35,8 @@ const STATUS_TONE: Record<
   'warning' | 'neutral' | 'primary' | 'success' | 'muted' | 'destructive'
 > = {
   Pending: 'warning',
-  Acknowledged: 'neutral',
-  'Calculating Compensation': 'primary',
-  'Generating Coupon': 'primary',
-  'Assign Coupon to User': 'primary',
-  Accepted: 'success',
-  Closed: 'muted',
+  'In Progress': 'primary',
+  Approved: 'success',
   Rejected: 'destructive',
 };
 

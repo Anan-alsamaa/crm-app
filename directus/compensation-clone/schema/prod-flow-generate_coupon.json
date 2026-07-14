@@ -1,0 +1,235 @@
+{
+  "flow": {
+    "id": "fd7dd27e-fcbe-4447-9864-82817da5fc78",
+    "name": "CR->Generate Coupon",
+    "icon": "bolt",
+    "status": "active",
+    "trigger": "manual",
+    "accountability": "all",
+    "options": {
+      "collections": ["compensation_requests"],
+      "requireConfirmation": true,
+      "fields": [
+        {
+          "field": "coupon_name",
+          "type": "string",
+          "name": "Coupon Name",
+          "meta": {
+            "interface": "input",
+            "note": "Enter the coupon Name",
+            "width": "half",
+            "required": true
+          }
+        },
+        {
+          "field": "coupon_code",
+          "type": "string",
+          "name": "Coupon Code",
+          "meta": {
+            "interface": "input",
+            "required": true,
+            "width": "half"
+          }
+        },
+        {
+          "field": "side",
+          "type": "json",
+          "name": "side",
+          "meta": {
+            "interface": "collection-item-dropdown",
+            "width": "full",
+            "required": true,
+            "options": {
+              "choices": [
+                {
+                  "text": "ww",
+                  "value": "1"
+                }
+              ],
+              "selectedCollection": "coupon_sides",
+              "template": "{{iid}}"
+            }
+          }
+        },
+        {
+          "field": "date_from",
+          "type": "dateTime",
+          "name": "Date From",
+          "meta": {
+            "interface": "datetime",
+            "width": "half",
+            "required": true
+          }
+        },
+        {
+          "field": "date_to",
+          "type": "dateTime",
+          "name": "Date To",
+          "meta": {
+            "interface": "datetime",
+            "width": "half"
+          }
+        },
+        {
+          "field": "time_form",
+          "type": "dateTime",
+          "name": "Time From",
+          "meta": {
+            "interface": "datetime",
+            "width": "half"
+          }
+        },
+        {
+          "field": "time_to",
+          "type": "dateTime",
+          "name": "Time To",
+          "meta": {
+            "interface": "datetime",
+            "width": "half"
+          }
+        }
+      ],
+      "error_on_reject": true,
+      "location": "item"
+    },
+    "operation": "aa0e0565-dbbf-4bdf-b040-352964aea87b"
+  },
+  "operations": [
+    {
+      "id": "0e9dcbd2-03dd-48a7-b53a-8d63ee95a080",
+      "name": "Yiji->CreateCoupon",
+      "key": "request_plfmj",
+      "type": "request",
+      "position_x": 69,
+      "position_y": 2,
+      "resolve": null,
+      "reject": null,
+      "options": {
+        "method": "POST",
+        "url": "https://admin.yiji-app.com/api/Coupon/AddCoupon",
+        "headers": [
+          {
+            "header": "Authorization",
+            "value": "Bearer <REDACTED>"
+          },
+          {
+            "header": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": "{\n\"Id\": 0,\n    \"Name\": \"{{$trigger.body.coupon_name}}\",\n    \"Type\": 1,\n    \"OrderMaximum\": 1000,\n    \"OrderMinimum\": 0,\n    \"MaximumDiscount\": 200,\n    \"MonthlyReachLimit\": 1,\n    \"ReachLimit\": 200,\n    \"ActivationDateTime\": \"{{generate_date.ActivationDateTime}}\",\n    \"ExpirationDateTime\": \"{{generate_date.ActivationDateTime}}\",\n    \"ActivationDate\": \"{{generate_date.ActivationDate}}\",\n    \"ExpirationDate\": \"{{generate_date.ExpirationDate}}\",\n    \"DeliveryTypes\": [\n        1,\n        2,\n        3\n    ],\n    \"Discount\":{{item_read_4vog0.final_compensation_value || 0}},\n    \"PosDiscountCode\": null,\n    \"DiscountPercentage\": 0,\n    \"Category\": 1,\n    \"DontApplyLoyality\": false,\n    \"DontApplyOffer\": false,\n    \"Sunday\": true,\n    \"Monday\": true,\n    \"Tuesday\": true,\n    \"Wednesday\": true,\n    \"Thursday\": true,\n    \"Friday\": true,\n    \"Saturday\": true,\n    \"Assignee\": [],\n    \"IssuingSideId\": 27,\n    \"Point\": 0,\n    \"Buy1Get1Id\": null,\n    \"DiscountReductionId\": null,\n    \"DeliveryOfferId\": null,\n    \"CompensationReason\": \"{{item_read_4vog0.com_issue.name}}\",\n    \"BrandId\": 1,\n    \"Code\": \"{{$trigger.body.coupon_code}}\", \n\"Status\": 1,\"LimitForUser\":1,\"TotalCount\": 0,\"TenantId\": 1,\"IsUsed\": false\n}"
+      }
+    },
+    {
+      "id": "473e8b57-49f8-415f-ae5d-98309456d189",
+      "name": "Read Data",
+      "key": "item_read_4vog0",
+      "type": "item-read",
+      "position_x": 27,
+      "position_y": 17,
+      "resolve": "af9e7d43-eee3-4fd0-9fae-2641de630b5f",
+      "reject": null,
+      "options": {
+        "permissions": "$trigger",
+        "emitEvents": false,
+        "collection": "compensation_requests",
+        "key": "{{$trigger.body.keys}}",
+        "query": {
+          "fields": ["*", "com_issue.*"]
+        }
+      }
+    },
+    {
+      "id": "aa0e0565-dbbf-4bdf-b040-352964aea87b",
+      "name": "Generate Date",
+      "key": "generate_date",
+      "type": "exec",
+      "position_x": 5,
+      "position_y": 20,
+      "resolve": "473e8b57-49f8-415f-ae5d-98309456d189",
+      "reject": null,
+      "options": {
+        "code": "module.exports = async function (data) {\n  const now = new Date();\n\n  // Start of today (00:00)\n  const start = new Date(now);\n  start.setHours(0, 0, 0, 0);\n\n  // +1 month\n  const end = new Date(start);\n  end.setMonth(end.getMonth() + 1);\n\n  // Format helpers\n  const formatDateTime = (date, endOfDay = false) => {\n    const d = new Date(date);\n    if (endOfDay) {\n      d.setHours(23, 59, 0, 0);\n    }\n    return d.toISOString().slice(0, 16);\n  };\n\n  const formatISO = (date) => {\n    return date.toISOString();\n  };\n\n  return {\n    ActivationDateTime: formatDateTime(start),\n    ExpirationDateTime: formatDateTime(end, true),\n\n    ActivationDate: formatISO(start),\n    ExpirationDate: formatISO(end),\n  };\n};"
+      }
+    },
+    {
+      "id": "af9e7d43-eee3-4fd0-9fae-2641de630b5f",
+      "name": "Create Data",
+      "key": "item_create_r05nh",
+      "type": "item-create",
+      "position_x": 24,
+      "position_y": 1,
+      "resolve": "dc3f570c-abd9-4b9a-aff9-18d3d19c7175",
+      "reject": null,
+      "options": {
+        "permissions": "$trigger",
+        "emitEvents": true,
+        "collection": "Com_Coupons",
+        "payload": {
+          "Id": 0,
+          "Name": "{{$trigger.body.coupon_name}}",
+          "Type": 1,
+          "OrderMaximum": 1000,
+          "OrderMinimum": 0,
+          "MaximumDiscount": "200",
+          "MonthlyReachLimit": 1,
+          "ReachLimit": "200",
+          "ActivationDateTime": "{{generate_date.ActivationDateTime}}",
+          "ExpirationDateTime": "{{generate_date.ActivationDateTime}}",
+          "ActivationDate": "{{generate_date.ActivationDate}}",
+          "ExpirationDate": "{{generate_date.ExpirationDate}}",
+          "DeliveryTypes": ["1", "2", "3"],
+          "Discount": "{{$last.final_compensation_value}}",
+          "PosDiscountCode": null,
+          "DiscountPercentage": 0,
+          "Category": 1,
+          "DontApplyLoyality": false,
+          "DontApplyOffer": false,
+          "Sunday": true,
+          "Monday": true,
+          "Tuesday": true,
+          "Wednesday": true,
+          "Thursday": true,
+          "Friday": true,
+          "Saturday": true,
+          "Assignee": [],
+          "IssuingSideId": 27,
+          "Point": 0,
+          "Buy1Get1Id": null,
+          "DiscountReductionId": null,
+          "DeliveryOfferId": null,
+          "CompensationReason": "{{$last.com_issue.name}}",
+          "BrandId": 1,
+          "Code": "{{$trigger.body.coupon_code}}"
+        }
+      }
+    },
+    {
+      "id": "dc3f570c-abd9-4b9a-aff9-18d3d19c7175",
+      "name": "Update Data",
+      "key": "item_update_3ipih",
+      "type": "item-update",
+      "position_x": 42,
+      "position_y": 1,
+      "resolve": "0e9dcbd2-03dd-48a7-b53a-8d63ee95a080",
+      "reject": null,
+      "options": {
+        "permissions": "$trigger",
+        "emitEvents": true,
+        "collection": "compensation_requests",
+        "key": "{{$trigger.body.keys}}",
+        "payload": {
+          "coupons": "{{$last[0]}}",
+          "generate_coupon": true
+        }
+      }
+    }
+  ],
+  "ordered_keys": [
+    "generate_date",
+    "item_read_4vog0",
+    "item_create_r05nh",
+    "item_update_3ipih",
+    "request_plfmj"
+  ]
+}

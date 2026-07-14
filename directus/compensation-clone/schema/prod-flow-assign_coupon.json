@@ -1,0 +1,57 @@
+{
+  "flow": {
+    "id": "9a09201e-ef25-4202-8afc-5088873b5905",
+    "name": "CR->Assign Coupon",
+    "icon": "bolt",
+    "status": "active",
+    "trigger": "manual",
+    "accountability": "all",
+    "options": {
+      "collections": ["compensation_requests"],
+      "requireConfirmation": true
+    },
+    "operation": "13908065-da10-4ca0-a16a-aae771f0f263"
+  },
+  "operations": [
+    {
+      "id": "13908065-da10-4ca0-a16a-aae771f0f263",
+      "name": "Read Data",
+      "key": "item_read_4vog0",
+      "type": "item-read",
+      "position_x": 19,
+      "position_y": 2,
+      "resolve": null,
+      "reject": null,
+      "options": {
+        "permissions": "$trigger",
+        "emitEvents": false,
+        "collection": "compensation_requests",
+        "key": "{{$trigger.body.keys}}",
+        "query": {
+          "fields": ["customer_id", "coupons.*"]
+        }
+      }
+    },
+    {
+      "id": "f7c6fbd9-a034-48e8-a5e6-3ff5cdf9cde6",
+      "name": "Update Data",
+      "key": "item_update_3ipih",
+      "type": "item-update",
+      "position_x": 42,
+      "position_y": 1,
+      "resolve": null,
+      "reject": null,
+      "options": {
+        "permissions": "$trigger",
+        "emitEvents": true,
+        "collection": "compensation_requests",
+        "key": "{{$trigger.body.keys}}",
+        "payload": {
+          "coupons": "{{$last[0]}}",
+          "generate_coupon": true
+        }
+      }
+    }
+  ],
+  "ordered_keys": ["item_read_4vog0", "item_update_3ipih"]
+}
