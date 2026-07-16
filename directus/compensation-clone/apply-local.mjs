@@ -14,12 +14,11 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { resolveAdmin } from './local-creds.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCHEMA = join(HERE, 'schema');
-const LOCAL = process.env.DIRECTUS_URL ?? 'http://localhost:8055';
-const EMAIL = process.env.DIRECTUS_ADMIN_EMAIL ?? 'e.habibi@anan.sa';
-const PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD ?? '123456';
+const { url: LOCAL, email: EMAIL, password: PASSWORD } = resolveAdmin();
 
 const read = (n) => JSON.parse(fs.readFileSync(join(SCHEMA, `${n}.json`), 'utf8'));
 
@@ -41,15 +40,22 @@ async function api(method, path, body) {
   });
   const txt = await r.text();
   let json;
-  try { json = txt ? JSON.parse(txt) : null; } catch { json = txt; }
+  try {
+    json = txt ? JSON.parse(txt) : null;
+  } catch {
+    json = txt;
+  }
   return { ok: r.ok, status: r.status, json };
 }
 const exists = async (p) => (await api('GET', p)).ok;
 
 const EXTERNAL_OK = new Set(['directus_users', 'directus_files', 'sla_policies']);
 const CREATE = new Set([
-  'Com_Issue_Categories', 'Com_Coupons', 'com_issues_list',
-  'Compensation_Request_items', 'compensation_requests',
+  'Com_Issue_Categories',
+  'Com_Coupons',
+  'com_issues_list',
+  'Compensation_Request_items',
+  'compensation_requests',
 ]);
 
 function cleanField(f) {
@@ -57,12 +63,18 @@ function cleanField(f) {
   delete meta.id;
   delete meta.group;
   const schema = f.schema ? { ...f.schema } : undefined;
-  if (schema) { delete schema.foreign_key_table; delete schema.foreign_key_column; }
+  if (schema) {
+    delete schema.foreign_key_table;
+    delete schema.foreign_key_column;
+  }
   return { field: f.field, type: f.type, meta, schema };
 }
 
 async function createCollection(name, fields, collMeta) {
-  if (await exists(`/collections/${name}`)) { console.log(`= ${name} exists`); return; }
+  if (await exists(`/collections/${name}`)) {
+    console.log(`= ${name} exists`);
+    return;
+  }
   const pk = fields.find((f) => f.schema?.is_primary_key) || fields.find((f) => f.field === 'id');
   const pkClean = cleanField(pk);
   pkClean.schema = { ...(pkClean.schema || {}), is_primary_key: true };

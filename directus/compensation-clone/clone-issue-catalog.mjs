@@ -1,3 +1,4 @@
+import { resolveAdmin } from './local-creds.mjs';
 /**
  * Clones the production compensation ISSUE CATALOG into local so ops can pick a
  * real Issue from the agent portal (the Issue drives the SLA timers and the
@@ -16,16 +17,16 @@
  */
 const PROD_URL = process.env.PROD_DIRECTUS_URL;
 const PROD_TOKEN = process.env.PROD_DIRECTUS_TOKEN;
-const LOCAL = process.env.DIRECTUS_URL ?? 'http://localhost:8055';
-const EMAIL = process.env.DIRECTUS_ADMIN_EMAIL ?? 'e.habibi@anan.sa';
-const PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD ?? '123456';
+const { url: LOCAL, email: EMAIL, password: PASSWORD } = resolveAdmin();
 if (!PROD_URL || !PROD_TOKEN) {
   console.error('Set PROD_DIRECTUS_URL and PROD_DIRECTUS_TOKEN (read-only source).');
   process.exit(1);
 }
 
 async function prod(path) {
-  const r = await fetch(`${PROD_URL}${path}`, { headers: { Authorization: `Bearer ${PROD_TOKEN}` } });
+  const r = await fetch(`${PROD_URL}${path}`, {
+    headers: { Authorization: `Bearer ${PROD_TOKEN}` },
+  });
   const j = await r.json();
   if (!r.ok) throw new Error(`PROD ${path} -> ${r.status}`);
   return j.data;
@@ -60,9 +61,13 @@ await login();
 
 // 1 ── sla_policies (prod uuid -> local uuid) ────────────────────────────────
 const slaMap = new Map();
-for (const s of await prod('/items/sla_policies?fields=id,response_hours,resolution_hours&limit=-1')) {
+for (const s of await prod(
+  '/items/sla_policies?fields=id,response_hours,resolution_hours&limit=-1',
+)) {
   const name = `Compensation SLA ${s.response_hours}h/${s.resolution_hours}h (prod clone)`;
-  const existing = await first(`/items/sla_policies?filter[name][_eq]=${encodeURIComponent(name)}&fields=id&limit=1`);
+  const existing = await first(
+    `/items/sla_policies?filter[name][_eq]=${encodeURIComponent(name)}&fields=id&limit=1`,
+  );
   let id = existing?.id;
   if (!id) {
     const r = await api('POST', '/items/sla_policies', {
@@ -84,7 +89,11 @@ console.log(`sla_policies: ${slaMap.size} mapped`);
 
 // 2 ── Com_Issue_Categories (preserve prod id — string, no collision) ─────────
 for (const c of await prod('/items/Com_Issue_Categories?fields=id,name&limit=-1')) {
-  if (!(await first(`/items/Com_Issue_Categories?filter[id][_eq]=${encodeURIComponent(c.id)}&fields=id&limit=1`))) {
+  if (
+    !(await first(
+      `/items/Com_Issue_Categories?filter[id][_eq]=${encodeURIComponent(c.id)}&fields=id&limit=1`,
+    ))
+  ) {
     const r = await api('POST', '/items/Com_Issue_Categories', { id: c.id, name: c.name });
     if (!r.ok) console.log(`✗ category ${c.id} ${c.name} (${r.status})`);
   }
@@ -97,7 +106,9 @@ const prodIssues = await prod(
   '/items/com_issues_list?fields=id,name,name_ar,frequency_window_days,com_issue_category,sla&limit=-1',
 );
 for (const iss of prodIssues) {
-  const existing = await first(`/items/com_issues_list?filter[name][_eq]=${encodeURIComponent(iss.name)}&fields=id&limit=1`);
+  const existing = await first(
+    `/items/com_issues_list?filter[name][_eq]=${encodeURIComponent(iss.name)}&fields=id&limit=1`,
+  );
   let id = existing?.id;
   if (!id) {
     const r = await api('POST', '/items/com_issues_list', {
@@ -122,13 +133,27 @@ console.log(`com_issues_list: ${issueMap.size} mapped`);
 
 // 4 ── Com_Issues_c rules (link to the mapped issue) ─────────────────────────
 const RULE_FIELDS = [
-  'late_delivery_time', 'min_prep_time', 'min_order_value', 'max_order_value',
-  'fixed_amount', 'fallback_amount', 'percentage', 'max_amount', 'validity_days',
-  'compensation_type', 'components', 'frequency_from', 'frequency_to',
-  'frequency_window_days', 'notification', 'status',
+  'late_delivery_time',
+  'min_prep_time',
+  'min_order_value',
+  'max_order_value',
+  'fixed_amount',
+  'fallback_amount',
+  'percentage',
+  'max_amount',
+  'validity_days',
+  'compensation_type',
+  'components',
+  'frequency_from',
+  'frequency_to',
+  'frequency_window_days',
+  'notification',
+  'status',
 ];
 let rules = 0;
-for (const rule of await prod(`/items/Com_Issues_c?fields=${RULE_FIELDS.join(',')},com_issue_list_item&limit=-1`)) {
+for (const rule of await prod(
+  `/items/Com_Issues_c?fields=${RULE_FIELDS.join(',')},com_issue_list_item&limit=-1`,
+)) {
   const localIssue = issueMap.get(rule.com_issue_list_item);
   if (!localIssue) continue;
   // signature guard so re-runs don't duplicate

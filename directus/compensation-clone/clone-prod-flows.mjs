@@ -24,13 +24,12 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
+import { resolveAdmin } from './local-creds.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROD_URL = process.env.PROD_DIRECTUS_URL;
 const PROD_TOKEN = process.env.PROD_DIRECTUS_TOKEN;
-const LOCAL = process.env.DIRECTUS_URL ?? 'http://localhost:8055';
-const EMAIL = process.env.DIRECTUS_ADMIN_EMAIL ?? 'e.habibi@anan.sa';
-const PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD ?? '123456';
+const { url: LOCAL, email: EMAIL, password: PASSWORD } = resolveAdmin();
 if (!PROD_URL || !PROD_TOKEN) {
   console.error('Set PROD_DIRECTUS_URL and PROD_DIRECTUS_TOKEN (read-only source).');
   process.exit(1);
@@ -38,7 +37,9 @@ if (!PROD_URL || !PROD_TOKEN) {
 const contract = JSON.parse(readFileSync(join(HERE, 'flow-contract.json'), 'utf8'));
 
 async function prodGet(path) {
-  const r = await fetch(`${PROD_URL}${path}`, { headers: { Authorization: `Bearer ${PROD_TOKEN}` } });
+  const r = await fetch(`${PROD_URL}${path}`, {
+    headers: { Authorization: `Bearer ${PROD_TOKEN}` },
+  });
   const j = await r.json();
   if (!r.ok) throw new Error(`PROD GET ${path} -> ${r.status} ${JSON.stringify(j).slice(0, 200)}`);
   return j.data;
@@ -75,7 +76,9 @@ function adaptOptions(op) {
   if (o.permissions === '$trigger') o.permissions = '$full';
   if (op.type === 'request' && Array.isArray(o.headers)) {
     o.headers = o.headers.map((h) =>
-      /^authorization$/i.test(h.header) ? { ...h, value: 'Bearer DISABLED-LOCAL-NO-EXTERNAL-CALLS' } : h,
+      /^authorization$/i.test(h.header)
+        ? { ...h, value: 'Bearer DISABLED-LOCAL-NO-EXTERNAL-CALLS' }
+        : h,
     );
   }
   if (op.type === 'request' && typeof o.body === 'string') {
@@ -95,7 +98,8 @@ for (const a of contract.actions) {
   const reqOps = new Set(ops.filter((o) => o.type === 'request').map((o) => o.id));
 
   // Replace the local flow.
-  if ((await local('GET', `/flows/${a.flowId}?fields=id`)).ok) await local('DELETE', `/flows/${a.flowId}`);
+  if ((await local('GET', `/flows/${a.flowId}?fields=id`)).ok)
+    await local('DELETE', `/flows/${a.flowId}`);
   const created = await local('POST', '/flows', {
     id: flow.id,
     name: flow.name,
@@ -108,7 +112,9 @@ for (const a of contract.actions) {
     options: flow.options,
   });
   if (!created.ok) {
-    console.log(`✗ flow ${a.key} (${created.status}) ${JSON.stringify(created.json).slice(0, 160)}`);
+    console.log(
+      `✗ flow ${a.key} (${created.status}) ${JSON.stringify(created.json).slice(0, 160)}`,
+    );
     continue;
   }
 
@@ -126,7 +132,9 @@ for (const a of contract.actions) {
       options: adaptOptions(op),
     });
     if (!res.ok) {
-      console.log(`✗ op ${a.key}.${op.key} (${res.status}) ${JSON.stringify(res.json).slice(0, 160)}`);
+      console.log(
+        `✗ op ${a.key}.${op.key} (${res.status}) ${JSON.stringify(res.json).slice(0, 160)}`,
+      );
       ok = false;
       break;
     }
@@ -149,7 +157,8 @@ for (const a of contract.actions) {
   // Reproduce prod wiring verbatim — but a resolve/reject that points INTO a
   // `request` op is redirected to return_ok, so the disabled Yiji call is never
   // reached (the request node stays present but unwired, for fidelity).
-  const wire = (target) => (target == null ? undefined : reqOps.has(target) ? retId : map.get(target));
+  const wire = (target) =>
+    target == null ? undefined : reqOps.has(target) ? retId : map.get(target);
   for (const op of ops) {
     if (reqOps.has(op.id)) continue; // leave the request node dangling
     const patch = {};
@@ -164,12 +173,17 @@ for (const a of contract.actions) {
   // request) should resolve into return_ok so the portal gets an object.
   for (const op of ops) {
     if (reqOps.has(op.id)) continue;
-    if (op.resolve == null) await local('PATCH', `/operations/${map.get(op.id)}`, { resolve: retId });
+    if (op.resolve == null)
+      await local('PATCH', `/operations/${map.get(op.id)}`, { resolve: retId });
   }
 
   // Entry: prod's entry op, or return_ok if the flow had no ops (e.g. refund).
   const entry = flow.operation && map.has(flow.operation) ? map.get(flow.operation) : retId;
   await local('PATCH', `/flows/${a.flowId}`, { operation: entry });
-  console.log(`✓ cloned ${a.key} (${a.flowId}) — ${ops.length} prod op(s) + return_ok${reqOps.size ? ' (request op disabled)' : ''}`);
+  console.log(
+    `✓ cloned ${a.key} (${a.flowId}) — ${ops.length} prod op(s) + return_ok${reqOps.size ? ' (request op disabled)' : ''}`,
+  );
 }
-console.log('\nExact clone complete. Local flows mirror prod op-for-op (3 documented adaptations).');
+console.log(
+  '\nExact clone complete. Local flows mirror prod op-for-op (3 documented adaptations).',
+);

@@ -28,11 +28,10 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
+import { resolveAdmin } from './local-creds.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const LOCAL = process.env.DIRECTUS_URL ?? 'http://localhost:8055';
-const EMAIL = process.env.DIRECTUS_ADMIN_EMAIL ?? 'e.habibi@anan.sa';
-const PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD ?? '123456';
+const { url: LOCAL, email: EMAIL, password: PASSWORD } = resolveAdmin();
 const FORCE = process.argv.includes('--force');
 const contract = JSON.parse(readFileSync(join(HERE, 'flow-contract.json'), 'utf8'));
 
@@ -69,7 +68,11 @@ function triggerField(i) {
   const base = { field: i.field, name: i.label ?? i.field };
   switch (i.type) {
     case 'text':
-      return { ...base, type: 'text', meta: { interface: 'input-multiline', required: !!i.required } };
+      return {
+        ...base,
+        type: 'text',
+        meta: { interface: 'input-multiline', required: !!i.required },
+      };
     case 'dateTime':
       return { ...base, type: 'dateTime', meta: { interface: 'datetime', required: !!i.required } };
     case 'select':
@@ -123,11 +126,18 @@ const calcExec = (readKey) => `module.exports = async function (data) {
 // Each flow's pipeline (ordered). item-update / item-create run with $full
 // permissions because the triggering agent is read-only on these collections
 // (mirrors prod, where flows run privileged and the agent only triggers them).
-const upd = (payload) => ({ type: 'item-update', options: { collection: CR, key: KEY, payload, permissions: '$full' } });
+const upd = (payload) => ({
+  type: 'item-update',
+  options: { collection: CR, key: KEY, payload, permissions: '$full' },
+});
 
 const PIPELINES = {
   acknowledge: [
-    { key: 'read_cr', type: 'item-read', options: { collection: CR, key: KEY, query: { fields: ['date_created', 'com_issue.sla.*'] } } },
+    {
+      key: 'read_cr',
+      type: 'item-read',
+      options: { collection: CR, key: KEY, query: { fields: ['date_created', 'com_issue.sla.*'] } },
+    },
     { key: 'calc_sla', type: 'exec', options: { code: slaExec('read_cr', 'response_hours') } },
     {
       key: 'apply',
@@ -144,7 +154,11 @@ const PIPELINES = {
     },
   ],
   calculate: [
-    { key: 'read_cr', type: 'item-read', options: { collection: CR, key: KEY, query: { fields: ['*', 'com_issue.*'] } } },
+    {
+      key: 'read_cr',
+      type: 'item-read',
+      options: { collection: CR, key: KEY, query: { fields: ['*', 'com_issue.*'] } },
+    },
     { key: 'calc', type: 'exec', options: { code: calcExec('read_cr') } },
     {
       key: 'apply',
@@ -182,11 +196,19 @@ const PIPELINES = {
   // `generate_coupon` flag — so there's no distinct observable change. We mirror
   // the idempotent re-link and omit the phantom flag.
   assign_coupon: [
-    { key: 'read_cr', type: 'item-read', options: { collection: CR, key: KEY, query: { fields: ['coupons'] } } },
+    {
+      key: 'read_cr',
+      type: 'item-read',
+      options: { collection: CR, key: KEY, query: { fields: ['coupons'] } },
+    },
     { key: 'apply', ...upd({ coupons: '{{read_cr.coupons}}' }) },
   ],
   approve: [
-    { key: 'read_cr', type: 'item-read', options: { collection: CR, key: KEY, query: { fields: ['date_created', 'com_issue.sla.*'] } } },
+    {
+      key: 'read_cr',
+      type: 'item-read',
+      options: { collection: CR, key: KEY, query: { fields: ['date_created', 'com_issue.sla.*'] } },
+    },
     { key: 'calc_sla', type: 'exec', options: { code: slaExec('read_cr', 'resolution_hours') } },
     {
       key: 'apply',
@@ -202,7 +224,13 @@ const PIPELINES = {
     },
   ],
   reject: [
-    { key: 'ts', type: 'exec', options: { code: 'module.exports = async function () { return { current_timestamp: new Date().toISOString() }; };' } },
+    {
+      key: 'ts',
+      type: 'exec',
+      options: {
+        code: 'module.exports = async function () { return { current_timestamp: new Date().toISOString() }; };',
+      },
+    },
     {
       key: 'apply',
       ...upd({
@@ -229,7 +257,9 @@ for (const a of contract.actions) {
       continue;
     }
     const del = await api('DELETE', `/flows/${a.flowId}`);
-    console.log(del.ok ? `↻ recreating flow ${a.key} (${a.flowId})` : `✗ delete ${a.key} (${del.status})`);
+    console.log(
+      del.ok ? `↻ recreating flow ${a.key} (${a.flowId})` : `✗ delete ${a.key} (${del.status})`,
+    );
     if (!del.ok) continue;
   }
   // Create the flow with the production id preserved.
@@ -273,7 +303,9 @@ for (const a of contract.actions) {
       options: spec.options ?? {},
     });
     if (!op.ok) {
-      console.log(`✗ op ${a.key}.${spec.key} (${op.status}) ${JSON.stringify(op.json).slice(0, 160)}`);
+      console.log(
+        `✗ op ${a.key}.${spec.key} (${op.status}) ${JSON.stringify(op.json).slice(0, 160)}`,
+      );
       failed = true;
       break;
     }

@@ -1,3 +1,4 @@
+import { resolveAdmin } from './local-creds.mjs';
 /**
  * Backfills the prod-like REFERENCE DATA the exact cloned flows (clone-prod-flows.mjs)
  * need to actually execute locally. The verbatim prod exec code reads
@@ -16,9 +17,7 @@
  *
  *   node directus/compensation-clone/backfill-ref-data.mjs
  */
-const LOCAL = process.env.DIRECTUS_URL ?? 'http://localhost:8055';
-const EMAIL = process.env.DIRECTUS_ADMIN_EMAIL ?? 'e.habibi@anan.sa';
-const PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD ?? '123456';
+const { url: LOCAL, email: EMAIL, password: PASSWORD } = resolveAdmin();
 const MARK = 'compensation reference (prod clone)';
 
 let TOKEN;
@@ -122,14 +121,17 @@ if (!(await exists('/collections/Com_Issues_c'))) {
     meta: { one_field: 'Com_Issues_c', one_deselect_action: 'nullify', sort_field: null },
     schema: { on_delete: 'SET NULL' },
   });
-  console.log(`${rel.ok ? '+' : '✗'} relation Com_Issues_c.com_issue_list_item -> com_issues_list (${rel.status})`);
+  console.log(
+    `${rel.ok ? '+' : '✗'} relation Com_Issues_c.com_issue_list_item -> com_issues_list (${rel.status})`,
+  );
 } else {
   console.log('= collection Com_Issues_c exists');
 }
 
 // 3 ── The rows: SLA policy -> com_issue (+ rule) ────────────────────────────
 async function findOrCreate(collection, filterPath, payload) {
-  const found = (await api('GET', `/items/${collection}?${filterPath}&limit=1&fields=id`)).json?.data?.[0];
+  const found = (await api('GET', `/items/${collection}?${filterPath}&limit=1&fields=id`)).json
+    ?.data?.[0];
   if (found) return found.id;
   const r = await api('POST', `/items/${collection}`, payload);
   if (!r.ok) {
@@ -166,7 +168,10 @@ console.log(`com_issues_list: ${issueId} (sla=${slaId})`);
 // one FIXED rule on that issue (mirrors a real prod Com_Issues_c row)
 if (issueId) {
   const hasRule = (
-    await api('GET', `/items/Com_Issues_c?filter[com_issue_list_item][_eq]=${issueId}&limit=1&fields=id`)
+    await api(
+      'GET',
+      `/items/Com_Issues_c?filter[com_issue_list_item][_eq]=${issueId}&limit=1&fields=id`,
+    )
   ).json?.data?.[0];
   if (!hasRule) {
     const r = await api('POST', '/items/Com_Issues_c', {
@@ -188,11 +193,14 @@ if (issueId) {
 
 // 4 ── Link sample requests that have no com_issue ───────────────────────────
 if (issueId) {
-  const rows = (await api('GET', '/items/compensation_requests?fields=id,com_issue&limit=-1')).json.data;
+  const rows = (await api('GET', '/items/compensation_requests?fields=id,com_issue&limit=-1')).json
+    .data;
   let linked = 0;
   for (const row of rows) {
     if (!row.com_issue) {
-      const r = await api('PATCH', `/items/compensation_requests/${row.id}`, { com_issue: issueId });
+      const r = await api('PATCH', `/items/compensation_requests/${row.id}`, {
+        com_issue: issueId,
+      });
       if (r.ok) linked++;
     }
   }

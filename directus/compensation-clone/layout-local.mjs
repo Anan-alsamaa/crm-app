@@ -12,29 +12,35 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { resolveAdmin } from './local-creds.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const LOCAL = process.env.DIRECTUS_URL ?? 'http://localhost:8055';
-const EMAIL = process.env.DIRECTUS_ADMIN_EMAIL ?? 'e.habibi@anan.sa';
-const PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD ?? '123456';
+const { url: LOCAL, email: EMAIL, password: PASSWORD } = resolveAdmin();
 const COLL = 'compensation_requests';
 const fields = JSON.parse(fs.readFileSync(join(HERE, 'schema', 'fields.json'), 'utf8'));
 
 let TOKEN;
 async function login() {
   const r = await fetch(`${LOCAL}/auth/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
   });
   TOKEN = (await r.json()).data.access_token;
 }
 async function api(method, path, body) {
   const r = await fetch(`${LOCAL}${path}`, {
-    method, headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+    method,
+    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
   const txt = await r.text();
-  let json; try { json = txt ? JSON.parse(txt) : null; } catch { json = txt; }
+  let json;
+  try {
+    json = txt ? JSON.parse(txt) : null;
+  } catch {
+    json = txt;
+  }
   return { ok: r.ok, status: r.status, json };
 }
 const exists = async (f) => (await api('GET', `/fields/${COLL}/${f}`)).ok;
@@ -45,19 +51,36 @@ await login();
 // (group is stripped on create, then restored in the layout pass below.)
 const aliasOrder = [
   'tabs-ywz6wq',
-  'complaint_group', 'Customer_tab', 'Order_Tab', 'Compensation_Tab',
-  'header-crt4xp', 'links-ycdmfv',
+  'complaint_group',
+  'Customer_tab',
+  'Order_Tab',
+  'Compensation_Tab',
+  'header-crt4xp',
+  'links-ycdmfv',
   'items',
 ];
 for (const name of aliasOrder) {
   const f = fields.find((x) => x.field === name);
-  if (!f) { console.log(`? ${name} not in schema — skip`); continue; }
-  if (await exists(name)) { console.log(`= ${name} exists`); continue; }
+  if (!f) {
+    console.log(`? ${name} not in schema — skip`);
+    continue;
+  }
+  if (await exists(name)) {
+    console.log(`= ${name} exists`);
+    continue;
+  }
   const meta = { ...(f.meta || {}) };
   delete meta.id;
   delete meta.group;
-  const r = await api('POST', `/fields/${COLL}`, { field: f.field, type: f.type, meta, schema: null });
-  console.log(`${r.ok ? '+' : '✗'} ${name} (${r.status})${r.ok ? '' : ' ' + JSON.stringify(r.json).slice(0, 250)}`);
+  const r = await api('POST', `/fields/${COLL}`, {
+    field: f.field,
+    type: f.type,
+    meta,
+    schema: null,
+  });
+  console.log(
+    `${r.ok ? '+' : '✗'} ${name} (${r.status})${r.ok ? '' : ' ' + JSON.stringify(r.json).slice(0, 250)}`,
+  );
 }
 
 // Layout pass: restore group + sort + width for every field so the form matches
