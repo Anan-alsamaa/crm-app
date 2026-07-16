@@ -80,8 +80,11 @@ test.describe('US6 — contact profile + commerce panel', () => {
     // Commerce panel (default MockYijiClient): seeded lifetime activity + an order
     await expect(page.getByText(/lifetime activity/i)).toBeVisible();
     await expect(page.getByText('O-5921')).toBeVisible({ timeout: 10_000 });
-    // Payment status pill rendered
-    await expect(page.getByText(/captured/i).first()).toBeVisible();
+    // Order rows render collapsed and fetch their detail on expand, so the
+    // payment pill only mounts once the row is opened. Yiji's PaymentStatus
+    // enum is not_paid/paid — there is no "captured" state.
+    await page.getByText('O-5921').click();
+    await expect(page.getByText(/paid/i).first()).toBeVisible({ timeout: 10_000 });
   });
 
   test('commerce panel degrades gracefully when there is no external link', async ({ page }) => {
@@ -105,9 +108,17 @@ test.describe('US6 — contact profile + commerce panel', () => {
           vendor: null,
         },
       };
+      // The portal (:5173) calls Directus (:8055) cross-origin with
+      // `credentials: 'include'`. Credentialed CORS requires an exact-origin
+      // allow header plus allow-credentials, or the browser discards the
+      // response and useContact() rejects — leaving no name heading to assert.
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
+        headers: {
+          'access-control-allow-origin': 'http://localhost:5173',
+          'access-control-allow-credentials': 'true',
+        },
         body: JSON.stringify(body),
       });
     });

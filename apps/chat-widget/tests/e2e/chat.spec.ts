@@ -13,10 +13,11 @@ test('customer message reaches the agent and the agent reply returns', async ({ 
   // 1. Customer opens the widget demo (mints its own JWT) and sends a message.
   const customer = await browser.newPage();
   await customer.goto('http://localhost:5175/');
-  await customer
-    .getByRole('button', { name: /support/i })
-    .first()
-    .click();
+  // The demo host page mounts with `autoOpen: true`, so the panel is already
+  // open. Do NOT click the launcher here — it is a toggle that stays mounted
+  // while open, so clicking it would CLOSE the panel. That also detaches
+  // `yiji-status`, making the wait below pass for the wrong reason and leaving
+  // no message box to type into.
   // Wait until the widget has finished onboarding (status banner disappears).
   await customer.getByTestId('yiji-status').waitFor({ state: 'detached', timeout: 15_000 });
   const text = `Hello ${Date.now()}`;

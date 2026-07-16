@@ -71,6 +71,10 @@ function defaultFixtures(): MockFixtures {
       total: 348.5,
       currency: 'SAR',
       placedAt: '2026-05-30T11:42:00Z',
+      // The live API maps Yiji's PaymentStatus enum (0 not_paid / 1 paid) onto
+      // every order inline; mirror that here so the mock exercises the same
+      // rendering path as production.
+      paymentStatus: 'paid',
       items: [
         { sku: 'BG-001', name: 'Linen tote', qty: 1, price: 199.0 },
         { sku: 'CR-014', name: 'Hand cream', qty: 3, price: 49.5 },
