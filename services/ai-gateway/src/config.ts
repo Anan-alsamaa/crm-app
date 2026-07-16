@@ -16,7 +16,9 @@ const schema = z
     GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
     /**
      * Yiji commerce API — proxied server-side so the API key never reaches the
-     * browser (replaces the old VITE_YIJI_API_TOKEN). Empty URL => mock client.
+     * browser (replaces the old VITE_YIJI_API_TOKEN). Empty URL => mock client,
+     * which is why production refuses to boot without it (see superRefine below).
+     * Host only, no trailing path: HttpYijiClient appends `/api/Order/...` itself.
      */
     YIJI_API_URL: z.string().default(''),
     YIJI_API_KEY: z.string().default(''),
@@ -43,6 +45,17 @@ const schema = z
         code: z.ZodIssueCode.custom,
         path: ['CORS_ORIGIN'],
         message: 'must be an explicit origin allow-list in production (not "*")',
+      });
+    }
+    // An empty YIJI_API_URL silently selects MockYijiClient, which would serve
+    // demo fixtures (Demo Customer, order O-5921) to real agents as if they were
+    // the customer's real orders. Fail the boot instead of lying about the data.
+    if (!cfg.YIJI_API_URL.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['YIJI_API_URL'],
+        message:
+          'is required in production — an empty value falls back to the mock commerce client and would serve demo fixtures to real agents',
       });
     }
     if (isPlaceholder(cfg.SVC_AI_TOKEN)) {
