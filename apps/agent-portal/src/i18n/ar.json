@@ -262,7 +262,21 @@
     "selectHint": "اختر تذكرة من القائمة لعرض سير عملها وجدول اتفاقية الخدمة وسجلّها.",
     "slaSection": "اتفاقية الخدمة",
     "contactSearchPrompt": "اكتب رقم جوال أو اسمًا للبحث عن جهة اتصال.",
-    "viewConversation": "عرض المحادثة →"
+    "viewConversation": "عرض المحادثة →",
+    "viewTicket": "عرض التذكرة",
+    "fromChat": "من هذه المحادثة",
+    "includeOrder": "إرفاق تفاصيل الطلب",
+    "includeAttachments": "إرفاق الملفات المشاركة في هذه المحادثة",
+    "includeAttachmentsCount": "{{count}} ملف من هذه الجلسة",
+    "orderSnapshotTitle": "الطلب من هذه المحادثة",
+    "orderRestaurant": "المطعم",
+    "orderItems": "العناصر",
+    "chatEndedPromptTitle": "انتهت هذه المحادثة.",
+    "chatEndedPromptBody": "أنشئ تذكرة لمتابعة أي إجراء لاحق — وسيُرفَق بها الطلب والملفات من هذه المحادثة.",
+    "createFromChat": "إنشاء تذكرة",
+    "dismissPrompt": "تجاهل",
+    "statusHelp": "تم الحل = اكتمل العمل بانتظار العميل. مغلقة = انتهت نهائيًا.",
+    "firstResponse": "أول رد"
   },
   "notifications": {
     "title": "التنبيهات",

@@ -262,7 +262,21 @@
     "selectHint": "Pick a ticket on the left to see its workflow, SLA timeline, and history.",
     "slaSection": "SLA",
     "contactSearchPrompt": "Type a phone number or name to find a contact.",
-    "viewConversation": "View conversation →"
+    "viewConversation": "View conversation →",
+    "viewTicket": "View ticket",
+    "fromChat": "From this chat",
+    "includeOrder": "Attach order details",
+    "includeAttachments": "Attach files shared in this chat",
+    "includeAttachmentsCount": "{{count}} file(s) from this session",
+    "orderSnapshotTitle": "Order from this chat",
+    "orderRestaurant": "Restaurant",
+    "orderItems": "Items",
+    "chatEndedPromptTitle": "This chat is wrapped up.",
+    "chatEndedPromptBody": "Create a ticket to track any follow-up — the order and files from this chat come with it.",
+    "createFromChat": "Create ticket",
+    "dismissPrompt": "Dismiss",
+    "statusHelp": "Resolved = work done, awaiting the customer. Closed = finished for good.",
+    "firstResponse": "First response"
   },
   "notifications": {
     "title": "Notifications",
