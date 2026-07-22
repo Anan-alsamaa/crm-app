@@ -479,6 +479,14 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                     label: t(`status.${s}`, { ns: 'common' }),
                   }))}
                 />
+                {/* #7 — spell out the two terminal states so the agent knows which
+                    one to pick and that neither is the same as logging a reply. */}
+                <p className="text-2xs leading-relaxed text-muted-foreground">
+                  {t('tickets.statusHelp', {
+                    defaultValue:
+                      'Resolved = work done, awaiting the customer. Closed = finished for good.',
+                  })}
+                </p>
               </label>
               <label className="block space-y-1">
                 <span className="text-2xs text-muted-foreground">{t('conversation.priority')}</span>
@@ -527,7 +535,13 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
               </label>
             </div>
             {!tk.first_responded_at ? (
-              <div className="space-y-1.5">
+              // #7 — set apart from the status control above with its own label so
+              // it's clear this only stops the SLA timer; it does not resolve or
+              // close the ticket.
+              <div className="space-y-1.5 border-t border-border/60 pt-3">
+                <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {t('tickets.firstResponse', { defaultValue: 'First response' })}
+                </span>
                 <Button
                   type="button"
                   size="sm"

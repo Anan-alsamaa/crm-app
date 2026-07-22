@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeftIcon, Avatar, Button, cn, GhostSelect, InfoIcon, toast } from '@yiji/ui';
 import { SOCKET_EVENTS, type ConversationStatus, type Priority } from '@yiji/shared-types';
 import {
   useAgents,
+  useLinkedTickets,
   useTeamOptions,
   useUpdateConversation,
   type InboxConversation,
@@ -38,10 +40,17 @@ export function ConversationToolbar({
   onToggleDetails,
 }: Props) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const agents = useAgents();
   const teams = useTeamOptions();
   const update = useUpdateConversation();
+  const linkedTickets = useLinkedTickets(conversation.id);
   const [openTicketDialog, setOpenTicketDialog] = useState(false);
+  // #6: once a chat is closed/resolved, nudge the agent to turn it into a ticket
+  // so no conversation is left without a follow-up record. Dismissible, and reset
+  // per conversation so a dismissal doesn't leak across threads.
+  const [promptDismissed, setPromptDismissed] = useState(false);
+  useEffect(() => setPromptDismissed(false), [conversation.id]);
 
   const vendorId =
     (conversation as unknown as { vendor?: { id?: string } | string }).vendor &&
@@ -111,7 +120,20 @@ export function ConversationToolbar({
     closed: 'bg-muted-foreground/50',
   };
 
+  // A conversation carries at most one ticket (SC-013). If it already has one we
+  // point at it rather than offering to create a second (which the DB would
+  // reject on the unique constraint).
+  const existingTicket = linkedTickets.data?.[0] ?? null;
+  const canCreateTicket = !!conversation.contact?.id && !!vendorId;
+  const isWrappedUp = conversation.status === 'resolved' || conversation.status === 'closed';
+  // #6: prompt to spin a ticket out of a chat that's been closed/resolved but has
+  // no ticket yet. Suppressed once dismissed, once a ticket exists, or when we
+  // lack the ids needed to create one.
+  const showTicketPrompt =
+    isWrappedUp && !existingTicket && !promptDismissed && canCreateTicket && !linkedTickets.isLoading;
+
   return (
+    <>
     <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/50 px-3 py-2 sm:px-5">
       {/* Back to inbox list — mobile single-column only. */}
       {onBack && (
@@ -227,9 +249,34 @@ export function ConversationToolbar({
           />
         </div>
 
-        <Button type="button" variant="default" size="sm" onClick={() => setOpenTicketDialog(true)}>
-          + {t('tickets.createTitle')}
-        </Button>
+        {existingTicket ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate(`/tickets/${existingTicket.id}`)}
+          >
+            {t('tickets.viewTicket', { defaultValue: 'View ticket' })}
+          </Button>
+        ) : (
+          // SC-013: a conversation carries at most one ticket. `existingTicket` is
+          // null while the linked-tickets query is still loading, so we must also
+          // gate on `!linkedTickets.isLoading` — otherwise this button is clickable
+          // during the load window and a duplicate ticket becomes reachable (and
+          // two agents on the same thread could both create one). This is a UX
+          // guard only; the authoritative backstop is a unique index on
+          // tickets.conversation owned by the infra/directus stream
+          // (directus/bootstrap/src/constraints.ts) — do NOT add the DB constraint here.
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            disabled={!canCreateTicket || linkedTickets.isLoading}
+            onClick={() => setOpenTicketDialog(true)}
+          >
+            + {t('tickets.createTitle')}
+          </Button>
+        )}
 
         {/* Details / notes panel toggle — mobile single-column only. */}
         {onToggleDetails && (
@@ -244,6 +291,40 @@ export function ConversationToolbar({
         )}
       </div>
 
+    </div>
+
+      {/* #6 — every chat should end as a ticket. When the conversation is
+          resolved/closed with no ticket yet, surface a one-tap prompt to spin
+          one out (carrying this chat's order + files, see CreateTicketDialog). */}
+      {showTicketPrompt && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-primary/20 bg-primary-subtle/60 px-3 py-2.5 sm:px-5 motion-safe:animate-fade-in">
+          <p className="min-w-0 flex-1 text-xs leading-relaxed text-foreground">
+            <span className="font-medium">
+              {t('tickets.chatEndedPromptTitle', { defaultValue: 'This chat is wrapped up.' })}
+            </span>{' '}
+            <span className="text-muted-foreground">
+              {t('tickets.chatEndedPromptBody', {
+                defaultValue:
+                  'Create a ticket to track any follow-up — the order and files from this chat come with it.',
+              })}
+            </span>
+          </p>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button type="button" size="sm" onClick={() => setOpenTicketDialog(true)}>
+              {t('tickets.createFromChat', { defaultValue: 'Create ticket' })}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setPromptDismissed(true)}
+            >
+              {t('tickets.dismissPrompt', { defaultValue: 'Dismiss' })}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {openTicketDialog && conversation.contact?.id && vendorId && (
         <CreateTicketDialog
           contactId={conversation.contact.id}
@@ -252,6 +333,6 @@ export function ConversationToolbar({
           onClose={() => setOpenTicketDialog(false)}
         />
       )}
-    </div>
+    </>
   );
 }
