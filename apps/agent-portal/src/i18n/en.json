@@ -48,7 +48,22 @@
     "askAi": "Ask AI about orders",
     "askPlaceholder": "Ask about the order(s)…",
     "orderIdLabel": "Order ID (optional)",
-    "orderIdPlaceholder": "Order ID (blank = latest orders)"
+    "orderIdPlaceholder": "Order ID (blank = latest orders)",
+    "latestOrder": "Latest order",
+    "latestOrders": "Latest orders",
+    "restaurant": "Restaurant",
+    "restaurantId": "Restaurant ID",
+    "deliveryType": "Fulfilment",
+    "deliveryTypes": {
+      "delivery": "Delivery",
+      "pickup": "Pickup"
+    },
+    "subtotal": "Items subtotal",
+    "total": "Total",
+    "each": "each",
+    "noItems": "No line items on this order.",
+    "detailUnavailable": "Order details unavailable.",
+    "deliverTo": "Deliver to"
   },
   "ai": {
     "title": "AI assistance",

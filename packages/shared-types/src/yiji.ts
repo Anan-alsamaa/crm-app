@@ -18,6 +18,8 @@ export interface YijiOrderItem {
   name: string;
   qty: number;
   price: number;
+  // Optional; the live single-order endpoint returns `itemCategory` per item.
+  category?: string;
 }
 
 export interface YijiOrder {
@@ -27,8 +29,16 @@ export interface YijiOrder {
   currency: string;
   placedAt: string; // ISO 8601
   items: YijiOrderItem[];
-  // Optional enrichment populated by the live Yiji API (absent in mock fixtures).
+  // The restaurant the order was placed with. `restaurantId` is present on both
+  // the list and single-order endpoints; `restaurantName` only on the single
+  // order (it is null in the list) — so it may be absent until an order is
+  // fetched in detail.
+  restaurantId?: string;
   restaurantName?: string;
+  // Fulfilment method, mapped from Yiji's DeliveryType int to a human label
+  // (e.g. 'delivery' | 'pickup'). Absent when the source value is unknown.
+  deliveryType?: string;
+  // Optional enrichment populated by the live Yiji API (absent in mock fixtures).
   deliveryAddress?: string;
   paymentStatus?: string;
   paymentMode?: string;

@@ -91,7 +91,22 @@
     "askAi": "اسأل الذكاء الاصطناعي عن الطلبات",
     "askPlaceholder": "اسأل عن الطلب (الطلبات)…",
     "orderIdLabel": "رقم الطلب (اختياري)",
-    "orderIdPlaceholder": "رقم الطلب (فارغ = أحدث الطلبات)"
+    "orderIdPlaceholder": "رقم الطلب (فارغ = أحدث الطلبات)",
+    "latestOrder": "آخر طلب",
+    "latestOrders": "أحدث الطلبات",
+    "restaurant": "المطعم",
+    "restaurantId": "معرّف المطعم",
+    "deliveryType": "طريقة الاستلام",
+    "deliveryTypes": {
+      "delivery": "توصيل",
+      "pickup": "استلام"
+    },
+    "subtotal": "إجمالي الأصناف",
+    "total": "الإجمالي",
+    "each": "للوحدة",
+    "noItems": "لا توجد أصناف في هذا الطلب.",
+    "detailUnavailable": "تفاصيل الطلب غير متوفرة.",
+    "deliverTo": "التوصيل إلى"
   },
   "inbox": {
     "title": "صندوق الوارد المشترك",

@@ -67,17 +67,20 @@ function defaultFixtures(): MockFixtures {
   const orders: YijiOrder[] = [
     {
       orderId: 'O-5921',
-      status: 'shipped',
-      total: 348.5,
+      status: 'in_delivery',
+      total: 84.5,
       currency: 'SAR',
       placedAt: '2026-05-30T11:42:00Z',
       // The live API maps Yiji's PaymentStatus enum (0 not_paid / 1 paid) onto
       // every order inline; mirror that here so the mock exercises the same
       // rendering path as production.
       paymentStatus: 'paid',
+      restaurantId: '312',
+      restaurantName: 'Burger Boutique',
+      deliveryType: 'delivery',
       items: [
-        { sku: 'BG-001', name: 'Linen tote', qty: 1, price: 199.0 },
-        { sku: 'CR-014', name: 'Hand cream', qty: 3, price: 49.5 },
+        { sku: 'BG-001', name: 'Classic cheeseburger', qty: 2, price: 32.0, category: 'Burgers' },
+        { sku: 'FR-014', name: 'Loaded fries', qty: 1, price: 20.5, category: 'Sides' },
       ],
     },
     {
@@ -86,7 +89,10 @@ function defaultFixtures(): MockFixtures {
       total: 129.0,
       currency: 'SAR',
       placedAt: '2026-04-12T09:10:00Z',
-      items: [{ sku: 'TS-220', name: 'Cotton tee', qty: 1, price: 129.0 }],
+      restaurantId: '208',
+      restaurantName: 'Shawarma House',
+      deliveryType: 'pickup',
+      items: [{ sku: 'SH-220', name: 'Chicken shawarma platter', qty: 3, price: 43.0 }],
     },
     {
       orderId: 'O-5410',
@@ -94,7 +100,10 @@ function defaultFixtures(): MockFixtures {
       total: 79.0,
       currency: 'SAR',
       placedAt: '2026-02-20T16:25:00Z',
-      items: [{ sku: 'CD-099', name: 'Candle', qty: 1, price: 79.0 }],
+      restaurantId: '312',
+      restaurantName: 'Burger Boutique',
+      deliveryType: 'delivery',
+      items: [{ sku: 'CB-099', name: 'Double bacon burger', qty: 1, price: 79.0 }],
     },
   ];
   f.ordersByCustomer.set(key(vendorId, cust.externalCustomerId), orders);
@@ -258,15 +267,27 @@ const YIJI_PAYMENT_MODE: Record<number, string> = {
   6: 'visa',
   7: 'master',
 };
+/**
+ * Yiji DeliveryType enum. Maps the raw int onto a human label the UI titleizes
+ * (and can translate). Unknown values fall back to `type_N` in the mapper.
+ */
+const YIJI_DELIVERY_TYPE: Record<number, string> = {
+  1: 'delivery',
+  2: 'pickup',
+};
 
 interface RawYijiOrder {
   id: number;
   orderStatus?: number;
   paymentStatus?: number;
   paymentMode?: number;
+  deliveryType?: number | null;
   total?: number;
   creationTime?: string;
   orderStatusDate?: string;
+  // `restaurantId` is on both list + detail responses; `restaurantName` only
+  // on detail (null in the list). The API may send the id as a number.
+  restaurantId?: number | string | null;
   restaurantName?: string | null;
   brandName?: string | null;
   customerPhoneNumber?: string | null;
@@ -279,6 +300,7 @@ interface RawYijiOrder {
     itemName?: string;
     quantity?: number;
     itemPrice?: number;
+    itemCategory?: string | null;
   }> | null;
 }
 
@@ -297,8 +319,14 @@ function mapYijiOrder(raw: RawYijiOrder): YijiOrder {
       name: it.itemName ?? 'item',
       qty: it.quantity ?? 1,
       price: it.itemPrice ?? 0,
+      category: it.itemCategory ?? undefined,
     })),
+    restaurantId: raw.restaurantId != null ? String(raw.restaurantId) : undefined,
     restaurantName: raw.restaurantName ?? raw.brandName ?? undefined,
+    deliveryType:
+      raw.deliveryType != null
+        ? (YIJI_DELIVERY_TYPE[raw.deliveryType] ?? `type_${raw.deliveryType}`)
+        : undefined,
     deliveryAddress: raw.deliveryAddress?.fullAddress ?? undefined,
     paymentStatus:
       raw.paymentStatus != null
