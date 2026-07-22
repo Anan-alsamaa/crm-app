@@ -237,6 +237,9 @@ export function Widget({ config }: { config: WidgetConfig }) {
     null,
   );
   const [agentsOnline, setAgentsOnline] = useState<number>(0);
+  // True once the "agents are offline" auto-reply has been shown for the current
+  // offline period; reset when an agent comes online so it can show again later.
+  const offlineNoticedRef = useRef(false);
   const [pending, setPending] = useState<
     Array<{ id: string; name: string; type: string; preview?: string }>
   >([]);
@@ -333,6 +336,9 @@ export function Widget({ config }: { config: WidgetConfig }) {
       },
       onAgentsPresence: (count) => {
         setAgentsOnline(count);
+        // Agents came back → allow the offline notice to show again if they
+        // later go offline within this same session.
+        if (count > 0) offlineNoticedRef.current = false;
         broadcastPresenceToHost(count);
       },
       onMessage: (msg) => {
@@ -434,6 +440,23 @@ export function Widget({ config }: { config: WidgetConfig }) {
       ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
       clientMsgId: cmid,
     });
+    // Agents offline: reassure the customer their message was received and an
+    // agent will reply once back. Shown once per offline period so we never spam
+    // it; the presence handler resets the flag when an agent comes online.
+    if (agentsOnline === 0 && !offlineNoticedRef.current) {
+      offlineNoticedRef.current = true;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: clientId(),
+          conversationId: convoRef.current ?? '',
+          senderType: 'system',
+          content: tr.offlineAutoReply,
+          attachments: [],
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    }
     setDraft('');
     setPending([]);
     stopTyping();
@@ -765,59 +788,63 @@ export function Widget({ config }: { config: WidgetConfig }) {
                 </>
               )}
             </div>
-          ) : ready && agentsOnline === 0 ? (
-            <div className="yiji-offline" role="region" aria-label={tr.offlineTitle}>
-              <p className="yiji-offline-title">{tr.offlineTitle}</p>
-              <p className="yiji-offline-body">{tr.offlineBody}</p>
-              <div className="yiji-offline-actions">
-                <a
-                  href={`tel:${(config.fallback?.phone ?? DEFAULT_FALLBACK.phone).replace(/\s+/g, '')}`}
-                  className="yiji-offline-link"
-                >
-                  <span className="yiji-offline-link-icon" aria-hidden>
-                    <PhoneIcon />
-                  </span>
-                  <span className="yiji-offline-link-text">
-                    <span className="yiji-offline-link-label">{tr.offlineCallLabel}</span>
-                    <span className="yiji-offline-link-value">
-                      {config.fallback?.phone ?? DEFAULT_FALLBACK.phone}
-                    </span>
-                  </span>
-                </a>
-                <a
-                  href={`https://wa.me/${(config.fallback?.phone ?? DEFAULT_FALLBACK.phone).replace(/\D/g, '')}`}
-                  className="yiji-offline-link"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <span className="yiji-offline-link-icon" aria-hidden>
-                    <WhatsAppIcon />
-                  </span>
-                  <span className="yiji-offline-link-text">
-                    <span className="yiji-offline-link-label">{tr.offlineWhatsappLabel}</span>
-                    <span className="yiji-offline-link-value">
-                      {config.fallback?.phone ?? DEFAULT_FALLBACK.phone}
-                    </span>
-                  </span>
-                </a>
-                <a
-                  href={`mailto:${config.fallback?.email ?? DEFAULT_FALLBACK.email}`}
-                  className="yiji-offline-link"
-                >
-                  <span className="yiji-offline-link-icon" aria-hidden>
-                    <MailIcon />
-                  </span>
-                  <span className="yiji-offline-link-text">
-                    <span className="yiji-offline-link-label">{tr.offlineEmailLabel}</span>
-                    <span className="yiji-offline-link-value">
-                      {config.fallback?.email ?? DEFAULT_FALLBACK.email}
-                    </span>
-                  </span>
-                </a>
-              </div>
-            </div>
           ) : (
             <>
+              {/* Offline: the customer can still leave a message (see send() for
+                  the auto-reply) — the direct-contact options are a secondary
+                  fallback shown above the composer, not a replacement for it. */}
+              {ready && agentsOnline === 0 && (
+                <div className="yiji-offline" role="region" aria-label={tr.offlineTitle}>
+                  <p className="yiji-offline-title">{tr.offlineTitle}</p>
+                  <p className="yiji-offline-body">{tr.offlineBody}</p>
+                  <div className="yiji-offline-actions">
+                    <a
+                      href={`tel:${(config.fallback?.phone ?? DEFAULT_FALLBACK.phone).replace(/\s+/g, '')}`}
+                      className="yiji-offline-link"
+                    >
+                      <span className="yiji-offline-link-icon" aria-hidden>
+                        <PhoneIcon />
+                      </span>
+                      <span className="yiji-offline-link-text">
+                        <span className="yiji-offline-link-label">{tr.offlineCallLabel}</span>
+                        <span className="yiji-offline-link-value">
+                          {config.fallback?.phone ?? DEFAULT_FALLBACK.phone}
+                        </span>
+                      </span>
+                    </a>
+                    <a
+                      href={`https://wa.me/${(config.fallback?.phone ?? DEFAULT_FALLBACK.phone).replace(/\D/g, '')}`}
+                      className="yiji-offline-link"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <span className="yiji-offline-link-icon" aria-hidden>
+                        <WhatsAppIcon />
+                      </span>
+                      <span className="yiji-offline-link-text">
+                        <span className="yiji-offline-link-label">{tr.offlineWhatsappLabel}</span>
+                        <span className="yiji-offline-link-value">
+                          {config.fallback?.phone ?? DEFAULT_FALLBACK.phone}
+                        </span>
+                      </span>
+                    </a>
+                    <a
+                      href={`mailto:${config.fallback?.email ?? DEFAULT_FALLBACK.email}`}
+                      className="yiji-offline-link"
+                    >
+                      <span className="yiji-offline-link-icon" aria-hidden>
+                        <MailIcon />
+                      </span>
+                      <span className="yiji-offline-link-text">
+                        <span className="yiji-offline-link-label">{tr.offlineEmailLabel}</span>
+                        <span className="yiji-offline-link-value">
+                          {config.fallback?.email ?? DEFAULT_FALLBACK.email}
+                        </span>
+                      </span>
+                    </a>
+                  </div>
+                </div>
+              )}
               {pending.length > 0 && (
                 <div className="yiji-pending">
                   {pending.map((p) => (
