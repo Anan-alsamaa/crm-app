@@ -10,7 +10,7 @@ import { commerce } from '../../lib/commerce-client.js';
  * only (id, status, total, date, payment) — the line items live on the single
  * order endpoint — so a row shows the summary instantly and lazily fetches full
  * details (items, delivery, restaurant) when it is expanded. Used by:
- *   - the inbox sidebar (LatestOrder): the newest order + any same-day siblings,
+ *   - the inbox sidebar (LatestOrder): the previous 2 orders, the most recent
  *     auto-expanded, so the agent sees it the moment a message comes in;
  *   - the contact panel (CustomerOrders): the latest N order ids, click to expand.
  */
@@ -75,12 +75,6 @@ function fmtDateTime(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-/** Same calendar day by the YYYY-MM-DD prefix of the ISO timestamp (Yiji emits
- *  local time with no zone, so a string compare is exact — no TZ shift). */
-function sameCalendarDay(aIso: string, bIso: string): boolean {
-  return aIso.slice(0, 10) === bIso.slice(0, 10);
 }
 
 function Chevron({ open }: { open: boolean }) {
@@ -149,8 +143,17 @@ function OrderDetails({ order }: { order: YijiOrder }) {
 
   return (
     <div className="space-y-2.5">
-      {order.restaurantName && (
-        <div className="text-xs font-medium text-foreground">{order.restaurantName}</div>
+      {(order.restaurantName || order.restaurantId) && (
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="min-w-0 truncate text-xs font-medium text-foreground">
+            {order.restaurantName ?? t('commerce.restaurant', { defaultValue: 'Restaurant' })}
+          </span>
+          {order.restaurantId && (
+            <span className="shrink-0 font-mono text-2xs text-muted-foreground">
+              {t('commerce.restaurantId', { defaultValue: 'Restaurant ID' })} #{order.restaurantId}
+            </span>
+          )}
+        </div>
       )}
 
       {order.items.length > 0 ? (
@@ -164,6 +167,9 @@ function OrderDetails({ order }: { order: YijiOrder }) {
                     ({money(it.price, order.currency)}{' '}
                     {t('commerce.each', { defaultValue: 'each' })})
                   </span>
+                )}
+                {it.category && (
+                  <span className="ms-1 text-2xs text-muted-foreground">· {it.category}</span>
                 )}
               </span>
               <span className="shrink-0 tabular-nums text-foreground">
@@ -193,6 +199,18 @@ function OrderDetails({ order }: { order: YijiOrder }) {
       </div>
 
       <dl className="space-y-1.5 text-2xs">
+        {order.deliveryType && (
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-muted-foreground">
+              {t('commerce.deliveryType', { defaultValue: 'Fulfilment' })}
+            </dt>
+            <dd className="text-foreground/90">
+              {t(`commerce.deliveryTypes.${order.deliveryType}`, {
+                defaultValue: titleize(order.deliveryType),
+              })}
+            </dd>
+          </div>
+        )}
         {order.paymentStatus && (
           <div className="flex items-center justify-between gap-2">
             <dt className="text-muted-foreground">
@@ -284,15 +302,17 @@ function ExpandableOrder({
 }
 
 /**
- * Inbox sidebar: the customer's latest order, auto-expanded. If more than one
- * order landed on the same calendar day as the newest, show up to 3 of them.
+ * Inbox sidebar: the customer's previous 2 orders. The Yiji list endpoint gives
+ * ids + status + totals only, so each row shows that instantly and fetches full
+ * details (restaurant, items, delivery) lazily on expand. The most recent order
+ * is auto-expanded; the second stays collapsed until the agent opens it.
  */
 export function LatestOrder({ vendorId, customerId }: { vendorId: string; customerId: string }) {
   const { t } = useTranslation();
   const orders = useQuery({
-    queryKey: ['yiji-orders', vendorId, customerId, 5],
+    queryKey: ['yiji-orders', vendorId, customerId, 2],
     enabled: !!vendorId && !!customerId,
-    queryFn: () => commerce.getOrders(vendorId, customerId, { limit: 5 }),
+    queryFn: () => commerce.getOrders(vendorId, customerId, { limit: 2 }),
     staleTime: 60_000,
   });
 
@@ -300,16 +320,13 @@ export function LatestOrder({ vendorId, customerId }: { vendorId: string; custom
   // "no orders" (the query is disabled, so there is nothing to show).
   if (!vendorId || !customerId) return null;
 
-  const list = orders.data ?? [];
-  const newest = list[0];
-  const sameDay = newest
-    ? list.filter((o) => sameCalendarDay(o.placedAt, newest.placedAt)).slice(0, 3)
-    : [];
+  // The last 2 orders (list is already newest-first from the client).
+  const recent = (orders.data ?? []).slice(0, 2);
 
   return (
     <div className="space-y-2">
       <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {sameDay.length > 1
+        {recent.length > 1
           ? t('commerce.latestOrders', { defaultValue: 'Latest orders' })
           : t('commerce.latestOrder', { defaultValue: 'Latest order' })}
       </h3>
@@ -319,11 +336,12 @@ export function LatestOrder({ vendorId, customerId }: { vendorId: string; custom
         <p className="text-xs text-muted-foreground">
           {t('commerce.unavailable', { defaultValue: 'Commerce data unavailable.' })}
         </p>
-      ) : newest ? (
+      ) : recent.length > 0 ? (
         <ul className="space-y-2">
-          {sameDay.map((o) => (
+          {recent.map((o, i) => (
             <li key={o.orderId}>
-              <ExpandableOrder vendorId={vendorId} summary={o} defaultOpen />
+              {/* Default-expand only the most recent (i === 0). */}
+              <ExpandableOrder vendorId={vendorId} summary={o} defaultOpen={i === 0} />
             </li>
           ))}
         </ul>

@@ -159,6 +159,95 @@ export function useCreateTicket() {
   });
 }
 
+/**
+ * File ids attached to a conversation's OWN messages — i.e. every file shared in
+ * THIS chat session (not the customer's earlier conversations). Used when a
+ * ticket is spun out of a chat so the session's attachments ride along onto it.
+ *
+ * Fail-soft: against an older gateway/permission set the junction read may be
+ * denied — we return `[]` so the ticket still creates (just without the copied
+ * files) rather than blocking creation.
+ */
+export function useConversationAttachmentIds(conversationId: string | null) {
+  return useQuery({
+    enabled: !!conversationId,
+    queryKey: ['conversation-attachment-ids', conversationId],
+    queryFn: async () => {
+      try {
+        const msgs = (await directus.request(
+          readItems('messages', {
+            filter: { conversation: { _eq: conversationId } },
+            fields: ['id'],
+            limit: -1,
+          }),
+        )) as Array<{ id: string }>;
+        const ids = msgs.map((m) => m.id);
+        if (ids.length === 0) return [] as string[];
+        const links = (await directus.request(
+          readItems('messages_files', {
+            filter: { messages_id: { _in: ids } },
+            fields: [{ directus_files_id: ['id'] }],
+            limit: -1,
+          }),
+        )) as Array<{ directus_files_id: { id: string } | null }>;
+        // Dedupe: the same file could be linked to more than one message.
+        const seen = new Set<string>();
+        for (const l of links) if (l.directus_files_id?.id) seen.add(l.directus_files_id.id);
+        return [...seen];
+      } catch {
+        return [] as string[];
+      }
+    },
+  });
+}
+
+export interface CreateTicketFromConversationInput {
+  ticket: CreateTicketInput;
+  /** File ids from the chat session to copy onto the new ticket (see FR #3). */
+  attachmentFileIds?: string[];
+}
+
+/**
+ * Create a ticket out of a chat and carry the session's context onto it: the
+ * ticket is linked to the conversation (via `ticket.conversation`), and every
+ * file shared in that chat is linked into `tickets_files`. Attachment linking is
+ * best-effort (`Promise.allSettled`) so one bad file id never discards the
+ * ticket that was already created.
+ *
+ * The order snapshot travels in `ticket.description` for now — the tickets
+ * collection has no structured order field yet.
+ * TODO: add a JSON `order_snapshot` column to the tickets collection and persist
+ * the order there instead of inlining it into the description.
+ */
+export function useCreateTicketFromConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ticket, attachmentFileIds }: CreateTicketFromConversationInput) => {
+      const created = (await directus.request(
+        createItem('tickets', { ...ticket, status: 'new' } as never),
+      )) as { id: string };
+      if (attachmentFileIds && attachmentFileIds.length > 0) {
+        await Promise.allSettled(
+          attachmentFileIds.map((fid) =>
+            directus.request(
+              createItem('tickets_files', {
+                tickets_id: created.id,
+                directus_files_id: fid,
+              } as never),
+            ),
+          ),
+        );
+      }
+      return created;
+    },
+    onSuccess: (created) => {
+      void qc.invalidateQueries({ queryKey: ['tickets'] });
+      void qc.invalidateQueries({ queryKey: ['linked-tickets'] });
+      if (created?.id) void qc.invalidateQueries({ queryKey: ['ticket', created.id] });
+    },
+  });
+}
+
 export interface UpdateTicketInput {
   status?: TicketStatus;
   priority?: Priority;

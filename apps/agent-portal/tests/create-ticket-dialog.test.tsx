@@ -14,7 +14,10 @@ vi.mock('../src/lib/auth/AuthContext.js', () => ({
   useAuth: () => ({ user: { id: 'agent-1' } }),
 }));
 
-const hooks = vi.hoisted(() => ({ useCreateTicket: vi.fn() }));
+const hooks = vi.hoisted(() => ({
+  useCreateTicketFromConversation: vi.fn(),
+  useConversationAttachmentIds: vi.fn(),
+}));
 vi.mock('../src/features/tickets/api.js', () => hooks);
 
 import { CreateTicketDialog } from '../src/features/tickets/CreateTicketDialog.js';
@@ -33,8 +36,12 @@ function renderDialog(onClose = vi.fn()) {
 }
 
 beforeEach(() => {
-  hooks.useCreateTicket.mockReset();
-  hooks.useCreateTicket.mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({}) });
+  hooks.useCreateTicketFromConversation.mockReset();
+  hooks.useCreateTicketFromConversation.mockReturnValue({
+    mutateAsync: vi.fn().mockResolvedValue({}),
+  });
+  hooks.useConversationAttachmentIds.mockReset();
+  hooks.useConversationAttachmentIds.mockReturnValue({ data: [] });
 });
 
 describe('CreateTicketDialog', () => {
@@ -53,7 +60,7 @@ describe('CreateTicketDialog', () => {
 
   it('submits a valid form and creates a ticket', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({});
-    hooks.useCreateTicket.mockReturnValue({ mutateAsync });
+    hooks.useCreateTicketFromConversation.mockReturnValue({ mutateAsync });
     const { onClose } = renderDialog();
     const subject = screen.getByText('tickets.subject').parentElement!.querySelector('input')!;
     await userEvent.type(subject, 'Refund request');
@@ -61,10 +68,13 @@ describe('CreateTicketDialog', () => {
     await waitFor(() =>
       expect(mutateAsync).toHaveBeenCalledWith(
         expect.objectContaining({
-          subject: 'Refund request',
-          contact: 'k1',
-          vendor: 'v1',
-          assigned_agent: 'agent-1',
+          ticket: expect.objectContaining({
+            subject: 'Refund request',
+            contact: 'k1',
+            vendor: 'v1',
+            assigned_agent: 'agent-1',
+          }),
+          attachmentFileIds: [],
         }),
       ),
     );

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -21,6 +22,7 @@ const inbox = vi.hoisted(() => ({
   useTags: vi.fn(),
   useAddTagToConversation: vi.fn(),
   useUpdateConversation: vi.fn(),
+  useLinkedTickets: vi.fn(),
 }));
 vi.mock('../src/features/inbox/api.js', () => inbox);
 
@@ -46,7 +48,9 @@ const conversation = {
 function renderToolbar() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
   );
   return render(<ConversationToolbar conversation={conversation as never} />, { wrapper: Wrapper });
 }
@@ -57,6 +61,7 @@ beforeEach(() => {
   inbox.useTags.mockReturnValue({ data: [{ id: 'tg1', name: 'VIP', color: null }] });
   inbox.useAddTagToConversation.mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({}) });
   inbox.useUpdateConversation.mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({}) });
+  inbox.useLinkedTickets.mockReturnValue({ data: [], isLoading: false });
 });
 
 describe('ConversationToolbar', () => {

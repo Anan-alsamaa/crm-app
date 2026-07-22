@@ -46,7 +46,9 @@ function full(id: string, over: Partial<YijiOrder> = {}): YijiOrder {
     currency: 'SAR',
     placedAt: '2026-06-25T12:25:32',
     items: [{ sku: 's1', name: 'Cheeseburger', qty: 2, price: 10 }],
+    restaurantId: '312',
     restaurantName: 'Burger Palace',
+    deliveryType: 'delivery',
     deliveryAddress: 'King Fahd Rd, Riyadh',
     paymentStatus: 'paid',
     paymentMode: 'apple_pay',
@@ -67,6 +69,9 @@ describe('LatestOrder (inbox)', () => {
 
     // defaultOpen → detail fetched without a click; all key fields render.
     await waitFor(() => expect(screen.getByText('Burger Palace')).toBeInTheDocument());
+    expect(screen.getByText(/Restaurant ID/)).toBeInTheDocument(); // restaurant id
+    expect(screen.getByText(/#312/)).toBeInTheDocument();
+    expect(screen.getByText('Delivery')).toBeInTheDocument(); // delivery type label
     expect(screen.getByText(/Cheeseburger/)).toBeInTheDocument();
     expect(screen.getByText(/each/)).toBeInTheDocument(); // unit price (qty > 1)
     expect(screen.getByText('Items subtotal')).toBeInTheDocument(); // total > subtotal
@@ -77,10 +82,10 @@ describe('LatestOrder (inbox)', () => {
     expect(screen.getByText('Latest order')).toBeInTheDocument();
   });
 
-  it('groups same-day orders (up to 3) and drops orders from other days', async () => {
+  it('shows the last 2 orders — newest auto-expanded, second collapsed', async () => {
     client.getOrders.mockResolvedValue([
       summary('A-1', '2026-06-25T15:00:00'),
-      summary('A-2', '2026-06-25T09:00:00'),
+      summary('A-2', '2026-06-20T09:00:00'),
       summary('B-9', '2026-06-09T13:00:00'),
     ]);
     client.getOrder.mockImplementation((_v: string, id: string) => Promise.resolve(full(id)));
@@ -89,24 +94,21 @@ describe('LatestOrder (inbox)', () => {
     await waitFor(() => expect(screen.getByText('Latest orders')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /A-1/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /A-2/ })).toBeInTheDocument();
-    // B-9 is a different calendar day → not shown.
+    // Only the previous 2 orders — the third is not shown.
     expect(screen.queryByRole('button', { name: /B-9/ })).not.toBeInTheDocument();
+
+    // Newest (A-1) is auto-expanded → its detail was fetched; A-2 was not.
+    await waitFor(() => expect(client.getOrder).toHaveBeenCalledWith('v1', 'A-1'));
+    expect(client.getOrder).not.toHaveBeenCalledWith('v1', 'A-2');
   });
 
-  it('shows a single order (singular heading) when days differ', async () => {
-    client.getOrders.mockResolvedValue([
-      summary('X-1', '2026-06-25T15:00:00'),
-      summary('X-2', '2026-06-09T13:00:00'),
-    ]);
+  it('shows a single order (singular heading) when there is only one', async () => {
+    client.getOrders.mockResolvedValue([summary('X-1', '2026-06-25T15:00:00')]);
     client.getOrder.mockImplementation((_v: string, id: string) => Promise.resolve(full(id)));
     renderView(<LatestOrder vendorId="v1" customerId="cust-guid" />);
 
-    // Wait on the row itself — the singular "Latest order" heading also shows
-    // during loading (sameDay is empty until data arrives), so it's not a
-    // reliable "loaded" signal here.
     expect(await screen.findByRole('button', { name: /X-1/ })).toBeInTheDocument();
     expect(screen.getByText('Latest order')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /X-2/ })).not.toBeInTheDocument();
   });
 
   it('shows "no orders" for a customer with an empty history', async () => {
