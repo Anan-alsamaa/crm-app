@@ -48,7 +48,9 @@
     "askAi": "Ask AI about orders",
     "askPlaceholder": "Ask about the order(s)…",
     "orderIdLabel": "Order ID (optional)",
-    "orderIdPlaceholder": "Order ID (blank = latest orders)"
+    "orderIdPlaceholder": "Order ID (blank = latest orders)",
+    "deliverTo": "Deliver to",
+    "total": "Total"
   },
   "ai": {
     "title": "AI assistance",

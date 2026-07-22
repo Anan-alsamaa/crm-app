@@ -259,11 +259,19 @@ export function ConversationToolbar({
             {t('tickets.viewTicket', { defaultValue: 'View ticket' })}
           </Button>
         ) : (
+          // SC-013: a conversation carries at most one ticket. `existingTicket` is
+          // null while the linked-tickets query is still loading, so we must also
+          // gate on `!linkedTickets.isLoading` — otherwise this button is clickable
+          // during the load window and a duplicate ticket becomes reachable (and
+          // two agents on the same thread could both create one). This is a UX
+          // guard only; the authoritative backstop is a unique index on
+          // tickets.conversation owned by the infra/directus stream
+          // (directus/bootstrap/src/constraints.ts) — do NOT add the DB constraint here.
           <Button
             type="button"
             variant="default"
             size="sm"
-            disabled={!canCreateTicket}
+            disabled={!canCreateTicket || linkedTickets.isLoading}
             onClick={() => setOpenTicketDialog(true)}
           >
             + {t('tickets.createTitle')}

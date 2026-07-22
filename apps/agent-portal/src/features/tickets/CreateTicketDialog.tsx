@@ -40,6 +40,15 @@ function titleize(s: string): string {
   return s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 }
 
+/** Short, locale-aware order date (falls back to the raw ISO string). */
+function formatOrderDate(iso: string, locale: string): string {
+  try {
+    return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
+
 /**
  * Flatten an order into the plain-text block we persist onto the ticket. It is
  * a point-in-time SNAPSHOT (the chat's order context), so it is stored as text
@@ -99,7 +108,7 @@ function IncludeToggle({
 }
 
 export function CreateTicketDialog({ contactId, vendorId, conversationId, onClose }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const createFromChat = useCreateTicketFromConversation();
   const { user } = useAuth();
   const {
@@ -234,7 +243,12 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
                   <span className="font-medium">
                     {t('tickets.includeOrder', { defaultValue: 'Attach order details' })}
                   </span>
-                  <span className="mt-0.5 flex items-center gap-1.5 text-muted-foreground">
+                  {/* Surface exactly which order is being snapshotted. This is the
+                      customer's LATEST order, which may be unrelated to this chat
+                      (the conversation schema carries no order reference), so the
+                      agent must be able to see the id, date and restaurant before
+                      attaching it rather than opting in blindly. */}
+                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-muted-foreground">
                     <span className="font-mono">#{latestOrder.orderId}</span>
                     <Pill tone="neutral" size="sm">
                       {titleize(latestOrder.status)}
@@ -242,6 +256,17 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
                     <span className="tabular-nums">
                       {money(latestOrder.total, latestOrder.currency)}
                     </span>
+                  </span>
+                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-muted-foreground">
+                    <span className="tabular-nums">
+                      {formatOrderDate(latestOrder.placedAt, i18n.language)}
+                    </span>
+                    {latestOrder.restaurantName && (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span className="min-w-0 truncate">{latestOrder.restaurantName}</span>
+                      </>
+                    )}
                   </span>
                 </IncludeToggle>
               )}
