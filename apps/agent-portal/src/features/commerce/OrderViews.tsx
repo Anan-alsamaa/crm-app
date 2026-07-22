@@ -168,6 +168,9 @@ function OrderDetails({ order }: { order: YijiOrder }) {
                     {t('commerce.each', { defaultValue: 'each' })})
                   </span>
                 )}
+                {it.category && (
+                  <span className="ms-1 text-2xs text-muted-foreground">· {it.category}</span>
+                )}
               </span>
               <span className="shrink-0 tabular-nums text-foreground">
                 {money(it.price * it.qty, order.currency)}

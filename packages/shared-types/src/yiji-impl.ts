@@ -150,10 +150,13 @@ function defaultFixtures(): MockFixtures {
     ],
   });
 
+  // Derive activity from `orders` (same reduction the HttpYijiClient uses) so
+  // the fixtures can never drift out of agreement with getOrders — editing an
+  // order's total automatically flows through to the lifetime value.
   f.activityByCustomer.set(key(vendorId, cust.externalCustomerId), {
     externalCustomerId: cust.externalCustomerId,
-    lifetimeValue: 556.5,
-    orderCount: 3,
+    lifetimeValue: orders.reduce((sum, o) => sum + o.total, 0),
+    orderCount: orders.length,
     lastOrderAt: orders[0]?.placedAt,
     recent: orders.slice(0, 3),
   });
@@ -270,6 +273,14 @@ const YIJI_PAYMENT_MODE: Record<number, string> = {
 /**
  * Yiji DeliveryType enum. Maps the raw int onto a human label the UI titleizes
  * (and can translate). Unknown values fall back to `type_N` in the mapper.
+ *
+ * ⚠️ UNVERIFIED: unlike the OrderStatus / PaymentStatus / PaymentMode enums
+ * above (whose values Yiji confirmed), this 1=delivery / 2=pickup mapping is an
+ * educated guess — the exact Yiji DeliveryType enum has NOT been confirmed
+ * against the real API. It degrades safely (any unrecognized int surfaces as
+ * `type_N`), so this is intentionally deferred: verify the true integer→label
+ * mapping against the live API / the client's mobile-dev contract and correct
+ * it here before relying on these labels.
  */
 const YIJI_DELIVERY_TYPE: Record<number, string> = {
   1: 'delivery',
