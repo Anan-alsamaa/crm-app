@@ -170,9 +170,12 @@ function displayName(u: RawUser): string {
 
 /* ── Base report data (Directus only — no commerce) ───────────────────── */
 
-export function useAgentReportData(days: number) {
+export function useAgentReportData(
+  days: number,
+  labels: { unassigned: string; noSubject: string },
+) {
   return useQuery({
-    queryKey: ['agent-reports', days],
+    queryKey: ['agent-reports', days, labels.unassigned, labels.noSubject],
     staleTime: 60_000,
     queryFn: async (): Promise<AgentReportData> => {
       const since = new Date(Date.now() - days * DAY_MS).toISOString();
@@ -227,16 +230,48 @@ export function useAgentReportData(days: number) {
         ) as Promise<RawUser[]>,
       ]);
 
-      const userName = new Map(users.map((u) => [u.id, displayName(u)]));
-      const agentOf = (id: string | null) => (id ? (userName.get(id) ?? '—') : 'Unassigned');
+      // Service accounts (…@svc.…) aren't people — exclude them so they never
+      // surface as real agents or inflate the Agent KPI (same rule as useAgents).
+      const isSvc = (email: string | null) => (email ?? '').toLowerCase().includes('@svc.');
+      const svcIds = new Set(users.filter((u) => isSvc(u.email)).map((u) => u.id));
+      const userName = new Map(
+        users.filter((u) => !isSvc(u.email)).map((u) => [u.id, displayName(u)]),
+      );
+      const agentOf = (id: string | null) => (id ? (userName.get(id) ?? '—') : labels.unassigned);
+      /** Fold service-account assignments into the "unassigned" row for the KPI. */
+      const realAgentId = (id: string | null): string | null =>
+        id && svcIds.has(id) ? null : id;
 
-      // CSAT → agent, via the rated conversation's assigned agent.
-      const convAgent = new Map(conversations.map((c) => [c.id, c.assigned_agent]));
+      // CSAT → agent, via the rated conversation's assigned agent. Conversations
+      // created BEFORE the window aren't in `conversations`, so an in-window CSAT
+      // for such a conversation would resolve to no agent. Fetch the assigned
+      // agent for those referenced-but-missing conversations so every in-window
+      // CSAT is attributed regardless of when its conversation was created.
+      const convAgent = new Map<string, string | null>(
+        conversations.map((c) => [c.id, c.assigned_agent]),
+      );
+      const missingConvIds = Array.from(
+        new Set(
+          csat
+            .map((r) => r.conversation)
+            .filter((id): id is string => !!id && !convAgent.has(id)),
+        ),
+      );
+      if (missingConvIds.length > 0) {
+        const extraConvs = (await directus.request(
+          readItems('conversations', {
+            filter: { id: { _in: missingConvIds } },
+            fields: ['id', 'assigned_agent'],
+            limit: -1,
+          }),
+        )) as { id: string; assigned_agent: string | null }[];
+        for (const c of extraConvs) convAgent.set(c.id, c.assigned_agent);
+      }
 
       /* Report 1: tickets + SLA timings (order enrichment added later). */
       const ticketRows: TicketReportRow[] = tickets.map((t) => ({
         id: t.id,
-        subject: t.subject || '(no subject)',
+        subject: t.subject || labels.noSubject,
         status: t.status,
         priority: t.priority,
         contactId: t.contact?.id ?? null,
@@ -285,7 +320,8 @@ export function useAgentReportData(days: number) {
       };
 
       for (const t of tickets) {
-        const a = ensure(t.assigned_agent, agentOf(t.assigned_agent));
+        const agentId = realAgentId(t.assigned_agent);
+        const a = ensure(agentId, agentOf(agentId));
         a.tickets += 1;
         const rm = minutesBetween(t.date_created, t.first_responded_at);
         if (rm != null) {
@@ -303,14 +339,16 @@ export function useAgentReportData(days: number) {
         if (typeof r.score !== 'number') continue;
         csatOverallSum += r.score;
         csatOverallCount += 1;
-        const agentId = r.conversation ? (convAgent.get(r.conversation) ?? null) : null;
-        // Only attribute to a real agent; unattributed CSAT still counts in the
-        // overall average but not against a specific agent row.
-        if (agentId) {
-          const a = ensure(agentId, agentOf(agentId));
-          a.csatSum += r.score;
-          a.csatCount += 1;
-        }
+        // Attribute to the conversation's assigned agent regardless of when the
+        // conversation was created (convAgent now includes the missing ones).
+        // Unassigned conversations and service-account assignments fold into the
+        // "unassigned" row, so sum(per-agent csatCount) === csatOverall.count.
+        const agentId = realAgentId(
+          r.conversation ? (convAgent.get(r.conversation) ?? null) : null,
+        );
+        const a = ensure(agentId, agentOf(agentId));
+        a.csatSum += r.score;
+        a.csatCount += 1;
       }
 
       const agents: AgentKpiRow[] = Array.from(accs.values())

@@ -474,7 +474,12 @@ export function AgentReportsPage() {
   const { t } = useTranslation();
   const [days, setDays] = useState(30);
   const [tab, setTab] = useState<ReportTab>('tickets');
-  const report = useAgentReportData(days);
+  // Labels baked into the report data (agent names / subjects) must be
+  // translated here — the .xlsx export runs outside React and can't call i18n.
+  const report = useAgentReportData(days, {
+    unassigned: t('agentReports.unassigned', { defaultValue: 'Unassigned' }),
+    noSubject: t('agentReports.noSubject', { defaultValue: '(no subject)' }),
+  });
 
   // A thin wrapper so the pure export builders can call i18next without taking a
   // dependency on its full TFunction type.

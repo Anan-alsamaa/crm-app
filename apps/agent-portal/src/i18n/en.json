@@ -407,6 +407,8 @@
     "empty": "No data in this window",
     "emptyHint": "Widen the date range, or wait for tickets and conversations to land.",
     "generatedAt": "Generated {{at}}",
+    "unassigned": "Unassigned",
+    "noSubject": "(no subject)",
     "sla": {
       "met": "Met",
       "breached": "Breached",
