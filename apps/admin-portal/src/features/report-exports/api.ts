@@ -239,8 +239,7 @@ export function useAgentReportData(
       );
       const agentOf = (id: string | null) => (id ? (userName.get(id) ?? '—') : labels.unassigned);
       /** Fold service-account assignments into the "unassigned" row for the KPI. */
-      const realAgentId = (id: string | null): string | null =>
-        id && svcIds.has(id) ? null : id;
+      const realAgentId = (id: string | null): string | null => (id && svcIds.has(id) ? null : id);
 
       // CSAT → agent, via the rated conversation's assigned agent. Conversations
       // created BEFORE the window aren't in `conversations`, so an in-window CSAT
@@ -252,9 +251,7 @@ export function useAgentReportData(
       );
       const missingConvIds = Array.from(
         new Set(
-          csat
-            .map((r) => r.conversation)
-            .filter((id): id is string => !!id && !convAgent.has(id)),
+          csat.map((r) => r.conversation).filter((id): id is string => !!id && !convAgent.has(id)),
         ),
       );
       if (missingConvIds.length > 0) {
@@ -438,7 +435,11 @@ const MAX_ENRICHED_CONTACTS = 150;
 /** Concurrent commerce requests — the proxy is a shared external dependency. */
 const ORDER_CONCURRENCY = 5;
 
-async function pool<T>(items: T[], size: number, worker: (item: T) => Promise<void>): Promise<void> {
+async function pool<T>(
+  items: T[],
+  size: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
   let i = 0;
   const runners = Array.from({ length: Math.min(size, items.length) }, async () => {
     while (i < items.length) {
@@ -464,11 +465,7 @@ function summariseItems(items: { qty: number; name: string }[]): string {
  *
  * Returns a Map<contactId, TicketOrderInfo|null>; `null` means "looked up, none".
  */
-export function useTicketOrders(
-  contactIds: string[],
-  enabled: boolean,
-  days: number,
-) {
+export function useTicketOrders(contactIds: string[], enabled: boolean, days: number) {
   // Stable, de-duplicated key so the enrichment is cached per report window.
   const uniqueIds = Array.from(new Set(contactIds.filter(Boolean)));
   return useQuery({
@@ -496,9 +493,7 @@ export function useTicketOrders(
         return result;
       }
 
-      const linkable = contacts.filter(
-        (c) => c.external_customer_id && c.vendor?.yiji_vendor_id,
-      );
+      const linkable = contacts.filter((c) => c.external_customer_id && c.vendor?.yiji_vendor_id);
 
       await pool(linkable, ORDER_CONCURRENCY, async (c) => {
         try {

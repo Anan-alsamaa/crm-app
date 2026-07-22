@@ -1,9 +1,5 @@
 import type { CellValue, Sheet } from './xlsx.js';
-import type {
-  AgentKpiRow,
-  ConversationStatusReport,
-  TicketReportRow,
-} from './api.js';
+import type { AgentKpiRow, ConversationStatusReport, TicketReportRow } from './api.js';
 
 /**
  * Pure builders that turn the aggregated report data into `.xlsx` sheet
@@ -62,8 +58,14 @@ export function buildTicketsSheets(rows: TicketReportRow[], t: Translate): Sheet
       header: t('agentReports.col.firstResponseMin', { defaultValue: 'First response (min)' }),
       width: 18,
     },
-    { header: t('agentReports.col.firstResponseSla', { defaultValue: 'First response SLA' }), width: 16 },
-    { header: t('agentReports.col.resolutionMin', { defaultValue: 'Resolution (min)' }), width: 16 },
+    {
+      header: t('agentReports.col.firstResponseSla', { defaultValue: 'First response SLA' }),
+      width: 16,
+    },
+    {
+      header: t('agentReports.col.resolutionMin', { defaultValue: 'Resolution (min)' }),
+      width: 16,
+    },
     { header: t('agentReports.col.resolutionSla', { defaultValue: 'Resolution SLA' }), width: 14 },
     { header: t('agentReports.col.orderId', { defaultValue: 'Order ID' }), width: 16 },
     { header: t('agentReports.col.restaurant', { defaultValue: 'Restaurant' }), width: 22 },
@@ -146,10 +148,7 @@ export function buildAgentKpiSheets(agents: AgentKpiRow[], t: Translate): Sheet[
 
 /* ── Report 3: Conversation status ────────────────────────────────────── */
 
-export function buildConversationSheets(
-  report: ConversationStatusReport,
-  t: Translate,
-): Sheet[] {
+export function buildConversationSheets(report: ConversationStatusReport, t: Translate): Sheet[] {
   // Sheet A — status / priority summary (counts).
   const summaryRows: CellValue[][] = [];
   summaryRows.push([t('agentReports.byStatus', { defaultValue: 'By status' }), '']);
@@ -195,7 +194,10 @@ export function buildConversationSheets(
 
   // Sheet C — conversation detail (row per conversation).
   const detailColumns = [
-    { header: t('agentReports.col.conversationId', { defaultValue: 'Conversation ID' }), width: 26 },
+    {
+      header: t('agentReports.col.conversationId', { defaultValue: 'Conversation ID' }),
+      width: 26,
+    },
     { header: t('agentReports.col.status', { defaultValue: 'Status' }), width: 12 },
     { header: t('agentReports.col.priority', { defaultValue: 'Priority' }), width: 12 },
     { header: t('agentReports.col.agent', { defaultValue: 'Agent' }), width: 20 },

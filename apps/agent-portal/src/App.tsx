@@ -28,7 +28,6 @@ import { SoundToggle } from './components/SoundToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
 import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
 import { NewMessageSound } from './components/NewMessageSound.js';
-import { ReportsIcon } from './features/agent-reports/ReportsIcon.js';
 
 // Route pages are code-split so the initial bundle stays lean; each loads on
 // first navigation behind the shared Suspense fallback below.
@@ -52,11 +51,6 @@ const CompensationPage = lazy(() =>
 const ContactProfilePage = lazy(() =>
   import('./features/contacts/ContactProfilePage.js').then((m) => ({
     default: m.ContactProfilePage,
-  })),
-);
-const AgentReportsPage = lazy(() =>
-  import('./features/agent-reports/AgentReportsPage.js').then((m) => ({
-    default: m.AgentReportsPage,
   })),
 );
 
@@ -234,11 +228,6 @@ function Shell({ children }: { children: React.ReactNode }) {
           label: t('nav.compensation', { defaultValue: 'Compensation' }),
           icon: ClockIcon,
         },
-        {
-          to: '/reports',
-          label: t('nav.reports', { defaultValue: 'Reports' }),
-          icon: ReportsIcon,
-        },
       ],
     },
     {
@@ -413,16 +402,6 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <CompensationPage />
-                </Shell>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/reports"
-            element={
-              <ProtectedRoute>
-                <Shell>
-                  <AgentReportsPage />
                 </Shell>
               </ProtectedRoute>
             }

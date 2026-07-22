@@ -48,6 +48,11 @@ const AutomationPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import('./features/reports/ReportsPage.js').then((m) => ({ default: m.ReportsPage })),
 );
+const ReportExportsPage = lazy(() =>
+  import('./features/report-exports/AgentReportsPage.js').then((m) => ({
+    default: m.AgentReportsPage,
+  })),
+);
 const SlaReportsPage = lazy(() =>
   import('./features/sla-reports/SlaReportsPage.js').then((m) => ({ default: m.SlaReportsPage })),
 );
@@ -261,6 +266,11 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         { to: '/reports', label: t('nav.reports', { defaultValue: 'Reports' }), icon: ClockIcon },
         {
+          to: '/report-exports',
+          label: t('nav.reportExports', { defaultValue: 'Report exports' }),
+          icon: ClockIcon,
+        },
+        {
           to: '/imports',
           label: t('nav.imports', { defaultValue: 'Import contacts' }),
           icon: UsersIcon,
@@ -428,6 +438,16 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <ReportsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/report-exports"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <ReportExportsPage />
                 </Shell>
               </ProtectedRoute>
             }

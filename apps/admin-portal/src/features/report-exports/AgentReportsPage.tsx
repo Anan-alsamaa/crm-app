@@ -1,15 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  Button,
-  cn,
-  EmptyState,
-  Pill,
-  SelectMenu,
-  Skeleton,
-  Spinner,
-  toast,
-} from '@yiji/ui';
+import { Button, cn, EmptyState, Pill, SelectMenu, Skeleton, Spinner, toast } from '@yiji/ui';
 import {
   useAgentReportData,
   useTicketOrders,
@@ -203,7 +194,9 @@ function TicketsReport({
                 {tr('agentReports.col.resolutionMin', { defaultValue: 'Resolution (min)' })}
               </HeadCell>
               {includeOrders && (
-                <HeadCell>{tr('agentReports.col.restaurant', { defaultValue: 'Restaurant' })}</HeadCell>
+                <HeadCell>
+                  {tr('agentReports.col.restaurant', { defaultValue: 'Restaurant' })}
+                </HeadCell>
               )}
             </tr>
           </thead>
@@ -259,7 +252,15 @@ function TicketsReport({
 
 /* ── Report 2: Agent KPI ──────────────────────────────────────────────── */
 
-function AgentKpiReport({ agents, tr, days }: { agents: AgentKpiRow[]; tr: Translate; days: number }) {
+function AgentKpiReport({
+  agents,
+  tr,
+  days,
+}: {
+  agents: AgentKpiRow[];
+  tr: Translate;
+  days: number;
+}) {
   const { t } = useTranslation();
 
   const onExport = () => {
@@ -269,7 +270,10 @@ function AgentKpiReport({ agents, tr, days }: { agents: AgentKpiRow[]; tr: Trans
     }
     downloadWorkbook(reportFilename('reports-agent-kpi', days), buildAgentKpiSheets(agents, tr));
     toast.success(
-      t('agentReports.exported', { count: agents.length, defaultValue: 'Exported {{count}} rows.' }),
+      t('agentReports.exported', {
+        count: agents.length,
+        defaultValue: 'Exported {{count}} rows.',
+      }),
     );
   };
 
@@ -487,7 +491,10 @@ export function AgentReportsPage() {
 
   const data = report.data;
   const isEmpty =
-    !!data && data.tickets.length === 0 && data.conversations.total === 0 && data.agents.length === 0;
+    !!data &&
+    data.tickets.length === 0 &&
+    data.conversations.total === 0 &&
+    data.agents.length === 0;
 
   const tabs: { key: ReportTab; label: string }[] = [
     { key: 'tickets', label: t('agentReports.tabTickets', { defaultValue: 'Tickets + orders' }) },
