@@ -542,10 +542,10 @@ export function ConversationView({
   };
 
   return (
-    // Solid ink surface: the chat opts out of the aurora wash — stacked
-    // gradients over a mostly-empty thread read as murk, and agents stare
-    // at this pane all day. Calm center; the color lives in the bubbles.
-    <div className="flex h-full bg-background">
+    // Instagram-DM zone: the whole conversation area re-scopes to the LIGHT
+    // token set — white thread + vivid gradient bubbles inside the dark app
+    // chrome. Calm reading surface; the color lives in the bubbles.
+    <div className="theme-light flex h-full bg-background text-foreground">
       <div className="flex flex-1 min-w-0 flex-col">
         {/* Toolbar — slim row of status/priority/agent controls. */}
         {c && (
