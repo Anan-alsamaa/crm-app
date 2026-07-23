@@ -149,8 +149,17 @@ export function AppShell({
             <header className="flex h-14 shrink-0 items-center border-b border-border px-4">
               {topBar}
             </header>
-            {/* Tinted workspace canvas so white surfaces genuinely float. */}
-            <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-canvas">{children}</main>
+            {/* Open workspace: white surface with a soft brand wash so the
+                center feels alive without boxing content into cards. */}
+            <main
+              className="min-h-0 min-w-0 flex-1 overflow-hidden"
+              style={{
+                background:
+                  'radial-gradient(1100px 480px at 12% -8%, oklch(var(--primary) / 0.09) 0%, transparent 60%), radial-gradient(900px 420px at 100% 112%, oklch(var(--secondary-brand) / 0.07) 0%, transparent 60%), oklch(var(--card))',
+              }}
+            >
+              {children}
+            </main>
           </div>
         </div>
       );

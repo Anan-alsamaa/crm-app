@@ -386,10 +386,8 @@ export function Inbox() {
                       <li
                         key={c.id}
                         className={cn(
-                          'group relative flex items-start rounded-2xl transition-[box-shadow,background-color] duration-fast ease-out',
-                          active
-                            ? 'bg-primary-subtle/60 shadow-md shadow-foreground/[0.08] ring-1 ring-primary/40'
-                            : 'bg-card ring-1 ring-foreground/[0.04] shadow-soft hover:shadow-float',
+                          'group relative flex items-start rounded-xl transition-colors duration-fast ease-out',
+                          active ? 'bg-primary-subtle/70' : 'hover:bg-secondary/60',
                         )}
                       >
                         <input

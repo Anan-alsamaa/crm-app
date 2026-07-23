@@ -114,7 +114,7 @@ export function TicketsPage() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-background">
+    <div className="flex h-full flex-col">
       {/* Dense toolbar: title + inline filter tabs (also stand in as stats) */}
       <Toolbar>
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
@@ -198,24 +198,18 @@ export function TicketsPage() {
                 </ul>
               ) : filtered.length > 0 ? (
                 <ul className="space-y-2 px-3 py-2">
-                  {filtered.map((tk, i) => {
+                  {filtered.map((tk) => {
                     const active = selected === tk.id;
                     const overdue = isOverdue(tk);
                     return (
-                      <li
-                        key={tk.id}
-                        style={{ animationDelay: `${Math.min(i * 28, 280)}ms` }}
-                        className="motion-safe:animate-fade-in"
-                      >
+                      <li key={tk.id}>
                         <button
                           type="button"
                           onClick={() => setSelected(tk.id)}
                           className={cn(
-                            'group flex w-full items-start gap-3 rounded-2xl px-3.5 py-3 text-start',
-                            'transition-[box-shadow,transform,background-color] duration-fast ease-out',
-                            active
-                              ? 'bg-card shadow-md shadow-foreground/[0.08] ring-1 ring-primary/30'
-                              : 'bg-card/40 ring-1 ring-foreground/[0.03] hover:bg-card hover:shadow-sm hover:shadow-foreground/[0.06] hover:-translate-y-px',
+                            'group flex w-full items-start gap-3 rounded-xl px-3.5 py-3 text-start',
+                            'transition-colors duration-fast ease-out',
+                            active ? 'bg-primary-subtle/70' : 'hover:bg-secondary/60',
                           )}
                         >
                           <Avatar
@@ -456,7 +450,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         {/* Rail — properties, SLA, attachments. */}
         <aside className="space-y-5 lg:order-2">
           {/* Properties — stacked selects + the mark-responded CTA. */}
-          <section className="space-y-3 rounded-2xl bg-card/70 p-4 shadow-soft ring-1 ring-foreground/[0.04]">
+          <section className="space-y-3 border-t border-border pt-4">
             <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               {t('tickets.properties', { defaultValue: 'Properties' })}
             </h3>
@@ -791,7 +785,7 @@ function SlaCard({
   metLabel?: string;
 }) {
   return (
-    <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-4 py-4">
+    <div className="border-t border-border pt-4">
       <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </div>

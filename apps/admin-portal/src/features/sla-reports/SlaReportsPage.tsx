@@ -73,11 +73,18 @@ function SlaPill({ cell }: { cell: SlaCell }) {
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-2xl bg-card px-4 py-3 ring-1 ring-border shadow-soft">
+    <div>
       <div className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
         {label}
       </div>
-      <div className={cn('mt-1 text-2xl font-bold tracking-tight tabular-nums', tone)}>{value}</div>
+      <div
+        className={cn(
+          'mt-1.5 text-4xl font-extrabold tracking-[-0.03em] tabular-nums leading-none',
+          tone,
+        )}
+      >
+        {value}
+      </div>
     </div>
   );
 }
@@ -302,7 +309,7 @@ function HeadCell({ children, className }: { children: React.ReactNode; classNam
 function AgentTable({ agents, onDrill }: { agents: AgentSla[]; onDrill: (a: AgentSla) => void }) {
   const { t } = useTranslation();
   return (
-    <div className="overflow-hidden rounded-2xl bg-card ring-1 ring-border shadow-soft">
+    <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="border-b border-border">
           <tr>
@@ -398,7 +405,7 @@ function TicketTable({
           <span className="text-muted-foreground">{tickets.length}</span>
         </div>
       )}
-      <div className="overflow-hidden rounded-2xl bg-card ring-1 ring-border shadow-soft">
+      <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b border-border">
             <tr>

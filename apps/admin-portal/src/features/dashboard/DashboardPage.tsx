@@ -96,10 +96,8 @@ function RankList({
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-border">
-      <h2 className="mb-4 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {title}
-      </h2>
+    <section className="border-t border-border pt-5">
+      <h2 className="mb-4 text-sm font-semibold tracking-tight text-foreground">{title}</h2>
       {children}
     </section>
   );
@@ -130,7 +128,7 @@ export function DashboardPage() {
       </Toolbar>
 
       <div className="flex-1 overflow-auto p-5 sm:p-6">
-        <div className="mx-auto max-w-6xl space-y-5">
+        <div className="mx-auto max-w-6xl space-y-8">
           {m.isError ? (
             <ErrorState
               title={t('dashboard.loadError', { defaultValue: 'Could not load metrics' })}
@@ -141,7 +139,7 @@ export function DashboardPage() {
               onRetry={() => void m.refetch()}
             />
           ) : m.isLoading || !m.data ? (
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-x-8 gap-y-6 lg:grid-cols-5">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-24 rounded-2xl" />
               ))}
@@ -149,7 +147,7 @@ export function DashboardPage() {
           ) : (
             <>
               {/* Key stats */}
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+              <div className="grid grid-cols-2 gap-x-8 gap-y-6 lg:grid-cols-5">
                 <Stat
                   label={t('dashboard.conversations', { defaultValue: 'Conversations' })}
                   value={String(m.data.conversationVolume)}

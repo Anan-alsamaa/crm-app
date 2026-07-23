@@ -151,7 +151,7 @@ export function ContactsPage() {
 
       <div className="flex-1 overflow-auto px-5 py-3">
         {contacts.isLoading ? (
-          <ul className="mx-auto max-w-5xl divide-y divide-border overflow-hidden rounded-2xl bg-card/60 ring-1 ring-border shadow-soft">
+          <ul className="mx-auto max-w-5xl divide-y divide-border">
             {Array.from({ length: 8 }).map((_, i) => (
               <li key={i} className="flex items-center gap-3 px-4 py-2.5">
                 <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
@@ -177,7 +177,7 @@ export function ContactsPage() {
             {t('contacts.noMatch', { defaultValue: 'No contacts match your search.' })}
           </p>
         ) : (
-          <ul className="mx-auto max-w-5xl divide-y divide-border overflow-hidden rounded-2xl bg-card/60 ring-1 ring-border shadow-soft">
+          <ul className="mx-auto max-w-5xl divide-y divide-border">
             {filtered.map((c) => {
               const name = c.name ?? c.email ?? c.phone ?? c.external_customer_id ?? '—';
               return (

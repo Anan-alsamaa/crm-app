@@ -53,11 +53,18 @@ const fmtScore = (n: number | null) => (n == null ? '—' : n.toFixed(2));
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-2xl bg-card px-4 py-3 ring-1 ring-border shadow-soft">
+    <div>
       <div className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
         {label}
       </div>
-      <div className={cn('mt-1 text-2xl font-bold tracking-tight tabular-nums', tone)}>{value}</div>
+      <div
+        className={cn(
+          'mt-1.5 text-4xl font-extrabold tracking-[-0.03em] tabular-nums leading-none',
+          tone,
+        )}
+      >
+        {value}
+      </div>
     </div>
   );
 }
@@ -175,7 +182,7 @@ function TicketsReport({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl bg-card ring-1 ring-border shadow-soft">
+      <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b border-border">
             <tr>
@@ -286,7 +293,7 @@ function AgentKpiReport({
           </Button>
         </div>
       </div>
-      <div className="overflow-x-auto rounded-2xl bg-card ring-1 ring-border shadow-soft">
+      <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b border-border">
             <tr>
@@ -383,8 +390,8 @@ function ConversationReport({
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* By status */}
-        <div className="rounded-2xl bg-card ring-1 ring-border shadow-soft p-4">
-          <h3 className="mb-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <div className="border-t border-border pt-4">
+          <h3 className="mb-3 text-sm font-semibold tracking-tight text-foreground">
             {t('agentReports.byStatus', { defaultValue: 'By status' })}
           </h3>
           <ul className="space-y-1.5">
@@ -397,8 +404,8 @@ function ConversationReport({
           </ul>
         </div>
         {/* By priority */}
-        <div className="rounded-2xl bg-card ring-1 ring-border shadow-soft p-4">
-          <h3 className="mb-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <div className="border-t border-border pt-4">
+          <h3 className="mb-3 text-sm font-semibold tracking-tight text-foreground">
             {t('agentReports.byPriority', { defaultValue: 'By priority' })}
           </h3>
           <ul className="space-y-1.5">
@@ -413,7 +420,7 @@ function ConversationReport({
       </div>
 
       {/* By day */}
-      <div className="overflow-x-auto rounded-2xl bg-card ring-1 ring-border shadow-soft">
+      <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b border-border">
             <tr>

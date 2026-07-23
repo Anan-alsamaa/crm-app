@@ -285,7 +285,7 @@ export function UsersPage() {
         ) : (
           /* Dense list — one row per account (density is a feature). Hairline
              dividers, no card chrome, columns read like a table at sm+. */
-          <ul className="mx-auto max-w-5xl divide-y divide-border overflow-hidden rounded-2xl bg-card/60 ring-1 ring-border shadow-soft">
+          <ul className="mx-auto max-w-5xl divide-y divide-border">
             {filtered.map((u) => {
               const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
               const isAdmin = u.role?.name?.toLowerCase() === 'administrator';

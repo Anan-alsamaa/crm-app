@@ -46,30 +46,30 @@
   /* Workspace canvas behind in-app content: visibly tinted so white
    * surfaces (cards, tables, list rows) genuinely float above it. */
   --canvas: 0.965 0.004 230;
-  --foreground: 0.2 0.005 250;
+  --foreground: 0.18 0.005 250;
   --card: 1 0 0;
-  --card-foreground: 0.2 0.005 250;
+  --card-foreground: 0.18 0.005 250;
   --popover: 1 0 0;
-  --popover-foreground: 0.2 0.005 250;
+  --popover-foreground: 0.18 0.005 250;
 
   /* YIJI teal — vivid step of #0F8D8F (same hue + lightness, higher
    * chroma) per the messenger-vibrant direction. White-on-primary
    * contrast is unchanged because L stays 0.58. */
-  --primary: 0.58 0.125 192;
+  --primary: 0.55 0.14 192;
   --primary-foreground: 1 0 0;
-  --primary-subtle: 0.58 0.125 192 / 0.12;
+  --primary-subtle: 0.55 0.14 192 / 0.12;
 
   /* Incoming chat bubble — soft periwinkle, cool against the teal
    * outgoing bubble (messenger reference). */
   --bubble: 0.945 0.02 255;
 
   --secondary: 0.96 0.005 230;
-  --secondary-foreground: 0.2 0.005 250;
+  --secondary-foreground: 0.18 0.005 250;
 
   --muted: 0.96 0.005 230;
-  --muted-foreground: 0.46 0.01 250;
+  --muted-foreground: 0.44 0.012 250;
 
-  --accent: 0.58 0.125 192;
+  --accent: 0.55 0.14 192;
   --accent-foreground: 1 0 0;
 
   --destructive: 0.56 0.22 25;
@@ -82,14 +82,14 @@
   --border: 0.22 0.005 250 / 0.12;
   --border-strong: 0.22 0.005 250 / 0.2;
   --input: 0.96 0.005 230;
-  --ring: 0.58 0.125 192;
+  --ring: 0.55 0.14 192;
   --shadow-color: 0.22 0.005 250;
 
   /* Rail — a darker, deeper YIJI teal. Same hue as --primary so the
    * brand reads as one family from the rail through to the accent. */
   --rail: 0.22 0.045 196;
   --rail-foreground: 0.92 0.03 196;
-  --rail-active: 0.28 0.07 196;
+  --rail-active: 0.3 0.09 192;
   --rail-active-foreground: 1 0 0;
   --rail-border: 0.16 0.04 196;
 
@@ -111,15 +111,15 @@
   --popover: 0.22 0.005 250;
   --popover-foreground: 0.96 0 0;
   /* Lighter YIJI teal on dark so it pops against the deep canvas. */
-  --primary: 0.66 0.135 192;
+  --primary: 0.68 0.145 192;
   --primary-foreground: 0.16 0.005 250;
-  --primary-subtle: 0.66 0.135 192 / 0.18;
+  --primary-subtle: 0.68 0.145 192 / 0.18;
   --bubble: 0.27 0.02 255;
   --secondary: 0.24 0.005 250;
   --secondary-foreground: 0.96 0 0;
   --muted: 0.24 0.005 250;
   --muted-foreground: 0.66 0.008 250;
-  --accent: 0.66 0.135 192;
+  --accent: 0.68 0.145 192;
   --accent-foreground: 0.16 0.005 250;
   --destructive: 0.68 0.21 25;
   --destructive-foreground: 1 0 0;
@@ -130,7 +130,7 @@
   --border: 0.96 0 0 / 0.1;
   --border-strong: 0.96 0 0 / 0.18;
   --input: 0.24 0.005 250;
-  --ring: 0.66 0.135 192;
+  --ring: 0.68 0.145 192;
   --shadow-color: 0 0 0;
   --rail: 0.14 0.04 196;
   --rail-foreground: 0.88 0.03 196;

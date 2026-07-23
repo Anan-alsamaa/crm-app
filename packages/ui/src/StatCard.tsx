@@ -6,9 +6,9 @@ export interface StatCardProps extends HTMLAttributes<HTMLDivElement> {
   value: ReactNode;
   /** Optional small caption under the value (e.g. "vs last week"). */
   caption?: ReactNode;
-  /** Optional leading icon, rendered in a tinted tile. */
+  /** Optional leading icon (unused in the open style; kept for API compat). */
   icon?: ReactNode;
-  /** Tone of the label dot / accent treatment. */
+  /** Tone of the label dot / value accent. */
   tone?: 'default' | 'primary' | 'success' | 'warning' | 'destructive' | 'pink';
 }
 
@@ -22,10 +22,9 @@ const dotBg: Record<NonNullable<StatCardProps['tone']>, string> = {
 };
 
 /**
- * Executive KPI card — a floating surface with an uppercase label (tone dot
- * carries semantics), a big tabular number, and an optional caption.
- * `tone="primary"` additionally tints the surface for the one metric that
- * deserves the accent.
+ * Open metric block — no box. A hero number with an uppercase label and a
+ * tone dot, separated from its neighbours by whitespace alone. The modern
+ * dashboard move: typography does the work, not card chrome.
  */
 export function StatCard({
   label,
@@ -38,40 +37,22 @@ export function StatCard({
 }: StatCardProps): JSX.Element {
   const accent = tone === 'primary';
   return (
-    <div
-      className={cn(
-        'flex flex-col gap-1 rounded-2xl px-5 py-4 shadow-soft',
-        accent
-          ? 'bg-primary-subtle/50 ring-1 ring-primary/25'
-          : 'bg-card ring-1 ring-foreground/[0.06]',
-        className,
-      )}
-      {...rest}
-    >
-      <div
-        className={cn(
-          'flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.14em]',
-          accent ? 'text-primary/80' : 'text-muted-foreground',
-        )}
-      >
-        {tone !== 'default' && !accent && (
+    <div className={cn('flex flex-col gap-1.5', className)} {...rest}>
+      <div className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {tone !== 'default' && (
           <span aria-hidden className={cn('h-1.5 w-1.5 rounded-full', dotBg[tone])} />
         )}
         <span>{label}</span>
       </div>
       <div
         className={cn(
-          'text-3xl font-bold tabular-nums tracking-[-0.025em]',
+          'text-4xl font-extrabold tabular-nums tracking-[-0.03em] leading-none',
           accent ? 'text-primary' : 'text-foreground',
         )}
       >
         {value}
       </div>
-      {caption && (
-        <div className={cn('text-xs', accent ? 'text-primary/70' : 'text-muted-foreground')}>
-          {caption}
-        </div>
-      )}
+      {caption && <div className="text-xs text-muted-foreground">{caption}</div>}
     </div>
   );
 }
