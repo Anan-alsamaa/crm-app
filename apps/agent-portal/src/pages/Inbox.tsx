@@ -374,7 +374,7 @@ export function Inbox() {
                   {t('inbox.selectAll')}
                 </label>
                 <ul className="space-y-1.5 px-2 pb-2">
-                  {conversations.data.map((c, i) => {
+                  {conversations.data.map((c) => {
                     const active = selected === c.id;
                     const unread = c.unread_count_agent > 0;
                     const displayName =
@@ -385,12 +385,11 @@ export function Inbox() {
                     return (
                       <li
                         key={c.id}
-                        style={{ animationDelay: `${Math.min(i * 28, 280)}ms` }}
                         className={cn(
-                          'group relative flex items-start rounded-2xl transition-[box-shadow,transform,background-color] duration-fast ease-out motion-safe:animate-fade-in',
+                          'group relative flex items-start rounded-2xl transition-[box-shadow,background-color] duration-fast ease-out',
                           active
                             ? 'bg-primary-subtle/60 shadow-md shadow-foreground/[0.08] ring-1 ring-primary/40'
-                            : 'bg-card/40 ring-1 ring-foreground/[0.03] hover:bg-card hover:shadow-sm hover:shadow-foreground/[0.06] hover:-translate-y-px',
+                            : 'bg-card ring-1 ring-foreground/[0.04] shadow-soft hover:shadow-float',
                         )}
                       >
                         <input

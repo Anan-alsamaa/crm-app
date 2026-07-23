@@ -30,6 +30,7 @@
 [data-theme='light'] {
   --radius: 0.5rem;
   --background: 0.985 0.002 230;
+  --canvas: 0.965 0.004 230;
   --foreground: 0.2 0.005 250;
   --card: 1 0 0;
   --card-foreground: 0.2 0.005 250;
@@ -69,6 +70,7 @@
 
 [data-theme='dark'] {
   --background: 0.17 0.005 250;
+  --canvas: 0.15 0.005 250;
   --foreground: 0.96 0 0;
   --card: 0.2 0.005 250;
   --card-foreground: 0.96 0 0;

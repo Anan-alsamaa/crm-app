@@ -34,6 +34,7 @@ module.exports = {
         // shadcn-style semantic slots, driven by CSS variables set in
         // each portal's index.css (light + dark).
         background: 'oklch(var(--background) / <alpha-value>)',
+        canvas: 'oklch(var(--canvas) / <alpha-value>)',
         foreground: 'oklch(var(--foreground) / <alpha-value>)',
         card: {
           DEFAULT: 'oklch(var(--card) / <alpha-value>)',
