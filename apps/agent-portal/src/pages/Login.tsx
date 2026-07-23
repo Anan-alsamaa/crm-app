@@ -87,13 +87,13 @@ export function Login() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-12">
-      {/* Very subtle single-tone wash — just enough to feel branded, not noisy */}
+      {/* Aurora backdrop — the same three glows the workspace breathes with. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'radial-gradient(at 50% 100%, oklch(var(--primary) / 0.07) 0%, transparent 55%)',
+            'radial-gradient(at 15% 0%, oklch(var(--primary) / 0.16) 0%, transparent 55%), radial-gradient(at 95% 25%, oklch(var(--violet) / 0.13) 0%, transparent 55%), radial-gradient(at 50% 110%, oklch(var(--magenta) / 0.12) 0%, transparent 60%)',
         }}
       />
 
@@ -110,138 +110,140 @@ export function Login() {
         </span>
       </div>
 
-      {/* Centered card */}
+      {/* Centered card — glassy surface inside a faint aurora edge. */}
       <div className="relative z-10 w-full max-w-[420px] animate-fade-in">
-        <div className="overflow-hidden rounded-3xl bg-card shadow-2xl shadow-foreground/[0.08] ring-1 ring-foreground/[0.05]">
-          {/* Top brand panel inside the card — no tint, no divider, just generous space */}
-          <div className="flex flex-col items-center gap-4 px-8 pb-2 pt-8 text-center">
-            <YijiLogo size={72} />
-            <div className="space-y-1.5">
-              <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
-                {t('login.title', { defaultValue: 'Sign in to YIJI CRM' })}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {t('login.subtitle', {
-                  defaultValue: 'Continue helping your customers.',
-                })}
-              </p>
+        <div className="rounded-3xl bg-gradient-to-br from-primary/35 via-violet/25 to-magenta/25 p-px shadow-2xl shadow-black/40">
+          <div className="overflow-hidden rounded-[calc(1.5rem-1px)] bg-card/95 backdrop-blur">
+            {/* Top brand panel inside the card — no tint, no divider, just generous space */}
+            <div className="flex flex-col items-center gap-4 px-8 pb-2 pt-8 text-center">
+              <YijiLogo size={72} />
+              <div className="space-y-1.5">
+                <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
+                  {t('login.title', { defaultValue: 'Sign in to YIJI CRM' })}
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  {t('login.subtitle', {
+                    defaultValue: 'Continue helping your customers.',
+                  })}
+                </p>
+              </div>
             </div>
-          </div>
 
-          {/* Form */}
-          <form onSubmit={onSubmit} className="space-y-4 px-8 py-7" noValidate>
-            <FormField
-              label={t('auth.email', { ns: 'common' })}
-              htmlFor="email"
-              error={errors.email?.message}
-            >
-              <Input
-                id="email"
-                type="email"
-                autoComplete="username"
-                autoFocus
-                placeholder={t('login.emailPlaceholder')}
-                invalid={!!errors.email}
-                {...register('email')}
-              />
-            </FormField>
+            {/* Form */}
+            <form onSubmit={onSubmit} className="space-y-4 px-8 py-7" noValidate>
+              <FormField
+                label={t('auth.email', { ns: 'common' })}
+                htmlFor="email"
+                error={errors.email?.message}
+              >
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="username"
+                  autoFocus
+                  placeholder={t('login.emailPlaceholder')}
+                  invalid={!!errors.email}
+                  {...register('email')}
+                />
+              </FormField>
 
-            <FormField
-              label={
-                <span className="flex items-baseline justify-between gap-3">
-                  <span>{t('auth.password', { ns: 'common' })}</span>
+              <FormField
+                label={
+                  <span className="flex items-baseline justify-between gap-3">
+                    <span>{t('auth.password', { ns: 'common' })}</span>
+                    <button
+                      type="button"
+                      onClick={() => setForgotOpen((v) => !v)}
+                      aria-expanded={forgotOpen}
+                      className="rounded-sm text-xs font-medium normal-case tracking-normal text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {t('login.forgot', { defaultValue: 'Forgot password?' })}
+                    </button>
+                  </span>
+                }
+                htmlFor="password"
+                error={errors.password?.message}
+                hint={
+                  capsOn
+                    ? t('login.capsLock', { defaultValue: 'Caps Lock is on.' })
+                    : forgotOpen
+                      ? t('login.forgotHint', {
+                          defaultValue: 'Password resets are handled by your administrator.',
+                        })
+                      : undefined
+                }
+              >
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPw ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    invalid={!!errors.password}
+                    className="pe-10"
+                    onKeyDown={(e) => setCapsOn(e.getModifierState('CapsLock'))}
+                    onKeyUp={(e) => setCapsOn(e.getModifierState('CapsLock'))}
+                    {...register('password', {
+                      onBlur: () => setCapsOn(false),
+                    })}
+                  />
                   <button
                     type="button"
-                    onClick={() => setForgotOpen((v) => !v)}
-                    aria-expanded={forgotOpen}
-                    className="rounded-sm text-xs font-medium normal-case tracking-normal text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => setShowPw((v) => !v)}
+                    aria-pressed={showPw}
+                    aria-label={
+                      showPw
+                        ? t('login.hidePassword', { defaultValue: 'Hide password' })
+                        : t('login.showPassword', { defaultValue: 'Show password' })
+                    }
+                    className="absolute end-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    {t('login.forgot', { defaultValue: 'Forgot password?' })}
+                    <EyeIcon open={showPw} />
                   </button>
-                </span>
-              }
-              htmlFor="password"
-              error={errors.password?.message}
-              hint={
-                capsOn
-                  ? t('login.capsLock', { defaultValue: 'Caps Lock is on.' })
-                  : forgotOpen
-                    ? t('login.forgotHint', {
-                        defaultValue: 'Password resets are handled by your administrator.',
-                      })
-                    : undefined
-              }
-            >
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPw ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  invalid={!!errors.password}
-                  className="pe-10"
-                  onKeyDown={(e) => setCapsOn(e.getModifierState('CapsLock'))}
-                  onKeyUp={(e) => setCapsOn(e.getModifierState('CapsLock'))}
-                  {...register('password', {
-                    onBlur: () => setCapsOn(false),
-                  })}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPw((v) => !v)}
-                  aria-pressed={showPw}
-                  aria-label={
-                    showPw
-                      ? t('login.hidePassword', { defaultValue: 'Hide password' })
-                      : t('login.showPassword', { defaultValue: 'Show password' })
-                  }
-                  className="absolute end-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                </div>
+              </FormField>
+
+              {authError && (
+                <p
+                  role="alert"
+                  className="flex items-start gap-2.5 rounded-2xl bg-destructive/10 ring-1 ring-destructive/20 px-3.5 py-2.5 text-sm text-destructive"
                 >
-                  <EyeIcon open={showPw} />
-                </button>
+                  {authError}
+                </p>
+              )}
+
+              <Button
+                type="submit"
+                loading={isSubmitting}
+                fullWidth
+                size="lg"
+                iconEnd={<ArrowRight className="h-4 w-4" />}
+              >
+                {t('login.submit')}
+              </Button>
+            </form>
+
+            {/* Footer inside card */}
+            <div className="px-8 py-3 text-center text-2xs text-muted-foreground">
+              <div className="flex items-center justify-center gap-2">
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-3 w-3"
+                  aria-hidden
+                >
+                  <rect x="3" y="7" width="10" height="6" rx="1" />
+                  <path d="M5 7V5a3 3 0 0 1 6 0v2" />
+                </svg>
+                <span>{t('login.secure', { defaultValue: 'Encrypted connection' })}</span>
+                <span className="text-border" aria-hidden>
+                  ·
+                </span>
+                <span>YIJI · Agent</span>
               </div>
-            </FormField>
-
-            {authError && (
-              <p
-                role="alert"
-                className="flex items-start gap-2.5 rounded-2xl bg-destructive/10 ring-1 ring-destructive/20 px-3.5 py-2.5 text-sm text-destructive"
-              >
-                {authError}
-              </p>
-            )}
-
-            <Button
-              type="submit"
-              loading={isSubmitting}
-              fullWidth
-              size="lg"
-              iconEnd={<ArrowRight className="h-4 w-4" />}
-            >
-              {t('login.submit')}
-            </Button>
-          </form>
-
-          {/* Footer inside card */}
-          <div className="px-8 py-3 text-center text-2xs text-muted-foreground">
-            <div className="flex items-center justify-center gap-2">
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-3 w-3"
-                aria-hidden
-              >
-                <rect x="3" y="7" width="10" height="6" rx="1" />
-                <path d="M5 7V5a3 3 0 0 1 6 0v2" />
-              </svg>
-              <span>{t('login.secure', { defaultValue: 'Encrypted connection' })}</span>
-              <span className="text-border" aria-hidden>
-                ·
-              </span>
-              <span>YIJI · Agent</span>
             </div>
           </div>
         </div>

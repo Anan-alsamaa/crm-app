@@ -963,7 +963,7 @@ export function ConversationView({
             <div
               aria-hidden
               onClick={() => setDetailsOpen(false)}
-              className="absolute inset-0 bg-foreground/30 backdrop-blur-sm motion-safe:animate-fade-in"
+              className="absolute inset-0 bg-black/55 backdrop-blur-sm motion-safe:animate-fade-in"
             />
             <div className="absolute inset-y-0 end-0 flex bg-card shadow-2xl shadow-foreground/20 motion-safe:animate-slide-in-drawer">
               <button

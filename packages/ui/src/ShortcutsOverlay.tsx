@@ -62,7 +62,7 @@ export function ShortcutsOverlay({
       <div
         aria-hidden
         onClick={onClose}
-        className="absolute inset-0 bg-foreground/30 backdrop-blur-sm motion-safe:animate-fade-in"
+        className="absolute inset-0 bg-black/55 backdrop-blur-sm motion-safe:animate-fade-in"
       />
       <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-2xl shadow-foreground/20 ring-1 ring-foreground/[0.06] motion-safe:animate-scale-in">
         <div className="flex items-center justify-between px-6 pt-5 pb-3">

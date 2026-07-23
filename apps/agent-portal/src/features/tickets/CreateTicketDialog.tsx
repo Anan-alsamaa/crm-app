@@ -92,7 +92,14 @@ function IncludeToggle({
             : 'bg-card text-transparent ring-foreground/20',
         )}
       >
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-3 w-3" aria-hidden>
+        <svg
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          className="h-3 w-3"
+          aria-hidden
+        >
           <path d="m3 8 3.5 3.5L13 5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </span>
@@ -184,7 +191,7 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 p-4 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

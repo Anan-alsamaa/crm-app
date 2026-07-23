@@ -180,7 +180,7 @@ export function AppShell({
           aria-hidden
           onClick={() => setOpen(false)}
           className={cn(
-            'absolute inset-0 bg-foreground/30 backdrop-blur-sm transition-opacity duration-medium ease-out',
+            'absolute inset-0 bg-black/55 backdrop-blur-sm transition-opacity duration-medium ease-out',
             open ? 'opacity-100' : 'opacity-0',
           )}
         />

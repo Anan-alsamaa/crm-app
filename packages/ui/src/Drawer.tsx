@@ -74,7 +74,7 @@ export function Drawer({
       <div
         aria-hidden
         onClick={onClose}
-        className="absolute inset-0 bg-foreground/20 backdrop-blur-md motion-safe:animate-fade-in"
+        className="absolute inset-0 bg-black/55 backdrop-blur-md motion-safe:animate-fade-in"
       />
 
       {/* Panel — anchored to the end edge, floats with soft shadow */}
