@@ -436,7 +436,7 @@ export function Inbox() {
                               )}
                               {unread && (
                                 <span
-                                  className="ms-auto inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-2xs font-semibold text-primary-foreground tabular-nums"
+                                  className="ms-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground tabular-nums shadow-sm shadow-primary/30"
                                   aria-label={`${c.unread_count_agent} unread`}
                                 >
                                   {c.unread_count_agent}

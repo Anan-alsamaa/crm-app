@@ -88,6 +88,8 @@ module.exports = {
           foreground: 'oklch(var(--secondary-brand-foreground) / <alpha-value>)',
         },
         display: 'oklch(var(--display) / <alpha-value>)',
+        // Incoming chat bubble surface (messenger-vibrant direction).
+        bubble: 'oklch(var(--bubble) / <alpha-value>)',
         // Per-vendor branding hook (legacy + runtime override).
         brand: {
           primary: 'var(--brand-primary, oklch(0.84 0.19 80.46))',

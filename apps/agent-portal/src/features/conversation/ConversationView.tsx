@@ -560,7 +560,7 @@ export function ConversationView({
           className="relative flex-1 overflow-auto"
           style={{
             background:
-              'radial-gradient(at 8% 8%, oklch(var(--primary) / 0.04) 0%, transparent 40%), radial-gradient(at 92% 92%, oklch(var(--secondary-brand) / 0.04) 0%, transparent 45%)',
+              'radial-gradient(at 8% 8%, oklch(var(--primary) / 0.06) 0%, transparent 40%), radial-gradient(at 92% 92%, oklch(var(--secondary-brand) / 0.05) 0%, transparent 45%)',
           }}
         >
           {/* min-h-full + justify-end bottom-anchors the thread: a short
@@ -642,13 +642,13 @@ export function ConversationView({
                                     className={cn(
                                       'px-4 py-2.5 text-[15px] leading-relaxed break-words text-start max-w-fit',
                                       'motion-safe:animate-message-in',
-                                      // Depth: the dark agent bubble lifts; the light
-                                      // customer bubble gets a hairline edge. No card chrome.
+                                      // Messenger-vibrant: outgoing = filled brand teal,
+                                      // incoming = soft periwinkle. No card chrome.
                                       isNote
                                         ? 'bg-warning/15 text-warning-foreground ring-1 ring-warning/20'
                                         : isAgent
-                                          ? 'bg-foreground text-background shadow-md shadow-foreground/15'
-                                          : 'bg-secondary text-foreground ring-1 ring-foreground/[0.04]',
+                                          ? 'bg-primary text-primary-foreground shadow-md shadow-primary/25'
+                                          : 'bg-bubble text-foreground',
                                       // Smooth pill shape, tail only on the LAST bubble of a run.
                                       'rounded-[18px]',
                                       isLast && isAgent && 'rounded-ee-sm',
@@ -706,7 +706,7 @@ export function ConversationView({
                   phone={c?.contact?.phone}
                   size="sm"
                 />
-                <div className="rounded-[18px] rounded-es-sm bg-secondary px-3.5 py-2.5">
+                <div className="rounded-[18px] rounded-es-sm bg-bubble px-3.5 py-2.5">
                   <span className="flex items-center gap-1" aria-hidden>
                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse" />
                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse [animation-delay:120ms]" />

@@ -12,16 +12,20 @@ match that ambient light; dark mode is available via `[data-theme='dark']` on
 OKLCH throughout. Token names follow shadcn semantic slots so primitives map
 1:1 to community patterns.
 
-**Brand color**: `#0F8D8F` ≈ `oklch(0.58 0.097 196)` — a deep, calm teal.
-This is the YIJI house tenant default and the value referenced as
-`--primary` everywhere. Per-tenant override via `--brand-primary` on
-`<html>`.
+**Brand color**: YIJI teal, vivid step — `oklch(0.58 0.125 192)` (derived
+from house `#0F8D8F` by raising chroma at the same lightness, so contrast
+math is unchanged). This is the tenant default referenced as `--primary`
+everywhere. Per-tenant override via `--brand-primary` on `<html>`.
 
-**Color strategy**: **Restrained** (impeccable product register default).
-The brand color carries the rail surface, the focus ring, the active-row
-fill, the accent word in display headlines, and the primary subtle. CTAs
-themselves default to near-black (`--foreground`) per the host-page
-discipline, so the brand never has to fight a button for attention.
+**Color strategy**: **Committed on conversation surfaces, Restrained
+elsewhere** (messenger-vibrant direction, user-approved 2026-07-23,
+reference: modern messenger UIs). In the inbox/thread the brand teal
+carries the outgoing message bubbles, the unread count badges, the send
+button, and selection; incoming bubbles sit on the cool `--bubble`
+periwinkle so the two directions read instantly. Colorful deterministic
+avatar hues are part of the vibrancy. Outside conversation surfaces the
+restrained rules still apply: CTAs default to near-black
+(`--foreground`), decorative color stays banned.
 
 ### Light tokens (default)
 
@@ -31,9 +35,10 @@ discipline, so the brand never has to fight a button for attention.
 | `--foreground`         | `0.20 0.005 250`        | Body text, charcoal with slight cool — also the default CTA fill |
 | `--card`               | `1 0 0`                 | White surface that floats above the tinted canvas                |
 | `--popover`            | `1 0 0`                 | Dropdowns, dialogs                                               |
-| `--primary`            | `0.58 0.097 196`        | YIJI teal `#0F8D8F` (or vendor `--brand-primary`)                |
+| `--primary`            | `0.58 0.125 192`        | YIJI teal, vivid (or vendor `--brand-primary`)                   |
 | `--primary-foreground` | `1 0 0`                 | Text on primary fills                                            |
-| `--primary-subtle`     | `0.58 0.097 196 / 0.12` | Selected row, unread pill bg, brand-accent fills                 |
+| `--primary-subtle`     | `0.58 0.125 192 / 0.12` | Selected row, unread pill bg, brand-accent fills                 |
+| `--bubble`             | `0.945 0.02 255`        | Incoming chat bubble — cool periwinkle vs the teal outgoing      |
 | `--secondary`          | `0.96 0.005 230`        | Hover surface, ghost-button bg, soft tints                       |
 | `--muted`              | `0.96 0.005 230`        | Same as secondary for impeccable-product simplicity              |
 | `--muted-foreground`   | `0.46 0.010 250`        | Meta text, labels                                                |
@@ -42,7 +47,7 @@ discipline, so the brand never has to fight a button for attention.
 | `--warning`            | `0.70 0.16 70`          | Pending status, SLA warning                                      |
 | `--border`             | `0.22 0.005 250 / 0.12` | Hairline at 12% opacity                                          |
 | `--border-strong`      | `0.22 0.005 250 / 0.20` | Form fields, dividers under hover                                |
-| `--ring`               | `0.58 0.097 196`        | Focus ring — same as primary                                     |
+| `--ring`               | `0.58 0.125 192`        | Focus ring — same as primary                                     |
 | `--secondary-brand`    | `0.66 0.22 0`           | Coral pink — eyebrow pills, "new" badges, urgent priority        |
 | `--display`            | `0.16 0.01 250`         | Punchier ink for hero typography (h1/h2 in PageHeader)           |
 | `--rail`               | `0.22 0.045 196`        | Dark YIJI teal — the rail / nav sidebar                          |
