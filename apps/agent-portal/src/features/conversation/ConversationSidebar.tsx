@@ -154,16 +154,12 @@ export function ConversationSidebar({
 
   return (
     <aside
-      className={cn(
-        'relative shrink-0 overflow-auto border-s border-border bg-card/30',
-        widthClass,
-        className,
-      )}
+      className={cn('relative shrink-0 space-y-3 overflow-auto px-3 pb-8', widthClass, className)}
       {...sizeProps}
     >
       {handle}
       {/* Identity hero — avatar in an aurora gradient ring over a glow halo. */}
-      <div className="relative overflow-hidden px-6 pb-6 pt-8">
+      <div className="relative -mx-3 overflow-hidden px-6 pb-6 pt-8">
         <div
           aria-hidden
           className="absolute inset-0"
@@ -194,7 +190,7 @@ export function ConversationSidebar({
 
       {/* Contact details — editable: agents can correct the customer's name,
           email or phone; saving persists to Directus and updates everywhere. */}
-      <section className="border-t border-border px-6 py-4">
+      <section className="rounded-2xl bg-card p-4 shadow-soft">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
             {t('sidebar.contact')}
@@ -282,18 +278,18 @@ export function ConversationSidebar({
       </section>
 
       {/* Tags — the single, interactive home for conversation tags. */}
-      <section className="border-t border-border px-6 py-4">
+      <section className="rounded-2xl bg-card p-4 shadow-soft">
         <ConversationTags conversation={c} />
       </section>
 
-      {/* Custom fields (per-conversation) */}
-      <section className="border-t border-border px-6 py-4">
+      {/* Custom fields (per-conversation) — card hides when nothing renders. */}
+      <section className="rounded-2xl bg-card p-4 shadow-soft empty:hidden">
         <CustomFieldsSection entityType="conversation" entityId={conversationId} />
       </section>
 
       {/* Orders — the customer's latest order (live Yiji data), right in the inbox */}
       {contact.data?.external_customer_id && contact.data?.vendor?.yiji_vendor_id && (
-        <section className="border-t border-border px-6 py-4">
+        <section className="rounded-2xl bg-card p-4 shadow-soft">
           <LatestOrder
             vendorId={contact.data.vendor.yiji_vendor_id}
             customerId={contact.data.external_customer_id}
@@ -302,7 +298,7 @@ export function ConversationSidebar({
       )}
 
       {/* AI assistance */}
-      <section className="border-t border-border px-6 py-4">
+      <section className="rounded-2xl bg-card p-4 shadow-soft">
         <AiPanel
           key={conversationId}
           conversationId={conversationId}
@@ -317,7 +313,7 @@ export function ConversationSidebar({
 
       {/* Internal notes — agent-only side conversation. Authored by the team,
           rendered out of the customer thread so they can't bleed in visually. */}
-      <section className="border-t border-border px-6 py-4">
+      <section className="rounded-2xl bg-card p-4 shadow-soft">
         <SectionLabel count={notes?.length}>
           {t('sidebar.internalNotes', { defaultValue: 'Internal notes' })}
         </SectionLabel>
@@ -368,7 +364,7 @@ export function ConversationSidebar({
       </section>
 
       {/* Linked tickets — borderless rows with hover lift, not stacked cards. */}
-      <section className="border-t border-border px-6 py-4 pb-8">
+      <section className="rounded-2xl bg-card p-4 shadow-soft">
         <SectionLabel count={tickets.data?.length}>{t('sidebar.linkedTickets')}</SectionLabel>
         {tickets.isLoading ? (
           <Spinner />

@@ -638,17 +638,17 @@ export function ConversationView({
                                     className={cn(
                                       'px-4 py-2.5 text-[15px] leading-relaxed break-words text-start max-w-fit',
                                       'motion-safe:animate-message-in',
-                                      // Messenger-vibrant: outgoing = filled brand teal,
-                                      // incoming = soft periwinkle. No card chrome.
+                                      // Instagram-DM style: outgoing = aurora gradient
+                                      // bubble, incoming = soft solid bubble. Big rounding.
                                       isNote
                                         ? 'bg-warning/15 text-warning-foreground ring-1 ring-warning/20'
                                         : isAgent
-                                          ? 'bg-primary text-primary-foreground shadow-md shadow-primary/25'
+                                          ? 'bg-gradient-to-br from-primary to-violet text-primary-foreground shadow-md shadow-violet/25'
                                           : 'bg-bubble text-foreground',
                                       // Smooth pill shape, tail only on the LAST bubble of a run.
-                                      'rounded-[18px]',
-                                      isLast && isAgent && 'rounded-ee-sm',
-                                      isLast && !isAgent && 'rounded-es-sm',
+                                      'rounded-[22px]',
+                                      isLast && isAgent && 'rounded-ee-md',
+                                      isLast && !isAgent && 'rounded-es-md',
                                       // Optimistic message: dim until the server confirms.
                                       m.pending && 'opacity-60',
                                     )}
@@ -702,7 +702,7 @@ export function ConversationView({
                   phone={c?.contact?.phone}
                   size="sm"
                 />
-                <div className="rounded-[18px] rounded-es-sm bg-bubble px-3.5 py-2.5">
+                <div className="rounded-[22px] rounded-es-md bg-bubble px-3.5 py-2.5">
                   <span className="flex items-center gap-1" aria-hidden>
                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse" />
                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse [animation-delay:120ms]" />
@@ -759,11 +759,10 @@ export function ConversationView({
 
             <div
               className={cn(
-                'group relative rounded-2xl transition-[box-shadow,background-color] duration-fast ease-out',
-                'ring-1 ring-foreground/[0.05]',
-                internalNote ? 'bg-warning/10' : 'bg-card/70 backdrop-blur',
-                // Confident teal lift on focus: brand glow + a 2px brand ring.
-                'focus-within:bg-card focus-within:shadow-lg focus-within:shadow-primary/15 focus-within:ring-2 focus-within:ring-primary/40',
+                'group relative rounded-[26px] transition-[box-shadow,background-color] duration-fast ease-out',
+                internalNote ? 'bg-warning/10' : 'bg-card shadow-soft',
+                // Confident aurora lift on focus: glow + a 2px brand ring.
+                'focus-within:shadow-lg focus-within:shadow-primary/15 focus-within:ring-2 focus-within:ring-primary/40',
                 internalNote && 'focus-within:ring-warning/50',
               )}
             >
@@ -904,7 +903,7 @@ export function ConversationView({
                     'disabled:opacity-40 disabled:cursor-not-allowed',
                     internalNote
                       ? 'bg-warning text-warning-foreground hover:enabled:shadow-warning/30'
-                      : 'bg-primary text-primary-foreground hover:bg-primary/90 hover:enabled:shadow-primary/40',
+                      : 'bg-gradient-to-br from-primary to-violet text-primary-foreground hover:brightness-110 hover:enabled:shadow-violet/40',
                   )}
                 >
                   <svg
