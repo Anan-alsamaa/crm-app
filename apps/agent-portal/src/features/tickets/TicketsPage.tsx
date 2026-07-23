@@ -5,7 +5,6 @@ import {
   ArrowLeftIcon,
   Avatar,
   Button,
-  CloseIcon,
   cn,
   formatRelative,
   Pill,
@@ -30,10 +29,9 @@ import {
 } from './api.js';
 import { useAgents, useTeamOptions } from '../inbox/api.js';
 import { NewTicketDialog } from './NewTicketDialog.js';
+import { TicketAttachments } from './TicketAttachments.js';
 import { resolveMentions } from '../conversation/mentions.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
-
-const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_URL ?? 'http://localhost:8055';
 
 const STATUSES: TicketStatus[] = ['new', 'open', 'pending', 'resolved', 'closed'];
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
@@ -583,12 +581,21 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
               />
             </div>
           </section>
+        </aside>
 
-          {/* Attachments — agent-uploaded files linked via tickets_files. */}
+        {/* Main column — the ticket narrative: attachments + notes + history. */}
+        <div className="min-w-0 space-y-6 lg:order-1">
+          {/* Attachments — front and center with live image previews, so the
+              agent sees what was shared without clicking anything. */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">
                 {t('tickets.attachments', { defaultValue: 'Attachments' })}
+                {tk.attachments && tk.attachments.length > 0 && (
+                  <span className="ms-2 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary-subtle px-1.5 text-xs font-semibold tabular-nums text-primary">
+                    {tk.attachments.length}
+                  </span>
+                )}
               </h3>
               <input
                 ref={fileInputRef}
@@ -601,7 +608,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-border px-2.5 text-xs text-muted-foreground transition-colors duration-fast ease-out hover:border-primary/40 hover:text-foreground disabled:opacity-50"
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-dashed border-border-strong px-3 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:border-primary/50 hover:text-foreground disabled:opacity-50"
               >
                 {uploading ? (
                   <Spinner size={13} />
@@ -614,48 +621,21 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
               </button>
             </div>
             {tk.attachments && tk.attachments.length > 0 ? (
-              <ul className="flex flex-wrap gap-2">
-                {tk.attachments.map((a) => (
-                  <li
-                    key={a.id}
-                    className="group inline-flex max-w-[16rem] items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 text-xs text-foreground ring-1 ring-foreground/[0.05]"
-                  >
-                    <a
-                      href={a.file ? `${DIRECTUS_URL}/assets/${a.file.id}?download` : undefined}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="truncate hover:underline"
-                    >
-                      {a.file?.filename ??
-                        t('conversation.attachment', { defaultValue: 'Attachment' })}
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void removeAttachment
-                          .mutateAsync({ junctionId: a.id, ticketId: tk.id })
-                          .catch(() => toast.error(t('errors.updateFailed', { ns: 'common' })))
-                      }
-                      aria-label={t('conversation.removeAttachment', {
-                        defaultValue: 'Remove attachment',
-                      })}
-                      className="shrink-0 text-muted-foreground transition-colors duration-fast hover:text-foreground"
-                    >
-                      <CloseIcon size={12} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <TicketAttachments
+                attachments={tk.attachments}
+                onRemove={(junctionId) =>
+                  void removeAttachment
+                    .mutateAsync({ junctionId, ticketId: tk.id })
+                    .catch(() => toast.error(t('errors.updateFailed', { ns: 'common' })))
+                }
+              />
             ) : (
               <p className="text-xs text-muted-foreground">
                 {t('tickets.noAttachments', { defaultValue: 'No attachments yet.' })}
               </p>
             )}
           </section>
-        </aside>
 
-        {/* Main column — the ticket narrative: notes + history. */}
-        <div className="min-w-0 space-y-6 lg:order-1">
           {/* Internal note composer — appends a 'commented' event to the history. */}
           <section className="space-y-2">
             <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">

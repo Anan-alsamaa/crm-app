@@ -138,7 +138,7 @@ export function ConversationToolbar({
 
   return (
     <>
-      <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3 py-2 sm:px-5">
+      <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-card/40 px-3 py-2 backdrop-blur sm:px-5">
         {/* Back to inbox list — mobile single-column only. */}
         {onBack && (
           <button
@@ -155,15 +155,19 @@ export function ConversationToolbar({
           priority live in the controls on the right, so no duplicate pills. */}
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <span className="relative shrink-0">
-            <Avatar
-              name={conversation.contact?.name}
-              email={conversation.contact?.email}
-              phone={conversation.contact?.phone}
-              size="md"
-            />
+            <span className="block rounded-full bg-gradient-to-br from-primary to-violet p-[2px]">
+              <span className="block rounded-full bg-background p-[2px]">
+                <Avatar
+                  name={conversation.contact?.name}
+                  email={conversation.contact?.email}
+                  phone={conversation.contact?.phone}
+                  size="md"
+                />
+              </span>
+            </span>
             <span
               className={cn(
-                'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-card',
+                'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-background',
                 statusDot[conversation.status],
               )}
               aria-hidden
@@ -201,7 +205,7 @@ export function ConversationToolbar({
           the thread below). Selects are grouped into one subtle cluster so they
           read as conversation properties rather than scattered controls. */}
         <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <div className="flex flex-wrap items-center gap-0.5 rounded-lg bg-secondary/50 px-1 py-0.5">
+          <div className="flex flex-wrap items-center gap-0.5 rounded-xl bg-card/60 px-1 py-0.5 ring-1 ring-border">
             <GhostSelect
               size="sm"
               label={t('conversation.status')}

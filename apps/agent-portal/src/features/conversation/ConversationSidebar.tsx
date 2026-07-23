@@ -32,10 +32,10 @@ interface Props {
 
 function SectionLabel({ children, count }: { children: React.ReactNode; count?: number }) {
   return (
-    <h3 className="mb-3 flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+    <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
       <span>{children}</span>
       {count !== undefined && count > 0 && (
-        <span className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-semibold tabular-nums text-muted-foreground">
+        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary-subtle px-1.5 text-xs font-semibold tabular-nums text-primary">
           {count}
         </span>
       )}
@@ -155,25 +155,29 @@ export function ConversationSidebar({
   return (
     <aside className={cn('relative shrink-0 overflow-auto', widthClass, className)} {...sizeProps}>
       {handle}
-      {/* Identity — big avatar in a mesh halo, no border below. */}
-      <div className="relative overflow-hidden px-6 pb-6 pt-7">
+      {/* Identity hero — avatar in an aurora gradient ring over a glow halo. */}
+      <div className="relative overflow-hidden px-6 pb-6 pt-8">
         <div
           aria-hidden
-          className="absolute inset-0 opacity-90"
+          className="absolute inset-0"
           style={{
             background:
-              'radial-gradient(at 0% 0%, oklch(var(--primary) / 0.10) 0%, transparent 60%), radial-gradient(at 100% 100%, oklch(var(--secondary-brand) / 0.10) 0%, transparent 65%)',
+              'radial-gradient(at 15% 0%, oklch(var(--primary) / 0.18) 0%, transparent 55%), radial-gradient(at 100% 10%, oklch(var(--violet) / 0.15) 0%, transparent 55%), radial-gradient(at 60% 110%, oklch(var(--magenta) / 0.12) 0%, transparent 60%)',
           }}
         />
         <div className="relative flex flex-col items-center gap-3 text-center">
-          <Avatar
-            name={c.contact?.name}
-            email={c.contact?.email}
-            phone={c.contact?.phone}
-            size="lg"
-          />
+          <span className="rounded-full bg-gradient-to-br from-primary via-violet to-magenta p-[3px] shadow-lg shadow-primary/20">
+            <span className="block rounded-full bg-background p-[3px]">
+              <Avatar
+                name={c.contact?.name}
+                email={c.contact?.email}
+                phone={c.contact?.phone}
+                size="lg"
+              />
+            </span>
+          </span>
           <div className="space-y-1.5">
-            <h3 className="text-lg font-bold tracking-tight text-foreground">{contactName}</h3>
+            <h3 className="text-xl font-extrabold tracking-tight text-foreground">{contactName}</h3>
             <Pill tone="pink" size="sm">
               {t('sidebar.channelWidget')}
             </Pill>
@@ -183,9 +187,9 @@ export function ConversationSidebar({
 
       {/* Contact details — editable: agents can correct the customer's name,
           email or phone; saving persists to Directus and updates everywhere. */}
-      <section className="px-6 py-4">
+      <section className="border-t border-border px-6 py-4">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <h3 className="flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
             {t('sidebar.contact')}
           </h3>
           {c.contact?.id && !editing && (
@@ -271,18 +275,18 @@ export function ConversationSidebar({
       </section>
 
       {/* Tags — the single, interactive home for conversation tags. */}
-      <section className="px-6 py-4">
+      <section className="border-t border-border px-6 py-4">
         <ConversationTags conversation={c} />
       </section>
 
       {/* Custom fields (per-conversation) */}
-      <section className="px-6 py-4">
+      <section className="border-t border-border px-6 py-4">
         <CustomFieldsSection entityType="conversation" entityId={conversationId} />
       </section>
 
       {/* Orders — the customer's latest order (live Yiji data), right in the inbox */}
       {contact.data?.external_customer_id && contact.data?.vendor?.yiji_vendor_id && (
-        <section className="px-6 py-4">
+        <section className="border-t border-border px-6 py-4">
           <LatestOrder
             vendorId={contact.data.vendor.yiji_vendor_id}
             customerId={contact.data.external_customer_id}
@@ -291,7 +295,7 @@ export function ConversationSidebar({
       )}
 
       {/* AI assistance */}
-      <section className="px-6 py-4">
+      <section className="border-t border-border px-6 py-4">
         <AiPanel
           key={conversationId}
           conversationId={conversationId}
@@ -306,7 +310,7 @@ export function ConversationSidebar({
 
       {/* Internal notes — agent-only side conversation. Authored by the team,
           rendered out of the customer thread so they can't bleed in visually. */}
-      <section className="px-6 py-4">
+      <section className="border-t border-border px-6 py-4">
         <SectionLabel count={notes?.length}>
           {t('sidebar.internalNotes', { defaultValue: 'Internal notes' })}
         </SectionLabel>
@@ -315,7 +319,7 @@ export function ConversationSidebar({
             {notes.map((n) => (
               <li
                 key={n.id}
-                className="group relative rounded-lg border-s-2 border-warning/50 bg-warning/10 ps-3 pe-3 py-2.5"
+                className="group relative rounded-xl bg-warning/10 px-3 py-2.5 ring-1 ring-warning/20"
               >
                 <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
                   {n.content}
@@ -357,7 +361,7 @@ export function ConversationSidebar({
       </section>
 
       {/* Linked tickets — borderless rows with hover lift, not stacked cards. */}
-      <section className="px-6 py-4 pb-8">
+      <section className="border-t border-border px-6 py-4 pb-8">
         <SectionLabel count={tickets.data?.length}>{t('sidebar.linkedTickets')}</SectionLabel>
         {tickets.isLoading ? (
           <Spinner />
