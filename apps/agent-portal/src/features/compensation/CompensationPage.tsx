@@ -195,7 +195,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="border-t border-border pt-4">
+    <div className="rounded-2xl bg-card p-4 shadow-soft">
       <h3 className="mb-2 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         {title}
       </h3>
@@ -624,7 +624,7 @@ function ActionPanel({ request }: { request: CompensationRow }) {
   const openAction = COMPENSATION_ACTIONS.find((a) => a.key === formKey) ?? null;
 
   return (
-    <div className="border-t border-border pt-4">
+    <div className="rounded-2xl bg-card p-4 shadow-soft">
       <h3 className="mb-3 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         {t('compensation.actions', { defaultValue: 'Actions' })}
       </h3>

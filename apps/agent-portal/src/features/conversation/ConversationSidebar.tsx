@@ -154,7 +154,13 @@ export function ConversationSidebar({
 
   return (
     <aside
-      className={cn('relative shrink-0 space-y-3 overflow-auto px-3 pb-8', widthClass, className)}
+      className={cn(
+        // .theme-light re-scopes the light token set to this subtree: a bright
+        // profile panel against the dark workspace (Instagram-style contrast).
+        'theme-light relative shrink-0 space-y-3 overflow-auto bg-background px-3 pb-8 text-foreground',
+        widthClass,
+        className,
+      )}
       {...sizeProps}
     >
       {handle}

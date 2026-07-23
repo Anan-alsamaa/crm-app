@@ -37,7 +37,8 @@
  * patterns. Values are OKLCH per impeccable.
  */
 
-:root[data-theme='light'] {
+:root[data-theme='light'],
+.theme-light {
   --radius: 0.5rem;
 
   /* Surface ramp — tinted canvas → pure white card → tinted popover. */

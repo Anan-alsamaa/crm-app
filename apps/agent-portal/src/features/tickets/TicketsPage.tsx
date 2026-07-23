@@ -448,7 +448,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         {/* Rail — properties, SLA, attachments. */}
         <aside className="space-y-5 lg:order-2">
           {/* Properties — stacked selects + the mark-responded CTA. */}
-          <section className="space-y-3 border-t border-border pt-4">
+          <section className="space-y-3 rounded-2xl bg-card p-4 shadow-soft">
             <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               {t('tickets.properties', { defaultValue: 'Properties' })}
             </h3>
@@ -530,7 +530,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
               // #7 — set apart from the status control above with its own label so
               // it's clear this only stops the SLA timer; it does not resolve or
               // close the ticket.
-              <div className="space-y-1.5 border-t border-border pt-3">
+              <div className="space-y-1.5 rounded-xl bg-secondary/40 p-3">
                 <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   {t('tickets.firstResponse', { defaultValue: 'First response' })}
                 </span>
@@ -765,7 +765,7 @@ function SlaCard({
   metLabel?: string;
 }) {
   return (
-    <div className="border-t border-border pt-4">
+    <div className="rounded-2xl bg-card p-4 shadow-soft">
       <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </div>

@@ -390,7 +390,7 @@ function ConversationReport({
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* By status */}
-        <div className="border-t border-border pt-4">
+        <div className="rounded-2xl bg-card p-4 shadow-soft">
           <h3 className="mb-3 text-sm font-semibold tracking-tight text-foreground">
             {t('agentReports.byStatus', { defaultValue: 'By status' })}
           </h3>
@@ -404,7 +404,7 @@ function ConversationReport({
           </ul>
         </div>
         {/* By priority */}
-        <div className="border-t border-border pt-4">
+        <div className="rounded-2xl bg-card p-4 shadow-soft">
           <h3 className="mb-3 text-sm font-semibold tracking-tight text-foreground">
             {t('agentReports.byPriority', { defaultValue: 'By priority' })}
           </h3>

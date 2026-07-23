@@ -96,7 +96,7 @@ function RankList({
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="border-t border-border pt-5">
+    <section className="rounded-2xl bg-card p-5 shadow-soft">
       <h2 className="mb-4 text-sm font-semibold tracking-tight text-foreground">{title}</h2>
       {children}
     </section>

@@ -53,8 +53,7 @@ export interface AppShellProps {
   children: ReactNode;
 }
 
-const RAIL_CLASS =
-  'relative z-30 flex shrink-0 flex-col bg-rail text-rail-foreground border-e border-rail-border';
+const RAIL_CLASS = 'relative z-30 flex shrink-0 flex-col bg-rail text-rail-foreground';
 
 export function AppShell({
   rail,
@@ -134,7 +133,8 @@ export function AppShell({
           {/* Flat full-bleed content column: slim navbar with a hairline, then
               the page directly on the workspace surface — no floating card. */}
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            <header className="flex h-14 shrink-0 items-center border-b border-border bg-background/80 px-4 backdrop-blur">
+            {/* Line-free navbar: tonal separation only, no hairline. */}
+            <header className="flex h-14 shrink-0 items-center bg-card/50 px-4 backdrop-blur">
               {topBar}
             </header>
             {/* Aurora workspace: drifting cyan/violet/magenta glows over the
@@ -156,7 +156,7 @@ export function AppShell({
   return (
     <div className="flex h-full flex-col text-foreground">
       {/* Mobile top bar */}
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-3">
+      <header className="flex h-14 shrink-0 items-center gap-2 bg-card px-3">
         <button
           type="button"
           onClick={() => setOpen(true)}
