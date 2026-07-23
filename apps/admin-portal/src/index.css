@@ -26,6 +26,7 @@
  * Primary = #0F8D8F (oklch 0.58 0.097 196).
  */
 
+:root,
 :root[data-theme='light'],
 .theme-light {
   --radius: 0.5rem;
@@ -72,7 +73,6 @@
 
 /* DEFAULT THEME — "midnight ink" (mirrors agent portal). Light via
    <html data-theme="light">. */
-:root,
 :root[data-theme='dark'] {
   --radius: 0.5rem;
   --background: 0.145 0.015 265;

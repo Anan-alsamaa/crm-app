@@ -37,6 +37,7 @@
  * patterns. Values are OKLCH per impeccable.
  */
 
+:root,
 :root[data-theme='light'],
 .theme-light {
   --radius: 0.5rem;
@@ -109,7 +110,6 @@
  * cyan-teal primary, coral second brand. Light stays available via
  * <html data-theme="light">.
  */
-:root,
 :root[data-theme='dark'] {
   --radius: 0.5rem;
   --background: 0.145 0.015 265;
