@@ -135,7 +135,7 @@ export function TeamsPage() {
         ) : (
           /* Dense list — one row per team. Members shown as a small avatar
              stack with an overflow count; no card chrome. */
-          <ul className="mx-auto max-w-5xl divide-y divide-border/50 overflow-hidden rounded-xl bg-card/50 ring-1 ring-border/60">
+          <ul className="mx-auto max-w-5xl divide-y divide-border overflow-hidden rounded-2xl bg-card/60 ring-1 ring-border shadow-soft">
             {teams.data.map((tm) => {
               const members = (users.data ?? []).filter((u) => u.team?.id === tm.id);
               const memberCount = members.length;

@@ -454,7 +454,7 @@ function ReportCard({
     <div
       className={cn(
         'flex flex-col gap-3 rounded-2xl bg-card/70 px-5 py-4',
-        'shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04]',
+        'shadow-soft ring-1 ring-foreground/[0.04]',
       )}
     >
       <div className="space-y-1">

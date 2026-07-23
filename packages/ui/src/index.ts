@@ -80,6 +80,7 @@ export { DrawerSection } from './DrawerSection.js';
 export type { DrawerSectionProps } from './DrawerSection.js';
 export { StatCard } from './StatCard.js';
 export type { StatCardProps } from './StatCard.js';
+export { TableSurface, Table, Th, Tr, Td } from './Table.js';
 export { YijiLogo } from './YijiLogo.js';
 export type { YijiLogoProps } from './YijiLogo.js';
 export { useResizable } from './useResizable.js';

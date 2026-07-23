@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cn, ErrorState, SelectMenu, Skeleton, Toolbar, ToolbarSpacer } from '@yiji/ui';
+import { cn, ErrorState, SelectMenu, Skeleton, StatCard, Toolbar, ToolbarSpacer } from '@yiji/ui';
 import { useDashboardMetrics, type DashboardMetrics } from './api.js';
 
 const RANGES = [7, 30, 90];
@@ -32,34 +32,7 @@ function Stat({
   accent?: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        'rounded-2xl px-5 py-4 shadow-sm shadow-foreground/[0.05] transition-shadow duration-fast ease-out',
-        accent ? 'bg-primary-subtle/50 ring-1 ring-primary/25' : 'bg-card/70 ring-1 ring-border/60',
-      )}
-    >
-      <div
-        className={cn(
-          'text-2xs font-semibold uppercase tracking-[0.12em]',
-          accent ? 'text-primary/80' : 'text-muted-foreground',
-        )}
-      >
-        {label}
-      </div>
-      <div
-        className={cn(
-          'mt-1.5 text-2xl font-bold tabular-nums tracking-tight',
-          accent ? 'text-primary' : 'text-foreground',
-        )}
-      >
-        {value}
-      </div>
-      {hint && (
-        <div className={cn('mt-0.5 text-xs', accent ? 'text-primary/70' : 'text-muted-foreground')}>
-          {hint}
-        </div>
-      )}
-    </div>
+    <StatCard label={label} value={value} caption={hint} tone={accent ? 'primary' : 'default'} />
   );
 }
 
@@ -123,7 +96,7 @@ function RankList({
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl bg-card/70 p-5 shadow-sm shadow-foreground/[0.05] ring-1 ring-border/60">
+    <section className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-border">
       <h2 className="mb-4 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {title}
       </h2>

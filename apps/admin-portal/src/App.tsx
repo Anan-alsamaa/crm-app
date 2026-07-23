@@ -131,29 +131,19 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
                     onClick={ctx.onNavigate}
                     className={({ isActive }) =>
                       cn(
-                        'group relative flex h-9 items-center rounded-md text-sm font-medium',
-                        'transition-[background-color,color] duration-fast ease-out',
+                        'group relative flex h-9 items-center rounded-lg text-sm',
+                        'transition-[background-color,color,box-shadow] duration-fast ease-out',
                         'hover:bg-rail-active hover:text-rail-active-foreground',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
                         isActive
-                          ? 'bg-rail-active text-rail-active-foreground'
-                          : 'text-rail-foreground/85',
+                          ? 'bg-rail-active font-semibold text-rail-active-foreground shadow-sm shadow-black/10'
+                          : 'font-medium text-rail-foreground/85',
                         isCollapsed ? 'justify-center px-0' : 'gap-3 px-2.5',
                       )
                     }
                   >
-                    {({ isActive }) => (
-                      <>
-                        {isActive && (
-                          <span
-                            aria-hidden
-                            className="absolute start-0 inset-y-2 w-0.5 rounded-full bg-primary"
-                          />
-                        )}
-                        <it.icon size={16} />
-                        {!isCollapsed && <span className="flex-1 truncate">{it.label}</span>}
-                      </>
-                    )}
+                    <it.icon size={16} />
+                    {!isCollapsed && <span className="flex-1 truncate">{it.label}</span>}
                   </NavLink>
                 </li>
               ))}
@@ -345,7 +335,10 @@ function Shell({ children }: { children: React.ReactNode }) {
               </div>
             }
           >
-            {children}
+            {/* Keyed on the route so each page settles up into place once. */}
+            <div key={location.pathname} className="h-full min-h-0 motion-safe:animate-rise-in">
+              {children}
+            </div>
           </Suspense>
         </ErrorBoundary>
       </AppShell>

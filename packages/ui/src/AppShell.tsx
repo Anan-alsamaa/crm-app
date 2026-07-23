@@ -149,7 +149,10 @@ export function AppShell({
             <header className="flex h-14 shrink-0 items-center border-b border-border px-4">
               {topBar}
             </header>
-            <main className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</main>
+            {/* Faint canvas tint so white cards float visibly above the page. */}
+            <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background/60">
+              {children}
+            </main>
           </div>
         </div>
       );

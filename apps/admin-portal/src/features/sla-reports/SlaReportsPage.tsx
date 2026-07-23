@@ -73,7 +73,7 @@ function SlaPill({ cell }: { cell: SlaCell }) {
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-xl bg-card px-4 py-3 ring-1 ring-border/60">
+    <div className="rounded-2xl bg-card px-4 py-3 ring-1 ring-border shadow-soft">
       <div className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
         {label}
       </div>
@@ -302,9 +302,9 @@ function HeadCell({ children, className }: { children: React.ReactNode; classNam
 function AgentTable({ agents, onDrill }: { agents: AgentSla[]; onDrill: (a: AgentSla) => void }) {
   const { t } = useTranslation();
   return (
-    <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border/60">
+    <div className="overflow-hidden rounded-2xl bg-card ring-1 ring-border shadow-soft">
       <table className="w-full text-sm">
-        <thead className="border-b border-border/60">
+        <thead className="border-b border-border">
           <tr>
             <HeadCell>{t('slaReports.colAgent', { defaultValue: 'Agent' })}</HeadCell>
             <HeadCell className="text-end">
@@ -398,9 +398,9 @@ function TicketTable({
           <span className="text-muted-foreground">{tickets.length}</span>
         </div>
       )}
-      <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border/60">
+      <div className="overflow-hidden rounded-2xl bg-card ring-1 ring-border shadow-soft">
         <table className="w-full text-sm">
-          <thead className="border-b border-border/60">
+          <thead className="border-b border-border">
             <tr>
               <HeadCell>{t('slaReports.colTicket', { defaultValue: 'Ticket' })}</HeadCell>
               <HeadCell>{t('slaReports.colPriority', { defaultValue: 'Priority' })}</HeadCell>

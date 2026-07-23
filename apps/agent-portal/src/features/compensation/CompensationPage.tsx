@@ -153,7 +153,7 @@ function QueueCard({ row, onOpen }: { row: CompensationRow; onOpen: () => void }
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full items-center gap-4 rounded-2xl bg-card/70 px-4 py-3 text-start ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] transition-colors duration-fast hover:bg-secondary/40"
+      className="flex w-full items-center gap-4 rounded-2xl bg-card/70 px-4 py-3 text-start ring-1 ring-foreground/[0.04] shadow-soft transition-colors duration-fast hover:bg-secondary/40"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -195,7 +195,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl bg-card/70 px-5 py-4 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04]">
+    <div className="rounded-2xl bg-card/70 px-5 py-4 ring-1 ring-foreground/[0.04] shadow-soft">
       <h3 className="mb-2 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         {title}
       </h3>
@@ -624,7 +624,7 @@ function ActionPanel({ request }: { request: CompensationRow }) {
   const openAction = COMPENSATION_ACTIONS.find((a) => a.key === formKey) ?? null;
 
   return (
-    <div className="rounded-2xl bg-card/70 px-5 py-4 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04]">
+    <div className="rounded-2xl bg-card/70 px-5 py-4 ring-1 ring-foreground/[0.04] shadow-soft">
       <h3 className="mb-3 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         {t('compensation.actions', { defaultValue: 'Actions' })}
       </h3>

@@ -130,168 +130,173 @@ export function ConversationToolbar({
   // no ticket yet. Suppressed once dismissed, once a ticket exists, or when we
   // lack the ids needed to create one.
   const showTicketPrompt =
-    isWrappedUp && !existingTicket && !promptDismissed && canCreateTicket && !linkedTickets.isLoading;
+    isWrappedUp &&
+    !existingTicket &&
+    !promptDismissed &&
+    canCreateTicket &&
+    !linkedTickets.isLoading;
 
   return (
     <>
-    <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/50 px-3 py-2 sm:px-5">
-      {/* Back to inbox list — mobile single-column only. */}
-      {onBack && (
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label={t('conversation.backToInbox', { defaultValue: 'Back to inbox' })}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors duration-fast ease-out hover:bg-secondary active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 lg:hidden"
-        >
-          <ArrowLeftIcon size={18} className="rtl:-scale-x-100" />
-        </button>
-      )}
+      <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3 py-2 sm:px-5">
+        {/* Back to inbox list — mobile single-column only. */}
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label={t('conversation.backToInbox', { defaultValue: 'Back to inbox' })}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors duration-fast ease-out hover:bg-secondary active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 lg:hidden"
+          >
+            <ArrowLeftIcon size={18} className="rtl:-scale-x-100" />
+          </button>
+        )}
 
-      {/* Identity — clean: a status-dotted avatar + name + email. The status &
+        {/* Identity — clean: a status-dotted avatar + name + email. The status &
           priority live in the controls on the right, so no duplicate pills. */}
-      <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        <span className="relative shrink-0">
-          <Avatar
-            name={conversation.contact?.name}
-            email={conversation.contact?.email}
-            phone={conversation.contact?.phone}
-            size="md"
-          />
-          <span
-            className={cn(
-              'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-card',
-              statusDot[conversation.status],
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <span className="relative shrink-0">
+            <Avatar
+              name={conversation.contact?.name}
+              email={conversation.contact?.email}
+              phone={conversation.contact?.phone}
+              size="md"
+            />
+            <span
+              className={cn(
+                'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-card',
+                statusDot[conversation.status],
+              )}
+              aria-hidden
+            />
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-foreground">{primaryLabel}</div>
+            {statusLine && (
+              <div className="truncate text-xs text-muted-foreground">{statusLine}</div>
             )}
-            aria-hidden
-          />
-        </span>
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-foreground">{primaryLabel}</div>
-          {statusLine && <div className="truncate text-xs text-muted-foreground">{statusLine}</div>}
-          {/* At-a-glance tags (read-only). Hidden on small screens to keep the
+            {/* At-a-glance tags (read-only). Hidden on small screens to keep the
               identity compact; managed in the details sidebar. */}
-          {tagChips.length > 0 && (
-            <div className="mt-1 hidden flex-wrap items-center gap-1 lg:flex">
-              {tagChips.map((j) => (
-                <span
-                  key={j.id}
-                  className="inline-flex items-center gap-1 rounded-full bg-secondary px-1.5 py-px text-[10px] font-medium text-foreground/75"
-                >
+            {tagChips.length > 0 && (
+              <div className="mt-1 hidden flex-wrap items-center gap-1 lg:flex">
+                {tagChips.map((j) => (
                   <span
-                    aria-hidden
-                    className="h-1 w-1 shrink-0 rounded-full"
-                    style={{ background: j.tags_id!.color ?? '#94a3b8' }}
-                  />
-                  <span className="max-w-[8rem] truncate">{j.tags_id!.name}</span>
-                </span>
-              ))}
-            </div>
-          )}
+                    key={j.id}
+                    className="inline-flex items-center gap-1 rounded-full bg-secondary px-1.5 py-px text-[10px] font-medium text-foreground/75"
+                  >
+                    <span
+                      aria-hidden
+                      className="h-1 w-1 shrink-0 rounded-full"
+                      style={{ background: j.tags_id!.color ?? '#94a3b8' }}
+                    />
+                    <span className="max-w-[8rem] truncate">{j.tags_id!.name}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Properties + actions. Wraps to a second line on narrow widths (the bar
+        {/* Properties + actions. Wraps to a second line on narrow widths (the bar
           grows with it — `min-h-14`, not a fixed height — so it never overlaps
           the thread below). Selects are grouped into one subtle cluster so they
           read as conversation properties rather than scattered controls. */}
-      <div className="flex flex-wrap items-center justify-end gap-1.5">
-        <div className="flex flex-wrap items-center gap-0.5 rounded-lg bg-secondary/50 px-1 py-0.5">
-          <GhostSelect
-            size="sm"
-            label={t('conversation.status')}
-            aria-label={t('conversation.status')}
-            value={conversation.status}
-            display={t(`status.${conversation.status}`, { ns: 'common' })}
-            onChange={(v) => void patch({ status: v as ConversationStatus })}
-            options={STATUSES.map((s) => ({
-              value: s,
-              label: t(`status.${s}`, { ns: 'common' }),
-            }))}
-          />
-          <GhostSelect
-            size="sm"
-            label={t('conversation.priority')}
-            aria-label={t('conversation.priority')}
-            value={conversation.priority}
-            display={t(`priority.${conversation.priority}`, { ns: 'common' })}
-            onChange={(v) => void patch({ priority: v as Priority })}
-            options={PRIORITIES.map((p) => ({
-              value: p,
-              label: t(`priority.${p}`, { ns: 'common' }),
-            }))}
-          />
-          <GhostSelect
-            size="sm"
-            label={t('conversation.agent')}
-            aria-label={t('conversation.agent')}
-            value={conversation.assigned_agent ?? ''}
-            display={agentLabel}
-            onChange={(v) => void patch({ assigned_agent: v || null })}
-            options={[
-              { value: '', label: t('conversation.unassigned') },
-              ...(agents.data ?? []).map((a) => ({
-                value: a.id,
-                label: a.first_name ?? a.email ?? '',
-              })),
-            ]}
-          />
-          <GhostSelect
-            size="sm"
-            label={t('conversation.team')}
-            aria-label={t('conversation.team')}
-            value={conversation.assigned_team ?? ''}
-            display={teamLabel}
-            onChange={(v) => void patch({ assigned_team: v || null })}
-            options={[
-              { value: '', label: t('conversation.noTeam') },
-              ...(teams.data ?? []).map((tm) => ({ value: tm.id, label: tm.name })),
-            ]}
-          />
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <div className="flex flex-wrap items-center gap-0.5 rounded-lg bg-secondary/50 px-1 py-0.5">
+            <GhostSelect
+              size="sm"
+              label={t('conversation.status')}
+              aria-label={t('conversation.status')}
+              value={conversation.status}
+              display={t(`status.${conversation.status}`, { ns: 'common' })}
+              onChange={(v) => void patch({ status: v as ConversationStatus })}
+              options={STATUSES.map((s) => ({
+                value: s,
+                label: t(`status.${s}`, { ns: 'common' }),
+              }))}
+            />
+            <GhostSelect
+              size="sm"
+              label={t('conversation.priority')}
+              aria-label={t('conversation.priority')}
+              value={conversation.priority}
+              display={t(`priority.${conversation.priority}`, { ns: 'common' })}
+              onChange={(v) => void patch({ priority: v as Priority })}
+              options={PRIORITIES.map((p) => ({
+                value: p,
+                label: t(`priority.${p}`, { ns: 'common' }),
+              }))}
+            />
+            <GhostSelect
+              size="sm"
+              label={t('conversation.agent')}
+              aria-label={t('conversation.agent')}
+              value={conversation.assigned_agent ?? ''}
+              display={agentLabel}
+              onChange={(v) => void patch({ assigned_agent: v || null })}
+              options={[
+                { value: '', label: t('conversation.unassigned') },
+                ...(agents.data ?? []).map((a) => ({
+                  value: a.id,
+                  label: a.first_name ?? a.email ?? '',
+                })),
+              ]}
+            />
+            <GhostSelect
+              size="sm"
+              label={t('conversation.team')}
+              aria-label={t('conversation.team')}
+              value={conversation.assigned_team ?? ''}
+              display={teamLabel}
+              onChange={(v) => void patch({ assigned_team: v || null })}
+              options={[
+                { value: '', label: t('conversation.noTeam') },
+                ...(teams.data ?? []).map((tm) => ({ value: tm.id, label: tm.name })),
+              ]}
+            />
+          </div>
+
+          {existingTicket ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => navigate(`/tickets/${existingTicket.id}`)}
+            >
+              {t('tickets.viewTicket', { defaultValue: 'View ticket' })}
+            </Button>
+          ) : (
+            // SC-013: a conversation carries at most one ticket. `existingTicket` is
+            // null while the linked-tickets query is still loading, so we must also
+            // gate on `!linkedTickets.isLoading` — otherwise this button is clickable
+            // during the load window and a duplicate ticket becomes reachable (and
+            // two agents on the same thread could both create one). This is a UX
+            // guard only; the authoritative backstop is a unique index on
+            // tickets.conversation owned by the infra/directus stream
+            // (directus/bootstrap/src/constraints.ts) — do NOT add the DB constraint here.
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              disabled={!canCreateTicket || linkedTickets.isLoading}
+              onClick={() => setOpenTicketDialog(true)}
+            >
+              + {t('tickets.createTitle')}
+            </Button>
+          )}
+
+          {/* Details / notes panel toggle — mobile single-column only. */}
+          {onToggleDetails && (
+            <button
+              type="button"
+              onClick={onToggleDetails}
+              aria-label={t('conversation.details', { defaultValue: 'Conversation details' })}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors duration-fast ease-out hover:bg-secondary active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 lg:hidden"
+            >
+              <InfoIcon size={18} />
+            </button>
+          )}
         </div>
-
-        {existingTicket ? (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => navigate(`/tickets/${existingTicket.id}`)}
-          >
-            {t('tickets.viewTicket', { defaultValue: 'View ticket' })}
-          </Button>
-        ) : (
-          // SC-013: a conversation carries at most one ticket. `existingTicket` is
-          // null while the linked-tickets query is still loading, so we must also
-          // gate on `!linkedTickets.isLoading` — otherwise this button is clickable
-          // during the load window and a duplicate ticket becomes reachable (and
-          // two agents on the same thread could both create one). This is a UX
-          // guard only; the authoritative backstop is a unique index on
-          // tickets.conversation owned by the infra/directus stream
-          // (directus/bootstrap/src/constraints.ts) — do NOT add the DB constraint here.
-          <Button
-            type="button"
-            variant="default"
-            size="sm"
-            disabled={!canCreateTicket || linkedTickets.isLoading}
-            onClick={() => setOpenTicketDialog(true)}
-          >
-            + {t('tickets.createTitle')}
-          </Button>
-        )}
-
-        {/* Details / notes panel toggle — mobile single-column only. */}
-        {onToggleDetails && (
-          <button
-            type="button"
-            onClick={onToggleDetails}
-            aria-label={t('conversation.details', { defaultValue: 'Conversation details' })}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors duration-fast ease-out hover:bg-secondary active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 lg:hidden"
-          >
-            <InfoIcon size={18} />
-          </button>
-        )}
       </div>
-
-    </div>
 
       {/* #6 — every chat should end as a ticket. When the conversation is
           resolved/closed with no ticket yet, surface a one-tap prompt to spin

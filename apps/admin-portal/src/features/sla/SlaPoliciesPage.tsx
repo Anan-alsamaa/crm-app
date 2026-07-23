@@ -226,7 +226,7 @@ export function SlaPoliciesPage() {
             {policies.data.map((p) => (
               <div
                 key={p.id}
-                className="group relative flex flex-col gap-4 rounded-2xl bg-card/70 px-5 py-5 shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04] transition-[box-shadow,transform,background-color] duration-fast ease-out hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px"
+                className="group relative flex flex-col gap-4 rounded-2xl bg-card/70 px-5 py-5 shadow-soft ring-1 ring-foreground/[0.04] transition-[box-shadow,transform,background-color] duration-fast ease-out hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">

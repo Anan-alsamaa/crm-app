@@ -417,7 +417,7 @@ function FieldRow({
     <div
       className={cn(
         'group flex items-start justify-between gap-4 rounded-2xl bg-card/70 px-5 py-4',
-        'shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04]',
+        'shadow-soft ring-1 ring-foreground/[0.04]',
         'transition-[box-shadow,transform,background-color] duration-fast ease-out',
         'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08]',
       )}

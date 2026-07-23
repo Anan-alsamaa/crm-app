@@ -70,7 +70,7 @@ export function ContactTags({ contact }: { contact: ContactRow }) {
   };
 
   return (
-    <section className="rounded-2xl bg-card/70 p-4 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04]">
+    <section className="rounded-2xl bg-card/70 p-4 ring-1 ring-foreground/[0.04] shadow-soft">
       <h2 className="mb-3 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         {t('sidebar.tags')}
       </h2>

@@ -136,7 +136,7 @@ export function AiPanel({ conversationId, vendorId, draft, locale, onReplySugges
   };
 
   return (
-    <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] px-5 py-4 space-y-4">
+    <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-5 py-4 space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {t('ai.title', { defaultValue: 'AI assistance' })}

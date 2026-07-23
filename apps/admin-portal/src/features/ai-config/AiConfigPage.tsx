@@ -190,7 +190,7 @@ export function AiConfigPage() {
 
       <div className="mx-auto w-full max-w-3xl flex-1 overflow-auto px-6 py-8 space-y-8 sm:px-10">
         {/* Usage card */}
-        <section className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] px-5 py-5">
+        <section className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-5 py-5">
           <div className="flex items-center gap-2">
             <span
               aria-hidden
@@ -261,7 +261,7 @@ export function AiConfigPage() {
                     className={cn(
                       'group flex items-start gap-3.5 rounded-2xl px-4 py-4 transition-colors duration-fast ease-out',
                       enabled
-                        ? 'bg-primary-subtle/50 ring-1 ring-primary/25 shadow-sm shadow-foreground/[0.04]'
+                        ? 'bg-primary-subtle/50 ring-1 ring-primary/25 shadow-soft'
                         : 'bg-card/60 ring-1 ring-foreground/[0.04]',
                     )}
                   >
@@ -312,7 +312,7 @@ export function AiConfigPage() {
               })}
             </p>
           </div>
-          <div className="rounded-2xl bg-card/60 shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04] px-5 py-4">
+          <div className="rounded-2xl bg-card/60 shadow-soft ring-1 ring-foreground/[0.04] px-5 py-4">
             <FormField
               label={t('aiConfig.cap', { defaultValue: 'Monthly cap' })}
               htmlFor="monthlyCap"

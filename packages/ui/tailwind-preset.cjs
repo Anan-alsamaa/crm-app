@@ -213,6 +213,11 @@ module.exports = {
           '0%': { opacity: '0', transform: 'translateY(10px) scale(0.985)' },
           '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
         },
+        // Page-enter — content settles up into place on route change.
+        'rise-in': {
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
+          '100%': { opacity: '1', transform: 'none' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both',
@@ -225,6 +230,15 @@ module.exports = {
         'slide-in-drawer':
           'slide-in-drawer 240ms cubic-bezier(0.32, 0.72, 0, 1) both',
         'message-in': 'message-in 260ms cubic-bezier(0.23, 1, 0.32, 1) both',
+        'rise-in': 'rise-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both',
+      },
+      boxShadow: {
+        // Elevation ramp for floating surfaces (soft, layered ambient+key).
+        // NB: keys must not collide with color names (a `shadow-card` would
+        // resolve as a shadow COLOR from the `card` token, not a box-shadow).
+        soft: '0 1px 2px 0 oklch(var(--shadow-color) / 0.07), 0 4px 16px -6px oklch(var(--shadow-color) / 0.12)',
+        float:
+          '0 2px 6px 0 oklch(var(--shadow-color) / 0.08), 0 12px 32px -12px oklch(var(--shadow-color) / 0.18)',
       },
       spacing: {
         // Two editorial steps added to the default scale.

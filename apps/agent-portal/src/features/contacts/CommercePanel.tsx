@@ -53,7 +53,7 @@ export function CommercePanel({ yijiVendorId, externalCustomerId }: Props) {
   return (
     <div className="space-y-4">
       {/* Activity summary */}
-      <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] px-5 py-4">
+      <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-5 py-4">
         <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {t('commerce.activity', { defaultValue: 'Lifetime activity' })}
         </h3>

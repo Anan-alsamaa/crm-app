@@ -5,6 +5,8 @@ type Padding = 'none' | 'sm' | 'md' | 'lg';
 
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   padding?: Padding;
+  /** Hover elevation for clickable / focusable cards. */
+  interactive?: boolean;
 }
 
 const paddings: Record<Padding, string> = {
@@ -14,11 +16,19 @@ const paddings: Record<Padding, string> = {
   lg: 'p-6',
 };
 
-export function Card({ padding = 'md', className, children, ...rest }: CardProps): JSX.Element {
+export function Card({
+  padding = 'md',
+  interactive = false,
+  className,
+  children,
+  ...rest
+}: CardProps): JSX.Element {
   return (
     <div
       className={cn(
-        'rounded-lg border border-border bg-card text-card-foreground',
+        'rounded-2xl bg-card text-card-foreground ring-1 ring-foreground/[0.05] shadow-soft',
+        interactive &&
+          'transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
         paddings[padding],
         className,
       )}

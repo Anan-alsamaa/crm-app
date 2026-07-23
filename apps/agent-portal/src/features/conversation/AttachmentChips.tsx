@@ -149,7 +149,7 @@ function FileChip({ a, onClick }: { a: MessageAttachment; onClick: () => void })
       onClick={onClick}
       className={cn(
         'group inline-flex w-full max-w-[18rem] items-center gap-2.5 rounded-xl bg-card/70 px-2.5 py-2 text-start',
-        'ring-1 ring-foreground/[0.06] shadow-sm shadow-foreground/[0.04]',
+        'ring-1 ring-foreground/[0.06] shadow-soft',
         'transition-[box-shadow,background-color] duration-fast ease-out',
         'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
       )}

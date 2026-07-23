@@ -127,7 +127,7 @@ export function ImportsPage() {
 
       <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 py-8 space-y-6 sm:px-10">
         {/* Vendor select */}
-        <section className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] px-5 py-4">
+        <section className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-5 py-4">
           <FormField
             label={t('imports.vendor', { defaultValue: 'Target vendor' })}
             hint={t('imports.vendorHint', {
@@ -152,7 +152,7 @@ export function ImportsPage() {
         </section>
 
         {/* File upload */}
-        <section className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] px-5 py-4">
+        <section className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-5 py-4">
           <FormField
             label={t('imports.file', { defaultValue: 'CSV file' })}
             hint={t('imports.fileHint', {
@@ -176,7 +176,7 @@ export function ImportsPage() {
             <h2 className="px-1 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               {t('imports.mapping', { defaultValue: 'Column mapping' })}
             </h2>
-            <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] px-5 py-4 space-y-3">
+            <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-5 py-4 space-y-3">
               {preview.header.map((h) => (
                 <div key={h} className="grid grid-cols-12 items-center gap-2">
                   <span className="col-span-5 truncate text-xs font-mono text-foreground">{h}</span>
@@ -208,7 +208,7 @@ export function ImportsPage() {
             </h2>
             <div
               className={cn(
-                'rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] overflow-auto',
+                'rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft overflow-auto',
               )}
             >
               <table className="w-full border-collapse text-xs">
@@ -223,7 +223,7 @@ export function ImportsPage() {
                 </thead>
                 <tbody>
                   {preview.sample.map((row, i) => (
-                    <tr key={i} className="border-t border-border/60">
+                    <tr key={i} className="border-t border-border">
                       {row.map((cell, j) => (
                         <td key={j} className="px-3 py-2 text-foreground/80 tabular-nums">
                           {cell}

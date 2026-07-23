@@ -184,7 +184,7 @@ function OrderDetails({ order }: { order: YijiOrder }) {
         </p>
       )}
 
-      <div className="space-y-1 border-t border-border/60 pt-2">
+      <div className="space-y-1 border-t border-border pt-2">
         {showSubtotal && (
           <TotalsRow
             label={t('commerce.subtotal', { defaultValue: 'Items subtotal' })}
@@ -271,7 +271,7 @@ function ExpandableOrder({
   });
 
   return (
-    <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04]">
+    <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -282,7 +282,7 @@ function ExpandableOrder({
         <OrderHeader order={summary} />
       </button>
       {open && (
-        <div className="border-t border-border/60 px-4 py-3">
+        <div className="border-t border-border px-4 py-3">
           {detail.isLoading ? (
             <div className="space-y-2">
               <Skeleton className="h-4 w-full" />

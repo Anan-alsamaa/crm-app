@@ -191,7 +191,7 @@ export function PreferencesPage() {
               </h2>
               <p className="text-sm text-foreground/80">{t('sound.prefHint')}</p>
             </div>
-            <ul className="rounded-2xl bg-card/60 shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04] px-5">
+            <ul className="rounded-2xl bg-card/60 shadow-soft ring-1 ring-foreground/[0.04] px-5">
               <li className="flex flex-col gap-2.5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <span
@@ -259,7 +259,7 @@ export function PreferencesPage() {
                   {t(g.descriptionKey, { defaultValue: g.descriptionFallback })}
                 </p>
               </div>
-              <ul className="rounded-2xl bg-card/60 shadow-sm shadow-foreground/[0.04] ring-1 ring-foreground/[0.04] divide-y divide-border/40 px-5">
+              <ul className="rounded-2xl bg-card/60 shadow-soft ring-1 ring-foreground/[0.04] divide-y divide-border/40 px-5">
                 {g.types.map((type) => {
                   const meta = META[type];
                   const Icon = meta?.icon;

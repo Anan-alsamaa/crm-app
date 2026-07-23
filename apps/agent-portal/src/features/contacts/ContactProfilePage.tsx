@@ -190,7 +190,7 @@ export function ContactProfilePage() {
   function IdentityCard() {
     if (contact.isLoading || !contact.data) {
       return (
-        <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] p-6 space-y-3">
+        <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft p-6 space-y-3">
           <Skeleton className="h-10 w-10 rounded-full" />
           <Skeleton className="h-5 w-40" />
           <Skeleton className="h-3 w-56" />
@@ -200,7 +200,7 @@ export function ContactProfilePage() {
     const c = contact.data;
     const metaTier = (c.metadata?.tier as string | undefined) ?? null;
     return (
-      <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] p-6">
+      <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft p-6">
         <div className="flex items-start gap-4">
           <Avatar name={c.name} email={c.email} phone={c.phone} size="lg" />
           <div className="min-w-0 flex-1 space-y-1.5">
@@ -343,7 +343,7 @@ export function ContactProfilePage() {
       <Link
         to={`/?conversation=${conv.id}`}
         className={cn(
-          'group block rounded-2xl bg-card/60 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] px-4 py-3',
+          'group block rounded-2xl bg-card/60 ring-1 ring-foreground/[0.04] shadow-soft px-4 py-3',
           'transition-[box-shadow,transform,background-color] duration-fast ease-out',
           'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px',
         )}
@@ -370,7 +370,7 @@ export function ContactProfilePage() {
       <Link
         to="/tickets"
         className={cn(
-          'group block rounded-2xl bg-card/60 ring-1 ring-foreground/[0.04] shadow-sm shadow-foreground/[0.04] px-4 py-3',
+          'group block rounded-2xl bg-card/60 ring-1 ring-foreground/[0.04] shadow-soft px-4 py-3',
           'transition-[box-shadow,transform,background-color] duration-fast ease-out',
           'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px',
         )}

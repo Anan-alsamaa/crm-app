@@ -53,7 +53,7 @@ const fmtScore = (n: number | null) => (n == null ? '—' : n.toFixed(2));
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-xl bg-card px-4 py-3 ring-1 ring-border/60">
+    <div className="rounded-2xl bg-card px-4 py-3 ring-1 ring-border shadow-soft">
       <div className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
         {label}
       </div>
@@ -175,9 +175,9 @@ function TicketsReport({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl bg-card ring-1 ring-border/60">
+      <div className="overflow-x-auto rounded-2xl bg-card ring-1 ring-border shadow-soft">
         <table className="w-full text-sm">
-          <thead className="border-b border-border/60">
+          <thead className="border-b border-border">
             <tr>
               <HeadCell>{tr('agentReports.col.subject', { defaultValue: 'Subject' })}</HeadCell>
               <HeadCell>{tr('agentReports.col.status', { defaultValue: 'Status' })}</HeadCell>
@@ -286,9 +286,9 @@ function AgentKpiReport({
           </Button>
         </div>
       </div>
-      <div className="overflow-x-auto rounded-xl bg-card ring-1 ring-border/60">
+      <div className="overflow-x-auto rounded-2xl bg-card ring-1 ring-border shadow-soft">
         <table className="w-full text-sm">
-          <thead className="border-b border-border/60">
+          <thead className="border-b border-border">
             <tr>
               <HeadCell>{tr('agentReports.col.agent', { defaultValue: 'Agent' })}</HeadCell>
               <HeadCell className="text-end">
@@ -383,7 +383,7 @@ function ConversationReport({
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* By status */}
-        <div className="rounded-xl bg-card ring-1 ring-border/60 p-4">
+        <div className="rounded-2xl bg-card ring-1 ring-border shadow-soft p-4">
           <h3 className="mb-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('agentReports.byStatus', { defaultValue: 'By status' })}
           </h3>
@@ -397,7 +397,7 @@ function ConversationReport({
           </ul>
         </div>
         {/* By priority */}
-        <div className="rounded-xl bg-card ring-1 ring-border/60 p-4">
+        <div className="rounded-2xl bg-card ring-1 ring-border shadow-soft p-4">
           <h3 className="mb-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('agentReports.byPriority', { defaultValue: 'By priority' })}
           </h3>
@@ -413,9 +413,9 @@ function ConversationReport({
       </div>
 
       {/* By day */}
-      <div className="overflow-x-auto rounded-xl bg-card ring-1 ring-border/60">
+      <div className="overflow-x-auto rounded-2xl bg-card ring-1 ring-border shadow-soft">
         <table className="w-full text-sm">
-          <thead className="border-b border-border/60">
+          <thead className="border-b border-border">
             <tr>
               <HeadCell>{tr('agentReports.col.date', { defaultValue: 'Date' })}</HeadCell>
               <HeadCell className="text-end">

@@ -183,7 +183,7 @@ export function VendorsPage() {
 
       <div className="flex-1 overflow-auto px-5 py-3">
         {vendors.isLoading ? (
-          <div className="mx-auto max-w-5xl divide-y divide-border/50 overflow-hidden rounded-xl ring-1 ring-border/60">
+          <div className="mx-auto max-w-5xl divide-y divide-border overflow-hidden rounded-2xl ring-1 ring-border shadow-soft bg-card/60">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3 px-4 py-3">
                 <Skeleton className="h-8 w-8 rounded-lg" />
@@ -214,7 +214,7 @@ export function VendorsPage() {
             }
           />
         ) : (
-          <ul className="mx-auto max-w-5xl divide-y divide-border/50 overflow-hidden rounded-xl bg-card/50 ring-1 ring-border/60">
+          <ul className="mx-auto max-w-5xl divide-y divide-border overflow-hidden rounded-2xl bg-card/60 ring-1 ring-border shadow-soft">
             {vendors.data.map((v) => (
               <li key={v.id}>
                 <VendorCard
