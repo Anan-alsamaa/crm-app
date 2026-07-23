@@ -153,7 +153,14 @@ export function ConversationSidebar({
   };
 
   return (
-    <aside className={cn('relative shrink-0 overflow-auto', widthClass, className)} {...sizeProps}>
+    <aside
+      className={cn(
+        'relative shrink-0 overflow-auto border-s border-border bg-card/30',
+        widthClass,
+        className,
+      )}
+      {...sizeProps}
+    >
       {handle}
       {/* Identity hero — avatar in an aurora gradient ring over a glow halo. */}
       <div className="relative overflow-hidden px-6 pb-6 pt-8">

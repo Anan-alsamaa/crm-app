@@ -542,7 +542,10 @@ export function ConversationView({
   };
 
   return (
-    <div className="flex h-full">
+    // Solid ink surface: the chat opts out of the aurora wash — stacked
+    // gradients over a mostly-empty thread read as murk, and agents stare
+    // at this pane all day. Calm center; the color lives in the bubbles.
+    <div className="flex h-full bg-background">
       <div className="flex flex-1 min-w-0 flex-col">
         {/* Toolbar — slim row of status/priority/agent controls. */}
         {c && (
@@ -554,15 +557,8 @@ export function ConversationView({
           />
         )}
 
-        {/* Thread — soft mesh wash so it doesn't feel like a void. */}
-        <div
-          ref={listRef}
-          className="relative flex-1 overflow-auto"
-          style={{
-            background:
-              'radial-gradient(at 8% 8%, oklch(var(--primary) / 0.06) 0%, transparent 40%), radial-gradient(at 92% 92%, oklch(var(--secondary-brand) / 0.05) 0%, transparent 45%)',
-          }}
-        >
+        {/* Thread — clean solid surface; no gradient behind reading text. */}
+        <div ref={listRef} className="relative flex-1 overflow-auto">
           {/* min-h-full + justify-end bottom-anchors the thread: a short
               conversation sits just above the composer instead of floating at
               the top with an empty void below. Long threads overflow + scroll
