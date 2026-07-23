@@ -54,7 +54,7 @@ export interface AppShellProps {
 }
 
 const RAIL_CLASS =
-  'relative z-30 flex shrink-0 flex-col rounded-xl bg-rail text-rail-foreground shadow-lg shadow-rail/20';
+  'relative z-30 flex shrink-0 flex-col bg-rail text-rail-foreground border-e border-rail-border';
 
 export function AppShell({
   rail,
@@ -95,14 +95,7 @@ export function AppShell({
   }, [open]);
 
   const mainCard = (marginClass: string) => (
-    <main
-      className={cn(
-        'flex-1 min-w-0 min-h-0 rounded-2xl bg-card/85 shadow-xl shadow-foreground/5 ring-1 ring-foreground/[0.04] overflow-hidden',
-        marginClass,
-      )}
-    >
-      {children}
-    </main>
+    <main className={cn('flex-1 min-w-0 min-h-0 overflow-hidden', marginClass)}>{children}</main>
   );
 
   if (isDesktop) {
@@ -110,11 +103,7 @@ export function AppShell({
       <nav
         aria-label={navLabel}
         style={{ width }}
-        className={cn(
-          RAIL_CLASS,
-          'my-3 ms-3',
-          !dragging && 'transition-[width] duration-150 ease-out',
-        )}
+        className={cn(RAIL_CLASS, !dragging && 'transition-[width] duration-150 ease-out')}
       >
         {rail({ variant: 'desktop', collapsed: width < 140, onNavigate: () => {} })}
         {/* Drag handle — 6px hit area on the trailing edge */}
@@ -142,20 +131,19 @@ export function AppShell({
       return (
         <div className="flex h-full text-foreground">
           {railNav}
-          {/* Content panel: one solid-white surface whose header is a real white
-              navbar (bottom border), with the page flush beneath it — no floating
-              gap or "bubble" between the bar and the content. */}
-          <div className="my-3 me-3 ms-3 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl bg-card shadow-xl shadow-foreground/5 ring-1 ring-foreground/[0.04]">
-            <header className="flex h-14 shrink-0 items-center border-b border-border px-4">
+          {/* Flat full-bleed content column: slim navbar with a hairline, then
+              the page directly on the workspace surface — no floating card. */}
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            <header className="flex h-14 shrink-0 items-center border-b border-border bg-background/80 px-4 backdrop-blur">
               {topBar}
             </header>
-            {/* Open workspace: white surface with a soft brand wash so the
+            {/* Open workspace: deep surface with teal + coral glows so the
                 center feels alive without boxing content into cards. */}
             <main
               className="min-h-0 min-w-0 flex-1 overflow-hidden"
               style={{
                 background:
-                  'radial-gradient(1100px 480px at 12% -8%, oklch(var(--primary) / 0.09) 0%, transparent 60%), radial-gradient(900px 420px at 100% 112%, oklch(var(--secondary-brand) / 0.07) 0%, transparent 60%), oklch(var(--card))',
+                  'radial-gradient(1100px 480px at 12% -8%, oklch(var(--primary) / 0.12) 0%, transparent 60%), radial-gradient(900px 420px at 100% 112%, oklch(var(--secondary-brand) / 0.1) 0%, transparent 60%), oklch(var(--background))',
               }}
             >
               {children}
@@ -168,7 +156,7 @@ export function AppShell({
     return (
       <div className="flex h-full text-foreground">
         {railNav}
-        {mainCard('m-3 ms-3')}
+        {mainCard('')}
       </div>
     );
   }
@@ -191,7 +179,7 @@ export function AppShell({
         {topBarActions}
       </header>
 
-      {mainCard('mx-2 mb-2')}
+      {mainCard('')}
 
       {/* Off-canvas drawer + backdrop — always mounted so it can transition;
           `invisible` removes it from the tab order and a11y tree when closed. */}

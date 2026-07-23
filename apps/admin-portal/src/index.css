@@ -26,8 +26,7 @@
  * Primary = #0F8D8F (oklch 0.58 0.097 196).
  */
 
-:root,
-[data-theme='light'] {
+:root[data-theme='light'] {
   --radius: 0.5rem;
   --background: 0.985 0.002 230;
   --canvas: 0.965 0.004 230;
@@ -68,40 +67,47 @@
   --display: 0.16 0.01 250;
 }
 
-[data-theme='dark'] {
-  --background: 0.17 0.005 250;
-  --canvas: 0.15 0.005 250;
-  --foreground: 0.96 0 0;
-  --card: 0.2 0.005 250;
-  --card-foreground: 0.96 0 0;
-  --popover: 0.22 0.005 250;
-  --popover-foreground: 0.96 0 0;
-  --primary: 0.68 0.145 192;
-  --primary-foreground: 0.16 0.005 250;
-  --primary-subtle: 0.68 0.145 192 / 0.18;
-  --bubble: 0.27 0.02 255;
-  --secondary: 0.24 0.005 250;
-  --secondary-foreground: 0.96 0 0;
-  --muted: 0.24 0.005 250;
-  --muted-foreground: 0.66 0.008 250;
-  --accent: 0.68 0.145 192;
-  --accent-foreground: 0.16 0.005 250;
-  --destructive: 0.68 0.21 25;
+/* DEFAULT THEME — "midnight ink" (mirrors agent portal). Light via
+   <html data-theme="light">. */
+:root,
+:root[data-theme='dark'] {
+  --radius: 0.5rem;
+  --background: 0.145 0.015 265;
+  --canvas: 0.125 0.015 265;
+  --foreground: 0.95 0.005 250;
+  --card: 0.175 0.015 262;
+  --card-foreground: 0.95 0.005 250;
+  --popover: 0.21 0.015 262;
+  --popover-foreground: 0.95 0.005 250;
+  --primary: 0.75 0.135 185;
+  --primary-foreground: 0.14 0.02 260;
+  --primary-subtle: 0.75 0.135 185 / 0.15;
+  --bubble: 0.24 0.03 262;
+  --secondary: 0.22 0.012 262;
+  --secondary-foreground: 0.95 0.005 250;
+  --muted: 0.22 0.012 262;
+  --muted-foreground: 0.68 0.015 255;
+  --accent: 0.75 0.135 185;
+  --accent-foreground: 0.14 0.02 260;
+  --destructive: 0.66 0.2 22;
   --destructive-foreground: 1 0 0;
-  --success: 0.7 0.14 155;
-  --success-foreground: 0.17 0 0;
-  --warning: 0.78 0.14 70;
-  --warning-foreground: 0.17 0 0;
-  --border: 0.96 0 0 / 0.1;
-  --border-strong: 0.96 0 0 / 0.18;
-  --input: 0.24 0.005 250;
-  --ring: 0.68 0.145 192;
+  --success: 0.72 0.15 155;
+  --success-foreground: 0.15 0.01 250;
+  --warning: 0.8 0.15 75;
+  --warning-foreground: 0.18 0.01 250;
+  --border: 0.95 0.01 250 / 0.09;
+  --border-strong: 0.95 0.01 250 / 0.16;
+  --input: 0.21 0.012 262;
+  --ring: 0.75 0.135 185;
   --shadow-color: 0 0 0;
-  --rail: 0.14 0.04 196;
-  --rail-foreground: 0.88 0.03 196;
-  --rail-active: 0.2 0.06 196;
-  --rail-active-foreground: 1 0 0;
-  --rail-border: 0.1 0.04 196;
+  --rail: 0.115 0.02 265;
+  --rail-foreground: 0.82 0.02 250;
+  --rail-active: 0.26 0.06 200;
+  --rail-active-foreground: 0.98 0.005 250;
+  --rail-border: 0.24 0.02 262;
+  --secondary-brand: 0.72 0.19 12;
+  --secondary-brand-foreground: 0.14 0.02 260;
+  --display: 0.98 0.005 250;
 }
 
 /* Full-viewport height chain. Kept in @layer base so it's emitted in the base
