@@ -400,20 +400,37 @@ export function Inbox() {
                         <button
                           type="button"
                           onClick={() => setSelected(c.id)}
-                          className="flex flex-1 items-start gap-3 px-3 py-2.5 text-start"
+                          className="flex flex-1 items-center gap-3 px-3 py-3 text-start"
                         >
-                          <Avatar
-                            name={c.contact?.name}
-                            email={c.contact?.email}
-                            phone={c.contact?.phone}
-                            size="sm"
-                          />
+                          {/* Messenger row: avatar with a status dot, name +
+                              secondary line, time and an unread count bubble. */}
+                          <span className="relative shrink-0">
+                            <Avatar
+                              name={c.contact?.name}
+                              email={c.contact?.email}
+                              phone={c.contact?.phone}
+                              size="md"
+                            />
+                            <span
+                              aria-hidden
+                              title={t(`status.${c.status}`, { ns: 'common' })}
+                              className={cn(
+                                'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-background',
+                                {
+                                  open: 'bg-success',
+                                  pending: 'bg-warning',
+                                  resolved: 'bg-primary',
+                                  closed: 'bg-muted-foreground/40',
+                                }[c.status],
+                              )}
+                            />
+                          </span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-baseline justify-between gap-2">
                               <span
                                 className={cn(
                                   'truncate text-sm text-foreground',
-                                  unread ? 'font-semibold' : 'font-medium',
+                                  unread ? 'font-bold' : 'font-semibold',
                                 )}
                               >
                                 {displayName}
@@ -422,18 +439,25 @@ export function Inbox() {
                                 {formatRelative(c.last_message_at)}
                               </span>
                             </div>
-                            <div className="mt-1 flex items-center gap-1.5">
-                              <Pill tone={STATUS_TONE[c.status]} size="sm">
-                                {t(`status.${c.status}`, { ns: 'common' })}
-                              </Pill>
-                              {c.priority !== 'medium' && c.priority !== 'low' && (
+                            <div className="mt-0.5 flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  'min-w-0 flex-1 truncate text-xs',
+                                  unread ? 'font-medium text-foreground' : 'text-muted-foreground',
+                                )}
+                              >
+                                {c.contact?.email ??
+                                  c.contact?.phone ??
+                                  t(`status.${c.status}`, { ns: 'common' })}
+                              </span>
+                              {(c.priority === 'urgent' || c.priority === 'high') && (
                                 <Pill tone={c.priority === 'urgent' ? 'pink' : 'orange'} size="sm">
                                   {t(`priority.${c.priority}`, { ns: 'common' })}
                                 </Pill>
                               )}
                               {unread && (
                                 <span
-                                  className="ms-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground tabular-nums shadow-sm shadow-primary/30"
+                                  className="inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-violet px-1.5 text-xs font-bold text-primary-foreground tabular-nums shadow-sm shadow-violet/30"
                                   aria-label={`${c.unread_count_agent} unread`}
                                 >
                                   {c.unread_count_agent}
@@ -441,12 +465,12 @@ export function Inbox() {
                               )}
                             </div>
                             {c.tags && c.tags.length > 0 && (
-                              <div className="mt-1.5 flex flex-wrap gap-1">
+                              <div className="mt-1 flex flex-wrap gap-1">
                                 {c.tags.map((tg) =>
                                   tg.tags_id ? (
                                     <span
                                       key={tg.tags_id.id}
-                                      className="rounded-sm bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground"
+                                      className="rounded-full bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground"
                                       style={
                                         tg.tags_id.color
                                           ? {

@@ -13,8 +13,16 @@ import {
   formatRelative,
   useResizable,
 } from '@yiji/ui';
-import { useConversation, useLinkedTickets, type ConversationMessage } from '../inbox/api.js';
+import {
+  useConversation,
+  useLinkedTickets,
+  type ConversationMessage,
+  type MessageAttachment,
+} from '../inbox/api.js';
 import { useContact, useUpdateContact } from '../contacts/api.js';
+import { useAssetBlobUrl } from '../../lib/useAssetBlobUrl.js';
+import { downloadAsset } from '../../lib/directus.js';
+import { Lightbox } from '../../components/Lightbox.js';
 import { AiPanel } from '../ai/AiPanel.js';
 import { LatestOrder } from '../commerce/OrderViews.js';
 import { ConversationTags } from './ConversationTags.js';
@@ -23,11 +31,43 @@ import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 interface Props {
   conversationId: string;
   notes?: ConversationMessage[];
+  /** Images shared in the thread — rendered as the "Shared media" grid. */
+  media?: MessageAttachment[];
   onDeleteNote?: (noteId: string) => void;
   /** Width/utility override. Defaults to the desktop `w-80` rail width. */
   className?: string;
   /** Desktop only: make the panel drag-resizable from its leading edge. */
   resizable?: boolean;
+}
+
+function MediaThumb({ a, onOpen }: { a: MessageAttachment; onOpen: (url: string) => void }) {
+  const { t } = useTranslation();
+  const { url, error } = useAssetBlobUrl(a.id, true);
+  const [broken, setBroken] = useState(false);
+  if (error || broken) return null;
+  return (
+    <button
+      type="button"
+      disabled={!url}
+      onClick={() => url && onOpen(url)}
+      aria-label={t('conversation.previewImage', {
+        defaultValue: 'Preview {{name}}',
+        name: a.filename ?? 'image',
+      })}
+      className="group relative aspect-square overflow-hidden rounded-lg bg-secondary transition-[box-shadow] duration-fast ease-out hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+    >
+      {url ? (
+        <img
+          src={url}
+          alt={a.filename ?? ''}
+          onError={() => setBroken(true)}
+          className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.06]"
+        />
+      ) : (
+        <span className="block h-full w-full animate-pulse bg-secondary" />
+      )}
+    </button>
+  );
 }
 
 function SectionLabel({ children, count }: { children: React.ReactNode; count?: number }) {
@@ -71,10 +111,15 @@ const TICKET_TONE: Record<string, 'success' | 'warning' | 'muted' | 'primary' | 
 export function ConversationSidebar({
   conversationId,
   notes,
+  media,
   onDeleteNote,
   className,
   resizable,
 }: Props) {
+  const [mediaPreview, setMediaPreview] = useState<{
+    url: string;
+    a: MessageAttachment;
+  } | null>(null);
   const { t } = useTranslation();
   const convo = useConversation(conversationId);
   const tickets = useLinkedTickets(conversationId);
@@ -283,6 +328,33 @@ export function ConversationSidebar({
           </dl>
         )}
       </section>
+
+      {/* Shared media — images from the thread, messenger-style grid. */}
+      {media && media.length > 0 && (
+        <section className="rounded-2xl bg-card p-4 shadow-soft">
+          <SectionLabel count={media.length}>
+            {t('sidebar.sharedMedia', { defaultValue: 'Shared media' })}
+          </SectionLabel>
+          <div className="grid grid-cols-3 gap-1.5">
+            {media.slice(0, 9).map((a) => (
+              <MediaThumb key={a.id} a={a} onOpen={(url) => setMediaPreview({ url, a })} />
+            ))}
+          </div>
+          {mediaPreview && (
+            <Lightbox
+              url={mediaPreview.url}
+              filename={mediaPreview.a.filename}
+              filesize={mediaPreview.a.filesize}
+              onDownload={() =>
+                void downloadAsset(mediaPreview.a.id, mediaPreview.a.filename ?? undefined).catch(
+                  () => undefined,
+                )
+              }
+              onClose={() => setMediaPreview(null)}
+            />
+          )}
+        </section>
+      )}
 
       {/* Tags — the single, interactive home for conversation tags. */}
       <section className="rounded-2xl bg-card p-4 shadow-soft">

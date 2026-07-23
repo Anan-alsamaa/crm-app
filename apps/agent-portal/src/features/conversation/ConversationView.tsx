@@ -15,7 +15,7 @@ import {
 import { SOCKET_EVENTS, type MessageNew } from '@yiji/shared-types';
 import { getSocket, uploadAttachment } from '../../lib/socket.js';
 import { noteSelfSend } from '../../lib/sound.js';
-import { formatBytes, validateAttachment, ATTACHMENT_ACCEPT } from '../../lib/files.js';
+import { formatBytes, isImage, validateAttachment, ATTACHMENT_ACCEPT } from '../../lib/files.js';
 import { FileGlyph } from '../../components/FileGlyph.js';
 import { useAgents, useConversation, useMessages, type ConversationMessage } from '../inbox/api.js';
 import { AttachmentChips } from './AttachmentChips.js';
@@ -269,6 +269,14 @@ export function ConversationView({
 
   // Internal notes live in the sidebar, not the conversation thread.
   const threadMessages = useMemo(() => all.filter((m) => !m.is_internal_note), [all]);
+  // Images shared in this thread — feeds the sidebar's "Shared media" grid.
+  const sharedMedia = useMemo(
+    () =>
+      threadMessages.flatMap((m) =>
+        (m.attachments ?? []).filter((a) => isImage(a.type, a.filename)),
+      ),
+    [threadMessages],
+  );
   const notes = useMemo(() => all.filter((m) => m.is_internal_note), [all]);
   const grouped = useMemo(() => groupRuns(threadMessages), [threadMessages]);
 
@@ -976,6 +984,7 @@ export function ConversationView({
         <ConversationSidebar
           conversationId={conversationId}
           notes={notes}
+          media={sharedMedia}
           onDeleteNote={deleteNote}
           resizable
         />
@@ -999,6 +1008,7 @@ export function ConversationView({
               <ConversationSidebar
                 conversationId={conversationId}
                 notes={notes}
+                media={sharedMedia}
                 onDeleteNote={deleteNote}
                 className="w-[20rem] max-w-[85vw]"
               />
