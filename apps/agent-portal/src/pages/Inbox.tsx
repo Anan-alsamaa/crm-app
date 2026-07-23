@@ -387,7 +387,11 @@ export function Inbox() {
                         key={c.id}
                         className={cn(
                           'group relative flex items-start rounded-xl transition-colors duration-fast ease-out',
-                          active ? 'bg-primary-subtle/70' : 'hover:bg-secondary/60',
+                          active
+                            ? 'bg-primary-subtle/70'
+                            : unread
+                              ? 'bg-primary-subtle/30 hover:bg-primary-subtle/50'
+                              : 'hover:bg-secondary/60',
                         )}
                       >
                         <input

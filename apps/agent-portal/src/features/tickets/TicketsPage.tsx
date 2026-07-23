@@ -39,23 +39,6 @@ const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 type TicketFilter = 'all' | TicketStatus | 'overdue';
 const FILTERS: TicketFilter[] = ['all', 'new', 'open', 'pending', 'resolved', 'overdue'];
 
-const STATUS_TONE: Record<TicketStatus, 'primary' | 'success' | 'warning' | 'muted' | 'neutral'> = {
-  new: 'primary',
-  open: 'success',
-  pending: 'warning',
-  resolved: 'primary',
-  closed: 'muted',
-};
-
-function StatusPill({ status }: { status: TicketStatus }) {
-  const { t } = useTranslation();
-  return (
-    <Pill tone={STATUS_TONE[status]} dot>
-      {t(`status.${status}`, { ns: 'common' })}
-    </Pill>
-  );
-}
-
 export function TicketsPage() {
   const { t } = useTranslation();
   const tickets = useTickets();
@@ -205,29 +188,52 @@ export function TicketsPage() {
                           type="button"
                           onClick={() => setSelected(tk.id)}
                           className={cn(
-                            'group flex w-full items-start gap-3 rounded-xl px-3.5 py-3 text-start',
+                            'group flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-start',
                             'transition-colors duration-fast ease-out',
                             active ? 'bg-primary-subtle/70' : 'hover:bg-secondary/60',
                           )}
                         >
-                          <Avatar
-                            name={tk.contact?.name}
-                            email={tk.contact?.email}
-                            phone={tk.contact?.phone}
-                            size="sm"
-                          />
+                          {/* Messenger row: avatar with a status dot, subject +
+                              contact secondary line, time and exception pills. */}
+                          <span className="relative shrink-0">
+                            <Avatar
+                              name={tk.contact?.name}
+                              email={tk.contact?.email}
+                              phone={tk.contact?.phone}
+                              size="md"
+                            />
+                            <span
+                              aria-hidden
+                              title={t(`status.${tk.status}`, { ns: 'common' })}
+                              className={cn(
+                                'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-background',
+                                {
+                                  new: 'bg-primary',
+                                  open: 'bg-success',
+                                  pending: 'bg-warning',
+                                  resolved: 'bg-primary',
+                                  closed: 'bg-muted-foreground/40',
+                                }[tk.status],
+                              )}
+                            />
+                          </span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-baseline justify-between gap-2">
-                              <span className="truncate text-sm font-medium text-foreground">
+                              <span className="truncate text-sm font-semibold text-foreground">
                                 {tk.subject}
                               </span>
                               <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
                                 {formatRelative(tk.date_created)}
                               </span>
                             </div>
-                            <div className="mt-1 flex items-center gap-1.5">
-                              <StatusPill status={tk.status} />
-                              {tk.priority !== 'medium' && tk.priority !== 'low' && (
+                            <div className="mt-0.5 flex items-center gap-2">
+                              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                                {tk.contact?.name ??
+                                  tk.contact?.email ??
+                                  tk.contact?.phone ??
+                                  t(`status.${tk.status}`, { ns: 'common' })}
+                              </span>
+                              {(tk.priority === 'urgent' || tk.priority === 'high') && (
                                 <Pill tone={tk.priority === 'urgent' ? 'pink' : 'orange'} size="sm">
                                   {t(`priority.${tk.priority}`, { ns: 'common' })}
                                 </Pill>
@@ -238,11 +244,6 @@ export function TicketsPage() {
                                 </Pill>
                               )}
                             </div>
-                            {tk.contact?.email && (
-                              <div className="mt-1 truncate text-xs text-muted-foreground">
-                                {tk.contact.email}
-                              </div>
-                            )}
                           </div>
                         </button>
                       </li>
