@@ -26,9 +26,9 @@
     "sla": "SLA",
     "automation": "Automation",
     "customFields": "Custom fields",
-    "reports": "Reports",
+    "reports": "Scheduled reports",
+    "reportsGroup": "Reports",
     "imports": "Import contacts",
-    "data": "Data",
     "aiConfig": "AI assistance",
     "intelligence": "Intelligence",
     "primary": "Primary navigation",
@@ -37,8 +37,8 @@
     "signedInAs": "Signed in as {{name}}",
     "workspace": "Workspace",
     "policies": "Policies",
-    "slaReports": "SLA reports",
-    "reportExports": "Report exports"
+    "slaReports": "SLA performance",
+    "reportExports": "Excel exports"
   },
   "dashboard": {
     "title": "Overview",
@@ -109,7 +109,7 @@
     "operator": "Operator"
   },
   "reports": {
-    "title": "Reports",
+    "title": "Scheduled reports",
     "agent": "Agent (optional)",
     "team": "Team (optional)",
     "anyAgent": "Any agent",
@@ -375,13 +375,13 @@
     "pending": "Pending",
     "range": "Date range",
     "subtitle": "First-response & resolution SLA — drill from agent into tickets",
-    "title": "SLA reports"
+    "title": "SLA performance"
   },
   "app": {
     "console": "Admin console"
   },
   "agentReports": {
-    "title": "Report exports",
+    "title": "Excel exports",
     "subtitle": "Ticket, agent and conversation analytics — exportable to Excel.",
     "range": "Date range",
     "lastDays": "Last {{days}} days",

@@ -3,13 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Avatar,
+  CalendarIcon,
+  ChartIcon,
   ClockIcon,
   CommandPalette,
   type CommandGroup,
+  DownloadIcon,
+  SettingsIcon,
+  ShieldIcon,
   SignOutIcon,
+  SparkleIcon,
+  StoreIcon,
   TeamIcon,
+  UploadIcon,
   UsersIcon,
   useCommandPaletteShortcut,
+  ZapIcon,
 } from '@yiji/ui';
 import { useUsers } from '../features/users/api.js';
 import { useTeams } from '../features/teams/api.js';
@@ -46,6 +55,14 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
       heading: t('cmd.pages', { defaultValue: 'Pages' }),
       items: [
         {
+          id: 'go-dashboard',
+          label: t('nav.dashboard', { defaultValue: 'Dashboard' }),
+          icon: <ChartIcon size={16} />,
+          shortcut: 'g d',
+          keywords: ['overview', 'metrics', 'home'],
+          onSelect: () => navigate('/dashboard'),
+        },
+        {
           id: 'go-users',
           label: t('nav.users'),
           icon: <UsersIcon size={16} />,
@@ -62,12 +79,68 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
           onSelect: () => navigate('/teams'),
         },
         {
+          id: 'go-vendors',
+          label: t('nav.vendors', { defaultValue: 'Vendors' }),
+          icon: <StoreIcon size={16} />,
+          keywords: ['brands', 'tenants'],
+          onSelect: () => navigate('/vendors'),
+        },
+        {
+          id: 'go-imports',
+          label: t('nav.imports', { defaultValue: 'Import contacts' }),
+          icon: <UploadIcon size={16} />,
+          keywords: ['csv', 'upload', 'contacts'],
+          onSelect: () => navigate('/imports'),
+        },
+        {
           id: 'go-sla',
           label: t('nav.sla'),
-          icon: <ClockIcon size={16} />,
+          icon: <ShieldIcon size={16} />,
           shortcut: 'g s',
           keywords: ['deadlines', 'response time', 'policy'],
           onSelect: () => navigate('/sla'),
+        },
+        {
+          id: 'go-automation',
+          label: t('nav.automation', { defaultValue: 'Automation' }),
+          icon: <ZapIcon size={16} />,
+          keywords: ['rules', 'triggers', 'workflows'],
+          onSelect: () => navigate('/automation'),
+        },
+        {
+          id: 'go-custom-fields',
+          label: t('nav.customFields', { defaultValue: 'Custom fields' }),
+          icon: <SettingsIcon size={16} />,
+          keywords: ['fields', 'schema', 'attributes'],
+          onSelect: () => navigate('/custom-fields'),
+        },
+        {
+          id: 'go-sla-reports',
+          label: t('nav.slaReports', { defaultValue: 'SLA performance' }),
+          icon: <ClockIcon size={16} />,
+          keywords: ['breaches', 'first response', 'resolution', 'report'],
+          onSelect: () => navigate('/sla-reports'),
+        },
+        {
+          id: 'go-reports',
+          label: t('nav.reports', { defaultValue: 'Scheduled reports' }),
+          icon: <CalendarIcon size={16} />,
+          keywords: ['saved', 'email', 'schedule', 'report'],
+          onSelect: () => navigate('/reports'),
+        },
+        {
+          id: 'go-report-exports',
+          label: t('nav.reportExports', { defaultValue: 'Excel exports' }),
+          icon: <DownloadIcon size={16} />,
+          keywords: ['xlsx', 'download', 'export', 'report'],
+          onSelect: () => navigate('/report-exports'),
+        },
+        {
+          id: 'go-ai-config',
+          label: t('nav.aiConfig', { defaultValue: 'AI assistance' }),
+          icon: <SparkleIcon size={16} />,
+          keywords: ['ai', 'gemini', 'assist'],
+          onSelect: () => navigate('/ai-config'),
         },
       ],
     });

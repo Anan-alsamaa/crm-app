@@ -26,6 +26,14 @@ export {
   InfoIcon,
   SoundOnIcon,
   SoundOffIcon,
+  ChartIcon,
+  StoreIcon,
+  UploadIcon,
+  DownloadIcon,
+  ShieldIcon,
+  ZapIcon,
+  CalendarIcon,
+  SparkleIcon,
 } from './Icon.js';
 export type { IconProps } from './Icon.js';
 export {

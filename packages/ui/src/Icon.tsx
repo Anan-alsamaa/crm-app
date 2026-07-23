@@ -93,6 +93,88 @@ export function ClockIcon({ size = 18, className, ...rest }: IconProps): JSX.Ele
   );
 }
 
+export function ChartIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+      <path d="M7 15v-3" />
+      <path d="M12 15V8" />
+      <path d="M17 15v-5" />
+    </svg>
+  );
+}
+
+export function StoreIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="m2 7 2.5-4h15L22 7" />
+      <path d="M2 7v2a3 3 0 0 0 5 2.24A3 3 0 0 0 12 11a3 3 0 0 0 5 .24A3 3 0 0 0 22 9V7" />
+      <path d="M4 12.5V21h16v-8.5" />
+      <path d="M9 21v-5h6v5" />
+    </svg>
+  );
+}
+
+export function UploadIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="m7 8 5-5 5 5" />
+      <path d="M12 3v12" />
+    </svg>
+  );
+}
+
+export function DownloadIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M12 15V3" />
+    </svg>
+  );
+}
+
+export function ShieldIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
+
+export function ZapIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14Z" />
+    </svg>
+  );
+}
+
+export function CalendarIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4" />
+      <path d="M8 2v4" />
+      <path d="M3 10h18" />
+    </svg>
+  );
+}
+
+export function SparkleIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M12 3v2" />
+      <path d="M12 19v2" />
+      <path d="M3 12h2" />
+      <path d="M19 12h2" />
+      <path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5Z" />
+    </svg>
+  );
+}
+
 export function SearchIcon({ size = 16, className, ...rest }: IconProps): JSX.Element {
   return (
     <svg {...svgProps(size, className)} {...rest}>

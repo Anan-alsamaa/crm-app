@@ -5,18 +5,25 @@ import {
   AppShell,
   type AppShellRailContext,
   Avatar,
+  CalendarIcon,
+  ChartIcon,
   ClockIcon,
   cn,
+  DownloadIcon,
   ErrorBoundary,
-  InboxIcon,
   SearchTrigger,
   SettingsIcon,
+  ShieldIcon,
   SignOutIcon,
+  SparkleIcon,
   Spinner,
+  StoreIcon,
   TeamIcon,
   Toaster,
+  UploadIcon,
   UsersIcon,
   YijiLogo,
+  ZapIcon,
 } from '@yiji/ui';
 import { RouteError } from './components/RouteError.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
@@ -218,12 +225,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         {
           to: '/dashboard',
           label: t('nav.dashboard', { defaultValue: 'Dashboard' }),
-          icon: InboxIcon,
-        },
-        {
-          to: '/sla-reports',
-          label: t('nav.slaReports', { defaultValue: 'SLA reports' }),
-          icon: ClockIcon,
+          icon: ChartIcon,
         },
       ],
     },
@@ -232,17 +234,22 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         { to: '/users', label: t('nav.users'), icon: UsersIcon },
         { to: '/teams', label: t('nav.teams'), icon: TeamIcon },
-        { to: '/vendors', label: t('nav.vendors', { defaultValue: 'Vendors' }), icon: TeamIcon },
+        { to: '/vendors', label: t('nav.vendors', { defaultValue: 'Vendors' }), icon: StoreIcon },
+        {
+          to: '/imports',
+          label: t('nav.imports', { defaultValue: 'Import contacts' }),
+          icon: UploadIcon,
+        },
       ],
     },
     {
       heading: t('nav.policies', { defaultValue: 'Policies' }),
       items: [
-        { to: '/sla', label: t('nav.sla'), icon: ClockIcon },
+        { to: '/sla', label: t('nav.sla'), icon: ShieldIcon },
         {
           to: '/automation',
           label: t('nav.automation', { defaultValue: 'Automation' }),
-          icon: SettingsIcon,
+          icon: ZapIcon,
         },
         {
           to: '/custom-fields',
@@ -252,18 +259,22 @@ function Shell({ children }: { children: React.ReactNode }) {
       ],
     },
     {
-      heading: t('nav.data', { defaultValue: 'Data' }),
+      heading: t('nav.reportsGroup', { defaultValue: 'Reports' }),
       items: [
-        { to: '/reports', label: t('nav.reports', { defaultValue: 'Reports' }), icon: ClockIcon },
         {
-          to: '/report-exports',
-          label: t('nav.reportExports', { defaultValue: 'Report exports' }),
+          to: '/sla-reports',
+          label: t('nav.slaReports', { defaultValue: 'SLA performance' }),
           icon: ClockIcon,
         },
         {
-          to: '/imports',
-          label: t('nav.imports', { defaultValue: 'Import contacts' }),
-          icon: UsersIcon,
+          to: '/reports',
+          label: t('nav.reports', { defaultValue: 'Scheduled reports' }),
+          icon: CalendarIcon,
+        },
+        {
+          to: '/report-exports',
+          label: t('nav.reportExports', { defaultValue: 'Excel exports' }),
+          icon: DownloadIcon,
         },
       ],
     },
@@ -273,7 +284,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         {
           to: '/ai-config',
           label: t('nav.aiConfig', { defaultValue: 'AI assistance' }),
-          icon: SettingsIcon,
+          icon: SparkleIcon,
         },
       ],
     },
