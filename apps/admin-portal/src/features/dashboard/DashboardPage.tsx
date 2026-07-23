@@ -50,7 +50,7 @@ function VolumeBars({ series }: { series: DashboardMetrics['volumeSeries'] }) {
       {series.map((s) => (
         <div key={s.day} className="group relative flex-1" title={`${s.day}: ${s.count}`}>
           <div
-            className="w-full rounded-t-md bg-gradient-to-t from-primary/70 to-primary shadow-sm shadow-primary/20 transition-[filter,opacity] duration-fast ease-out group-hover:brightness-110"
+            className="w-full rounded-t-md bg-gradient-to-t from-primary to-violet shadow-sm shadow-primary/20 transition-[filter,opacity] duration-fast ease-out group-hover:brightness-110"
             style={{ height: `${Math.max(4, (s.count / max) * 100)}%` }}
           />
         </div>
@@ -81,7 +81,7 @@ function RankList({
           <span className="w-28 shrink-0 truncate text-sm text-foreground">{r.name}</span>
           <span className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
             <span
-              className="block h-full rounded-full bg-gradient-to-r from-primary/75 to-primary shadow-sm shadow-primary/20"
+              className="block h-full rounded-full bg-gradient-to-r from-primary to-violet shadow-sm shadow-primary/20"
               style={{ width: `${(r.value / max) * 100}%` }}
             />
           </span>

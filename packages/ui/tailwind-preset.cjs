@@ -89,6 +89,9 @@ module.exports = {
           foreground: 'oklch(var(--secondary-brand-foreground) / <alpha-value>)',
         },
         display: 'oklch(var(--display) / <alpha-value>)',
+        // Aurora gradient companions to the primary.
+        violet: 'oklch(var(--violet) / <alpha-value>)',
+        magenta: 'oklch(var(--magenta) / <alpha-value>)',
         // Incoming chat bubble surface (messenger-vibrant direction).
         bubble: 'oklch(var(--bubble) / <alpha-value>)',
         // Per-vendor branding hook (legacy + runtime override).

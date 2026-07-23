@@ -65,6 +65,8 @@
   --secondary-brand: 0.66 0.22 0;
   --secondary-brand-foreground: 1 0 0;
   --display: 0.16 0.01 250;
+  --violet: 0.55 0.2 295;
+  --magenta: 0.6 0.22 350;
 }
 
 /* DEFAULT THEME — "midnight ink" (mirrors agent portal). Light via
@@ -108,6 +110,35 @@
   --secondary-brand: 0.72 0.19 12;
   --secondary-brand-foreground: 0.14 0.02 260;
   --display: 0.98 0.005 250;
+  --violet: 0.68 0.17 300;
+  --magenta: 0.7 0.2 350;
+}
+
+/* Aurora workspace wash (mirrors agent portal). */
+.app-aurora {
+  background-color: oklch(var(--background));
+  background-image:
+    radial-gradient(ellipse 55% 60% at 12% 0%, oklch(var(--primary) / 0.16) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 55% at 100% 20%, oklch(var(--violet) / 0.14) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 55% at 45% 110%, oklch(var(--magenta) / 0.12) 0%, transparent 60%);
+  background-size: 160% 160%;
+  background-repeat: no-repeat;
+  animation: aurora-drift 36s ease-in-out infinite;
+}
+@keyframes aurora-drift {
+  0%,
+  100% {
+    background-position:
+      0% 0%,
+      100% 0%,
+      50% 100%;
+  }
+  50% {
+    background-position:
+      30% 15%,
+      70% 30%,
+      35% 80%;
+  }
 }
 
 /* Full-viewport height chain. Kept in @layer base so it's emitted in the base

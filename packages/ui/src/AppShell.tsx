@@ -137,17 +137,9 @@ export function AppShell({
             <header className="flex h-14 shrink-0 items-center border-b border-border bg-background/80 px-4 backdrop-blur">
               {topBar}
             </header>
-            {/* Open workspace: deep surface with teal + coral glows so the
-                center feels alive without boxing content into cards. */}
-            <main
-              className="min-h-0 min-w-0 flex-1 overflow-hidden"
-              style={{
-                background:
-                  'radial-gradient(1100px 480px at 12% -8%, oklch(var(--primary) / 0.12) 0%, transparent 60%), radial-gradient(900px 420px at 100% 112%, oklch(var(--secondary-brand) / 0.1) 0%, transparent 60%), oklch(var(--background))',
-              }}
-            >
-              {children}
-            </main>
+            {/* Aurora workspace: drifting cyan/violet/magenta glows over the
+                ink surface (defined as .app-aurora in each portal's css). */}
+            <main className="app-aurora min-h-0 min-w-0 flex-1 overflow-hidden">{children}</main>
           </div>
         </div>
       );

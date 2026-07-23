@@ -188,7 +188,7 @@ export function Inbox() {
                 <span
                   className={cn(
                     'text-lg font-bold tabular-nums',
-                    tone === 'pink' && 'text-[oklch(0.50_0.20_0)]',
+                    tone === 'pink' && 'text-magenta',
                     tone === 'primary' && 'text-primary',
                     tone === 'default' && 'text-foreground',
                   )}
@@ -518,12 +518,14 @@ export function Inbox() {
                       {openCount === 0 ? (
                         <>
                           {t('inbox.welcome.zeroTitle')}{' '}
-                          <span className="text-primary">{t('inbox.welcome.zeroAccent')}</span>
+                          <span className="bg-gradient-to-r from-primary to-violet bg-clip-text text-transparent">
+                            {t('inbox.welcome.zeroAccent')}
+                          </span>
                         </>
                       ) : (
                         <>
                           {t('inbox.welcome.waiting', { count: openCount })}{' '}
-                          <span className="text-primary">
+                          <span className="bg-gradient-to-r from-primary to-violet bg-clip-text text-transparent">
                             {urgentCount > 0
                               ? t('inbox.welcome.urgentAccent', { count: urgentCount })
                               : t('inbox.welcome.pace')}

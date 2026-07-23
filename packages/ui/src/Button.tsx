@@ -24,11 +24,11 @@ const base =
   'active:enabled:scale-[0.97]';
 
 const variants: Record<Variant, string> = {
-  // Default CTA = near-black pill with a soft drop shadow for depth.
+  // Default CTA = aurora gradient (cyan -> violet) with a colored glow.
   default:
-    'bg-foreground text-background border border-transparent ' +
-    'shadow-sm shadow-foreground/20 hover:bg-foreground/90 hover:shadow-md hover:shadow-foreground/25',
-  // Use `brand` only when the button itself IS the brand moment (rare in app UI).
+    'bg-gradient-to-r from-primary to-violet text-primary-foreground border border-transparent ' +
+    'shadow-md shadow-primary/25 hover:brightness-110 hover:shadow-lg hover:shadow-violet/30',
+  // Solid brand fill for secondary brand moments.
   brand:
     'bg-primary text-primary-foreground border border-transparent ' +
     'shadow-sm shadow-primary/30 hover:bg-primary/90 hover:shadow-md hover:shadow-primary/40',

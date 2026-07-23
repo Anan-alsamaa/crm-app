@@ -47,7 +47,9 @@ export function StatCard({
       <div
         className={cn(
           'text-4xl font-extrabold tabular-nums tracking-[-0.03em] leading-none',
-          accent ? 'text-primary' : 'text-foreground',
+          accent
+            ? 'bg-gradient-to-r from-primary to-violet bg-clip-text text-transparent'
+            : 'text-foreground',
         )}
       >
         {value}

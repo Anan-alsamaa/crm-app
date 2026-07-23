@@ -87,6 +87,15 @@ interface NavSection {
   items: NavItem[];
 }
 
+/* Aurora nav: each item's icon sits in its own tinted tile. */
+const NAV_TILES = [
+  'bg-primary/15 text-primary',
+  'bg-violet/20 text-violet',
+  'bg-magenta/20 text-magenta',
+  'bg-warning/20 text-warning',
+  'bg-success/20 text-success',
+];
+
 function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSection[] }) {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
@@ -130,7 +139,7 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
               </h3>
             )}
             <ul className="space-y-0.5">
-              {sec.items.map((it) => (
+              {sec.items.map((it, iIdx) => (
                 <li key={it.to}>
                   <NavLink
                     to={it.to}
@@ -145,12 +154,25 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
                         isActive
                           ? 'bg-rail-active font-semibold text-rail-active-foreground shadow-sm shadow-black/10'
                           : 'font-medium text-rail-foreground/85',
-                        isCollapsed ? 'justify-center px-0' : 'gap-3 px-2.5',
+                        isCollapsed ? 'justify-center px-0' : 'gap-2.5 px-2',
                       )
                     }
                   >
-                    <it.icon size={16} />
-                    {!isCollapsed && <span className="flex-1 truncate">{it.label}</span>}
+                    {({ isActive }) => (
+                      <>
+                        <span
+                          className={cn(
+                            'grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors duration-fast ease-out',
+                            isActive
+                              ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/40'
+                              : NAV_TILES[(sIdx * 2 + iIdx) % NAV_TILES.length],
+                          )}
+                        >
+                          <it.icon size={14} />
+                        </span>
+                        {!isCollapsed && <span className="flex-1 truncate">{it.label}</span>}
+                      </>
+                    )}
                   </NavLink>
                 </li>
               ))}
