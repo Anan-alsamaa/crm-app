@@ -543,9 +543,9 @@ export function ConversationView({
 
   return (
     // Instagram-DM zone: the whole conversation area re-scopes to the LIGHT
-    // token set — white thread + vivid gradient bubbles inside the dark app
-    // chrome. Calm reading surface; the color lives in the bubbles.
-    <div className="theme-light flex h-full bg-background text-foreground">
+    // token set inside the dark app chrome. The zone canvas is a soft tint so
+    // white surfaces (toolbar, composer, cards, bubbles) visibly float.
+    <div className="theme-light flex h-full bg-canvas text-foreground">
       <div className="flex flex-1 min-w-0 flex-col">
         {/* Toolbar — slim row of status/priority/agent controls. */}
         {c && (
@@ -563,7 +563,34 @@ export function ConversationView({
               conversation sits just above the composer instead of floating at
               the top with an empty void below. Long threads overflow + scroll
               normally. */}
-          <div className="mx-auto flex min-h-full max-w-4xl flex-col justify-end gap-5 px-5 py-6">
+          <div className="mx-auto flex min-h-full max-w-3xl flex-col justify-end gap-5 px-5 py-6">
+            {/* Conversation-start header — the Instagram move: the contact's
+                profile opens the scrollback instead of an empty void. */}
+            {threadMessages.length > 0 && (
+              <div className="flex flex-col items-center gap-3 pb-8 pt-10 text-center">
+                <span className="rounded-full bg-gradient-to-br from-primary via-violet to-magenta p-[3px]">
+                  <span className="block rounded-full bg-canvas p-[3px]">
+                    <Avatar
+                      name={c?.contact?.name}
+                      email={c?.contact?.email}
+                      phone={c?.contact?.phone}
+                      size="lg"
+                    />
+                  </span>
+                </span>
+                <div className="space-y-1">
+                  <div className="text-lg font-bold tracking-tight text-foreground">
+                    {contactName}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {t('conversation.startedOn', {
+                      defaultValue: 'Conversation started {{date}}',
+                      date: dayLabel(threadMessages[0]!.date_created),
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
             {grouped.map((run, runIdx) => {
               const head = run[0]!;
               const isAgent = head.sender_type === 'agent';
@@ -760,7 +787,7 @@ export function ConversationView({
             <div
               className={cn(
                 'group relative rounded-[26px] transition-[box-shadow,background-color] duration-fast ease-out',
-                internalNote ? 'bg-warning/10' : 'bg-card shadow-soft',
+                internalNote ? 'bg-warning/10' : 'bg-card shadow-soft ring-1 ring-border',
                 // Confident aurora lift on focus: glow + a 2px brand ring.
                 'focus-within:shadow-lg focus-within:shadow-primary/15 focus-within:ring-2 focus-within:ring-primary/40',
                 internalNote && 'focus-within:ring-warning/50',
