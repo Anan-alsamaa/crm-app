@@ -64,6 +64,8 @@ export function Login() {
   const navigate = useNavigate();
   const [authError, setAuthError] = useState<string | null>(null);
   const [showPw, setShowPw] = useState(false);
+  const [capsOn, setCapsOn] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
   const {
     register,
     handleSubmit,
@@ -131,6 +133,7 @@ export function Login() {
                 id="email"
                 type="email"
                 autoComplete="username"
+                autoFocus
                 placeholder={t('login.emailPlaceholder')}
                 invalid={!!errors.email}
                 {...register('email')}
@@ -141,17 +144,27 @@ export function Login() {
               label={
                 <span className="flex items-baseline justify-between gap-3">
                   <span>{t('auth.password', { ns: 'common' })}</span>
-                  <a
-                    href="#"
-                    onClick={(e) => e.preventDefault()}
-                    className="text-xs font-semibold text-[oklch(0.42_0.10_196)] underline-offset-2 hover:underline"
+                  <button
+                    type="button"
+                    onClick={() => setForgotOpen((v) => !v)}
+                    aria-expanded={forgotOpen}
+                    className="rounded-sm text-xs font-medium normal-case tracking-normal text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {t('login.forgot', { defaultValue: 'Forgot password?' })}
-                  </a>
+                  </button>
                 </span>
               }
               htmlFor="password"
               error={errors.password?.message}
+              hint={
+                capsOn
+                  ? t('login.capsLock', { defaultValue: 'Caps Lock is on.' })
+                  : forgotOpen
+                    ? t('login.forgotHint', {
+                        defaultValue: 'Password resets are handled by your system administrator.',
+                      })
+                    : undefined
+              }
             >
               <div className="relative">
                 <Input
@@ -160,17 +173,22 @@ export function Login() {
                   autoComplete="current-password"
                   invalid={!!errors.password}
                   className="pe-10"
-                  {...register('password')}
+                  onKeyDown={(e) => setCapsOn(e.getModifierState('CapsLock'))}
+                  onKeyUp={(e) => setCapsOn(e.getModifierState('CapsLock'))}
+                  {...register('password', {
+                    onBlur: () => setCapsOn(false),
+                  })}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPw((v) => !v)}
+                  aria-pressed={showPw}
                   aria-label={
                     showPw
-                      ? t('login.hidePassword', { defaultValue: 'Hide' })
-                      : t('login.showPassword', { defaultValue: 'Reveal' })
+                      ? t('login.hidePassword', { defaultValue: 'Hide password' })
+                      : t('login.showPassword', { defaultValue: 'Show password' })
                   }
-                  className="absolute end-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground"
+                  className="absolute end-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <EyeIcon open={showPw} />
                 </button>

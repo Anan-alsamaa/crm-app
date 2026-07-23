@@ -90,9 +90,11 @@
     "emailPlaceholder": "you@company.com",
     "subtitle": "Continue helping your customers.",
     "forgot": "Forgot password?",
-    "hidePassword": "Hide",
-    "showPassword": "Reveal",
-    "secure": "Secured by JWT + TLS",
+    "hidePassword": "Hide password",
+    "showPassword": "Show password",
+    "capsLock": "Caps Lock is on.",
+    "forgotHint": "Password resets are handled by your administrator.",
+    "secure": "Encrypted connection",
     "help": "Trouble signing in? Talk to your administrator."
   },
   "nav": {

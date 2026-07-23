@@ -9,8 +9,10 @@
     "notAdmin": "Your account does not have administrator access.",
     "emailPlaceholder": "you@company.com",
     "forgot": "Forgot password?",
-    "hidePassword": "Hide",
-    "showPassword": "Reveal",
+    "hidePassword": "Hide password",
+    "showPassword": "Show password",
+    "capsLock": "Caps Lock is on.",
+    "forgotHint": "Password resets are handled by your system administrator.",
     "secure": "Every action audit-logged",
     "help": "Trouble signing in? Talk to your system administrator.",
     "subtitle": "Administrator access required."

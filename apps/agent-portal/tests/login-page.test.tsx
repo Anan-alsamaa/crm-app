@@ -37,7 +37,7 @@ describe('Login page', () => {
     renderLogin();
     const pw = document.getElementById('password') as HTMLInputElement;
     expect(pw.type).toBe('password');
-    await userEvent.click(screen.getByLabelText('Reveal'));
+    await userEvent.click(screen.getByLabelText('Show password'));
     expect(pw.type).toBe('text');
   });
 

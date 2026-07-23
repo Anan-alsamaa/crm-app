@@ -30,9 +30,11 @@
     "emailPlaceholder": "you@company.com",
     "subtitle": "واصل مساعدة عملائك.",
     "forgot": "هل نسيت كلمة المرور؟",
-    "hidePassword": "إخفاء",
-    "showPassword": "إظهار",
-    "secure": "محمي بـ JWT و TLS",
+    "hidePassword": "إخفاء كلمة المرور",
+    "showPassword": "إظهار كلمة المرور",
+    "capsLock": "مفتاح الأحرف الكبيرة (Caps Lock) مفعّل.",
+    "forgotHint": "تتم إعادة تعيين كلمة المرور عن طريق المسؤول.",
+    "secure": "اتصال مشفّر",
     "help": "تواجه مشكلة في تسجيل الدخول؟ تواصل مع المسؤول."
   },
   "nav": {
