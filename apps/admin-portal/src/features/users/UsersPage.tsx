@@ -300,20 +300,19 @@ export function UsersPage() {
                       'focus-visible:outline-none focus-visible:bg-secondary/60',
                     )}
                   >
-                    <span className="relative shrink-0">
-                      <Avatar name={fullName} email={u.email} size="md" />
-                      <span
-                        aria-hidden
-                        title={u.status}
-                        className={cn(
-                          'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-background',
-                          u.status === 'active' ? 'bg-success' : 'bg-muted-foreground/40',
-                        )}
-                      />
-                    </span>
+                    {/* No presence dot — a green avatar dot reads as "online",
+                        which we don't track. Account status shows as a label. */}
+                    <Avatar name={fullName} email={u.email} size="md" className="shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-foreground">
-                        {fullName || u.email}
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm font-semibold text-foreground">
+                          {fullName || u.email}
+                        </span>
+                        {u.status !== 'active' && (
+                          <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-2xs font-medium text-muted-foreground">
+                            {t('users.inactive', { defaultValue: 'Inactive' })}
+                          </span>
+                        )}
                       </div>
                       {fullName && (
                         <div className="truncate text-xs text-muted-foreground">{u.email}</div>

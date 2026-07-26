@@ -152,11 +152,11 @@ export function TicketsPage() {
 
       {/* Below: list + detail — no card wrapping. Single-column on mobile:
           the list and the detail view swap places. */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 gap-3 p-3">
         {(isDesktop || selected === null) && (
           <aside
             className={cn(
-              'flex shrink-0 flex-col overflow-hidden',
+              'flex shrink-0 flex-col overflow-hidden rounded-2xl bg-card shadow-soft',
               isDesktop ? 'w-[360px]' : 'w-full',
             )}
           >
@@ -268,7 +268,7 @@ export function TicketsPage() {
         )}
 
         {(isDesktop || selected !== null) && (
-          <section className="flex-1 overflow-auto bg-background">
+          <section className="flex-1 min-w-0 overflow-auto rounded-2xl bg-card shadow-soft">
             {selected ? (
               <TicketDetail ticketId={selected} onBack={() => setSelected(null)} />
             ) : (
