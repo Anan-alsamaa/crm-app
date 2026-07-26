@@ -146,10 +146,13 @@ export function Inbox() {
   const showConversation = isDesktop || selected !== null;
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full gap-3 p-3">
       {showList && (
         <aside
-          className={cn('relative flex shrink-0 flex-col', !isDesktop && 'w-full')}
+          className={cn(
+            'relative flex shrink-0 flex-col overflow-hidden rounded-2xl bg-card shadow-soft',
+            !isDesktop && 'w-full',
+          )}
           style={isDesktop ? { width: list.width } : undefined}
         >
           {/* Header */}
@@ -523,7 +526,7 @@ export function Inbox() {
       )}
 
       {showConversation && (
-        <section className="flex-1 overflow-hidden">
+        <section className="flex-1 min-w-0 overflow-hidden">
           {selected ? (
             <ConversationView conversationId={selected} onBack={() => setSelected(null)} />
           ) : (

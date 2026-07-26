@@ -200,10 +200,9 @@ export function ConversationSidebar({
   return (
     <aside
       className={cn(
-        // .theme-light re-scopes the light token set to this subtree: a bright
-        // profile panel against the dark workspace (Instagram-style contrast).
-        // Tinted canvas so the white cards visibly float.
-        'theme-light relative shrink-0 space-y-3 overflow-auto bg-canvas px-3 pb-8 text-foreground',
+        // One floating profile panel (reference composition): sections are
+        // separated by spacing inside a single rounded surface.
+        'theme-light relative shrink-0 overflow-auto rounded-2xl bg-card pb-6 text-foreground shadow-soft',
         widthClass,
         className,
       )}
@@ -211,7 +210,7 @@ export function ConversationSidebar({
     >
       {handle}
       {/* Identity hero — avatar in an aurora gradient ring over a glow halo. */}
-      <div className="relative -mx-3 overflow-hidden px-6 pb-6 pt-8">
+      <div className="relative overflow-hidden px-6 pb-6 pt-8">
         <div
           aria-hidden
           className="absolute inset-0"
@@ -240,9 +239,27 @@ export function ConversationSidebar({
         </div>
       </div>
 
+      {/* Stat tiles — the reference profile-panel move (Age/Blood, Files/Links). */}
+      <div className="grid grid-cols-2 gap-2 px-5 pb-2">
+        <div className="rounded-xl bg-secondary/60 px-3 py-2.5 text-center">
+          <div className="text-lg font-bold tabular-nums text-foreground">
+            {tickets.data?.length ?? 0}
+          </div>
+          <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t('sidebar.linkedTickets')}
+          </div>
+        </div>
+        <div className="rounded-xl bg-secondary/60 px-3 py-2.5 text-center">
+          <div className="text-lg font-bold tabular-nums text-foreground">{media?.length ?? 0}</div>
+          <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t('sidebar.sharedMedia', { defaultValue: 'Shared media' })}
+          </div>
+        </div>
+      </div>
+
       {/* Contact details — editable: agents can correct the customer's name,
           email or phone; saving persists to Directus and updates everywhere. */}
-      <section className="rounded-2xl bg-card p-4 shadow-soft">
+      <section className="px-5 py-4">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
             {t('sidebar.contact')}
@@ -331,7 +348,7 @@ export function ConversationSidebar({
 
       {/* Shared media — images from the thread, messenger-style grid. */}
       {media && media.length > 0 && (
-        <section className="rounded-2xl bg-card p-4 shadow-soft">
+        <section className="px-5 py-4">
           <SectionLabel count={media.length}>
             {t('sidebar.sharedMedia', { defaultValue: 'Shared media' })}
           </SectionLabel>
@@ -357,18 +374,18 @@ export function ConversationSidebar({
       )}
 
       {/* Tags — the single, interactive home for conversation tags. */}
-      <section className="rounded-2xl bg-card p-4 shadow-soft">
+      <section className="px-5 py-4">
         <ConversationTags conversation={c} />
       </section>
 
       {/* Custom fields (per-conversation) — card hides when nothing renders. */}
-      <section className="rounded-2xl bg-card p-4 shadow-soft empty:hidden">
+      <section className="px-5 py-4 empty:hidden">
         <CustomFieldsSection entityType="conversation" entityId={conversationId} />
       </section>
 
       {/* Orders — the customer's latest order (live Yiji data), right in the inbox */}
       {contact.data?.external_customer_id && contact.data?.vendor?.yiji_vendor_id && (
-        <section className="rounded-2xl bg-card p-4 shadow-soft">
+        <section className="px-5 py-4">
           <LatestOrder
             vendorId={contact.data.vendor.yiji_vendor_id}
             customerId={contact.data.external_customer_id}
@@ -377,7 +394,7 @@ export function ConversationSidebar({
       )}
 
       {/* AI assistance */}
-      <section className="rounded-2xl bg-card p-4 shadow-soft">
+      <section className="px-5 py-4">
         <AiPanel
           key={conversationId}
           conversationId={conversationId}
@@ -392,7 +409,7 @@ export function ConversationSidebar({
 
       {/* Internal notes — agent-only side conversation. Authored by the team,
           rendered out of the customer thread so they can't bleed in visually. */}
-      <section className="rounded-2xl bg-card p-4 shadow-soft">
+      <section className="px-5 py-4">
         <SectionLabel count={notes?.length}>
           {t('sidebar.internalNotes', { defaultValue: 'Internal notes' })}
         </SectionLabel>
@@ -443,7 +460,7 @@ export function ConversationSidebar({
       </section>
 
       {/* Linked tickets — borderless rows with hover lift, not stacked cards. */}
-      <section className="rounded-2xl bg-card p-4 shadow-soft">
+      <section className="px-5 py-4">
         <SectionLabel count={tickets.data?.length}>{t('sidebar.linkedTickets')}</SectionLabel>
         {tickets.isLoading ? (
           <Spinner />

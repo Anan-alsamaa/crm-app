@@ -553,8 +553,8 @@ export function ConversationView({
     // Instagram-DM zone: the whole conversation area re-scopes to the LIGHT
     // token set inside the dark app chrome. The zone canvas is a soft tint so
     // white surfaces (toolbar, composer, cards, bubbles) visibly float.
-    <div className="theme-light flex h-full bg-canvas text-foreground">
-      <div className="flex flex-1 min-w-0 flex-col">
+    <div className="theme-light flex h-full gap-3 text-foreground">
+      <div className="flex flex-1 min-w-0 flex-col overflow-hidden rounded-2xl bg-card shadow-soft">
         {/* Toolbar — slim row of status/priority/agent controls. */}
         {c && (
           <ConversationToolbar
@@ -566,7 +566,7 @@ export function ConversationView({
         )}
 
         {/* Thread — clean solid surface; no gradient behind reading text. */}
-        <div ref={listRef} className="relative flex-1 overflow-auto">
+        <div ref={listRef} className="relative flex-1 overflow-auto bg-secondary/25">
           {/* min-h-full + justify-end bottom-anchors the thread: a short
               conversation sits just above the composer instead of floating at
               the top with an empty void below. Long threads overflow + scroll
