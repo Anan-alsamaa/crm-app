@@ -335,9 +335,9 @@ function Shell({ children }: { children: React.ReactNode }) {
           <div className="flex w-full items-center gap-4">
             {/* Left: bold page title */}
             <div className="flex min-w-0 flex-1 items-center">
-              <h1 className="hidden truncate text-lg font-bold tracking-[-0.02em] text-foreground md:block">
+              <span className="hidden truncate text-lg font-bold tracking-[-0.02em] text-foreground md:block">
                 {pageTitle}
-              </h1>
+              </span>
             </div>
             {/* Center: the search field */}
             <div className="flex w-full max-w-sm justify-center">
