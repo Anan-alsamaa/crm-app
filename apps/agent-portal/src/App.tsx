@@ -221,6 +221,9 @@ function MobileBrand() {
 function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const location = useLocation();
+  const { user } = useAuth();
+  const displayName =
+    [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || 'Agent';
   // Command-palette open state is lifted here so the top-bar search trigger and
   // the Cmd/Ctrl+K shortcut both drive the one palette instance below.
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -276,15 +279,15 @@ function Shell({ children }: { children: React.ReactNode }) {
           </div>
         }
         topBar={
-          <div className="flex w-full items-center gap-3">
-            {/* Left: section label */}
+          <div className="flex w-full items-center gap-4">
+            {/* Left: bold page title */}
             <div className="flex min-w-0 flex-1 items-center">
-              <span className="hidden truncate text-sm font-semibold tracking-tight text-foreground md:block">
+              <h1 className="hidden truncate text-lg font-bold tracking-[-0.02em] text-foreground md:block">
                 {pageTitle}
-              </span>
+              </h1>
             </div>
             {/* Center: the search field */}
-            <div className="flex w-full max-w-md justify-center">
+            <div className="flex w-full max-w-sm justify-center">
               <SearchTrigger
                 fullWidth
                 label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
@@ -292,12 +295,19 @@ function Shell({ children }: { children: React.ReactNode }) {
                 onClick={() => setPaletteOpen(true)}
               />
             </div>
-            {/* Right: utility controls */}
-            <div className="flex flex-1 items-center justify-end gap-1 text-muted-foreground">
-              <NotificationBell />
-              <SoundToggle />
-              <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-              <LanguageToggle />
+            {/* Right: utility cluster + user chip */}
+            <div className="flex flex-1 items-center justify-end gap-2">
+              <div className="flex items-center gap-0.5 rounded-xl bg-secondary/50 p-1 text-muted-foreground ring-1 ring-border">
+                <NotificationBell />
+                <SoundToggle />
+                <LanguageToggle />
+              </div>
+              <span className="hidden items-center gap-2 rounded-full bg-secondary/50 py-1 pe-3 ps-1 ring-1 ring-border sm:flex">
+                <Avatar name={displayName} email={user?.email} size="sm" />
+                <span className="max-w-[9rem] truncate text-xs font-semibold text-foreground">
+                  {displayName}
+                </span>
+              </span>
             </div>
           </div>
         }

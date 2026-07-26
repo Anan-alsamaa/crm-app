@@ -46,7 +46,7 @@ export function SearchTrigger({
       type={type}
       aria-label={ariaLabel ?? label}
       className={cn(
-        'group flex h-9 items-center gap-2.5 rounded-lg border border-border bg-secondary/60 text-sm text-muted-foreground',
+        'group flex h-9 items-center gap-2.5 rounded-xl border border-border bg-secondary/60 text-sm text-muted-foreground',
         'transition-colors duration-base ease-out',
         'hover:border-border-strong hover:bg-secondary hover:text-foreground',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
