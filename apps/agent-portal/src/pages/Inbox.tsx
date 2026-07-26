@@ -534,94 +534,139 @@ export function Inbox() {
               const all = conversations.data ?? [];
               const openCount = all.filter((c) => c.status === 'open').length;
               const urgentCount = all.filter((c) => c.priority === 'urgent').length;
+              const unreadCount = all.filter((c) => c.unread_count_agent > 0).length;
               const recent = [...all]
                 .sort((a, b) => (b.last_message_at ?? '').localeCompare(a.last_message_at ?? ''))
-                .slice(0, 4);
+                .slice(0, 5);
               return (
-                <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center px-6">
-                  <div className="flex flex-col items-center gap-6 text-center">
-                    <Pill tone="pink" size="md">
-                      <span className="font-semibold">{t('inbox.welcome.queue')}</span>
-                      <span className="opacity-70">·</span>
-                      <span>{t('inbox.welcome.openCount', { count: openCount })}</span>
-                    </Pill>
-                    <h2 className="text-3xl sm:text-4xl font-extrabold leading-[1.02] tracking-[-0.035em] text-display text-balance">
-                      {openCount === 0 ? (
-                        <>
-                          {t('inbox.welcome.zeroTitle')}{' '}
-                          <span className="bg-gradient-to-r from-primary to-violet bg-clip-text text-transparent">
-                            {t('inbox.welcome.zeroAccent')}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          {t('inbox.welcome.waiting', { count: openCount })}{' '}
-                          <span className="bg-gradient-to-r from-primary to-violet bg-clip-text text-transparent">
-                            {urgentCount > 0
-                              ? t('inbox.welcome.urgentAccent', { count: urgentCount })
-                              : t('inbox.welcome.pace')}
-                          </span>
-                        </>
-                      )}
-                    </h2>
-                    <p className="max-w-prose text-base text-muted-foreground">
-                      {t('inbox.welcomeHint', {
-                        defaultValue:
-                          'Pick the next thread on the left, or use the stats above to filter by what needs attention first.',
-                      })}
-                    </p>
-
-                    {recent.length > 0 && (
-                      <div className="mt-2 w-full max-w-md text-start">
-                        <p className="mb-3 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                          {t('inbox.welcome.recent')}
-                        </p>
-                        <ul className="space-y-1">
-                          {recent.map((c) => {
-                            const name =
-                              c.contact?.name ||
-                              c.contact?.phone ||
-                              c.contact?.email ||
-                              t('inbox.unknownContact');
-                            return (
-                              <li key={c.id}>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelected(c.id)}
-                                  className="group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-start transition-colors duration-fast ease-out hover:bg-secondary/70"
-                                >
-                                  <Avatar
-                                    name={c.contact?.name}
-                                    email={c.contact?.email}
-                                    phone={c.contact?.phone}
-                                    size="sm"
-                                  />
-                                  <span className="flex-1 truncate text-sm font-medium text-foreground">
-                                    {name}
-                                  </span>
-                                  <Pill tone={STATUS_TONE[c.status]} size="sm">
-                                    {t(`status.${c.status}`, { ns: 'common' })}
-                                  </Pill>
-                                  <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-                                    {formatRelative(c.last_message_at)}
-                                  </span>
-                                </button>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    )}
-
-                    {openCount === 0 && (
-                      <div className="mt-2 flex items-center gap-3">
-                        <ConversationPlaceholderArt size={120} />
-                        <p className="text-sm text-muted-foreground max-w-xs">
-                          {t('inbox.welcome.zeroArt')}
-                        </p>
-                      </div>
-                    )}
+                <div className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-4 p-6">
+                  {/* Gradient hero card — the agent's morning glance. */}
+                  <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-violet p-7 text-primary-foreground shadow-lg shadow-primary/25">
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 opacity-70"
+                      style={{
+                        background:
+                          'radial-gradient(circle at 100% 0%, oklch(1 0 0 / 0.2) 0%, transparent 45%), radial-gradient(circle at 0% 120%, oklch(0 0 0 / 0.18) 0%, transparent 55%)',
+                      }}
+                    />
+                    <div className="relative">
+                      <h2 className="text-3xl font-extrabold leading-[1.05] tracking-[-0.035em] text-balance">
+                        {openCount === 0
+                          ? `${t('inbox.welcome.zeroTitle')} ${t('inbox.welcome.zeroAccent')}`
+                          : `${t('inbox.welcome.waiting', { count: openCount })} ${
+                              urgentCount > 0
+                                ? t('inbox.welcome.urgentAccent', { count: urgentCount })
+                                : t('inbox.welcome.pace')
+                            }`}
+                      </h2>
+                      <p className="mt-2 max-w-prose text-sm text-primary-foreground/85">
+                        {t('inbox.welcomeHint', {
+                          defaultValue:
+                            'Pick the next thread on the left, or filter by what needs attention first.',
+                        })}
+                      </p>
+                    </div>
                   </div>
+
+                  {/* Colored stat tiles. */}
+                  <div className="grid grid-cols-3 gap-4">
+                    {(
+                      [
+                        {
+                          key: 'open',
+                          label: t('inbox.stats.open', { defaultValue: 'open' }),
+                          value: openCount,
+                          tile: 'bg-success/10 ring-success/15',
+                          num: 'text-success',
+                        },
+                        {
+                          key: 'urgent',
+                          label: t('inbox.stats.urgent', { defaultValue: 'urgent' }),
+                          value: urgentCount,
+                          tile: 'bg-magenta/[0.08] ring-magenta/15',
+                          num: 'text-magenta',
+                        },
+                        {
+                          key: 'unread',
+                          label: t('inbox.stats.unread', { defaultValue: 'unread' }),
+                          value: unreadCount,
+                          tile: 'bg-primary/[0.08] ring-primary/15',
+                          num: 'text-primary',
+                        },
+                      ] as const
+                    ).map((s) => (
+                      <div
+                        key={s.key}
+                        className={cn(
+                          'rounded-3xl p-5 shadow-soft ring-1 ring-foreground/[0.04]',
+                          s.tile,
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            'text-4xl font-extrabold leading-none tabular-nums tracking-[-0.04em]',
+                            s.num,
+                          )}
+                        >
+                          {s.value}
+                        </div>
+                        <div className="mt-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          {s.label}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Recent activity panel. */}
+                  {recent.length > 0 ? (
+                    <div className="rounded-3xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.04]">
+                      <p className="mb-3 text-sm font-semibold tracking-tight text-foreground">
+                        {t('inbox.welcome.recent')}
+                      </p>
+                      <ul className="space-y-1">
+                        {recent.map((c) => {
+                          const name =
+                            c.contact?.name ||
+                            c.contact?.phone ||
+                            c.contact?.email ||
+                            t('inbox.unknownContact');
+                          return (
+                            <li key={c.id}>
+                              <button
+                                type="button"
+                                onClick={() => setSelected(c.id)}
+                                className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-start transition-colors duration-fast ease-out hover:bg-secondary/60"
+                              >
+                                <Avatar
+                                  name={c.contact?.name}
+                                  email={c.contact?.email}
+                                  phone={c.contact?.phone}
+                                  size="md"
+                                />
+                                <span className="flex-1 truncate text-sm font-semibold text-foreground">
+                                  {name}
+                                </span>
+                                <Pill tone={STATUS_TONE[c.status]} size="sm">
+                                  {t(`status.${c.status}`, { ns: 'common' })}
+                                </Pill>
+                                <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                                  {formatRelative(c.last_message_at)}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-4 rounded-3xl bg-card p-6 shadow-soft ring-1 ring-foreground/[0.04]">
+                      <ConversationPlaceholderArt size={96} />
+                      <p className="max-w-xs text-sm text-muted-foreground">
+                        {t('inbox.welcome.zeroArt')}
+                      </p>
+                    </div>
+                  )}
                 </div>
               );
             })()

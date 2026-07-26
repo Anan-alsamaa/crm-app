@@ -16,6 +16,7 @@ import {
   Input,
   SelectMenu,
   Skeleton,
+  StatStrip,
   toast,
   Toolbar,
   ToolbarSpacer,
@@ -244,7 +245,31 @@ export function UsersPage() {
         </Button>
       </Toolbar>
 
-      <div className="flex-1 overflow-auto px-5 py-3">
+      <div className="flex-1 overflow-auto px-5 py-4">
+        {!users.isLoading && !users.isError && list.length > 0 && (
+          <div className="mx-auto mb-5 max-w-5xl">
+            <StatStrip
+              items={[
+                { label: t('users.total', { defaultValue: 'total' }), value: total, tone: 'blue' },
+                {
+                  label: t('users.active', { defaultValue: 'active' }),
+                  value: activeCount,
+                  tone: 'green',
+                },
+                {
+                  label: t('users.admins', { defaultValue: 'admins' }),
+                  value: adminCount,
+                  tone: 'violet',
+                },
+                {
+                  label: t('users.noTeamShort', { defaultValue: 'no team' }),
+                  value: teamlessCount,
+                  tone: teamlessCount > 0 ? 'amber' : 'neutral',
+                },
+              ]}
+            />
+          </div>
+        )}
         {users.isError ? (
           <ErrorState
             title={t('users.loadError', { defaultValue: 'Could not load users' })}

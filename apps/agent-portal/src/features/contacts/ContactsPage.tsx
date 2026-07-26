@@ -7,6 +7,7 @@ import {
   cn,
   EmptyState,
   Skeleton,
+  StatStrip,
   toast,
   Toolbar,
   ToolbarSpacer,
@@ -96,7 +97,11 @@ export function ContactsPage() {
     );
   };
 
-  const total = contacts.data?.length ?? 0;
+  const all = contacts.data ?? [];
+  const total = all.length;
+  const withEmail = all.filter((c) => !!c.email).length;
+  const withPhone = all.filter((c) => !!c.phone).length;
+  const withVendor = all.filter((c) => !!c.vendor).length;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -149,7 +154,35 @@ export function ContactsPage() {
         </Button>
       </Toolbar>
 
-      <div className="flex-1 overflow-auto px-5 py-3">
+      <div className="flex-1 overflow-auto px-5 py-4">
+        {!contacts.isLoading && total > 0 && (
+          <div className="mx-auto mb-5 max-w-5xl">
+            <StatStrip
+              items={[
+                {
+                  label: t('contacts.total', { defaultValue: 'total' }),
+                  value: total,
+                  tone: 'blue',
+                },
+                {
+                  label: t('contacts.withEmail', { defaultValue: 'with email' }),
+                  value: withEmail,
+                  tone: 'violet',
+                },
+                {
+                  label: t('contacts.withPhone', { defaultValue: 'with phone' }),
+                  value: withPhone,
+                  tone: 'green',
+                },
+                {
+                  label: t('contacts.withVendor', { defaultValue: 'linked vendor' }),
+                  value: withVendor,
+                  tone: 'crimson',
+                },
+              ]}
+            />
+          </div>
+        )}
         {contacts.isLoading ? (
           <ul className="mx-auto max-w-5xl space-y-1">
             {Array.from({ length: 8 }).map((_, i) => (

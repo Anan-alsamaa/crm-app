@@ -14,6 +14,7 @@ import {
   FormField,
   Input,
   Skeleton,
+  StatStrip,
   Textarea,
   toast,
   Toolbar,
@@ -98,7 +99,35 @@ export function TeamsPage() {
         </Button>
       </Toolbar>
 
-      <div className="flex-1 overflow-auto px-5 py-3">
+      <div className="flex-1 overflow-auto px-5 py-4">
+        {!teams.isLoading && !teams.isError && teamCount > 0 && (
+          <div className="mx-auto mb-5 max-w-5xl">
+            <StatStrip
+              items={[
+                {
+                  label: t('teams.total', { defaultValue: 'teams' }),
+                  value: teamCount,
+                  tone: 'blue',
+                },
+                {
+                  label: t('teams.members', { defaultValue: 'members' }),
+                  value: userCount,
+                  tone: 'violet',
+                },
+                {
+                  label: t('teams.assigned', { defaultValue: 'assigned' }),
+                  value: assignedCount,
+                  tone: 'green',
+                },
+                {
+                  label: t('teams.unassigned', { defaultValue: 'unassigned' }),
+                  value: userCount - assignedCount,
+                  tone: userCount - assignedCount > 0 ? 'amber' : 'neutral',
+                },
+              ]}
+            />
+          </div>
+        )}
         {teams.isError ? (
           <ErrorState
             title={t('teams.loadError', { defaultValue: 'Could not load teams' })}

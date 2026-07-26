@@ -14,6 +14,7 @@ import {
   Input,
   Skeleton,
   Spinner,
+  StatStrip,
   toast,
   Toolbar,
   ToolbarSpacer,
@@ -181,7 +182,30 @@ export function VendorsPage() {
         </Button>
       </Toolbar>
 
-      <div className="flex-1 overflow-auto px-5 py-3">
+      <div className="flex-1 overflow-auto px-5 py-4">
+        {!vendors.isLoading && total > 0 && (
+          <div className="mx-auto mb-5 max-w-5xl">
+            <StatStrip
+              items={[
+                {
+                  label: t('vendors.total', { defaultValue: 'vendors' }),
+                  value: total,
+                  tone: 'blue',
+                },
+                {
+                  label: t('vendors.active', { defaultValue: 'active' }),
+                  value: activeCount,
+                  tone: 'green',
+                },
+                {
+                  label: t('vendors.inactive', { defaultValue: 'inactive' }),
+                  value: total - activeCount,
+                  tone: total - activeCount > 0 ? 'amber' : 'neutral',
+                },
+              ]}
+            />
+          </div>
+        )}
         {vendors.isLoading ? (
           <div className="mx-auto max-w-5xl space-y-1">
             {Array.from({ length: 5 }).map((_, i) => (
