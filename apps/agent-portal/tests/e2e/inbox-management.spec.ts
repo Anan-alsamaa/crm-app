@@ -13,7 +13,7 @@ const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD!;
 test('agent changes status, priority, and assignment then sees them persist', async ({ page }) => {
   await page.goto('http://localhost:5173/login');
   await page.getByLabel(/email/i).fill(AGENT_EMAIL);
-  await page.getByLabel(/password/i).fill(AGENT_PASSWORD);
+  await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page.getByRole('heading', { name: /shared inbox/i })).toBeVisible({
     timeout: 10_000,
@@ -46,7 +46,7 @@ test('agent changes status, priority, and assignment then sees them persist', as
 test('agent toggles internal note mode and sees the amber styling', async ({ page }) => {
   await page.goto('http://localhost:5173/login');
   await page.getByLabel(/email/i).fill(AGENT_EMAIL);
-  await page.getByLabel(/password/i).fill(AGENT_PASSWORD);
+  await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   await page.locator('aside li button').first().waitFor({ timeout: 15_000 });
   await page.locator('aside li button').first().click();
@@ -62,7 +62,7 @@ test('agent toggles internal note mode and sees the amber styling', async ({ pag
 test('bulk selecting multiple conversations enables the bulk toolbar', async ({ page }) => {
   await page.goto('http://localhost:5173/login');
   await page.getByLabel(/email/i).fill(AGENT_EMAIL);
-  await page.getByLabel(/password/i).fill(AGENT_PASSWORD);
+  await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   await page.locator('aside li button').first().waitFor({ timeout: 15_000 });
 

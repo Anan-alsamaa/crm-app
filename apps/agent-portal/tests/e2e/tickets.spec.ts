@@ -18,7 +18,7 @@ const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD!;
 async function signInAgent(page: import('@playwright/test').Page) {
   await page.goto('http://localhost:5173/login');
   await page.getByLabel(/email/i).fill(AGENT_EMAIL);
-  await page.getByLabel(/password/i).fill(AGENT_PASSWORD);
+  await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page.getByRole('heading', { name: /shared inbox/i })).toBeVisible({
     timeout: 20_000,

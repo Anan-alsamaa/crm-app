@@ -15,7 +15,7 @@ test('unauthenticated visitor is redirected to login', async ({ page }) => {
 test('agent signs in and reaches the inbox', async ({ page }) => {
   await page.goto('http://localhost:5173/login');
   await page.getByLabel(/email/i).fill(AGENT_EMAIL);
-  await page.getByLabel(/password/i).fill(AGENT_PASSWORD);
+  await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page.getByRole('heading', { name: /shared inbox/i })).toBeVisible({
     timeout: 20_000,

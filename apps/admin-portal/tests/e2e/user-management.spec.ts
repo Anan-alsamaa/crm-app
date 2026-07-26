@@ -12,7 +12,7 @@ const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? '123456';
 async function login(page: import('@playwright/test').Page) {
   await page.goto(`${BASE}/login`);
   await page.getByLabel(/email/i).fill(ADMIN_EMAIL);
-  await page.getByLabel(/password/i).fill(ADMIN_PASSWORD);
+  await page.locator('#password').fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   // Wait for the post-login landing — the admin lands on the Dashboard, whose
   // h1 is "Overview" (level:1 disambiguates it from the "Overview" section

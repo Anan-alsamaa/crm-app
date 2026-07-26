@@ -30,7 +30,7 @@ test('customer message reaches the agent and the agent reply returns', async ({ 
   const agent = await browser.newPage();
   await agent.goto('http://localhost:5173/login');
   await agent.getByLabel(/email/i).fill(AGENT_EMAIL);
-  await agent.getByLabel(/password/i).fill(AGENT_PASSWORD);
+  await agent.locator('#password').fill(AGENT_PASSWORD);
   await agent.getByRole('button', { name: /sign in/i }).click();
   await expect(agent.getByRole('heading', { name: /shared inbox/i })).toBeVisible({
     timeout: 10_000,
