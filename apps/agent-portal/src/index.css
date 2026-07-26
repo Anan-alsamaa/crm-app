@@ -211,6 +211,7 @@ body {
   background-attachment: fixed;
   color: oklch(var(--foreground));
   font-family:
+    'Inter Variable',
     ui-sans-serif,
     system-ui,
     -apple-system,

@@ -102,8 +102,10 @@ module.exports = {
         },
       },
       fontFamily: {
-        // System sans (impeccable product register allows system stacks).
+        // Inter (self-hosted variable, bundled in each portal entry) as the
+        // designed UI face, falling back to the system stack.
         sans: [
+          '"Inter Variable"',
           'ui-sans-serif',
           'system-ui',
           '-apple-system',
