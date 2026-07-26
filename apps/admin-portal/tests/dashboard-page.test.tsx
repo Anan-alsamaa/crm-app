@@ -67,7 +67,7 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Overview')).toBeInTheDocument();
     // Skeleton grid renders 5 placeholders; no stat values present.
     expect(screen.queryByText('Conversations')).not.toBeInTheDocument();
-    expect(container.querySelectorAll('.h-24').length).toBe(5);
+    expect(container.querySelectorAll('.h-28').length).toBe(5);
   });
 
   it('renders the loading skeleton when data is missing but not loading', () => {
@@ -85,15 +85,15 @@ describe('DashboardPage', () => {
     });
     renderPage();
 
-    // Stat labels.
-    expect(screen.getByText('Conversations')).toBeInTheDocument();
+    // Stat labels. "Conversations" appears twice (hero banner + KPI card).
+    expect(screen.getAllByText('Conversations').length).toBeGreaterThan(0);
     expect(screen.getByText('Avg response')).toBeInTheDocument();
     expect(screen.getByText('SLA compliance')).toBeInTheDocument();
     expect(screen.getByText('Resolution rate')).toBeInTheDocument();
     expect(screen.getByText('CSAT')).toBeInTheDocument();
 
     // Formatted values.
-    expect(screen.getByText('128')).toBeInTheDocument(); // conversationVolume
+    expect(screen.getAllByText('128').length).toBeGreaterThan(0); // conversationVolume (hero + KPI)
     expect(screen.getByText('42m')).toBeInTheDocument(); // fmtMinutes < 60
     expect(screen.getByText('87%')).toBeInTheDocument(); // fmtPct SLA
     expect(screen.getByText('73%')).toBeInTheDocument(); // fmtPct resolution
@@ -105,8 +105,9 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Agent productivity')).toBeInTheDocument();
     expect(screen.getByText('Vendor activity')).toBeInTheDocument();
 
-    // Status breakdown (sorted desc: resolved 60 first).
-    expect(screen.getByText('resolved')).toBeInTheDocument();
+    // Status breakdown (sorted desc: resolved 60 first). "resolved" also
+    // appears as the agent-productivity unit, so match at least one.
+    expect(screen.getAllByText('resolved').length).toBeGreaterThan(0);
     expect(screen.getByText('60')).toBeInTheDocument();
 
     // Rank lists.
