@@ -382,15 +382,19 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         </button>
       )}
 
-      {/* Identity card — avatar + subject + contact + status pills */}
+      {/* Identity card — gradient-ringed avatar + subject + contact + pills */}
       <header className="space-y-4">
         <div className="flex items-start gap-4">
-          <Avatar
-            name={tk.contact?.name}
-            email={tk.contact?.email}
-            phone={tk.contact?.phone}
-            size="lg"
-          />
+          <span className="shrink-0 rounded-full bg-gradient-to-br from-primary via-violet to-magenta p-[3px] shadow-md shadow-primary/20">
+            <span className="block rounded-full bg-background p-[2px]">
+              <Avatar
+                name={tk.contact?.name}
+                email={tk.contact?.email}
+                phone={tk.contact?.phone}
+                size="lg"
+              />
+            </span>
+          </span>
           <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <Pill tone={statusTone[tk.status]} dot>
@@ -436,7 +440,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         </div>
 
         {tk.description && (
-          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+          <p className="max-w-prose whitespace-pre-wrap rounded-xl bg-secondary/50 px-4 py-3 text-sm leading-relaxed text-foreground/85">
             {tk.description}
           </p>
         )}

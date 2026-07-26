@@ -151,7 +151,7 @@ export function ContactsPage() {
 
       <div className="flex-1 overflow-auto px-5 py-3">
         {contacts.isLoading ? (
-          <ul className="mx-auto max-w-5xl divide-y divide-border">
+          <ul className="mx-auto max-w-5xl space-y-1">
             {Array.from({ length: 8 }).map((_, i) => (
               <li key={i} className="flex items-center gap-3 px-4 py-2.5">
                 <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
@@ -177,7 +177,7 @@ export function ContactsPage() {
             {t('contacts.noMatch', { defaultValue: 'No contacts match your search.' })}
           </p>
         ) : (
-          <ul className="mx-auto max-w-5xl divide-y divide-border">
+          <ul className="mx-auto max-w-5xl space-y-1">
             {filtered.map((c) => {
               const name = c.name ?? c.email ?? c.phone ?? c.external_customer_id ?? '—';
               return (
@@ -186,7 +186,7 @@ export function ContactsPage() {
                     type="button"
                     onClick={() => navigate(`/contacts/${c.id}`)}
                     className={cn(
-                      'group flex w-full items-center gap-3 px-4 py-2.5 text-start',
+                      'group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-start',
                       'transition-colors duration-fast ease-out hover:bg-secondary/50',
                       'focus-visible:outline-none focus-visible:bg-secondary/60',
                     )}
@@ -195,11 +195,11 @@ export function ContactsPage() {
                       name={c.name}
                       email={c.email}
                       phone={c.phone}
-                      size="sm"
+                      size="md"
                       className="shrink-0"
                     />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-foreground">{name}</div>
+                      <div className="truncate text-sm font-semibold text-foreground">{name}</div>
                       {c.email && (
                         <div className="truncate text-xs text-muted-foreground">{c.email}</div>
                       )}

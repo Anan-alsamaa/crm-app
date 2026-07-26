@@ -45,16 +45,52 @@ function VolumeBars({ series }: { series: DashboardMetrics['volumeSeries'] }) {
         {t('dashboard.noActivity', { defaultValue: 'No activity in range.' })}
       </p>
     );
+  const labelEvery = Math.max(1, Math.ceil(series.length / 6));
   return (
-    <div className="flex h-28 items-end gap-1">
-      {series.map((s) => (
-        <div key={s.day} className="group relative flex-1" title={`${s.day}: ${s.count}`}>
+    <div>
+      {/* Peak annotation gives the y-axis meaning without axis chrome. */}
+      <div className="mb-2 flex items-baseline justify-between text-2xs text-muted-foreground">
+        <span>
+          {t('dashboard.peak', { defaultValue: 'Peak day' })}{' '}
+          <strong className="font-semibold tabular-nums text-foreground">{max}</strong>
+        </span>
+        <span className="tabular-nums">
+          {series.length} {t('dashboard.daysUnit', { defaultValue: 'days' })}
+        </span>
+      </div>
+      <div className="flex h-40 items-end gap-1 border-b border-border pb-px">
+        {series.map((s) => (
           <div
-            className="w-full rounded-t-md bg-gradient-to-t from-primary to-violet shadow-sm shadow-primary/20 transition-[filter,opacity] duration-fast ease-out group-hover:brightness-110"
-            style={{ height: `${Math.max(4, (s.count / max) * 100)}%` }}
-          />
-        </div>
-      ))}
+            key={s.day}
+            className="group relative flex h-full flex-1 flex-col justify-end"
+            title={`${s.day}: ${s.count}`}
+          >
+            {s.count > 0 && (
+              <span className="pointer-events-none absolute -top-5 start-1/2 -translate-x-1/2 rounded-md bg-foreground px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-background opacity-0 shadow-md transition-opacity duration-fast group-hover:opacity-100 rtl:translate-x-1/2">
+                {s.count}
+              </span>
+            )}
+            <div
+              className={cn(
+                'w-full rounded-t-md transition-[filter] duration-fast ease-out group-hover:brightness-110',
+                s.count > 0 ? 'bg-gradient-to-t from-primary to-violet' : 'bg-secondary',
+              )}
+              style={{ height: `${Math.max(3, (s.count / max) * 100)}%` }}
+            />
+          </div>
+        ))}
+      </div>
+      {/* Sparse date ticks under the baseline. */}
+      <div className="mt-1.5 flex gap-1">
+        {series.map((s, i) => (
+          <span
+            key={s.day}
+            className="flex-1 truncate text-center text-[9px] tabular-nums text-muted-foreground"
+          >
+            {i % labelEvery === 0 ? s.day.slice(5) : ''}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -146,6 +182,18 @@ export function DashboardPage() {
             </div>
           ) : (
             <>
+              {/* Hero header — the workspace's morning glance. */}
+              <div>
+                <h2 className="text-3xl font-extrabold tracking-[-0.03em] text-display">
+                  {t('dashboard.heroTitle', { defaultValue: 'Workspace overview' })}
+                </h2>
+                <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+                  {t('dashboard.heroHint', {
+                    defaultValue: 'How support is performing across every channel, at a glance.',
+                  })}
+                </p>
+              </div>
+
               {/* Key stats */}
               <div className="grid grid-cols-2 gap-x-8 gap-y-6 lg:grid-cols-5">
                 <Stat
@@ -189,33 +237,48 @@ export function DashboardPage() {
                   <VolumeBars series={m.data.volumeSeries} />
                 </Card>
                 <Card title={t('dashboard.byStatus', { defaultValue: 'Conversations by status' })}>
-                  <ul className="space-y-2.5">
-                    {Object.entries(m.data.conversationsByStatus).length === 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        {t('dashboard.noConversations', {
-                          defaultValue: 'No conversations in range.',
-                        })}
-                      </p>
-                    )}
-                    {Object.entries(m.data.conversationsByStatus)
-                      .sort(([, a], [, b]) => b - a)
-                      .map(([status, count]) => (
-                        <li key={status} className="flex items-center gap-2.5">
-                          <span
-                            className={cn(
-                              'h-2 w-2 shrink-0 rounded-full',
-                              STATUS_TONE[status] ?? 'bg-muted-foreground/40',
-                            )}
-                          />
-                          <span className="flex-1 text-sm capitalize text-foreground">
-                            {t(`status.${status}`, { ns: 'common', defaultValue: status })}
-                          </span>
-                          <span className="text-sm tabular-nums text-muted-foreground">
-                            {count}
-                          </span>
-                        </li>
-                      ))}
-                  </ul>
+                  {(() => {
+                    const entries = Object.entries(m.data.conversationsByStatus).sort(
+                      ([, a], [, b]) => b - a,
+                    );
+                    const totalConvs = entries.reduce((acc, [, n]) => acc + n, 0);
+                    if (entries.length === 0)
+                      return (
+                        <p className="text-sm text-muted-foreground">
+                          {t('dashboard.noConversations', {
+                            defaultValue: 'No conversations in range.',
+                          })}
+                        </p>
+                      );
+                    return (
+                      <ul className="space-y-3">
+                        {entries.map(([status, count]) => (
+                          <li key={status} className="space-y-1">
+                            <div className="flex items-baseline justify-between gap-2 text-sm">
+                              <span className="capitalize text-foreground">
+                                {t(`status.${status}`, { ns: 'common', defaultValue: status })}
+                              </span>
+                              <span className="tabular-nums text-muted-foreground">
+                                {count}
+                                <span className="ms-1 text-2xs">
+                                  ({Math.round((count / totalConvs) * 100)}%)
+                                </span>
+                              </span>
+                            </div>
+                            <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                              <div
+                                className={cn(
+                                  'h-full rounded-full transition-[width] duration-slow ease-out',
+                                  STATUS_TONE[status] ?? 'bg-muted-foreground/40',
+                                )}
+                                style={{ width: `${(count / totalConvs) * 100}%` }}
+                              />
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    );
+                  })()}
                 </Card>
               </div>
 
