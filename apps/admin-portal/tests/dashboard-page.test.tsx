@@ -65,9 +65,9 @@ describe('DashboardPage', () => {
     const { container } = renderPage();
     // Title toolbar always renders.
     expect(screen.getByText('Overview')).toBeInTheDocument();
-    // Skeleton grid renders 5 placeholders; no stat values present.
+    // Bento skeleton renders placeholder tiles; no stat values present.
     expect(screen.queryByText('Conversations')).not.toBeInTheDocument();
-    expect(container.querySelectorAll('.h-28').length).toBe(5);
+    expect(container.querySelectorAll('.rounded-3xl').length).toBeGreaterThanOrEqual(5);
   });
 
   it('renders the loading skeleton when data is missing but not loading', () => {
@@ -89,7 +89,7 @@ describe('DashboardPage', () => {
     expect(screen.getAllByText('Conversations').length).toBeGreaterThan(0);
     expect(screen.getByText('Avg response')).toBeInTheDocument();
     expect(screen.getByText('SLA compliance')).toBeInTheDocument();
-    expect(screen.getByText('Resolution rate')).toBeInTheDocument();
+    expect(screen.getByText('Resolution')).toBeInTheDocument();
     expect(screen.getByText('CSAT')).toBeInTheDocument();
 
     // Formatted values.
@@ -97,11 +97,11 @@ describe('DashboardPage', () => {
     expect(screen.getByText('42m')).toBeInTheDocument(); // fmtMinutes < 60
     expect(screen.getByText('87%')).toBeInTheDocument(); // fmtPct SLA
     expect(screen.getByText('73%')).toBeInTheDocument(); // fmtPct resolution
-    expect(screen.getByText('4.2/5')).toBeInTheDocument(); // csatAvg
+    expect(screen.getByText('4.2')).toBeInTheDocument(); // csatAvg
 
     // Card titles.
     expect(screen.getByText('Conversation volume')).toBeInTheDocument();
-    expect(screen.getByText('Conversations by status')).toBeInTheDocument();
+    expect(screen.getByText('By status')).toBeInTheDocument();
     expect(screen.getByText('Agent productivity')).toBeInTheDocument();
     expect(screen.getByText('Vendor activity')).toBeInTheDocument();
 

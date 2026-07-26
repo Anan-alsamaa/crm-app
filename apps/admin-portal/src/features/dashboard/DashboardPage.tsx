@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  ChartIcon,
   ClockIcon,
   cn,
   ErrorState,
@@ -41,36 +40,78 @@ const KPI_TILE: Record<KpiTone, string> = {
   amber: 'bg-warning/20 text-[oklch(0.5_0.15_70)]',
   crimson: 'bg-magenta/12 text-magenta',
 };
+// Whole-tile tint per tone, for the colored bento blocks.
+const KPI_SURFACE: Record<KpiTone, string> = {
+  blue: 'bg-card',
+  violet: 'bg-card',
+  green: 'bg-success/10 ring-success/15',
+  amber: 'bg-warning/12 ring-warning/20',
+  crimson: 'bg-magenta/[0.08] ring-magenta/15',
+};
 
-/** Colorful KPI card — icon tile + big number + label, a floating surface. */
-function KpiCard({
+/** Bento metric tile — icon tile, giant number, label; some tiles tinted. */
+function BentoStat({
   icon,
   tone,
   label,
   value,
   hint,
+  className,
 }: {
   icon: ReactNode;
   tone: KpiTone;
   label: string;
   value: string;
   hint?: string;
+  className?: string;
 }) {
   return (
-    <div className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.04] transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5">
-      <div className="flex items-center gap-2.5">
-        <span className={cn('grid h-9 w-9 place-items-center rounded-xl', KPI_TILE[tone])}>
+    <div
+      className={cn(
+        'flex flex-col justify-between rounded-3xl p-5 shadow-soft ring-1 ring-foreground/[0.04]',
+        'transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
+        KPI_SURFACE[tone],
+        className,
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <span className={cn('grid h-10 w-10 place-items-center rounded-2xl', KPI_TILE[tone])}>
           {icon}
         </span>
-        <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           {label}
         </span>
       </div>
-      <div className="mt-3 text-3xl font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
-        {value}
+      <div>
+        <div className="text-[2.75rem] font-extrabold leading-none tabular-nums tracking-[-0.04em] text-foreground">
+          {value}
+        </div>
+        {hint && <div className="mt-1 text-xs text-muted-foreground">{hint}</div>}
       </div>
-      {hint && <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div>}
     </div>
+  );
+}
+
+/** A titled bento panel (charts, lists). */
+function Panel({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={cn(
+        'flex flex-col overflow-hidden rounded-3xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.04]',
+        className,
+      )}
+    >
+      <h2 className="mb-4 text-sm font-semibold tracking-tight text-foreground">{title}</h2>
+      <div className="min-h-0 flex-1">{children}</div>
+    </section>
   );
 }
 
@@ -173,12 +214,41 @@ function RankList({
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function StatusBreakdown({ data }: { data: DashboardMetrics['conversationsByStatus'] }) {
+  const { t } = useTranslation();
+  const entries = Object.entries(data).sort(([, a], [, b]) => b - a);
+  const total = entries.reduce((acc, [, n]) => acc + n, 0);
+  if (entries.length === 0)
+    return (
+      <p className="text-sm text-muted-foreground">
+        {t('dashboard.noConversations', { defaultValue: 'No conversations in range.' })}
+      </p>
+    );
   return (
-    <section className="rounded-2xl bg-card p-5 shadow-soft">
-      <h2 className="mb-4 text-sm font-semibold tracking-tight text-foreground">{title}</h2>
-      {children}
-    </section>
+    <ul className="space-y-3">
+      {entries.map(([status, count]) => (
+        <li key={status} className="space-y-1">
+          <div className="flex items-baseline justify-between gap-2 text-sm">
+            <span className="capitalize text-foreground">
+              {t(`status.${status}`, { ns: 'common', defaultValue: status })}
+            </span>
+            <span className="tabular-nums text-muted-foreground">
+              {count}
+              <span className="ms-1 text-2xs">({Math.round((count / total) * 100)}%)</span>
+            </span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-secondary">
+            <div
+              className={cn(
+                'h-full rounded-full transition-[width] duration-slow ease-out',
+                STATUS_TONE[status] ?? 'bg-muted-foreground/40',
+              )}
+              style={{ width: `${(count / total) * 100}%` }}
+            />
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -206,8 +276,8 @@ export function DashboardPage() {
         />
       </Toolbar>
 
-      <div className="flex-1 overflow-auto p-5 sm:p-6">
-        <div className="mx-auto max-w-6xl space-y-8">
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
+        <div className="mx-auto max-w-6xl">
           {m.isError ? (
             <ErrorState
               title={t('dashboard.loadError', { defaultValue: 'Could not load metrics' })}
@@ -218,177 +288,137 @@ export function DashboardPage() {
               onRetry={() => void m.refetch()}
             />
           ) : m.isLoading || !m.data ? (
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-28 rounded-2xl" />
+            <div className="grid auto-rows-[150px] grid-cols-2 gap-4 lg:grid-cols-4">
+              <Skeleton className="col-span-2 row-span-2 rounded-3xl" />
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="rounded-3xl" />
               ))}
+              <Skeleton className="col-span-2 row-span-2 rounded-3xl" />
+              <Skeleton className="col-span-2 row-span-2 rounded-3xl" />
             </div>
           ) : (
-            <>
-              {/* Hero banner — a colorful gradient welcome with the headline stat. */}
-              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-violet p-6 text-primary-foreground shadow-lg shadow-primary/25 sm:p-7">
+            /* BENTO grid — mixed tile sizes, oversized numbers, color blocks. */
+            <div className="grid auto-rows-[150px] grid-cols-2 gap-4 lg:grid-cols-4">
+              {/* Feature tile — gradient hero + the two headline numbers. */}
+              <div className="relative col-span-2 row-span-2 flex flex-col justify-between overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-violet p-6 text-primary-foreground shadow-lg shadow-primary/25">
                 <div
                   aria-hidden
                   className="pointer-events-none absolute inset-0 opacity-70"
                   style={{
                     background:
-                      'radial-gradient(circle at 100% 0%, oklch(1 0 0 / 0.18) 0%, transparent 45%), radial-gradient(circle at 0% 120%, oklch(0 0 0 / 0.15) 0%, transparent 50%)',
+                      'radial-gradient(circle at 100% 0%, oklch(1 0 0 / 0.2) 0%, transparent 45%), radial-gradient(circle at 0% 120%, oklch(0 0 0 / 0.18) 0%, transparent 55%)',
                   }}
                 />
-                <div className="relative flex flex-wrap items-end justify-between gap-4">
+                <div className="relative">
+                  <h2 className="text-2xl font-extrabold tracking-[-0.03em]">
+                    {t('dashboard.heroTitle', { defaultValue: 'Workspace overview' })}
+                  </h2>
+                  <p className="mt-1 text-sm text-primary-foreground/85">
+                    {t('dashboard.heroHint', {
+                      defaultValue: 'Support performance across every channel.',
+                    })}
+                  </p>
+                </div>
+                <div className="relative flex items-end gap-8">
                   <div>
-                    <h2 className="text-2xl font-extrabold tracking-[-0.03em] sm:text-3xl">
-                      {t('dashboard.heroTitle', { defaultValue: 'Workspace overview' })}
-                    </h2>
-                    <p className="mt-1 max-w-prose text-sm text-primary-foreground/85">
-                      {t('dashboard.heroHint', {
-                        defaultValue:
-                          'How support is performing across every channel, at a glance.',
-                      })}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-5">
-                    <div>
-                      <div className="text-3xl font-extrabold tabular-nums leading-none">
-                        {m.data.conversationVolume}
-                      </div>
-                      <div className="mt-1 text-2xs font-medium uppercase tracking-wide text-primary-foreground/75">
-                        {t('dashboard.conversations', { defaultValue: 'Conversations' })}
-                      </div>
+                    <div className="text-6xl font-extrabold leading-none tabular-nums tracking-[-0.05em]">
+                      {m.data.conversationVolume}
                     </div>
-                    <div className="h-10 w-px bg-primary-foreground/20" aria-hidden />
-                    <div>
-                      <div className="text-3xl font-extrabold tabular-nums leading-none">
-                        {m.data.ticketTotal}
-                      </div>
-                      <div className="mt-1 text-2xs font-medium uppercase tracking-wide text-primary-foreground/75">
-                        {t('dashboard.ofTicketsShort', { defaultValue: 'Tickets' })}
-                      </div>
+                    <div className="mt-1.5 text-2xs font-medium uppercase tracking-wide text-primary-foreground/75">
+                      {t('dashboard.conversations', { defaultValue: 'Conversations' })}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-4xl font-extrabold leading-none tabular-nums tracking-[-0.04em]">
+                      {m.data.ticketTotal}
+                    </div>
+                    <div className="mt-1.5 text-2xs font-medium uppercase tracking-wide text-primary-foreground/75">
+                      {t('dashboard.ofTicketsShort', { defaultValue: 'Tickets' })}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Key stats — colorful KPI cards. */}
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-                <KpiCard
-                  icon={<ChartIcon size={18} />}
-                  tone="blue"
-                  label={t('dashboard.conversations', { defaultValue: 'Conversations' })}
-                  value={String(m.data.conversationVolume)}
-                  hint={t('dashboard.inRange', { defaultValue: 'in range' })}
-                />
-                <KpiCard
-                  icon={<ClockIcon size={18} />}
-                  tone="violet"
-                  label={t('dashboard.avgResponse', { defaultValue: 'Avg response' })}
-                  value={fmtMinutes(m.data.avgResponseMinutes)}
-                  hint={t('dashboard.firstReply', { defaultValue: 'first reply' })}
-                />
-                <KpiCard
-                  icon={<ShieldIcon size={18} />}
-                  tone="green"
-                  label={t('dashboard.slaCompliance', { defaultValue: 'SLA compliance' })}
-                  value={fmtPct(m.data.slaCompliancePct)}
-                  hint={t('dashboard.onTime', { defaultValue: 'on-time first reply' })}
-                />
-                <KpiCard
-                  icon={<ZapIcon size={18} />}
-                  tone="amber"
-                  label={t('dashboard.resolution', { defaultValue: 'Resolution rate' })}
-                  value={fmtPct(m.data.ticketResolutionPct)}
-                  hint={t('dashboard.ofTickets', {
-                    count: m.data.ticketTotal,
-                    defaultValue: `of ${m.data.ticketTotal} tickets`,
-                  })}
-                />
-                <KpiCard
-                  icon={<SparkleIcon size={18} />}
-                  tone="crimson"
-                  label={t('dashboard.csat', { defaultValue: 'CSAT' })}
-                  value={m.data.csatAvg === null ? '—' : `${m.data.csatAvg.toFixed(1)}/5`}
-                  hint={t('dashboard.responses', {
-                    count: m.data.csatCount,
-                    defaultValue: `${m.data.csatCount} responses`,
-                  })}
-                />
-              </div>
+              {/* Four metric tiles beside the feature (2x2 block of 1x1s). */}
+              <BentoStat
+                icon={<ClockIcon size={18} />}
+                tone="violet"
+                label={t('dashboard.avgResponse', { defaultValue: 'Avg response' })}
+                value={fmtMinutes(m.data.avgResponseMinutes)}
+                hint={t('dashboard.firstReply', { defaultValue: 'first reply' })}
+              />
+              <BentoStat
+                icon={<ShieldIcon size={18} />}
+                tone="green"
+                label={t('dashboard.slaCompliance', { defaultValue: 'SLA compliance' })}
+                value={fmtPct(m.data.slaCompliancePct)}
+                hint={t('dashboard.onTime', { defaultValue: 'on-time' })}
+              />
+              <BentoStat
+                icon={<ZapIcon size={18} />}
+                tone="amber"
+                label={t('dashboard.resolution', { defaultValue: 'Resolution' })}
+                value={fmtPct(m.data.ticketResolutionPct)}
+                hint={t('dashboard.ofTickets', {
+                  count: m.data.ticketTotal,
+                  defaultValue: `of ${m.data.ticketTotal} tickets`,
+                })}
+              />
+              <BentoStat
+                icon={<SparkleIcon size={18} />}
+                tone="crimson"
+                label={t('dashboard.csat', { defaultValue: 'CSAT' })}
+                value={m.data.csatAvg === null ? '—' : `${m.data.csatAvg.toFixed(1)}`}
+                hint={t('dashboard.responses', {
+                  count: m.data.csatCount,
+                  defaultValue: `${m.data.csatCount} responses`,
+                })}
+              />
 
-              {/* Volume + status */}
-              <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
-                <Card title={t('dashboard.volume', { defaultValue: 'Conversation volume' })}>
-                  <VolumeBars series={m.data.volumeSeries} />
-                </Card>
-                <Card title={t('dashboard.byStatus', { defaultValue: 'Conversations by status' })}>
-                  {(() => {
-                    const entries = Object.entries(m.data.conversationsByStatus).sort(
-                      ([, a], [, b]) => b - a,
-                    );
-                    const totalConvs = entries.reduce((acc, [, n]) => acc + n, 0);
-                    if (entries.length === 0)
-                      return (
-                        <p className="text-sm text-muted-foreground">
-                          {t('dashboard.noConversations', {
-                            defaultValue: 'No conversations in range.',
-                          })}
-                        </p>
-                      );
-                    return (
-                      <ul className="space-y-3">
-                        {entries.map(([status, count]) => (
-                          <li key={status} className="space-y-1">
-                            <div className="flex items-baseline justify-between gap-2 text-sm">
-                              <span className="capitalize text-foreground">
-                                {t(`status.${status}`, { ns: 'common', defaultValue: status })}
-                              </span>
-                              <span className="tabular-nums text-muted-foreground">
-                                {count}
-                                <span className="ms-1 text-2xs">
-                                  ({Math.round((count / totalConvs) * 100)}%)
-                                </span>
-                              </span>
-                            </div>
-                            <div className="h-2 overflow-hidden rounded-full bg-secondary">
-                              <div
-                                className={cn(
-                                  'h-full rounded-full transition-[width] duration-slow ease-out',
-                                  STATUS_TONE[status] ?? 'bg-muted-foreground/40',
-                                )}
-                                style={{ width: `${(count / totalConvs) * 100}%` }}
-                              />
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    );
-                  })()}
-                </Card>
-              </div>
+              {/* Wide chart tile. */}
+              <Panel
+                title={t('dashboard.volume', { defaultValue: 'Conversation volume' })}
+                className="col-span-2 row-span-2"
+              >
+                <VolumeBars series={m.data.volumeSeries} />
+              </Panel>
 
-              {/* Agent productivity + vendor activity */}
-              <div className="grid gap-5 lg:grid-cols-2">
-                <Card title={t('dashboard.topAgents', { defaultValue: 'Agent productivity' })}>
-                  <RankList
-                    rows={m.data.topAgents.map((a) => ({
-                      id: a.id,
-                      name: a.name,
-                      value: a.resolved,
-                    }))}
-                    unit={t('dashboard.resolvedUnit', { defaultValue: 'resolved' })}
-                  />
-                </Card>
-                <Card title={t('dashboard.topVendors', { defaultValue: 'Vendor activity' })}>
-                  <RankList
-                    rows={m.data.topVendors.map((v) => ({
-                      id: v.id,
-                      name: v.name,
-                      value: v.conversations,
-                    }))}
-                    unit={t('dashboard.convsUnit', { defaultValue: 'convos' })}
-                  />
-                </Card>
-              </div>
-            </>
+              {/* Status breakdown tile. */}
+              <Panel
+                title={t('dashboard.byStatus', { defaultValue: 'By status' })}
+                className="col-span-2 row-span-2"
+              >
+                <StatusBreakdown data={m.data.conversationsByStatus} />
+              </Panel>
+
+              {/* Two rank-list tiles. */}
+              <Panel
+                title={t('dashboard.topAgents', { defaultValue: 'Agent productivity' })}
+                className="col-span-2 row-span-2"
+              >
+                <RankList
+                  rows={m.data.topAgents.map((a) => ({
+                    id: a.id,
+                    name: a.name,
+                    value: a.resolved,
+                  }))}
+                  unit={t('dashboard.resolvedUnit', { defaultValue: 'resolved' })}
+                />
+              </Panel>
+              <Panel
+                title={t('dashboard.topVendors', { defaultValue: 'Vendor activity' })}
+                className="col-span-2 row-span-2"
+              >
+                <RankList
+                  rows={m.data.topVendors.map((v) => ({
+                    id: v.id,
+                    name: v.name,
+                    value: v.conversations,
+                  }))}
+                  unit={t('dashboard.convsUnit', { defaultValue: 'convos' })}
+                />
+              </Panel>
+            </div>
           )}
         </div>
       </div>
