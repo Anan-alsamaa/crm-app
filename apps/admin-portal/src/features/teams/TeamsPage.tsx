@@ -135,7 +135,7 @@ export function TeamsPage() {
         ) : (
           /* Dense list — one row per team. Members shown as a small avatar
              stack with an overflow count; no card chrome. */
-          <ul className="mx-auto max-w-5xl divide-y divide-border">
+          <ul className="mx-auto max-w-5xl space-y-1">
             {teams.data.map((tm) => {
               const members = (users.data ?? []).filter((u) => u.team?.id === tm.id);
               const memberCount = members.length;
@@ -144,8 +144,8 @@ export function TeamsPage() {
                   <button
                     type="button"
                     className={cn(
-                      'group flex w-full items-center gap-3 px-4 py-2.5 text-start',
-                      'transition-colors duration-fast ease-out hover:bg-secondary/50',
+                      'group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-start',
+                      'transition-colors duration-fast ease-out hover:bg-secondary/60',
                       'focus-visible:outline-none focus-visible:bg-secondary/60',
                     )}
                   >

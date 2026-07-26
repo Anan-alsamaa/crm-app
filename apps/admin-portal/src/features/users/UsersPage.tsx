@@ -285,7 +285,7 @@ export function UsersPage() {
         ) : (
           /* Dense list — one row per account (density is a feature). Hairline
              dividers, no card chrome, columns read like a table at sm+. */
-          <ul className="mx-auto max-w-5xl divide-y divide-border">
+          <ul className="mx-auto max-w-5xl space-y-1">
             {filtered.map((u) => {
               const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
               const isAdmin = u.role?.name?.toLowerCase() === 'administrator';
@@ -295,24 +295,24 @@ export function UsersPage() {
                     type="button"
                     onClick={() => openEdit(u)}
                     className={cn(
-                      'group flex w-full items-center gap-3 px-4 py-2.5 text-start',
-                      'transition-colors duration-fast ease-out hover:bg-secondary/50',
+                      'group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-start',
+                      'transition-colors duration-fast ease-out hover:bg-secondary/60',
                       'focus-visible:outline-none focus-visible:bg-secondary/60',
                     )}
                   >
                     <span className="relative shrink-0">
-                      <Avatar name={fullName} email={u.email} size="sm" />
+                      <Avatar name={fullName} email={u.email} size="md" />
                       <span
                         aria-hidden
                         title={u.status}
                         className={cn(
-                          'absolute -bottom-0.5 -end-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-card',
+                          'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-background',
                           u.status === 'active' ? 'bg-success' : 'bg-muted-foreground/40',
                         )}
                       />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-foreground">
+                      <div className="truncate text-sm font-semibold text-foreground">
                         {fullName || u.email}
                       </div>
                       {fullName && (
@@ -321,10 +321,10 @@ export function UsersPage() {
                     </div>
                     <span
                       className={cn(
-                        'hidden shrink-0 items-center rounded-full px-2 py-0.5 text-2xs font-medium sm:inline-flex',
+                        'hidden shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold sm:inline-flex',
                         isAdmin
-                          ? 'bg-primary-subtle text-primary'
-                          : 'bg-secondary text-foreground/75',
+                          ? 'bg-gradient-to-r from-primary to-violet text-primary-foreground shadow-sm shadow-primary/25'
+                          : 'bg-primary-subtle text-primary',
                       )}
                     >
                       {u.role?.name ?? '—'}
