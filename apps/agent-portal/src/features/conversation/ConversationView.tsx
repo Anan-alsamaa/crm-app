@@ -576,7 +576,7 @@ export function ConversationView({
                 profile opens the scrollback instead of an empty void. */}
             {threadMessages.length > 0 && (
               <div className="flex flex-col items-center gap-3 pb-8 pt-10 text-center">
-                <span className="rounded-full bg-gradient-to-br from-primary via-violet to-magenta p-[3px]">
+                <span className="rounded-full bg-gradient-to-br from-primary to-violet p-[3px]">
                   <span className="block rounded-full bg-canvas p-[3px]">
                     <Avatar
                       name={c?.contact?.name}

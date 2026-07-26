@@ -217,11 +217,11 @@ export function ConversationSidebar({
           className="absolute inset-0"
           style={{
             background:
-              'radial-gradient(at 15% 0%, oklch(var(--primary) / 0.18) 0%, transparent 55%), radial-gradient(at 100% 10%, oklch(var(--violet) / 0.15) 0%, transparent 55%), radial-gradient(at 60% 110%, oklch(var(--magenta) / 0.12) 0%, transparent 60%)',
+              'radial-gradient(at 15% 0%, oklch(var(--primary) / 0.18) 0%, transparent 55%), radial-gradient(at 100% 10%, oklch(var(--violet) / 0.15) 0%, transparent 55%), radial-gradient(at 60% 110%, oklch(var(--primary) / 0.06) 0%, transparent 60%)',
           }}
         />
         <div className="relative flex flex-col items-center gap-3 text-center">
-          <span className="rounded-full bg-gradient-to-br from-primary via-violet to-magenta p-[3px] shadow-lg shadow-primary/20">
+          <span className="rounded-full bg-gradient-to-br from-primary to-violet p-[3px] shadow-lg shadow-primary/20">
             <span className="block rounded-full bg-background p-[3px]">
               <Avatar
                 name={c.contact?.name}

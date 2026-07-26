@@ -385,7 +385,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
       {/* Identity card — gradient-ringed avatar + subject + contact + pills */}
       <header className="space-y-4">
         <div className="flex items-start gap-4">
-          <span className="shrink-0 rounded-full bg-gradient-to-br from-primary via-violet to-magenta p-[3px] shadow-md shadow-primary/20">
+          <span className="shrink-0 rounded-full bg-gradient-to-br from-primary to-violet p-[3px] shadow-md shadow-primary/20">
             <span className="block rounded-full bg-background p-[2px]">
               <Avatar
                 name={tk.contact?.name}

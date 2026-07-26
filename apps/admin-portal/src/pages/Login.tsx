@@ -95,7 +95,7 @@ export function Login() {
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'radial-gradient(at 15% 0%, oklch(var(--primary) / 0.16) 0%, transparent 55%), radial-gradient(at 95% 25%, oklch(var(--violet) / 0.13) 0%, transparent 55%), radial-gradient(at 50% 110%, oklch(var(--magenta) / 0.12) 0%, transparent 60%)',
+            'radial-gradient(at 15% 0%, oklch(var(--primary) / 0.16) 0%, transparent 55%), radial-gradient(at 95% 25%, oklch(var(--violet) / 0.13) 0%, transparent 55%), radial-gradient(at 50% 110%, oklch(var(--primary) / 0.07) 0%, transparent 60%)',
         }}
       />
 
@@ -110,7 +110,7 @@ export function Login() {
       </div>
 
       <div className="relative z-10 w-full max-w-[420px] animate-fade-in">
-        <div className="rounded-3xl bg-gradient-to-br from-primary/35 via-violet/25 to-magenta/25 p-px shadow-2xl shadow-black/40">
+        <div className="rounded-3xl bg-gradient-to-br from-primary/35 to-violet/30 p-px shadow-2xl shadow-black/40">
           <div className="overflow-hidden rounded-[calc(1.5rem-1px)] bg-card/95 backdrop-blur">
             <div className="flex flex-col items-center gap-3 px-8 pb-2 pt-8 text-center">
               <YijiLogo size={72} />
