@@ -260,7 +260,13 @@ export function ConversationToolbar({
             />
           </div>
 
-          {existingTicket ? (
+          {/* Product change (2026-07-26): a conversation may carry MULTIPLE
+              tickets, so Create ticket is always offered. Existing tickets
+              stay reachable via the sidebar's Linked tickets list (and the
+              quick View ticket shortcut below when one exists). The old
+              SC-013 one-ticket rule and its UX guard are retired; no DB
+              unique constraint exists on tickets.conversation. */}
+          {existingTicket && (
             <Button
               type="button"
               variant="secondary"
@@ -269,25 +275,16 @@ export function ConversationToolbar({
             >
               {t('tickets.viewTicket', { defaultValue: 'View ticket' })}
             </Button>
-          ) : (
-            // SC-013: a conversation carries at most one ticket. `existingTicket` is
-            // null while the linked-tickets query is still loading, so we must also
-            // gate on `!linkedTickets.isLoading` — otherwise this button is clickable
-            // during the load window and a duplicate ticket becomes reachable (and
-            // two agents on the same thread could both create one). This is a UX
-            // guard only; the authoritative backstop is a unique index on
-            // tickets.conversation owned by the infra/directus stream
-            // (directus/bootstrap/src/constraints.ts) — do NOT add the DB constraint here.
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              disabled={!canCreateTicket || linkedTickets.isLoading}
-              onClick={() => setOpenTicketDialog(true)}
-            >
-              + {t('tickets.createTitle')}
-            </Button>
           )}
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            disabled={!canCreateTicket}
+            onClick={() => setOpenTicketDialog(true)}
+          >
+            + {t('tickets.createTitle')}
+          </Button>
 
           {/* Details / notes panel toggle — mobile single-column only. */}
           {onToggleDetails && (
