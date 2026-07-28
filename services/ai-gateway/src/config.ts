@@ -13,7 +13,7 @@ const schema = z
     REDIS_URL: z.string().url().default('redis://localhost:6379'),
     SVC_AI_TOKEN: z.string().min(1, 'SVC_AI_TOKEN is required'),
     GEMINI_API_KEY: z.string().optional().default(''),
-    GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
+    GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
     /**
      * Yiji commerce API — proxied server-side so the API key never reaches the
      * browser (replaces the old VITE_YIJI_API_TOKEN). Empty URL => mock client,

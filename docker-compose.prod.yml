@@ -238,7 +238,7 @@ services:
       SVC_AI_TOKEN: ${SVC_AI_TOKEN:?set SVC_AI_TOKEN}
       DIRECTUS_AI_TOKEN: ${DIRECTUS_AI_TOKEN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       # Yiji commerce proxy (C-2) — key stays server-side, never in the browser.
       YIJI_API_URL: ${YIJI_API_URL:-}
       YIJI_API_KEY: ${YIJI_API_KEY:-}
