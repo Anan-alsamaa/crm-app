@@ -1,7 +1,7 @@
 /**
  * ai-gateway entrypoint.
  *
- * Fastify HTTP service exposing /health, /ready, /metrics, the 7 AI endpoints,
+ * Fastify HTTP service exposing /health, /ready, /metrics, the 8 AI endpoints,
  * and /admin/config + /admin/usage. PII redaction runs on every outbound call.
  */
 import './telemetry.js'; // MUST be first: starts OTel before http/ioredis load.
@@ -13,7 +13,7 @@ import { loadConfig } from './config.js';
 import { registerAiRoutes } from './routes.js';
 import { GeminiProvider } from './provider/gemini.js';
 import { AiConfigStore } from './aiconfig/index.js';
-import { SlidingWindowLimiter, MonthlyCap } from './ratelimit/index.js';
+import { SlidingWindowLimiter, MonthlyCap, DailyQuota } from './ratelimit/index.js';
 import { ResponseCache } from './cache/index.js';
 import { GatewayDirectus } from './directus/index.js';
 import { registerCommerceRoutes } from './commerce/index.js';
@@ -68,6 +68,10 @@ async function main(): Promise<void> {
   const perIpLimiter = new SlidingWindowLimiter(redis, 60_000, config.AI_PER_IP_RPM, 'rl:ip');
   const globalLimiter = new SlidingWindowLimiter(redis, 60_000, config.AI_GLOBAL_RPM, 'rl:global');
   const monthlyCap = new MonthlyCap(redis);
+  // Help-assistant daily budget per user. The limit itself is admin-configurable
+  // (AiFeatureConfig.helpDailyPerUser) and read per request, so it can be tuned
+  // without a redeploy.
+  const helpDailyQuota = new DailyQuota(redis);
 
   // --- Metrics ---
   const metrics = new Registry();
@@ -155,6 +159,7 @@ async function main(): Promise<void> {
     perIpLimiter,
     globalLimiter,
     monthlyCap,
+    helpDailyQuota,
   });
 
   await registerCommerceRoutes(app, { directus, yiji });

@@ -109,3 +109,88 @@ export class MonthlyCap {
     return raw ? Number.parseInt(raw, 10) : 0;
   }
 }
+
+export interface DailyQuotaVerdict {
+  allowed: boolean;
+  /** Units consumed today, after this attempt (clamped to `limit` on reject). */
+  used: number;
+  /** The configured limit (0 = unlimited). */
+  limit: number;
+  /** Epoch ms of the next UTC midnight — when the counter rolls. */
+  resetAt: number;
+}
+
+/**
+ * Per-user DAILY quota.
+ *
+ * A stricter, longer-horizon companion to SlidingWindowLimiter: the sliding
+ * window stops bursts, this stops steady all-day grinding of a paid provider.
+ *
+ * One counter per scope per UTC day (`<prefix>:<scope>:<YYYY-MM-DD>`), expiring
+ * at the next UTC midnight — so it self-cleans and the reset is simply the date
+ * key changing. INCR is atomic, so concurrent requests cannot both slip past
+ * the limit; an over-limit attempt is rolled back with DECR (same pattern as
+ * MonthlyCap) so a rejected call never costs the user budget.
+ *
+ * `limit = 0` means unlimited (usage is still tracked, for reporting).
+ */
+export class DailyQuota {
+  constructor(
+    private readonly redis: Redis,
+    private readonly keyPrefix = 'help:quota',
+    /** Injectable clock — lets tests roll the date without faking timers. */
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  /** UTC calendar day, e.g. `2026-07-28`. */
+  private dayKey(d: Date): string {
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
+      d.getUTCDate(),
+    ).padStart(2, '0')}`;
+  }
+
+  private key(scope: string, d: Date): string {
+    return `${this.keyPrefix}:${scope}:${this.dayKey(d)}`;
+  }
+
+  /** Epoch ms of the next UTC midnight. */
+  private nextUtcMidnight(d: Date): number {
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 0, 0, 0);
+  }
+
+  /** Check + increment atomically. Returns whether the request fits today. */
+  async tryConsume(scope: string, limit: number): Promise<DailyQuotaVerdict> {
+    const nowMs = this.now();
+    const d = new Date(nowMs);
+    const key = this.key(scope, d);
+    const resetAt = this.nextUtcMidnight(d);
+
+    const used = await this.redis.incr(key);
+    if (used === 1) {
+      // TTL to end-of-day so the key disappears on its own. +60s of slack so a
+      // request racing midnight can't expire the counter it just created.
+      await this.redis.expire(key, Math.max(Math.ceil((resetAt - nowMs) / 1000), 1) + 60);
+    }
+    if (limit > 0 && used > limit) {
+      await this.redis.decr(key); // roll back — a rejected call costs nothing
+      return { allowed: false, used: limit, limit, resetAt };
+    }
+    return { allowed: true, used, limit, resetAt };
+  }
+
+  /**
+   * Give one unit back — for calls that consumed quota but produced nothing
+   * billable-worthy (an off-topic refusal, or a provider failure). Clamped at
+   * zero so repeated refunds can't mint budget.
+   */
+  async refund(scope: string): Promise<void> {
+    const key = this.key(scope, new Date(this.now()));
+    const left = await this.redis.decr(key);
+    if (left < 0) await this.redis.incr(key); // never go negative
+  }
+
+  async currentUsage(scope: string): Promise<number> {
+    const raw = await this.redis.get(this.key(scope, new Date(this.now())));
+    return raw ? Number.parseInt(raw, 10) : 0;
+  }
+}

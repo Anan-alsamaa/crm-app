@@ -237,6 +237,18 @@ export const roles: RoleSpec[] = [
       ...readOnly('tags'),
       ...readOnly('custom_fields'),
       ...readOnly('custom_field_values'),
+      // The imports processor downloads the uploaded CSV: readFile() + a bearer
+      // GET on /assets/<id> (processors/imports.ts:141-147). Without this the
+      // whole contact-import feature 403s.
+      ...readOnly('directus_files'),
+      // The `csat` report aggregates satisfaction scores (processors/reports.ts:280).
+      ...readOnly('csat_responses'),
+      // The automation `add_tag` action inserts the junction row
+      // (processors/automation.ts:149).
+      { collection: 'conversations_tags', action: 'create' },
+      { collection: 'conversations_tags', action: 'read' },
+      { collection: 'contacts_tags', action: 'create' },
+      { collection: 'contacts_tags', action: 'read' },
     ],
   },
   {

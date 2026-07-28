@@ -4,6 +4,8 @@ import {
   ConversationRef,
   SuggestReplyRequest,
   SemanticSearchRequest,
+  HelpAssistantRequest,
+  type HelpAssistantResponse,
   type SummaryResponse,
   type SuggestReplyResponse,
   type SentimentResponse,
@@ -15,7 +17,7 @@ import {
 import { z } from 'zod';
 import { verifyCaller, AuthError, type Caller } from './auth/index.js';
 import { AiConfigStore, FEATURE_BY_ENDPOINT } from './aiconfig/index.js';
-import { SlidingWindowLimiter, MonthlyCap } from './ratelimit/index.js';
+import { SlidingWindowLimiter, MonthlyCap, DailyQuota } from './ratelimit/index.js';
 import { ResponseCache } from './cache/index.js';
 import { redactDeep } from './redaction/index.js';
 import { prompts } from './prompts/index.js';
@@ -33,6 +35,11 @@ export interface RouteDeps {
   perIpLimiter?: SlidingWindowLimiter;
   globalLimiter: SlidingWindowLimiter;
   monthlyCap: MonthlyCap;
+  /**
+   * Per-user daily budget for /help-assistant only. Separate from
+   * perUserLimiter (RPM, anti-burst) — this is the anti-overuse control.
+   */
+  helpDailyQuota: DailyQuota;
 }
 
 type Json = Record<string, unknown>;
@@ -43,6 +50,29 @@ type Json = Record<string, unknown>;
 const SEARCH_CORPUS_CONVERSATIONS = 50;
 const SEARCH_MESSAGES_PER_CONVERSATION = 4;
 const SEARCH_SNIPPET_CHARS = 500;
+
+/* Help-assistant output budget. The prompt asks for <=120 words, but a prompt
+ * is a request, not a guarantee — these are the server-side enforcement. An
+ * off-topic reply is capped far harder: a refusal needs one sentence, and a
+ * long "off-topic" answer is exactly what a user trying to smuggle general
+ * chat out of the assistant would be aiming for. */
+const HELP_ANSWER_MAX_WORDS = 120;
+const HELP_OFFTOPIC_MAX_CHARS = 240;
+
+/** Trim to at most `max` whitespace-separated words. */
+function truncateWords(text: string, max: number): string {
+  const words = text.trim().split(/\s+/);
+  return words.length <= max ? text.trim() : `${words.slice(0, max).join(' ')}…`;
+}
+
+/** Trim to at most `max` characters, on a word boundary where possible. */
+function truncateChars(text: string, max: number): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) return trimmed;
+  const cut = trimmed.slice(0, max);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
 
 /** Parse JSON safely from provider text — strips markdown fences if present. */
 function parseJson<T>(text: string, schema: z.ZodType<T>): T {
@@ -466,6 +496,106 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
       );
       return reply.send(result);
     } catch (err) {
+      handleProviderError(reply, err);
+    }
+  });
+
+  /* ── /help-assistant ─────────────────────────────────────────── */
+  /* In-app help for STAFF: "how do I …?" / "why is X happening?" about this
+   * CRM.
+   *
+   * DELIBERATELY STATELESS. One question in, one answer out: there is no
+   * conversation history, no thread id, and no follow-up turn. That is a
+   * product decision, not a missing feature — history is precisely what would
+   * turn an in-app help box into a general-purpose chat companion, and it
+   * multiplies the token cost of every turn. Do not add it.
+   *
+   * Abuse controls, in the order they fire:
+   *   1. auth            — verified Directus session (authOrReply)
+   *   2. body validation — 3..500 chars (HelpAssistantRequest)
+   *   3. gate()          — admin kill switch, cache, per-IP/user/global RPM,
+   *                        monthly vendor cap
+   *   4. daily quota     — per user per UTC day, checked AFTER the cache so a
+   *                        repeat question is free
+   *   5. scope guard     — prompt-enforced, refunded so refusals stay cheap
+   *   6. output cap      — server-side truncation
+   */
+  app.post(AI_ENDPOINTS.helpAssistant, async (req, reply) => {
+    const caller = await authOrReply(req, reply);
+    if (!caller) return;
+    const body = HelpAssistantRequest.safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
+
+    // Normalise (trim + lowercase + collapse whitespace) so "How do I close a
+    // ticket?" and "  how do i   close a ticket? " share one cache entry.
+    // Repeats are then free AND quota-free — the cheapest possible answer.
+    const question = body.data.question;
+    const cacheKey = `help:${question.toLowerCase().replace(/\s+/g, ' ').trim()}`;
+
+    const gateRes = await gate(caller, reply, AI_ENDPOINTS.helpAssistant, cacheKey, req.ip);
+    if (!gateRes) return;
+    if (gateRes.cached) {
+      const hit = gateRes.cached as HelpAssistantResponse;
+      app.log.info(
+        { userId: caller.userId, offTopic: hit.offTopic, cached: true },
+        'help-assistant answered',
+      );
+      return reply.send(hit);
+    }
+
+    // Per-user DAILY quota. Checked here rather than inside gate() for two
+    // reasons: it is help-assistant-only, and it must sit AFTER the cache
+    // lookup so a cache hit never costs a user any budget.
+    // (A request rejected here has already ticked the vendor monthly cap in
+    // gate(). That over-counts by one, which fails safe — the cap only ever
+    // gets stricter — so it is left alone rather than adding a refund path.)
+    const config = await deps.configStore.get();
+    const quota = await deps.helpDailyQuota.tryConsume(caller.userId, config.helpDailyPerUser);
+    if (!quota.allowed) {
+      app.log.warn(
+        { userId: caller.userId, limit: quota.limit, scope: 'daily' },
+        'help-assistant daily quota exceeded',
+      );
+      return reply.code(429).send({
+        error: 'quota_exceeded',
+        scope: 'daily',
+        limit: quota.limit,
+        resetAt: new Date(quota.resetAt).toISOString(),
+      });
+    }
+
+    const p = prompts.helpAssistant(question);
+    const schema = z.object({ answer: z.string(), offTopic: z.boolean() });
+    try {
+      const result: HelpAssistantResponse = await runWith(
+        AI_ENDPOINTS.helpAssistant,
+        cacheKey,
+        p.system,
+        p.user,
+        schema,
+        (text) => {
+          const raw = parseJson(text, schema);
+          return {
+            answer: raw.offTopic
+              ? truncateChars(raw.answer, HELP_OFFTOPIC_MAX_CHARS)
+              : truncateWords(raw.answer, HELP_ANSWER_MAX_WORDS),
+            offTopic: raw.offTopic,
+          };
+        },
+      );
+      // A refusal is not a service the user received. Charging for it would
+      // let a user burn their own day on questions the product never intended
+      // to answer — and would teach them to phrase things to dodge the guard.
+      if (result.offTopic) await deps.helpDailyQuota.refund(caller.userId);
+      app.log.info(
+        { userId: caller.userId, offTopic: result.offTopic, cached: false },
+        'help-assistant answered',
+      );
+      return reply.send(result);
+    } catch (err) {
+      // No answer was produced (provider unconfigured => 503, upstream error,
+      // unparseable JSON) — give the quota unit back.
+      await deps.helpDailyQuota.refund(caller.userId);
       handleProviderError(reply, err);
     }
   });

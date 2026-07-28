@@ -129,6 +129,29 @@
     },
     "noEntities": "No entities detected."
   },
+  "helpAssistant": {
+    "launch": "Ask AI help",
+    "title": "Ask AI help",
+    "description": "Ask how something works in this CRM and get a short answer. One question at a time — nothing is saved.",
+    "label": "Your question",
+    "placeholder": "How do I reassign a ticket to another agent?",
+    "counter": "{{chars}}/{{max}}",
+    "send": "Ask",
+    "thinking": "Looking that up…",
+    "answer": "Answer",
+    "offTopicTag": "Out of scope",
+    "offTopic": "That looks outside what this assistant covers — it only answers questions about this CRM.",
+    "statelessNote": "Answers aren’t saved. Edit the question above to ask another.",
+    "error": {
+      "disabled": "AI help is turned off by your administrator.",
+      "rateLimited": "Too many requests — try again in {{seconds}}s.",
+      "quota": "You’ve used your daily AI help allowance ({{limit}}). It resets at {{time}}.",
+      "quotaResetUnknown": "tomorrow",
+      "notConfigured": "AI help isn’t configured yet.",
+      "invalid": "Ask a question between 3 and 500 characters.",
+      "generic": "Couldn’t get an answer. Please try again."
+    }
+  },
   "login": {
     "title": "Sign in to YIJI CRM",
     "submit": "Sign in",
@@ -264,7 +287,16 @@
     "noTagsYetHint": "No tags yet — type to create one.",
     "tagAdded": "Added",
     "tagDeleted": "Deleted “{{name}}” everywhere.",
-    "startedOn": "Conversation started {{date}}"
+    "startedOn": "Conversation started {{date}}",
+    "socketError": {
+      "rate_limited": "You're sending too fast — wait a moment and try again.",
+      "attachment_rejected": "That file was rejected. Check the type and size limit.",
+      "forbidden": "You don't have permission to do that.",
+      "bad_payload": "That message couldn't be sent — please try again.",
+      "persist_failed": "Couldn't save that message. Please retry.",
+      "note_delete_rejected": "That note can't be deleted.",
+      "note_delete_failed": "Couldn't delete the note. Please retry."
+    }
   },
   "sidebar": {
     "contact": "Contact",

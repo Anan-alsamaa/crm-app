@@ -1,4 +1,5 @@
 import type { ConversationContext } from '../directus/index.js';
+import { helpAssistant } from './help-assistant.js';
 
 /**
  * Prompt builders.
@@ -102,4 +103,9 @@ export const prompts = {
       user: thread(ctx),
     };
   },
+
+  /** In-app help for staff. Lives in its own module — see ./help-assistant.ts. */
+  helpAssistant,
 };
+
+export { HELP_REFUSAL } from './help-assistant.js';

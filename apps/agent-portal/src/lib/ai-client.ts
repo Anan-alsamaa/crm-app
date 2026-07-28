@@ -1,5 +1,6 @@
 import type {
   EntitiesResponse,
+  HelpAssistantResponse,
   IntentResponse,
   LeadScoreResponse,
   SemanticSearchResponse,
@@ -33,6 +34,20 @@ export interface AiError extends Error {
   status: number;
   code?: string;
   retryAfterMs?: number;
+  /** Which bucket the limit applies to ('user' | 'global' | 'daily' | …). */
+  scope?: string;
+  /** Allowance size for `quota_exceeded`. */
+  limit?: number;
+  /** ISO timestamp the `quota_exceeded` allowance resets at. */
+  resetAt?: string;
+}
+
+interface AiErrorPayload {
+  error?: string;
+  retryAfterMs?: number;
+  scope?: string;
+  limit?: number;
+  resetAt?: string;
 }
 
 async function post<T>(c: AiCaller, path: string, body: unknown): Promise<T> {
@@ -47,7 +62,7 @@ async function post<T>(c: AiCaller, path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    let payload: { error?: string; retryAfterMs?: number } = {};
+    let payload: AiErrorPayload = {};
     try {
       payload = await res.json();
     } catch {
@@ -57,6 +72,9 @@ async function post<T>(c: AiCaller, path: string, body: unknown): Promise<T> {
       status: res.status,
       code: payload.error,
       retryAfterMs: payload.retryAfterMs,
+      scope: payload.scope,
+      limit: payload.limit,
+      resetAt: payload.resetAt,
     }) as AiError;
     throw err;
   }
@@ -86,4 +104,7 @@ export const ai = {
     post<SemanticSearchResponse>(c, AI_ENDPOINTS.semanticSearch, { query, limit }),
   scoreLead: (c: AiCaller, conversationId: string) =>
     post<LeadScoreResponse>(c, AI_ENDPOINTS.scoreLead, { conversationId }),
+  /** In-app help assistant — one question, one answer, no history kept. */
+  helpAssistant: (c: AiCaller, question: string) =>
+    post<HelpAssistantResponse>(c, AI_ENDPOINTS.helpAssistant, { question }),
 };

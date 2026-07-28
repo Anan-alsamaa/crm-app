@@ -32,6 +32,7 @@ import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
 import { ResetPassword, RESET_PASSWORD_PATH } from './pages/ResetPassword.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
+import { HelpAssistant } from './features/help-assistant/HelpAssistant.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
 import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
 
@@ -351,12 +352,15 @@ function Shell({ children }: { children: React.ReactNode }) {
         rail={(ctx) => <Rail ctx={ctx} sections={sections} />}
         topBarBrand={<MobileBrand />}
         topBarActions={
-          <SearchTrigger
-            label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
-            aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
-            onClick={() => setPaletteOpen(true)}
-            className="hidden sm:inline-flex"
-          />
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <SearchTrigger
+              label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
+              aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
+              onClick={() => setPaletteOpen(true)}
+              className="hidden sm:inline-flex"
+            />
+            <HelpAssistant />
+          </div>
         }
         topBar={
           <div className="flex w-full items-center gap-4">
@@ -375,8 +379,11 @@ function Shell({ children }: { children: React.ReactNode }) {
                 onClick={() => setPaletteOpen(true)}
               />
             </div>
-            {/* Right: user chip */}
-            <div className="flex flex-1 items-center justify-end">
+            {/* Right: utility cluster + user chip */}
+            <div className="flex flex-1 items-center justify-end gap-2">
+              <div className="flex items-center gap-0.5 rounded-xl bg-secondary/50 p-1 text-muted-foreground ring-1 ring-border">
+                <HelpAssistant />
+              </div>
               <span className="hidden items-center gap-2 rounded-full bg-secondary/50 py-1 pe-3 ps-1 ring-1 ring-border sm:flex">
                 <Avatar name={displayName} email={user?.email} size="sm" />
                 <span className="max-w-[9rem] truncate text-xs font-semibold text-foreground">

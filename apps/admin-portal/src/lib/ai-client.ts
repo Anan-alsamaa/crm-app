@@ -1,4 +1,5 @@
-import type { AiFeatureConfig } from '@yiji/shared-types';
+import type { AiFeatureConfig, HelpAssistantResponse } from '@yiji/shared-types';
+import { AI_ENDPOINTS } from '@yiji/shared-types';
 import { auth } from './directus.js';
 
 /**
@@ -58,5 +59,55 @@ export const aiAdmin = {
   },
   async getUsage(c: CallerHeaders): Promise<{ used: number; cap: number }> {
     return fetchJson(`${GATEWAY_URL}/admin/usage`, { headers: await authHeaders(c) });
+  },
+};
+
+/**
+ * Error shape for the non-admin AI endpoints the console calls (currently just
+ * the help assistant). Keeps the gateway's structured error fields intact so
+ * the UI can say *why* a call failed instead of "something went wrong".
+ */
+export interface AiError extends Error {
+  status: number;
+  code?: string;
+  retryAfterMs?: number;
+  scope?: string;
+  limit?: number;
+  resetAt?: string;
+}
+
+interface AiErrorPayload {
+  error?: string;
+  retryAfterMs?: number;
+  scope?: string;
+  limit?: number;
+  resetAt?: string;
+}
+
+export const ai = {
+  /** In-app help assistant — one question, one answer, no history kept. */
+  async helpAssistant(c: CallerHeaders, question: string): Promise<HelpAssistantResponse> {
+    const res = await fetch(`${GATEWAY_URL}${AI_ENDPOINTS.helpAssistant}`, {
+      method: 'POST',
+      headers: await authHeaders(c),
+      body: JSON.stringify({ question }),
+    });
+    if (!res.ok) {
+      let payload: AiErrorPayload = {};
+      try {
+        payload = await res.json();
+      } catch {
+        /* ignore */
+      }
+      throw Object.assign(new Error(`AI gateway ${res.status}: ${payload.error ?? ''}`), {
+        status: res.status,
+        code: payload.error,
+        retryAfterMs: payload.retryAfterMs,
+        scope: payload.scope,
+        limit: payload.limit,
+        resetAt: payload.resetAt,
+      }) as AiError;
+    }
+    return (await res.json()) as HelpAssistantResponse;
   },
 };

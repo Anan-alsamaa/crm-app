@@ -14,6 +14,7 @@ export const AI_ENDPOINTS = {
   extractEntities: '/extract-entities',
   semanticSearch: '/semantic-search',
   scoreLead: '/score-lead',
+  helpAssistant: '/help-assistant',
 } as const;
 export type AiEndpoint = (typeof AI_ENDPOINTS)[keyof typeof AI_ENDPOINTS];
 
@@ -62,6 +63,28 @@ export type SemanticSearchResponse = z.infer<typeof SemanticSearchResponse>;
 export const LeadScoreResponse = z.object({ score: z.number(), signals: z.array(z.string()) });
 export type LeadScoreResponse = z.infer<typeof LeadScoreResponse>;
 
+/**
+ * In-app help assistant — staff (agents/admins) ask "how do I …?" / "why is X
+ * happening?" about THIS product.
+ *
+ * Deliberately single-shot: one question, one answer, no history field and no
+ * thread id. See the route handler for why.
+ */
+export const HelpAssistantRequest = z.object({
+  // Trimmed first, so "  ?  " can't pass as a 3-char question. 500 chars is
+  // plenty for a support question and bounds the tokens we pay for.
+  question: z.string().trim().min(3).max(500),
+});
+export type HelpAssistantRequest = z.infer<typeof HelpAssistantRequest>;
+
+export const HelpAssistantResponse = z.object({
+  answer: z.string(),
+  /** True when the question was out of scope and `answer` is the refusal. */
+  offTopic: z.boolean(),
+  cached: z.boolean().optional(),
+});
+export type HelpAssistantResponse = z.infer<typeof HelpAssistantResponse>;
+
 /** Admin-configurable AI feature flags + monthly usage cap (read by gateway). */
 export const AiFeatureConfig = z.object({
   summarize: z.boolean().default(true),
@@ -71,6 +94,15 @@ export const AiFeatureConfig = z.object({
   extractEntities: z.boolean().default(true),
   semanticSearch: z.boolean().default(true),
   scoreLead: z.boolean().default(true),
+  /** Kill switch for the in-app help assistant (enforced by the gateway gate). */
+  helpAssistant: z.boolean().default(true),
   monthlyCap: z.number().int().nonnegative().default(0), // 0 = unlimited
+  /**
+   * Per-user DAILY question budget for the help assistant. Deliberately much
+   * stricter than the sliding-window RPM limiter: that one stops bursts, this
+   * one stops a user grinding the (paid) provider all day at a polite pace.
+   * 0 = unlimited.
+   */
+  helpDailyPerUser: z.number().int().nonnegative().default(20),
 });
 export type AiFeatureConfig = z.infer<typeof AiFeatureConfig>;

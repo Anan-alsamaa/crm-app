@@ -22,9 +22,10 @@ RUN pnpm install --frozen-lockfile --filter @yiji/admin-portal...
 ARG VITE_DIRECTUS_URL=http://localhost:8055
 ARG VITE_SOCKET_URL=http://localhost:8080
 ARG VITE_AI_GATEWAY_URL=http://localhost:8081
-ARG VITE_AI_SVC_TOKEN=
-ARG VITE_YIJI_API_URL=
-ARG VITE_YIJI_API_TOKEN=
+# NOTE: VITE_AI_SVC_TOKEN / VITE_YIJI_API_URL / VITE_YIJI_API_TOKEN were removed.
+# Nothing referenced them (commerce moved server-side behind the ai-gateway
+# /commerce/* proxy), and VITE_* values are inlined into the public JS bundle —
+# so keeping token args around only invited someone to bake a real secret in.
 # Job enqueue endpoint (Import CSV / Run report now). Prod: the socket-gateway's
 # HTTP base URL (it exposes authed POST /jobs/*). Dev default: host job-producer.
 ARG VITE_JOB_PRODUCER_URL=http://localhost:3031
@@ -32,9 +33,6 @@ ARG VITE_JOB_PRODUCER_TOKEN=
 ENV VITE_DIRECTUS_URL=$VITE_DIRECTUS_URL \
     VITE_SOCKET_URL=$VITE_SOCKET_URL \
     VITE_AI_GATEWAY_URL=$VITE_AI_GATEWAY_URL \
-    VITE_AI_SVC_TOKEN=$VITE_AI_SVC_TOKEN \
-    VITE_YIJI_API_URL=$VITE_YIJI_API_URL \
-    VITE_YIJI_API_TOKEN=$VITE_YIJI_API_TOKEN \
     VITE_JOB_PRODUCER_URL=$VITE_JOB_PRODUCER_URL \
     VITE_JOB_PRODUCER_TOKEN=$VITE_JOB_PRODUCER_TOKEN
 RUN pnpm --filter @yiji/admin-portal build

@@ -83,6 +83,13 @@ const ScoreLeadGlyph: Glyph = (props) => (
     <path d="M15 8h4v4" />
   </svg>
 );
+const HelpAssistantGlyph: Glyph = (props) => (
+  <svg {...glyphBase} {...props}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.6 9.3a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2.1-2.5 3.7" />
+    <path d="M12 16.8h.01" />
+  </svg>
+);
 
 const FEATURES: Array<{ key: keyof Config; label: string; hint: string; glyph: Glyph }> = [
   {
@@ -126,6 +133,12 @@ const FEATURES: Array<{ key: keyof Config; label: string; hint: string; glyph: G
     label: 'Score lead',
     hint: 'Estimates lead quality + the signals behind the score.',
     glyph: ScoreLeadGlyph,
+  },
+  {
+    key: 'helpAssistant',
+    label: 'Help assistant',
+    hint: 'Lets staff ask short “how do I…?” questions about this CRM.',
+    glyph: HelpAssistantGlyph,
   },
 ];
 
@@ -246,7 +259,7 @@ export function AiConfigPage() {
 
           {configQuery.isLoading || !draft ? (
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {Array.from({ length: 7 }).map((_, i) => (
+              {Array.from({ length: FEATURES.length }).map((_, i) => (
                 <li
                   key={i}
                   className="rounded-2xl bg-card/60 ring-1 ring-foreground/[0.04] px-4 py-4"
@@ -340,6 +353,43 @@ export function AiConfigPage() {
                   setDraft({
                     ...draft,
                     monthlyCap: Math.max(0, Number.parseInt(e.target.value, 10) || 0),
+                  })
+                }
+              />
+            </FormField>
+          </div>
+        </section>
+
+        {/* Help-assistant daily allowance — per user, separate from the global
+            monthly cap because this feature is asked for ad hoc by every agent. */}
+        <section className="space-y-3">
+          <div className="space-y-1 px-1">
+            <h2 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('aiConfig.helpBudget', { defaultValue: 'Help assistant allowance' })}
+            </h2>
+            <p className="text-sm text-foreground/80">
+              {t('aiConfig.helpBudgetHint', {
+                defaultValue:
+                  'Max help-assistant questions each staff member can ask per day. 0 = unlimited.',
+              })}
+            </p>
+          </div>
+          <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] px-5 py-4">
+            <FormField
+              label={t('aiConfig.helpDailyPerUser', { defaultValue: 'Daily questions per user' })}
+              htmlFor="helpDailyPerUser"
+            >
+              <Input
+                id="helpDailyPerUser"
+                type="number"
+                min={0}
+                step={5}
+                value={draft?.helpDailyPerUser ?? 0}
+                onChange={(e) =>
+                  draft &&
+                  setDraft({
+                    ...draft,
+                    helpDailyPerUser: Math.max(0, Number.parseInt(e.target.value, 10) || 0),
                   })
                 }
               />

@@ -42,7 +42,9 @@ const baseConfig = {
   extractEntities: false,
   semanticSearch: false,
   scoreLead: false,
+  helpAssistant: false,
   monthlyCap: 1000,
+  helpDailyPerUser: 20,
 };
 
 beforeEach(() => {
@@ -58,7 +60,44 @@ describe('AiConfigPage', () => {
     renderPage();
     expect(screen.getByRole('heading', { name: 'AI assistance', level: 1 })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('Summarize conversation')).toBeInTheDocument());
-    expect(screen.getAllByRole('switch').length).toBe(7);
+    expect(screen.getAllByRole('switch').length).toBe(8);
+  });
+
+  it('renders the help-assistant toggle and its daily allowance field', async () => {
+    aiAdmin.getConfig.mockResolvedValue(baseConfig);
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Help assistant' })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('switch', { name: 'Help assistant' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    expect(screen.getByLabelText('Daily questions per user')).toHaveValue(20);
+  });
+
+  it('saves the help-assistant toggle and daily allowance', async () => {
+    aiAdmin.getConfig.mockResolvedValue(baseConfig);
+    aiAdmin.putConfig.mockResolvedValue({
+      ...baseConfig,
+      helpAssistant: true,
+      helpDailyPerUser: 5,
+    });
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Help assistant' })).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByRole('switch', { name: 'Help assistant' }));
+    const allowance = screen.getByLabelText('Daily questions per user');
+    await userEvent.clear(allowance);
+    await userEvent.type(allowance, '5');
+    await userEvent.click(screen.getByText('actions.save'));
+    await waitFor(() =>
+      expect(aiAdmin.putConfig).toHaveBeenCalledWith(
+        { userId: 'admin-1' },
+        expect.objectContaining({ helpAssistant: true, helpDailyPerUser: 5 }),
+      ),
+    );
   });
 
   it('shows current usage', async () => {

@@ -241,12 +241,26 @@ export function ConversationView({
         setLive((prev) => prev.filter((m) => m.id !== e.noteId));
         void qc.invalidateQueries({ queryKey: ['messages', conversationId] });
       };
+      // The gateway rejects work by emitting `error` (rate_limited,
+      // attachment_rejected, forbidden, bad_payload, persist_failed,
+      // note_delete_*). Without a listener those failures were SILENT — a
+      // rejected attachment or a throttled send just looked like nothing
+      // happened. Surface them as a toast so the agent knows to retry.
+      const onSocketError = (e: { code?: string; message?: string }) => {
+        const code = e?.code ?? 'unknown';
+        toast.error(
+          t(`conversation.socketError.${code}`, {
+            defaultValue: e?.message || t('errors.actionFailed', { ns: 'common' }),
+          }),
+        );
+      };
       socket.on(SOCKET_EVENTS.messageNew, onNew);
       socket.on(SOCKET_EVENTS.noteNew, onNoteNew);
       socket.on(SOCKET_EVENTS.noteDeleted, onNoteDeleted);
       socket.on(SOCKET_EVENTS.typingUpdate, onTyping);
       socket.on(SOCKET_EVENTS.customerPresence, onCustomerPresence);
       socket.on(SOCKET_EVENTS.conversationChanged, onChanged);
+      socket.on(SOCKET_EVENTS.error, onSocketError);
       return () => {
         socket.off(SOCKET_EVENTS.messageNew, onNew);
         socket.off(SOCKET_EVENTS.noteNew, onNoteNew);
@@ -254,12 +268,13 @@ export function ConversationView({
         socket.off(SOCKET_EVENTS.typingUpdate, onTyping);
         socket.off(SOCKET_EVENTS.customerPresence, onCustomerPresence);
         socket.off(SOCKET_EVENTS.conversationChanged, onChanged);
+        socket.off(SOCKET_EVENTS.error, onSocketError);
       };
     })();
     return () => {
       cancelled = true;
     };
-  }, [conversationId, qc]);
+  }, [conversationId, qc, t]);
 
   const all = useMemo(() => {
     const base = messagesQuery.data ?? [];

@@ -24,6 +24,7 @@ import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
 import { ResetPassword, RESET_PASSWORD_PATH } from './pages/ResetPassword.js';
 import { NotificationBell } from './features/notifications/NotificationBell.js';
+import { HelpAssistant } from './features/help-assistant/HelpAssistant.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { SoundToggle } from './components/SoundToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
@@ -275,6 +276,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             />
             <span className="mx-0.5 hidden h-5 w-px bg-border sm:block" aria-hidden />
             <NotificationBell />
+            <HelpAssistant />
             <SoundToggle />
             <LanguageToggle />
           </div>
@@ -300,6 +302,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             <div className="flex flex-1 items-center justify-end gap-2">
               <div className="flex items-center gap-0.5 rounded-xl bg-secondary/50 p-1 text-muted-foreground ring-1 ring-border">
                 <NotificationBell />
+                <HelpAssistant />
                 <SoundToggle />
                 <LanguageToggle />
               </div>

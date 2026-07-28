@@ -5,7 +5,7 @@ import type { Redis } from 'ioredis';
 import { AI_ENDPOINTS } from '@yiji/shared-types';
 import { registerAiRoutes } from '../src/routes.js';
 import { AiConfigStore } from '../src/aiconfig/index.js';
-import { SlidingWindowLimiter, MonthlyCap } from '../src/ratelimit/index.js';
+import { SlidingWindowLimiter, MonthlyCap, DailyQuota } from '../src/ratelimit/index.js';
 import { ResponseCache } from '../src/cache/index.js';
 import type { AIProvider, AiRunInput, AiRunOutput } from '../src/provider/types.js';
 import type {
@@ -103,6 +103,7 @@ async function buildApp(
     perUserLimiter: new SlidingWindowLimiter(redis, 60_000, 100, 'rl:user'),
     globalLimiter: new SlidingWindowLimiter(redis, 60_000, 1000, 'rl:global'),
     monthlyCap: new MonthlyCap(redis),
+    helpDailyQuota: new DailyQuota(redis),
   });
   return { app, provider, redis };
 }

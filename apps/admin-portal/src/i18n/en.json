@@ -273,7 +273,36 @@
     "featuresHint": "Disabled features return a clean error to the caller — no provider hit, no usage charge.",
     "budget": "Monthly budget",
     "budgetHint": "Max provider calls per calendar month, across all features. 0 = unlimited.",
-    "cap": "Monthly cap"
+    "cap": "Monthly cap",
+    "helpBudget": "Help assistant allowance",
+    "helpBudgetHint": "Max help-assistant questions each staff member can ask per day. 0 = unlimited.",
+    "helpDailyPerUser": "Daily questions per user",
+    "feature": {
+      "helpAssistant": "Help assistant"
+    }
+  },
+  "helpAssistant": {
+    "launch": "Ask AI help",
+    "title": "Ask AI help",
+    "description": "Ask how something works in this CRM and get a short answer. One question at a time — nothing is saved.",
+    "label": "Your question",
+    "placeholder": "How do I add an agent to a team?",
+    "counter": "{{chars}}/{{max}}",
+    "send": "Ask",
+    "thinking": "Looking that up…",
+    "answer": "Answer",
+    "offTopicTag": "Out of scope",
+    "offTopic": "That looks outside what this assistant covers — it only answers questions about this CRM.",
+    "statelessNote": "Answers aren’t saved. Edit the question above to ask another.",
+    "error": {
+      "disabled": "AI help is turned off by your administrator.",
+      "rateLimited": "Too many requests — try again in {{seconds}}s.",
+      "quota": "You’ve used your daily AI help allowance ({{limit}}). It resets at {{time}}.",
+      "quotaResetUnknown": "tomorrow",
+      "notConfigured": "AI help isn’t configured yet.",
+      "invalid": "Ask a question between 3 and 500 characters.",
+      "generic": "Couldn’t get an answer. Please try again."
+    }
   },
   "sla": {
     "title": "SLA policies",
