@@ -1,5 +1,6 @@
 import type { JSX, ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from './cn.js';
 import { useFocusTrap } from './useFocusTrap.js';
 
@@ -11,6 +12,14 @@ import { useFocusTrap } from './useFocusTrap.js';
  *
  * Closes on Esc + backdrop click. Animated entrance is gated by
  * `motion-safe`. Body scroll is locked while open.
+ *
+ * Rendered through a PORTAL to <body>. `position: fixed` is relative to the
+ * viewport only while no ancestor establishes a containing block — but
+ * `transform`, `filter`, `backdrop-filter`, `perspective`, `will-change` and
+ * `contain` all do. The app shell's top bar uses `backdrop-blur`, so a drawer
+ * opened from a top-bar control (e.g. the AI help assistant) anchored itself to
+ * that 56px header and rendered as a broken sliver. Portalling makes the drawer
+ * correct from ANY mount point instead of depending on where it is placed.
  */
 
 export interface DrawerProps {
@@ -61,9 +70,10 @@ export function Drawer({
   const panelRef = useRef<HTMLDivElement | null>(null);
   useFocusTrap(panelRef, open);
 
-  if (!open) return null;
+  // SSR/test guard: nothing to portal into before the document exists.
+  if (!open || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -130,6 +140,7 @@ export function Drawer({
           <div className="flex shrink-0 items-center justify-end gap-2 px-8 py-5">{footer}</div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
