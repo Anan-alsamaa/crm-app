@@ -37,15 +37,18 @@
   --card-foreground: 0.18 0.005 250;
   --popover: 1 0 0;
   --popover-foreground: 0.18 0.005 250;
-  --primary: 0.52 0.17 262;
+  /* YIJI BRAND TEAL — #0B8C8D = oklch(0.581 0.097 195.7). Fill steps one
+   * notch darker (L 0.55) so white label text clears WCAG AA at 4.63:1. */
+  --primary: 0.55 0.097 196;
   --primary-foreground: 1 0 0;
-  --primary-subtle: 0.52 0.17 262 / 0.1;
-  --bubble: 0.95 0.012 260;
+  --primary-subtle: 0.581 0.097 196 / 0.12;
+  --brand: 0.581 0.097 196;
+  --bubble: 0.955 0.006 230;
   --secondary: 0.96 0.005 230;
   --secondary-foreground: 0.18 0.005 250;
   --muted: 0.96 0.005 230;
   --muted-foreground: 0.44 0.012 250;
-  --accent: 0.52 0.17 262;
+  --accent: 0.55 0.097 196;
   --accent-foreground: 1 0 0;
   --destructive: 0.56 0.22 25;
   --destructive-foreground: 1 0 0;
@@ -53,17 +56,18 @@
   --success-foreground: 1 0 0;
   --warning: 0.7 0.16 70;
   --warning-foreground: 0.22 0.005 250;
-  --border: 0.22 0.005 250 / 0.12;
-  --border-strong: 0.22 0.005 250 / 0.2;
+  --border: 0.22 0.005 250 / 0.1;
+  --border-strong: 0.22 0.005 250 / 0.18;
   --input: 0.96 0.005 230;
-  --ring: 0.52 0.17 262;
-  --shadow-color: 0.22 0.005 250;
+  --ring: 0.55 0.097 196;
+  --shadow-color: 0.22 0.02 200;
 
-  --rail: 0.24 0.05 262;
-  --rail-foreground: 0.92 0.02 262;
-  --rail-active: 0.33 0.1 262;
+  /* Rail — deep BRAND teal ink; the brand teal lights the active item. */
+  --rail: 0.245 0.045 196;
+  --rail-foreground: 0.9 0.015 196;
+  --rail-active: 0.581 0.097 196;
   --rail-active-foreground: 1 0 0;
-  --rail-border: 0.19 0.045 262;
+  --rail-border: 0.31 0.04 196;
   --secondary-brand: 0.55 0.2 20;
   --secondary-brand-foreground: 1 0 0;
   --display: 0.16 0.01 250;
@@ -75,39 +79,43 @@
    <html data-theme="light">. */
 :root[data-theme='dark'] {
   --radius: 0.5rem;
-  --background: 0.145 0.015 265;
-  --canvas: 0.125 0.015 265;
-  --foreground: 0.95 0.005 250;
-  --card: 0.175 0.015 262;
-  --card-foreground: 0.95 0.005 250;
-  --popover: 0.21 0.015 262;
-  --popover-foreground: 0.95 0.005 250;
-  --primary: 0.62 0.16 262;
-  --primary-foreground: 1 0 0;
-  --primary-subtle: 0.62 0.16 262 / 0.16;
-  --bubble: 0.28 0.025 260;
-  --secondary: 0.22 0.012 262;
-  --secondary-foreground: 0.95 0.005 250;
-  --muted: 0.22 0.012 262;
-  --muted-foreground: 0.68 0.015 255;
-  --accent: 0.62 0.16 262;
-  --accent-foreground: 0.14 0.02 260;
+  /* Elevation ladder with real separation so surfaces read as distinct layers,
+     not one flat wall of dark: base < card < secondary/popover. */
+  --background: 0.135 0.014 265;
+  --canvas: 0.115 0.014 265;
+  --foreground: 0.96 0.005 250;
+  --card: 0.205 0.014 262;
+  --card-foreground: 0.96 0.005 250;
+  --popover: 0.245 0.014 262;
+  --popover-foreground: 0.96 0.005 250;
+  /* Brand teal, lifted for dark ink. */
+  --primary: 0.68 0.11 196;
+  --primary-foreground: 0.16 0.02 200;
+  --primary-subtle: 0.68 0.11 196 / 0.18;
+  --brand: 0.68 0.11 196;
+  --bubble: 0.3 0.02 260;
+  --secondary: 0.25 0.012 262;
+  --secondary-foreground: 0.96 0.005 250;
+  --muted: 0.25 0.012 262;
+  --muted-foreground: 0.72 0.015 255;
+  --accent: 0.68 0.11 196;
+  --accent-foreground: 0.16 0.02 200;
   --destructive: 0.66 0.2 22;
   --destructive-foreground: 1 0 0;
   --success: 0.72 0.15 155;
   --success-foreground: 0.15 0.01 250;
   --warning: 0.8 0.15 75;
   --warning-foreground: 0.18 0.01 250;
-  --border: 0.95 0.01 250 / 0.09;
-  --border-strong: 0.95 0.01 250 / 0.16;
-  --input: 0.21 0.012 262;
-  --ring: 0.62 0.16 262;
+  --border: 0.96 0.01 250 / 0.13;
+  --border-strong: 0.96 0.01 250 / 0.22;
+  --input: 0.24 0.012 262;
+  --ring: 0.68 0.11 196;
   --shadow-color: 0 0 0;
-  --rail: 0.14 0.035 262;
+  --rail: 0.17 0.035 196;
   --rail-foreground: 0.82 0.02 250;
-  --rail-active: 0.26 0.08 262;
+  --rail-active: 0.3 0.07 196;
   --rail-active-foreground: 0.98 0.005 250;
-  --rail-border: 0.24 0.02 262;
+  --rail-border: 0.26 0.025 196;
   --secondary-brand: 0.62 0.19 20;
   --secondary-brand-foreground: 1 0 0;
   --display: 0.98 0.005 250;
@@ -118,28 +126,14 @@
 /* Aurora workspace wash (mirrors agent portal). */
 .app-aurora {
   background-color: oklch(var(--background));
-  background-image:
-    radial-gradient(ellipse 55% 60% at 12% 0%, oklch(var(--primary) / 0.09) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 55% at 100% 20%, oklch(var(--violet) / 0.07) 0%, transparent 60%),
-    radial-gradient(ellipse 55% 55% at 45% 110%, oklch(var(--primary) / 0.05) 0%, transparent 60%);
-  background-size: 160% 160%;
+  /* Clean off-black canvas with ONE quiet, static accent glow for depth.
+     No animated multi-colour mesh — that reads as AI slop. */
+  background-image: radial-gradient(
+    ellipse 60% 45% at 18% -12%,
+    oklch(var(--primary) / 0.05) 0%,
+    transparent 55%
+  );
   background-repeat: no-repeat;
-  animation: aurora-drift 36s ease-in-out infinite;
-}
-@keyframes aurora-drift {
-  0%,
-  100% {
-    background-position:
-      0% 0%,
-      100% 0%,
-      50% 100%;
-  }
-  50% {
-    background-position:
-      30% 15%,
-      70% 30%,
-      35% 80%;
-  }
 }
 
 /* Full-viewport height chain. Kept in @layer base so it's emitted in the base
@@ -155,9 +149,10 @@
 
 body {
   margin: 0;
+  /* Ambient brand wash — the Yiji teal only, no off-brand second hue. */
   background:
-    radial-gradient(at 8% 10%, oklch(var(--primary) / 0.07) 0%, transparent 38%),
-    radial-gradient(at 90% 92%, oklch(var(--violet) / 0.05) 0%, transparent 42%),
+    radial-gradient(at 8% 10%, oklch(var(--brand) / 0.08) 0%, transparent 40%),
+    radial-gradient(at 92% 90%, oklch(var(--brand) / 0.05) 0%, transparent 42%),
     oklch(var(--background));
   background-attachment: fixed;
   color: oklch(var(--foreground));

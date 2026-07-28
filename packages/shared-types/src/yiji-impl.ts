@@ -271,20 +271,15 @@ const YIJI_PAYMENT_MODE: Record<number, string> = {
   7: 'master',
 };
 /**
- * Yiji DeliveryType enum. Maps the raw int onto a human label the UI titleizes
- * (and can translate). Unknown values fall back to `type_N` in the mapper.
- *
- * ⚠️ UNVERIFIED: unlike the OrderStatus / PaymentStatus / PaymentMode enums
- * above (whose values Yiji confirmed), this 1=delivery / 2=pickup mapping is an
- * educated guess — the exact Yiji DeliveryType enum has NOT been confirmed
- * against the real API. It degrades safely (any unrecognized int surfaces as
- * `type_N`), so this is intentionally deferred: verify the true integer→label
- * mapping against the live API / the client's mobile-dev contract and correct
- * it here before relying on these labels.
+ * Yiji DeliveryType enum (confirmed by the client's mobile-dev contract). Maps
+ * the raw int onto a human label the UI titleizes (and can translate). Unknown
+ * values fall back to `type_N` in the mapper.
  */
 const YIJI_DELIVERY_TYPE: Record<number, string> = {
-  1: 'delivery',
-  2: 'pickup',
+  0: 'delivery',
+  1: 'pickup',
+  2: 'carhop',
+  3: 'in_restaurant',
 };
 
 interface RawYijiOrder {
@@ -333,7 +328,8 @@ function mapYijiOrder(raw: RawYijiOrder): YijiOrder {
       category: it.itemCategory ?? undefined,
     })),
     restaurantId: raw.restaurantId != null ? String(raw.restaurantId) : undefined,
-    restaurantName: raw.restaurantName ?? raw.brandName ?? undefined,
+    restaurantName: raw.restaurantName ?? undefined,
+    brandName: raw.brandName ?? undefined,
     deliveryType:
       raw.deliveryType != null
         ? (YIJI_DELIVERY_TYPE[raw.deliveryType] ?? `type_${raw.deliveryType}`)

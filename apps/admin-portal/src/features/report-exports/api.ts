@@ -457,6 +457,22 @@ function summariseItems(items: { qty: number; name: string }[]): string {
     .slice(0, 2000);
 }
 
+/** `in_delivery` → `In Delivery`. */
+function titleize(s: string): string {
+  return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Brand + branch, e.g. "La Casa Pasta — Riyadh - Masief Plaza". */
+function restaurantLabel(o: {
+  brandName?: string;
+  restaurantName?: string;
+  restaurantId?: string;
+}): string {
+  const parts = [o.brandName, o.restaurantName].filter(Boolean) as string[];
+  if (parts.length) return parts.join(' — ');
+  return o.restaurantId ? `#${o.restaurantId}` : '';
+}
+
 /**
  * Enrich ticket rows with each customer's latest Yiji order. Runs only when the
  * caller opts in (the export includes order columns), fetches at most one order
@@ -497,21 +513,30 @@ export function useTicketOrders(contactIds: string[], enabled: boolean, days: nu
 
       await pool(linkable, ORDER_CONCURRENCY, async (c) => {
         try {
-          const orders = await commerce.getOrders(
-            c.vendor!.yiji_vendor_id as string,
-            c.external_customer_id as string,
-            { limit: 1 },
-          );
-          const o = orders?.[0];
-          if (!o) {
+          const vendorId = c.vendor!.yiji_vendor_id as string;
+          // The list endpoint is a SUMMARY (id/status/total/date only) — the
+          // restaurant, brand, items and delivery type live on the single-order
+          // endpoint, so fetch the latest id from the list, then its full detail.
+          const orders = await commerce.getOrders(vendorId, c.external_customer_id as string, {
+            limit: 1,
+          });
+          const summary = orders?.[0];
+          if (!summary) {
             result.set(c.id, null);
             return;
           }
+          let full = null;
+          try {
+            full = await commerce.getOrder(vendorId, summary.orderId);
+          } catch {
+            /* detail unavailable — fall back to the sparse summary */
+          }
+          const o = full ?? summary;
           result.set(c.id, {
             orderId: o.orderId,
-            restaurant: o.restaurantName ?? '',
+            restaurant: restaurantLabel(o),
             status: o.status ?? '',
-            delivery: o.deliveryAddress ?? '',
+            delivery: o.deliveryType ? titleize(o.deliveryType) : (o.deliveryAddress ?? ''),
             items: summariseItems(o.items ?? []),
             total: typeof o.total === 'number' ? o.total : null,
             currency: o.currency ?? '',

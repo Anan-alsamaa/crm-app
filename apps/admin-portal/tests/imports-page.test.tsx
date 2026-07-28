@@ -35,7 +35,7 @@ beforeEach(() => request.mockReset());
 describe('ImportsPage', () => {
   it('renders the heading and the empty state before upload', () => {
     renderPage();
-    expect(screen.getByText('Import contacts')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Import contacts', level: 1 })).toBeInTheDocument();
     expect(screen.getByText('Upload a CSV to begin')).toBeInTheDocument();
   });
 

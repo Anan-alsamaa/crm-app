@@ -22,6 +22,7 @@ import {
 import { SOCKET_EVENTS, type ConversationStatus, type Priority } from '@yiji/shared-types';
 import {
   useConversations,
+  useConversationPreviews,
   useUpdateConversation,
   useAddTagToConversation,
   useTags,
@@ -57,6 +58,7 @@ export function Inbox() {
   });
   const [filters, setFilters] = useState<InboxFilters>({ status: 'open', sort: 'recent' });
   const conversations = useConversations(filters);
+  const previews = useConversationPreviews((conversations.data ?? []).map((c) => c.id));
   const tags = useTags();
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -76,7 +78,11 @@ export function Inbox() {
     void (async () => {
       const socket = await getSocket();
       if (cancelled) return;
-      const onActivity = () => qc.invalidateQueries({ queryKey: ['conversations'] });
+      const onActivity = () => {
+        void qc.invalidateQueries({ queryKey: ['conversations'] });
+        // Keep the WhatsApp-style last-message previews fresh in real time.
+        void qc.invalidateQueries({ queryKey: ['conversation-previews'] });
+      };
       socket.on(SOCKET_EVENTS.inboxActivity, onActivity);
       cleanup = () => socket.off(SOCKET_EVENTS.inboxActivity, onActivity);
     })();
@@ -246,7 +252,7 @@ export function Inbox() {
                 type="search"
                 aria-label={t('inbox.search')}
                 placeholder={t('inbox.search')}
-                className="block h-9 w-full rounded-full border-none bg-secondary/60 ps-9 pe-3 text-sm text-foreground placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-ring/25 text-start transition-[background-color,box-shadow] duration-fast ease-out"
+                className="block h-9 w-full rounded-full border-none bg-secondary/50 ps-9 pe-3 text-sm text-foreground ring-1 ring-inset ring-foreground/10 placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 text-start transition-[background-color,box-shadow] duration-fast ease-out"
                 value={filters.search ?? ''}
                 onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
               />
@@ -286,7 +292,7 @@ export function Inbox() {
                 size="sm"
                 value={filters.sort ?? 'recent'}
                 display={sortDisplay}
-                aria-label="sort"
+                aria-label={t('inbox.sort', { defaultValue: 'Sort' })}
                 onChange={(v) => setFilters((f) => ({ ...f, sort: v as InboxFilters['sort'] }))}
                 options={[
                   { value: 'recent', label: t('inbox.sortRecent') },
@@ -385,18 +391,39 @@ export function Inbox() {
                       c.contact?.phone ||
                       c.contact?.email ||
                       t('inbox.unknownContact');
+                    // WhatsApp-style second line: the last real message, not a
+                    // repeat of the name/phone/email. "You:" prefixes agent
+                    // replies; an image/file-only message shows an attachment label.
+                    const pv = previews.data?.[c.id];
+                    const pvBody = pv?.hasAttachment
+                      ? t('inbox.attachmentPreview', { defaultValue: 'Attachment' })
+                      : (pv?.content ?? '');
+                    const previewText = pv
+                      ? pv.sender_type === 'agent'
+                        ? `${t('inbox.youPrefix', { defaultValue: 'You:' })} ${pvBody}`
+                        : pvBody
+                      : previews.isLoading
+                        ? ''
+                        : t('inbox.noMessagesYet', { defaultValue: 'No messages yet' });
                     return (
                       <li
                         key={c.id}
                         className={cn(
-                          'group relative flex items-start rounded-xl transition-colors duration-fast ease-out',
+                          'group relative flex items-stretch rounded-2xl transition-colors duration-fast ease-out',
                           active
-                            ? 'bg-primary-subtle/70'
+                            ? 'bg-primary/[0.1] ring-1 ring-primary/25'
                             : unread
-                              ? 'bg-primary-subtle/30 hover:bg-primary-subtle/50'
-                              : 'hover:bg-secondary/60',
+                              ? 'bg-foreground/[0.04] hover:bg-foreground/[0.07]'
+                              : 'hover:bg-foreground/[0.05]',
                         )}
                       >
+                        {/* Active accent bar — solid, single accent. */}
+                        {active && (
+                          <span
+                            aria-hidden
+                            className="absolute inset-y-2.5 start-0 w-[3px] rounded-full bg-primary"
+                          />
+                        )}
                         <input
                           type="checkbox"
                           className="ms-3 mt-4 h-3.5 w-3.5 rounded-sm border-border-strong bg-card accent-primary opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity duration-fast"
@@ -409,40 +436,39 @@ export function Inbox() {
                           onClick={() => setSelected(c.id)}
                           className="flex flex-1 items-center gap-3 px-3 py-3 text-start"
                         >
-                          {/* Messenger row: avatar with a status dot, name +
-                              secondary line, time and an unread count bubble. */}
-                          <span className="relative shrink-0">
+                          {/* Messenger row: ringed avatar, name + last-message
+                              line, accent time and a gradient unread bubble. */}
+                          <span
+                            className={cn(
+                              'shrink-0 rounded-full ring-2',
+                              unread ? 'ring-primary/40' : 'ring-foreground/10',
+                            )}
+                          >
                             <Avatar
                               name={c.contact?.name}
                               email={c.contact?.email}
                               phone={c.contact?.phone}
                               size="md"
                             />
-                            <span
-                              aria-hidden
-                              title={t(`status.${c.status}`, { ns: 'common' })}
-                              className={cn(
-                                'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-background',
-                                {
-                                  open: 'bg-success',
-                                  pending: 'bg-warning',
-                                  resolved: 'bg-primary',
-                                  closed: 'bg-muted-foreground/40',
-                                }[c.status],
-                              )}
-                            />
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-baseline justify-between gap-2">
                               <span
                                 className={cn(
-                                  'truncate text-sm text-foreground',
-                                  unread ? 'font-bold' : 'font-semibold',
+                                  'truncate text-sm',
+                                  unread
+                                    ? 'font-bold text-foreground'
+                                    : 'font-semibold text-foreground/90',
                                 )}
                               >
                                 {displayName}
                               </span>
-                              <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                              <span
+                                className={cn(
+                                  'shrink-0 text-2xs tabular-nums',
+                                  unread ? 'font-semibold text-primary' : 'text-muted-foreground',
+                                )}
+                              >
                                 {formatRelative(c.last_message_at)}
                               </span>
                             </div>
@@ -450,12 +476,12 @@ export function Inbox() {
                               <span
                                 className={cn(
                                   'min-w-0 flex-1 truncate text-xs',
-                                  unread ? 'font-medium text-foreground' : 'text-muted-foreground',
+                                  unread
+                                    ? 'font-medium text-foreground/85'
+                                    : 'text-muted-foreground',
                                 )}
                               >
-                                {c.contact?.email ??
-                                  c.contact?.phone ??
-                                  t(`status.${c.status}`, { ns: 'common' })}
+                                {previewText}
                               </span>
                               {(c.priority === 'urgent' || c.priority === 'high') && (
                                 <Pill tone={c.priority === 'urgent' ? 'pink' : 'orange'} size="sm">
@@ -464,7 +490,7 @@ export function Inbox() {
                               )}
                               {unread && (
                                 <span
-                                  className="inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-violet px-1.5 text-xs font-bold text-primary-foreground tabular-nums shadow-sm shadow-violet/30"
+                                  className="inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground tabular-nums"
                                   aria-label={`${c.unread_count_agent} unread`}
                                 >
                                   {c.unread_count_agent}
@@ -540,33 +566,23 @@ export function Inbox() {
                 .slice(0, 5);
               return (
                 <div className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-4 p-6">
-                  {/* Gradient hero card — the agent's morning glance. */}
-                  <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-violet p-7 text-primary-foreground shadow-lg shadow-primary/25">
-                    <div
-                      aria-hidden
-                      className="pointer-events-none absolute inset-0 opacity-70"
-                      style={{
-                        background:
-                          'radial-gradient(circle at 100% 0%, oklch(1 0 0 / 0.2) 0%, transparent 45%), radial-gradient(circle at 0% 120%, oklch(0 0 0 / 0.18) 0%, transparent 55%)',
-                      }}
-                    />
-                    <div className="relative">
-                      <h2 className="text-3xl font-extrabold leading-[1.05] tracking-[-0.035em] text-balance">
-                        {openCount === 0
-                          ? `${t('inbox.welcome.zeroTitle')} ${t('inbox.welcome.zeroAccent')}`
-                          : `${t('inbox.welcome.waiting', { count: openCount })} ${
-                              urgentCount > 0
-                                ? t('inbox.welcome.urgentAccent', { count: urgentCount })
-                                : t('inbox.welcome.pace')
-                            }`}
-                      </h2>
-                      <p className="mt-2 max-w-prose text-sm text-primary-foreground/85">
-                        {t('inbox.welcomeHint', {
-                          defaultValue:
-                            'Pick the next thread on the left, or filter by what needs attention first.',
-                        })}
-                      </p>
-                    </div>
+                  {/* The agent's morning glance — clean, no gradient. */}
+                  <div>
+                    <h2 className="text-3xl font-extrabold leading-[1.05] tracking-[-0.035em] text-balance text-foreground">
+                      {openCount === 0
+                        ? `${t('inbox.welcome.zeroTitle')} ${t('inbox.welcome.zeroAccent')}`
+                        : `${t('inbox.welcome.waiting', { count: openCount })} ${
+                            urgentCount > 0
+                              ? t('inbox.welcome.urgentAccent', { count: urgentCount })
+                              : t('inbox.welcome.pace')
+                          }`}
+                    </h2>
+                    <p className="mt-2 max-w-prose text-sm text-muted-foreground">
+                      {t('inbox.welcomeHint', {
+                        defaultValue:
+                          'Pick the next thread on the left, or filter by what needs attention first.',
+                      })}
+                    </p>
                   </div>
 
                   {/* Colored stat tiles. */}
@@ -577,22 +593,22 @@ export function Inbox() {
                           key: 'open',
                           label: t('inbox.stats.open', { defaultValue: 'open' }),
                           value: openCount,
-                          tile: 'bg-success/10 ring-success/15',
-                          num: 'text-success',
+                          tile: 'bg-emerald-500/10 ring-emerald-500/25',
+                          num: 'text-emerald-600',
                         },
                         {
                           key: 'urgent',
                           label: t('inbox.stats.urgent', { defaultValue: 'urgent' }),
                           value: urgentCount,
-                          tile: 'bg-magenta/[0.08] ring-magenta/15',
-                          num: 'text-magenta',
+                          tile: 'bg-rose-500/10 ring-rose-500/25',
+                          num: 'text-rose-600',
                         },
                         {
                           key: 'unread',
                           label: t('inbox.stats.unread', { defaultValue: 'unread' }),
                           value: unreadCount,
-                          tile: 'bg-primary/[0.08] ring-primary/15',
-                          num: 'text-primary',
+                          tile: 'bg-sky-500/10 ring-sky-500/25',
+                          num: 'text-sky-600',
                         },
                       ] as const
                     ).map((s) => (

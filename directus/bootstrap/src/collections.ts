@@ -134,6 +134,12 @@ export const collections: CollectionSpec[] = [
       { field: 'first_responded_at', type: 'dateTime' },
       { field: 'resolved_at', type: 'dateTime' },
       { field: 'closed_at', type: 'dateTime' },
+      // Point-in-time snapshot of the Yiji order the ticket was raised about,
+      // captured when the ticket is created from a chat. Structured JSON (not
+      // prose in `description`) so the UI can render it as a real order card
+      // and so it stays queryable. The order may change or vanish upstream,
+      // which is exactly why this is a snapshot rather than a live lookup.
+      { field: 'order_snapshot', type: 'json' },
     ],
   },
   {
@@ -150,6 +156,7 @@ export const collections: CollectionSpec[] = [
           'commented',
           'sla_warning',
           'sla_breached',
+          'sla_escalated',
           'resolved',
           'closed',
           'reopened',

@@ -1,6 +1,24 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, cn, EmptyState, Pill, SelectMenu, Skeleton, Spinner, toast } from '@yiji/ui';
+import {
+  Button,
+  cn,
+  EmptyState,
+  Pagination,
+  Pill,
+  SelectMenu,
+  Skeleton,
+  SortTh,
+  Table,
+  TableSurface,
+  Td,
+  Th,
+  toast,
+  Toolbar,
+  ToolbarSpacer,
+  Tr,
+  useTableSort,
+} from '@yiji/ui';
 import {
   useAgentReportData,
   useTicketOrders,
@@ -15,14 +33,16 @@ import {
   buildTicketsSheets,
   fmtDateTime,
   reportFilename,
+  TICKET_COLUMN_KEYS,
+  TICKET_COLUMN_LABELS,
+  type TicketColumnKey,
   type Translate,
 } from './export.js';
 import { downloadWorkbook } from './xlsx.js';
 
-type ReportTab = 'tickets' | 'agents' | 'conversations';
+/** Which of the three exportable reports this page instance renders. */
+export type ReportKind = 'tickets' | 'agents' | 'conversations';
 const RANGE_DAYS = [7, 30, 90] as const;
-/** Rows rendered in the on-screen preview; the export always covers everything. */
-const PREVIEW_ROWS = 50;
 
 const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructive'> = {
   low: 'muted',
@@ -49,36 +69,62 @@ const fmtMins = (n: number | null) =>
 const fmtPct = (n: number | null) => (n == null ? '—' : `${Math.round(n)}%`);
 const fmtScore = (n: number | null) => (n == null ? '—' : n.toFixed(2));
 
-/* ── Small presentational atoms ───────────────────────────────────────── */
+const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+const STATUS_RANK: Record<string, number> = { new: 0, open: 1, pending: 2, resolved: 3, closed: 4 };
+const PAGE_SIZE = 10;
 
-function Kpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
+const TICKET_SORT: Record<string, (r: TicketReportRow) => string | number | null | undefined> = {
+  subject: (r) => r.subject.toLowerCase(),
+  status: (r) => STATUS_RANK[r.status] ?? 99,
+  priority: (r) => PRIORITY_RANK[r.priority] ?? 99,
+  contact: (r) => (r.contactName || r.contactPhone || r.contactEmail || '').toLowerCase(),
+  agent: (r) => r.agentName.toLowerCase(),
+  firstResponse: (r) => r.firstResponseMinutes,
+  resolution: (r) => r.resolutionMinutes,
+};
+const AGENT_SORT: Record<string, (r: AgentKpiRow) => string | number | null | undefined> = {
+  agent: (r) => r.agentName.toLowerCase(),
+  tickets: (r) => r.tickets,
+  avgFirstResponse: (r) => r.avgFirstResponseMin,
+  firstResponsePct: (r) => r.firstResponsePct,
+  csatCount: (r) => r.csatCount,
+  csatAvg: (r) => r.csatAvg,
+};
+
+/* ── KPI card — vibrant tinted card, colored number (reference style) ───── */
+type Tone = 'blue' | 'violet' | 'green' | 'amber';
+const TILE_TONE: Record<Tone, string> = {
+  blue: 'bg-sky-500/10 ring-sky-500/25',
+  violet: 'bg-violet-500/10 ring-violet-500/25',
+  green: 'bg-emerald-500/10 ring-emerald-500/25',
+  amber: 'bg-orange-400/15 ring-orange-400/30',
+};
+const NUM_TONE: Record<Tone, string> = {
+  blue: 'text-sky-600',
+  violet: 'text-violet-600',
+  green: 'text-emerald-600',
+  amber: 'text-orange-500',
+};
+function KpiTile({ label, value, tone }: { label: string; value: string; tone: Tone }) {
   return (
-    <div>
-      <div className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-        {label}
-      </div>
+    <div
+      className={cn(
+        'rounded-2xl px-4 py-3.5 shadow-soft ring-1 transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
+        TILE_TONE[tone],
+      )}
+    >
       <div
         className={cn(
-          'mt-1.5 text-4xl font-extrabold tracking-[-0.03em] tabular-nums leading-none',
-          tone,
+          'text-3xl font-black tabular-nums leading-none tracking-[-0.04em]',
+          NUM_TONE[tone],
         )}
       >
         {value}
       </div>
+      <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </div>
     </div>
-  );
-}
-
-function HeadCell({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <th
-      className={cn(
-        'whitespace-nowrap px-3 py-2 text-start text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground',
-        className,
-      )}
-    >
-      {children}
-    </th>
   );
 }
 
@@ -121,6 +167,8 @@ function TicketsReport({
 }) {
   const { t } = useTranslation();
   const [includeOrders, setIncludeOrders] = useState(false);
+  const [cols, setCols] = useState<Set<TicketColumnKey>>(() => new Set(TICKET_COLUMN_KEYS));
+  const [showCols, setShowCols] = useState(false);
 
   const contactIds = useMemo(
     () => rows.map((r) => r.contactId).filter((id): id is string => !!id),
@@ -142,7 +190,12 @@ function TicketsReport({
       toast.error(t('agentReports.nothingToExport', { defaultValue: 'Nothing to export.' }));
       return;
     }
-    downloadWorkbook(reportFilename('reports-tickets', days), buildTicketsSheets(merged, tr));
+    // Full dataset, only the chosen columns (in canonical order).
+    const chosen = TICKET_COLUMN_KEYS.filter((k) => cols.has(k));
+    downloadWorkbook(
+      reportFilename('reports-tickets', days),
+      buildTicketsSheets(merged, tr, chosen),
+    );
     toast.success(
       t('agentReports.exported', {
         count: merged.length,
@@ -151,12 +204,37 @@ function TicketsReport({
     );
   };
 
-  const preview = merged.slice(0, PREVIEW_ROWS);
+  const toggleCol = (k: TicketColumnKey) =>
+    setCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) {
+        if (next.size > 1) next.delete(k); // keep at least one column
+      } else {
+        next.add(k);
+      }
+      return next;
+    });
+
+  const [page, setPage] = useState(1);
+  const { sorted, sort, toggle } = useTableSort(merged, TICKET_SORT);
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const current = Math.min(page, pageCount);
+  const pageRows = sorted.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const onSort = (key: string) => {
+    toggle(key);
+    setPage(1);
+  };
+  const sortProps = (key: string, align?: 'start' | 'end') => ({
+    active: sort?.key === key,
+    dir: sort?.dir ?? ('asc' as const),
+    onSort: () => onSort(key),
+    align,
+  });
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-secondary/60 px-3 py-1.5 text-sm text-foreground ring-1 ring-border">
           <input
             type="checkbox"
             className="h-4 w-4 rounded border-border text-primary focus:ring-primary/60"
@@ -164,9 +242,6 @@ function TicketsReport({
             onChange={(e) => setIncludeOrders(e.currentTarget.checked)}
           />
           {t('agentReports.includeOrders', { defaultValue: 'Include order data' })}
-          {includeOrders && orders.isFetching && (
-            <Spinner size={14} label={t('actions.loading', { ns: 'common' })} />
-          )}
         </label>
         {includeOrders && (
           <span className="text-2xs text-muted-foreground">
@@ -175,69 +250,128 @@ function TicketsReport({
             })}
           </span>
         )}
-        <div className="ms-auto">
+        <div className="relative ms-auto flex items-center gap-2">
+          {/* Column picker — which columns land in the .xlsx (all by default). */}
+          <button
+            type="button"
+            onClick={() => setShowCols((v) => !v)}
+            aria-expanded={showCols}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors duration-fast hover:bg-secondary hover:text-foreground"
+          >
+            {t('agentReports.columns', { defaultValue: 'Columns' })}
+            <span className="tabular-nums opacity-70">
+              {cols.size}/{TICKET_COLUMN_KEYS.length}
+            </span>
+          </button>
+          {showCols && (
+            <>
+              <button
+                type="button"
+                aria-hidden
+                tabIndex={-1}
+                className="fixed inset-0 z-30 cursor-default"
+                onClick={() => setShowCols(false)}
+              />
+              <div className="absolute end-0 top-9 z-40 max-h-80 w-64 overflow-auto rounded-xl bg-card p-2 shadow-float ring-1 ring-foreground/10">
+                <div className="flex items-center justify-between px-1.5 pb-1.5">
+                  <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                    {t('agentReports.exportColumns', { defaultValue: 'Export columns' })}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-2xs font-medium text-primary hover:underline"
+                    onClick={() => setCols(new Set(TICKET_COLUMN_KEYS))}
+                  >
+                    {t('agentReports.selectAll', { defaultValue: 'All' })}
+                  </button>
+                </div>
+                <ul className="space-y-0.5">
+                  {TICKET_COLUMN_KEYS.map((k) => (
+                    <li key={k}>
+                      <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-xs text-foreground hover:bg-secondary/60">
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary/60"
+                          checked={cols.has(k)}
+                          onChange={() => toggleCol(k)}
+                        />
+                        {t(TICKET_COLUMN_LABELS[k].key, {
+                          defaultValue: TICKET_COLUMN_LABELS[k].def,
+                        })}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </>
+          )}
           <Button size="sm" onClick={onExport}>
             {t('agentReports.exportExcel', { defaultValue: 'Export to Excel' })}
           </Button>
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-border">
+      <TableSurface>
+        <Table>
+          <thead>
             <tr>
-              <HeadCell>{tr('agentReports.col.subject', { defaultValue: 'Subject' })}</HeadCell>
-              <HeadCell>{tr('agentReports.col.status', { defaultValue: 'Status' })}</HeadCell>
-              <HeadCell>{tr('agentReports.col.priority', { defaultValue: 'Priority' })}</HeadCell>
-              <HeadCell>{tr('agentReports.col.contact', { defaultValue: 'Contact' })}</HeadCell>
-              <HeadCell>{tr('agentReports.col.agent', { defaultValue: 'Agent' })}</HeadCell>
-              <HeadCell className="text-end">
+              <SortTh {...sortProps('subject')}>
+                {tr('agentReports.col.subject', { defaultValue: 'Subject' })}
+              </SortTh>
+              <SortTh {...sortProps('status')}>
+                {tr('agentReports.col.status', { defaultValue: 'Status' })}
+              </SortTh>
+              <SortTh {...sortProps('priority')}>
+                {tr('agentReports.col.priority', { defaultValue: 'Priority' })}
+              </SortTh>
+              <SortTh {...sortProps('contact')}>
+                {tr('agentReports.col.contact', { defaultValue: 'Contact' })}
+              </SortTh>
+              <SortTh {...sortProps('agent')}>
+                {tr('agentReports.col.agent', { defaultValue: 'Agent' })}
+              </SortTh>
+              <SortTh {...sortProps('firstResponse', 'end')}>
                 {tr('agentReports.col.firstResponse', { defaultValue: 'First response' })}
-              </HeadCell>
-              <HeadCell>
+              </SortTh>
+              <Th>
                 {tr('agentReports.col.firstResponseSla', { defaultValue: 'First response SLA' })}
-              </HeadCell>
-              <HeadCell className="text-end">
+              </Th>
+              <SortTh {...sortProps('resolution', 'end')}>
                 {tr('agentReports.col.resolutionMin', { defaultValue: 'Resolution (min)' })}
-              </HeadCell>
+              </SortTh>
               {includeOrders && (
-                <HeadCell>
-                  {tr('agentReports.col.restaurant', { defaultValue: 'Restaurant' })}
-                </HeadCell>
+                <Th>{tr('agentReports.col.restaurant', { defaultValue: 'Restaurant' })}</Th>
               )}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/40">
-            {preview.map((r) => (
-              <tr key={r.id} className="transition-colors duration-fast hover:bg-secondary/40">
-                <td
-                  className="max-w-[16rem] truncate px-3 py-2.5 font-medium text-foreground"
-                  title={r.subject}
-                >
+          <tbody>
+            {pageRows.map((r) => (
+              <Tr key={r.id}>
+                <Td className="max-w-[16rem] truncate font-medium" title={r.subject}>
                   {r.subject}
-                </td>
-                <td className="px-3 py-2.5">
+                </Td>
+                <Td>
                   <StatusPill value={r.status} />
-                </td>
-                <td className="px-3 py-2.5">
+                </Td>
+                <Td>
                   <PriorityPill value={r.priority} />
-                </td>
-                <td className="max-w-[12rem] truncate px-3 py-2.5 text-muted-foreground">
+                </Td>
+                <Td className="max-w-[12rem] truncate text-muted-foreground">
                   {r.contactName || r.contactPhone || r.contactEmail || '—'}
-                </td>
-                <td className="px-3 py-2.5 text-muted-foreground">{r.agentName}</td>
-                <td className="px-3 py-2.5 text-end tabular-nums text-muted-foreground">
+                </Td>
+                <Td className="text-muted-foreground">{r.agentName}</Td>
+                <Td className="text-end tabular-nums text-muted-foreground">
                   {fmtMins(r.firstResponseMinutes)}
-                </td>
-                <td className="px-3 py-2.5">
+                </Td>
+                <Td>
                   <SlaPill state={r.firstResponseState} />
-                </td>
-                <td className="px-3 py-2.5 text-end tabular-nums text-muted-foreground">
+                </Td>
+                <Td className="text-end tabular-nums text-muted-foreground">
                   {r.resolutionMinutes == null ? '—' : Math.round(r.resolutionMinutes)}
-                </td>
+                </Td>
                 {includeOrders && (
-                  <td
-                    className="max-w-[12rem] truncate px-3 py-2.5 text-muted-foreground"
+                  <Td
+                    className="max-w-[12rem] truncate text-muted-foreground"
                     title={r.order?.restaurant ?? ''}
                   >
                     {orders.isFetching && !r.order ? (
@@ -245,14 +379,20 @@ function TicketsReport({
                     ) : (
                       (r.order?.restaurant ?? '—')
                     )}
-                  </td>
+                  </Td>
                 )}
-              </tr>
+              </Tr>
             ))}
           </tbody>
-        </table>
-      </div>
-      <PreviewNote shown={preview.length} total={merged.length} />
+        </Table>
+      </TableSurface>
+      <Pagination
+        page={current}
+        pageCount={pageCount}
+        onPage={setPage}
+        prevLabel={t('agentReports.prev', { defaultValue: 'Previous' })}
+        nextLabel={t('agentReports.next', { defaultValue: 'Next' })}
+      />
     </div>
   );
 }
@@ -269,6 +409,13 @@ function AgentKpiReport({
   days: number;
 }) {
   const { t } = useTranslation();
+  const { sorted, sort, toggle } = useTableSort(agents, AGENT_SORT);
+  const sp = (key: string, align?: 'start' | 'end') => ({
+    active: sort?.key === key,
+    dir: sort?.dir ?? ('asc' as const),
+    onSort: () => toggle(key),
+    align,
+  });
 
   const onExport = () => {
     if (agents.length === 0) {
@@ -293,55 +440,48 @@ function AgentKpiReport({
           </Button>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-border">
+      <TableSurface>
+        <Table>
+          <thead>
             <tr>
-              <HeadCell>{tr('agentReports.col.agent', { defaultValue: 'Agent' })}</HeadCell>
-              <HeadCell className="text-end">
+              <SortTh {...sp('agent')}>
+                {tr('agentReports.col.agent', { defaultValue: 'Agent' })}
+              </SortTh>
+              <SortTh {...sp('tickets', 'end')}>
                 {tr('agentReports.col.tickets', { defaultValue: 'Tickets' })}
-              </HeadCell>
-              <HeadCell className="text-end">
+              </SortTh>
+              <SortTh {...sp('avgFirstResponse', 'end')}>
                 {tr('agentReports.col.avgFirstResponse', { defaultValue: 'Avg first response' })}
-              </HeadCell>
-              <HeadCell className="text-end">
+              </SortTh>
+              <SortTh {...sp('firstResponsePct', 'end')}>
                 {tr('agentReports.col.firstResponsePct', { defaultValue: 'First response SLA %' })}
-              </HeadCell>
-              <HeadCell className="text-end">
+              </SortTh>
+              <SortTh {...sp('csatCount', 'end')}>
                 {tr('agentReports.col.csatCount', { defaultValue: 'CSAT responses' })}
-              </HeadCell>
-              <HeadCell className="text-end">
+              </SortTh>
+              <SortTh {...sp('csatAvg', 'end')}>
                 {tr('agentReports.col.csatAvg', { defaultValue: 'CSAT avg (1–5)' })}
-              </HeadCell>
+              </SortTh>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/40">
-            {agents.map((a) => (
-              <tr
-                key={a.agentId ?? '__unassigned__'}
-                className="transition-colors duration-fast hover:bg-secondary/40"
-              >
-                <td className="px-3 py-2.5 font-medium text-foreground">{a.agentName}</td>
-                <td className="px-3 py-2.5 text-end tabular-nums text-muted-foreground">
-                  {a.tickets}
-                </td>
-                <td className="px-3 py-2.5 text-end tabular-nums text-muted-foreground">
+          <tbody>
+            {sorted.map((a) => (
+              <Tr key={a.agentId ?? '__unassigned__'}>
+                <Td className="font-medium">{a.agentName}</Td>
+                <Td className="text-end tabular-nums text-muted-foreground">{a.tickets}</Td>
+                <Td className="text-end tabular-nums text-muted-foreground">
                   {fmtMins(a.avgFirstResponseMin)}
-                </td>
-                <td className="px-3 py-2.5 text-end tabular-nums text-muted-foreground">
+                </Td>
+                <Td className="text-end tabular-nums text-muted-foreground">
                   {fmtPct(a.firstResponsePct)}
-                </td>
-                <td className="px-3 py-2.5 text-end tabular-nums text-muted-foreground">
-                  {a.csatCount}
-                </td>
-                <td className="px-3 py-2.5 text-end tabular-nums font-medium text-foreground">
-                  {fmtScore(a.csatAvg)}
-                </td>
-              </tr>
+                </Td>
+                <Td className="text-end tabular-nums text-muted-foreground">{a.csatCount}</Td>
+                <Td className="text-end tabular-nums font-semibold">{fmtScore(a.csatAvg)}</Td>
+              </Tr>
             ))}
           </tbody>
-        </table>
-      </div>
+        </Table>
+      </TableSurface>
     </div>
   );
 }
@@ -369,10 +509,7 @@ function ConversationReport({
       buildConversationSheets(report, tr),
     );
     toast.success(
-      t('agentReports.exported', {
-        count: report.total,
-        defaultValue: 'Exported {{count}} rows.',
-      }),
+      t('agentReports.exported', { count: report.total, defaultValue: 'Exported {{count}} rows.' }),
     );
   };
 
@@ -389,75 +526,68 @@ function ConversationReport({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* By status */}
-        <div className="rounded-2xl bg-card p-4 shadow-soft">
-          <h3 className="mb-3 text-sm font-semibold tracking-tight text-foreground">
+        <div className="rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.05] shadow-soft">
+          <h3 className="mb-3 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('agentReports.byStatus', { defaultValue: 'By status' })}
           </h3>
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {report.byStatus.map((s) => (
               <li key={s.key} className="flex items-center justify-between gap-2 text-sm">
                 <StatusPill value={s.key} />
-                <span className="tabular-nums font-medium text-foreground">{s.count}</span>
+                <span className="tabular-nums font-semibold text-foreground">{s.count}</span>
               </li>
             ))}
           </ul>
         </div>
-        {/* By priority */}
-        <div className="rounded-2xl bg-card p-4 shadow-soft">
-          <h3 className="mb-3 text-sm font-semibold tracking-tight text-foreground">
+        <div className="rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.05] shadow-soft">
+          <h3 className="mb-3 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('agentReports.byPriority', { defaultValue: 'By priority' })}
           </h3>
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {report.byPriority.map((p) => (
               <li key={p.key} className="flex items-center justify-between gap-2 text-sm">
                 <PriorityPill value={p.key} />
-                <span className="tabular-nums font-medium text-foreground">{p.count}</span>
+                <span className="tabular-nums font-semibold text-foreground">{p.count}</span>
               </li>
             ))}
           </ul>
         </div>
       </div>
 
-      {/* By day */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-border">
+      <TableSurface>
+        <Table>
+          <thead>
             <tr>
-              <HeadCell>{tr('agentReports.col.date', { defaultValue: 'Date' })}</HeadCell>
-              <HeadCell className="text-end">
+              <Th>{tr('agentReports.col.date', { defaultValue: 'Date' })}</Th>
+              <Th className="text-end">
                 {tr('agentReports.col.total', { defaultValue: 'Total' })}
-              </HeadCell>
+              </Th>
               {report.statuses.map((s) => (
-                <HeadCell key={s} className="text-end">
+                <Th key={s} className="text-end">
                   {tr(`status.${s}`, { ns: 'common', defaultValue: s })}
-                </HeadCell>
+                </Th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/40">
+          <tbody>
             {preview.map((d) => (
-              <tr key={d.day} className="transition-colors duration-fast hover:bg-secondary/40">
-                <td className="px-3 py-2.5 tabular-nums text-muted-foreground">{d.day}</td>
-                <td className="px-3 py-2.5 text-end tabular-nums font-medium text-foreground">
-                  {d.total}
-                </td>
+              <Tr key={d.day}>
+                <Td className="tabular-nums text-muted-foreground">{d.day}</Td>
+                <Td className="text-end tabular-nums font-semibold">{d.total}</Td>
                 {report.statuses.map((s) => (
-                  <td key={s} className="px-3 py-2.5 text-end tabular-nums text-muted-foreground">
+                  <Td key={s} className="text-end tabular-nums text-muted-foreground">
                     {d.byStatus[s] ?? 0}
-                  </td>
+                  </Td>
                 ))}
-              </tr>
+              </Tr>
             ))}
           </tbody>
-        </table>
-      </div>
+        </Table>
+      </TableSurface>
       <PreviewNote shown={preview.length} total={report.byDay.length} unit="days" />
     </div>
   );
 }
-
-/* ── Shared bits ──────────────────────────────────────────────────────── */
 
 function PreviewNote({ shown, total, unit }: { shown: number; total: number; unit?: string }) {
   const { t } = useTranslation();
@@ -479,53 +609,58 @@ function PreviewNote({ shown, total, unit }: { shown: number; total: number; uni
   );
 }
 
-/* ── Page ─────────────────────────────────────────────────────────────── */
+/* ── Page — one instance per individual report (no tabs) ─────────────────── */
 
-export function AgentReportsPage() {
+const META: Record<
+  ReportKind,
+  { titleKey: string; titleDefault: string; subKey: string; subDefault: string }
+> = {
+  tickets: {
+    titleKey: 'agentReports.ticketsTitle',
+    titleDefault: 'Tickets & orders',
+    subKey: 'agentReports.ticketsSubtitle',
+    subDefault: 'Every ticket with SLA timings and the linked customer order — export to Excel.',
+  },
+  agents: {
+    titleKey: 'agentReports.agentsTitle',
+    titleDefault: 'Agent KPI',
+    subKey: 'agentReports.agentsSubtitle',
+    subDefault: 'Per-agent first-response time, SLA compliance and CSAT — export to Excel.',
+  },
+  conversations: {
+    titleKey: 'agentReports.conversationsTitle',
+    titleDefault: 'Conversation status',
+    subKey: 'agentReports.conversationsSubtitle',
+    subDefault: 'Conversations by status, priority and day — export to Excel.',
+  },
+};
+
+export function AgentReportsPage({ report: which }: { report: ReportKind }) {
   const { t } = useTranslation();
   const [days, setDays] = useState(30);
-  const [tab, setTab] = useState<ReportTab>('tickets');
-  // Labels baked into the report data (agent names / subjects) must be
-  // translated here — the .xlsx export runs outside React and can't call i18n.
   const report = useAgentReportData(days, {
     unassigned: t('agentReports.unassigned', { defaultValue: 'Unassigned' }),
     noSubject: t('agentReports.noSubject', { defaultValue: '(no subject)' }),
   });
-
-  // A thin wrapper so the pure export builders can call i18next without taking a
-  // dependency on its full TFunction type.
   const tr: Translate = (key, opts) => String(t(key, opts));
-
   const data = report.data;
-  const isEmpty =
-    !!data &&
-    data.tickets.length === 0 &&
-    data.conversations.total === 0 &&
-    data.agents.length === 0;
+  const meta = META[which];
 
-  const tabs: { key: ReportTab; label: string }[] = [
-    { key: 'tickets', label: t('agentReports.tabTickets', { defaultValue: 'Tickets + orders' }) },
-    { key: 'agents', label: t('agentReports.tabAgents', { defaultValue: 'Agent KPI' }) },
-    {
-      key: 'conversations',
-      label: t('agentReports.tabConversations', { defaultValue: 'Conversation status' }),
-    },
-  ];
+  const isEmpty =
+    which === 'tickets'
+      ? !!data && data.tickets.length === 0
+      : which === 'agents'
+        ? !!data && data.agents.length === 0
+        : !!data && data.conversations.total === 0;
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-y-auto px-4 py-6 sm:px-6">
-      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            {t('agentReports.title', { defaultValue: 'Reports' })}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t('agentReports.subtitle', {
-              defaultValue: 'Ticket, agent and conversation analytics — exportable to Excel.',
-            })}
-          </p>
-        </div>
-        <div className="w-40">
+    <div className="flex h-full flex-col overflow-hidden">
+      <Toolbar>
+        <h1 className="text-sm font-semibold tracking-tight text-foreground">
+          {t(meta.titleKey, { defaultValue: meta.titleDefault })}
+        </h1>
+        <ToolbarSpacer />
+        <div className="w-32">
           <SelectMenu
             fullWidth
             value={String(days)}
@@ -541,87 +676,86 @@ export function AgentReportsPage() {
             }))}
           />
         </div>
-      </header>
+      </Toolbar>
 
-      {/* Tabs */}
-      <div className="mb-4 inline-flex w-fit rounded-lg bg-secondary/60 p-0.5 text-xs">
-        {tabs.map((tb) => (
-          <button
-            key={tb.key}
-            type="button"
-            onClick={() => setTab(tb.key)}
-            className={cn(
-              'rounded-md px-3 py-1.5 font-medium transition-colors duration-fast',
-              tab === tb.key
-                ? 'bg-card text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {tb.label}
-          </button>
-        ))}
-      </div>
-
-      {report.isLoading ? (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Skeleton className="h-20 rounded-xl" />
-            <Skeleton className="h-20 rounded-xl" />
-            <Skeleton className="h-20 rounded-xl" />
-            <Skeleton className="h-20 rounded-xl" />
-          </div>
-          <Skeleton className="h-64 w-full rounded-xl" />
-        </div>
-      ) : report.isError ? (
-        <EmptyState
-          title={t('agentReports.loadError', { defaultValue: 'Could not load report data' })}
-          description={t('agentReports.loadErrorHint', {
-            defaultValue: 'Check your connection and try again.',
-          })}
-        />
-      ) : !data || isEmpty ? (
-        <EmptyState
-          title={t('agentReports.empty', { defaultValue: 'No data in this window' })}
-          description={t('agentReports.emptyHint', {
-            defaultValue: 'Widen the date range, or wait for tickets and conversations to land.',
-          })}
-        />
-      ) : (
-        <div className="space-y-5">
-          {/* KPI strip */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Kpi
-              label={t('agentReports.kpiTickets', { defaultValue: 'Tickets' })}
-              value={String(data.tickets.length)}
-            />
-            <Kpi
-              label={t('agentReports.kpiConversations', { defaultValue: 'Conversations' })}
-              value={String(data.conversations.total)}
-            />
-            <Kpi
-              label={t('agentReports.kpiAgents', { defaultValue: 'Agents' })}
-              value={String(data.agents.filter((a) => a.agentId).length)}
-            />
-            <Kpi
-              label={t('agentReports.kpiCsat', { defaultValue: 'CSAT avg' })}
-              value={fmtScore(data.csatOverall.avg)}
-              tone={data.csatOverall.avg == null ? undefined : 'text-success'}
-            />
+      <div className="flex-1 overflow-auto px-5 py-4">
+        <div className="mx-auto max-w-5xl space-y-5">
+          {/* Clean editorial header — no gradient banner. */}
+          <div className="border-b border-foreground/10 pb-5">
+            <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+              {t(meta.titleKey, { defaultValue: meta.titleDefault })}
+            </h2>
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {t(meta.subKey, { defaultValue: meta.subDefault })}
+            </p>
           </div>
 
-          {tab === 'tickets' && <TicketsReport rows={data.tickets} tr={tr} days={days} />}
-          {tab === 'agents' && <AgentKpiReport agents={data.agents} tr={tr} days={days} />}
-          {tab === 'conversations' && (
-            <ConversationReport report={data.conversations} tr={tr} days={days} />
+          {report.isLoading ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[0, 1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-20 rounded-2xl" />
+                ))}
+              </div>
+              <Skeleton className="h-64 w-full rounded-2xl" />
+            </div>
+          ) : report.isError ? (
+            <EmptyState
+              title={t('agentReports.loadError', { defaultValue: 'Could not load report data' })}
+              description={t('agentReports.loadErrorHint', {
+                defaultValue: 'Check your connection and try again.',
+              })}
+            />
+          ) : !data || isEmpty ? (
+            <EmptyState
+              title={t('agentReports.empty', { defaultValue: 'No data in this window' })}
+              description={t('agentReports.emptyHint', {
+                defaultValue:
+                  'Widen the date range, or wait for tickets and conversations to land.',
+              })}
+            />
+          ) : (
+            <>
+              {/* KPI strip — colored, report-relevant. */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <KpiTile
+                  label={t('agentReports.kpiTickets', { defaultValue: 'Tickets' })}
+                  value={String(data.tickets.length)}
+                  tone="blue"
+                />
+                <KpiTile
+                  label={t('agentReports.kpiConversations', { defaultValue: 'Conversations' })}
+                  value={String(data.conversations.total)}
+                  tone="violet"
+                />
+                <KpiTile
+                  label={t('agentReports.kpiAgents', { defaultValue: 'Agents' })}
+                  value={String(data.agents.filter((a) => a.agentId).length)}
+                  tone="amber"
+                />
+                <KpiTile
+                  label={t('agentReports.kpiCsat', { defaultValue: 'CSAT avg' })}
+                  value={fmtScore(data.csatOverall.avg)}
+                  tone="green"
+                />
+              </div>
+
+              {which === 'tickets' && <TicketsReport rows={data.tickets} tr={tr} days={days} />}
+              {which === 'agents' && <AgentKpiReport agents={data.agents} tr={tr} days={days} />}
+              {which === 'conversations' && (
+                <ConversationReport report={data.conversations} tr={tr} days={days} />
+              )}
+
+              <p className="pt-1 text-2xs text-muted-foreground">
+                {t('agentReports.generatedAt', {
+                  at: fmtDateTime(data.generatedAt),
+                  defaultValue: 'Generated {{at}}',
+                })}
+              </p>
+            </>
           )}
-          <p className="pt-1 text-2xs text-muted-foreground">
-            {t('agentReports.generatedAt', {
-              at: fmtDateTime(data.generatedAt),
-              defaultValue: 'Generated {{at}}',
-            })}
-          </p>
         </div>
-      )}
+      </div>
     </div>
   );
 }

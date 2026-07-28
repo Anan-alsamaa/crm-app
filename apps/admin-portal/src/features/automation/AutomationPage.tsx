@@ -77,6 +77,30 @@ function PlusIcon() {
   );
 }
 
+/* Flat KPI tile — neutral number, semantic tint on the label only (ONE accent). */
+type KpiTone = 'blue' | 'violet' | 'green' | 'amber';
+const LABEL_TONE: Record<KpiTone, string> = {
+  blue: 'text-primary',
+  violet: 'text-primary',
+  green: 'text-success',
+  amber: 'text-warning-foreground',
+};
+
+function KpiTile({ label, value, tone }: { label: string; value: string | number; tone: KpiTone }) {
+  return (
+    <div className="rounded-2xl bg-card px-4 py-3.5 ring-1 ring-foreground/[0.08]">
+      <div className="text-3xl font-black tabular-nums leading-none tracking-[-0.04em] text-foreground">
+        {value}
+      </div>
+      <div
+        className={cn('mt-2 text-2xs font-semibold uppercase tracking-[0.12em]', LABEL_TONE[tone])}
+      >
+        {label}
+      </div>
+    </div>
+  );
+}
+
 interface DraftRule {
   name: string;
   description: string;
@@ -203,61 +227,102 @@ export function AutomationPage() {
         </Button>
       </Toolbar>
 
-      <div className="flex-1 overflow-auto px-5 py-3">
-        {rules.isError ? (
-          <ErrorState
-            title={t('automation.loadError', { defaultValue: 'Could not load automation rules' })}
-            message={t('automation.loadErrorHint', {
-              defaultValue: 'Check your connection and try again.',
-            })}
-            retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
-            onRetry={() => void rules.refetch()}
-          />
-        ) : rules.isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 w-full rounded-2xl" />
-            ))}
+      <div className="flex-1 overflow-auto px-5 py-4">
+        <div className="mx-auto max-w-5xl space-y-5">
+          {/* Clean editorial header — no gradient banner. */}
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-foreground/10 pb-5">
+            <div>
+              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+                {t('automation.title', { defaultValue: 'Automation' })}
+              </h2>
+              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                {t('automation.heroSubtitle', {
+                  defaultValue:
+                    'Rules fire when a trigger matches — conditions are AND-joined, then actions run in order to assign, tag, escalate, or notify automatically.',
+                })}
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-secondary px-3.5 py-1.5 text-sm font-semibold tabular-nums text-muted-foreground ring-1 ring-foreground/10">
+              {t('automation.ruleCount', { count: total, defaultValue: '{{count}} rules' })}
+            </span>
           </div>
-        ) : !rules.data || rules.data.length === 0 ? (
-          <EmptyState
-            title={t('automation.empty', { defaultValue: 'No automation rules yet.' })}
-            description={t('automation.emptyHint', {
-              defaultValue:
-                'Rules fire when triggers match — e.g. auto-assign high-priority tickets, notify a team on SLA breach.',
-            })}
-            action={
-              <Button
-                type="button"
-                onClick={() => {
-                  setEditingId(null);
-                  setDrawerOpen(true);
-                }}
-                iconStart={<PlusIcon />}
-              >
-                {t('automation.create', { defaultValue: 'New rule' })}
-              </Button>
-            }
-          />
-        ) : (
-          <ul className="space-y-2">
-            {rules.data.map((r) => (
-              <li key={r.id}>
-                <RuleCard
-                  rule={r}
-                  onEdit={() => {
-                    setEditingId(r.id);
+
+          {rules.isError ? (
+            <ErrorState
+              title={t('automation.loadError', { defaultValue: 'Could not load automation rules' })}
+              message={t('automation.loadErrorHint', {
+                defaultValue: 'Check your connection and try again.',
+              })}
+              retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+              onRetry={() => void rules.refetch()}
+            />
+          ) : rules.isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-20 w-full rounded-2xl" />
+              ))}
+            </div>
+          ) : !rules.data || rules.data.length === 0 ? (
+            <EmptyState
+              title={t('automation.empty', { defaultValue: 'No automation rules yet.' })}
+              description={t('automation.emptyHint', {
+                defaultValue:
+                  'Rules fire when triggers match — e.g. auto-assign high-priority tickets, notify a team on SLA breach.',
+              })}
+              action={
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null);
                     setDrawerOpen(true);
                   }}
-                  onToggle={async () => {
-                    await update.mutateAsync({ id: r.id, patch: { active: !r.active } });
-                  }}
-                  onDelete={() => setDeletingId(r.id)}
+                  iconStart={<PlusIcon />}
+                >
+                  {t('automation.create', { defaultValue: 'New rule' })}
+                </Button>
+              }
+            />
+          ) : (
+            <>
+              {/* Headline KPIs */}
+              <div className="grid grid-cols-3 gap-3">
+                <KpiTile
+                  label={t('automation.kpiRules', { defaultValue: 'Rules' })}
+                  value={total}
+                  tone="blue"
                 />
-              </li>
-            ))}
-          </ul>
-        )}
+                <KpiTile
+                  label={t('automation.kpiActive', { defaultValue: 'Active' })}
+                  value={activeCount}
+                  tone="green"
+                />
+                <KpiTile
+                  label={t('automation.kpiInactive', { defaultValue: 'Inactive' })}
+                  value={total - activeCount}
+                  tone="amber"
+                />
+              </div>
+
+              <ul className="space-y-2">
+                {rules.data.map((r) => (
+                  <li key={r.id}>
+                    <RuleCard
+                      rule={r}
+                      onEdit={() => {
+                        setEditingId(r.id);
+                        setDrawerOpen(true);
+                      }}
+                      onToggle={async () => {
+                        await update.mutateAsync({ id: r.id, patch: { active: !r.active } });
+                      }}
+                      onDelete={() => setDeletingId(r.id)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
       </div>
 
       <Drawer
@@ -433,9 +498,9 @@ function RuleCard({
             {rule.name}
           </h3>
           {!rule.active && (
-            <span className="inline-flex items-center rounded-full bg-warning/20 px-2 py-0.5 text-2xs font-medium text-warning-foreground">
+            <Pill tone="muted" size="sm" dot>
               {t('automation.inactive', { defaultValue: 'inactive' })}
-            </span>
+            </Pill>
           )}
         </div>
         {rule.description && (

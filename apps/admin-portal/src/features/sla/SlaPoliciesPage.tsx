@@ -7,12 +7,14 @@ import { readItems, createItem, updateItem } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
+  cn,
   Drawer,
   DrawerSection,
   EmptyState,
   ErrorState,
   FormField,
   Input,
+  Pill,
   Skeleton,
   Textarea,
   toast,
@@ -189,126 +191,161 @@ export function SlaPoliciesPage() {
         </Button>
       </Toolbar>
 
-      <div className="flex-1 overflow-auto px-5 py-3">
-        {policies.isError ? (
-          <ErrorState
-            title={t('sla.loadError', { defaultValue: 'Could not load SLA policies' })}
-            message={t('sla.loadErrorHint', {
-              defaultValue: 'Check your connection and try again.',
-            })}
-            retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
-            onRetry={() => void policies.refetch()}
-          />
-        ) : policies.isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-lg px-2 py-3">
-                <Skeleton className="h-3 w-1/4" />
-                <Skeleton className="h-3 w-32" />
-                <Skeleton className="ms-auto h-4 w-12" />
-              </div>
-            ))}
+      <div className="flex-1 overflow-auto px-5 py-4">
+        <div className="mx-auto max-w-5xl space-y-5">
+          {/* Clean editorial header — no gradient banner. */}
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-foreground/10 pb-5">
+            <div>
+              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+                {t('sla.title')}
+              </h2>
+              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                {t('sla.heroSubtitle', {
+                  defaultValue:
+                    'Each policy maps ticket priorities to first-response and resolution deadlines — the worker schedules warnings and breach events automatically.',
+                })}
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-secondary px-3.5 py-1.5 text-sm font-semibold tabular-nums text-muted-foreground ring-1 ring-foreground/10">
+              {t('sla.policyCount', { count: total, defaultValue: '{{count}} policies' })}
+            </span>
           </div>
-        ) : !policies.data || policies.data.length === 0 ? (
-          <EmptyState
-            title={t('sla.empty')}
-            description={t('sla.emptyHint', {
-              defaultValue: 'Create your first SLA policy to start tracking response times.',
-            })}
-            action={
-              <Button type="button" onClick={openCreate} iconStart={<PlusIcon />}>
-                {t('sla.create')}
-              </Button>
-            }
-          />
-        ) : (
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {policies.data.map((p) => (
-              <div
-                key={p.id}
-                className="group relative flex flex-col gap-4 rounded-2xl bg-card/70 px-5 py-5 shadow-soft ring-1 ring-foreground/[0.04] transition-[box-shadow,transform,background-color] duration-fast ease-out hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                        {p.name}
-                      </h3>
-                      {p.active ? (
-                        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" />
-                      ) : (
-                        <span
-                          aria-hidden
-                          className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40"
-                        />
-                      )}
-                    </div>
-                    {p.description && (
-                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                        {p.description}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(p)}>
-                      {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
-                    </Button>
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 text-2xs text-muted-foreground">
-                      <input
-                        type="checkbox"
-                        checked={p.active}
-                        onChange={(e) =>
-                          void toggleActive.mutateAsync({ id: p.id, active: e.target.checked })
-                        }
-                        className="h-3.5 w-3.5 rounded-sm border-border-strong bg-input accent-primary"
-                        aria-label={t('sla.active')}
-                      />
-                      <span>{t('sla.active')}</span>
-                    </label>
-                  </div>
-                </div>
 
-                <div className="flex flex-wrap gap-1.5">
-                  {p.applies_to_priority?.map((pr) => (
-                    <span
-                      key={pr}
-                      className="inline-flex items-center rounded-full bg-primary-subtle px-2 py-0.5 text-xs font-semibold text-[oklch(0.42_0.10_196)]"
-                    >
-                      {t(`priority.${pr}`, { ns: 'common' })}
-                    </span>
-                  ))}
+          {policies.isError ? (
+            <ErrorState
+              title={t('sla.loadError', { defaultValue: 'Could not load SLA policies' })}
+              message={t('sla.loadErrorHint', {
+                defaultValue: 'Check your connection and try again.',
+              })}
+              retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+              onRetry={() => void policies.refetch()}
+            />
+          ) : policies.isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 rounded-lg px-2 py-3">
+                  <Skeleton className="h-3 w-1/4" />
+                  <Skeleton className="h-3 w-32" />
+                  <Skeleton className="ms-auto h-4 w-12" />
                 </div>
-
-                <div className="grid grid-cols-3 gap-4 pt-1">
-                  <div>
-                    <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
-                      first reply
-                    </div>
-                    <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
-                      {p.first_response_minutes}m
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
-                      resolution
-                    </div>
-                    <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
-                      {p.resolution_minutes}m
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
-                      warn at
-                    </div>
-                    <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
-                      {p.warning_threshold_percent}%
-                    </div>
-                  </div>
-                </div>
+              ))}
+            </div>
+          ) : !policies.data || policies.data.length === 0 ? (
+            <EmptyState
+              title={t('sla.empty')}
+              description={t('sla.emptyHint', {
+                defaultValue: 'Create your first SLA policy to start tracking response times.',
+              })}
+              action={
+                <Button type="button" onClick={openCreate} iconStart={<PlusIcon />}>
+                  {t('sla.create')}
+                </Button>
+              }
+            />
+          ) : (
+            <>
+              {/* Headline KPIs */}
+              <div className="grid grid-cols-3 gap-3">
+                <KpiTile
+                  label={t('sla.kpiPolicies', { defaultValue: 'Policies' })}
+                  value={total}
+                  tone="blue"
+                />
+                <KpiTile
+                  label={t('sla.kpiActive', { defaultValue: 'Active' })}
+                  value={activeCount}
+                  tone="green"
+                />
+                <KpiTile
+                  label={t('sla.kpiAvgFirst', { defaultValue: 'Avg first reply' })}
+                  value={`${avgFirst}m`}
+                  tone="violet"
+                />
               </div>
-            ))}
-          </div>
-        )}
+
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {policies.data.map((p) => (
+                  <div
+                    key={p.id}
+                    className="group relative flex flex-col gap-4 rounded-2xl bg-card/70 px-5 py-5 shadow-soft ring-1 ring-foreground/[0.04] transition-[box-shadow,transform,background-color] duration-fast ease-out hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                            {p.name}
+                          </h3>
+                          <Pill tone={p.active ? 'success' : 'muted'} size="sm" dot>
+                            {p.active
+                              ? t('sla.active')
+                              : t('sla.inactive', { defaultValue: 'Inactive' })}
+                          </Pill>
+                        </div>
+                        {p.description && (
+                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                            {p.description}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(p)}>
+                          {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
+                        </Button>
+                        <label className="inline-flex cursor-pointer items-center gap-1.5 text-2xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={p.active}
+                            onChange={(e) =>
+                              void toggleActive.mutateAsync({ id: p.id, active: e.target.checked })
+                            }
+                            className="h-3.5 w-3.5 rounded-sm border-border-strong bg-input accent-primary"
+                            aria-label={t('sla.active')}
+                          />
+                          <span>{t('sla.active')}</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {p.applies_to_priority?.map((pr) => (
+                        <Pill key={pr} tone="primary" size="sm">
+                          {t(`priority.${pr}`, { ns: 'common' })}
+                        </Pill>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4 pt-1">
+                      <div>
+                        <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                          first reply
+                        </div>
+                        <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
+                          {p.first_response_minutes}m
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                          resolution
+                        </div>
+                        <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
+                          {p.resolution_minutes}m
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                          warn at
+                        </div>
+                        <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
+                          {p.warning_threshold_percent}%
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <Drawer
@@ -417,5 +454,29 @@ function PlusIcon() {
     >
       <path d="M8 3v10M3 8h10" />
     </svg>
+  );
+}
+
+/* Flat KPI tile — neutral number, semantic tint on the label only (ONE accent). */
+type KpiTone = 'blue' | 'violet' | 'green' | 'amber';
+const LABEL_TONE: Record<KpiTone, string> = {
+  blue: 'text-primary',
+  violet: 'text-primary',
+  green: 'text-success',
+  amber: 'text-warning-foreground',
+};
+
+function KpiTile({ label, value, tone }: { label: string; value: string | number; tone: KpiTone }) {
+  return (
+    <div className="rounded-2xl bg-card px-4 py-3.5 ring-1 ring-foreground/[0.08]">
+      <div className="text-3xl font-black tabular-nums leading-none tracking-[-0.04em] text-foreground">
+        {value}
+      </div>
+      <div
+        className={cn('mt-2 text-2xs font-semibold uppercase tracking-[0.12em]', LABEL_TONE[tone])}
+      >
+        {label}
+      </div>
+    </div>
   );
 }

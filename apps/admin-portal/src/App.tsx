@@ -19,6 +19,7 @@ import {
   Spinner,
   StoreIcon,
   TeamIcon,
+  TicketIcon,
   Toaster,
   UploadIcon,
   UsersIcon,
@@ -29,6 +30,7 @@ import { RouteError } from './components/RouteError.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
 import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
+import { ResetPassword, RESET_PASSWORD_PATH } from './pages/ResetPassword.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
 import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
@@ -63,6 +65,9 @@ const ReportExportsPage = lazy(() =>
 const SlaReportsPage = lazy(() =>
   import('./features/sla-reports/SlaReportsPage.js').then((m) => ({ default: m.SlaReportsPage })),
 );
+const TicketOpsPage = lazy(() =>
+  import('./features/ticket-ops/TicketOpsPage.js').then((m) => ({ default: m.TicketOpsPage })),
+);
 const CustomFieldsPage = lazy(() =>
   import('./features/custom-fields/CustomFieldsPage.js').then((m) => ({
     default: m.CustomFieldsPage,
@@ -87,13 +92,14 @@ interface NavSection {
   items: NavItem[];
 }
 
-/* Aurora nav: each item's icon sits in its own tinted tile. */
+/* Colorful nav: each item's icon sits in its own vivid tinted tile that pops
+ * against the dark navy rail. */
 const NAV_TILES = [
-  'bg-primary/15 text-primary',
-  'bg-violet/20 text-violet',
-  'bg-magenta/20 text-magenta',
-  'bg-warning/20 text-warning',
-  'bg-success/20 text-success',
+  'bg-sky-400/25 text-sky-300',
+  'bg-violet-400/25 text-violet-300',
+  'bg-rose-400/25 text-rose-300',
+  'bg-orange-400/25 text-orange-300',
+  'bg-emerald-400/25 text-emerald-300',
 ];
 
 function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSection[] }) {
@@ -164,7 +170,7 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
                           className={cn(
                             'grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors duration-fast ease-out',
                             isActive
-                              ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/40'
+                              ? 'bg-primary text-primary-foreground'
                               : NAV_TILES[(sIdx * 2 + iIdx) % NAV_TILES.length],
                           )}
                         >
@@ -243,6 +249,12 @@ function Shell({ children }: { children: React.ReactNode }) {
   // Command-palette open state is lifted here so the top-bar search trigger and
   // the Cmd/Ctrl+K shortcut both drive the one palette instance below.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Sidebar ranked by how often an operations lead reaches for each area:
+  // the daily pulse (Overview) → all the reporting under one "Reports" heading
+  // (one entry per report) → managing the org (Workspace) → setup that rarely
+  // changes (Policies, Intelligence). Each report is its own clearly-named
+  // entry: Ticket report + SLA performance (live dashboards you view), and
+  // Scheduled reports + Excel exports (the ways you get data OUT).
   const sections: NavSection[] = [
     {
       heading: t('nav.overview', { defaultValue: 'Overview' }),
@@ -251,6 +263,41 @@ function Shell({ children }: { children: React.ReactNode }) {
           to: '/dashboard',
           label: t('nav.dashboard', { defaultValue: 'Dashboard' }),
           icon: ChartIcon,
+        },
+      ],
+    },
+    {
+      heading: t('nav.reportsGroup', { defaultValue: 'Reports' }),
+      items: [
+        {
+          to: '/ticket-ops',
+          label: t('nav.ticketReport', { defaultValue: 'Ticket report' }),
+          icon: TicketIcon,
+        },
+        {
+          to: '/sla-reports',
+          label: t('nav.slaReports', { defaultValue: 'SLA performance' }),
+          icon: ClockIcon,
+        },
+        {
+          to: '/report-tickets',
+          label: t('nav.reportTickets', { defaultValue: 'Tickets & orders' }),
+          icon: DownloadIcon,
+        },
+        {
+          to: '/report-agents',
+          label: t('nav.reportAgents', { defaultValue: 'Agent KPI' }),
+          icon: DownloadIcon,
+        },
+        {
+          to: '/report-conversations',
+          label: t('nav.reportConversations', { defaultValue: 'Conversation status' }),
+          icon: DownloadIcon,
+        },
+        {
+          to: '/reports',
+          label: t('nav.reports', { defaultValue: 'Scheduled reports' }),
+          icon: CalendarIcon,
         },
       ],
     },
@@ -280,26 +327,6 @@ function Shell({ children }: { children: React.ReactNode }) {
           to: '/custom-fields',
           label: t('nav.customFields', { defaultValue: 'Custom fields' }),
           icon: SettingsIcon,
-        },
-      ],
-    },
-    {
-      heading: t('nav.reportsGroup', { defaultValue: 'Reports' }),
-      items: [
-        {
-          to: '/sla-reports',
-          label: t('nav.slaReports', { defaultValue: 'SLA performance' }),
-          icon: ClockIcon,
-        },
-        {
-          to: '/reports',
-          label: t('nav.reports', { defaultValue: 'Scheduled reports' }),
-          icon: CalendarIcon,
-        },
-        {
-          to: '/report-exports',
-          label: t('nav.reportExports', { defaultValue: 'Excel exports' }),
-          icon: DownloadIcon,
         },
       ],
     },
@@ -398,6 +425,8 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          {/* Public: reached from the emailed Directus reset link (FR-001). */}
+          <Route path={RESET_PASSWORD_PATH} element={<ResetPassword />} />
           <Route
             path="/dashboard"
             element={
@@ -479,21 +508,53 @@ export function App() {
             }
           />
           <Route
-            path="/report-exports"
+            path="/report-tickets"
             element={
               <ProtectedRoute>
                 <Shell>
-                  <ReportExportsPage />
+                  <ReportExportsPage report="tickets" />
                 </Shell>
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/report-agents"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <ReportExportsPage report="agents" />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/report-conversations"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <ReportExportsPage report="conversations" />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          {/* Old combined route → first individual report. */}
+          <Route path="/report-exports" element={<Navigate to="/report-tickets" replace />} />
           <Route
             path="/sla-reports"
             element={
               <ProtectedRoute>
                 <Shell>
                   <SlaReportsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ticket-ops"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <TicketOpsPage />
                 </Shell>
               </ProtectedRoute>
             }

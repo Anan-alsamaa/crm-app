@@ -1,6 +1,8 @@
 import {
   createDirectus,
   authentication,
+  passwordRequest,
+  passwordReset,
   rest,
   readMe,
   type AuthenticationStorage,
@@ -134,6 +136,40 @@ export function createAuthClient({ url, storage }: AuthClientOptions) {
     },
     /** Current user with role name + computed admin_access, or null if not authenticated. */
     me,
+    /**
+     * FR-001 — start Directus's BUILT-IN self-service password reset.
+     *
+     * Directus signs a short-lived, single-use reset token and emails the user a
+     * link (`<resetUrl>?token=…`). Nothing is hand-rolled here.
+     *
+     * OPS REQUIREMENTS (both are on the go-live checklist):
+     *  - SMTP must be configured on the Directus server (EMAIL_TRANSPORT +
+     *    EMAIL_SMTP_* / EMAIL_FROM); with no mailer nothing is ever delivered
+     *    and the user sees the same neutral confirmation described below.
+     *  - `resetUrl`'s origin must be listed in PASSWORD_RESET_URL_ALLOW_LIST or
+     *    Directus refuses the custom URL.
+     *
+     * SECURITY — NO ACCOUNT ENUMERATION: this resolves identically whether or
+     * not the address belongs to a user. Directus already answers 204 for
+     * unknown addresses; we additionally swallow transport/rate-limit failures
+     * so no caller can tell "registered" from "not registered" via an error
+     * path. Callers MUST render one fixed confirmation message.
+     */
+    async requestPasswordReset(email: string, resetUrl?: string): Promise<void> {
+      try {
+        await client.request(passwordRequest(email, resetUrl));
+      } catch {
+        /* intentionally swallowed — see the no-enumeration note above */
+      }
+    },
+    /**
+     * FR-001 — complete the reset with the token from the emailed link.
+     * Throws when the token is missing/expired/already used, or when Directus
+     * rejects the new password; the caller surfaces that as a form error.
+     */
+    async resetPassword(token: string, password: string): Promise<void> {
+      await client.request(passwordReset(token, password));
+    },
     /**
      * Restore a session on cold load. The access token lives in memory only, so
      * first refresh from the httpOnly cookie; returns null when there is no

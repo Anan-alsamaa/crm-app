@@ -37,6 +37,13 @@ export interface RouteDeps {
 
 type Json = Record<string, unknown>;
 
+/* Semantic-search corpus budget. The whole corpus is inlined into a single
+ * prompt, so these caps are what keep token cost (and latency) bounded:
+ * 50 × ~500 chars ≈ 25 KB worst case. */
+const SEARCH_CORPUS_CONVERSATIONS = 50;
+const SEARCH_MESSAGES_PER_CONVERSATION = 4;
+const SEARCH_SNIPPET_CHARS = 500;
+
 /** Parse JSON safely from provider text — strips markdown fences if present. */
 function parseJson<T>(text: string, schema: z.ZodType<T>): T {
   let cleaned = text.trim();
@@ -345,16 +352,53 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     const body = SemanticSearchRequest.safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
 
-    // Caller's vendor scope wins over body
-    const cacheKey = `search:${body.data.query}:${body.data.limit}`;
+    // Caller's verified vendor scope wins over the (client-supplied) body value.
+    // An empty scope means "search everything this session can already see" —
+    // consistent with auth/index.ts, where the vendor header is a cost bucket,
+    // not an access boundary.
+    const vendorId = caller.vendorId || body.data.vendorId || '';
+    // Vendor is part of the cache key so one vendor's ranking can never be
+    // served to another.
+    const cacheKey = `search:${vendorId}:${body.data.query}:${body.data.limit}`;
     const gateRes = await gate(caller, reply, AI_ENDPOINTS.semanticSearch, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as SemanticSearchResponse);
 
-    // Pull recent open conversations and their last messages as snippets to rank.
-    // (A proper vector store comes later; this is a usable baseline.)
-    const ctxList: Array<{ id: string; text: string }> = [];
-    // Snippets come from recent conversations of the caller's vendor.
+    // Pull recent conversations + a representative excerpt each as the corpus to
+    // rank. (A proper vector store comes later; this is a usable baseline.)
+    let corpus: Array<{ id: string; text: string }>;
+    try {
+      corpus = await deps.directus.listConversationSnippets({
+        vendorId,
+        conversationLimit: SEARCH_CORPUS_CONVERSATIONS,
+        messagesPerConversation: SEARCH_MESSAGES_PER_CONVERSATION,
+        snippetChars: SEARCH_SNIPPET_CHARS,
+      });
+    } catch (err) {
+      // Fail soft: a Directus outage must not 500 the search box, and must not
+      // burn a provider call (+ monthly cap) on a corpus we could not load.
+      app.log.error({ err, vendorId }, 'semantic-search corpus fetch failed');
+      return reply.send({ results: [] } satisfies SemanticSearchResponse);
+    }
+    // Nothing to rank — short-circuit instead of paying for a guaranteed-empty
+    // provider call.
+    if (corpus.length === 0) return reply.send({ results: [] } satisfies SemanticSearchResponse);
+
+    // Conversation ids are never sent to the provider: redaction rewrites
+    // digit-heavy runs (a UUID can look like a phone number), which would
+    // corrupt the ids we have to map results back onto. Rank against short
+    // opaque refs and resolve them locally.
+    const refToConversation = new Map<string, string>();
+    const snippetByRef = new Map<string, string>();
+    const ctxList = corpus.map((c, i) => {
+      const ref = `s${i + 1}`;
+      refToConversation.set(ref, c.id);
+      snippetByRef.set(ref, c.text);
+      return { id: ref, text: c.text };
+    });
+
+    // NOTE: snippet text is redacted inside runWith (redactDeep over
+    // {system, user}) — the same perimeter every other endpoint uses.
     const ranking = prompts.semanticSearch(body.data.query, ctxList);
     const schema = z.object({
       results: z.array(
@@ -368,7 +412,26 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
         ranking.system,
         ranking.user,
         schema,
-        (text) => parseJson(text, schema),
+        (text) => {
+          const raw = parseJson(text, schema);
+          const results = raw.results
+            .flatMap((r) => {
+              const conversationId = refToConversation.get(r.conversationId);
+              if (!conversationId) return []; // hallucinated / unknown ref
+              return [
+                {
+                  conversationId,
+                  score: r.score,
+                  // Serve OUR snippet, not the model's echo: the model only ever
+                  // saw redacted placeholders (`<EMAIL_1>`).
+                  snippet: (snippetByRef.get(r.conversationId) ?? '').slice(0, 200),
+                },
+              ];
+            })
+            .sort((a, b) => b.score - a.score)
+            .slice(0, body.data.limit);
+          return { results };
+        },
       );
       return reply.send(result);
     } catch (err) {
@@ -440,6 +503,6 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
   });
 }
 
-// Suppress unused-context warning from ConversationContext re-export in the
-// limited semantic-search baseline above; keep typing intact for future use.
+// Convenience re-export so consumers of the route module get the context shape
+// without reaching into ./directus. Nothing in this file references it directly.
 export type { ConversationContext };

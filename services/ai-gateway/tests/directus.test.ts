@@ -57,6 +57,51 @@ describe('GatewayDirectus.getConversation', () => {
     expect(await gateway().getConversation('absent')).toBeNull();
   });
 
+  it('groups messages per conversation, oldest-first, truncated', async () => {
+    request
+      .mockResolvedValueOnce([{ id: 'c-1' }, { id: 'c-2' }])
+      // Directus returns newest-first (sort: -date_created).
+      .mockResolvedValueOnce([
+        { conversation: 'c-1', sender_type: 'agent', content: 'On it.' },
+        { conversation: 'c-1', sender_type: 'customer', content: 'Refund please' },
+        { conversation: 'c-2', sender_type: 'customer', content: 'x'.repeat(50) },
+      ]);
+    const out = await gateway().listConversationSnippets({ vendorId: 'v-1', snippetChars: 80 });
+    expect(out).toEqual([
+      { id: 'c-1', text: 'Customer: Refund please / Agent: On it.' },
+      { id: 'c-2', text: `Customer: ${'x'.repeat(50)}`.slice(0, 80) },
+    ]);
+  });
+
+  it('caps the sampled messages per conversation', async () => {
+    request.mockResolvedValueOnce([{ id: 'c-1' }]).mockResolvedValueOnce([
+      { conversation: 'c-1', sender_type: 'customer', content: 'four' },
+      { conversation: 'c-1', sender_type: 'customer', content: 'three' },
+      { conversation: 'c-1', sender_type: 'customer', content: 'two' },
+      { conversation: 'c-1', sender_type: 'customer', content: 'one' },
+    ]);
+    const out = await gateway().listConversationSnippets({ messagesPerConversation: 2 });
+    expect(out[0]!.text).toBe('Customer: three / Customer: four');
+  });
+
+  it('skips conversations with no usable message text', async () => {
+    request
+      .mockResolvedValueOnce([{ id: 'c-1' }, { id: 'c-2' }])
+      .mockResolvedValueOnce([{ conversation: 'c-2', sender_type: 'customer', content: '   ' }]);
+    expect(await gateway().listConversationSnippets({})).toEqual([]);
+  });
+
+  it('returns [] without a second query when no conversations match', async () => {
+    request.mockResolvedValueOnce([]);
+    expect(await gateway().listConversationSnippets({ vendorId: 'v-x' })).toEqual([]);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates fetch errors so the route can fail soft', async () => {
+    request.mockRejectedValueOnce(new Error('directus down'));
+    await expect(gateway().listConversationSnippets({})).rejects.toThrow('directus down');
+  });
+
   it('passes a custom message limit through without error', async () => {
     request.mockResolvedValueOnce({
       id: 'c',

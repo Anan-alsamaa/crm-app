@@ -78,6 +78,32 @@ the high-risk items to not miss:
       **quarterly restore drill**.
 - [ ] `GEMINI_API_KEY` set (else AI endpoints degrade to `503 not_configured`).
 
+### 4b. Required by the latest release (silent no-ops if skipped)
+
+Each of these gates a feature that will _appear_ to work while doing nothing —
+none of them fail loudly, so verify them explicitly.
+
+- [ ] **Re-run the Directus bootstrap** (`pnpm --filter directus-bootstrap apply`).
+      Adds `tickets.order_snapshot` (JSON) and grants `tickets: read` to the
+      **svc-socket-gateway** role. Without it: ticket order cards stay empty and
+      ticket-assignment notifications silently no-op. The apply is additive and
+      idempotent (it only ever _creates_, never deletes/updates).
+- [ ] **`VITE_JOB_PRODUCER_URL` for the AGENT portal build** (it was admin-only
+      before). Must point at the gateway's HTTP base in prod. If unset the build
+      falls back to `localhost:3031` and **assignment notifications quietly do
+      nothing**. Set as a Docker build arg — it is baked in at build time, not
+      read at runtime.
+- [ ] **Password reset needs SMTP on _Directus_** (`EMAIL_TRANSPORT`,
+      `EMAIL_SMTP_*`, `EMAIL_FROM`) — separate from the workers' `SMTP_*`.
+      Without a mailer the user still sees the neutral "check your email"
+      confirmation (deliberate, to prevent account enumeration), so this failure
+      is invisible. Verify by actually completing a reset in staging.
+- [ ] **`PASSWORD_RESET_URL_ALLOW_LIST`** on Directus must contain BOTH portal
+      reset URLs (e.g. `https://agent.example.com/reset-password,https://admin.example.com/reset-password`).
+      Directus rejects a `reset_url` that is not allow-listed.
+- [ ] SPA rewrite for `/reset-password` on both portals (unknown paths →
+      `index.html`), so the emailed link resolves on a cold load.
+
 ## 5. Pre-launch verification (against staging, not prod)
 
 - [ ] `pnpm test:e2e` (Playwright) — full agent/admin/widget flow.

@@ -15,7 +15,14 @@
     "forgotHint": "Password resets are handled by your system administrator.",
     "secure": "Every action audit-logged",
     "help": "Trouble signing in? Talk to your system administrator.",
-    "subtitle": "Administrator access required."
+    "subtitle": "Administrator access required.",
+    "backToSignIn": "Back to sign in",
+    "forgotTitle": "Reset your password",
+    "forgotSubtitle": "Enter your work email and we'll send you a reset link.",
+    "forgotSubmit": "Send reset link",
+    "forgotSent": "If that email matches an account, we just sent a reset link. It expires shortly — check your spam folder if it does not arrive.",
+    "forgotSentSubtitle": "Check your inbox.",
+    "resetDone": "Password updated. Sign in with your new password."
   },
   "nav": {
     "overview": "Overview",
@@ -38,7 +45,13 @@
     "workspace": "Workspace",
     "policies": "Policies",
     "slaReports": "SLA performance",
-    "reportExports": "Excel exports"
+    "reportExports": "Excel exports",
+    "analytics": "Analytics",
+    "ticketOps": "Ticket operations",
+    "ticketReport": "Ticket report",
+    "reportTickets": "Tickets & orders",
+    "reportAgents": "Agent KPI",
+    "reportConversations": "Conversation status"
   },
   "dashboard": {
     "title": "Overview",
@@ -64,7 +77,12 @@
     "loadErrorHint": "Check your connection and try again.",
     "noActivity": "No activity in range.",
     "noData": "No data yet.",
-    "noConversations": "No conversations in range."
+    "noConversations": "No conversations in range.",
+    "heroTitle": "Workspace overview",
+    "heroHint": "Support performance across every channel.",
+    "ofTicketsShort": "Tickets",
+    "peak": "Peak day",
+    "daysUnit": "days"
   },
   "automation": {
     "title": "Automation",
@@ -106,7 +124,12 @@
     "deleteError": "Could not delete rule.",
     "loadError": "Could not load automation rules",
     "loadErrorHint": "Check your connection and try again.",
-    "operator": "Operator"
+    "operator": "Operator",
+    "heroSubtitle": "Rules fire when a trigger matches — conditions are AND-joined, then actions run in order to assign, tag, escalate, or notify automatically.",
+    "kpiRules": "Rules",
+    "kpiActive": "Active",
+    "kpiInactive": "Inactive",
+    "ruleCount": "{{count}} rules"
   },
   "reports": {
     "title": "Scheduled reports",
@@ -146,7 +169,12 @@
     "loadErrorHint": "Check your connection and try again.",
     "runError": "Could not run report: {{message}}",
     "runNow": "Run now",
-    "runQueued": "Report queued (job {{jobId}}). The worker will run it shortly."
+    "runQueued": "Report queued (job {{jobId}}). The worker will run it shortly.",
+    "purpose": "Saved report definitions that run on a schedule and email a CSV",
+    "heroSubtitle": "Saved report definitions that run automatically on a schedule and email a CSV to their recipients — set once, delivered on time.",
+    "savedCount": "{{count}} saved",
+    "vendorPlaceholder": "vendor-uuid",
+    "recipientsPlaceholder": "ops@example.com, manager@example.com"
   },
   "customFields": {
     "title": "Custom fields",
@@ -175,7 +203,12 @@
     "confirmDelete": "Delete this field?",
     "deleteError": "Could not delete field.",
     "loadError": "Could not load custom fields",
-    "loadErrorHint": "Check your connection and try again."
+    "loadErrorHint": "Check your connection and try again.",
+    "heroSubtitle": "Define fields once per entity; they render dynamically in the agent portal on the matching contact, conversation, or ticket.",
+    "fieldCount": "{{count}} fields",
+    "entityContact": "Contact",
+    "entityConversation": "Conversation",
+    "entityTicket": "Ticket"
   },
   "imports": {
     "title": "Import contacts",
@@ -191,7 +224,8 @@
     "queued": "Import queued.",
     "empty": "Upload a CSV to begin",
     "emptyHint": "Map columns to contact fields, preview the first rows, then queue the import.",
-    "queueError": "Could not queue import: {{message}}"
+    "queueError": "Could not queue import: {{message}}",
+    "heroSubtitle": "Upload a CSV, map its columns to contact fields, preview the first rows, then queue the import. Deduplication runs per-vendor on phone or email."
   },
   "vendors": {
     "title": "Vendors",
@@ -224,7 +258,8 @@
     "preview": "Preview",
     "status": "Status",
     "previewGreeting": "Hi there",
-    "previewSub": "We're here to help."
+    "previewSub": "We're here to help.",
+    "heroSubtitle": "Every brand you support, with the colors and logo that drive its customer chat widget. Select a vendor to edit its branding or status."
   },
   "aiConfig": {
     "title": "AI assistance",
@@ -266,7 +301,13 @@
     "loadError": "Could not load SLA policies",
     "loadErrorHint": "Check your connection and try again.",
     "updateError": "Could not update policy.",
-    "updated": "Policy updated."
+    "updated": "Policy updated.",
+    "heroSubtitle": "Each policy maps ticket priorities to first-response and resolution deadlines — the worker schedules warnings and breach events automatically.",
+    "inactive": "Inactive",
+    "kpiPolicies": "Policies",
+    "kpiActive": "Active",
+    "kpiAvgFirst": "Avg first reply",
+    "policyCount": "{{count}} policies"
   },
   "users": {
     "inactive": "Inactive",
@@ -282,7 +323,6 @@
     "status": "Status",
     "noTeam": "No team",
     "active": "Active",
-    "inactive": "Inactive",
     "statusHint": "Inactive accounts cannot sign in but keep their data.",
     "edit": "Edit user",
     "editHint": "Update role, team, status, or reset the password.",
@@ -309,7 +349,11 @@
     "sectionCredentialsHint": "Set an initial password and their default UI language.",
     "passwordHint": "At least 6 characters.",
     "loadError": "Could not load users",
-    "loadErrorHint": "Check your connection and try again."
+    "loadErrorHint": "Check your connection and try again.",
+    "heroSubtitle": "Everyone who can sign in to Yiji — their role, team, and account status at a glance. Select anyone to edit access or reset a password.",
+    "total": "total",
+    "admins": "admins",
+    "noTeamShort": "no team"
   },
   "teams": {
     "title": "Teams",
@@ -329,7 +373,11 @@
     "sectionMembersHint": "Assign members from the Users page after creating the team.",
     "membersHelper": "You can assign agents to this team from the Users page once the team is created.",
     "loadError": "Could not load teams",
-    "loadErrorHint": "Check your connection and try again."
+    "loadErrorHint": "Check your connection and try again.",
+    "heroSubtitle": "Groups that decide where conversations and tickets route. See each team, who belongs to it, and who still needs a home.",
+    "total": "teams",
+    "assigned": "assigned",
+    "unassigned": "unassigned"
   },
   "cmd": {
     "pages": "Pages",
@@ -383,7 +431,7 @@
   },
   "agentReports": {
     "title": "Excel exports",
-    "subtitle": "Ticket, agent and conversation analytics — exportable to Excel.",
+    "subtitle": "On-demand Excel downloads of ticket, agent and conversation data — export now, no schedule.",
     "range": "Date range",
     "lastDays": "Last {{days}} days",
     "tabTickets": "Tickets + orders",
@@ -457,6 +505,81 @@
       "total": "Total",
       "conversationId": "Conversation ID",
       "lastMessage": "Last message"
+    },
+    "ticketsTitle": "Tickets & orders",
+    "ticketsSubtitle": "Every ticket with SLA timings and the linked customer order — export to Excel.",
+    "agentsTitle": "Agent KPI",
+    "agentsSubtitle": "Per-agent first-response time, SLA compliance and CSAT — export to Excel.",
+    "conversationsTitle": "Conversation status",
+    "conversationsSubtitle": "Conversations by status, priority and day — export to Excel.",
+    "columns": "Columns",
+    "exportColumns": "Export columns",
+    "selectAll": "All",
+    "prev": "Previous",
+    "next": "Next"
+  },
+  "ticketOps": {
+    "title": "Ticket report",
+    "subtitle": "Backlog, lifecycle times and agent load across the ticket queue",
+    "range": "Date range",
+    "lastDays": "Last {{days}} days",
+    "exportCsv": "Export CSV",
+    "empty": "No tickets in this window",
+    "emptyHint": "Widen the date range, or wait for new tickets to arrive.",
+    "kpiTotal": "Tickets",
+    "kpiOpen": "Open backlog",
+    "kpiOverdue": "Overdue",
+    "kpiUnassigned": "Unassigned",
+    "kpiResolved": "Resolved",
+    "kpiClosed": "Closed",
+    "medianResponse": "Median 1st response",
+    "medianResolution": "Median resolution",
+    "avgResolution": "Avg resolution",
+    "byStatus": "By status",
+    "byPriority": "By priority",
+    "agentLoad": "Agent workload",
+    "register": "Ticket register",
+    "colAgent": "Agent",
+    "colTotal": "Total",
+    "colOpen": "Open",
+    "colOverdue": "Overdue",
+    "colResolved": "Resolved",
+    "colAvgResolution": "Avg resolution",
+    "colTicket": "Ticket",
+    "colPriority": "Priority",
+    "colStatus": "Status",
+    "colCreated": "Created",
+    "colFirstResponse": "1st response",
+    "colAge": "Age",
+    "overdue": "Overdue",
+    "heroTitle": "Ticket report",
+    "heroSubtitle": "Every support ticket in this window — its lifecycle, whether it is overdue, who is carrying the load, and the customer order behind each one.",
+    "linkedOrder": "Linked order",
+    "noOrder": "No linked order for this customer.",
+    "orderNoItems": "No line items on this order.",
+    "colActions": "Actions",
+    "viewOrder": "View order",
+    "filterAll": "All",
+    "prev": "Previous",
+    "next": "Next"
+  },
+  "commerce": {
+    "deliveryTypes": {
+      "delivery": "Delivery",
+      "pickup": "Pickup",
+      "carhop": "Carhop",
+      "in_restaurant": "In restaurant"
     }
+  },
+  "reset": {
+    "title": "Choose a new password",
+    "subtitle": "Your new password replaces the old one immediately.",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "submit": "Update password",
+    "tooShort": "Use at least 8 characters.",
+    "mismatch": "Passwords do not match.",
+    "invalidToken": "This reset link is invalid or has expired. Request a new one.",
+    "missingToken": "This reset link is incomplete. Request a new one from sign in."
   }
 }

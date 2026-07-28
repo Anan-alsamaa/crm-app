@@ -29,7 +29,10 @@
     "editContact": "Edit contact",
     "name": "Name",
     "saveError": "Could not save customer details.",
-    "saved": "Customer details saved."
+    "saved": "Customer details saved.",
+    "withEmail": "with email",
+    "withPhone": "with phone",
+    "withVendor": "linked vendor"
   },
   "commerce": {
     "title": "Commerce",
@@ -53,17 +56,60 @@
     "latestOrders": "Latest orders",
     "restaurant": "Restaurant",
     "restaurantId": "Restaurant ID",
-    "deliveryType": "Fulfilment",
+    "deliveryType": "Delivery type",
     "deliveryTypes": {
       "delivery": "Delivery",
-      "pickup": "Pickup"
+      "pickup": "Pickup",
+      "carhop": "Carhop",
+      "in_restaurant": "In restaurant"
     },
     "subtotal": "Items subtotal",
     "total": "Total",
     "each": "each",
     "noItems": "No line items on this order.",
     "detailUnavailable": "Order details unavailable.",
-    "deliverTo": "Deliver to"
+    "deliverTo": "Deliver to",
+    "orderStatus": "Order status",
+    "paymentStatus": "Payment status",
+    "paymentType": "Payment type",
+    "customerPhone": "Customer phone",
+    "brand": "Brand",
+    "orderStatuses": {
+      "initial": "Initial",
+      "pending_payment": "Pending payment",
+      "received": "Received",
+      "finding_driver": "Finding driver",
+      "driver_accepted": "Driver accepted",
+      "in_kitchen": "In kitchen",
+      "manual": "Manual",
+      "ready_to_pickup": "Ready to pick up",
+      "in_delivery": "In delivery",
+      "delivered": "Delivered",
+      "closed": "Closed",
+      "canceled": "Canceled",
+      "force_cancel": "Force canceled",
+      "force_closed": "Force closed",
+      "not_valid": "Not valid",
+      "paid": "Paid",
+      "pos_accepted": "POS accepted",
+      "pending_pos_accepted": "Pending POS acceptance",
+      "arrived": "Arrived",
+      "unknown": "Unknown"
+    },
+    "paymentStatuses": {
+      "not_paid": "Not paid",
+      "paid": "Paid"
+    },
+    "paymentModes": {
+      "cash": "Cash",
+      "credit_card": "Credit card",
+      "apple_pay": "Apple Pay",
+      "pay_later": "Pay later",
+      "mada": "mada",
+      "visa": "Visa",
+      "master": "Mastercard"
+    },
+    "placedAt": "Placed"
   },
   "ai": {
     "title": "AI assistance",
@@ -95,7 +141,14 @@
     "capsLock": "Caps Lock is on.",
     "forgotHint": "Password resets are handled by your administrator.",
     "secure": "Encrypted connection",
-    "help": "Trouble signing in? Talk to your administrator."
+    "help": "Trouble signing in? Talk to your administrator.",
+    "backToSignIn": "Back to sign in",
+    "forgotTitle": "Reset your password",
+    "forgotSubtitle": "Enter your work email and we'll send you a reset link.",
+    "forgotSubmit": "Send reset link",
+    "forgotSent": "If that email matches an account, we just sent a reset link. It expires shortly — check your spam folder if it does not arrive.",
+    "forgotSentSubtitle": "Check your inbox.",
+    "resetDone": "Password updated. Sign in with your new password."
   },
   "nav": {
     "inbox": "Inbox",
@@ -150,7 +203,11 @@
     },
     "resizeList": "Resize conversation list",
     "loadError": "Could not load conversations",
-    "loadErrorHint": "Check your connection and try again."
+    "loadErrorHint": "Check your connection and try again.",
+    "attachmentPreview": "Attachment",
+    "youPrefix": "You:",
+    "noMessagesYet": "No messages yet",
+    "sort": "Sort"
   },
   "conversation": {
     "replyPlaceholder": "Type a reply…",
@@ -206,7 +263,8 @@
     "deleteTagWarning": "This removes the tag from every conversation, contact and ticket it’s on. It can’t be undone.",
     "noTagsYetHint": "No tags yet — type to create one.",
     "tagAdded": "Added",
-    "tagDeleted": "Deleted “{{name}}” everywhere."
+    "tagDeleted": "Deleted “{{name}}” everywhere.",
+    "startedOn": "Conversation started {{date}}"
   },
   "sidebar": {
     "contact": "Contact",
@@ -268,6 +326,7 @@
       "commented": "Comment added",
       "sla_warning": "SLA warning",
       "sla_breached": "SLA breached",
+      "sla_escalated": "SLA escalated",
       "resolved": "Resolved",
       "closed": "Closed",
       "reopened": "Reopened",
@@ -295,7 +354,17 @@
     "createFromChat": "Create ticket",
     "dismissPrompt": "Dismiss",
     "statusHelp": "Resolved = work done, awaiting the customer. Closed = finished for good.",
-    "firstResponse": "First response"
+    "firstResponse": "First response",
+    "attachFromChat": "From chat",
+    "chatMediaHint": "Files shared in this conversation. Add any missing here.",
+    "noChatMedia": "No files shared in this conversation.",
+    "fromCustomer": "Customer",
+    "fromAgent": "Agent",
+    "fromSystem": "System",
+    "addToTicket": "Add",
+    "added": "Added",
+    "orderNoItems": "No line items on this order.",
+    "orderCapturedAt": "Snapshot taken {{at}}"
   },
   "notifications": {
     "title": "Notifications",
@@ -376,40 +445,70 @@
   "compensation": {
     "actionError": "Action failed. Try again.",
     "actions": "Actions",
+    "addItem": "Add item",
     "all": "All",
     "back": "Back",
     "badJson": "{{label}} must be valid JSON.",
     "brand": "Brand",
+    "cancel": "Cancel",
     "claimed": "Claimed amount",
+    "claimedHint": "Used by PERCENT-type compensation rules.",
+    "classifyError": "Could not save. Try again.",
     "complaint": "Complaint",
     "confirm": "Confirm this action?",
     "coupon": "Coupon",
     "customer": "Customer",
     "declineReason": "Decline reason",
     "deliveryFee": "Delivery fee",
+    "deliveryFeeHint": "Used by DELIVERY-type compensation rules.",
     "done": "{{label}} done.",
     "empty": "No compensation requests",
     "emptyHint": "Requests submitted by customers will appear here.",
     "final": "Final value",
+    "formTitle": "{{label}} — fill the required fields",
     "issue": "Issue",
+    "issueHint": "Drives the SLA timers and the compensation calculation.",
+    "itemName": "Item",
     "items": "Items with issue",
+    "itemsTotal": "Total",
+    "itemsWithIssue": "Items with issue",
+    "itemsWithIssueHint": "Used by ITEMS-type compensation rules (sums the prices below).",
     "loadError": "Could not load compensation requests.",
     "mobile": "Mobile",
     "name": "Name",
     "notFound": "Request not found.",
     "order": "Order",
+    "orderItems": "Order line items",
     "orderTotal": "Order total",
+    "price": "Price",
+    "removeItem": "Remove item",
     "required": "{{label}} is required.",
     "resolution": "Compensation",
     "restaurant": "Restaurant",
     "run": "Confirm",
+    "saveError": "Could not save. Try again.",
+    "selectIssue": "Select an issue…",
+    "selectPlaceholder": "Select…",
+    "submit": "Confirm {{label}}",
     "subtitle": "Review customer compensation requests and run each step.",
     "suggested": "Suggested",
     "terminal": "This request is closed — no further actions.",
     "title": "Compensation",
-    "type": "Type"
+    "type": "Type",
+    "unclassified": "Unclassified"
   },
   "app": {
     "workspace": "Agent workspace"
+  },
+  "reset": {
+    "title": "Choose a new password",
+    "subtitle": "Your new password replaces the old one immediately.",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "submit": "Update password",
+    "tooShort": "Use at least 8 characters.",
+    "mismatch": "Passwords do not match.",
+    "invalidToken": "This reset link is invalid or has expired. Request a new one.",
+    "missingToken": "This reset link is incomplete. Request a new one from sign in."
   }
 }

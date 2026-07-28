@@ -35,6 +35,11 @@ export interface YijiOrder {
   // fetched in detail.
   restaurantId?: string;
   restaurantName?: string;
+  // The brand/eatery name (Yiji `brandName`), distinct from the branch/location
+  // in `restaurantName` (e.g. brand "La Casa Pasta" at branch "Riyadh - Masief
+  // Plaza"). Present on the single-order endpoint; kept separate so the UI can
+  // show both rather than folding one into the other.
+  brandName?: string;
   // Fulfilment method, mapped from Yiji's DeliveryType int to a human label
   // (e.g. 'delivery' | 'pickup'). Absent when the source value is unknown.
   deliveryType?: string;

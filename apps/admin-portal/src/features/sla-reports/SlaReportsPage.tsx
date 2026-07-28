@@ -7,8 +7,13 @@ import {
   Pill,
   SelectMenu,
   Spinner,
+  Table,
+  TableSurface,
+  Td,
+  Th,
   Toolbar,
   ToolbarSpacer,
+  Tr,
 } from '@yiji/ui';
 import { useSlaReports, type AgentSla, type SlaCell, type TicketSla } from './api.js';
 
@@ -71,19 +76,42 @@ function SlaPill({ cell }: { cell: SlaCell }) {
   );
 }
 
-function Kpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
+/* Vibrant tinted KPI card — matches the Ticket report / export reports. */
+type KpiTone = 'blue' | 'green' | 'amber' | 'crimson';
+const KPI_TILE: Record<KpiTone, string> = {
+  blue: 'bg-sky-500/10 ring-sky-500/25',
+  green: 'bg-emerald-500/10 ring-emerald-500/25',
+  amber: 'bg-orange-400/15 ring-orange-400/30',
+  crimson: 'bg-rose-500/10 ring-rose-500/25',
+};
+const KPI_NUM: Record<KpiTone, string> = {
+  blue: 'text-sky-600',
+  green: 'text-emerald-600',
+  amber: 'text-orange-500',
+  crimson: 'text-rose-600',
+};
+/** Green ≥90, amber ≥75, red below (no data → blue). */
+const pctKpiTone = (n: number | null): KpiTone =>
+  n == null ? 'blue' : n >= 90 ? 'green' : n >= 75 ? 'amber' : 'crimson';
+
+function Kpi({ label, value, tone = 'blue' }: { label: string; value: string; tone?: KpiTone }) {
   return (
-    <div>
-      <div className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-        {label}
-      </div>
+    <div
+      className={cn(
+        'rounded-2xl px-4 py-4 shadow-soft ring-1 transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
+        KPI_TILE[tone],
+      )}
+    >
       <div
         className={cn(
-          'mt-1.5 text-4xl font-extrabold tracking-[-0.03em] tabular-nums leading-none',
-          tone,
+          'text-4xl font-extrabold tracking-[-0.03em] tabular-nums leading-none',
+          KPI_NUM[tone],
         )}
       >
         {value}
+      </div>
+      <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        {label}
       </div>
     </div>
   );
@@ -256,21 +284,22 @@ export function SlaReportsPage() {
               <Kpi
                 label={t('slaReports.kpiTickets', { defaultValue: 'Tickets' })}
                 value={String(totals?.tickets ?? 0)}
+                tone="blue"
               />
               <Kpi
                 label={t('slaReports.kpiFirstResponse', { defaultValue: 'First-response SLA' })}
                 value={fmtPct(totals?.frPct ?? null)}
-                tone={pctTone(totals?.frPct ?? null)}
+                tone={pctKpiTone(totals?.frPct ?? null)}
               />
               <Kpi
                 label={t('slaReports.kpiResolution', { defaultValue: 'Resolution SLA' })}
                 value={fmtPct(totals?.resPct ?? null)}
-                tone={pctTone(totals?.resPct ?? null)}
+                tone={pctKpiTone(totals?.resPct ?? null)}
               />
               <Kpi
                 label={t('slaReports.kpiBreaches', { defaultValue: 'Breaches' })}
                 value={String(totals?.breaches ?? 0)}
-                tone={(totals?.breaches ?? 0) > 0 ? 'text-destructive' : 'text-success'}
+                tone={(totals?.breaches ?? 0) > 0 ? 'crimson' : 'green'}
               />
             </div>
 
@@ -293,84 +322,71 @@ export function SlaReportsPage() {
   );
 }
 
-function HeadCell({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <th
-      className={cn(
-        'px-3 py-2 text-start text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground',
-        className,
-      )}
-    >
-      {children}
-    </th>
-  );
-}
-
 function AgentTable({ agents, onDrill }: { agents: AgentSla[]; onDrill: (a: AgentSla) => void }) {
   const { t } = useTranslation();
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="border-b border-border">
-          <tr>
-            <HeadCell>{t('slaReports.colAgent', { defaultValue: 'Agent' })}</HeadCell>
-            <HeadCell className="text-end">
-              {t('slaReports.colTickets', { defaultValue: 'Tickets' })}
-            </HeadCell>
-            <HeadCell className="text-end">
-              {t('slaReports.colFirstResponse', { defaultValue: 'First response' })}
-            </HeadCell>
-            <HeadCell className="text-end">
-              {t('slaReports.colResolution', { defaultValue: 'Resolution' })}
-            </HeadCell>
-            <HeadCell className="text-end">
-              {t('slaReports.colAvgReply', { defaultValue: 'Avg 1st reply' })}
-            </HeadCell>
-            <HeadCell className="text-end">
-              {t('slaReports.colBreaches', { defaultValue: 'Breaches' })}
-            </HeadCell>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border/40">
-          {agents.map((a) => (
-            <tr
-              key={a.agentId ?? '__unassigned__'}
-              onClick={() => onDrill(a)}
-              className="cursor-pointer transition-colors duration-fast hover:bg-secondary/50"
-            >
-              <td className="px-3 py-2.5 font-medium text-foreground">{a.agentName}</td>
-              <td className="px-3 py-2.5 text-end tabular-nums text-muted-foreground">
-                {a.tickets}
-              </td>
-              <td className="px-3 py-2.5 text-end tabular-nums">
-                <span className={cn('font-semibold', pctTone(a.frPct))}>{fmtPct(a.frPct)}</span>
-                <span className="ms-1.5 text-2xs text-muted-foreground">
-                  {a.frMet}/{a.frMet + a.frBreached}
-                </span>
-              </td>
-              <td className="px-3 py-2.5 text-end tabular-nums">
-                <span className={cn('font-semibold', pctTone(a.resPct))}>{fmtPct(a.resPct)}</span>
-                <span className="ms-1.5 text-2xs text-muted-foreground">
-                  {a.resMet}/{a.resMet + a.resBreached}
-                </span>
-              </td>
-              <td className="px-3 py-2.5 text-end tabular-nums text-muted-foreground">
-                {fmtMins(a.avgResponseMin)}
-              </td>
-              <td className="px-3 py-2.5 text-end tabular-nums">
-                <span
-                  className={
-                    a.breaches > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground'
-                  }
-                >
-                  {a.breaches}
-                </span>
-              </td>
+    <div className="space-y-2">
+      <TableSurface>
+        <Table>
+          <thead>
+            <tr>
+              <Th>{t('slaReports.colAgent', { defaultValue: 'Agent' })}</Th>
+              <Th className="text-end">
+                {t('slaReports.colTickets', { defaultValue: 'Tickets' })}
+              </Th>
+              <Th className="text-end">
+                {t('slaReports.colFirstResponse', { defaultValue: 'First response' })}
+              </Th>
+              <Th className="text-end">
+                {t('slaReports.colResolution', { defaultValue: 'Resolution' })}
+              </Th>
+              <Th className="text-end">
+                {t('slaReports.colAvgReply', { defaultValue: 'Avg 1st reply' })}
+              </Th>
+              <Th className="text-end">
+                {t('slaReports.colBreaches', { defaultValue: 'Breaches' })}
+              </Th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="px-3 py-2 text-2xs text-muted-foreground">
+          </thead>
+          <tbody>
+            {agents.map((a) => (
+              <Tr
+                key={a.agentId ?? '__unassigned__'}
+                onClick={() => onDrill(a)}
+                className="cursor-pointer"
+              >
+                <Td className="font-medium">{a.agentName}</Td>
+                <Td className="text-end tabular-nums text-muted-foreground">{a.tickets}</Td>
+                <Td className="text-end tabular-nums">
+                  <span className={cn('font-semibold', pctTone(a.frPct))}>{fmtPct(a.frPct)}</span>
+                  <span className="ms-1.5 text-2xs text-muted-foreground">
+                    {a.frMet}/{a.frMet + a.frBreached}
+                  </span>
+                </Td>
+                <Td className="text-end tabular-nums">
+                  <span className={cn('font-semibold', pctTone(a.resPct))}>{fmtPct(a.resPct)}</span>
+                  <span className="ms-1.5 text-2xs text-muted-foreground">
+                    {a.resMet}/{a.resMet + a.resBreached}
+                  </span>
+                </Td>
+                <Td className="text-end tabular-nums text-muted-foreground">
+                  {fmtMins(a.avgResponseMin)}
+                </Td>
+                <Td className="text-end tabular-nums">
+                  <span
+                    className={
+                      a.breaches > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground'
+                    }
+                  >
+                    {a.breaches}
+                  </span>
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </Table>
+      </TableSurface>
+      <p className="px-1 text-2xs text-muted-foreground">
         {t('slaReports.drillHint', { defaultValue: 'Click an agent to see their tickets.' })}
       </p>
     </div>
@@ -405,61 +421,52 @@ function TicketTable({
           <span className="text-muted-foreground">{tickets.length}</span>
         </div>
       )}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-border">
+      <TableSurface>
+        <Table>
+          <thead>
             <tr>
-              <HeadCell>{t('slaReports.colTicket', { defaultValue: 'Ticket' })}</HeadCell>
-              <HeadCell>{t('slaReports.colPriority', { defaultValue: 'Priority' })}</HeadCell>
-              <HeadCell>{t('slaReports.colStatus', { defaultValue: 'Status' })}</HeadCell>
-              {!agentFilter && (
-                <HeadCell>{t('slaReports.colAgent', { defaultValue: 'Agent' })}</HeadCell>
-              )}
-              <HeadCell>
-                {t('slaReports.colFirstResponse', { defaultValue: 'First response' })}
-              </HeadCell>
-              <HeadCell>{t('slaReports.colResolution', { defaultValue: 'Resolution' })}</HeadCell>
-              <HeadCell className="text-end">
+              <Th>{t('slaReports.colTicket', { defaultValue: 'Ticket' })}</Th>
+              <Th>{t('slaReports.colPriority', { defaultValue: 'Priority' })}</Th>
+              <Th>{t('slaReports.colStatus', { defaultValue: 'Status' })}</Th>
+              {!agentFilter && <Th>{t('slaReports.colAgent', { defaultValue: 'Agent' })}</Th>}
+              <Th>{t('slaReports.colFirstResponse', { defaultValue: 'First response' })}</Th>
+              <Th>{t('slaReports.colResolution', { defaultValue: 'Resolution' })}</Th>
+              <Th className="text-end">
                 {t('slaReports.colReplyTime', { defaultValue: '1st reply' })}
-              </HeadCell>
+              </Th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/40">
+          <tbody>
             {tickets.map((tk) => (
-              <tr key={tk.id} className="transition-colors duration-fast hover:bg-secondary/40">
-                <td
-                  className="max-w-[16rem] truncate px-3 py-2.5 font-medium text-foreground"
-                  title={tk.subject}
-                >
+              <Tr key={tk.id}>
+                <Td className="max-w-[16rem] truncate font-medium" title={tk.subject}>
                   {tk.subject}
-                </td>
-                <td className="px-3 py-2.5">
+                </Td>
+                <Td>
                   <Pill tone={PRIORITY_TONE[tk.priority] ?? 'neutral'} size="sm">
                     {t(`priority.${tk.priority}`, { ns: 'common', defaultValue: tk.priority })}
                   </Pill>
-                </td>
-                <td className="px-3 py-2.5">
+                </Td>
+                <Td>
                   <Pill tone={STATUS_TONE[tk.status] ?? 'neutral'} size="sm">
                     {t(`status.${tk.status}`, { ns: 'common', defaultValue: tk.status })}
                   </Pill>
-                </td>
-                {!agentFilter && (
-                  <td className="px-3 py-2.5 text-muted-foreground">{tk.agentName}</td>
-                )}
-                <td className="px-3 py-2.5">
+                </Td>
+                {!agentFilter && <Td className="text-muted-foreground">{tk.agentName}</Td>}
+                <Td>
                   <SlaPill cell={tk.firstResponse} />
-                </td>
-                <td className="px-3 py-2.5">
+                </Td>
+                <Td>
                   <SlaPill cell={tk.resolution} />
-                </td>
-                <td className="px-3 py-2.5 text-end tabular-nums text-muted-foreground">
+                </Td>
+                <Td className="text-end tabular-nums text-muted-foreground">
                   {fmtMins(tk.responseMinutes)}
-                </td>
-              </tr>
+                </Td>
+              </Tr>
             ))}
           </tbody>
-        </table>
-      </div>
+        </Table>
+      </TableSurface>
     </div>
   );
 }

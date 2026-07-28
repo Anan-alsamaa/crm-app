@@ -25,6 +25,13 @@ vi.mock('../src/features/contacts/CommercePanel.js', () => ({
 vi.mock('../src/features/contacts/ContactTags.js', () => ({
   ContactTags: () => <div>contact-tags</div>,
 }));
+// FR-031 custom fields — stubbed here (it has its own suite in
+// custom-fields-section.test.tsx); we only assert it is mounted for contacts.
+vi.mock('../src/features/custom-fields/CustomFieldsSection.js', () => ({
+  CustomFieldsSection: ({ entityType, entityId }: { entityType: string; entityId: string }) => (
+    <div>{`custom-fields:${entityType}:${entityId}`}</div>
+  ),
+}));
 
 import { ContactProfilePage } from '../src/features/contacts/ContactProfilePage.js';
 
@@ -69,6 +76,12 @@ describe('ContactProfilePage', () => {
     expect(screen.getAllByText('Alice Jones').length).toBeGreaterThan(0);
     expect(screen.getByText('alice@example.com')).toBeInTheDocument();
     expect(screen.getByText('commerce-panel')).toBeInTheDocument();
+  });
+
+  it('mounts the custom-fields section for the contact (FR-031)', () => {
+    hooks.useContact.mockReturnValue({ data: contact, isLoading: false });
+    renderPage();
+    expect(screen.getByText('custom-fields:contact:k1')).toBeInTheDocument();
   });
 
   it('merges conversations and tickets into the timeline', () => {

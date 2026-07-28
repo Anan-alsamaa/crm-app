@@ -17,7 +17,8 @@
     "add": "إضافة",
     "change": "تغيير",
     "done": "تم",
-    "toggleLanguage": "تبديل اللغة"
+    "toggleLanguage": "تبديل اللغة",
+    "retry": "إعادة المحاولة"
   },
   "auth": {
     "signIn": "تسجيل الدخول",

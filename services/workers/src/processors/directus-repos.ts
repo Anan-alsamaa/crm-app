@@ -3,6 +3,7 @@ import type { YijiDirectusClient } from '@yiji/shared-config';
 import type {
   NotificationsRepo,
   SlaPolicyRow,
+  TicketEventRow,
   TicketEventType,
   TicketRepo,
   TicketRow,
@@ -86,6 +87,18 @@ export function createTicketRepo(client: YijiDirectusClient): TicketRepo {
           payload: payload ?? null,
         } as never),
       );
+    },
+    async listTicketEvents(ticketId: string, type?: TicketEventType) {
+      return (await client.request(
+        readItems('ticket_events', {
+          filter: type
+            ? { _and: [{ ticket: { _eq: ticketId } }, { event_type: { _eq: type } }] }
+            : { ticket: { _eq: ticketId } },
+          fields: ['id', 'event_type', 'payload'],
+          sort: ['-id'],
+          limit: 100,
+        }),
+      )) as TicketEventRow[];
     },
   };
 }

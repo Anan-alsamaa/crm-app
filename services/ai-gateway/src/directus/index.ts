@@ -22,6 +22,27 @@ export interface ConversationContext {
   }>;
 }
 
+/** One searchable conversation + a short representative text blob. */
+export interface ConversationSnippet {
+  /** Conversation id. */
+  id: string;
+  /** Truncated, chronological excerpt of the conversation's latest messages. */
+  text: string;
+}
+
+export interface SnippetCorpusOptions {
+  /** Vendor scope. Empty/undefined = no vendor filter (see routes.ts). */
+  vendorId?: string;
+  /** Max conversations pulled into the corpus (clamped to 1..100). */
+  conversationLimit?: number;
+  /** Max messages sampled per conversation (clamped to 1..10). */
+  messagesPerConversation?: number;
+  /** Max characters per snippet (clamped to 80..2000). */
+  snippetChars?: number;
+}
+
+const clamp = (n: number, lo: number, hi: number): number => Math.min(Math.max(n, lo), hi);
+
 export class GatewayDirectus {
   private readonly client: YijiDirectusClient;
   private readonly url: string;
@@ -132,5 +153,74 @@ export class GatewayDirectus {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Build the semantic-search corpus: the most recently active conversations in
+   * the caller's vendor scope, each reduced to one short text blob taken from
+   * its latest customer/agent messages (internal notes excluded).
+   *
+   * Bounded on purpose — the whole corpus is inlined into one LLM prompt, so we
+   * cap both the conversation count and the per-conversation character budget.
+   *
+   * Unlike `getConversation`, failures are NOT swallowed: the caller needs to
+   * tell "Directus is down" (fail soft, skip the provider call) apart from
+   * "this vendor genuinely has no conversations".
+   */
+  async listConversationSnippets(opts: SnippetCorpusOptions = {}): Promise<ConversationSnippet[]> {
+    const conversationLimit = clamp(opts.conversationLimit ?? 50, 1, 100);
+    const perConversation = clamp(opts.messagesPerConversation ?? 4, 1, 10);
+    const snippetChars = clamp(opts.snippetChars ?? 500, 80, 2000);
+
+    const convs = (await this.client.request(
+      readItems('conversations', {
+        ...(opts.vendorId ? { filter: { vendor: { _eq: opts.vendorId } } } : {}),
+        // Most recently active first; fall back to creation order for rows that
+        // have never received a message.
+        sort: ['-last_message_at', '-date_created'],
+        limit: conversationLimit,
+        fields: ['id'],
+      }),
+    )) as Array<{ id: string }> | null;
+
+    const ids = (convs ?? []).map((c) => c.id).filter(Boolean);
+    if (ids.length === 0) return [];
+
+    // One batched read for every candidate conversation rather than N round-trips.
+    const messages = (await this.client.request(
+      readItems('messages', {
+        filter: {
+          _and: [{ conversation: { _in: ids } }, { is_internal_note: { _eq: false } }],
+        },
+        sort: ['-date_created'],
+        limit: ids.length * perConversation,
+        fields: ['conversation', 'sender_type', 'content', 'date_created'],
+      }),
+    )) as Array<{
+      conversation: string;
+      sender_type: string;
+      content: string | null;
+    }> | null;
+
+    // Group newest-first, keep at most `perConversation` per conversation.
+    const byConversation = new Map<string, string[]>();
+    for (const m of messages ?? []) {
+      const content = (m.content ?? '').trim();
+      if (!content) continue;
+      const bucket = byConversation.get(m.conversation) ?? [];
+      if (bucket.length >= perConversation) continue;
+      bucket.push(`${m.sender_type === 'agent' ? 'Agent' : 'Customer'}: ${content}`);
+      byConversation.set(m.conversation, bucket);
+    }
+
+    const out: ConversationSnippet[] = [];
+    for (const id of ids) {
+      const lines = byConversation.get(id);
+      if (!lines || lines.length === 0) continue; // nothing to rank on
+      // Stored newest-first; flip back to reading order before truncating.
+      const text = lines.slice().reverse().join(' / ').slice(0, snippetChars);
+      out.push({ id, text });
+    }
+    return out;
   }
 }

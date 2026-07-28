@@ -6,6 +6,7 @@ import {
   DEFAULT_JOB_OPTIONS,
   type AutomationJob,
   type ImportJob,
+  type NotificationJob,
   type ReportJob,
 } from '@yiji/shared-types';
 
@@ -24,6 +25,9 @@ export interface SideEffectProducer {
   enqueueImport(job: ImportJob): Promise<string | null>;
   /** Admin-triggered: enqueue a "run now" for a saved report. */
   enqueueReport(job: ReportJob): Promise<string | null>;
+  /** Agent-triggered: notify the assignee of a conversation/ticket. `jobId` is
+   *  deterministic (assign-<type>-<entity>-<assignee>) so repeat calls collapse. */
+  enqueueNotification(job: NotificationJob, jobId: string): Promise<string | null>;
   close(): Promise<void>;
 }
 
@@ -43,6 +47,10 @@ class NoopProducer implements SideEffectProducer {
     this.logger.warn('enqueue report skipped (Redis disabled)');
     return null;
   }
+  async enqueueNotification(): Promise<string | null> {
+    this.logger.warn('enqueue notification skipped (Redis disabled)');
+    return null;
+  }
   async close(): Promise<void> {}
 }
 
@@ -50,6 +58,7 @@ class BullProducer implements SideEffectProducer {
   private readonly automation: Queue;
   private readonly imports: Queue;
   private readonly reports: Queue;
+  private readonly notifications: Queue;
   private readonly connection: Redis;
   constructor(redisUrl: string) {
     // Same auto-reconnect posture as the Socket.IO Redis clients.
@@ -66,6 +75,10 @@ class BullProducer implements SideEffectProducer {
     // workers consume — the job NAME is cosmetic; the queue + data shape match.
     this.imports = new Queue(QUEUES.imports, { connection: this.connection });
     this.reports = new Queue(QUEUES.reports, { connection: this.connection });
+    // Agent-triggered assignment notifications land on the same `notifications`
+    // queue the workers' notifications processor consumes (per-type user
+    // preferences + email fanout live there — we do NOT notify from here).
+    this.notifications = new Queue(QUEUES.notifications, { connection: this.connection });
   }
   async enqueueImport(job: ImportJob): Promise<string | null> {
     const added = await this.imports.add('import', job, DEFAULT_JOB_OPTIONS);
@@ -73,6 +86,10 @@ class BullProducer implements SideEffectProducer {
   }
   async enqueueReport(job: ReportJob): Promise<string | null> {
     const added = await this.reports.add('run-now', job, DEFAULT_JOB_OPTIONS);
+    return added.id ?? null;
+  }
+  async enqueueNotification(job: NotificationJob, jobId: string): Promise<string | null> {
+    const added = await this.notifications.add(job.type, job, { ...DEFAULT_JOB_OPTIONS, jobId });
     return added.id ?? null;
   }
   async conversationCreated(conversationId: string): Promise<void> {
@@ -97,6 +114,7 @@ class BullProducer implements SideEffectProducer {
     await this.automation.close();
     await this.imports.close();
     await this.reports.close();
+    await this.notifications.close();
     await this.connection.quit();
   }
 }

@@ -3,21 +3,31 @@ import { cn } from './cn.js';
 
 export type StatStripTone = 'blue' | 'violet' | 'green' | 'amber' | 'crimson' | 'neutral';
 
+// Vibrant tinted tiles — saturated wash + strong matching number per tone
+// (the colorful stat-card pattern from the reference dashboards).
 const TILE: Record<StatStripTone, string> = {
-  blue: 'bg-primary/[0.07] ring-primary/12',
-  violet: 'bg-violet/[0.08] ring-violet/12',
-  green: 'bg-success/10 ring-success/15',
-  amber: 'bg-warning/12 ring-warning/18',
-  crimson: 'bg-magenta/[0.07] ring-magenta/12',
-  neutral: 'bg-card ring-foreground/[0.05]',
+  blue: 'bg-sky-500/10 ring-sky-500/25',
+  violet: 'bg-violet-500/10 ring-violet-500/25',
+  green: 'bg-emerald-500/10 ring-emerald-500/25',
+  amber: 'bg-orange-400/15 ring-orange-400/30',
+  crimson: 'bg-rose-500/10 ring-rose-500/25',
+  neutral: 'bg-card ring-foreground/[0.06]',
 };
 const NUM: Record<StatStripTone, string> = {
-  blue: 'text-primary',
-  violet: 'text-violet',
-  green: 'text-success',
-  amber: 'text-[oklch(0.5_0.15_70)]',
-  crimson: 'text-magenta',
+  blue: 'text-sky-600',
+  violet: 'text-violet-600',
+  green: 'text-emerald-600',
+  amber: 'text-orange-500',
+  crimson: 'text-rose-600',
   neutral: 'text-foreground',
+};
+const DOT: Record<StatStripTone, string> = {
+  blue: 'bg-sky-500',
+  violet: 'bg-violet-500',
+  green: 'bg-emerald-500',
+  amber: 'bg-orange-400',
+  crimson: 'bg-rose-500',
+  neutral: 'bg-muted-foreground/50',
 };
 
 export interface StatStripItem {
@@ -58,8 +68,11 @@ export function StatStrip({
             <div className={cn('text-2xl font-extrabold leading-none tabular-nums', NUM[tone])}>
               {it.value}
             </div>
-            <div className="mt-1 text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-              {it.label}
+            <div className="mt-1 flex items-center gap-1.5">
+              <span className={cn('h-1.5 w-1.5 rounded-full', DOT[tone])} aria-hidden />
+              <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                {it.label}
+              </span>
             </div>
           </div>
         );

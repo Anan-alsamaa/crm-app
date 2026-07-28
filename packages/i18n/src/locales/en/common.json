@@ -17,7 +17,8 @@
     "add": "Add",
     "change": "Change",
     "done": "Done",
-    "toggleLanguage": "Toggle language"
+    "toggleLanguage": "Toggle language",
+    "retry": "Retry"
   },
   "auth": {
     "signIn": "Sign in",

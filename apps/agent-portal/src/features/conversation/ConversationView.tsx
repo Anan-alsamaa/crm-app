@@ -550,11 +550,11 @@ export function ConversationView({
   };
 
   return (
-    // Instagram-DM zone: the whole conversation area re-scopes to the LIGHT
-    // token set inside the dark app chrome. The zone canvas is a soft tint so
-    // white surfaces (toolbar, composer, cards, bubbles) visibly float.
-    <div className="theme-light flex h-full gap-3 text-foreground">
-      <div className="flex flex-1 min-w-0 flex-col overflow-hidden rounded-2xl bg-card shadow-soft">
+    // Instagram-DM zone on the dark aurora canvas: an elevated card with a thin
+    // ring so it floats off the ink, a softly-tinted thread surface, aurora
+    // gradient bubbles outgoing and defined solid bubbles incoming.
+    <div className="flex h-full gap-3 text-foreground">
+      <div className="flex flex-1 min-w-0 flex-col overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
         {/* Toolbar — slim row of status/priority/agent controls. */}
         {c && (
           <ConversationToolbar
@@ -576,7 +576,7 @@ export function ConversationView({
                 profile opens the scrollback instead of an empty void. */}
             {threadMessages.length > 0 && (
               <div className="flex flex-col items-center gap-3 pb-8 pt-10 text-center">
-                <span className="rounded-full bg-gradient-to-br from-primary to-violet p-[3px]">
+                <span className="rounded-full bg-primary/30 p-[2px]">
                   <span className="block rounded-full bg-canvas p-[3px]">
                     <Avatar
                       name={c?.contact?.name}
@@ -678,8 +678,8 @@ export function ConversationView({
                                       isNote
                                         ? 'bg-warning/15 text-warning-foreground ring-1 ring-warning/20'
                                         : isAgent
-                                          ? 'bg-gradient-to-br from-primary to-violet text-primary-foreground shadow-md shadow-violet/25'
-                                          : 'bg-bubble text-foreground',
+                                          ? 'bg-primary text-primary-foreground'
+                                          : 'bg-bubble text-foreground ring-1 ring-foreground/[0.06]',
                                       // Smooth pill shape, tail only on the LAST bubble of a run.
                                       'rounded-[22px]',
                                       isLast && isAgent && 'rounded-ee-md',
@@ -797,7 +797,7 @@ export function ConversationView({
                 'group relative rounded-[26px] transition-[box-shadow,background-color] duration-fast ease-out',
                 internalNote ? 'bg-warning/10' : 'bg-card shadow-soft ring-1 ring-border',
                 // Confident aurora lift on focus: glow + a 2px brand ring.
-                'focus-within:shadow-lg focus-within:shadow-primary/15 focus-within:ring-2 focus-within:ring-primary/40',
+                'focus-within:ring-2 focus-within:ring-primary/40',
                 internalNote && 'focus-within:ring-warning/50',
               )}
             >
@@ -937,8 +937,8 @@ export function ConversationView({
                     'hover:enabled:scale-105 hover:enabled:shadow-md active:enabled:scale-90',
                     'disabled:opacity-40 disabled:cursor-not-allowed',
                     internalNote
-                      ? 'bg-warning text-warning-foreground hover:enabled:shadow-warning/30'
-                      : 'bg-gradient-to-br from-primary to-violet text-primary-foreground hover:brightness-110 hover:enabled:shadow-violet/40',
+                      ? 'bg-warning text-warning-foreground'
+                      : 'bg-primary text-primary-foreground hover:brightness-110',
                   )}
                 >
                   <svg

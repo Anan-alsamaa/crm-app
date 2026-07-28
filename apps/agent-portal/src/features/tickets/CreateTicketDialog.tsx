@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Button, cn, FormField, Input, Pill, SelectMenu, Textarea, toast } from '@yiji/ui';
 import type { Priority, YijiOrder } from '@yiji/shared-types';
 import { useConversationAttachmentIds, useCreateTicketFromConversation } from './api.js';
+import { orderToSnapshot, type TicketOrderSnapshot } from './OrderSnapshotCard.js';
 import { useContact } from '../contacts/api.js';
 import { commerce } from '../../lib/commerce-client.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
@@ -50,26 +51,14 @@ function formatOrderDate(iso: string, locale: string): string {
 }
 
 /**
- * Flatten an order into the plain-text block we persist onto the ticket. It is
- * a point-in-time SNAPSHOT (the chat's order context), so it is stored as text
- * rather than re-fetched — the order may change or vanish later.
- * TODO: `deliveryType` isn't exposed by the Yiji order shape yet; add it here
- * once commerce surfaces it.
+ * Capture the chat's order as a STRUCTURED point-in-time snapshot persisted to
+ * `tickets.order_snapshot` (JSON). It is a snapshot rather than a live lookup
+ * because the order may change or vanish upstream — but storing it as data (not
+ * prose appended to `description`) lets the ticket render a real order card and
+ * keeps the fields queryable.
  */
-function orderSnapshotText(order: YijiOrder, label: (key: string, def: string) => string): string {
-  const lines: string[] = [];
-  lines.push(`${label('tickets.orderSnapshotTitle', 'Order from this chat')}:`);
-  lines.push(`#${order.orderId} · ${titleize(order.status)}`);
-  if (order.restaurantName)
-    lines.push(`${label('tickets.orderRestaurant', 'Restaurant')}: ${order.restaurantName}`);
-  if (order.deliveryAddress)
-    lines.push(`${label('commerce.deliverTo', 'Deliver to')}: ${order.deliveryAddress}`);
-  lines.push(`${label('commerce.total', 'Total')}: ${money(order.total, order.currency)}`);
-  if (order.items.length > 0) {
-    lines.push(`${label('tickets.orderItems', 'Items')}:`);
-    for (const it of order.items) lines.push(`  ${it.qty}× ${it.name}`);
-  }
-  return lines.join('\n');
+function orderSnapshot(order: YijiOrder): TicketOrderSnapshot {
+  return { ...orderToSnapshot(order), capturedAt: new Date().toISOString() };
 }
 
 /** Small labelled checkbox row used to opt the chat context in/out. */
@@ -135,12 +124,22 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
   const yijiVendorId = contact.data?.vendor?.yiji_vendor_id ?? '';
   const externalCustomerId = contact.data?.external_customer_id ?? '';
   const ordersQuery = useQuery({
-    queryKey: ['yiji-orders', yijiVendorId, externalCustomerId, 1],
+    queryKey: ['yiji-latest-order-detail', yijiVendorId, externalCustomerId],
     enabled: !!conversationId && !!yijiVendorId && !!externalCustomerId,
-    queryFn: () => commerce.getOrders(yijiVendorId, externalCustomerId, { limit: 1 }),
+    // The list endpoint is a SUMMARY (id/status/total/date only) — line items,
+    // brand/restaurant and delivery type live on the single-order endpoint. Take
+    // the newest id from the list, then fetch its full detail, otherwise the
+    // snapshot we persist onto the ticket would be missing those fields.
+    queryFn: async () => {
+      const list = await commerce.getOrders(yijiVendorId, externalCustomerId, { limit: 1 });
+      const summary = list?.[0];
+      if (!summary) return null;
+      const full = await commerce.getOrder(yijiVendorId, summary.orderId).catch(() => null);
+      return full ?? summary;
+    },
     staleTime: 60_000,
   });
-  const latestOrder = ordersQuery.data?.[0] ?? null;
+  const latestOrder = ordersQuery.data ?? null;
   const sessionFiles = useConversationAttachmentIds(conversationId ?? null);
   const sessionFileIds = sessionFiles.data ?? [];
 
@@ -157,12 +156,10 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      // Compose the description: the agent's own text first, then the order
-      // snapshot (if kept). Filter empties so we never store dangling blank lines.
-      const parts = [values.description?.trim() ?? ''];
-      if (includeOrder && latestOrder)
-        parts.push(orderSnapshotText(latestOrder, (k, d) => t(k, { defaultValue: d })));
-      const description = parts.filter(Boolean).join('\n\n') || undefined;
+      // The description stays the agent's OWN words. The order rides along as
+      // structured JSON so the ticket can render it as a real order card
+      // instead of a wall of pasted text.
+      const description = values.description?.trim() || undefined;
 
       await createFromChat.mutateAsync({
         ticket: {
@@ -173,6 +170,7 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
           vendor: vendorId,
           conversation: conversationId ?? null,
           assigned_agent: user?.id ?? null,
+          order_snapshot: includeOrder && latestOrder ? orderSnapshot(latestOrder) : null,
         },
         attachmentFileIds: includeFiles ? sessionFileIds : [],
       });

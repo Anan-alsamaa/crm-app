@@ -47,6 +47,30 @@ function PlusIcon() {
   );
 }
 
+/* Flat KPI tile — neutral number, semantic tint on the label only (ONE accent). */
+type KpiTone = 'blue' | 'violet' | 'green' | 'amber';
+const LABEL_TONE: Record<KpiTone, string> = {
+  blue: 'text-primary',
+  violet: 'text-primary',
+  green: 'text-success',
+  amber: 'text-warning-foreground',
+};
+
+function KpiTile({ label, value, tone }: { label: string; value: string | number; tone: KpiTone }) {
+  return (
+    <div className="rounded-2xl bg-card px-4 py-3.5 ring-1 ring-foreground/[0.08]">
+      <div className="text-3xl font-black tabular-nums leading-none tracking-[-0.04em] text-foreground">
+        {value}
+      </div>
+      <div
+        className={cn('mt-2 text-2xs font-semibold uppercase tracking-[0.12em]', LABEL_TONE[tone])}
+      >
+        {label}
+      </div>
+    </div>
+  );
+}
+
 interface Draft {
   entity_type: EntityType;
   name: string;
@@ -210,60 +234,106 @@ export function CustomFieldsPage() {
         </Button>
       </Toolbar>
 
-      <div className="flex-1 overflow-auto px-5 py-3">
-        {fields.isError ? (
-          <ErrorState
-            title={t('customFields.loadError', { defaultValue: 'Could not load custom fields' })}
-            message={t('customFields.loadErrorHint', {
-              defaultValue: 'Check your connection and try again.',
-            })}
-            retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
-            onRetry={() => void fields.refetch()}
-          />
-        ) : fields.isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-16 w-full rounded-2xl" />
-            ))}
+      <div className="flex-1 overflow-auto px-5 py-4">
+        <div className="mx-auto max-w-5xl space-y-5">
+          {/* Clean editorial header — no gradient banner. */}
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-foreground/10 pb-5">
+            <div>
+              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+                {t('customFields.title', { defaultValue: 'Custom fields' })}
+              </h2>
+              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                {t('customFields.heroSubtitle', {
+                  defaultValue:
+                    'Define fields once per entity; they render dynamically in the agent portal on the matching contact, conversation, or ticket.',
+                })}
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-secondary px-3.5 py-1.5 text-sm font-semibold tabular-nums text-muted-foreground ring-1 ring-foreground/10">
+              {t('customFields.fieldCount', {
+                count: fields.data?.length ?? 0,
+                defaultValue: '{{count}} fields',
+              })}
+            </span>
           </div>
-        ) : byEntity[tab].length === 0 ? (
-          <EmptyState
-            title={t('customFields.empty', {
-              defaultValue: 'No custom fields for this entity yet.',
-            })}
-            description={t('customFields.emptyHint', {
-              defaultValue:
-                'Define fields once; they render dynamically in the agent portal on the matching entity.',
-            })}
-            action={
-              <Button
-                type="button"
-                onClick={() => {
-                  setEditingId(null);
-                  setDrawerOpen(true);
-                }}
-                iconStart={<PlusIcon />}
-              >
-                {t('customFields.create', { defaultValue: 'New field' })}
-              </Button>
-            }
-          />
-        ) : (
-          <ul className="space-y-2">
-            {byEntity[tab].map((f) => (
-              <li key={f.id}>
-                <FieldRow
-                  f={f}
-                  onEdit={() => {
-                    setEditingId(f.id);
-                    setDrawerOpen(true);
-                  }}
-                  onDelete={() => setDeletingId(f.id)}
+
+          {fields.isError ? (
+            <ErrorState
+              title={t('customFields.loadError', { defaultValue: 'Could not load custom fields' })}
+              message={t('customFields.loadErrorHint', {
+                defaultValue: 'Check your connection and try again.',
+              })}
+              retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+              onRetry={() => void fields.refetch()}
+            />
+          ) : fields.isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full rounded-2xl" />
+              ))}
+            </div>
+          ) : (
+            <>
+              {/* Per-entity field counts */}
+              <div className="grid grid-cols-3 gap-3">
+                <KpiTile
+                  label={t('customFields.entityContact', { defaultValue: 'Contact' })}
+                  value={byEntity.contact.length}
+                  tone="blue"
                 />
-              </li>
-            ))}
-          </ul>
-        )}
+                <KpiTile
+                  label={t('customFields.entityConversation', { defaultValue: 'Conversation' })}
+                  value={byEntity.conversation.length}
+                  tone="violet"
+                />
+                <KpiTile
+                  label={t('customFields.entityTicket', { defaultValue: 'Ticket' })}
+                  value={byEntity.ticket.length}
+                  tone="green"
+                />
+              </div>
+
+              {byEntity[tab].length === 0 ? (
+                <EmptyState
+                  title={t('customFields.empty', {
+                    defaultValue: 'No custom fields for this entity yet.',
+                  })}
+                  description={t('customFields.emptyHint', {
+                    defaultValue:
+                      'Define fields once; they render dynamically in the agent portal on the matching entity.',
+                  })}
+                  action={
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(null);
+                        setDrawerOpen(true);
+                      }}
+                      iconStart={<PlusIcon />}
+                    >
+                      {t('customFields.create', { defaultValue: 'New field' })}
+                    </Button>
+                  }
+                />
+              ) : (
+                <ul className="space-y-2">
+                  {byEntity[tab].map((f) => (
+                    <li key={f.id}>
+                      <FieldRow
+                        f={f}
+                        onEdit={() => {
+                          setEditingId(f.id);
+                          setDrawerOpen(true);
+                        }}
+                        onDelete={() => setDeletingId(f.id)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       <Drawer

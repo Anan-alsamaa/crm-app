@@ -10,6 +10,7 @@ import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-confi
 import type { SenderType } from '@yiji/shared-types';
 import type { CustomerClaims } from './auth/customer-jwt.js';
 import type { AttachmentMeta } from './attachments.js';
+import type { AssignmentEntity, AssignmentEntityType } from './assignment-notify.js';
 
 /**
  * Gateway persistence via the Directus service account. The gateway is the sole
@@ -376,6 +377,48 @@ export class GatewayDirectus {
       createdAt: m.date_created,
       attachments: byMessage.get(m.id) ?? [],
     }));
+  }
+
+  /**
+   * Read the CURRENT assignee (+ a display label) of a conversation or ticket,
+   * for the assignment-notification endpoint. Deliberately uses the SERVICE
+   * token, not the caller's: the Agent role can only read work assigned to
+   * itself, so the moment an agent hands an item to a colleague they lose read
+   * access to it — the caller's token could not tell us who the new assignee is.
+   * The endpoint never echoes this row back to the caller.
+   */
+  async getAssignmentTarget(
+    entityType: AssignmentEntityType,
+    entityId: string,
+  ): Promise<AssignmentEntity | null> {
+    if (entityType === 'ticket') {
+      const rows = (await this.client.request(
+        readItems('tickets', {
+          filter: { id: { _eq: entityId } },
+          fields: ['id', 'assigned_agent', 'subject'],
+          limit: 1,
+        }),
+      )) as Array<{ id: string; assigned_agent: string | null; subject: string | null }>;
+      const t = rows[0];
+      return t
+        ? { id: t.id, assignedAgent: t.assigned_agent ?? null, label: t.subject ?? null }
+        : null;
+    }
+    const rows = (await this.client.request(
+      readItems('conversations', {
+        filter: { id: { _eq: entityId } },
+        fields: ['id', 'assigned_agent', { contact: ['name'] }],
+        limit: 1,
+      }),
+    )) as Array<{
+      id: string;
+      assigned_agent: string | null;
+      contact: { name: string | null } | null;
+    }>;
+    const c = rows[0];
+    return c
+      ? { id: c.id, assignedAgent: c.assigned_agent ?? null, label: c.contact?.name ?? null }
+      : null;
   }
 
   /** Current status of a conversation (used to detect close/resolve for CSAT). */

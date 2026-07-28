@@ -33,23 +33,17 @@ function fmtMinutes(m: number | null): string {
 const fmtPct = (p: number | null) => (p === null ? '—' : `${Math.round(p)}%`);
 
 type KpiTone = 'blue' | 'violet' | 'green' | 'amber' | 'crimson';
+// Vivid solid icon chips (Sara Connect style) — a categorical color per card,
+// used ONLY on the small icon chip; the card itself stays white.
 const KPI_TILE: Record<KpiTone, string> = {
-  blue: 'bg-primary/10 text-primary',
-  violet: 'bg-violet/12 text-violet',
-  green: 'bg-success/15 text-success',
-  amber: 'bg-warning/20 text-[oklch(0.5_0.15_70)]',
-  crimson: 'bg-magenta/12 text-magenta',
-};
-// Whole-tile tint per tone, for the colored bento blocks.
-const KPI_SURFACE: Record<KpiTone, string> = {
-  blue: 'bg-card',
-  violet: 'bg-card',
-  green: 'bg-success/10 ring-success/15',
-  amber: 'bg-warning/12 ring-warning/20',
-  crimson: 'bg-magenta/[0.08] ring-magenta/15',
+  blue: 'bg-sky-500 text-white',
+  violet: 'bg-violet-500 text-white',
+  green: 'bg-emerald-500 text-white',
+  amber: 'bg-orange-400 text-white',
+  crimson: 'bg-rose-500 text-white',
 };
 
-/** Bento metric tile — icon tile, giant number, label; some tiles tinted. */
+/** KPI card — label top-left, vivid icon chip top-right, big number, hint. */
 function BentoStat({
   icon,
   tone,
@@ -68,25 +62,29 @@ function BentoStat({
   return (
     <div
       className={cn(
-        'flex flex-col justify-between rounded-3xl p-5 shadow-soft ring-1 ring-foreground/[0.04]',
+        'flex flex-col justify-between rounded-3xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]',
         'transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
-        KPI_SURFACE[tone],
         className,
       )}
     >
-      <div className="flex items-center justify-between">
-        <span className={cn('grid h-10 w-10 place-items-center rounded-2xl', KPI_TILE[tone])}>
-          {icon}
-        </span>
-        <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <div className="flex items-start justify-between gap-3">
+        <span className="pt-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           {label}
+        </span>
+        <span
+          className={cn(
+            'grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-sm',
+            KPI_TILE[tone],
+          )}
+        >
+          {icon}
         </span>
       </div>
       <div>
-        <div className="text-[2.75rem] font-extrabold leading-none tabular-nums tracking-[-0.04em] text-foreground">
+        <div className="text-[2.5rem] font-extrabold leading-none tabular-nums tracking-[-0.04em] text-foreground">
           {value}
         </div>
-        {hint && <div className="mt-1 text-xs text-muted-foreground">{hint}</div>}
+        {hint && <div className="mt-1.5 text-xs text-muted-foreground">{hint}</div>}
       </div>
     </div>
   );
@@ -105,7 +103,7 @@ function Panel({
   return (
     <section
       className={cn(
-        'flex flex-col overflow-hidden rounded-3xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.04]',
+        'flex flex-col overflow-hidden rounded-3xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]',
         className,
       )}
     >
@@ -152,7 +150,7 @@ function VolumeBars({ series }: { series: DashboardMetrics['volumeSeries'] }) {
             <div
               className={cn(
                 'w-full rounded-t-md transition-[filter] duration-fast ease-out group-hover:brightness-110',
-                s.count > 0 ? 'bg-gradient-to-t from-primary to-violet' : 'bg-secondary',
+                s.count > 0 ? 'bg-primary' : 'bg-secondary',
               )}
               style={{ height: `${Math.max(3, (s.count / max) * 100)}%` }}
             />
@@ -201,7 +199,7 @@ function RankList({
           </span>
           <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-secondary">
             <span
-              className="block h-full rounded-full bg-gradient-to-r from-primary to-violet shadow-sm shadow-primary/20 transition-[width] duration-slow ease-out"
+              className="block h-full rounded-full bg-primary transition-[width] duration-slow ease-out"
               style={{ width: `${(r.value / max) * 100}%` }}
             />
           </span>
@@ -299,40 +297,32 @@ export function DashboardPage() {
           ) : (
             /* BENTO grid — mixed tile sizes, oversized numbers, color blocks. */
             <div className="grid auto-rows-[150px] grid-cols-2 gap-4 lg:grid-cols-4">
-              {/* Feature tile — gradient hero + the two headline numbers. */}
-              <div className="relative col-span-2 row-span-2 flex flex-col justify-between overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-violet p-6 text-primary-foreground shadow-lg shadow-primary/25">
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 opacity-70"
-                  style={{
-                    background:
-                      'radial-gradient(circle at 100% 0%, oklch(1 0 0 / 0.2) 0%, transparent 45%), radial-gradient(circle at 0% 120%, oklch(0 0 0 / 0.18) 0%, transparent 55%)',
-                  }}
-                />
-                <div className="relative">
-                  <h2 className="text-2xl font-extrabold tracking-[-0.03em]">
+              {/* Feature tile — flat surface, the two headline numbers. */}
+              <div className="col-span-2 row-span-2 flex flex-col justify-between rounded-3xl bg-card p-6 shadow-soft ring-1 ring-foreground/[0.08]">
+                <div>
+                  <h2 className="text-2xl font-extrabold tracking-[-0.03em] text-foreground">
                     {t('dashboard.heroTitle', { defaultValue: 'Workspace overview' })}
                   </h2>
-                  <p className="mt-1 text-sm text-primary-foreground/85">
+                  <p className="mt-1 text-sm text-muted-foreground">
                     {t('dashboard.heroHint', {
                       defaultValue: 'Support performance across every channel.',
                     })}
                   </p>
                 </div>
-                <div className="relative flex items-end gap-8">
+                <div className="flex items-end gap-8">
                   <div>
-                    <div className="text-6xl font-extrabold leading-none tabular-nums tracking-[-0.05em]">
+                    <div className="text-6xl font-extrabold leading-none tabular-nums tracking-[-0.05em] text-foreground">
                       {m.data.conversationVolume}
                     </div>
-                    <div className="mt-1.5 text-2xs font-medium uppercase tracking-wide text-primary-foreground/75">
+                    <div className="mt-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                       {t('dashboard.conversations', { defaultValue: 'Conversations' })}
                     </div>
                   </div>
                   <div>
-                    <div className="text-4xl font-extrabold leading-none tabular-nums tracking-[-0.04em]">
+                    <div className="text-4xl font-extrabold leading-none tabular-nums tracking-[-0.04em] text-foreground">
                       {m.data.ticketTotal}
                     </div>
-                    <div className="mt-1.5 text-2xs font-medium uppercase tracking-wide text-primary-foreground/75">
+                    <div className="mt-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                       {t('dashboard.ofTicketsShort', { defaultValue: 'Tickets' })}
                     </div>
                   </div>

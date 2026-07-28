@@ -215,3 +215,39 @@ describe('GatewayDirectus.getConversationAttachment', () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('GatewayDirectus.getAssignmentTarget', () => {
+  it('reads a ticket assignee + subject with the SERVICE token', async () => {
+    request.mockResolvedValueOnce([{ id: 'tkt-1', assigned_agent: 'agent-2', subject: 'Refund' }]);
+    expect(await makeGateway().getAssignmentTarget('ticket', 'tkt-1')).toEqual({
+      id: 'tkt-1',
+      assignedAgent: 'agent-2',
+      label: 'Refund',
+    });
+  });
+
+  it('reads a conversation assignee and uses the contact name as the label', async () => {
+    request.mockResolvedValueOnce([
+      { id: 'conv-1', assigned_agent: 'agent-3', contact: { name: 'Dana' } },
+    ]);
+    expect(await makeGateway().getAssignmentTarget('conversation', 'conv-1')).toEqual({
+      id: 'conv-1',
+      assignedAgent: 'agent-3',
+      label: 'Dana',
+    });
+  });
+
+  it('normalises a missing assignee/contact to null', async () => {
+    request.mockResolvedValueOnce([{ id: 'conv-2', assigned_agent: null, contact: null }]);
+    expect(await makeGateway().getAssignmentTarget('conversation', 'conv-2')).toEqual({
+      id: 'conv-2',
+      assignedAgent: null,
+      label: null,
+    });
+  });
+
+  it('returns null when the entity does not exist', async () => {
+    request.mockResolvedValueOnce([]);
+    expect(await makeGateway().getAssignmentTarget('ticket', 'nope')).toBeNull();
+  });
+});

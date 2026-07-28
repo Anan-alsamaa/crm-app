@@ -10,6 +10,10 @@ interface AuthState {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** FR-001 — email a Directus reset link. Never throws (no account enumeration). */
+  requestPasswordReset: (email: string, resetUrl?: string) => Promise<void>;
+  /** FR-001 — set a new password from an emailed reset token. */
+  resetPassword: (token: string, password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -65,8 +69,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  // Password reset is deliberately session-less: it runs on the same shared
+  // Directus client but never touches `user` — you are still signed out until
+  // you sign in with the new password.
+  const requestPasswordReset = useCallback(
+    (email: string, resetUrl?: string) => auth.requestPasswordReset(email, resetUrl),
+    [],
+  );
+  const resetPassword = useCallback(
+    (token: string, password: string) => auth.resetPassword(token, password),
+    [],
+  );
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider
+      value={{ user, loading, login, logout, requestPasswordReset, resetPassword }}
+    >
+      {children}
+    </AuthContext.Provider>
   );
 }
 

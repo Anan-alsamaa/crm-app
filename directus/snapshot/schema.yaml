@@ -6951,6 +6951,8 @@ fields:
             value: sla_warning
           - text: sla_breached
             value: sla_breached
+          - text: sla_escalated
+            value: sla_escalated
           - text: resolved
             value: resolved
           - text: closed

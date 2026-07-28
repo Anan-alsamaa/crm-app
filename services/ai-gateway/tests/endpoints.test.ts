@@ -8,7 +8,11 @@ import { AiConfigStore } from '../src/aiconfig/index.js';
 import { SlidingWindowLimiter, MonthlyCap } from '../src/ratelimit/index.js';
 import { ResponseCache } from '../src/cache/index.js';
 import type { AIProvider, AiRunInput, AiRunOutput } from '../src/provider/types.js';
-import type { GatewayDirectus, ConversationContext } from '../src/directus/index.js';
+import type {
+  GatewayDirectus,
+  ConversationContext,
+  ConversationSnippet,
+} from '../src/directus/index.js';
 
 // Session tokens the stub Directus recognises. Auth is now a VERIFIED Directus
 // session — the gateway resolves the token to a user + role server-side, so a
@@ -26,11 +30,24 @@ class StubProvider implements AIProvider {
   }
 }
 
-function stubDirectus(ctx: ConversationContext | null): GatewayDirectus {
+/** Default semantic-search corpus returned by the stub Directus. */
+const CORPUS: ConversationSnippet[] = [
+  {
+    id: '11111111-1111-1111-1111-111111111111',
+    text: 'Customer: I want a refund, reach me at demo@example.com / Agent: Checking.',
+  },
+  { id: '22222222-2222-2222-2222-222222222222', text: 'Customer: Where is my parcel?' },
+];
+
+function stubDirectus(
+  ctx: ConversationContext | null,
+  snippets?: () => Promise<ConversationSnippet[]>,
+): GatewayDirectus {
   return {
     async getConversation() {
       return ctx;
     },
+    listConversationSnippets: snippets ?? (async () => CORPUS),
     async whoAmI(token: string) {
       if (token === AGENT_TOKEN) return { id: 'u-1', role: 'role-agent' };
       if (token === ADMIN_TOKEN) return { id: 'u-admin', role: 'role-admin' };
@@ -70,12 +87,13 @@ async function buildApp(
   opts: {
     provider?: AIProvider;
     ctx?: ConversationContext | null;
+    snippets?: () => Promise<ConversationSnippet[]>;
   } = {},
 ): Promise<{ app: FastifyInstance; provider: StubProvider; redis: Redis }> {
   const provider = (opts.provider as StubProvider) ?? new StubProvider();
   const redis = new RedisMock() as unknown as Redis;
   await redis.flushall();
-  const directus = stubDirectus(opts.ctx === undefined ? FAKE_CONV : opts.ctx);
+  const directus = stubDirectus(opts.ctx === undefined ? FAKE_CONV : opts.ctx, opts.snippets);
   const app = Fastify();
   await registerAiRoutes(app, {
     provider,
@@ -236,8 +254,9 @@ describe('AI endpoints', () => {
     expect(res.json().score).toBe(68);
   });
 
-  it('semantic-search: returns results object', async () => {
-    provider.reply = '{"results":[{"conversationId":"abc","score":0.92,"snippet":"refund"}]}';
+  it('semantic-search: ranks the fetched corpus and maps refs back to conversation ids', async () => {
+    provider.reply =
+      '{"results":[{"conversationId":"s2","score":0.4,"snippet":"x"},{"conversationId":"s1","score":0.92,"snippet":"x"}]}';
     const res = await app.inject({
       method: 'POST',
       url: AI_ENDPOINTS.semanticSearch,
@@ -245,7 +264,94 @@ describe('AI endpoints', () => {
       payload: { query: 'refund issue', limit: 5 },
     });
     expect(res.statusCode).toBe(200);
+    const results = res.json().results as Array<{ conversationId: string; snippet: string }>;
+    expect(results).toHaveLength(2);
+    // Sorted by score desc, opaque refs resolved to real conversation ids.
+    expect(results.map((r) => r.conversationId)).toEqual([
+      '11111111-1111-1111-1111-111111111111',
+      '22222222-2222-2222-2222-222222222222',
+    ]);
+    // Snippet is served from OUR corpus, not the model's echo.
+    expect(results[0]!.snippet).toContain('I want a refund');
+  });
+
+  it('semantic-search: sends a NON-EMPTY, PII-redacted corpus to the provider', async () => {
+    provider.reply = '{"results":[]}';
+    const res = await app.inject({
+      method: 'POST',
+      url: AI_ENDPOINTS.semanticSearch,
+      headers: auth,
+      payload: { query: 'refund issue', limit: 5 },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(provider.calls).toHaveLength(1);
+    const outbound = provider.calls[0]!.user;
+    // The corpus actually reached the prompt (regression: it used to be []).
+    expect(outbound).toContain('I want a refund');
+    expect(outbound).toContain('Where is my parcel?');
+    // ...redacted, and identified by opaque refs rather than raw ids.
+    expect(outbound).not.toContain('demo@example.com');
+    expect(outbound).toContain('<EMAIL_1>');
+    expect(outbound).not.toContain('11111111-1111-1111-1111-111111111111');
+    expect(outbound).toContain('[s1]');
+  });
+
+  it('semantic-search: drops results the model invented for unknown refs', async () => {
+    provider.reply =
+      '{"results":[{"conversationId":"s1","score":0.9,"snippet":"x"},{"conversationId":"nope","score":0.99,"snippet":"x"}]}';
+    const res = await app.inject({
+      method: 'POST',
+      url: AI_ENDPOINTS.semanticSearch,
+      headers: auth,
+      payload: { query: 'refund', limit: 5 },
+    });
     expect(res.json().results).toHaveLength(1);
+    expect(res.json().results[0].conversationId).toBe('11111111-1111-1111-1111-111111111111');
+  });
+
+  it('semantic-search: honours the requested limit', async () => {
+    provider.reply =
+      '{"results":[{"conversationId":"s1","score":0.9,"snippet":"x"},{"conversationId":"s2","score":0.8,"snippet":"x"}]}';
+    const res = await app.inject({
+      method: 'POST',
+      url: AI_ENDPOINTS.semanticSearch,
+      headers: auth,
+      payload: { query: 'refund', limit: 1 },
+    });
+    expect(res.json().results).toHaveLength(1);
+  });
+
+  it('semantic-search: fetch failure returns 200 + [] and never calls the provider', async () => {
+    const { app: app2, provider: p2 } = await buildApp({
+      snippets: async () => {
+        throw new Error('directus down');
+      },
+    });
+    p2.reply = 'never called';
+    const res = await app2.inject({
+      method: 'POST',
+      url: AI_ENDPOINTS.semanticSearch,
+      headers: auth,
+      payload: { query: 'refund issue', limit: 5 },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ results: [] });
+    // Quota protection: no provider call on an unusable corpus.
+    expect(p2.calls).toHaveLength(0);
+  });
+
+  it('semantic-search: empty corpus short-circuits without a provider call', async () => {
+    const { app: app2, provider: p2 } = await buildApp({ snippets: async () => [] });
+    p2.reply = 'never called';
+    const res = await app2.inject({
+      method: 'POST',
+      url: AI_ENDPOINTS.semanticSearch,
+      headers: auth,
+      payload: { query: 'refund issue', limit: 5 },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ results: [] });
+    expect(p2.calls).toHaveLength(0);
   });
 
   it('404 when conversation does not exist', async () => {

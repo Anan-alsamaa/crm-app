@@ -38,10 +38,17 @@ export type TicketEventType =
   | 'commented'
   | 'sla_warning'
   | 'sla_breached'
+  | 'sla_escalated'
   | 'resolved'
   | 'closed'
   | 'reopened'
   | 'automation_triggered';
+
+export interface TicketEventRow {
+  id?: string;
+  event_type: TicketEventType;
+  payload: Record<string, unknown> | null;
+}
 
 export interface TicketRepo {
   listOpenTickets(): Promise<TicketRow[]>;
@@ -53,6 +60,12 @@ export interface TicketRepo {
     type: TicketEventType,
     payload?: Record<string, unknown>,
   ): Promise<void>;
+  /**
+   * Read back a ticket's audit trail, optionally narrowed to one event type.
+   * `ticket_events` is append-only, which makes it the durable idempotency
+   * ledger for at-least-once queue jobs (see sla.ts runBreach).
+   */
+  listTicketEvents(ticketId: string, type?: TicketEventType): Promise<TicketEventRow[]>;
 }
 
 export interface NotificationsRepo {

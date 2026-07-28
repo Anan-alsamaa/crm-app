@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, createItem, updateItem, deleteItem, uploadFiles } from '@directus/sdk';
 import type { Priority, TicketStatus } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { notifyAssignmentBestEffort } from '../../lib/job-producer.js';
+import type { TicketOrderSnapshot } from './OrderSnapshotCard.js';
 
 export interface TicketAttachment {
   /** Junction-row id (for removal). */
@@ -13,6 +15,8 @@ export interface TicketRow {
   id: string;
   subject: string;
   description: string | null;
+  /** Structured point-in-time copy of the order the ticket is about. */
+  order_snapshot?: TicketOrderSnapshot | null;
   status: TicketStatus;
   priority: Priority;
   assigned_agent: string | null;
@@ -83,6 +87,7 @@ export function useTicket(id: string | null) {
             'resolution_due_at',
             'first_responded_at',
             'date_created',
+            'order_snapshot',
             { contact: ['id', 'name', 'email', 'phone'] },
             {
               attachments: ['id', { directus_files_id: ['id', 'filename_download', 'type'] }],
@@ -142,6 +147,8 @@ export interface CreateTicketInput {
   vendor: string;
   conversation?: string | null;
   assigned_agent?: string | null;
+  /** Structured point-in-time copy of the order the ticket is about. */
+  order_snapshot?: TicketOrderSnapshot | null;
 }
 
 export function useCreateTicket() {
@@ -267,6 +274,14 @@ export function useUpdateTicket() {
       void qc.invalidateQueries({ queryKey: ['tickets'] });
       void qc.invalidateQueries({ queryKey: ['ticket', vars.id] });
       void qc.invalidateQueries({ queryKey: ['ticket-events', vars.id] });
+      // The assignment persisted — now tell the assignee (in-app + email per
+      // their preferences, via the workers' notifications processor). Only when
+      // this patch actually set an agent; unassignment (null) notifies nobody.
+      // Best-effort by design: notifyAssignmentBestEffort never throws, so a
+      // producer/Redis outage cannot fail or roll back the assignment.
+      if (typeof vars.patch.assigned_agent === 'string' && vars.patch.assigned_agent) {
+        notifyAssignmentBestEffort('ticket', vars.id);
+      }
     },
   });
 }
@@ -327,6 +342,97 @@ export function useRemoveTicketAttachment() {
   return useMutation({
     mutationFn: ({ junctionId }: { junctionId: string; ticketId: string }) =>
       directus.request(deleteItem('tickets_files', junctionId)),
+    onSuccess: (_d, vars) => void qc.invalidateQueries({ queryKey: ['ticket', vars.ticketId] }),
+  });
+}
+
+/** A file shared in the ticket's linked chat, re-usable as a ticket attachment. */
+export interface ChatAttachment {
+  /** Directus file id (already uploaded via the chat). */
+  id: string;
+  filename: string | null;
+  type: string | null;
+  filesize: number | null;
+  sender_type: 'customer' | 'agent' | 'system' | null;
+  date_created: string | null;
+}
+
+/**
+ * Every file shared in a conversation's chat (the messages_files junction),
+ * newest first and de-duplicated by file. Lets an agent attach a file the
+ * customer already sent in chat onto an EXISTING ticket without re-uploading it
+ * — the "add it later if it wasn't carried over at creation" path (complements
+ * useConversationAttachmentIds, which copies files at create time). Fails soft
+ * (returns []) if the junction read is denied by an older permission set.
+ */
+export function useConversationAttachments(conversationId: string | null) {
+  return useQuery({
+    enabled: !!conversationId,
+    queryKey: ['conversation-attachments', conversationId],
+    queryFn: async (): Promise<ChatAttachment[]> => {
+      try {
+        const links = (await directus.request(
+          readItems('messages_files', {
+            filter: { messages_id: { conversation: { _eq: conversationId } } },
+            fields: [
+              { messages_id: ['sender_type', 'date_created'] },
+              { directus_files_id: ['id', 'filename_download', 'type', 'filesize'] },
+            ],
+            limit: -1,
+          }),
+        )) as Array<{
+          messages_id: {
+            sender_type: ChatAttachment['sender_type'];
+            date_created: string | null;
+          } | null;
+          directus_files_id: {
+            id: string;
+            filename_download: string | null;
+            type: string | null;
+            filesize: number | string | null;
+          } | null;
+        }>;
+        // De-dupe by file id (a file can be linked to more than one message).
+        const byFile = new Map<string, ChatAttachment>();
+        for (const l of links) {
+          const f = l.directus_files_id;
+          if (!f || byFile.has(f.id)) continue;
+          const fs = f.filesize;
+          byFile.set(f.id, {
+            id: f.id,
+            filename: f.filename_download,
+            type: f.type,
+            filesize: fs === null || fs === undefined ? null : Number(fs),
+            sender_type: l.messages_id?.sender_type ?? null,
+            date_created: l.messages_id?.date_created ?? null,
+          });
+        }
+        return Array.from(byFile.values()).sort((a, b) => {
+          const x = a.date_created ?? '';
+          const y = b.date_created ?? '';
+          return x < y ? 1 : x > y ? -1 : 0;
+        });
+      } catch {
+        return [];
+      }
+    },
+  });
+}
+
+/**
+ * Link an existing Directus file (e.g. one shared in chat) to a ticket via the
+ * tickets_files junction — no upload, the file already exists in Directus.
+ */
+export function useAttachExistingFileToTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ticketId, fileId }: { ticketId: string; fileId: string }) =>
+      directus.request(
+        createItem('tickets_files', {
+          tickets_id: ticketId,
+          directus_files_id: fileId,
+        } as never),
+      ),
     onSuccess: (_d, vars) => void qc.invalidateQueries({ queryKey: ['ticket', vars.ticketId] }),
   });
 }

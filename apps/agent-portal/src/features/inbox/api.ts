@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, readUsers, updateItem, createItem, deleteItem } from '@directus/sdk';
 import type { ConversationStatus, Priority } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { notifyAssignmentBestEffort } from '../../lib/job-producer.js';
 
 export interface InboxConversation {
   id: string;
@@ -87,6 +88,63 @@ export function useConversations(filters: InboxFilters = {}) {
           ...(filter ? { filter } : {}),
         }),
       ) as Promise<InboxConversation[]>,
+  });
+}
+
+/** Last-message preview for a conversation row (WhatsApp-style subtitle). */
+export interface ConversationPreview {
+  content: string;
+  sender_type: 'customer' | 'agent' | 'system';
+  hasAttachment: boolean;
+}
+
+/**
+ * The latest real message (not an internal note) for each conversation in
+ * `conversationIds`, keyed by conversation id — used as the WhatsApp-style
+ * second line in the inbox list. One batched query, reduced to first-per-
+ * conversation (sorted newest-first). Fails soft to {} so rows still render.
+ */
+export function useConversationPreviews(conversationIds: string[]) {
+  // Stable key regardless of order so re-sorts don't refetch.
+  const key = [...conversationIds].sort().join(',');
+  return useQuery({
+    enabled: conversationIds.length > 0,
+    queryKey: ['conversation-previews', key],
+    staleTime: 10_000,
+    queryFn: async (): Promise<Record<string, ConversationPreview>> => {
+      try {
+        const rows = (await directus.request(
+          readItems('messages', {
+            filter: {
+              conversation: { _in: conversationIds },
+              is_internal_note: { _eq: false },
+            },
+            fields: ['conversation', 'content', 'sender_type'],
+            sort: ['-date_created'],
+            // Generous cap: the inbox shows a bounded list; the newest message
+            // per conversation is comfortably within this window at app scale.
+            limit: 1000,
+          }),
+        )) as Array<{
+          conversation: string;
+          content: string | null;
+          sender_type: ConversationPreview['sender_type'];
+        }>;
+        const byConv: Record<string, ConversationPreview> = {};
+        for (const r of rows) {
+          if (!r.conversation || byConv[r.conversation]) continue; // first = latest
+          const content = (r.content ?? '').trim();
+          byConv[r.conversation] = {
+            content,
+            sender_type: r.sender_type,
+            hasAttachment: content.length === 0,
+          };
+        }
+        return byConv;
+      } catch {
+        return {};
+      }
+    },
   });
 }
 
@@ -194,6 +252,14 @@ export function useUpdateConversation() {
     onSuccess: (_data, vars) => {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void qc.invalidateQueries({ queryKey: ['conversation', vars.id] });
+      // The assignment persisted — now tell the assignee (in-app + email per
+      // their preferences, via the workers' notifications processor). Only when
+      // this patch actually set an agent; unassignment (null) notifies nobody.
+      // Best-effort by design: notifyAssignmentBestEffort never throws, so a
+      // producer/Redis outage cannot fail or roll back the assignment.
+      if (typeof vars.patch.assigned_agent === 'string' && vars.patch.assigned_agent) {
+        notifyAssignmentBestEffort('conversation', vars.id);
+      }
     },
   });
 }

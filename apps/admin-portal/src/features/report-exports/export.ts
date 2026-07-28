@@ -43,65 +43,122 @@ function slaLabel(state: string, t: Translate): string {
 
 /* ── Report 1: Tickets + order data ───────────────────────────────────── */
 
-export function buildTicketsSheets(rows: TicketReportRow[], t: Translate): Sheet[] {
-  const columns = [
-    { header: t('agentReports.col.ticketId', { defaultValue: 'Ticket ID' }), width: 26 },
-    { header: t('agentReports.col.subject', { defaultValue: 'Subject' }), width: 34 },
-    { header: t('agentReports.col.status', { defaultValue: 'Status' }), width: 12 },
-    { header: t('agentReports.col.priority', { defaultValue: 'Priority' }), width: 12 },
-    { header: t('agentReports.col.contact', { defaultValue: 'Contact' }), width: 22 },
-    { header: t('agentReports.col.email', { defaultValue: 'Email' }), width: 24 },
-    { header: t('agentReports.col.phone', { defaultValue: 'Phone' }), width: 16 },
-    { header: t('agentReports.col.agent', { defaultValue: 'Agent' }), width: 20 },
-    { header: t('agentReports.col.created', { defaultValue: 'Created' }), width: 18 },
-    {
-      header: t('agentReports.col.firstResponseMin', { defaultValue: 'First response (min)' }),
-      width: 18,
-    },
-    {
-      header: t('agentReports.col.firstResponseSla', { defaultValue: 'First response SLA' }),
-      width: 16,
-    },
-    {
-      header: t('agentReports.col.resolutionMin', { defaultValue: 'Resolution (min)' }),
-      width: 16,
-    },
-    { header: t('agentReports.col.resolutionSla', { defaultValue: 'Resolution SLA' }), width: 14 },
-    { header: t('agentReports.col.orderId', { defaultValue: 'Order ID' }), width: 16 },
-    { header: t('agentReports.col.restaurant', { defaultValue: 'Restaurant' }), width: 22 },
-    { header: t('agentReports.col.orderStatus', { defaultValue: 'Order status' }), width: 16 },
-    { header: t('agentReports.col.delivery', { defaultValue: 'Delivery' }), width: 26 },
-    { header: t('agentReports.col.items', { defaultValue: 'Items' }), width: 40 },
-    { header: t('agentReports.col.orderTotal', { defaultValue: 'Order total' }), width: 14 },
-  ];
+/**
+ * The selectable columns for the Tickets export, in order. `labelKey`/`def` feed
+ * the on-screen column picker; the builder below maps each key to its header +
+ * per-row value, so the picker and the sheet never drift apart.
+ */
+export const TICKET_COLUMN_KEYS = [
+  'id',
+  'subject',
+  'status',
+  'priority',
+  'contact',
+  'email',
+  'phone',
+  'agent',
+  'created',
+  'firstResponseMin',
+  'firstResponseSla',
+  'resolutionMin',
+  'resolutionSla',
+  'orderId',
+  'restaurant',
+  'orderStatus',
+  'delivery',
+  'items',
+  'orderTotal',
+] as const;
+export type TicketColumnKey = (typeof TICKET_COLUMN_KEYS)[number];
 
-  const data: CellValue[][] = rows.map((r) => [
-    r.id,
-    r.subject,
-    common(`status.${r.status}`, r.status, t),
-    common(`priority.${r.priority}`, r.priority, t),
-    r.contactName,
-    r.contactEmail,
-    r.contactPhone,
-    r.agentName,
-    fmtDateTime(r.createdAt),
-    roundMin(r.firstResponseMinutes),
-    slaLabel(r.firstResponseState, t),
-    roundMin(r.resolutionMinutes),
-    slaLabel(r.resolutionState, t),
-    r.order?.orderId ?? '',
-    r.order?.restaurant ?? '',
-    r.order?.status ?? '',
-    r.order?.delivery ?? '',
-    r.order?.items ?? '',
-    r.order?.total ?? '',
-  ]);
+export const TICKET_COLUMN_LABELS: Record<TicketColumnKey, { key: string; def: string }> = {
+  id: { key: 'agentReports.col.ticketId', def: 'Ticket ID' },
+  subject: { key: 'agentReports.col.subject', def: 'Subject' },
+  status: { key: 'agentReports.col.status', def: 'Status' },
+  priority: { key: 'agentReports.col.priority', def: 'Priority' },
+  contact: { key: 'agentReports.col.contact', def: 'Contact' },
+  email: { key: 'agentReports.col.email', def: 'Email' },
+  phone: { key: 'agentReports.col.phone', def: 'Phone' },
+  agent: { key: 'agentReports.col.agent', def: 'Agent' },
+  created: { key: 'agentReports.col.created', def: 'Created' },
+  firstResponseMin: { key: 'agentReports.col.firstResponseMin', def: 'First response (min)' },
+  firstResponseSla: { key: 'agentReports.col.firstResponseSla', def: 'First response SLA' },
+  resolutionMin: { key: 'agentReports.col.resolutionMin', def: 'Resolution (min)' },
+  resolutionSla: { key: 'agentReports.col.resolutionSla', def: 'Resolution SLA' },
+  orderId: { key: 'agentReports.col.orderId', def: 'Order ID' },
+  restaurant: { key: 'agentReports.col.restaurant', def: 'Restaurant' },
+  orderStatus: { key: 'agentReports.col.orderStatus', def: 'Order status' },
+  delivery: { key: 'agentReports.col.delivery', def: 'Delivery' },
+  items: { key: 'agentReports.col.items', def: 'Items' },
+  orderTotal: { key: 'agentReports.col.orderTotal', def: 'Order total' },
+};
+
+/**
+ * Build the Tickets sheet. `enabled` selects which columns to include (order
+ * preserved); omitted/empty → all columns. The rows are ALWAYS the full dataset
+ * the caller passes — pagination only limits the on-screen preview, never the
+ * export.
+ */
+export function buildTicketsSheets(
+  rows: TicketReportRow[],
+  t: Translate,
+  enabled?: readonly TicketColumnKey[],
+): Sheet[] {
+  const width: Record<TicketColumnKey, number> = {
+    id: 26,
+    subject: 34,
+    status: 12,
+    priority: 12,
+    contact: 22,
+    email: 24,
+    phone: 16,
+    agent: 20,
+    created: 18,
+    firstResponseMin: 18,
+    firstResponseSla: 16,
+    resolutionMin: 16,
+    resolutionSla: 14,
+    orderId: 16,
+    restaurant: 22,
+    orderStatus: 16,
+    delivery: 26,
+    items: 40,
+    orderTotal: 14,
+  };
+  const value: Record<TicketColumnKey, (r: TicketReportRow) => CellValue> = {
+    id: (r) => r.id,
+    subject: (r) => r.subject,
+    status: (r) => common(`status.${r.status}`, r.status, t),
+    priority: (r) => common(`priority.${r.priority}`, r.priority, t),
+    contact: (r) => r.contactName,
+    email: (r) => r.contactEmail,
+    phone: (r) => r.contactPhone,
+    agent: (r) => r.agentName,
+    created: (r) => fmtDateTime(r.createdAt),
+    firstResponseMin: (r) => roundMin(r.firstResponseMinutes),
+    firstResponseSla: (r) => slaLabel(r.firstResponseState, t),
+    resolutionMin: (r) => roundMin(r.resolutionMinutes),
+    resolutionSla: (r) => slaLabel(r.resolutionState, t),
+    orderId: (r) => r.order?.orderId ?? '',
+    restaurant: (r) => r.order?.restaurant ?? '',
+    orderStatus: (r) => r.order?.status ?? '',
+    delivery: (r) => r.order?.delivery ?? '',
+    items: (r) => r.order?.items ?? '',
+    orderTotal: (r) => r.order?.total ?? '',
+  };
+
+  const keys = (enabled && enabled.length ? enabled : TICKET_COLUMN_KEYS).filter(
+    (k): k is TicketColumnKey => (TICKET_COLUMN_KEYS as readonly string[]).includes(k),
+  );
 
   return [
     {
       name: t('agentReports.tab.tickets', { defaultValue: 'Tickets' }),
-      columns,
-      rows: data,
+      columns: keys.map((k) => ({
+        header: t(TICKET_COLUMN_LABELS[k].key, { defaultValue: TICKET_COLUMN_LABELS[k].def }),
+        width: width[k],
+      })),
+      rows: rows.map((r) => keys.map((k) => value[k](r))),
     },
   ];
 }

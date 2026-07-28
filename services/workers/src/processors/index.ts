@@ -26,9 +26,8 @@ import { processReportJob, type ReportsDeps } from './reports.js';
 import { createTicketRepo, createNotificationsRepo } from './directus-repos.js';
 
 /**
- * Queue processor registry.
- *   sla, notifications → implemented (US4).
- *   ai, automation, imports, reports → no-op stubs filled in later phases.
+ * Queue processor registry — every queue (sla, notifications, ai, automation,
+ * imports, reports) is backed by a real processor.
  */
 export interface ProcessorDeps {
   logger: Logger;
@@ -45,12 +44,6 @@ export interface ProcessorDeps {
 }
 
 export type Processor = (job: Job, deps: ProcessorDeps) => Promise<void>;
-
-const notImplemented =
-  (queue: QueueName): Processor =>
-  async (job, deps) => {
-    deps.logger.warn({ queue, jobId: job.id, name: job.name }, 'processor not yet implemented');
-  };
 
 export const processors: Record<QueueName, Processor> = {
   [QUEUES.sla]: async (job, deps) => {
@@ -133,10 +126,6 @@ export const processors: Record<QueueName, Processor> = {
     await processReportJob(job as Job<ReportJob>, reportDeps);
   },
 };
-
-// `notImplemented` is no longer used now that every processor ships; retain
-// the symbol export-free to keep the diff small. Remove on next refactor.
-void notImplemented;
 
 export { scheduleReconcile } from './sla.js';
 export { scheduleInactivitySweep } from './automation.js';

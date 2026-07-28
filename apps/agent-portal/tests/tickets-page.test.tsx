@@ -22,6 +22,12 @@ const hooks = vi.hoisted(() => ({
   useAddTicketNote: () => ({ mutateAsync: () => Promise.resolve({}), isPending: false }),
   useAddTicketAttachment: () => ({ mutateAsync: () => Promise.resolve({}) }),
   useRemoveTicketAttachment: () => ({ mutateAsync: () => Promise.resolve({}) }),
+  // Detail can pull files already shared in the linked chat.
+  useConversationAttachments: () => ({ data: [], isLoading: false }),
+  useAttachExistingFileToTicket: () => ({
+    mutateAsync: () => Promise.resolve({}),
+    isPending: false,
+  }),
 }));
 vi.mock('../src/features/tickets/api.js', () => hooks);
 // Detail uses agent/team option lists + the current user.

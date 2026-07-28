@@ -201,6 +201,11 @@ export const roles: RoleSpec[] = [
       { collection: 'messages_files', action: 'read' },
       { collection: 'csat_responses', action: 'create' },
       { collection: 'csat_responses', action: 'read' },
+      // READ-ONLY on tickets: POST /jobs/notify-assignment re-reads the assigned
+      // entity server-side to derive the notification recipient (the caller's own
+      // token can't — an agent loses ticket read access the moment they hand it
+      // to a colleague). The gateway never writes tickets.
+      { collection: 'tickets', action: 'read' },
       ...readOnly('directus_users'),
       ...readOnly('vendors'),
       ...readOnly('teams'),

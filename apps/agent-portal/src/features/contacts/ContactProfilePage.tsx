@@ -40,13 +40,15 @@ function PencilIcon() {
 }
 import { CommercePanel } from './CommercePanel.js';
 import { ContactTags } from './ContactTags.js';
+import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 
 /**
  * Contact profile.
  *
  * Two-column layout under a slim toolbar:
  *   - left:  identity + chronological timeline merging conversations + tickets
- *   - right: commerce panel (orders, payment, shipment, lifetime activity)
+ *   - right: tags, custom fields (FR-031), and the commerce panel (orders,
+ *            payment, shipment, lifetime activity)
  *
  * The right panel uses the vendor's `yiji_vendor_id` (not the Directus
  * vendor.id) — that's the identifier the upstream Yiji platform issues.
@@ -169,9 +171,14 @@ export function ContactProfilePage() {
             />
           </div>
 
-          {/* Right column: tags + commerce panel */}
+          {/* Right column: tags + custom fields + commerce panel */}
           <div className="space-y-6">
             {contact.data && <ContactTags contact={contact.data} />}
+            {/* FR-031 — admin-defined custom fields for contacts. Renders its own
+                card and collapses to nothing when no contact fields are defined. */}
+            {contact.data && (
+              <CustomFieldsSection entityType="contact" entityId={contact.data.id} />
+            )}
             <div className="space-y-3">
               <h2 className="px-1 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 {t('commerce.title', { defaultValue: 'Commerce' })}

@@ -1,15 +1,22 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Button, cn, FormField, Input, YijiLogo } from '@yiji/ui';
+import { Button, cn, FormField, Input, toast, Toaster, YijiLogo } from '@yiji/ui';
 import { useAuth, isAdmin } from '../lib/auth/AuthContext.js';
 import { LanguageToggle } from '../components/LanguageToggle.js';
+import { RESET_PASSWORD_PATH } from './ResetPassword.js';
 
 const schema = z.object({ email: z.string().email(), password: z.string().min(1) });
 type FormValues = z.infer<typeof schema>;
+
+const forgotSchema = z.object({ email: z.string().email() });
+type ForgotValues = z.infer<typeof forgotSchema>;
+
+/** Which panel the card is showing. */
+type View = 'signin' | 'forgot' | 'sent';
 
 function ArrowRight({ className }: { className?: string }) {
   return (
@@ -60,17 +67,32 @@ function EyeIcon({ open }: { open: boolean }) {
 
 export function Login() {
   const { t } = useTranslation();
-  const { login, logout } = useAuth();
+  const { login, logout, requestPasswordReset } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [authError, setAuthError] = useState<string | null>(null);
   const [showPw, setShowPw] = useState(false);
   const [capsOn, setCapsOn] = useState(false);
-  const [forgotOpen, setForgotOpen] = useState(false);
+  const [view, setView] = useState<View>('signin');
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
+  const forgotForm = useForm<ForgotValues>({ resolver: zodResolver(forgotSchema) });
+
+  // Arriving here from a completed reset (see ResetPassword) — confirm it.
+  const resetDone = (location.state as { passwordReset?: boolean } | null)?.passwordReset === true;
+  useEffect(() => {
+    if (!resetDone) return;
+    toast.success(
+      t('login.resetDone', { defaultValue: 'Password updated. Sign in with your new password.' }),
+    );
+    // Clear the flag so a refresh doesn't replay the toast.
+    navigate(location.pathname, { replace: true, state: null });
+    // Intentionally keyed on `resetDone` only — re-running on t/navigate identity
+    // changes would replay the toast.
+  }, [resetDone]);
 
   const onSubmit = handleSubmit(async (values) => {
     setAuthError(null);
@@ -87,18 +109,30 @@ export function Login() {
     }
   });
 
+  /**
+   * FR-001 — self-service reset request.
+   *
+   * SECURITY: we ALWAYS land on the same 'sent' panel with the same wording.
+   * `requestPasswordReset` never throws (see shared-config/auth.ts), so an
+   * unknown address is indistinguishable from a registered one — no account
+   * enumeration. Requires SMTP on the Directus server for mail to arrive.
+   */
+  const onForgotSubmit = forgotForm.handleSubmit(async (values) => {
+    await requestPasswordReset(values.email, `${window.location.origin}${RESET_PASSWORD_PATH}`);
+    setView('sent');
+  });
+
+  const openForgot = () => {
+    setAuthError(null);
+    forgotForm.reset({ email: '' });
+    setView('forgot');
+  };
+  const backToSignIn = () => {
+    setView('signin');
+  };
+
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-12">
-      {/* Aurora backdrop — the same three glows the workspace breathes with. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(at 15% 0%, oklch(var(--primary) / 0.16) 0%, transparent 55%), radial-gradient(at 95% 25%, oklch(var(--violet) / 0.13) 0%, transparent 55%), radial-gradient(at 50% 110%, oklch(var(--primary) / 0.07) 0%, transparent 60%)',
-        }}
-      />
-
       <div className="absolute end-5 top-5 z-10">
         <LanguageToggle />
       </div>
@@ -110,111 +144,169 @@ export function Login() {
       </div>
 
       <div className="relative z-10 w-full max-w-[420px] animate-fade-in">
-        <div className="rounded-3xl bg-gradient-to-br from-primary/35 to-violet/30 p-px shadow-2xl shadow-black/40">
-          <div className="overflow-hidden rounded-[calc(1.5rem-1px)] bg-card/95 backdrop-blur">
+        <div className="overflow-hidden rounded-3xl bg-card shadow-2xl shadow-black/40 ring-1 ring-foreground/[0.08]">
+          <div className="overflow-hidden rounded-3xl bg-card">
             <div className="flex flex-col items-center gap-3 px-8 pb-2 pt-8 text-center">
               <YijiLogo size={72} />
               <div className="space-y-1.5">
                 <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
-                  {t('login.title', { defaultValue: 'Sign in to YIJI CRM Admin' })}
+                  {view === 'signin'
+                    ? t('login.title', { defaultValue: 'Sign in to YIJI CRM Admin' })
+                    : t('login.forgotTitle', { defaultValue: 'Reset your password' })}
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  {t('login.subtitle', { defaultValue: 'Administrator access required.' })}
+                  {view === 'signin'
+                    ? t('login.subtitle', { defaultValue: 'Administrator access required.' })
+                    : view === 'forgot'
+                      ? t('login.forgotSubtitle', {
+                          defaultValue: "Enter your work email and we'll send you a reset link.",
+                        })
+                      : t('login.forgotSentSubtitle', { defaultValue: 'Check your inbox.' })}
                 </p>
               </div>
             </div>
 
-            <form onSubmit={onSubmit} className="space-y-4 px-8 py-7" noValidate>
-              <FormField
-                label={t('auth.email', { ns: 'common' })}
-                htmlFor="email"
-                error={errors.email?.message}
-              >
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="username"
-                  autoFocus
-                  placeholder={t('login.emailPlaceholder')}
-                  invalid={!!errors.email}
-                  {...register('email')}
-                />
-              </FormField>
+            {view === 'signin' && (
+              <form onSubmit={onSubmit} className="space-y-4 px-8 py-7" noValidate>
+                <FormField
+                  label={t('auth.email', { ns: 'common' })}
+                  htmlFor="email"
+                  error={errors.email?.message}
+                >
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="username"
+                    autoFocus
+                    placeholder={t('login.emailPlaceholder')}
+                    invalid={!!errors.email}
+                    {...register('email')}
+                  />
+                </FormField>
 
-              <FormField
-                label={
-                  <span className="flex items-baseline justify-between gap-3">
-                    <span>{t('auth.password', { ns: 'common' })}</span>
+                <FormField
+                  label={
+                    <span className="flex items-baseline justify-between gap-3">
+                      <span>{t('auth.password', { ns: 'common' })}</span>
+                      <button
+                        type="button"
+                        onClick={openForgot}
+                        className="rounded-sm text-xs font-medium normal-case tracking-normal text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {t('login.forgot', { defaultValue: 'Forgot password?' })}
+                      </button>
+                    </span>
+                  }
+                  htmlFor="password"
+                  error={errors.password?.message}
+                  hint={
+                    capsOn ? t('login.capsLock', { defaultValue: 'Caps Lock is on.' }) : undefined
+                  }
+                >
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPw ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      invalid={!!errors.password}
+                      className="pe-10"
+                      onKeyDown={(e) => setCapsOn(e.getModifierState('CapsLock'))}
+                      onKeyUp={(e) => setCapsOn(e.getModifierState('CapsLock'))}
+                      {...register('password', {
+                        onBlur: () => setCapsOn(false),
+                      })}
+                    />
                     <button
                       type="button"
-                      onClick={() => setForgotOpen((v) => !v)}
-                      aria-expanded={forgotOpen}
-                      className="rounded-sm text-xs font-medium normal-case tracking-normal text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => setShowPw((v) => !v)}
+                      aria-pressed={showPw}
+                      aria-label={
+                        showPw
+                          ? t('login.hidePassword', { defaultValue: 'Hide password' })
+                          : t('login.showPassword', { defaultValue: 'Show password' })
+                      }
+                      className="absolute end-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      {t('login.forgot', { defaultValue: 'Forgot password?' })}
+                      <EyeIcon open={showPw} />
                     </button>
-                  </span>
-                }
-                htmlFor="password"
-                error={errors.password?.message}
-                hint={
-                  capsOn
-                    ? t('login.capsLock', { defaultValue: 'Caps Lock is on.' })
-                    : forgotOpen
-                      ? t('login.forgotHint', {
-                          defaultValue: 'Password resets are handled by your system administrator.',
-                        })
-                      : undefined
-                }
-              >
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPw ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    invalid={!!errors.password}
-                    className="pe-10"
-                    onKeyDown={(e) => setCapsOn(e.getModifierState('CapsLock'))}
-                    onKeyUp={(e) => setCapsOn(e.getModifierState('CapsLock'))}
-                    {...register('password', {
-                      onBlur: () => setCapsOn(false),
-                    })}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPw((v) => !v)}
-                    aria-pressed={showPw}
-                    aria-label={
-                      showPw
-                        ? t('login.hidePassword', { defaultValue: 'Hide password' })
-                        : t('login.showPassword', { defaultValue: 'Show password' })
-                    }
-                    className="absolute end-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  </div>
+                </FormField>
+
+                {authError && (
+                  <p
+                    role="alert"
+                    className="flex items-start gap-2.5 rounded-2xl bg-destructive/10 ring-1 ring-destructive/20 px-3.5 py-2.5 text-sm text-destructive"
                   >
-                    <EyeIcon open={showPw} />
-                  </button>
-                </div>
-              </FormField>
+                    {authError}
+                  </p>
+                )}
 
-              {authError && (
-                <p
-                  role="alert"
-                  className="flex items-start gap-2.5 rounded-2xl bg-destructive/10 ring-1 ring-destructive/20 px-3.5 py-2.5 text-sm text-destructive"
+                <Button
+                  type="submit"
+                  loading={isSubmitting}
+                  fullWidth
+                  size="lg"
+                  iconEnd={<ArrowRight className="h-4 w-4" />}
                 >
-                  {authError}
-                </p>
-              )}
+                  {t('login.submit')}
+                </Button>
+              </form>
+            )}
 
-              <Button
-                type="submit"
-                loading={isSubmitting}
-                fullWidth
-                size="lg"
-                iconEnd={<ArrowRight className="h-4 w-4" />}
-              >
-                {t('login.submit')}
-              </Button>
-            </form>
+            {/* FR-001 — request a reset link. */}
+            {view === 'forgot' && (
+              <form onSubmit={onForgotSubmit} className="space-y-4 px-8 py-7" noValidate>
+                <FormField
+                  label={t('auth.email', { ns: 'common' })}
+                  htmlFor="forgot-email"
+                  error={forgotForm.formState.errors.email?.message}
+                >
+                  <Input
+                    id="forgot-email"
+                    type="email"
+                    autoComplete="username"
+                    autoFocus
+                    placeholder={t('login.emailPlaceholder')}
+                    invalid={!!forgotForm.formState.errors.email}
+                    {...forgotForm.register('email')}
+                  />
+                </FormField>
+                <Button
+                  type="submit"
+                  loading={forgotForm.formState.isSubmitting}
+                  fullWidth
+                  size="lg"
+                  iconEnd={<ArrowRight className="h-4 w-4" />}
+                >
+                  {t('login.forgotSubmit', { defaultValue: 'Send reset link' })}
+                </Button>
+                <button
+                  type="button"
+                  onClick={backToSignIn}
+                  className="mx-auto block rounded-sm text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {t('login.backToSignIn', { defaultValue: 'Back to sign in' })}
+                </button>
+              </form>
+            )}
+
+            {/* Neutral confirmation — identical for known and unknown addresses. */}
+            {view === 'sent' && (
+              <div className="space-y-4 px-8 py-7">
+                <p
+                  role="status"
+                  className="rounded-2xl bg-primary-subtle px-3.5 py-3 text-sm text-foreground ring-1 ring-primary/20"
+                >
+                  {t('login.forgotSent', {
+                    defaultValue:
+                      'If that email matches an account, we just sent a reset link. It expires shortly — check your spam folder if it does not arrive.',
+                  })}
+                </p>
+                <Button type="button" variant="outline" fullWidth size="lg" onClick={backToSignIn}>
+                  {t('login.backToSignIn', { defaultValue: 'Back to sign in' })}
+                </Button>
+              </div>
+            )}
 
             <div className="px-8 py-3 text-center text-2xs text-muted-foreground">
               <div className="flex items-center justify-center gap-2">
@@ -252,6 +344,10 @@ export function Login() {
       <p className="absolute bottom-4 inset-x-0 z-10 text-center text-2xs text-muted-foreground">
         © YIJI CRM
       </p>
+
+      {/* Login sits outside the app shell, so it mounts its own toaster (used by
+          the "password updated" confirmation after a completed reset). */}
+      <Toaster position="top" />
     </div>
   );
 }

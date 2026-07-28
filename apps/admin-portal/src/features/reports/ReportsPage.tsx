@@ -198,9 +198,15 @@ export function ReportsPage() {
     <div className="flex h-full flex-col overflow-hidden">
       <Toolbar>
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('reports.title', { defaultValue: 'Reports' })}
+          {t('reports.title', { defaultValue: 'Scheduled reports' })}
         </h1>
         <span className="hidden text-xs text-muted-foreground sm:inline-flex items-center gap-2.5">
+          <span className="opacity-50">·</span>
+          <span>
+            {t('reports.purpose', {
+              defaultValue: 'Saved report definitions that run on a schedule and email a CSV',
+            })}
+          </span>
           <span className="opacity-50">·</span>
           <span className="tabular-nums">
             <strong className="font-semibold text-foreground">{total}</strong>{' '}
@@ -221,60 +227,80 @@ export function ReportsPage() {
         </Button>
       </Toolbar>
 
-      <div className="flex-1 overflow-auto px-5 py-3">
-        {reports.isError ? (
-          <ErrorState
-            title={t('reports.loadError', { defaultValue: 'Could not load reports' })}
-            message={t('reports.loadErrorHint', {
-              defaultValue: 'Check your connection and try again.',
-            })}
-            retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
-            onRetry={() => void reports.refetch()}
-          />
-        ) : reports.isLoading ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-28 w-full rounded-2xl" />
-            ))}
+      <div className="flex-1 overflow-auto px-5 py-4">
+        <div className="mx-auto max-w-5xl space-y-5">
+          {/* Clean editorial header — no gradient banner. */}
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-foreground/10 pb-5">
+            <div>
+              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+                {t('reports.title', { defaultValue: 'Scheduled reports' })}
+              </h2>
+              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                {t('reports.heroSubtitle', {
+                  defaultValue:
+                    'Saved report definitions that run automatically on a schedule and email a CSV to their recipients. Set once, delivered on time.',
+                })}
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-secondary px-3.5 py-1.5 text-sm font-semibold tabular-nums text-muted-foreground ring-1 ring-foreground/10">
+              {t('reports.savedCount', { count: total, defaultValue: '{{count}} saved' })}
+            </span>
           </div>
-        ) : !reports.data || reports.data.length === 0 ? (
-          <EmptyState
-            title={t('reports.empty', { defaultValue: 'No saved reports yet.' })}
-            description={t('reports.emptyHint', {
-              defaultValue:
-                'Create a saved report to schedule periodic emails or run on demand from this list.',
-            })}
-            action={
-              <Button
-                type="button"
-                onClick={() => {
-                  setEditingId(null);
-                  setDrawerOpen(true);
-                }}
-                iconStart={<PlusIcon />}
-              >
-                {t('reports.create', { defaultValue: 'New report' })}
-              </Button>
-            }
-          />
-        ) : (
-          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {reports.data.map((r) => (
-              <li key={r.id}>
-                <ReportCard
-                  r={r}
-                  onEdit={() => {
-                    setEditingId(r.id);
+
+          {reports.isError ? (
+            <ErrorState
+              title={t('reports.loadError', { defaultValue: 'Could not load reports' })}
+              message={t('reports.loadErrorHint', {
+                defaultValue: 'Check your connection and try again.',
+              })}
+              retryLabel={t('actions.retry', { ns: 'common', defaultValue: 'Retry' })}
+              onRetry={() => void reports.refetch()}
+            />
+          ) : reports.isLoading ? (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-28 w-full rounded-2xl" />
+              ))}
+            </div>
+          ) : !reports.data || reports.data.length === 0 ? (
+            <EmptyState
+              title={t('reports.empty', { defaultValue: 'No saved reports yet.' })}
+              description={t('reports.emptyHint', {
+                defaultValue:
+                  'Create a saved report to schedule periodic emails or run on demand from this list.',
+              })}
+              action={
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null);
                     setDrawerOpen(true);
                   }}
-                  onDelete={() => setDeletingId(r.id)}
-                  onRun={() => runNow.mutate(r.id)}
-                  running={runNow.isPending && runNow.variables === r.id}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
+                  iconStart={<PlusIcon />}
+                >
+                  {t('reports.create', { defaultValue: 'New report' })}
+                </Button>
+              }
+            />
+          ) : (
+            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {reports.data.map((r) => (
+                <li key={r.id}>
+                  <ReportCard
+                    r={r}
+                    onEdit={() => {
+                      setEditingId(r.id);
+                      setDrawerOpen(true);
+                    }}
+                    onDelete={() => setDeletingId(r.id)}
+                    onRun={() => runNow.mutate(r.id)}
+                    running={runNow.isPending && runNow.variables === r.id}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       <Drawer
@@ -370,7 +396,7 @@ export function ReportsPage() {
               <Input
                 value={draft.vendor}
                 onChange={(e) => setDraft({ ...draft, vendor: e.target.value })}
-                placeholder="vendor-uuid"
+                placeholder={t('reports.vendorPlaceholder', { defaultValue: 'vendor-uuid' })}
               />
             </FormField>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -415,7 +441,9 @@ export function ReportsPage() {
               <Input
                 value={draft.emailRecipients}
                 onChange={(e) => setDraft({ ...draft, emailRecipients: e.target.value })}
-                placeholder="ops@example.com, manager@example.com"
+                placeholder={t('reports.recipientsPlaceholder', {
+                  defaultValue: 'ops@example.com, manager@example.com',
+                })}
               />
             </FormField>
           </DrawerSection>

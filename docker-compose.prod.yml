@@ -259,6 +259,8 @@ services:
         VITE_DIRECTUS_URL: ${VITE_DIRECTUS_URL:-http://localhost:8055}
         VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:8080}
         VITE_AI_GATEWAY_URL: ${VITE_AI_GATEWAY_URL:-http://localhost:8081}
+        # Enqueue endpoint = the socket-gateway HTTP port (assignment notifications).
+        VITE_JOB_PRODUCER_URL: ${VITE_JOB_PRODUCER_URL:-http://localhost:8082}
     restart: unless-stopped
     ports:
       - '127.0.0.1:${AGENT_PORTAL_PORT:-8090}:80' # loopback only; public edge is Caddy

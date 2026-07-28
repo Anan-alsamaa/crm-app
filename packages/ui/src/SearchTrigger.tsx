@@ -40,24 +40,34 @@ export function SearchTrigger({
   'aria-label': ariaLabel,
   ...rest
 }: SearchTriggerProps): JSX.Element {
-  const meta = isApplePlatform() ? '⌘ + K' : 'Ctrl + K';
+  const meta = isApplePlatform() ? '⌘K' : 'Ctrl K';
   return (
     <button
       type={type}
       aria-label={ariaLabel ?? label}
       className={cn(
-        'group flex h-9 items-center gap-2.5 rounded-xl border border-border bg-secondary/60 text-sm text-muted-foreground',
-        'transition-colors duration-base ease-out',
-        'hover:border-border-strong hover:bg-secondary hover:text-foreground',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
-        fullWidth ? 'w-full ps-3 pe-3' : 'ps-3 pe-2.5',
+        'group flex items-center gap-2.5 rounded-full text-sm text-muted-foreground',
+        'bg-secondary/50 ring-1 ring-inset ring-border/70',
+        'shadow-sm shadow-foreground/[0.03]',
+        'transition-[background-color,box-shadow,color] duration-base ease-out',
+        'hover:bg-secondary hover:text-foreground hover:ring-primary/30 hover:shadow-md hover:shadow-foreground/[0.06]',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
+        fullWidth ? 'h-10 w-full ps-4 pe-2' : 'h-9 ps-3.5 pe-2',
         className,
       )}
       {...rest}
     >
-      <SearchIcon size={16} className="shrink-0 text-muted-foreground/70" />
+      <SearchIcon
+        size={16}
+        className="shrink-0 text-muted-foreground/70 transition-colors duration-base ease-out group-hover:text-primary"
+      />
       <span className="flex-1 truncate text-start text-muted-foreground/90">{label}</span>
-      <kbd className="hidden shrink-0 font-sans text-2xs font-medium tracking-tight text-muted-foreground/80 sm:inline">
+      <kbd
+        className={cn(
+          'hidden shrink-0 items-center rounded-md border border-border/80 bg-background/70 px-1.5 py-0.5',
+          'font-sans text-[10px] font-semibold tracking-tight text-muted-foreground/80 shadow-sm sm:inline-flex',
+        )}
+      >
         {meta}
       </kbd>
     </button>

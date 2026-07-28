@@ -12,6 +12,7 @@ import {
   EmptyState,
   FormField,
   Input,
+  Pill,
   Skeleton,
   Spinner,
   StatStrip,
@@ -184,7 +185,18 @@ export function VendorsPage() {
 
       <div className="flex-1 overflow-auto px-5 py-4">
         {!vendors.isLoading && total > 0 && (
-          <div className="mx-auto mb-5 max-w-5xl">
+          <div className="mx-auto mb-5 max-w-5xl space-y-5">
+            <div className="border-b border-foreground/10 pb-5">
+              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+                {t('vendors.title', { defaultValue: 'Vendors' })}
+              </h2>
+              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                {t('vendors.heroSubtitle', {
+                  defaultValue:
+                    'Every brand you support, with the colors and logo that drive its customer chat widget. Select a vendor to edit its branding or status.',
+                })}
+              </p>
+            </div>
             <StatStrip
               items={[
                 {
@@ -238,7 +250,7 @@ export function VendorsPage() {
             }
           />
         ) : (
-          <ul className="mx-auto max-w-5xl space-y-1">
+          <ul className="mx-auto max-w-5xl space-y-1 rounded-2xl bg-card p-2 ring-1 ring-foreground/[0.06] shadow-soft">
             {vendors.data.map((v) => (
               <li key={v.id}>
                 <VendorCard
@@ -448,9 +460,9 @@ function VendorCard({ v, onEdit }: { v: VendorRow; onEdit: () => void }) {
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium text-foreground">{v.name}</span>
           {v.status === 'inactive' && (
-            <span className="inline-flex items-center rounded-full bg-warning/20 px-2 py-0.5 text-2xs font-medium text-warning-foreground">
+            <Pill tone="warning" size="sm" dot className="shrink-0">
               {t('vendors.inactive', { defaultValue: 'inactive' })}
-            </span>
+            </Pill>
           )}
         </div>
         <div className="truncate font-mono text-2xs text-muted-foreground">{v.yiji_vendor_id}</div>

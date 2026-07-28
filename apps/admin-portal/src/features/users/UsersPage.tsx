@@ -14,6 +14,7 @@ import {
   ErrorState,
   FormField,
   Input,
+  Pill,
   SelectMenu,
   Skeleton,
   StatStrip,
@@ -247,7 +248,18 @@ export function UsersPage() {
 
       <div className="flex-1 overflow-auto px-5 py-4">
         {!users.isLoading && !users.isError && list.length > 0 && (
-          <div className="mx-auto mb-5 max-w-5xl">
+          <div className="mx-auto mb-5 max-w-5xl space-y-5">
+            <div className="border-b border-foreground/10 pb-5">
+              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+                {t('users.title')}
+              </h2>
+              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                {t('users.heroSubtitle', {
+                  defaultValue:
+                    'Everyone who can sign in to Yiji — their role, team, and account status at a glance. Select anyone to edit access or reset a password.',
+                })}
+              </p>
+            </div>
             <StatStrip
               items={[
                 { label: t('users.total', { defaultValue: 'total' }), value: total, tone: 'blue' },
@@ -308,9 +320,9 @@ export function UsersPage() {
             })}
           </p>
         ) : (
-          /* Dense list — one row per account (density is a feature). Hairline
-             dividers, no card chrome, columns read like a table at sm+. */
-          <ul className="mx-auto max-w-5xl space-y-1">
+          /* Dense list — one row per account (density is a feature). Rows sit
+             on a soft floating card; columns read like a table at sm+. */
+          <ul className="mx-auto max-w-5xl space-y-1 rounded-2xl bg-card p-2 ring-1 ring-foreground/[0.06] shadow-soft">
             {filtered.map((u) => {
               const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
               const isAdmin = u.role?.name?.toLowerCase() === 'administrator';
@@ -334,9 +346,9 @@ export function UsersPage() {
                           {fullName || u.email}
                         </span>
                         {u.status !== 'active' && (
-                          <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-2xs font-medium text-muted-foreground">
+                          <Pill tone="muted" size="sm" dot className="shrink-0">
                             {t('users.inactive', { defaultValue: 'Inactive' })}
-                          </span>
+                          </Pill>
                         )}
                       </div>
                       {fullName && (
@@ -347,7 +359,7 @@ export function UsersPage() {
                       className={cn(
                         'hidden shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold sm:inline-flex',
                         isAdmin
-                          ? 'bg-gradient-to-r from-primary to-violet text-primary-foreground shadow-sm shadow-primary/25'
+                          ? 'bg-primary text-primary-foreground'
                           : 'bg-primary-subtle text-primary',
                       )}
                     >

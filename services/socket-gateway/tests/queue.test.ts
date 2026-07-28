@@ -74,6 +74,40 @@ describe('createProducer — BullProducer (Redis enabled)', () => {
     );
   });
 
+  it('enqueues an assignment notification with a deterministic jobId', async () => {
+    const p = createProducer(
+      { redisEnabled: true, redisUrl: 'redis://localhost:6379' },
+      silentLogger,
+    );
+    queueAdd.mockResolvedValueOnce({ id: 'assign-ticket-tkt-1-agent-2' } as never);
+    const id = await p.enqueueNotification(
+      {
+        recipientId: 'agent-2',
+        type: 'assignment',
+        title: 'New ticket assigned to you',
+        body: 'Ticket "Broken charger" was assigned to you.',
+        link: '/tickets/tkt-1',
+      },
+      'assign-ticket-tkt-1-agent-2',
+    );
+    expect(id).toBe('assign-ticket-tkt-1-agent-2');
+    expect(queueAdd).toHaveBeenCalledWith(
+      'assignment',
+      expect.objectContaining({ recipientId: 'agent-2', type: 'assignment' }),
+      expect.objectContaining({ jobId: 'assign-ticket-tkt-1-agent-2' }),
+    );
+  });
+
+  it('NoopProducer returns null for notifications (Redis disabled)', async () => {
+    const p = createProducer({ redisEnabled: false, redisUrl: 'redis://x' }, silentLogger);
+    await expect(
+      p.enqueueNotification(
+        { recipientId: 'a', type: 'assignment', title: 't', body: 'b' },
+        'assign-ticket-1-a',
+      ),
+    ).resolves.toBeNull();
+  });
+
   it('uses the automation queue and tears down on close', async () => {
     const p = createProducer(
       { redisEnabled: true, redisUrl: 'redis://localhost:6379' },

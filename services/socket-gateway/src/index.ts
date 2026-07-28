@@ -29,6 +29,7 @@ import { registerConnection, getAgentPresenceSnapshot } from './connection.js';
 import { Registry } from './metrics.js';
 import { parseAttachmentPolicy } from './attachments.js';
 import { verifyWebhookSignature } from './webhook.js';
+import { notifyAssignment } from './assignment-notify.js';
 
 /** Reachability ping to Directus /server/health with a hard timeout. */
 async function pingDirectus(url: string, timeoutMs = 2000): Promise<boolean> {
@@ -245,21 +246,36 @@ async function main(): Promise<void> {
   // Auth: the caller's Directus access token must resolve to Admin/Administrator.
   // (Scheduled reports are enqueued by the workers themselves, not this path.)
   const ADMIN_ROLES = new Set(['Admin', 'Administrator']);
-  const requireAdmin = async (req: FastifyRequest, reply: FastifyReply): Promise<boolean> => {
+  // Assignment notifications are triggered by working agents, so that endpoint
+  // also accepts the Agent role (service accounts, which have no app access, are
+  // still excluded — they must not be able to drive user-facing notifications).
+  const STAFF_ROLES = new Set([...ADMIN_ROLES, 'Agent']);
+  const bearerToken = (req: FastifyRequest): string => {
     const raw = req.headers['authorization'];
     const header = Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
-    const token = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
+    return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
+  };
+  /** Verify the caller's Directus token resolves to one of `roles`. */
+  const requireRole = async (
+    req: FastifyRequest,
+    reply: FastifyReply,
+    roles: Set<string>,
+    denial: string,
+  ): Promise<{ id: string; role: string | null } | null> => {
+    const token = bearerToken(req);
     if (!token) {
       await reply.code(401).send({ ok: false, error: 'missing bearer token' });
-      return false;
+      return null;
     }
     const identity = await validateAgentToken(config.DIRECTUS_INTERNAL_URL, token);
-    if (!identity || !identity.role || !ADMIN_ROLES.has(identity.role)) {
-      await reply.code(403).send({ ok: false, error: 'admin role required' });
-      return false;
+    if (!identity || !identity.role || !roles.has(identity.role)) {
+      await reply.code(403).send({ ok: false, error: denial });
+      return null;
     }
-    return true;
+    return identity;
   };
+  const requireAdmin = async (req: FastifyRequest, reply: FastifyReply): Promise<boolean> =>
+    (await requireRole(req, reply, ADMIN_ROLES, 'admin role required')) !== null;
   app.post('/jobs/import', async (req, reply) => {
     if (!(await requireAdmin(req, reply))) return reply;
     const parsed = ImportJob.safeParse(req.body);
@@ -282,6 +298,35 @@ async function main(): Promise<void> {
     logger.info({ jobId }, 'admin enqueued report run');
     return reply.send({ ok: true, jobId });
   });
+  // Agent-triggered: "I just assigned this conversation/ticket — tell the
+  // assignee." Any staff member may call this, so the body carries NO recipient,
+  // title or body (that would be a spam/phishing vector). The client may only
+  // name an entity; the gateway re-reads that entity with its SERVICE token and
+  // derives the recipient (its current assigned_agent) and the copy itself.
+  // Self-assignment and unassigned entities enqueue nothing.
+  app.post('/jobs/notify-assignment', async (req, reply) => {
+    const identity = await requireRole(req, reply, STAFF_ROLES, 'agent role required');
+    if (!identity) return reply;
+    const outcome = await notifyAssignment(
+      {
+        loadEntity: (type, id) => directus.getAssignmentTarget(type, id),
+        enqueueNotification: (job, jobId) => producer.enqueueNotification(job, jobId),
+        logger,
+      },
+      req.body,
+      identity.id,
+    );
+    if (outcome.status === 'invalid')
+      return reply.code(400).send({ ok: false, error: outcome.error });
+    if (outcome.status === 'queue-disabled')
+      return reply.code(503).send({ ok: false, error: 'queue disabled (no Redis)' });
+    // Skipped cases (missing entity / unassigned / self-assign) answer exactly
+    // like a successful no-op: the caller learns nothing about entities it may
+    // not read, and the portal treats this as fire-and-forget anyway.
+    if (outcome.status === 'skipped') return reply.send({ ok: true, enqueued: false });
+    return reply.send({ ok: true, enqueued: true, jobId: outcome.jobId });
+  });
+
   // Diagnostic: inspect which agents the gateway thinks are currently
   // online (and how many sockets each is holding). Useful for chasing the
   // "host page shows online after logout" class of bugs — if this returns

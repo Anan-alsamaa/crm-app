@@ -27,6 +27,7 @@ export const TicketEventType = z.enum([
   'commented',
   'sla_warning',
   'sla_breached',
+  'sla_escalated',
   'resolved',
   'closed',
   'reopened',

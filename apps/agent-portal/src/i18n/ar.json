@@ -35,7 +35,14 @@
     "capsLock": "مفتاح الأحرف الكبيرة (Caps Lock) مفعّل.",
     "forgotHint": "تتم إعادة تعيين كلمة المرور عن طريق المسؤول.",
     "secure": "اتصال مشفّر",
-    "help": "تواجه مشكلة في تسجيل الدخول؟ تواصل مع المسؤول."
+    "help": "تواجه مشكلة في تسجيل الدخول؟ تواصل مع المسؤول.",
+    "backToSignIn": "العودة إلى تسجيل الدخول",
+    "forgotTitle": "إعادة تعيين كلمة المرور",
+    "forgotSubtitle": "أدخل بريد العمل الإلكتروني وسنرسل لك رابط إعادة التعيين.",
+    "forgotSubmit": "إرسال رابط إعادة التعيين",
+    "forgotSent": "إذا كان هذا البريد مطابقًا لحساب لدينا، فقد أرسلنا للتو رابط إعادة التعيين. تنتهي صلاحيته قريبًا — تحقّق من مجلد البريد غير المرغوب فيه إن لم يصلك.",
+    "forgotSentSubtitle": "تحقّق من بريدك الوارد.",
+    "resetDone": "تم تحديث كلمة المرور. سجّل الدخول بكلمة المرور الجديدة."
   },
   "nav": {
     "inbox": "صندوق الوارد",
@@ -75,7 +82,10 @@
     "editContact": "تعديل جهة الاتصال",
     "name": "الاسم",
     "saveError": "تعذّر حفظ بيانات العميل.",
-    "saved": "تم حفظ بيانات العميل."
+    "saved": "تم حفظ بيانات العميل.",
+    "withEmail": "لديها بريد إلكتروني",
+    "withPhone": "لديها هاتف",
+    "withVendor": "مرتبطة ببائع"
   },
   "commerce": {
     "title": "التجارة",
@@ -99,17 +109,60 @@
     "latestOrders": "أحدث الطلبات",
     "restaurant": "المطعم",
     "restaurantId": "معرّف المطعم",
-    "deliveryType": "طريقة الاستلام",
+    "deliveryType": "نوع التوصيل",
     "deliveryTypes": {
       "delivery": "توصيل",
-      "pickup": "استلام"
+      "pickup": "استلام",
+      "carhop": "الاستلام من السيارة",
+      "in_restaurant": "داخل المطعم"
     },
     "subtotal": "إجمالي الأصناف",
     "total": "الإجمالي",
     "each": "للوحدة",
     "noItems": "لا توجد أصناف في هذا الطلب.",
     "detailUnavailable": "تفاصيل الطلب غير متوفرة.",
-    "deliverTo": "التوصيل إلى"
+    "deliverTo": "التوصيل إلى",
+    "orderStatus": "حالة الطلب",
+    "paymentStatus": "حالة الدفع",
+    "paymentType": "طريقة الدفع",
+    "customerPhone": "هاتف العميل",
+    "brand": "العلامة التجارية",
+    "orderStatuses": {
+      "initial": "مبدئي",
+      "pending_payment": "بانتظار الدفع",
+      "received": "تم الاستلام",
+      "finding_driver": "البحث عن سائق",
+      "driver_accepted": "قبِل السائق الطلب",
+      "in_kitchen": "قيد التحضير",
+      "manual": "يدوي",
+      "ready_to_pickup": "جاهز للاستلام",
+      "in_delivery": "قيد التوصيل",
+      "delivered": "تم التوصيل",
+      "closed": "مغلق",
+      "canceled": "ملغى",
+      "force_cancel": "إلغاء إجباري",
+      "force_closed": "إغلاق إجباري",
+      "not_valid": "غير صالح",
+      "paid": "مدفوع",
+      "pos_accepted": "مقبول من نقطة البيع",
+      "pending_pos_accepted": "بانتظار قبول نقطة البيع",
+      "arrived": "وصل",
+      "unknown": "غير معروف"
+    },
+    "paymentStatuses": {
+      "not_paid": "غير مدفوع",
+      "paid": "مدفوع"
+    },
+    "paymentModes": {
+      "cash": "نقدًا",
+      "credit_card": "بطاقة ائتمانية",
+      "apple_pay": "Apple Pay",
+      "pay_later": "الدفع لاحقًا",
+      "mada": "mada",
+      "visa": "Visa",
+      "master": "Mastercard"
+    },
+    "placedAt": "تاريخ الطلب"
   },
   "inbox": {
     "title": "صندوق الوارد المشترك",
@@ -150,7 +203,11 @@
     },
     "resizeList": "تغيير حجم قائمة المحادثات",
     "loadError": "تعذّر تحميل المحادثات",
-    "loadErrorHint": "تحقّق من اتصالك وحاول مرة أخرى."
+    "loadErrorHint": "تحقّق من اتصالك وحاول مرة أخرى.",
+    "attachmentPreview": "مرفق",
+    "youPrefix": "أنت:",
+    "noMessagesYet": "لا توجد رسائل بعد",
+    "sort": "الترتيب"
   },
   "conversation": {
     "replyPlaceholder": "اكتب ردًا…",
@@ -206,7 +263,8 @@
     "deleteTagWarning": "سيؤدي هذا إلى إزالة الوسم من كل محادثة وجهة اتصال وتذكرة مرتبط بها. لا يمكن التراجع عن ذلك.",
     "noTagsYetHint": "لا توجد وسوم بعد — اكتب لإنشاء وسم.",
     "tagAdded": "تمت الإضافة",
-    "tagDeleted": "تم حذف \"{{name}}\" من كل مكان."
+    "tagDeleted": "تم حذف \"{{name}}\" من كل مكان.",
+    "startedOn": "بدأت المحادثة {{date}}"
   },
   "sidebar": {
     "contact": "جهة الاتصال",
@@ -268,6 +326,7 @@
       "commented": "تم إضافة تعليق",
       "sla_warning": "تحذير اتفاقية الخدمة",
       "sla_breached": "خرق اتفاقية الخدمة",
+      "sla_escalated": "تصعيد اتفاقية الخدمة",
       "resolved": "تم الحل",
       "closed": "مغلق",
       "reopened": "أُعيد فتحه",
@@ -295,7 +354,17 @@
     "createFromChat": "إنشاء تذكرة",
     "dismissPrompt": "تجاهل",
     "statusHelp": "تم الحل = اكتمل العمل بانتظار العميل. مغلقة = انتهت نهائيًا.",
-    "firstResponse": "أول رد"
+    "firstResponse": "أول رد",
+    "attachFromChat": "من المحادثة",
+    "chatMediaHint": "الملفات المُشارَكة في هذه المحادثة. أضِف أيّ ملف ناقص من هنا.",
+    "noChatMedia": "لا توجد ملفات مُشارَكة في هذه المحادثة.",
+    "fromCustomer": "العميل",
+    "fromAgent": "الوكيل",
+    "fromSystem": "النظام",
+    "addToTicket": "إضافة",
+    "added": "مُضاف",
+    "orderNoItems": "لا توجد عناصر في هذا الطلب.",
+    "orderCapturedAt": "أُخذت اللقطة {{at}}"
   },
   "notifications": {
     "title": "التنبيهات",
@@ -376,40 +445,70 @@
   "compensation": {
     "actionError": "فشل الإجراء. حاول مرة أخرى.",
     "actions": "الإجراءات",
+    "addItem": "إضافة عنصر",
     "all": "الكل",
     "back": "رجوع",
     "badJson": "يجب أن يكون {{label}} بصيغة JSON صحيحة.",
     "brand": "العلامة التجارية",
+    "cancel": "إلغاء",
     "claimed": "المبلغ المطالب به",
+    "claimedHint": "تستخدمه قواعد التعويض من نوع النسبة المئوية (PERCENT).",
+    "classifyError": "تعذّر الحفظ. حاول مرة أخرى.",
     "complaint": "شكوى",
     "confirm": "تأكيد هذا الإجراء؟",
     "coupon": "قسيمة",
     "customer": "العميل",
     "declineReason": "سبب الرفض",
     "deliveryFee": "رسوم التوصيل",
+    "deliveryFeeHint": "تستخدمه قواعد التعويض من نوع التوصيل (DELIVERY).",
     "done": "تم تنفيذ {{label}}.",
     "empty": "لا توجد طلبات تعويض",
     "emptyHint": "ستظهر هنا الطلبات المقدَّمة من العملاء.",
     "final": "القيمة النهائية",
+    "formTitle": "{{label}} — أكمل الحقول المطلوبة",
     "issue": "المشكلة",
+    "issueHint": "يحدّد مؤقتات اتفاقية مستوى الخدمة (SLA) وطريقة احتساب التعويض.",
+    "itemName": "العنصر",
     "items": "العناصر التي بها مشكلة",
+    "itemsTotal": "الإجمالي",
+    "itemsWithIssue": "العناصر التي بها مشكلة",
+    "itemsWithIssueHint": "تستخدمه قواعد التعويض من نوع العناصر (ITEMS) — يجمع الأسعار أدناه.",
     "loadError": "تعذّر تحميل طلبات التعويض.",
     "mobile": "الجوال",
     "name": "الاسم",
     "notFound": "لم يتم العثور على الطلب.",
     "order": "الطلب",
+    "orderItems": "عناصر الطلب",
     "orderTotal": "إجمالي الطلب",
+    "price": "السعر",
+    "removeItem": "إزالة العنصر",
     "required": "{{label}} مطلوب.",
     "resolution": "التعويض",
     "restaurant": "المطعم",
     "run": "تأكيد",
+    "saveError": "تعذّر الحفظ. حاول مرة أخرى.",
+    "selectIssue": "اختر مشكلة…",
+    "selectPlaceholder": "اختر…",
+    "submit": "تأكيد {{label}}",
     "subtitle": "راجع طلبات تعويض العملاء ونفّذ كل خطوة.",
     "suggested": "المقترح",
     "terminal": "هذا الطلب مغلق — لا مزيد من الإجراءات.",
     "title": "التعويض",
-    "type": "النوع"
+    "type": "النوع",
+    "unclassified": "غير مصنّف"
   },
   "app": {
     "workspace": "مساحة عمل الموظف"
+  },
+  "reset": {
+    "title": "اختر كلمة مرور جديدة",
+    "subtitle": "تحلّ كلمة المرور الجديدة محل القديمة فورًا.",
+    "newPassword": "كلمة المرور الجديدة",
+    "confirmPassword": "تأكيد كلمة المرور الجديدة",
+    "submit": "تحديث كلمة المرور",
+    "tooShort": "استخدم 8 أحرف على الأقل.",
+    "mismatch": "كلمتا المرور غير متطابقتين.",
+    "invalidToken": "رابط إعادة التعيين هذا غير صالح أو انتهت صلاحيته. اطلب رابطًا جديدًا.",
+    "missingToken": "رابط إعادة التعيين هذا غير مكتمل. اطلب رابطًا جديدًا من صفحة تسجيل الدخول."
   }
 }

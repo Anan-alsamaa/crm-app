@@ -24,10 +24,16 @@ ARG VITE_DIRECTUS_URL=http://localhost:8055
 ARG VITE_SOCKET_URL=http://localhost:8080
 ARG VITE_AI_GATEWAY_URL=http://localhost:8081
 ARG VITE_YIJI_API_URL=
+# Where assignment notifications are enqueued (POST /jobs/notify-assignment):
+# dev = the host job producer on :3031, prod = the socket-gateway HTTP base URL.
+ARG VITE_JOB_PRODUCER_URL=http://localhost:3031
+ARG VITE_JOB_PRODUCER_TOKEN=
 ENV VITE_DIRECTUS_URL=$VITE_DIRECTUS_URL \
     VITE_SOCKET_URL=$VITE_SOCKET_URL \
     VITE_AI_GATEWAY_URL=$VITE_AI_GATEWAY_URL \
-    VITE_YIJI_API_URL=$VITE_YIJI_API_URL
+    VITE_YIJI_API_URL=$VITE_YIJI_API_URL \
+    VITE_JOB_PRODUCER_URL=$VITE_JOB_PRODUCER_URL \
+    VITE_JOB_PRODUCER_TOKEN=$VITE_JOB_PRODUCER_TOKEN
 RUN pnpm --filter @yiji/agent-portal build
 
 # ---- runner: nginx serving the static build with SPA history fallback ----

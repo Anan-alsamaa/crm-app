@@ -143,11 +143,24 @@ function OrderDetails({ order }: { order: YijiOrder }) {
 
   return (
     <div className="space-y-2.5">
-      {(order.restaurantName || order.restaurantId) && (
+      {(order.brandName || order.restaurantName || order.restaurantId) && (
         <div className="flex items-baseline justify-between gap-2">
-          <span className="min-w-0 truncate text-xs font-medium text-foreground">
-            {order.restaurantName ?? t('commerce.restaurant', { defaultValue: 'Restaurant' })}
-          </span>
+          <div className="min-w-0">
+            {/* Brand (the eatery) as the prominent name; the branch/location
+                below it. Both come from the Yiji order and are shown together. */}
+            <span className="block truncate text-xs font-medium text-foreground">
+              {order.brandName ??
+                order.restaurantName ??
+                t('commerce.restaurant', { defaultValue: 'Restaurant' })}
+            </span>
+            {order.brandName &&
+              order.restaurantName &&
+              order.restaurantName !== order.brandName && (
+                <span className="block truncate text-2xs text-muted-foreground">
+                  {order.restaurantName}
+                </span>
+              )}
+          </div>
           {order.restaurantId && (
             <span className="shrink-0 font-mono text-2xs text-muted-foreground">
               {t('commerce.restaurantId', { defaultValue: 'Restaurant ID' })} #{order.restaurantId}
@@ -198,11 +211,26 @@ function OrderDetails({ order }: { order: YijiOrder }) {
         />
       </div>
 
+      {/* Every field the Yiji order carries, one labelled row each, so the agent
+          sees the complete order at a glance. Each row renders only when the API
+          actually returned that field. */}
       <dl className="space-y-1.5 text-2xs">
+        <div className="flex items-center justify-between gap-2">
+          <dt className="text-muted-foreground">
+            {t('commerce.orderStatus', { defaultValue: 'Order status' })}
+          </dt>
+          <dd>
+            <Pill tone={orderTone(order.status)} size="sm">
+              {t(`commerce.orderStatuses.${order.status}`, {
+                defaultValue: titleize(order.status),
+              })}
+            </Pill>
+          </dd>
+        </div>
         {order.deliveryType && (
           <div className="flex items-center justify-between gap-2">
             <dt className="text-muted-foreground">
-              {t('commerce.deliveryType', { defaultValue: 'Fulfilment' })}
+              {t('commerce.deliveryType', { defaultValue: 'Delivery type' })}
             </dt>
             <dd className="text-foreground/90">
               {t(`commerce.deliveryTypes.${order.deliveryType}`, {
@@ -214,9 +242,9 @@ function OrderDetails({ order }: { order: YijiOrder }) {
         {order.paymentStatus && (
           <div className="flex items-center justify-between gap-2">
             <dt className="text-muted-foreground">
-              {t('commerce.payment', { defaultValue: 'Payment' })}
+              {t('commerce.paymentStatus', { defaultValue: 'Payment status' })}
             </dt>
-            <dd className="flex items-center gap-1.5">
+            <dd>
               <Pill
                 tone={
                   order.paymentStatus === 'paid'
@@ -227,11 +255,32 @@ function OrderDetails({ order }: { order: YijiOrder }) {
                 }
                 size="sm"
               >
-                {titleize(order.paymentStatus)}
+                {t(`commerce.paymentStatuses.${order.paymentStatus}`, {
+                  defaultValue: titleize(order.paymentStatus),
+                })}
               </Pill>
-              {order.paymentMode && (
-                <span className="text-muted-foreground">{titleize(order.paymentMode)}</span>
-              )}
+            </dd>
+          </div>
+        )}
+        {order.paymentMode && (
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-muted-foreground">
+              {t('commerce.paymentType', { defaultValue: 'Payment type' })}
+            </dt>
+            <dd className="text-foreground/90">
+              {t(`commerce.paymentModes.${order.paymentMode}`, {
+                defaultValue: titleize(order.paymentMode),
+              })}
+            </dd>
+          </div>
+        )}
+        {order.customerPhone && (
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-muted-foreground">
+              {t('commerce.customerPhone', { defaultValue: 'Customer phone' })}
+            </dt>
+            <dd className="tabular-nums text-foreground/90" dir="ltr">
+              {order.customerPhone}
             </dd>
           </div>
         )}

@@ -56,7 +56,7 @@ describe('AiConfigPage', () => {
   it('renders the title and feature toggles after loading', async () => {
     aiAdmin.getConfig.mockResolvedValue(baseConfig);
     renderPage();
-    expect(screen.getByText('AI assistance')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'AI assistance', level: 1 })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('Summarize conversation')).toBeInTheDocument());
     expect(screen.getAllByRole('switch').length).toBe(7);
   });

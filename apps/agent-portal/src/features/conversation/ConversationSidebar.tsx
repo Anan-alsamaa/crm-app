@@ -202,25 +202,17 @@ export function ConversationSidebar({
       className={cn(
         // One floating profile panel (reference composition): sections are
         // separated by spacing inside a single rounded surface.
-        'theme-light relative shrink-0 overflow-auto rounded-2xl bg-card pb-6 text-foreground shadow-soft',
+        'relative shrink-0 overflow-auto rounded-2xl bg-card pb-6 text-foreground shadow-soft ring-1 ring-foreground/[0.06]',
         widthClass,
         className,
       )}
       {...sizeProps}
     >
       {handle}
-      {/* Identity hero — avatar in an aurora gradient ring over a glow halo. */}
+      {/* Identity hero — avatar in a subtle accent ring. */}
       <div className="relative overflow-hidden px-6 pb-6 pt-8">
-        <div
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            background:
-              'radial-gradient(at 15% 0%, oklch(var(--primary) / 0.18) 0%, transparent 55%), radial-gradient(at 100% 10%, oklch(var(--violet) / 0.15) 0%, transparent 55%), radial-gradient(at 60% 110%, oklch(var(--primary) / 0.06) 0%, transparent 60%)',
-          }}
-        />
         <div className="relative flex flex-col items-center gap-3 text-center">
-          <span className="rounded-full bg-gradient-to-br from-primary to-violet p-[3px] shadow-lg shadow-primary/20">
+          <span className="rounded-full bg-primary/30 p-[2px]">
             <span className="block rounded-full bg-background p-[3px]">
               <Avatar
                 name={c.contact?.name}
@@ -232,9 +224,6 @@ export function ConversationSidebar({
           </span>
           <div className="space-y-1.5">
             <h3 className="text-xl font-extrabold tracking-tight text-foreground">{contactName}</h3>
-            <Pill tone="pink" size="sm">
-              {t('sidebar.channelWidget')}
-            </Pill>
           </div>
         </div>
       </div>
@@ -338,10 +327,6 @@ export function ConversationSidebar({
                 <dd className="tabular-nums font-medium text-foreground">{c.contact.phone}</dd>
               </div>
             )}
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">{t('sidebar.source')}</dt>
-              <dd className="font-medium text-foreground">{t('sidebar.sourceWidget')}</dd>
-            </div>
           </dl>
         )}
       </section>

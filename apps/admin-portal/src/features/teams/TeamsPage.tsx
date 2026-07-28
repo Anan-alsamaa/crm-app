@@ -101,7 +101,18 @@ export function TeamsPage() {
 
       <div className="flex-1 overflow-auto px-5 py-4">
         {!teams.isLoading && !teams.isError && teamCount > 0 && (
-          <div className="mx-auto mb-5 max-w-5xl">
+          <div className="mx-auto mb-5 max-w-5xl space-y-5">
+            <div className="border-b border-foreground/10 pb-5">
+              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+                {t('teams.title')}
+              </h2>
+              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                {t('teams.heroSubtitle', {
+                  defaultValue:
+                    'Groups that decide where conversations and tickets route. See each team, who belongs to it, and who still needs a home.',
+                })}
+              </p>
+            </div>
             <StatStrip
               items={[
                 {
@@ -163,8 +174,8 @@ export function TeamsPage() {
           />
         ) : (
           /* Dense list — one row per team. Members shown as a small avatar
-             stack with an overflow count; no card chrome. */
-          <ul className="mx-auto max-w-5xl space-y-1">
+             stack with an overflow count; rows sit on a soft floating card. */
+          <ul className="mx-auto max-w-5xl space-y-1 rounded-2xl bg-card p-2 ring-1 ring-foreground/[0.06] shadow-soft">
             {teams.data.map((tm) => {
               const members = (users.data ?? []).filter((u) => u.team?.id === tm.id);
               const memberCount = members.length;

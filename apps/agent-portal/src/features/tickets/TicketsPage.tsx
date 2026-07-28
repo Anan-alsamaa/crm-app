@@ -5,6 +5,7 @@ import {
   ArrowLeftIcon,
   Avatar,
   Button,
+  CloseIcon,
   cn,
   formatRelative,
   Pill,
@@ -26,12 +27,25 @@ import {
   useAddTicketNote,
   useAddTicketAttachment,
   useRemoveTicketAttachment,
+  useConversationAttachments,
+  useAttachExistingFileToTicket,
+  type ChatAttachment,
 } from './api.js';
 import { useAgents, useTeamOptions } from '../inbox/api.js';
 import { NewTicketDialog } from './NewTicketDialog.js';
 import { TicketAttachments } from './TicketAttachments.js';
+import {
+  LegacyOrderSnapshotCard,
+  OrderSnapshotCard,
+  parseLegacyOrderBlock,
+} from './OrderSnapshotCard.js';
+import { useContact } from '../contacts/api.js';
+import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 import { resolveMentions } from '../conversation/mentions.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { formatBytes, isImage, isUnknownType } from '../../lib/files.js';
+import { FileGlyph } from '../../components/FileGlyph.js';
+import { useAssetBlobUrl } from '../../lib/useAssetBlobUrl.js';
 
 const STATUSES: TicketStatus[] = ['new', 'open', 'pending', 'resolved', 'closed'];
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
@@ -296,6 +310,166 @@ export function TicketsPage() {
   );
 }
 
+/**
+ * One selectable file from the linked chat. Images render a small thumbnail
+ * (private asset fetched with the agent's token); everything else shows a
+ * type glyph. "Add" links the existing Directus file onto the ticket.
+ */
+function ChatMediaRow({
+  att,
+  added,
+  pending,
+  onAdd,
+}: {
+  att: ChatAttachment;
+  added: boolean;
+  pending: boolean;
+  onAdd: () => void;
+}) {
+  const { t } = useTranslation();
+  const showImg = isImage(att.type, att.filename) || isUnknownType(att.type, att.filename);
+  const { url } = useAssetBlobUrl(att.id, showImg);
+  const size = formatBytes(att.filesize);
+  const sender =
+    att.sender_type === 'customer'
+      ? t('tickets.fromCustomer', { defaultValue: 'Customer' })
+      : att.sender_type === 'agent'
+        ? t('tickets.fromAgent', { defaultValue: 'Agent' })
+        : t('tickets.fromSystem', { defaultValue: 'System' });
+
+  return (
+    <li className="flex items-center gap-2 rounded-lg bg-card px-2 py-1.5 ring-1 ring-foreground/[0.04]">
+      <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-md bg-secondary">
+        {showImg && url ? (
+          <img src={url} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <FileGlyph type={att.type} filename={att.filename} size="sm" />
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs font-medium text-foreground">
+          {att.filename ?? t('conversation.attachment', { defaultValue: 'Attachment' })}
+        </span>
+        <span className="block text-2xs text-muted-foreground">
+          {sender}
+          {size && ` · ${size}`}
+        </span>
+      </span>
+      <button
+        type="button"
+        disabled={added || pending}
+        onClick={onAdd}
+        className={cn(
+          'shrink-0 rounded-full border border-dashed px-2 py-0.5 text-2xs transition-colors duration-fast',
+          added
+            ? 'border-success/40 text-success'
+            : 'border-border-strong text-muted-foreground hover:border-primary/50 hover:text-foreground',
+          'disabled:cursor-default disabled:opacity-70',
+        )}
+      >
+        {added
+          ? t('tickets.added', { defaultValue: 'Added' })
+          : t('tickets.addToTicket', { defaultValue: 'Add' })}
+      </button>
+    </li>
+  );
+}
+
+/**
+ * Modal picker for attaching files the customer (or agent) already shared in the
+ * linked chat — the "add it later if it wasn't carried over at creation" flow.
+ * Mirrors NewTicketDialog's overlay/scale-in styling.
+ */
+function ChatMediaDialog({
+  items,
+  loading,
+  attachedFileIds,
+  pending,
+  onAdd,
+  onClose,
+}: {
+  items: ChatAttachment[];
+  loading: boolean;
+  attachedFileIds: Set<string>;
+  pending: boolean;
+  onAdd: (fileId: string) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md animate-fade-in"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="flex max-h-[80vh] w-full max-w-md flex-col rounded-3xl bg-card p-6 shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold tracking-[-0.02em] text-foreground">
+              {t('tickets.attachFromChat', { defaultValue: 'From chat' })}
+            </h3>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {t('tickets.chatMediaHint', {
+                defaultValue: 'Files shared in this conversation. Add any missing here.',
+              })}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('actions.close', { ns: 'common', defaultValue: 'Close' })}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors duration-fast hover:bg-secondary hover:text-foreground"
+          >
+            <CloseIcon size={16} />
+          </button>
+        </div>
+
+        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <Spinner size={16} />
+            </div>
+          ) : items.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {t('tickets.noChatMedia', { defaultValue: 'No files shared in this conversation.' })}
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {items.map((att) => (
+                <ChatMediaRow
+                  key={att.id}
+                  att={att}
+                  added={attachedFileIds.has(att.id)}
+                  pending={pending}
+                  onAdd={() => onAdd(att.id)}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="mt-5 flex justify-end">
+          <Button type="button" variant="ghost" size="md" onClick={onClose}>
+            {t('actions.done', { ns: 'common', defaultValue: 'Done' })}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => void }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -307,9 +481,20 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
   const addNote = useAddTicketNote();
   const addAttachment = useAddTicketAttachment();
   const removeAttachment = useRemoveTicketAttachment();
+  const attachExisting = useAttachExistingFileToTicket();
+  const chatMedia = useConversationAttachments(ticket.data?.conversation ?? null);
+  // Legacy tickets (created before `order_snapshot`) carry the order as prose in
+  // the description; recover the id so it can be re-fetched and rendered as a
+  // proper card, and drop that block from the description we display.
+  const legacyOrder = ticket.data?.order_snapshot
+    ? null
+    : parseLegacyOrderBlock(ticket.data?.description);
+  const orderContact = useContact(ticket.data?.contact?.id ?? '');
+  const orderVendorId = orderContact.data?.vendor?.yiji_vendor_id ?? null;
   const { user } = useAuth();
   const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [showChatMedia, setShowChatMedia] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   if (ticket.isLoading)
@@ -320,6 +505,19 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
     );
   if (!ticket.data) return null;
   const tk = ticket.data;
+
+  /**
+   * The order id to re-fetch in full, if any: a legacy ticket that only stored
+   * the order as prose, or a snapshot taken from the SUMMARY endpoint (no line
+   * items, so no brand/restaurant either). Null when the stored snapshot is
+   * already complete. Requires the contact's Yiji vendor id to look anything up.
+   */
+  const refetchOrderId = !orderVendorId
+    ? null
+    : (legacyOrder?.orderId ??
+      (tk.order_snapshot && tk.order_snapshot.items.length === 0
+        ? tk.order_snapshot.orderId
+        : null));
 
   const patch = (p: Parameters<typeof update.mutateAsync>[0]['patch']) =>
     void update
@@ -350,6 +548,19 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
+
+  // Files already shared in the linked chat — attachable without re-uploading,
+  // for the case they weren't carried over when the ticket was created.
+  const chatItems = chatMedia.data ?? [];
+  const attachedFileIds = new Set(
+    (tk.attachments ?? []).map((a) => a.file?.id).filter((id): id is string => Boolean(id)),
+  );
+  const addFromChat = (fileId: string) =>
+    void attachExisting
+      .mutateAsync({ ticketId: tk.id, fileId })
+      .catch(() =>
+        toast.error(t('conversation.attachFailed', { defaultValue: 'Could not attach the file.' })),
+      );
 
   const dueClass = (iso: string | null) => {
     if (!iso) return 'text-muted-foreground';
@@ -382,10 +593,10 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         </button>
       )}
 
-      {/* Identity card — gradient-ringed avatar + subject + contact + pills */}
+      {/* Identity card — accent-ringed avatar + subject + contact + pills */}
       <header className="space-y-4">
         <div className="flex items-start gap-4">
-          <span className="shrink-0 rounded-full bg-gradient-to-br from-primary to-violet p-[3px] shadow-md shadow-primary/20">
+          <span className="shrink-0 rounded-full bg-primary/30 p-[2px]">
             <span className="block rounded-full bg-background p-[2px]">
               <Avatar
                 name={tk.contact?.name}
@@ -439,10 +650,33 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
           </div>
         </div>
 
-        {tk.description && (
+        {/* The agent's own words only — the order block is stripped out of
+            legacy descriptions and rendered as a card below instead. */}
+        {(legacyOrder ? legacyOrder.description : tk.description) && (
           <p className="max-w-prose whitespace-pre-wrap rounded-xl bg-secondary/50 px-4 py-3 text-sm leading-relaxed text-foreground/85">
-            {tk.description}
+            {legacyOrder ? legacyOrder.description : tk.description}
           </p>
+        )}
+
+        {/* The order this ticket was raised about — always a real order card.
+            Re-fetch the full order when we only have the id (legacy prose
+            tickets) or when the stored snapshot is thin: snapshots captured
+            from the SUMMARY endpoint carry no line items / brand, so those
+            tickets heal themselves instead of showing a half-empty card. */}
+        {(tk.order_snapshot || (legacyOrder && orderVendorId)) && (
+          <section className="max-w-prose space-y-2">
+            <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('tickets.orderSnapshotTitle', { defaultValue: 'Order from this chat' })}
+            </h3>
+            {refetchOrderId ? (
+              <LegacyOrderSnapshotCard
+                vendorId={orderVendorId as string}
+                orderId={refetchOrderId}
+              />
+            ) : (
+              <OrderSnapshotCard order={tk.order_snapshot!} />
+            )}
+          </section>
         )}
       </header>
 
@@ -586,6 +820,11 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
               />
             </div>
           </section>
+
+          {/* Custom fields — admin-defined ticket attributes (FR-031). */}
+          <section className="space-y-2.5">
+            <CustomFieldsSection entityType="ticket" entityId={tk.id} />
+          </section>
         </aside>
 
         {/* Main column — the ticket narrative: attachments + notes + history. */}
@@ -609,22 +848,48 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 hidden
                 onChange={(e) => void onPickFiles(e.target.files)}
               />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-dashed border-border-strong px-3 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:border-primary/50 hover:text-foreground disabled:opacity-50"
-              >
-                {uploading ? (
-                  <Spinner size={13} />
-                ) : (
-                  <>
-                    <span className="text-sm leading-none">+</span>
-                    <span>{t('tickets.attach', { defaultValue: 'Attach file' })}</span>
-                  </>
+              <div className="flex items-center gap-2">
+                {tk.conversation && chatItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowChatMedia(true)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-dashed border-border-strong px-3 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:border-primary/50 hover:text-foreground"
+                  >
+                    <span>{t('tickets.attachFromChat', { defaultValue: 'From chat' })}</span>
+                    <span className="tabular-nums opacity-70">{chatItems.length}</span>
+                  </button>
                 )}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-dashed border-border-strong px-3 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:border-primary/50 hover:text-foreground disabled:opacity-50"
+                >
+                  {uploading ? (
+                    <Spinner size={13} />
+                  ) : (
+                    <>
+                      <span className="text-sm leading-none">+</span>
+                      <span>{t('tickets.attach', { defaultValue: 'Attach file' })}</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
+
+            {/* Picker modal: files the customer (or agent) already shared in the
+                chat — attach any that weren't carried over at creation. */}
+            {showChatMedia && tk.conversation && (
+              <ChatMediaDialog
+                items={chatItems}
+                loading={chatMedia.isLoading}
+                attachedFileIds={attachedFileIds}
+                pending={attachExisting.isPending}
+                onAdd={addFromChat}
+                onClose={() => setShowChatMedia(false)}
+              />
+            )}
+
             {tk.attachments && tk.attachments.length > 0 ? (
               <TicketAttachments
                 attachments={tk.attachments}

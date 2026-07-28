@@ -4,15 +4,19 @@ import { useMutation } from '@tanstack/react-query';
 import { uploadFiles } from '@directus/sdk';
 import {
   Button,
-  cn,
   EmptyState,
   FormField,
   Input,
   SelectMenu,
   Skeleton,
+  Table,
+  TableSurface,
+  Td,
+  Th,
   toast,
   Toolbar,
   ToolbarSpacer,
+  Tr,
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { jobProducer } from '../../lib/job-producer.js';
@@ -126,8 +130,21 @@ export function ImportsPage() {
       </Toolbar>
 
       <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 py-8 space-y-6 sm:px-10">
+        {/* Clean editorial header — no gradient banner. */}
+        <div className="border-b border-foreground/10 pb-5">
+          <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+            {t('imports.title', { defaultValue: 'Import contacts' })}
+          </h2>
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            {t('imports.heroSubtitle', {
+              defaultValue:
+                'Upload a CSV, map its columns to contact fields, preview the first rows, then queue the import. Deduplication runs per-vendor on phone or email.',
+            })}
+          </p>
+        </div>
+
         {/* Vendor select */}
-        <section className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-5 py-4">
+        <section className="rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft px-5 py-5">
           <FormField
             label={t('imports.vendor', { defaultValue: 'Target vendor' })}
             hint={t('imports.vendorHint', {
@@ -152,7 +169,7 @@ export function ImportsPage() {
         </section>
 
         {/* File upload */}
-        <section className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-5 py-4">
+        <section className="rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft px-5 py-5">
           <FormField
             label={t('imports.file', { defaultValue: 'CSV file' })}
             hint={t('imports.fileHint', {
@@ -173,10 +190,10 @@ export function ImportsPage() {
         {/* Mapping + preview */}
         {preview && (
           <section className="space-y-3">
-            <h2 className="px-1 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            <h2 className="px-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               {t('imports.mapping', { defaultValue: 'Column mapping' })}
             </h2>
-            <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-5 py-4 space-y-3">
+            <div className="rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft px-5 py-5 space-y-3">
               {preview.header.map((h) => (
                 <div key={h} className="grid grid-cols-12 items-center gap-2">
                   <span className="col-span-5 truncate text-xs font-mono text-foreground">{h}</span>
@@ -203,37 +220,31 @@ export function ImportsPage() {
               ))}
             </div>
 
-            <h2 className="px-1 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            <h2 className="px-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               {t('imports.preview', { defaultValue: 'Preview (first 5 rows)' })}
             </h2>
-            <div
-              className={cn(
-                'rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft overflow-auto',
-              )}
-            >
-              <table className="w-full border-collapse text-xs">
+            <TableSurface>
+              <Table>
                 <thead>
-                  <tr className="text-2xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
                     {preview.header.map((h) => (
-                      <th key={h} className="px-3 py-2 text-start font-medium">
-                        {h}
-                      </th>
+                      <Th key={h}>{h}</Th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {preview.sample.map((row, i) => (
-                    <tr key={i} className="border-t border-border">
+                    <Tr key={i}>
                       {row.map((cell, j) => (
-                        <td key={j} className="px-3 py-2 text-foreground/80 tabular-nums">
+                        <Td key={j} className="text-foreground/80 tabular-nums">
                           {cell}
-                        </td>
+                        </Td>
                       ))}
-                    </tr>
+                    </Tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+              </Table>
+            </TableSurface>
           </section>
         )}
 

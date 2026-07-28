@@ -22,6 +22,7 @@ import { RouteError } from './components/RouteError.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
 import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
+import { ResetPassword, RESET_PASSWORD_PATH } from './pages/ResetPassword.js';
 import { NotificationBell } from './features/notifications/NotificationBell.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { SoundToggle } from './components/SoundToggle.js';
@@ -68,11 +69,11 @@ interface NavSection {
 
 /* Aurora nav: each item's icon sits in its own tinted tile. */
 const NAV_TILES = [
-  'bg-primary/15 text-primary',
-  'bg-violet/20 text-violet',
-  'bg-magenta/20 text-magenta',
-  'bg-warning/20 text-warning',
-  'bg-success/20 text-success',
+  'bg-sky-400/25 text-sky-300',
+  'bg-violet-400/25 text-violet-300',
+  'bg-rose-400/25 text-rose-300',
+  'bg-orange-400/25 text-orange-300',
+  'bg-emerald-400/25 text-emerald-300',
 ];
 
 function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSection[] }) {
@@ -145,7 +146,7 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
                           className={cn(
                             'grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors duration-fast ease-out',
                             isActive
-                              ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/40'
+                              ? 'bg-primary text-primary-foreground'
                               : NAV_TILES[(sIdx * 2 + iIdx) % NAV_TILES.length],
                           )}
                         >
@@ -351,6 +352,8 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          {/* Public: reached from the emailed Directus reset link (FR-001). */}
+          <Route path={RESET_PASSWORD_PATH} element={<ResetPassword />} />
           <Route
             path="/"
             element={

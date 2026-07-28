@@ -1,6 +1,6 @@
 import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
-import { QUEUES, type NotificationJob, type SlaJob } from '@yiji/shared-types';
+import { QUEUES, type NotificationJob, type Priority, type SlaJob } from '@yiji/shared-types';
 import { computeDueAt, warningAt } from '../lib/sla-clock.js';
 import type { TicketRepo, TicketRow, SlaPolicyRow } from './repos.js';
 
@@ -72,26 +72,33 @@ async function schedule(
   );
 }
 
+type SlaNotificationType = 'sla_warning' | 'sla_breach' | 'escalation';
+
+const NOTIFICATION_COPY: Record<SlaNotificationType, { title: string; state: string }> = {
+  sla_warning: { title: 'SLA warning on ticket', state: 'is approaching' },
+  sla_breach: { title: 'SLA breached on ticket', state: 'has been missed' },
+  escalation: { title: 'Ticket escalated after SLA breach', state: 'was missed' },
+};
+
 /** Enqueue an in-app + email notification fanout via the notifications queue. */
 async function enqueueNotification(
   deps: SlaDeps,
   recipient: string,
-  type: 'sla_warning' | 'sla_breach',
+  type: SlaNotificationType,
   ticket: TicketRow,
   deadline: Deadline,
+  extraPayload: Record<string, unknown> = {},
 ): Promise<void> {
+  const copy = NOTIFICATION_COPY[type];
   const job: NotificationJob = {
     recipientId: recipient,
     type,
-    title:
-      type === 'sla_warning'
-        ? `SLA warning on ticket ${ticket.id}`
-        : `SLA breached on ticket ${ticket.id}`,
-    body: `${deadline === 'first_response' ? 'First-response' : 'Resolution'} ${
-      type === 'sla_warning' ? 'is approaching' : 'has been missed'
-    } for ticket ${ticket.id}.`,
+    title: `${copy.title} ${ticket.id}`,
+    body: `${deadline === 'first_response' ? 'First-response' : 'Resolution'} ${copy.state} for ticket ${ticket.id}.${
+      type === 'escalation' ? ' The ticket has been escalated.' : ''
+    }`,
     link: `/tickets/${ticket.id}`,
-    payload: { ticketId: ticket.id, deadline },
+    payload: { ticketId: ticket.id, deadline, ...extraPayload },
   };
   // Deterministic id per (type, ticket, deadline) so a retry / stalled re-run of
   // the warning/breach job does not enqueue a duplicate SLA notification.
@@ -160,6 +167,30 @@ export async function runWarning(
   if (recipient) await enqueueNotification(deps, recipient, 'sla_warning', t, deadline);
 }
 
+/**
+ * Escalation target. Mirrors the `escalate` automation action
+ * (processors/automation.ts): escalating raises priority to the top of the
+ * ladder and notifies. Encoded here so both paths mean the same thing.
+ */
+export const ESCALATED_PRIORITY: Priority = 'urgent';
+
+/**
+ * Has this exact (ticket, deadline) breach already been escalated?
+ *
+ * `ticket_events` is append-only, so it is the one durable record that survives
+ * a worker crash — a stalled/retried breach job re-reads it and no-ops. We can't
+ * lean on ticket.priority alone: a ticket may already be `urgent` before it
+ * breaches, and the two deadlines escalate independently.
+ */
+async function alreadyEscalated(
+  deps: SlaDeps,
+  ticketId: string,
+  deadline: Deadline,
+): Promise<boolean> {
+  const prior = await deps.tickets.listTicketEvents(ticketId, 'sla_escalated');
+  return prior.some((e) => (e.payload as { deadline?: string } | null)?.deadline === deadline);
+}
+
 export async function runBreach(
   deps: SlaDeps,
   ticketId: string,
@@ -169,9 +200,48 @@ export async function runBreach(
   if (!t || isDone(t)) return;
   if (deadline === 'first_response' && t.first_responded_at) return;
 
+  // Idempotency gate for the WHOLE breach side-effect set (FR-017). Breach jobs
+  // are at-least-once; without this a retry appends a duplicate sla_breached
+  // event and re-escalates.
+  if (await alreadyEscalated(deps, t.id, deadline)) {
+    deps.logger.debug({ ticketId: t.id, deadline }, 'sla breach already processed — skipping');
+    return;
+  }
+
   await deps.tickets.createTicketEvent(t.id, 'sla_breached', { deadline });
+
+  // ── Escalate (FR-017) ────────────────────────────────────────────────
+  const fromPriority = t.priority;
+  if (fromPriority !== ESCALATED_PRIORITY) {
+    await deps.tickets.patchTicket(t.id, { priority: ESCALATED_PRIORITY });
+  }
+  await deps.tickets.createTicketEvent(t.id, 'sla_escalated', {
+    deadline,
+    reason: 'sla_breach',
+    from_priority: fromPriority,
+    to_priority: ESCALATED_PRIORITY,
+    team: t.assigned_team,
+  });
+
   const recipient = t.assigned_agent;
-  if (recipient) await enqueueNotification(deps, recipient, 'sla_breach', t, deadline);
+  if (recipient) {
+    await enqueueNotification(deps, recipient, 'sla_breach', t, deadline);
+    // Separate escalation notification so it is distinguishable in the inbox
+    // (and routable by notification preferences) from the plain breach notice.
+    await enqueueNotification(deps, recipient, 'escalation', t, deadline, {
+      reason: 'sla_breach',
+      fromPriority,
+      toPriority: ESCALATED_PRIORITY,
+      team: t.assigned_team,
+    });
+  } else {
+    // Unassigned ticket: nobody to page. The sla_escalated event + priority bump
+    // still land, so the ticket surfaces at the top of the queue views.
+    deps.logger.warn(
+      { ticketId: t.id, deadline, team: t.assigned_team },
+      'sla breach escalated on an unassigned ticket — no notification recipient',
+    );
+  }
 }
 
 // ---------------- main entry ----------------

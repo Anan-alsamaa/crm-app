@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Queue } from 'bullmq';
 import type { Logger } from 'pino';
-import { runReconcile, runWarning, runBreach, type SlaDeps } from '../src/processors/sla.js';
+import {
+  runReconcile,
+  runWarning,
+  runBreach,
+  ESCALATED_PRIORITY,
+  type SlaDeps,
+} from '../src/processors/sla.js';
 import type {
   TicketRepo,
   TicketRow,
@@ -23,6 +29,14 @@ function makeRepo(tickets: TicketRow[], policies: SlaPolicyRow[]) {
     createTicketEvent: async (ticketId, type, payload) => {
       events.push({ ticket: ticketId, type, payload });
     },
+    // Append-only event log, read back for the breach idempotency guard.
+    listTicketEvents: async (ticketId, type) =>
+      events
+        .filter((e) => e.ticket === ticketId && (!type || e.type === type))
+        .map((e) => ({
+          event_type: e.type,
+          payload: (e.payload as Record<string, unknown> | undefined) ?? null,
+        })),
   };
   return { repo, patched, events };
 }
@@ -162,9 +176,11 @@ describe('runWarning + runBreach (T067)', () => {
       logger,
     };
     await runBreach(deps, 't1', 'resolution');
-    expect(events).toEqual([
-      { ticket: 't1', type: 'sla_breached', payload: { deadline: 'resolution' } },
-    ]);
+    expect(events[0]).toEqual({
+      ticket: 't1',
+      type: 'sla_breached',
+      payload: { deadline: 'resolution' },
+    });
     expect((q.notifications[0]?.data as { type: string }).type).toBe('sla_breach');
     expect(q.notifications[0]?.opts?.jobId).toBe('slanotif-sla_breach-t1-resolution');
   });
@@ -196,5 +212,95 @@ describe('runWarning + runBreach (T067)', () => {
     };
     await runBreach(deps, 't1', 'first_response');
     expect(events).toEqual([]);
+  });
+});
+
+describe('runBreach escalation (FR-017)', () => {
+  function setup(ticket: TicketRow = { ...baseTicket }) {
+    const { repo, patched, events } = makeRepo([ticket], [POLICY]);
+    const q = makeQueues();
+    const deps: SlaDeps = {
+      tickets: repo,
+      slaQueue: q.slaQueue,
+      notificationsQueue: q.notificationsQueue,
+      logger,
+    };
+    return { deps, patched, events, q, ticket };
+  }
+
+  it('escalates the ticket to urgent and records an sla_escalated event', async () => {
+    const { deps, patched, events } = setup({ ...baseTicket, priority: 'medium' });
+    await runBreach(deps, 't1', 'first_response');
+
+    expect(patched).toEqual([{ id: 't1', patch: { priority: ESCALATED_PRIORITY } }]);
+    expect(events.map((e) => e.type)).toEqual(['sla_breached', 'sla_escalated']);
+    expect(events[1]?.payload).toMatchObject({
+      deadline: 'first_response',
+      reason: 'sla_breach',
+      from_priority: 'medium',
+      to_priority: 'urgent',
+    });
+  });
+
+  it('notifies the assigned agent with a distinct escalation notification', async () => {
+    const { deps, q } = setup({ ...baseTicket, priority: 'low', assigned_team: 'team-9' });
+    await runBreach(deps, 't1', 'resolution');
+
+    const types = q.notifications.map((n) => (n.data as { type: string }).type);
+    expect(types).toEqual(['sla_breach', 'escalation']);
+    const esc = q.notifications[1]!;
+    expect(esc.opts?.jobId).toBe('slanotif-escalation-t1-resolution');
+    expect((esc.data as { payload: Record<string, unknown> }).payload).toMatchObject({
+      ticketId: 't1',
+      deadline: 'resolution',
+      reason: 'sla_breach',
+      fromPriority: 'low',
+      toPriority: 'urgent',
+      team: 'team-9',
+    });
+  });
+
+  it('is idempotent — a retried breach job does not double-escalate', async () => {
+    const { deps, patched, events, q } = setup({ ...baseTicket, priority: 'medium' });
+    await runBreach(deps, 't1', 'first_response');
+    await runBreach(deps, 't1', 'first_response');
+    await runBreach(deps, 't1', 'first_response');
+
+    expect(patched).toHaveLength(1);
+    expect(events.map((e) => e.type)).toEqual(['sla_breached', 'sla_escalated']);
+    expect(q.notifications).toHaveLength(2);
+  });
+
+  it('escalates each deadline independently', async () => {
+    const { deps, events } = setup({ ...baseTicket, priority: 'medium' });
+    await runBreach(deps, 't1', 'first_response');
+    await runBreach(deps, 't1', 'resolution');
+
+    const escalations = events.filter((e) => e.type === 'sla_escalated');
+    expect(escalations.map((e) => (e.payload as { deadline: string }).deadline)).toEqual([
+      'first_response',
+      'resolution',
+    ]);
+  });
+
+  it('skips the priority patch when the ticket is already urgent, but still audits', async () => {
+    const { deps, patched, events } = setup({ ...baseTicket, priority: 'urgent' });
+    await runBreach(deps, 't1', 'resolution');
+
+    expect(patched).toEqual([]);
+    expect(events.map((e) => e.type)).toEqual(['sla_breached', 'sla_escalated']);
+  });
+
+  it('escalates an unassigned ticket without enqueuing notifications', async () => {
+    const { deps, patched, events, q } = setup({
+      ...baseTicket,
+      priority: 'high',
+      assigned_agent: null,
+    });
+    await runBreach(deps, 't1', 'resolution');
+
+    expect(patched).toEqual([{ id: 't1', patch: { priority: 'urgent' } }]);
+    expect(events.map((e) => e.type)).toEqual(['sla_breached', 'sla_escalated']);
+    expect(q.notifications).toHaveLength(0);
   });
 });

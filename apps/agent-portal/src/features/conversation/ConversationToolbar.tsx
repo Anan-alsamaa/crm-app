@@ -156,7 +156,7 @@ export function ConversationToolbar({
           priority live in the controls on the right, so no duplicate pills. */}
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <span className="relative shrink-0">
-            <span className="block rounded-full bg-gradient-to-br from-primary to-violet p-[2px]">
+            <span className="block rounded-full bg-primary/30 p-[2px]">
               <span className="block rounded-full bg-background p-[2px]">
                 <Avatar
                   name={conversation.contact?.name}
