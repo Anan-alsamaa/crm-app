@@ -1,5 +1,6 @@
 import type { JSX, ReactNode } from 'react';
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from './cn.js';
 
 export interface ShortcutRow {
@@ -50,9 +51,13 @@ export function ShortcutsOverlay({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  // Portalled to <body>: `position: fixed` is only viewport-relative while no
+  // ancestor establishes a containing block, and transform/filter/backdrop-filter/
+  // perspective/will-change/contain all create one. The app shell's top bar is
+  // backdrop-blurred, so an overlay opened from there would otherwise anchor to it.
+  if (!open || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -119,6 +124,7 @@ export function ShortcutsOverlay({
           ))}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

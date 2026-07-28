@@ -1,5 +1,6 @@
 import type { JSX, KeyboardEvent, ReactNode } from 'react';
 import { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from './Button.js';
 
 /*
@@ -79,7 +80,11 @@ export function ConfirmDialog({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onCancel]);
 
-  if (!open) return null;
+  // Portalled to <body>: `position: fixed` is only viewport-relative while no
+  // ancestor establishes a containing block, and transform/filter/backdrop-filter/
+  // perspective/will-change/contain all create one. The app shell's top bar is
+  // backdrop-blurred, so an overlay opened from there would otherwise anchor to it.
+  if (!open || typeof document === 'undefined') return null;
 
   // Trap Tab within the panel so focus never leaks to the page behind it.
   const onPanelKey = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -102,7 +107,7 @@ export function ConfirmDialog({
     }
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md animate-fade-in"
       onClick={(e) => {
@@ -144,6 +149,7 @@ export function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

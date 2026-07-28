@@ -1,5 +1,6 @@
 import type { JSX, KeyboardEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from './cn.js';
 import { useFocusTrap } from './useFocusTrap.js';
 
@@ -110,7 +111,11 @@ export function CommandPalette({
 
   useFocusTrap(panelRef, open);
 
-  if (!open) return null;
+  // Portalled to <body>: `position: fixed` is only viewport-relative while no
+  // ancestor establishes a containing block, and transform/filter/backdrop-filter/
+  // perspective/will-change/contain all create one. The app shell's top bar is
+  // backdrop-blurred, so an overlay opened from there would otherwise anchor to it.
+  if (!open || typeof document === 'undefined') return null;
 
   const onInputKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown') {
@@ -129,7 +134,7 @@ export function CommandPalette({
     }
   };
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -259,7 +264,8 @@ export function CommandPalette({
           <span>YIJI CRM</span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
