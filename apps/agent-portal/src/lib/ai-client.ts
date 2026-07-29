@@ -1,6 +1,7 @@
 import type {
   EntitiesResponse,
   HelpAssistantResponse,
+  HelpAssistantTurn,
   IntentResponse,
   LeadScoreResponse,
   SemanticSearchResponse,
@@ -105,6 +106,15 @@ export const ai = {
   scoreLead: (c: AiCaller, conversationId: string) =>
     post<LeadScoreResponse>(c, AI_ENDPOINTS.scoreLead, { conversationId }),
   /** In-app help assistant — one question, one answer, no history kept. */
-  helpAssistant: (c: AiCaller, question: string) =>
-    post<HelpAssistantResponse>(c, AI_ENDPOINTS.helpAssistant, { question }),
+  /**
+   * `history` carries the earlier turns of the CURRENT panel session so
+   * follow-ups resolve. Nothing is persisted anywhere — the transcript lives
+   * in component state and dies with the panel.
+   */
+  helpAssistant: (c: AiCaller, question: string, history: HelpAssistantTurn[] = []) =>
+    post<HelpAssistantResponse>(
+      c,
+      AI_ENDPOINTS.helpAssistant,
+      history.length ? { question, history } : { question },
+    ),
 };

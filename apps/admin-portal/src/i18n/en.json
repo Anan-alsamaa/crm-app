@@ -284,7 +284,7 @@
   "helpAssistant": {
     "launch": "Ask AI help",
     "title": "Ask AI help",
-    "description": "Ask how something works in this CRM and get a short answer. One question at a time — nothing is saved.",
+    "description": "Ask how something works in this CRM. Follow-up questions keep their context; the chat is cleared when you close this panel and nothing is saved.",
     "label": "Your question",
     "placeholder": "How do I add an agent to a team?",
     "counter": "{{chars}}/{{max}}",
@@ -293,7 +293,6 @@
     "answer": "Answer",
     "offTopicTag": "Out of scope",
     "offTopic": "That looks outside what this assistant covers — it only answers questions about this CRM.",
-    "statelessNote": "Answers aren’t saved. Edit the question above to ask another.",
     "error": {
       "disabled": "AI help is turned off by your administrator.",
       "rateLimited": "Too many requests — try again in {{seconds}}s.",
@@ -302,7 +301,8 @@
       "notConfigured": "AI help isn’t configured yet.",
       "invalid": "Ask a question between 3 and 500 characters.",
       "generic": "Couldn’t get an answer. Please try again."
-    }
+    },
+    "empty": "Ask about the inbox, tickets, SLA, reports, contacts, automation or the widget. Follow-up questions work — the chat clears when you close this panel."
   },
   "sla": {
     "title": "SLA policies",

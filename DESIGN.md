@@ -27,32 +27,50 @@ avatar hues are part of the vibrancy. Outside conversation surfaces the
 restrained rules still apply: CTAs default to near-black
 (`--foreground`), decorative color stays banned.
 
+### Surface ladder — why the canvas is tinted
+
+Light does not mean flat. Cards are pure white and the canvas sits **below**
+them, so content reads as elevated:
+
+| Layer                             | L     | Where                               |
+| --------------------------------- | ----- | ----------------------------------- |
+| `--card`/`--popover`              | 1.000 | Content surfaces — stays pure white |
+| `--background`                    | 0.965 | Workspace canvas behind them        |
+| `--secondary`/`--muted`/`--input` | 0.935 | Hover, ghost buttons, form fields   |
+
+Corrected 2026-07-29. The canvas was 0.985 against white cards — a 1.5%
+difference, which is not a surface relationship, and every screen read as
+washed out. Deepening the canvas on its own would have collided with the 0.96
+hover tint and erased hover states, so the ladder moves as a unit; keep the
+gaps roughly even if you retune it. Hairlines are 14% (24% for fields and
+dividers) — enough to define an edge without drawing a box.
+
 ### Light tokens (default)
 
-| Token                  | OKLCH                   | Role                                                             |
-| ---------------------- | ----------------------- | ---------------------------------------------------------------- |
-| `--background`         | `0.985 0.002 230`       | App canvas (mesh gradient on body lays the brand over this)      |
-| `--foreground`         | `0.20 0.005 250`        | Body text, charcoal with slight cool — also the default CTA fill |
-| `--card`               | `1 0 0`                 | White surface that floats above the tinted canvas                |
-| `--popover`            | `1 0 0`                 | Dropdowns, dialogs                                               |
-| `--primary`            | `0.58 0.125 192`        | YIJI teal, vivid (or vendor `--brand-primary`)                   |
-| `--primary-foreground` | `1 0 0`                 | Text on primary fills                                            |
-| `--primary-subtle`     | `0.58 0.125 192 / 0.12` | Selected row, unread pill bg, brand-accent fills                 |
-| `--bubble`             | `0.945 0.02 255`        | Incoming chat bubble — cool periwinkle vs the teal outgoing      |
-| `--secondary`          | `0.96 0.005 230`        | Hover surface, ghost-button bg, soft tints                       |
-| `--muted`              | `0.96 0.005 230`        | Same as secondary for impeccable-product simplicity              |
-| `--muted-foreground`   | `0.46 0.010 250`        | Meta text, labels                                                |
-| `--destructive`        | `0.56 0.22 25`          | Error states, overdue SLA                                        |
-| `--success`            | `0.58 0.15 155`         | Resolved status, responded marker                                |
-| `--warning`            | `0.70 0.16 70`          | Pending status, SLA warning                                      |
-| `--border`             | `0.22 0.005 250 / 0.12` | Hairline at 12% opacity                                          |
-| `--border-strong`      | `0.22 0.005 250 / 0.20` | Form fields, dividers under hover                                |
-| `--ring`               | `0.58 0.125 192`        | Focus ring — same as primary                                     |
-| `--secondary-brand`    | `0.66 0.22 0`           | Coral pink — eyebrow pills, "new" badges, urgent priority        |
-| `--display`            | `0.16 0.01 250`         | Punchier ink for hero typography (h1/h2 in PageHeader)           |
-| `--rail`               | `0.22 0.045 196`        | Dark YIJI teal — the rail / nav sidebar                          |
-| `--rail-foreground`    | `0.92 0.03 196`         | Off-white icons on the rail                                      |
-| `--rail-active`        | `0.28 0.07 196`         | Rail hover/active bg — lighter step of the same hue              |
+| Token                  | OKLCH                   | Role                                                              |
+| ---------------------- | ----------------------- | ----------------------------------------------------------------- |
+| `--background`         | `0.965 0.004 230`       | App canvas — tinted so white cards visibly float (mesh over this) |
+| `--foreground`         | `0.20 0.005 250`        | Body text, charcoal with slight cool — also the default CTA fill  |
+| `--card`               | `1 0 0`                 | White surface that floats above the tinted canvas                 |
+| `--popover`            | `1 0 0`                 | Dropdowns, dialogs                                                |
+| `--primary`            | `0.58 0.125 192`        | YIJI teal, vivid (or vendor `--brand-primary`)                    |
+| `--primary-foreground` | `1 0 0`                 | Text on primary fills                                             |
+| `--primary-subtle`     | `0.58 0.125 192 / 0.12` | Selected row, unread pill bg, brand-accent fills                  |
+| `--bubble`             | `0.945 0.02 255`        | Incoming chat bubble — cool periwinkle vs the teal outgoing       |
+| `--secondary`          | `0.935 0.006 230`       | Hover surface, ghost-button bg, soft tints                        |
+| `--muted`              | `0.935 0.006 230`       | Same as secondary for impeccable-product simplicity               |
+| `--muted-foreground`   | `0.46 0.010 250`        | Meta text, labels                                                 |
+| `--destructive`        | `0.56 0.22 25`          | Error states, overdue SLA                                         |
+| `--success`            | `0.58 0.15 155`         | Resolved status, responded marker                                 |
+| `--warning`            | `0.70 0.16 70`          | Pending status, SLA warning                                       |
+| `--border`             | `0.22 0.005 250 / 0.14` | Hairline at 14% opacity                                           |
+| `--border-strong`      | `0.22 0.005 250 / 0.24` | Form fields, dividers under hover                                 |
+| `--ring`               | `0.58 0.125 192`        | Focus ring — same as primary                                      |
+| `--secondary-brand`    | `0.66 0.22 0`           | Coral pink — eyebrow pills, "new" badges, urgent priority         |
+| `--display`            | `0.16 0.01 250`         | Punchier ink for hero typography (h1/h2 in PageHeader)            |
+| `--rail`               | `0.22 0.045 196`        | Dark YIJI teal — the rail / nav sidebar                           |
+| `--rail-foreground`    | `0.92 0.03 196`         | Off-white icons on the rail                                       |
+| `--rail-active`        | `0.28 0.07 196`         | Rail hover/active bg — lighter step of the same hue               |
 
 Tenant brand override: `--brand-primary` CSS variable on `<html>` (set at
 runtime from vendor record) replaces `--primary` for that tenant. `#0F8D8F`

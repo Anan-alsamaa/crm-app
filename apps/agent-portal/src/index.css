@@ -43,7 +43,23 @@
   --radius: 0.5rem;
 
   /* Surface ramp — tinted canvas → pure white card → tinted popover. */
-  --background: 0.985 0.002 230;
+
+  /* SURFACE LADDER (contrast pass 2026-07-29).
+   * White cards used to sit on a 0.985 canvas — a 1.5% lightness difference,
+   * so nothing read as elevated and every screen looked washed out. The canvas
+   * now matches the `--canvas` token that already existed for exactly this
+   * ("visibly tinted so white surfaces genuinely float") but was wired to a
+   * single 3px avatar ring and nothing else.
+   *
+   * Deepening the canvas alone would have collided with --secondary/--muted
+   * (0.96), erasing hover states, so the whole ladder moved together:
+   *   card/popover 1.000  ← content sits here, still pure white
+   *   canvas       0.965  ← workspace behind it (3.5% below the card)
+   *   hover/input  0.935  ← ghost buttons, table hover, form fields
+   * Hairlines went 0.10 → 0.14 (and 0.18 → 0.24 for fields/dividers) so edges
+   * are visible without becoming boxes. Dark theme already had separation and
+   * is untouched. */
+  --background: 0.965 0.004 230;
   /* Workspace canvas behind in-app content: visibly tinted so white
    * surfaces (cards, tables, list rows) genuinely float above it. */
   --canvas: 0.965 0.004 230;
@@ -65,10 +81,10 @@
   /* Incoming chat bubble — soft neutral against the green outgoing bubble. */
   --bubble: 0.955 0.006 230;
 
-  --secondary: 0.96 0.005 230;
+  --secondary: 0.935 0.006 230;
   --secondary-foreground: 0.18 0.005 250;
 
-  --muted: 0.96 0.005 230;
+  --muted: 0.935 0.006 230;
   --muted-foreground: 0.44 0.012 250;
 
   --accent: 0.55 0.097 196;
@@ -81,9 +97,9 @@
   --warning: 0.7 0.16 70;
   --warning-foreground: 0.22 0.005 250;
 
-  --border: 0.22 0.005 250 / 0.1;
-  --border-strong: 0.22 0.005 250 / 0.18;
-  --input: 0.96 0.005 230;
+  --border: 0.22 0.005 250 / 0.14;
+  --border-strong: 0.22 0.005 250 / 0.24;
+  --input: 0.935 0.006 230;
   --ring: 0.55 0.097 196;
   --shadow-color: 0.22 0.02 200;
 

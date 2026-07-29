@@ -1,8 +1,9 @@
 import type { JSX, SVGProps } from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import { Button, cn, Drawer, FormField, Pill, Spinner, Textarea } from '@yiji/ui';
+import { HELP_HISTORY_MAX_TURNS, type HelpAssistantTurn } from '@yiji/shared-types';
 import { ai, type AiError } from '../../lib/ai-client.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
@@ -10,13 +11,20 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
  * In-app AI help assistant — "how do I…?" / "why is X happening?" about THIS
  * CRM, answered in a sentence or two.
  *
- * STATELESS BY DESIGN: one question in, one answer out. There is deliberately
- * no thread, no history and no follow-up context — closing the panel throws
- * the exchange away. This is what keeps it a *help lookup* affordance instead
- * of drifting into a general-purpose chatbot (which is out of scope, costs
- * tokens per turn, and would need retention/PII handling we do not want here).
- * Please don't add a message list.
+ * A CONTINUOUS CHAT, SCOPED TO THE SESSION. The transcript lives in component
+ * state and the recent turns ride along with each question, so "and what about
+ * the one I just asked?" resolves instead of being refused as off-topic. It was
+ * single-shot until 2026-07-29; that made every follow-up a dead end.
+ *
+ * Nothing is persisted: no thread id, no server-side storage, and `close()`
+ * drops the transcript, so reopening starts clean and staff questions are never
+ * stored. Staying in scope is NOT a function of forgetting — the gateway's
+ * system prompt re-judges each question and fences replayed turns as untrusted
+ * data, so this remains a product help box, not a general chatbot.
  */
+
+/** One exchange in the panel. Mirrors HelpAssistantTurn plus the scope flag. */
+type Turn = { role: 'user' | 'assistant'; content: string; offTopic?: boolean };
 
 const MAX_LENGTH = 500;
 const MIN_LENGTH = 3;
@@ -47,10 +55,26 @@ export function HelpAssistant(): JSX.Element {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState('');
+  /** This session's transcript, oldest first. Never leaves the component. */
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const feedRef = useRef<HTMLDivElement | null>(null);
 
   const caller = { userId: user?.id ?? '' };
+  /**
+   * History is passed as a mutation VARIABLE, not read from `turns` inside
+   * mutationFn. react-query resolves mutationFn from the latest render, so a
+   * closure over `turns` picked up the user turn we had only just appended —
+   * the current question ended up inside its own history and was sent twice.
+   * Capturing it at call time in submit() keeps the two unambiguous.
+   */
   const ask = useMutation({
-    mutationFn: (q: string) => ai.helpAssistant(caller, q),
+    mutationFn: (v: { question: string; history: HelpAssistantTurn[] }) =>
+      ai.helpAssistant(caller, v.question, v.history),
+    onSuccess: (res) =>
+      setTurns((prev) => [
+        ...prev,
+        { role: 'assistant', content: res.answer, offTopic: res.offTopic },
+      ]),
   });
 
   const trimmed = question.trim();
@@ -58,15 +82,35 @@ export function HelpAssistant(): JSX.Element {
 
   const close = () => {
     setOpen(false);
-    // Stateless: drop the question and its answer so reopening starts clean.
+    // Session-scoped: drop the whole transcript so reopening starts clean and
+    // nothing staff asked survives the panel.
     setQuestion('');
+    setTurns([]);
     ask.reset();
   };
 
   const submit = () => {
     if (!canSend || ask.isPending) return;
-    ask.mutate(trimmed);
+    const asked = trimmed;
+    // Snapshot the transcript BEFORE adding this question, so it never appears
+    // in its own history. Only the most recent turns ride along: enough to
+    // resolve "that one", bounded so a long session cannot grow the prompt (and
+    // the bill) without limit. The server caps this again rather than trusting us.
+    const history = turns
+      .slice(-HELP_HISTORY_MAX_TURNS)
+      .map(({ role, content }) => ({ role, content }));
+    // Show the question immediately; the answer lands when the request settles.
+    setTurns((prev) => [...prev, { role: 'user', content: asked }]);
+    setQuestion('');
+    ask.mutate({ question: asked, history });
   };
+
+  // Keep the newest turn in view as the conversation grows.
+  useEffect(() => {
+    // Optional-call: jsdom (and some embedded webviews) do not implement
+    // scrollIntoView, and an auto-scroll must never break the panel.
+    feedRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+  }, [turns, ask.isPending]);
 
   /** Every gateway failure gets its own sentence — never a bare "error". */
   const errorMessage = (): string => {
@@ -133,9 +177,69 @@ export function HelpAssistant(): JSX.Element {
         title={t('helpAssistant.title', { defaultValue: 'Ask AI help' })}
         description={t('helpAssistant.description', {
           defaultValue:
-            'Ask how something works in this CRM and get a short answer. One question at a time — nothing is saved.',
+            'Ask how something works in this CRM. Follow-up questions keep their context; the chat is cleared when you close this panel and nothing is saved.',
         })}
       >
+        {/* Transcript — this session only, cleared when the panel closes. */}
+        <div className="space-y-3" aria-live="polite">
+          {turns.length === 0 && !ask.isPending && (
+            <p className="rounded-2xl bg-secondary/70 px-4 py-3 text-xs leading-relaxed text-muted-foreground ring-1 ring-foreground/[0.04]">
+              {t('helpAssistant.empty', {
+                defaultValue:
+                  'Ask about the inbox, tickets, SLA, reports, contacts, automation or the widget. Follow-up questions work — the chat clears when you close this panel.',
+              })}
+            </p>
+          )}
+
+          {turns.map((turn, i) =>
+            turn.role === 'user' ? (
+              <div key={i} className="flex justify-end">
+                <p className="max-w-[85%] whitespace-pre-wrap rounded-[22px] rounded-ee-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-foreground">
+                  {turn.content}
+                </p>
+              </div>
+            ) : (
+              <div key={i} className="flex flex-col items-start gap-1.5">
+                {/* Off-topic replies are shown but visually demoted, so nobody
+                    mistakes a refusal for guidance about this CRM. */}
+                {turn.offTopic && (
+                  <Pill tone="muted" size="sm">
+                    {t('helpAssistant.offTopicTag', { defaultValue: 'Out of scope' })}
+                  </Pill>
+                )}
+                <p
+                  className={cn(
+                    'max-w-[85%] whitespace-pre-wrap rounded-[22px] rounded-es-md px-4 py-2.5 text-sm leading-relaxed ring-1 ring-foreground/[0.06]',
+                    turn.offTopic
+                      ? 'bg-secondary text-muted-foreground'
+                      : 'bg-bubble text-foreground',
+                  )}
+                >
+                  {turn.content}
+                </p>
+              </div>
+            ),
+          )}
+
+          {ask.isPending && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Spinner /> {t('helpAssistant.thinking', { defaultValue: 'Looking that up…' })}
+            </div>
+          )}
+
+          {ask.isError && (
+            <p
+              role="alert"
+              className="rounded-xl bg-destructive/10 px-3.5 py-2.5 text-xs leading-relaxed text-destructive ring-1 ring-destructive/20"
+            >
+              {errorMessage()}
+            </p>
+          )}
+
+          {/* Scroll anchor — the Drawer body is the scroller, not this div. */}
+          <div ref={feedRef} />
+        </div>
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -149,10 +253,17 @@ export function HelpAssistant(): JSX.Element {
           >
             <Textarea
               id="help-assistant-question"
-              rows={4}
+              rows={3}
               maxLength={MAX_LENGTH}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                // Chat convention: Enter sends, Shift+Enter newlines.
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
               placeholder={t('helpAssistant.placeholder', {
                 defaultValue: 'How do I add an agent to a team?',
               })}
@@ -177,59 +288,6 @@ export function HelpAssistant(): JSX.Element {
             </Button>
           </div>
         </form>
-
-        {ask.isPending && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Spinner /> {t('helpAssistant.thinking', { defaultValue: 'Looking that up…' })}
-          </div>
-        )}
-
-        {ask.isError && (
-          <p
-            role="alert"
-            className="rounded-xl bg-destructive/10 px-3.5 py-2.5 text-xs leading-relaxed text-destructive ring-1 ring-destructive/20"
-          >
-            {errorMessage()}
-          </p>
-        )}
-
-        {ask.isSuccess && ask.data && (
-          <div className="rounded-2xl bg-card px-4 py-4 shadow-soft ring-1 ring-foreground/[0.06] space-y-2.5">
-            <div className="flex items-center gap-2">
-              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('helpAssistant.answer', { defaultValue: 'Answer' })}
-              </span>
-              {ask.data.offTopic && (
-                <Pill tone="muted" size="sm">
-                  {t('helpAssistant.offTopicTag', { defaultValue: 'Out of scope' })}
-                </Pill>
-              )}
-            </div>
-            {/* Off-topic answers are still shown, but visually demoted so nobody
-                mistakes them for authoritative guidance about this CRM. */}
-            {ask.data.offTopic && (
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {t('helpAssistant.offTopic', {
-                  defaultValue:
-                    'That looks outside what this assistant covers — it only answers questions about this CRM.',
-                })}
-              </p>
-            )}
-            <p
-              className={cn(
-                'whitespace-pre-wrap text-sm leading-relaxed',
-                ask.data.offTopic ? 'text-muted-foreground' : 'text-foreground',
-              )}
-            >
-              {ask.data.answer}
-            </p>
-            <p className="text-2xs text-muted-foreground">
-              {t('helpAssistant.statelessNote', {
-                defaultValue: 'Answers aren’t saved. Edit the question above to ask another.',
-              })}
-            </p>
-          </div>
-        )}
       </Drawer>
     </>
   );

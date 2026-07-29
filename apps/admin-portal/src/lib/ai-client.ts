@@ -1,4 +1,4 @@
-import type { AiFeatureConfig, HelpAssistantResponse } from '@yiji/shared-types';
+import type { AiFeatureConfig, HelpAssistantResponse, HelpAssistantTurn } from '@yiji/shared-types';
 import { AI_ENDPOINTS } from '@yiji/shared-types';
 import { auth } from './directus.js';
 
@@ -86,11 +86,20 @@ interface AiErrorPayload {
 
 export const ai = {
   /** In-app help assistant — one question, one answer, no history kept. */
-  async helpAssistant(c: CallerHeaders, question: string): Promise<HelpAssistantResponse> {
+  /**
+   * `history` carries the earlier turns of the CURRENT panel session so
+   * follow-ups resolve. Nothing is persisted anywhere — the transcript lives
+   * in component state and dies with the panel.
+   */
+  async helpAssistant(
+    c: CallerHeaders,
+    question: string,
+    history: HelpAssistantTurn[] = [],
+  ): Promise<HelpAssistantResponse> {
     const res = await fetch(`${GATEWAY_URL}${AI_ENDPOINTS.helpAssistant}`, {
       method: 'POST',
       headers: await authHeaders(c),
-      body: JSON.stringify({ question }),
+      body: JSON.stringify(history.length ? { question, history } : { question }),
     });
     if (!res.ok) {
       let payload: AiErrorPayload = {};

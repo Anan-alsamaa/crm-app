@@ -90,9 +90,11 @@ describe('HelpAssistant (admin portal)', () => {
     await waitFor(() =>
       expect(screen.getByText('Open the ticket and use the Assignee menu.')).toBeInTheDocument(),
     );
+    // Third argument is the replayed transcript — empty on the first turn.
     expect(ai.helpAssistant).toHaveBeenCalledWith(
       { userId: 'admin-1' },
       'How do I reassign a ticket?',
+      [],
     );
   });
 
@@ -103,7 +105,9 @@ describe('HelpAssistant (admin portal)', () => {
     await user.type(screen.getByLabelText('Your question'), 'What is the weather?');
     await user.click(screen.getByRole('button', { name: 'Ask' }));
     await waitFor(() => expect(screen.getByText('Out of scope')).toBeInTheDocument());
-    expect(screen.getByText(/only answers questions about this CRM/)).toBeInTheDocument();
+    // The refusal text itself comes from the gateway and is shown in the
+    // bubble; the panel no longer repeats an explanation next to it.
+    expect(screen.getByText('I only cover this CRM.')).toBeInTheDocument();
   });
 
   it('renders the daily allowance and reset time on quota_exceeded', async () => {
@@ -187,5 +191,40 @@ describe('HelpAssistant (admin portal)', () => {
     await user.type(screen.getByLabelText('Your question'), 'ya');
     expect(send).toBeEnabled();
     expect(ai.helpAssistant).not.toHaveBeenCalled();
+  });
+
+  it('replays the session transcript so follow-ups have context', async () => {
+    ai.helpAssistant
+      .mockResolvedValueOnce({
+        answer: 'Open the ticket and use the Assignee menu.',
+        offTopic: false,
+      })
+      .mockResolvedValueOnce({ answer: 'Only the assigned agent sees it.', offTopic: false });
+    renderHelp();
+    await openPanel();
+
+    await user.type(screen.getByLabelText('Your question'), 'How do I reassign a ticket?');
+    await user.click(screen.getByRole('button', { name: 'Ask' }));
+    await screen.findByText('Open the ticket and use the Assignee menu.');
+
+    // The composer clears, so the follow-up is typed into an empty box.
+    await user.type(screen.getByLabelText('Your question'), 'And who can see it?');
+    await user.click(screen.getByRole('button', { name: 'Ask' }));
+    await screen.findByText('Only the assigned agent sees it.');
+
+    // Second call must carry BOTH earlier turns, oldest first — that context is
+    // the whole point; without it the gateway refuses follow-ups as off-topic.
+    expect(ai.helpAssistant).toHaveBeenNthCalledWith(
+      2,
+      { userId: 'admin-1' },
+      'And who can see it?',
+      [
+        { role: 'user', content: 'How do I reassign a ticket?' },
+        { role: 'assistant', content: 'Open the ticket and use the Assignee menu.' },
+      ],
+    );
+
+    // Both questions stay on screen: it reads as a conversation, not a lookup.
+    expect(screen.getByText('How do I reassign a ticket?')).toBeInTheDocument();
   });
 });

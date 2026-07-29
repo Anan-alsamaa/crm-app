@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   AI_ENDPOINTS,
@@ -5,6 +6,7 @@ import {
   SuggestReplyRequest,
   SemanticSearchRequest,
   HelpAssistantRequest,
+  HELP_HISTORY_MAX_TURNS,
   type HelpAssistantResponse,
   type SummaryResponse,
   type SuggestReplyResponse,
@@ -504,11 +506,22 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
   /* In-app help for STAFF: "how do I …?" / "why is X happening?" about this
    * CRM.
    *
-   * DELIBERATELY STATELESS. One question in, one answer out: there is no
-   * conversation history, no thread id, and no follow-up turn. That is a
-   * product decision, not a missing feature — history is precisely what would
-   * turn an in-app help box into a general-purpose chat companion, and it
-   * multiplies the token cost of every turn. Do not add it.
+   * MULTI-TURN WITHIN A SESSION, STATELESS ON THE SERVER. The client replays
+   * the recent turns it holds in memory; nothing is stored here and there is no
+   * thread id, so a reload starts clean and no staff question is ever persisted.
+   *
+   * This was single-shot until 2026-07-29. The reasoning then was that history
+   * "is what would turn an in-app help box into a general-purpose chat
+   * companion" — but that conflated two things. Scope is enforced by the system
+   * prompt, which re-judges the CURRENT question every call and treats replayed
+   * turns as fenced, untrusted data; it does not depend on amnesia. What
+   * statelessness actually cost was ordinary usability: "and what about the one
+   * I just asked?" was unanswerable and came back as an off-topic refusal.
+   *
+   * The real price is tokens. Every turn re-sends the transcript, and a request
+   * carrying history can no longer share a cache entry with the same question
+   * asked cold — hence the history-aware cache key below. Turns are capped
+   * (HELP_HISTORY_MAX_TURNS) and re-truncated server-side rather than trusted.
    *
    * Abuse controls, in the order they fire:
    *   1. auth            — verified Directus session (authOrReply)
@@ -530,7 +543,22 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     // ticket?" and "  how do i   close a ticket? " share one cache entry.
     // Repeats are then free AND quota-free — the cheapest possible answer.
     const question = body.data.question;
-    const cacheKey = `help:${question.toLowerCase().replace(/\s+/g, ' ').trim()}`;
+    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+
+    // Keep only the most recent turns even if the client sent more; the schema
+    // caps this too, but the server must not depend on the client behaving.
+    const history = (body.data.history ?? []).slice(-HELP_HISTORY_MAX_TURNS);
+
+    // The answer to a follow-up depends on what came before, so the transcript
+    // has to be part of the key or a context-free hit would be served for a
+    // context-dependent question. Hashed to keep the key bounded, and a
+    // first-turn question keeps the old plain key so cold repeats stay free.
+    const cacheKey = history.length
+      ? `help:${createHash('sha256')
+          .update(history.map((t) => `${t.role}:${norm(t.content)}`).join('\n'))
+          .digest('hex')
+          .slice(0, 16)}:${norm(question)}`
+      : `help:${norm(question)}`;
 
     const gateRes = await gate(caller, reply, AI_ENDPOINTS.helpAssistant, cacheKey, req.ip);
     if (!gateRes) return;
@@ -564,7 +592,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
       });
     }
 
-    const p = prompts.helpAssistant(question);
+    const p = prompts.helpAssistant(question, history);
     const schema = z.object({ answer: z.string(), offTopic: z.boolean() });
     try {
       const result: HelpAssistantResponse = await runWith(

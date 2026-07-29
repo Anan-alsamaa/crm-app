@@ -63,17 +63,41 @@ export type SemanticSearchResponse = z.infer<typeof SemanticSearchResponse>;
 export const LeadScoreResponse = z.object({ score: z.number(), signals: z.array(z.string()) });
 export type LeadScoreResponse = z.infer<typeof LeadScoreResponse>;
 
+/** One prior turn of an in-session help conversation. */
+export const HelpAssistantTurn = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string().trim().min(1).max(2000),
+});
+export type HelpAssistantTurn = z.infer<typeof HelpAssistantTurn>;
+
+/** Turns the client may replay. 3 exchanges is enough to resolve "that one". */
+export const HELP_HISTORY_MAX_TURNS = 6;
+
 /**
  * In-app help assistant — staff (agents/admins) ask "how do I …?" / "why is X
  * happening?" about THIS product.
  *
- * Deliberately single-shot: one question, one answer, no history field and no
- * thread id. See the route handler for why.
+ * Multi-turn WITHIN A SESSION only. The client replays the recent turns it is
+ * holding in memory; the server stores nothing and there is no thread id, so
+ * closing the panel or reloading starts clean and no staff question is ever
+ * persisted. This was single-shot until 2026-07-29 — follow-ups like "and what
+ * about the one I just asked?" were unanswerable and got refused as off-topic.
+ *
+ * History does NOT widen the scope guard: the guard is enforced by the system
+ * prompt on every call and prior turns are fenced as untrusted data, exactly
+ * like the question itself, so an earlier turn cannot be used to argue the
+ * assistant into general-purpose chat.
  */
 export const HelpAssistantRequest = z.object({
   // Trimmed first, so "  ?  " can't pass as a 3-char question. 500 chars is
   // plenty for a support question and bounds the tokens we pay for.
   question: z.string().trim().min(3).max(500),
+  /**
+   * Recent turns, oldest first, EXCLUDING the current question. Bounded so a
+   * client cannot inflate the prompt (and the bill) without limit; the server
+   * additionally truncates rather than trusting the client.
+   */
+  history: z.array(HelpAssistantTurn).max(HELP_HISTORY_MAX_TURNS).optional(),
 });
 export type HelpAssistantRequest = z.infer<typeof HelpAssistantRequest>;
 
