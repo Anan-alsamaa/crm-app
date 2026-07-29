@@ -40,11 +40,24 @@ function renderHelp() {
   return render(<HelpAssistant />, { wrapper: Wrapper });
 }
 
+/*
+ * user-event v14's direct API (userEvent.click(...)) implicitly creates a new
+ * session per call, which does not reliably flush React 18 updates when the
+ * suite runs under load — every failure below appeared only in CI (Linux, both
+ * portals' suites running concurrently in one fork) and never locally. setup()
+ * is the supported pattern: one session per test, wired to this document.
+ */
+let user: ReturnType<typeof userEvent.setup>;
+
 async function openPanel() {
-  await userEvent.click(screen.getByRole('button', { name: 'Ask AI help' }));
+  await user.click(screen.getByRole('button', { name: 'Ask AI help' }));
+  // Wait for the portalled Drawer to actually commit before anyone queries
+  // inside it; asserting synchronously is what made these tests CI-fragile.
+  await screen.findByRole('dialog');
 }
 
 beforeEach(() => {
+  user = userEvent.setup();
   ai.helpAssistant.mockReset();
 });
 
@@ -64,8 +77,8 @@ describe('HelpAssistant (agent portal)', () => {
     });
     renderHelp();
     await openPanel();
-    await userEvent.type(screen.getByLabelText('Your question'), 'How do I reassign a ticket?');
-    await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    await user.type(screen.getByLabelText('Your question'), 'How do I reassign a ticket?');
+    await user.click(screen.getByRole('button', { name: 'Ask' }));
     await waitFor(() =>
       expect(screen.getByText('Open the ticket and use the Assignee menu.')).toBeInTheDocument(),
     );
@@ -79,8 +92,8 @@ describe('HelpAssistant (agent portal)', () => {
     ai.helpAssistant.mockResolvedValueOnce({ answer: 'I only cover this CRM.', offTopic: true });
     renderHelp();
     await openPanel();
-    await userEvent.type(screen.getByLabelText('Your question'), 'What is the weather?');
-    await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    await user.type(screen.getByLabelText('Your question'), 'What is the weather?');
+    await user.click(screen.getByRole('button', { name: 'Ask' }));
     await waitFor(() => expect(screen.getByText('Out of scope')).toBeInTheDocument());
     expect(screen.getByText(/only answers questions about this CRM/)).toBeInTheDocument();
   });
@@ -97,8 +110,8 @@ describe('HelpAssistant (agent portal)', () => {
     );
     renderHelp();
     await openPanel();
-    await userEvent.type(screen.getByLabelText('Your question'), 'How do I close a ticket?');
-    await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    await user.type(screen.getByLabelText('Your question'), 'How do I close a ticket?');
+    await user.click(screen.getByRole('button', { name: 'Ask' }));
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(/daily AI help allowance \(20\)/),
     );
@@ -111,8 +124,8 @@ describe('HelpAssistant (agent portal)', () => {
     );
     renderHelp();
     await openPanel();
-    await userEvent.type(screen.getByLabelText('Your question'), 'How do I close a ticket?');
-    await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    await user.type(screen.getByLabelText('Your question'), 'How do I close a ticket?');
+    await user.click(screen.getByRole('button', { name: 'Ask' }));
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(
         'AI help is turned off by your administrator.',
@@ -131,8 +144,8 @@ describe('HelpAssistant (agent portal)', () => {
     );
     renderHelp();
     await openPanel();
-    await userEvent.type(screen.getByLabelText('Your question'), 'How do I close a ticket?');
-    await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    await user.type(screen.getByLabelText('Your question'), 'How do I close a ticket?');
+    await user.click(screen.getByRole('button', { name: 'Ask' }));
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent('Too many requests — try again in 5s.'),
     );
@@ -144,8 +157,8 @@ describe('HelpAssistant (agent portal)', () => {
     );
     renderHelp();
     await openPanel();
-    await userEvent.type(screen.getByLabelText('Your question'), 'How do I close a ticket?');
-    await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    await user.type(screen.getByLabelText('Your question'), 'How do I close a ticket?');
+    await user.click(screen.getByRole('button', { name: 'Ask' }));
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent('AI help isn’t configured yet.'),
     );
@@ -156,10 +169,14 @@ describe('HelpAssistant (agent portal)', () => {
     await openPanel();
     const send = screen.getByRole('button', { name: 'Ask' });
     expect(send).toBeDisabled();
-    await userEvent.type(screen.getByLabelText('Your question'), 'hi');
+    await user.type(screen.getByLabelText('Your question'), 'hi');
     expect(send).toBeDisabled();
-    expect(screen.getByTestId('help-assistant-counter')).toHaveTextContent('2/500');
-    await userEvent.type(screen.getByLabelText('Your question'), 'ya');
+    // Assert the counter once React has committed the keystrokes. Reading it
+    // synchronously is exactly what failed in CI ("expected 2/500, got 0/500").
+    await waitFor(() =>
+      expect(screen.getByTestId('help-assistant-counter')).toHaveTextContent('2/500'),
+    );
+    await user.type(screen.getByLabelText('Your question'), 'ya');
     expect(send).toBeEnabled();
     expect(ai.helpAssistant).not.toHaveBeenCalled();
   });
