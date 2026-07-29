@@ -27,7 +27,13 @@ test('admin signs in and reaches Users management', async ({ page }) => {
   // Admin lands on the Dashboard; navigate to Users management.
   await page.getByRole('link', { name: /users/i }).click();
   await page.waitForURL(/\/users/);
-  await expect(page.getByRole('heading', { name: /users/i })).toBeVisible({ timeout: 20_000 });
+  // Match the AppShell's page title (h1) specifically: the Users page also has
+  // its own <h2>Users</h2>, and an unqualified heading query resolves to both,
+  // which Playwright strict mode rejects. `login()` above already scopes by
+  // level for the same reason.
+  await expect(page.getByRole('heading', { name: /users/i, level: 1 })).toBeVisible({
+    timeout: 20_000,
+  });
 });
 
 test('admin creates a team then a user assigned to it', async ({ page }) => {
