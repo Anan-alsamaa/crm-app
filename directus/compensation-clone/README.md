@@ -85,12 +85,23 @@ pipelines (see `schema/prod-flow-*.json`, extracted read-only):
 
 ## Reproduce on a fresh local Directus
 
+> **The schema and the Agent permissions are now part of the main Directus
+> bootstrap** (`pnpm --filter directus-bootstrap apply`). It reads the same
+> `schema/*.json` snapshots as `apply-local.mjs` and grants the same permissions
+> as `grant-agent-perms.mjs` — see `directus/bootstrap/src/compensation.ts`. Both
+> scripts remain here as standalone equivalents; running either is redundant
+> after a bootstrap, and harmless (all four paths are idempotent).
+>
+> **Flows are deliberately NOT bootstrapped** — production owns the real ones and
+> the stand-ins below make no external calls, so shipping them would silently
+> replace real logic. `directus-bootstrap verify` warns about missing flow ids.
+
 ```bash
 # creds default to the local dev admin; override via env if needed
-node directus/compensation-clone/apply-local.mjs      # 5 collections + relations
+node directus/compensation-clone/apply-local.mjs      # 5 collections + relations (the bootstrap does this too)
 node directus/compensation-clone/standin-flows.mjs    # 7 stand-in flows mirroring prod pipelines (same ids); add --force to recreate after changing a pipeline/inputs
 node directus/compensation-clone/layout-local.mjs     # admin form layout: tabs, super-header, button bar
-node directus/compensation-clone/grant-agent-perms.mjs # Agent role: read on the 5 collections (portal queue)
+node directus/compensation-clone/grant-agent-perms.mjs # Agent role: read on the 5 collections (the bootstrap does this too)
 node directus/compensation-clone/seed.mjs             # synthetic sample requests
 ```
 

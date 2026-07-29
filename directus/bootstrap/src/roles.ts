@@ -9,6 +9,8 @@
  *   - Agent access is scoped via permission filters.
  */
 
+import { COMPENSATION_COLLECTIONS, COMPENSATION_OPS_EDITABLE_FIELDS } from './compensation.js';
+
 export type Action = 'create' | 'read' | 'update' | 'delete';
 
 export interface PermissionSpec {
@@ -175,6 +177,19 @@ export const roles: RoleSpec[] = [
       { collection: 'tickets_files', action: 'create' },
       { collection: 'tickets_files', action: 'read' },
       { collection: 'tickets_files', action: 'delete' },
+      // Compensation ops queue (/compensation). Ops agents have no Directus
+      // access, so the portal is their only surface: read the queue + the issue
+      // catalog they classify with. Unfiltered — a compensation request has no
+      // assigned-agent column; the queue is worked as a shared pool.
+      ...COMPENSATION_COLLECTIONS.flatMap(readOnly),
+      // Field-scoped update: ops prepare a request for the workflow buttons.
+      // Status, computed values and coupon links stay read-only here — those are
+      // written by the Directus flows, which run with their own accountability.
+      {
+        collection: 'compensation_requests',
+        action: 'update',
+        fields: COMPENSATION_OPS_EDITABLE_FIELDS,
+      },
     ],
   },
   {

@@ -84,10 +84,21 @@ Each of these gates a feature that will _appear_ to work while doing nothing —
 none of them fail loudly, so verify them explicitly.
 
 - [ ] **Re-run the Directus bootstrap** (`pnpm --filter directus-bootstrap apply`).
-      Adds `tickets.order_snapshot` (JSON) and grants `tickets: read` to the
-      **svc-socket-gateway** role. Without it: ticket order cards stay empty and
-      ticket-assignment notifications silently no-op. The apply is additive and
-      idempotent (it only ever _creates_, never deletes/updates).
+      Adds `tickets.order_snapshot` (JSON), grants `tickets: read` to the
+      **svc-socket-gateway** role, and provisions the **compensation ops queue**
+      (5 collections + the Agent grants — see below). Without it: ticket order
+      cards stay empty, ticket-assignment notifications silently no-op, and
+      `/compensation` 403s for every agent. The apply is additive and idempotent
+      (it only ever _creates_, never deletes/updates).
+- [ ] **Compensation workflow FLOWS are NOT provisioned by the bootstrap.** The
+      schema and the Agent permissions now are, so the queue lists and the detail
+      page renders — but each action button triggers a Directus **manual flow by
+      fixed id** (`directus/compensation-clone/flow-contract.json`), and those
+      flows carry the real logic (including the Yiji `AddCoupon` call). Confirm
+      the target Directus already owns those 7 flow ids —
+      `pnpm --filter directus-bootstrap verify` prints a `WARN` naming any that
+      are missing. Never point production at `standin-flows.mjs`: those are
+      offline look-alikes that make no external calls.
 - [ ] **`VITE_JOB_PRODUCER_URL` for the AGENT portal build** (it was admin-only
       before). Must point at the gateway's HTTP base in prod. If unset the build
       falls back to `localhost:3031` and **assignment notifications quietly do
