@@ -25,7 +25,6 @@ vi.mock('../src/features/inbox/api.js', () => inbox);
 
 // Heavy children pull in AI / directus — stub them to markers so the sidebar
 // renders cheaply and deterministically.
-vi.mock('../src/features/ai/AiPanel.js', () => ({ AiPanel: () => <div>ai-panel</div> }));
 vi.mock('../src/features/custom-fields/CustomFieldsSection.js', () => ({
   CustomFieldsSection: () => <div>custom-fields</div>,
 }));
@@ -69,8 +68,13 @@ describe('ConversationSidebar', () => {
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('alice@example.com')).toBeInTheDocument();
     expect(screen.getByText('VIP')).toBeInTheDocument();
-    expect(screen.getByText('ai-panel')).toBeInTheDocument();
     expect(screen.getByText('custom-fields')).toBeInTheDocument();
+  });
+
+  it('has no AI panel: AI assists staff about the app, not customer replies', () => {
+    inbox.useConversation.mockReturnValue({ data: convo, isLoading: false });
+    renderSidebar();
+    expect(screen.queryByText('ai-panel')).not.toBeInTheDocument();
   });
 
   it('renders internal notes and the no-tickets empty state', () => {

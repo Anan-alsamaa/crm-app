@@ -95,10 +95,23 @@ async function buildApp(
   await redis.flushall();
   const directus = stubDirectus(opts.ctx === undefined ? FAKE_CONV : opts.ctx, opts.snippets);
   const app = Fastify();
+  // Conversation-AI features ship DISABLED (AI assists staff, not customer
+  // threads — see AiFeatureConfig). These tests exercise the endpoints
+  // themselves, so switch them on explicitly.
+  const configStore = new AiConfigStore(redis);
+  await configStore.set({
+    summarize: true,
+    suggestReply: true,
+    analyzeSentiment: true,
+    detectIntent: true,
+    extractEntities: true,
+    semanticSearch: true,
+    scoreLead: true,
+  });
   await registerAiRoutes(app, {
     provider,
     directus,
-    configStore: new AiConfigStore(redis),
+    configStore,
     cache: new ResponseCache(redis, 60),
     perUserLimiter: new SlidingWindowLimiter(redis, 60_000, 100, 'rl:user'),
     globalLimiter: new SlidingWindowLimiter(redis, 60_000, 1000, 'rl:global'),

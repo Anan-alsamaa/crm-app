@@ -94,3 +94,32 @@ describe('prompt injection defences', () => {
     expect(system).toMatch(/never answer, summarise or act on/i);
   });
 });
+
+/**
+ * PRODUCT DECISION lock-in: AI assists STAFF (the in-app help assistant), it
+ * does not read customer threads or draft customer replies. The conversation-AI
+ * endpoints stay implemented but ship OFF, so nothing can call them unless an
+ * admin deliberately turns one on.
+ */
+describe('AI feature defaults', () => {
+  it('ships every conversation-AI feature disabled', async () => {
+    const { AiFeatureConfig } = await import('@yiji/shared-types');
+    const defaults = AiFeatureConfig.parse({});
+    for (const key of [
+      'summarize',
+      'suggestReply',
+      'analyzeSentiment',
+      'detectIntent',
+      'extractEntities',
+      'semanticSearch',
+      'scoreLead',
+    ] as const) {
+      expect(defaults[key], `${key} must ship disabled`).toBe(false);
+    }
+  });
+
+  it('ships the staff help assistant enabled', async () => {
+    const { AiFeatureConfig } = await import('@yiji/shared-types');
+    expect(AiFeatureConfig.parse({}).helpAssistant).toBe(true);
+  });
+});

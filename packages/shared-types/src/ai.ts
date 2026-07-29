@@ -86,14 +86,24 @@ export const HelpAssistantResponse = z.object({
 export type HelpAssistantResponse = z.infer<typeof HelpAssistantResponse>;
 
 /** Admin-configurable AI feature flags + monthly usage cap (read by gateway). */
+/**
+ * PRODUCT DECISION: AI supports STAFF, not customer conversations.
+ *
+ * The only AI surface in the product is the help assistant — agents and admins
+ * asking how the application works. The conversation-AI endpoints below (which
+ * read a customer thread, and in suggest-reply's case draft text sent back to a
+ * customer) are therefore DISABLED BY DEFAULT. They remain implemented and an
+ * admin can switch any of them on from the AI configuration page, but nothing
+ * in the UI calls them.
+ */
 export const AiFeatureConfig = z.object({
-  summarize: z.boolean().default(true),
-  suggestReply: z.boolean().default(true),
-  analyzeSentiment: z.boolean().default(true),
-  detectIntent: z.boolean().default(true),
-  extractEntities: z.boolean().default(true),
-  semanticSearch: z.boolean().default(true),
-  scoreLead: z.boolean().default(true),
+  summarize: z.boolean().default(false),
+  suggestReply: z.boolean().default(false),
+  analyzeSentiment: z.boolean().default(false),
+  detectIntent: z.boolean().default(false),
+  extractEntities: z.boolean().default(false),
+  semanticSearch: z.boolean().default(false),
+  scoreLead: z.boolean().default(false),
   /** Kill switch for the in-app help assistant (enforced by the gateway gate). */
   helpAssistant: z.boolean().default(true),
   monthlyCap: z.number().int().nonnegative().default(0), // 0 = unlimited

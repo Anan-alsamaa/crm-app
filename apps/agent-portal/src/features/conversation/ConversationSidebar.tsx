@@ -23,7 +23,6 @@ import { useContact, useUpdateContact } from '../contacts/api.js';
 import { useAssetBlobUrl } from '../../lib/useAssetBlobUrl.js';
 import { downloadAsset } from '../../lib/directus.js';
 import { Lightbox } from '../../components/Lightbox.js';
-import { AiPanel } from '../ai/AiPanel.js';
 import { LatestOrder } from '../commerce/OrderViews.js';
 import { ConversationTags } from './ConversationTags.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
@@ -378,19 +377,9 @@ export function ConversationSidebar({
         </section>
       )}
 
-      {/* AI assistance */}
-      <section className="px-5 py-4">
-        <AiPanel
-          key={conversationId}
-          conversationId={conversationId}
-          vendorId={
-            (c as unknown as { vendor?: string | { id: string } }).vendor &&
-            typeof (c as unknown as { vendor?: string | { id: string } }).vendor === 'object'
-              ? (c as unknown as { vendor: { id: string } }).vendor.id
-              : ((c as unknown as { vendor?: string }).vendor ?? 'unknown')
-          }
-        />
-      </section>
+      {/* No AI in the customer conversation, by product decision: AI assistance
+          is for STAFF asking about the application (the help assistant in the
+          top bar), not for generating or shaping customer replies. */}
 
       {/* Internal notes — agent-only side conversation. Authored by the team,
           rendered out of the customer thread so they can't bleed in visually. */}
