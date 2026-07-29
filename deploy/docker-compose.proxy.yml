@@ -1,0 +1,39 @@
+# Reverse-proxy + automatic-HTTPS overlay for the production stack.
+#
+# Adds a Caddy edge that terminates TLS and routes public hostnames to the
+# internal services. Use it TOGETHER with the base prod file (run from the repo
+# root so the relative ./deploy path resolves):
+#
+#   docker compose -f docker-compose.prod.yml -f deploy/docker-compose.proxy.yml \
+#     --env-file .env.prod up -d
+#
+# Requires BASE_DOMAIN + ACME_EMAIL in the env file, and DNS records pointing at
+# this host (see deploy/Caddyfile). Once Caddy is the public edge you no longer
+# need to publish the raw service ports to the host - see docs/DEPLOYMENT.md
+# ("Lock down the edge").
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp' # HTTP/3 (QUIC)
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN:?set BASE_DOMAIN (e.g. crm.example.com)}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL for Let's Encrypt registration}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # persisted certs - do NOT lose this volume
+      - caddy_config:/config
+    depends_on:
+      - directus
+      - socket-gateway
+      - ai-gateway
+      - agent-portal
+      - admin-portal
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -12,6 +12,15 @@ dist/
 build/
 *.tsbuildinfo
 
+# ...except vendored Directus marketplace extensions. These are third-party
+# BUILT bundles, not our build output: Directus loads `dist/index.js` at
+# startup from the mounted ./directus/extensions volume, and nothing in this
+# repo can regenerate them. The compensation request form needs super-header
+# to render its action bar, so a fresh deploy without this file silently loses
+# those buttons (docs/GO-LIVE-READINESS.md §4b).
+!directus/extensions/*/dist/
+!directus/extensions/*/dist/**
+
 # Test / coverage
 coverage/
 playwright-report/

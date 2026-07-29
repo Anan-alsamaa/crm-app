@@ -1,0 +1,87 @@
+# Yiji CRM - reverse proxy + automatic HTTPS (Caddy).
+#
+# Routes each public hostname to the right internal service and terminates TLS
+# with auto-provisioned Let's Encrypt certificates (renewed automatically).
+# WebSocket upgrades (the socket-gateway) are proxied transparently.
+#
+# Set BASE_DOMAIN + ACME_EMAIL in your --env-file. Point these DNS A/AAAA
+# records at this host BEFORE first boot so the ACME challenge can complete:
+#   agent.$BASE_DOMAIN   admin.$BASE_DOMAIN   api.$BASE_DOMAIN
+#   ws.$BASE_DOMAIN      ai.$BASE_DOMAIN
+#
+# These public URLs must match the VITE_* build args the portal images were
+# built with (see docs/DEPLOYMENT.md):
+#   VITE_DIRECTUS_URL=https://api.$BASE_DOMAIN
+#   VITE_SOCKET_URL=https://ws.$BASE_DOMAIN
+#   VITE_AI_GATEWAY_URL=https://ai.$BASE_DOMAIN
+
+{
+	email {$ACME_EMAIL}
+}
+
+# Shared security headers. HSTS forces HTTPS for a year (incl. subdomains); the
+# rest are conservative, app-safe defaults. A Content-Security-Policy is
+# intentionally NOT set here because it must be tuned to the SPA's asset/API
+# origins and tested per portal — see docs/PRODUCTION.md security checklist.
+(sechdrs) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+# Content-Security-Policy for the SPAs. Verified safe against the built portals
+# (script-src 'self' — Vite emits no inline scripts; only a same-origin module).
+# style-src allows 'unsafe-inline' for React/Tailwind inline styles. connect-src
+# is the api/ws/ai origins the portals talk to. If you change hostnames or add a
+# CDN/font host, update this accordingly.
+(spa_csp) {
+	header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.{$BASE_DOMAIN}; font-src 'self' data:; connect-src 'self' https://api.{$BASE_DOMAIN} https://ai.{$BASE_DOMAIN} https://ws.{$BASE_DOMAIN} wss://ws.{$BASE_DOMAIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+}
+
+# Agent portal (static SPA)
+agent.{$BASE_DOMAIN} {
+	import sechdrs
+	import spa_csp
+	header X-Frame-Options "DENY"
+	encode zstd gzip
+	reverse_proxy agent-portal:80
+}
+
+# Admin portal (static SPA)
+admin.{$BASE_DOMAIN} {
+	import sechdrs
+	import spa_csp
+	header X-Frame-Options "DENY"
+	encode zstd gzip
+	reverse_proxy admin-portal:80
+}
+
+# Directus - API, auth, and private asset storage (attachments)
+api.{$BASE_DOMAIN} {
+	import sechdrs
+	encode zstd gzip
+	reverse_proxy directus:8055
+}
+
+# Socket.IO realtime gateway (WebSocket). Caddy performs the upgrade
+# automatically. When you scale socket-gateway beyond one replica, Socket.IO
+# needs sticky sessions for the long-polling fallback - uncomment lb_policy and
+# the active health check (which probes the gateway's internal :8081 /ready).
+ws.{$BASE_DOMAIN} {
+	import sechdrs
+	reverse_proxy socket-gateway:8080 {
+		# lb_policy cookie
+		# health_uri /ready
+		# health_port 8081
+	}
+}
+
+# AI gateway
+ai.{$BASE_DOMAIN} {
+	import sechdrs
+	encode zstd gzip
+	reverse_proxy ai-gateway:8081
+}
