@@ -14,7 +14,7 @@
  * container; locally we must not write into the demo data on :8055.
  */
 import { spawn } from 'node:child_process';
-import { rmSync, mkdtempSync, existsSync } from 'node:fs';
+import { rmSync, mkdtempSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -75,7 +75,16 @@ async function waitFor(url, label, tries = 60) {
     }
     await new Promise((r) => setTimeout(r, 2000));
   }
-  throw new Error(`${label} (${url}) did not come up`);
+  // Say what to look at. The service usually DID start — it just bound a
+  // different port than we polled (a stray .env winning over our config), and
+  // the bare "did not come up" sends you hunting a phantom startup failure
+  // while the real clue ("Server started at …:<other port>") sits in the log
+  // above. A wrong-port process also keeps running after this throw.
+  throw new Error(
+    `${label} (${url}) did not come up. Check the log above for the port it ACTUALLY ` +
+      `bound: if they differ, config leaked in from elsewhere. Also check nothing else ` +
+      `already holds ${new URL(url).port}.`,
+  );
 }
 
 function killAll() {
@@ -135,6 +144,24 @@ try {
   };
   delete directusEnv.REDIS_URL;
   const localDir = join(ROOT, 'directus', 'local');
+
+  // Directus is spawned with cwd=directus/local, and it loads that folder's own
+  // `.env` — which takes precedence over the environment we pass here. On any
+  // machine where someone created one for manual dev (it is gitignored, so CI
+  // never sees it) that file silently wins: DB_CLIENT/DB_HOST point the
+  // "throwaway" instance at a REAL Postgres, and PORT drags it onto the shared
+  // 8055, where it shadows the running stack and outlives this script. Pinning
+  // CONFIG_PATH at a file we generate makes the isolation actually hold — that
+  // is the whole promise of this runner.
+  const configPath = join(tmp, 'directus.env');
+  writeFileSync(
+    configPath,
+    Object.entries(directusEnv)
+      .filter(([, v]) => v !== undefined && v !== null)
+      .map(([k, v]) => `${k}=${String(v)}`)
+      .join('\n'),
+  );
+  directusEnv.CONFIG_PATH = configPath;
   // directus/local is not part of the pnpm workspace; install it once on demand.
   if (!existsSync(join(localDir, 'node_modules'))) {
     console.log('Installing directus/local (one-time)…');
