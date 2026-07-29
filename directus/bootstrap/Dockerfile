@@ -37,6 +37,11 @@ COPY packages/shared-types ./packages/shared-types
 COPY --from=deps /app/packages/shared-types/node_modules ./packages/shared-types/node_modules
 COPY tsconfig.base.json ./
 COPY directus/bootstrap ./directus/bootstrap
+# The compensation stage applies the production schema snapshots that live
+# alongside the clone scripts (src/compensation.ts reads ../../compensation-clone).
+# Without this the image bootstraps everything EXCEPT the /compensation queue,
+# and verify.ts fails on the missing collections.
+COPY directus/compensation-clone ./directus/compensation-clone
 
 WORKDIR /app/directus/bootstrap
 USER node

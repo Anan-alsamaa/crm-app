@@ -34,6 +34,7 @@ import {
 } from '@directus/sdk';
 import pg from 'pg';
 import { collections, junctions, relations, type FieldSpec } from './collections.js';
+import { applyCompensation } from './compensation.js';
 import { constraintStatements } from './constraints.js';
 import { roles } from './roles.js';
 import { loadEnv } from './env.js';
@@ -579,6 +580,11 @@ async function main(): Promise<void> {
   await applyUserFields(client);
   await applyRelations(client);
   await applyJunctions(client);
+  // After the CRM schema (the compensation issue catalog has an m2o onto
+  // `sla_policies`) and before roles — the Agent policy grants read/update on
+  // these collections, and a permission on a collection that doesn't exist yet
+  // is a silent dead grant.
+  await applyCompensation(client, idempotent);
   await applyRoles(client);
   await applyServiceUsers(client);
   // Constraints run BEFORE project-owner so the dedup indexes are never gated
