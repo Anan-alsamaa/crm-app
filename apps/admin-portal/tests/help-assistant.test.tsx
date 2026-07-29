@@ -41,11 +41,19 @@ function renderHelp() {
 }
 
 /*
- * user-event v14's direct API (userEvent.click(...)) implicitly creates a new
- * session per call, which does not reliably flush React 18 updates when the
- * suite runs under load — every failure below appeared only in CI (Linux, both
- * portals' suites running concurrently in one fork) and never locally. setup()
- * is the supported pattern: one session per test, wired to this document.
+ * One user-event session per test, with the inter-keystroke delay OFF.
+ *
+ * These tests failed only in CI, never locally, for several releases. The
+ * difference is load, not platform: CI runs both portals' suites concurrently
+ * (`pnpm -r`), while the local gate runs --workspace-concurrency=1. By default
+ * user-event waits on a real setTimeout between keystrokes, and under that
+ * contention the typing never landed — the character counter still read 0/500
+ * straight after typing "hi", so `canSend` stayed false, the Ask button stayed
+ * disabled, and every assertion downstream of a submit failed.
+ *
+ * `delay: null` types synchronously, removing the timer dependency altogether.
+ * setup() (rather than the direct userEvent.click API, which starts an implicit
+ * session per call) is also the supported pattern for React 18 act() handling.
  */
 let user: ReturnType<typeof userEvent.setup>;
 
@@ -57,7 +65,7 @@ async function openPanel() {
 }
 
 beforeEach(() => {
-  user = userEvent.setup();
+  user = userEvent.setup({ delay: null });
   ai.helpAssistant.mockReset();
 });
 
