@@ -104,14 +104,23 @@ none of them fail loudly, so verify them explicitly.
       falls back to `localhost:3031` and **assignment notifications quietly do
       nothing**. Set as a Docker build arg — it is baked in at build time, not
       read at runtime.
-- [ ] **Password reset needs SMTP on _Directus_** (`EMAIL_TRANSPORT`,
-      `EMAIL_SMTP_*`, `EMAIL_FROM`) — separate from the workers' `SMTP_*`.
-      Without a mailer the user still sees the neutral "check your email"
-      confirmation (deliberate, to prevent account enumeration), so this failure
-      is invisible. Verify by actually completing a reset in staging.
-- [ ] **`PASSWORD_RESET_URL_ALLOW_LIST`** on Directus must contain BOTH portal
-      reset URLs (e.g. `https://agent.example.com/reset-password,https://admin.example.com/reset-password`).
-      Directus rejects a `reset_url` that is not allow-listed.
+- [x] **Password reset SMTP on _Directus_ — now wired in the prod compose.**
+      Until 2026-07-29 neither `EMAIL_*` nor `PASSWORD_RESET_URL_ALLOW_LIST`
+      appeared in `docker-compose.prod.yml` at all, so setting them in
+      `.env.prod` (as this checklist told you to) did nothing — the values never
+      reached the container. Directus uses `EMAIL_*` names while the workers use
+      `SMTP_*`; the compose now maps the workers' `SMTP_*` onto Directus, so a
+      mailer is configured ONCE. `EMAIL_SMTP_HOST` is required (`:?`), matching
+      how the workers already fail fast.
+      Still verify by completing a real reset in staging: without a mailer the
+      user sees the neutral "check your email" confirmation regardless
+      (deliberate, to prevent account enumeration), so a broken mailer is
+      invisible from the UI.
+- [ ] **`PASSWORD_RESET_URL_ALLOW_LIST`** must list BOTH portal reset URLs
+      (`https://agent.example.com/reset-password,https://admin.example.com/reset-password`).
+      Now passed through by the compose and REQUIRED (`:?`), so Directus will
+      refuse to start rather than silently reject the emailed link — but the
+      value itself is still yours to set correctly.
 - [ ] SPA rewrite for `/reset-password` on both portals (unknown paths →
       `index.html`), so the emailed link resolves on a cold load.
 

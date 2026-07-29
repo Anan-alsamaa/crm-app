@@ -106,6 +106,24 @@ services:
       REFRESH_TOKEN_COOKIE_SAME_SITE: ${REFRESH_TOKEN_COOKIE_SAME_SITE:-lax}
       REFRESH_TOKEN_COOKIE_SECURE: 'true'
       STORAGE_LOCATIONS: ${STORAGE_LOCATIONS:-local}
+      # --- Password-reset email -------------------------------------------
+      # Directus sends the reset mail itself, and it uses EMAIL_* names while
+      # the workers use SMTP_*. Without these the portal still shows its
+      # neutral "check your email" confirmation (deliberate, to prevent account
+      # enumeration), so a missing mailer is INVISIBLE until a user reports
+      # that the link never arrives. The workers' SMTP_* values are mapped
+      # here so email is configured once, in one place.
+      EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-smtp}
+      EMAIL_FROM: ${SMTP_FROM:-Yiji Support <support@example.com>}
+      EMAIL_SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST (Directus password-reset email needs it)}
+      EMAIL_SMTP_PORT: ${SMTP_PORT:-587}
+      EMAIL_SMTP_USER: ${SMTP_USER:-}
+      EMAIL_SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      # 587 is STARTTLS (secure=false); set true only for implicit TLS on 465.
+      EMAIL_SMTP_SECURE: ${SMTP_SECURE:-false}
+      # Directus REJECTS a reset_url that is not allow-listed, so both portals'
+      # /reset-password URLs must appear here or the emailed link fails.
+      PASSWORD_RESET_URL_ALLOW_LIST: ${PASSWORD_RESET_URL_ALLOW_LIST:?set both portal /reset-password URLs}
     volumes:
       - directus_uploads:/directus/uploads
       - ./directus/extensions:/directus/extensions
