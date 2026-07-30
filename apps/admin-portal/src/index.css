@@ -55,10 +55,20 @@
   --popover-foreground: 0.18 0.005 250;
   /* YIJI BRAND TEAL — #0B8C8D = oklch(0.581 0.097 195.7). Fill steps one
    * notch darker (L 0.55) so white label text clears WCAG AA at 4.63:1. */
-  --primary: 0.55 0.097 196;
+
+  /* MULTI-HUE VIVID (2026-07-29). Chroma raised across every accent so colour
+   * carries meaning instead of decorating: teal is the brand, and status /
+   * priority / category each own a hue. `--primary` gained chroma at the SAME
+   * lightness AND its lightness re-solved: raising chroma alone dropped white-on-
+   * primary from 4.61 to 4.31:1 (under AA) because OKLCH L is PERCEPTUAL, not
+   * WCAG luminance. L was solved numerically per accent to clear 4.5:1 against
+   * white text; `--warning` deliberately stays light because its foreground is
+   * dark ink (6.74:1). `--sky` is new, for
+   * informational surfaces that were borrowing the brand teal and blurring it. */
+  --primary: 0.536 0.132 194;
   --primary-foreground: 1 0 0;
-  --primary-subtle: 0.581 0.097 196 / 0.12;
-  --brand: 0.581 0.097 196;
+  --primary-subtle: 0.581 0.132 194 / 0.14;
+  --brand: 0.581 0.132 194;
   --bubble: 0.955 0.006 230;
   --secondary: 0.935 0.006 230;
   --secondary-foreground: 0.18 0.005 250;
@@ -66,11 +76,11 @@
   --muted-foreground: 0.44 0.012 250;
   --accent: 0.55 0.097 196;
   --accent-foreground: 1 0 0;
-  --destructive: 0.56 0.22 25;
+  --destructive: 0.56 0.245 25;
   --destructive-foreground: 1 0 0;
-  --success: 0.58 0.15 155;
+  --success: 0.529 0.185 158;
   --success-foreground: 1 0 0;
-  --warning: 0.7 0.16 70;
+  --warning: 0.72 0.195 68;
   --warning-foreground: 0.22 0.005 250;
   --border: 0.22 0.005 250 / 0.14;
   --border-strong: 0.22 0.005 250 / 0.24;
@@ -84,10 +94,11 @@
   --rail-active: 0.581 0.097 196;
   --rail-active-foreground: 1 0 0;
   --rail-border: 0.31 0.04 196;
-  --secondary-brand: 0.55 0.2 20;
+  --secondary-brand: 0.58 0.235 16;
   --secondary-brand-foreground: 1 0 0;
   --display: 0.16 0.01 250;
-  --violet: 0.45 0.15 275;
+  --violet: 0.5 0.205 285;
+  --sky: 0.55 0.19 242;
   --magenta: 0.55 0.2 20;
 }
 
@@ -105,10 +116,10 @@
   --popover: 0.245 0.014 262;
   --popover-foreground: 0.96 0.005 250;
   /* Brand teal, lifted for dark ink. */
-  --primary: 0.68 0.11 196;
+  --primary: 0.7 0.145 194;
   --primary-foreground: 0.16 0.02 200;
   --primary-subtle: 0.68 0.11 196 / 0.18;
-  --brand: 0.68 0.11 196;
+  --brand: 0.7 0.145 194;
   --bubble: 0.3 0.02 260;
   --secondary: 0.25 0.012 262;
   --secondary-foreground: 0.96 0.005 250;
@@ -116,11 +127,11 @@
   --muted-foreground: 0.72 0.015 255;
   --accent: 0.68 0.11 196;
   --accent-foreground: 0.16 0.02 200;
-  --destructive: 0.66 0.2 22;
+  --destructive: 0.66 0.225 22;
   --destructive-foreground: 1 0 0;
-  --success: 0.72 0.15 155;
+  --success: 0.74 0.18 158;
   --success-foreground: 0.15 0.01 250;
-  --warning: 0.8 0.15 75;
+  --warning: 0.82 0.18 72;
   --warning-foreground: 0.18 0.01 250;
   --border: 0.96 0.01 250 / 0.13;
   --border-strong: 0.96 0.01 250 / 0.22;
@@ -132,10 +143,11 @@
   --rail-active: 0.3 0.07 196;
   --rail-active-foreground: 0.98 0.005 250;
   --rail-border: 0.26 0.025 196;
-  --secondary-brand: 0.62 0.19 20;
+  --secondary-brand: 0.66 0.22 16;
   --secondary-brand-foreground: 1 0 0;
   --display: 0.98 0.005 250;
-  --violet: 0.58 0.16 275;
+  --violet: 0.62 0.2 285;
+  --sky: 0.7 0.17 242;
   --magenta: 0.62 0.19 20;
 }
 

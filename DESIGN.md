@@ -17,7 +17,22 @@ from house `#0F8D8F` by raising chroma at the same lightness, so contrast
 math is unchanged). This is the tenant default referenced as `--primary`
 everywhere. Per-tenant override via `--brand-primary` on `<html>`.
 
-**Color strategy**: **Committed on conversation surfaces, Restrained
+**Color strategy (revised 2026-07-29): MULTI-HUE VIVID.** Colour now carries
+meaning across the whole product, not just the inbox. Teal remains the brand and
+the only _identity_ colour, but status, priority and category each own a hue —
+violet, coral, amber, emerald and the new `--sky` — and chroma is raised on every
+accent. This supersedes the earlier "decorative color stays banned" rule at the
+owner's direction.
+
+**Contrast is solved numerically, not by eye.** OKLCH `L` is PERCEPTUAL
+lightness, not WCAG luminance, so raising chroma at constant `L` silently drops
+contrast — it took `--primary` from 4.61 to 4.31:1, under AA for the white button
+labels it carries. Every accent that carries white text has its `L` solved to
+clear 4.5:1. `--warning` stays light on purpose: its foreground is dark ink
+(6.74:1), so darkening it would have made that pairing worse. Re-run the check
+if you retune a hue.
+
+_Superseded:_ **Committed on conversation surfaces, Restrained
 elsewhere** (messenger-vibrant direction, user-approved 2026-07-23,
 reference: modern messenger UIs). In the inbox/thread the brand teal
 carries the outgoing message bubbles, the unread count badges, the send

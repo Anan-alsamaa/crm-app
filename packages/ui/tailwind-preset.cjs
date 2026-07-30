@@ -91,6 +91,7 @@ module.exports = {
         display: 'oklch(var(--display) / <alpha-value>)',
         // Aurora gradient companions to the primary.
         violet: 'oklch(var(--violet) / <alpha-value>)',
+        sky: 'oklch(var(--sky) / <alpha-value>)',
         magenta: 'oklch(var(--magenta) / <alpha-value>)',
         // Incoming chat bubble surface (messenger-vibrant direction).
         bubble: 'oklch(var(--bubble) / <alpha-value>)',
@@ -159,7 +160,8 @@ module.exports = {
         none: 'none',
         xs: '0 1px 0 0 oklch(var(--shadow-color) / 0.04)',
         sm: '0 1px 2px 0 oklch(var(--shadow-color) / 0.06)',
-        DEFAULT: '0 1px 3px 0 oklch(var(--shadow-color) / 0.08), 0 1px 2px -1px oklch(var(--shadow-color) / 0.06)',
+        DEFAULT:
+          '0 1px 3px 0 oklch(var(--shadow-color) / 0.08), 0 1px 2px -1px oklch(var(--shadow-color) / 0.06)',
         md: '0 4px 12px -2px oklch(var(--shadow-color) / 0.12)',
         lg: '0 10px 30px -10px oklch(var(--shadow-color) / 0.24)',
         ring: '0 0 0 2px oklch(var(--ring) / 0.55)',
@@ -233,8 +235,7 @@ module.exports = {
         shimmer: 'shimmer 1.4s linear infinite',
         'mesh-drift': 'mesh-drift 24s ease-in-out infinite',
         'soft-pulse': 'soft-pulse 3.2s ease-in-out infinite',
-        'slide-in-drawer':
-          'slide-in-drawer 240ms cubic-bezier(0.32, 0.72, 0, 1) both',
+        'slide-in-drawer': 'slide-in-drawer 240ms cubic-bezier(0.32, 0.72, 0, 1) both',
         'message-in': 'message-in 260ms cubic-bezier(0.23, 1, 0.32, 1) both',
         'rise-in': 'rise-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both',
       },
