@@ -22,6 +22,7 @@ import {
   COMPENSATION_COLLECTIONS,
   compensationFlows,
   compensationSnapshotsPresent,
+  PROVISION_COMPENSATION,
 } from './compensation.js';
 import { roles } from './roles.js';
 import { loadEnv } from './env.js';
@@ -68,7 +69,8 @@ async function main(): Promise<void> {
   const expectedCollections = [
     ...collections.map((c) => c.collection),
     ...junctions.map((j) => j.junction),
-    ...COMPENSATION_COLLECTIONS,
+    // Expected here ONLY if this instance owns compensation.
+    ...(PROVISION_COMPENSATION ? COMPENSATION_COLLECTIONS : []),
   ];
   const actualCollections = new Set(
     ((await client.request(readCollections())) as Array<{ collection: string }>).map(
@@ -98,7 +100,7 @@ async function main(): Promise<void> {
   // (production owns the real ones, which call the Yiji API; the local stand-ins
   // must never ship). Report the gap so it is not discovered by an ops agent
   // clicking a button that silently 404s.
-  if (compensationSnapshotsPresent()) {
+  if (PROVISION_COMPENSATION && compensationSnapshotsPresent()) {
     const expectedFlows = compensationFlows();
     const actualFlows = new Set(
       (

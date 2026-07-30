@@ -25,7 +25,11 @@ export function TableSurface({
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.08] shadow-soft',
+        // overflow-x-auto, NOT overflow-hidden: a table wider than this surface
+        // used to be CLIPPED, so the right-hand columns were unreachable rather
+        // than merely cramped. Wide registers (ticket ops, agent reports) now
+        // scroll horizontally inside the card instead of losing data.
+        'overflow-x-auto rounded-2xl bg-card ring-1 ring-foreground/[0.08] shadow-soft',
         className,
       )}
       {...rest}
@@ -43,7 +47,16 @@ export function Table({
   ...rest
 }: HTMLAttributes<HTMLTableElement>): JSX.Element {
   return (
-    <table className={cn('w-full border-collapse text-sm', className)} {...rest}>
+    <table
+      className={cn(
+        // `w-full` alone let a many-column table squash every cell to fit.
+        // Pairing it with min-w-max keeps the natural column widths once the
+        // content needs more room, and the surface above scrolls to reach them.
+        'w-full min-w-max border-collapse text-sm',
+        className,
+      )}
+      {...rest}
+    >
       {children}
     </table>
   );

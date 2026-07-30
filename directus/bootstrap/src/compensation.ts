@@ -34,6 +34,19 @@ import {
 } from '@directus/sdk';
 import fs from 'node:fs';
 
+/**
+ * Compensation lives in a SEPARATE, pre-existing Directus: its collections,
+ * workflow flows and the account they are reached with are not ours. The CRM
+ * renders the UI and points at that instance (see the agent portal's
+ * lib/compensation-directus.ts), so this bootstrap must NOT create the schema
+ * in the CRM's own database by default — that would produce an unused shadow
+ * copy and grant the Agent role permissions on collections nobody reads.
+ *
+ * Set PROVISION_COMPENSATION=true only when this Directus really is the one
+ * that owns compensation (the local dev clone, or a self-hosted variant).
+ */
+export const PROVISION_COMPENSATION = process.env.PROVISION_COMPENSATION === 'true';
+
 /** Minimal structural view of the bootstrap's Directus client. */
 type Client = { request: (options: never) => Promise<unknown> };
 

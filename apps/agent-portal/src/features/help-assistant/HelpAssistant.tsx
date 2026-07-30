@@ -24,7 +24,25 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
  */
 
 /** One exchange in the panel. Mirrors HelpAssistantTurn plus the scope flag. */
-type Turn = { role: 'user' | 'assistant'; content: string; offTopic?: boolean };
+type Turn = {
+  role: 'user' | 'assistant';
+  content: string;
+  offTopic?: boolean;
+  /** Locally seeded greeting. Shown like a message, never sent as history —
+   *  replaying our own copy back to the model wastes tokens and teaches it
+   *  nothing about what the user actually asked. */
+  welcome?: boolean;
+};
+
+/* Starter prompts for the empty state. Grounded in things this product really
+ * does (the gateway refuses anything else), so a first click never produces a
+ * refusal — the worst possible first impression for a help assistant. */
+const STARTERS: Array<{ key: string; text: string }> = [
+  { key: 'reassign', text: 'How do I reassign a ticket to another agent?' },
+  { key: 'sla', text: 'How is the first-response SLA clock stopped?' },
+  { key: 'import', text: 'How do I import contacts from a CSV?' },
+  { key: 'team', text: 'How do I add an agent to a team?' },
+];
 
 const MAX_LENGTH = 500;
 const MIN_LENGTH = 3;
@@ -53,6 +71,7 @@ function HelpGlyph(props: SVGProps<SVGSVGElement>): JSX.Element {
 export function HelpAssistant(): JSX.Element {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const firstName = user?.first_name?.trim() || t('helpAssistant.there', { defaultValue: 'there' });
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState('');
   /** This session's transcript, oldest first. Never leaves the component. */
@@ -89,14 +108,16 @@ export function HelpAssistant(): JSX.Element {
     ask.reset();
   };
 
-  const submit = () => {
-    if (!canSend || ask.isPending) return;
-    const asked = trimmed;
+  /** Send an arbitrary question — used by both the composer and the chips. */
+  const send = (raw: string) => {
+    const asked = raw.trim();
+    if (asked.length < MIN_LENGTH || asked.length > MAX_LENGTH || ask.isPending) return;
     // Snapshot the transcript BEFORE adding this question, so it never appears
     // in its own history. Only the most recent turns ride along: enough to
     // resolve "that one", bounded so a long session cannot grow the prompt (and
     // the bill) without limit. The server caps this again rather than trusting us.
     const history = turns
+      .filter((t2) => !t2.welcome)
       .slice(-HELP_HISTORY_MAX_TURNS)
       .map(({ role, content }) => ({ role, content }));
     // Show the question immediately; the answer lands when the request settles.
@@ -104,6 +125,8 @@ export function HelpAssistant(): JSX.Element {
     setQuestion('');
     ask.mutate({ question: asked, history });
   };
+
+  const submit = () => send(question);
 
   // Keep the newest turn in view as the conversation grows.
   useEffect(() => {
@@ -157,7 +180,26 @@ export function HelpAssistant(): JSX.Element {
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true);
+          // Open on a greeting rather than an empty box: the panel should read
+          // as a conversation already in progress, not a form to fill in.
+          setTurns((prev) =>
+            prev.length
+              ? prev
+              : [
+                  {
+                    role: 'assistant',
+                    welcome: true,
+                    content: t('helpAssistant.welcome', {
+                      defaultValue:
+                        'Hi {{name}} — I can help with anything in this CRM: the inbox, tickets, SLA, reports, contacts, automation and the widget. How may I help you?',
+                      name: firstName,
+                    }),
+                  },
+                ],
+          );
+        }}
         aria-label={launchLabel}
         title={launchLabel}
         className={cn(
@@ -182,15 +224,6 @@ export function HelpAssistant(): JSX.Element {
       >
         {/* Transcript — this session only, cleared when the panel closes. */}
         <div className="space-y-3" aria-live="polite">
-          {turns.length === 0 && !ask.isPending && (
-            <p className="rounded-2xl bg-secondary/70 px-4 py-3 text-xs leading-relaxed text-muted-foreground ring-1 ring-foreground/[0.04]">
-              {t('helpAssistant.empty', {
-                defaultValue:
-                  'Ask about the inbox, tickets, SLA, reports, contacts, automation or the widget. Follow-up questions work — the chat clears when you close this panel.',
-              })}
-            </p>
-          )}
-
           {turns.map((turn, i) =>
             turn.role === 'user' ? (
               <div key={i} className="flex justify-end">
@@ -221,6 +254,37 @@ export function HelpAssistant(): JSX.Element {
             ),
           )}
 
+          {turns.length === 1 && turns[0]?.welcome && !ask.isPending && (
+            <div className="flex flex-col gap-2 pt-1">
+              <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('helpAssistant.tryAsking', { defaultValue: 'Try asking' })}
+              </p>
+              {STARTERS.map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() =>
+                    send(t(`helpAssistant.starter.${s.key}`, { defaultValue: s.text }))
+                  }
+                  className="group flex w-full items-center justify-between gap-3 rounded-xl bg-primary/10 px-4 py-2.5 text-start text-sm font-medium text-foreground ring-1 ring-primary/20 transition-all duration-fast ease-out hover:bg-primary hover:text-primary-foreground hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  <span>{t(`helpAssistant.starter.${s.key}`, { defaultValue: s.text })}</span>
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.75"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-3.5 w-3.5 shrink-0 opacity-40 transition-opacity group-hover:opacity-100"
+                    aria-hidden
+                  >
+                    <path d="M6 3l5 5-5 5" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          )}
           {ask.isPending && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Spinner /> {t('helpAssistant.thinking', { defaultValue: 'Looking that up…' })}

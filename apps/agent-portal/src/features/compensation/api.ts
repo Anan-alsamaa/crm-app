@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, triggerFlow, updateItem } from '@directus/sdk';
-import { directus } from '../../lib/directus.js';
+// Compensation lives in a SEPARATE Directus (its collections, flows and
+// account are not ours) — see lib/compensation-directus.ts. Falls back to the
+// CRM client when no dedicated instance is configured.
+import { compensationDirectus as directus } from '../../lib/compensation-directus.js';
 
 /**
  * Compensation requests — the ops team works these through the agent portal
