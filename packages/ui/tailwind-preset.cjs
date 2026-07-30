@@ -44,6 +44,7 @@ module.exports = {
           DEFAULT: 'oklch(var(--popover) / <alpha-value>)',
           foreground: 'oklch(var(--popover-foreground) / <alpha-value>)',
         },
+        'primary-tint': 'oklch(var(--primary-tint) / <alpha-value>)',
         primary: {
           DEFAULT: 'oklch(var(--primary) / <alpha-value>)',
           foreground: 'oklch(var(--primary-foreground) / <alpha-value>)',
@@ -61,14 +62,17 @@ module.exports = {
           DEFAULT: 'oklch(var(--accent) / <alpha-value>)',
           foreground: 'oklch(var(--accent-foreground) / <alpha-value>)',
         },
+        'destructive-tint': 'oklch(var(--destructive-tint) / <alpha-value>)',
         destructive: {
           DEFAULT: 'oklch(var(--destructive) / <alpha-value>)',
           foreground: 'oklch(var(--destructive-foreground) / <alpha-value>)',
         },
+        'success-tint': 'oklch(var(--success-tint) / <alpha-value>)',
         success: {
           DEFAULT: 'oklch(var(--success) / <alpha-value>)',
           foreground: 'oklch(var(--success-foreground) / <alpha-value>)',
         },
+        'warning-tint': 'oklch(var(--warning-tint) / <alpha-value>)',
         warning: {
           DEFAULT: 'oklch(var(--warning) / <alpha-value>)',
           foreground: 'oklch(var(--warning-foreground) / <alpha-value>)',
@@ -91,7 +95,9 @@ module.exports = {
         display: 'oklch(var(--display) / <alpha-value>)',
         // Aurora gradient companions to the primary.
         violet: 'oklch(var(--violet) / <alpha-value>)',
+        'violet-tint': 'oklch(var(--violet-tint) / <alpha-value>)',
         sky: 'oklch(var(--sky) / <alpha-value>)',
+        'sky-tint': 'oklch(var(--sky-tint) / <alpha-value>)',
         magenta: 'oklch(var(--magenta) / <alpha-value>)',
         // Incoming chat bubble surface (messenger-vibrant direction).
         bubble: 'oklch(var(--bubble) / <alpha-value>)',

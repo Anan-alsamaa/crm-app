@@ -79,10 +79,10 @@ function SlaPill({ cell }: { cell: SlaCell }) {
 /* Vibrant tinted KPI card — matches the Ticket report / export reports. */
 type KpiTone = 'blue' | 'green' | 'amber' | 'crimson';
 const KPI_TILE: Record<KpiTone, string> = {
-  blue: 'bg-sky/18 ring-sky/45',
-  green: 'bg-success/18 ring-success/45',
-  amber: 'bg-warning/22 ring-warning/50',
-  crimson: 'bg-destructive/18 ring-destructive/45',
+  blue: 'bg-sky-tint ring-sky/35',
+  green: 'bg-success-tint ring-success/35',
+  amber: 'bg-warning-tint ring-warning/40',
+  crimson: 'bg-destructive-tint ring-destructive/35',
 };
 const KPI_NUM: Record<KpiTone, string> = {
   blue: 'text-sky',

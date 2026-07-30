@@ -99,6 +99,20 @@
   --display: 0.16 0.01 250;
   --violet: 0.5 0.205 285;
   --sky: 0.55 0.19 242;
+
+  /* TINT RAMP — light, SATURATED fills for coloured surfaces (stat tiles, pills,
+   * callouts). Deliberately separate tokens rather than an alpha of the accent:
+   * `bg-success/18` is 18% of a DARK green over white, which reads grey-green and
+   * washed out. A high-lightness / mid-chroma colour reads unmistakably green
+   * while staying quiet enough for dark text on top. Pair as:
+   *   fill  bg-<hue>-tint   ring  ring-<hue>/35   text  text-<hue>
+   * That is what makes a tile colourful AND clean instead of merely pale. */
+  --primary-tint: 0.935 0.062 194;
+  --success-tint: 0.928 0.078 158;
+  --destructive-tint: 0.935 0.062 25;
+  --warning-tint: 0.945 0.085 75;
+  --sky-tint: 0.935 0.058 242;
+  --violet-tint: 0.935 0.062 285;
   --magenta: 0.55 0.2 20;
 }
 

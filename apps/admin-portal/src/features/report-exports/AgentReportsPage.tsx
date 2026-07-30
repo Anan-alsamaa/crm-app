@@ -94,10 +94,10 @@ const AGENT_SORT: Record<string, (r: AgentKpiRow) => string | number | null | un
 /* ── KPI card — vibrant tinted card, colored number (reference style) ───── */
 type Tone = 'blue' | 'violet' | 'green' | 'amber';
 const TILE_TONE: Record<Tone, string> = {
-  blue: 'bg-sky/18 ring-sky/45',
-  violet: 'bg-violet/18 ring-violet/45',
-  green: 'bg-success/18 ring-success/45',
-  amber: 'bg-warning/22 ring-warning/50',
+  blue: 'bg-sky-tint ring-sky/35',
+  violet: 'bg-violet-tint ring-violet/35',
+  green: 'bg-success-tint ring-success/35',
+  amber: 'bg-warning-tint ring-warning/40',
 };
 const NUM_TONE: Record<Tone, string> = {
   blue: 'text-sky',

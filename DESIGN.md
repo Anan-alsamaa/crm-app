@@ -42,6 +42,27 @@ avatar hues are part of the vibrancy. Outside conversation surfaces the
 restrained rules still apply: CTAs default to near-black
 (`--foreground`), decorative color stays banned.
 
+### Tint ramp — how a coloured surface is built
+
+A coloured surface is **three tokens, not one alpha**:
+
+| Part    | Token          | Example           |
+| ------- | -------------- | ----------------- |
+| fill    | `--<hue>-tint` | `bg-success-tint` |
+| edge    | accent @ ~35%  | `ring-success/35` |
+| numeral | accent         | `text-success`    |
+
+Do NOT fake the fill with a low alpha of the accent. `bg-success/18` is 18% of a
+_dark_ green over white, which reads grey-green and washed out — that mistake is
+why the stat tiles twice looked paler after a "more vibrant" pass. The tint
+tokens are high-lightness / mid-chroma, so they read unmistakably coloured while
+staying quiet enough to carry dark text.
+
+Accent-on-tint lands ~3.7–3.9:1, which is AA for LARGE text only. That is fine
+for the display numerals these tiles use (`text-3xl`+) and NOT fine for body
+copy — never put small text in the accent colour on a tint fill; use
+`--foreground` or `--muted-foreground` there.
+
 ### Surface ladder — why the canvas is tinted
 
 Light does not mean flat. Cards are pure white and the canvas sits **below**
