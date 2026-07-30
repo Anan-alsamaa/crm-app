@@ -59,15 +59,15 @@
    * Hairlines went 0.10 → 0.14 (and 0.18 → 0.24 for fields/dividers) so edges
    * are visible without becoming boxes. Dark theme already had separation and
    * is untouched. */
-  --background: 0.965 0.004 230;
+  --background: 0.95 0.006 230;
   /* Workspace canvas behind in-app content: visibly tinted so white
    * surfaces (cards, tables, list rows) genuinely float above it. */
-  --canvas: 0.965 0.004 230;
-  --foreground: 0.18 0.005 250;
+  --canvas: 0.95 0.006 230;
+  --foreground: 0.155 0.006 250;
   --card: 1 0 0;
-  --card-foreground: 0.18 0.005 250;
+  --card-foreground: 0.155 0.006 250;
   --popover: 1 0 0;
-  --popover-foreground: 0.18 0.005 250;
+  --popover-foreground: 0.155 0.006 250;
 
   /* YIJI BRAND TEAL — #0B8C8D = oklch(0.581 0.097 195.7).
    * The fill steps one notch darker (L 0.55 = #008384) so white label text
@@ -84,18 +84,18 @@
    * informational surfaces that were borrowing the brand teal and blurring it. */
   --primary: 0.536 0.132 194;
   --primary-foreground: 1 0 0;
-  --primary-subtle: 0.581 0.132 194 / 0.14;
+  --primary-subtle: 0.581 0.132 194 / 0.22;
   /* The brand hex itself, for the logo mark and brand-only surfaces. */
   --brand: 0.581 0.132 194;
 
   /* Incoming chat bubble — soft neutral against the green outgoing bubble. */
   --bubble: 0.955 0.006 230;
 
-  --secondary: 0.935 0.006 230;
-  --secondary-foreground: 0.18 0.005 250;
+  --secondary: 0.915 0.008 230;
+  --secondary-foreground: 0.155 0.006 250;
 
-  --muted: 0.935 0.006 230;
-  --muted-foreground: 0.44 0.012 250;
+  --muted: 0.915 0.008 230;
+  --muted-foreground: 0.4 0.014 250;
 
   --accent: 0.55 0.097 196;
   --accent-foreground: 1 0 0;
@@ -107,9 +107,9 @@
   --warning: 0.72 0.195 68;
   --warning-foreground: 0.22 0.005 250;
 
-  --border: 0.22 0.005 250 / 0.14;
-  --border-strong: 0.22 0.005 250 / 0.24;
-  --input: 0.935 0.006 230;
+  --border: 0.22 0.005 250 / 0.2;
+  --border-strong: 0.22 0.005 250 / 0.32;
+  --input: 0.915 0.008 230;
   --ring: 0.55 0.097 196;
   --shadow-color: 0.22 0.02 200;
 

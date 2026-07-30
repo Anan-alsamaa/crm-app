@@ -593,22 +593,22 @@ export function Inbox() {
                           key: 'open',
                           label: t('inbox.stats.open', { defaultValue: 'open' }),
                           value: openCount,
-                          tile: 'bg-emerald-500/10 ring-emerald-500/25',
-                          num: 'text-emerald-600',
+                          tile: 'bg-success/18 ring-success/45',
+                          num: 'text-success',
                         },
                         {
                           key: 'urgent',
                           label: t('inbox.stats.urgent', { defaultValue: 'urgent' }),
                           value: urgentCount,
-                          tile: 'bg-rose-500/10 ring-rose-500/25',
-                          num: 'text-rose-600',
+                          tile: 'bg-destructive/18 ring-destructive/45',
+                          num: 'text-destructive',
                         },
                         {
                           key: 'unread',
                           label: t('inbox.stats.unread', { defaultValue: 'unread' }),
                           value: unreadCount,
-                          tile: 'bg-sky-500/10 ring-sky-500/25',
-                          num: 'text-sky-600',
+                          tile: 'bg-sky/18 ring-sky/45',
+                          num: 'text-sky',
                         },
                       ] as const
                     ).map((s) => (
