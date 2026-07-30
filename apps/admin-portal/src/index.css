@@ -89,9 +89,15 @@
   --shadow-color: 0.22 0.02 200;
 
   /* Rail — deep BRAND teal ink; the brand teal lights the active item. */
-  --rail: 0.245 0.045 196;
-  --rail-foreground: 0.9 0.015 196;
-  --rail-active: 0.581 0.097 196;
+
+  /* RAIL — the nav is a BRAND surface, not a dark panel. Chroma was 0.045, so it
+   * read as near-black and threw away the teal identity; now 0.068 at a slightly
+   * higher lightness so it is unmistakably teal while still anchoring the page.
+   * Labels lifted 0.90 -> 0.965 and the active pill is the vivid brand teal.
+   * Ratios: labels 12.9:1 on the rail, white on the active pill 4.54:1. */
+  --rail: 0.288 0.068 196;
+  --rail-foreground: 0.965 0.014 196;
+  --rail-active: 0.535 0.135 193;
   --rail-active-foreground: 1 0 0;
   --rail-border: 0.31 0.04 196;
   --secondary-brand: 0.58 0.235 16;
