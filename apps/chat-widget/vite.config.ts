@@ -130,7 +130,16 @@ export default defineConfig(({ mode }) => {
         '/socket.io': { target: 'http://localhost:8080', ws: true, changeOrigin: true },
       },
     },
-    plugins: [widgetHostPage(secret, gatewayUrl)],
+    // OPT-IN ONLY. This plugin inlines YIJI_JWT_SECRET into a static
+    // dist/index.html and mints customer JWTs in the browser. That is fine for
+    // the local :5175 QA harness and CATASTROPHIC if it ships: the widget dist
+    // is published to widget.<domain> (S3/CloudFront per the AWS plan), which
+    // would put the signing secret on a public URL and let anyone mint a valid
+    // identity for ANY customer_id/phone and read or post in that customer's
+    // conversations. `apply: 'build'` meant it was emitted by EVERY build,
+    // including production. Set WIDGET_DEMO_HOST_PAGE=true to get it back for
+    // local QA; a deploy build must never set it.
+    plugins: env.WIDGET_DEMO_HOST_PAGE === 'true' ? [widgetHostPage(secret, gatewayUrl)] : [],
     build: {
       lib: {
         entry: 'src/embed.ts',
