@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq';
-import { Redis } from 'ioredis';
+import { createRedis, bullPrefix } from '@yiji/shared-config';
+import type { Redis, Cluster } from 'ioredis';
 import type { Logger } from 'pino';
 import {
   QUEUES,
@@ -59,26 +60,34 @@ class BullProducer implements SideEffectProducer {
   private readonly imports: Queue;
   private readonly reports: Queue;
   private readonly notifications: Queue;
-  private readonly connection: Redis;
+  private readonly connection: Redis | Cluster;
+  /* On a cluster a queue's keys must hash to ONE shard or BullMQ's Lua
+   * scripts fail with CROSSSLOT — hence the hash tag. undefined on
+   * standalone, which leaves BullMQ's default keyspace untouched. */
+  private readonly prefix: string | undefined;
   constructor(redisUrl: string) {
     // Same auto-reconnect posture as the Socket.IO Redis clients.
-    this.connection = new Redis(redisUrl, {
-      maxRetriesPerRequest: null,
-      enableReadyCheck: true,
-      retryStrategy: (attempts: number) => Math.min(attempts * 200, 5000),
-    });
+    // Cluster-aware — see @yiji/shared-config/redis for why.
+    this.connection = createRedis(redisUrl);
+    this.prefix = bullPrefix(redisUrl);
     this.connection.on('error', () => {
       /* swallow — retried by retryStrategy; logged once by BullMQ */
     });
-    this.automation = new Queue(QUEUES.automation, { connection: this.connection });
+    this.automation = new Queue(QUEUES.automation, {
+      connection: this.connection,
+      prefix: this.prefix,
+    });
     // Admin-triggered enqueue (imports/reports) lands on the same queues the
     // workers consume — the job NAME is cosmetic; the queue + data shape match.
-    this.imports = new Queue(QUEUES.imports, { connection: this.connection });
-    this.reports = new Queue(QUEUES.reports, { connection: this.connection });
+    this.imports = new Queue(QUEUES.imports, { connection: this.connection, prefix: this.prefix });
+    this.reports = new Queue(QUEUES.reports, { connection: this.connection, prefix: this.prefix });
     // Agent-triggered assignment notifications land on the same `notifications`
     // queue the workers' notifications processor consumes (per-type user
     // preferences + email fanout live there — we do NOT notify from here).
-    this.notifications = new Queue(QUEUES.notifications, { connection: this.connection });
+    this.notifications = new Queue(QUEUES.notifications, {
+      connection: this.connection,
+      prefix: this.prefix,
+    });
   }
   async enqueueImport(job: ImportJob): Promise<string | null> {
     const added = await this.imports.add('import', job, DEFAULT_JOB_OPTIONS);

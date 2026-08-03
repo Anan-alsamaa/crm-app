@@ -9,8 +9,8 @@
  */
 import './telemetry.js'; // MUST be first: starts OTel before http/ioredis load.
 import Fastify, { type FastifyBaseLogger } from 'fastify';
-import { Redis } from 'ioredis';
 import { Queue, Worker } from 'bullmq';
+import { createRedis, bullPrefix } from '@yiji/shared-config';
 import pino from 'pino';
 import { createServiceClient } from '@yiji/shared-config';
 import { QUEUES, type QueueName } from '@yiji/shared-types';
@@ -29,11 +29,14 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const logger = pino({ level: config.LOG_LEVEL, name: 'workers' });
 
-  const connection = new Redis(config.REDIS_URL, {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: true,
-    retryStrategy: (a) => Math.min(a * 200, 5000),
-  });
+  // Cluster-aware: a `clustercfg.*` ElastiCache endpoint needs a Cluster client
+  // (a standalone one cannot follow MOVED redirects).
+  const connection = createRedis(config.REDIS_URL);
+  /* On a cluster a queue's keys must hash to ONE shard or BullMQ's Lua scripts
+   * fail with CROSSSLOT — hence the hash tag. undefined on standalone, which
+   * leaves BullMQ's default keyspace untouched. Producer and consumer MUST
+   * agree: socket-gateway/queue.ts derives the same value the same way. */
+  const bullPrefixValue = bullPrefix(config.REDIS_URL);
   connection.on('error', (err) => logger.warn({ err: err.message }, 'redis error (retrying)'));
 
   const directus = createServiceClient({
@@ -79,6 +82,7 @@ async function main(): Promise<void> {
       name,
       new Queue(name, {
         connection,
+        prefix: bullPrefixValue,
         ...(retryableQueues.has(name) ? { defaultJobOptions: RETRY } : {}),
       }),
     ]),
@@ -152,7 +156,7 @@ async function main(): Promise<void> {
           const processor = processors[queue];
           await processor(job, deps);
         },
-        { connection, concurrency: workerConcurrency },
+        { connection, concurrency: workerConcurrency, prefix: bullPrefixValue },
       ),
   );
   for (const w of workers) {

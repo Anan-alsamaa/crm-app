@@ -19,3 +19,5 @@ export {
   type AuthUser,
   type AuthClientOptions,
 } from './auth.js';
+
+export { createRedis, isClusterUrl, bullPrefix } from './redis.js';
