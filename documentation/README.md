@@ -18,7 +18,7 @@ preserved here rather than lost.
 | ------------------------- | ----------------------------------------------------------------- |
 | Deploy / operate          | [`docs/PRODUCTION.md`](../docs/PRODUCTION.md)                     |
 | Cutover readiness         | [`docs/GO-LIVE-READINESS.md`](../docs/GO-LIVE-READINESS.md)       |
-| Hybrid deploy runbook     | [`docs/DEPLOY-HYBRID.md`](../docs/DEPLOY-HYBRID.md)               |
+| Deploy topology + env     | [`docs/DEPLOYMENT.md`](../docs/DEPLOYMENT.md)                     |
 | Feature spec + data model | [`specs/001-yiji-crm-platform/`](../specs/001-yiji-crm-platform/) |
 
 These are **point-in-time snapshots from June 2026**. They describe branch
