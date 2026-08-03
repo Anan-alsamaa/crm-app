@@ -28,8 +28,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Deploy fires on TAGS and CI fires on PUSH, so until now nothing connected
+  # them: a tag could be cut on a commit whose tests were failing and every image
+  # would still publish. That is not hypothetical — v1.1.2 through v1.2.0 all
+  # shipped over a red pipeline with a green Deploy badge. This gate makes a
+  # release impossible unless the same checks CI runs pass on the tagged commit.
+  gate:
+    name: Quality gate (blocks the release)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          # Pinned to match ci.yml — a different pnpm can reject the lockfile.
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+
   build-and-push:
     name: Build & push ${{ matrix.name }}
+    needs: gate
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -114,10 +136,46 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
           provenance: false
 
+  widget:
+    name: Build & publish chat-widget
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          # Pinned to match ci.yml — a different pnpm can reject the lockfile.
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # WIDGET_DEMO_HOST_PAGE is deliberately NOT set. With it, the build emits a
+      # host page that inlines YIJI_JWT_SECRET into static HTML — publishing that
+      # would put the customer-token signing key on a public URL.
+      - name: Build widget (no demo host page)
+        env:
+          VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL }}
+        run: pnpm --filter @yiji/chat-widget build
+      - name: Fail if the demo host page leaked into the bundle
+        run: |
+          if [ -f apps/chat-widget/dist/index.html ]; then
+            echo "::error::dist/index.html present — the demo host page (which inlines"
+            echo "::error::YIJI_JWT_SECRET) must never be published. Refusing to upload."
+            exit 1
+          fi
+          echo "widget dist:"; ls -1 apps/chat-widget/dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chat-widget-${{ github.ref_name }}
+          path: apps/chat-widget/dist
+          retention-days: 90
+
   summary:
     name: Release summary
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [build-and-push, widget]
     steps:
       - name: Write summary
         run: |
@@ -131,6 +189,8 @@ jobs:
             echo "- agent-portal (static SPA / nginx)"
             echo "- admin-portal (static SPA / nginx)"
             echo "- bootstrap (one-shot schema/roles job)"
+            echo ""
+            echo "chat-widget published as a build artifact (static bundle for S3/CDN)."
             echo ""
             echo "Roll out with:"
             echo '```'
