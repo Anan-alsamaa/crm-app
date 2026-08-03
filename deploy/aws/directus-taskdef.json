@@ -1,0 +1,112 @@
+{
+  "_comment": [
+    "ECS Fargate task definition for Directus — Yiji CRM, us-east-2.",
+    "",
+    "Register in the console: ECS > Task definitions > Create new > JSON, paste this.",
+    "Replace <ACCOUNT_ID> and confirm the two role ARNs exist.",
+    "",
+    "SECRETS: DB_PASSWORD / KEY / SECRET / ADMIN_PASSWORD are pulled from Secrets",
+    "Manager by ARN and never appear here in plain text. Create the secret first:",
+    "  Secrets Manager > Store a new secret > Other > key/value, name yiji-crm/directus",
+    "  keys: DB_PASSWORD, DIRECTUS_KEY, DIRECTUS_SECRET, DIRECTUS_ADMIN_PASSWORD",
+    "",
+    "KEY and SECRET must stay STABLE FOREVER — changing them invalidates every",
+    "session and token that already exists.",
+    "",
+    "REDIS IS DELIBERATELY OMITTED. The endpoint supplied",
+    "(clustercfg.redis-yiji...) is CLUSTER MODE ENABLED, and Directus connects",
+    "with a standalone ioredis client, which fails on MOVED redirects against a",
+    "cluster. Directus runs fine without it — it falls back to in-memory cache —",
+    "but you lose the shared rate limiter, so DO NOT scale beyond 1 task until",
+    "Redis is sorted, or the limiter becomes per-task and brute-force protection",
+    "on /auth/login weakens. See the notes in 01-directus-ecs.sh.",
+    "",
+    "STORAGE is S3, not local: a Fargate filesystem is ephemeral, so `local`",
+    "would discard every uploaded attachment on each task replacement."
+  ],
+  "family": "yiji-crm-directus",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/yiji-crm-directus-task",
+  "containerDefinitions": [
+    {
+      "name": "directus",
+      "image": "directus/directus:11",
+      "essential": true,
+      "portMappings": [{ "containerPort": 8055, "protocol": "tcp" }],
+      "environment": [
+        { "name": "DB_CLIENT", "value": "pg" },
+        { "name": "DB_HOST", "value": "test-yiji.ctqnuieahhb8.us-east-2.rds.amazonaws.com" },
+        { "name": "DB_PORT", "value": "5432" },
+        { "name": "DB_DATABASE", "value": "afcoCrm" },
+        { "name": "DB_USER", "value": "directus" },
+        { "name": "DB_SSL__REJECT_UNAUTHORIZED", "value": "false" },
+
+        { "name": "PUBLIC_URL", "value": "https://api.CHANGE-ME.com" },
+        { "name": "ADMIN_EMAIL", "value": "CHANGE-ME@example.com" },
+
+        { "name": "WEBSOCKETS_ENABLED", "value": "true" },
+        { "name": "CORS_ENABLED", "value": "true" },
+        { "name": "CORS_ORIGIN", "value": "https://app.CHANGE-ME.com,https://admin.CHANGE-ME.com" },
+        { "name": "CORS_CREDENTIALS", "value": "true" },
+        { "name": "REFRESH_TOKEN_COOKIE_SAME_SITE", "value": "lax" },
+        { "name": "REFRESH_TOKEN_COOKIE_SECURE", "value": "true" },
+
+        { "name": "STORAGE_LOCATIONS", "value": "s3" },
+        { "name": "STORAGE_S3_DRIVER", "value": "s3" },
+        { "name": "STORAGE_S3_BUCKET", "value": "yiji-crm-directus-uploads" },
+        { "name": "STORAGE_S3_REGION", "value": "us-east-2" },
+
+        { "name": "EMAIL_TRANSPORT", "value": "smtp" },
+        { "name": "EMAIL_FROM", "value": "Yiji Support <support@CHANGE-ME.com>" },
+        { "name": "EMAIL_SMTP_HOST", "value": "CHANGE-ME" },
+        { "name": "EMAIL_SMTP_PORT", "value": "587" },
+        { "name": "EMAIL_SMTP_SECURE", "value": "false" },
+        {
+          "name": "PASSWORD_RESET_URL_ALLOW_LIST",
+          "value": "https://app.CHANGE-ME.com/reset-password,https://admin.CHANGE-ME.com/reset-password"
+        },
+
+        { "name": "RATE_LIMITER_ENABLED", "value": "false" },
+        { "name": "CACHE_ENABLED", "value": "false" }
+      ],
+      "secrets": [
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:<ACCOUNT_ID>:secret:yiji-crm/directus:DB_PASSWORD::"
+        },
+        {
+          "name": "KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:<ACCOUNT_ID>:secret:yiji-crm/directus:DIRECTUS_KEY::"
+        },
+        {
+          "name": "SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:<ACCOUNT_ID>:secret:yiji-crm/directus:DIRECTUS_SECRET::"
+        },
+        {
+          "name": "ADMIN_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:<ACCOUNT_ID>:secret:yiji-crm/directus:DIRECTUS_ADMIN_PASSWORD::"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -qO- http://127.0.0.1:8055/server/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 120
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/yiji-crm-directus",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "directus",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}
