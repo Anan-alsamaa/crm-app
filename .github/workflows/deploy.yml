@@ -43,6 +43,11 @@ jobs:
           - { name: ai-gateway, dockerfile: services/ai-gateway/Dockerfile }
           - { name: agent-portal, dockerfile: apps/agent-portal/Dockerfile }
           - { name: admin-portal, dockerfile: apps/admin-portal/Dockerfile }
+          # The one-shot schema/roles job. docker-compose.prod.yml already
+          # references ${REGISTRY}/bootstrap, and on ECS you RunTask an IMAGE —
+          # there is no build context there — so it has to be published like
+          # the services rather than built on the host.
+          - { name: bootstrap, dockerfile: directus/bootstrap/Dockerfile }
     steps:
       - uses: actions/checkout@v4
 
@@ -55,6 +60,26 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # A portal bundle bakes its API URLs at BUILD time. If the repo Variables
+      # are unset the build-args are empty, Vite treats them as unset, and the
+      # code's localhost fallbacks get compiled in — producing an image that
+      # looks fine, pushes fine, and cannot work in any browser but the build
+      # machine's. Fail here instead of shipping that.
+      - name: Require portal URLs before publishing a portal image
+        if: contains(matrix.name, 'portal')
+        run: |
+          missing=
+          [ -z "${{ vars.VITE_DIRECTUS_URL }}" ] && missing="$missing VITE_DIRECTUS_URL"
+          [ -z "${{ vars.VITE_SOCKET_URL }}" ] && missing="$missing VITE_SOCKET_URL"
+          [ -z "${{ vars.VITE_AI_GATEWAY_URL }}" ] && missing="$missing VITE_AI_GATEWAY_URL"
+          if [ -n "$missing" ]; then
+            echo "::error::Refusing to build ${{ matrix.name }}: unset repo Variable(s):$missing"
+            echo "::error::These are compiled into the SPA. Unset means the image would ship"
+            echo "::error::http://localhost:* and be dead for every real user."
+            echo "::error::Set them under Settings > Secrets and variables > Actions > Variables."
+            exit 1
+          fi
 
       - name: Derive image metadata
         id: meta
@@ -105,6 +130,7 @@ jobs:
             echo "- ai-gateway"
             echo "- agent-portal (static SPA / nginx)"
             echo "- admin-portal (static SPA / nginx)"
+            echo "- bootstrap (one-shot schema/roles job)"
             echo ""
             echo "Roll out with:"
             echo '```'
