@@ -1,0 +1,64 @@
+{
+  "_comment": [
+    "IAM for the Directus ECS task — Yiji CRM, us-east-2.",
+    "",
+    "TWO ROLES ARE INVOLVED and they are not interchangeable:",
+    "  taskRoleArn      -> what the RUNNING CONTAINER may do  (S3 uploads)",
+    "  executionRoleArn -> what ECS does ON ITS BEHALF to start it (pull, logs)",
+    "A task-role permission will not fix a startup failure, and vice versa.",
+    "",
+    "policy_task_role below attaches to  yiji-crm-directus-task",
+    "policy_execution_extra below attaches to  ecsTaskExecutionRole",
+    "",
+    "WHY THE EXECUTION EXTRA EXISTS: the task definition sets",
+    "awslogs-create-group=true, and the AWS-managed AmazonECSTaskExecutionRolePolicy",
+    "does NOT grant logs:CreateLogGroup. Without it the task fails at START with a",
+    "CannotStartContainerError and writes no logs — so the one place you would look",
+    "for the reason is the thing that could not be created. Either add this policy",
+    "or pre-create /ecs/yiji-crm-directus in CloudWatch by hand.",
+    "",
+    "Scope note: S3 access is limited to this one bucket. Directus needs no other",
+    "AWS API, so nothing else is granted."
+  ],
+
+  "policy_task_role": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "DirectusReadWriteItsOwnBucket",
+        "Effect": "Allow",
+        "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+        "Resource": "arn:aws:s3:::yiji-crm-directus-uploads/*"
+      },
+      {
+        "Sid": "DirectusListBucket",
+        "Effect": "Allow",
+        "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+        "Resource": "arn:aws:s3:::yiji-crm-directus-uploads"
+      }
+    ]
+  },
+
+  "policy_execution_extra": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "CreateTheLogGroupTheTaskDefAsksFor",
+        "Effect": "Allow",
+        "Action": ["logs:CreateLogGroup"],
+        "Resource": "arn:aws:logs:us-east-2:*:log-group:/ecs/yiji-crm-directus*"
+      }
+    ]
+  },
+
+  "trust_policy_for_task_role": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Principal": { "Service": "ecs-tasks.amazonaws.com" },
+        "Action": "sts:AssumeRole"
+      }
+    ]
+  }
+}
