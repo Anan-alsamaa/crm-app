@@ -105,7 +105,24 @@ services:
       CORS_CREDENTIALS: 'true'
       REFRESH_TOKEN_COOKIE_SAME_SITE: ${REFRESH_TOKEN_COOKIE_SAME_SITE:-lax}
       REFRESH_TOKEN_COOKIE_SECURE: 'true'
+      # --- File storage ------------------------------------------------
+      # Defaults to `local`, which writes to the directus_uploads volume below —
+      # correct for a VM/compose deploy.
+      #
+      # ON ECS/FARGATE YOU MUST SET THIS TO `s3`. A Fargate task's filesystem is
+      # EPHEMERAL: with `local`, every task replacement (deploy, scale, crash)
+      # silently discards every uploaded file — i.e. all ticket and message
+      # attachments — while Directus keeps serving rows that reference them, so
+      # the loss shows up later as broken downloads rather than an error.
+      # Credentials are optional: omit KEY/SECRET on ECS and Directus picks up
+      # the task role, which is the safer setup.
       STORAGE_LOCATIONS: ${STORAGE_LOCATIONS:-local}
+      STORAGE_S3_DRIVER: s3
+      STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-}
+      STORAGE_S3_REGION: ${STORAGE_S3_REGION:-}
+      STORAGE_S3_KEY: ${STORAGE_S3_KEY:-}
+      STORAGE_S3_SECRET: ${STORAGE_S3_SECRET:-}
+      STORAGE_S3_ENDPOINT: ${STORAGE_S3_ENDPOINT:-}
       # --- Password-reset email -------------------------------------------
       # Directus sends the reset mail itself, and it uses EMAIL_* names while
       # the workers use SMTP_*. Without these the portal still shows its
