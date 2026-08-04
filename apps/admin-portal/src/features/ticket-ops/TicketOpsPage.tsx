@@ -161,12 +161,24 @@ const TILE_TONE: Record<Tone, string> = {
   slate: 'bg-card ring-foreground/[0.06]',
 };
 const NUM_TONE: Record<Tone, string> = {
-  blue: 'text-sky',
-  violet: 'text-violet',
-  green: 'text-success',
-  amber: 'text-warning',
-  crimson: 'text-destructive',
+  // White on the saturated fills — the numeral used to be the SAME colour as its
+  // own tile, i.e. invisible. `amber` keeps dark ink because warning is a light
+  // hue where white fails; `slate` is a white card so it keeps normal ink.
+  blue: 'text-white',
+  violet: 'text-white',
+  green: 'text-white',
+  amber: 'text-warning-foreground',
+  crimson: 'text-white',
   slate: 'text-foreground',
+};
+/* Labels have to follow the fill too, or they sit dark-on-dark. */
+const LABEL_TONE: Record<Tone, string> = {
+  blue: 'text-white/85',
+  violet: 'text-white/85',
+  green: 'text-white/85',
+  amber: 'text-warning-foreground/80',
+  crimson: 'text-white/85',
+  slate: 'text-muted-foreground',
 };
 
 function KpiTile({ label, value, tone }: { label: string; value: string | number; tone: Tone }) {
@@ -185,7 +197,9 @@ function KpiTile({ label, value, tone }: { label: string; value: string | number
       >
         {value}
       </div>
-      <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <div
+        className={cn('mt-2 text-2xs font-semibold uppercase tracking-[0.12em]', LABEL_TONE[tone])}
+      >
         {label}
       </div>
     </div>
