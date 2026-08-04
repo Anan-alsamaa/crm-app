@@ -93,47 +93,26 @@ const AGENT_SORT: Record<string, (r: AgentKpiRow) => string | number | null | un
 
 /* ── KPI card — vibrant tinted card, colored number (reference style) ───── */
 type Tone = 'blue' | 'violet' | 'green' | 'amber';
-const TILE_TONE: Record<Tone, string> = {
-  blue: 'bg-sky ring-sky/40 shadow-lg shadow-sky/25',
-  violet: 'bg-violet ring-violet/40 shadow-lg shadow-violet/25',
-  green: 'bg-success ring-success/40 shadow-lg shadow-success/25',
-  amber: 'bg-warning ring-warning/40 shadow-lg shadow-warning/25',
-};
-const NUM_TONE: Record<Tone, string> = {
-  // White on the saturated fills — the numeral used to be the SAME colour as its
-  // own tile, i.e. invisible. `amber` keeps dark ink because warning is a light
-  // hue where white fails.
-  blue: 'text-white',
-  violet: 'text-white',
-  green: 'text-white',
-  amber: 'text-warning-foreground',
-};
-/* Labels have to follow the fill too, or they sit dark-on-dark. */
-const LABEL_TONE: Record<Tone, string> = {
-  blue: 'text-white/85',
-  violet: 'text-white/85',
-  green: 'text-white/85',
-  amber: 'text-warning-foreground/80',
+/* Colour as ACCENT, not surface — see TicketOpsPage for the rationale. This
+ * page's Tone union is narrower (no crimson/slate). */
+const DOT_TONE: Record<Tone, string> = {
+  blue: 'bg-sky',
+  violet: 'bg-violet',
+  green: 'bg-success',
+  amber: 'bg-warning',
 };
 function KpiTile({ label, value, tone }: { label: string; value: string; tone: Tone }) {
   return (
     <div
       className={cn(
-        'rounded-2xl px-4 py-3.5 shadow-soft ring-1 transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
-        TILE_TONE[tone],
+        'rounded-2xl bg-card px-4 py-4 shadow-soft ring-1 ring-border transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
       )}
     >
-      <div
-        className={cn(
-          'text-3xl font-black tabular-nums leading-none tracking-[-0.04em]',
-          NUM_TONE[tone],
-        )}
-      >
+      <div className="text-4xl font-bold tabular-nums leading-none tracking-[-0.03em] text-foreground">
         {value}
       </div>
-      <div
-        className={cn('mt-2 text-2xs font-semibold uppercase tracking-[0.12em]', LABEL_TONE[tone])}
-      >
+      <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT_TONE[tone])} />
         {label}
       </div>
     </div>

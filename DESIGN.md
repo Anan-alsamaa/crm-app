@@ -42,6 +42,32 @@ avatar hues are part of the vibrancy. Outside conversation surfaces the
 restrained rules still apply: CTAs default to near-black
 (`--foreground`), decorative color stays banned.
 
+### KPI tiles — colour as accent, never as surface (settled 2026-08-04)
+
+The canonical stat/KPI tile is a **white card, ink numeral, coloured
+state dot**:
+
+```
+container  bg-card ring-1 ring-border shadow-soft rounded-2xl
+numeral    text-4xl font-bold text-foreground tabular-nums
+label      text-2xs uppercase text-muted-foreground, preceded by
+           an h-1.5 w-1.5 rounded-full dot in the metric's hue
+```
+
+This went through both failure modes before landing here, so don't reopen them:
+
+- **Pale washes** (low-alpha tints of dark accents) read as a wireframe —
+  rejected as "not vibrant".
+- **Solid saturated fills** (bg-success etc. with white numerals) read as a toy
+  dashboard — rejected as "childish", and full-saturation colour on an inactive
+  display is a product-register ban. That pass also twice produced invisible
+  numerals (accent-on-same-accent), a class of bug no type check can see.
+
+Ink-on-white is also simply the strongest contrast available (~19.5:1 vs
+4.5–6.5:1 for white-on-colour). Colour still identifies the metric — as a
+state-indicator dot, which is what SLA green/amber/red actually is. No coloured
+glow shadows on tiles; `shadow-soft` only.
+
 ### Tint ramp — how a coloured surface is built
 
 A coloured surface is **three tokens, not one alpha**:

@@ -78,17 +78,16 @@ function SlaPill({ cell }: { cell: SlaCell }) {
 
 /* Vibrant tinted KPI card — matches the Ticket report / export reports. */
 type KpiTone = 'blue' | 'green' | 'amber' | 'crimson';
-const KPI_TILE: Record<KpiTone, string> = {
-  blue: 'bg-sky ring-sky/40 shadow-lg shadow-sky/25',
-  green: 'bg-success ring-success/40 shadow-lg shadow-success/25',
-  amber: 'bg-warning ring-warning/40 shadow-lg shadow-warning/25',
-  crimson: 'bg-destructive ring-destructive/40 shadow-lg shadow-destructive/25',
-};
-const KPI_NUM: Record<KpiTone, string> = {
-  blue: 'text-sky',
-  green: 'text-success',
-  amber: 'text-warning',
-  crimson: 'text-destructive',
+/* Colour as ACCENT, not surface. Solid saturated tiles read as a toy dashboard
+ * (and here the numeral was the SAME colour as its fill — invisible). White
+ * card + ink numeral is also the strongest contrast available (~19.5:1); the
+ * tone survives as a state-indicator dot, which is what SLA green/amber/red
+ * actually is. */
+const KPI_DOT: Record<KpiTone, string> = {
+  blue: 'bg-sky',
+  green: 'bg-success',
+  amber: 'bg-warning',
+  crimson: 'bg-destructive',
 };
 /** Green ≥90, amber ≥75, red below (no data → blue). */
 const pctKpiTone = (n: number | null): KpiTone =>
@@ -98,19 +97,14 @@ function Kpi({ label, value, tone = 'blue' }: { label: string; value: string; to
   return (
     <div
       className={cn(
-        'rounded-2xl px-4 py-4 shadow-soft ring-1 transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
-        KPI_TILE[tone],
+        'rounded-2xl bg-card px-4 py-4 shadow-soft ring-1 ring-border transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
       )}
     >
-      <div
-        className={cn(
-          'text-4xl font-extrabold tracking-[-0.03em] tabular-nums leading-none',
-          KPI_NUM[tone],
-        )}
-      >
+      <div className="text-4xl font-bold tracking-[-0.03em] tabular-nums leading-none text-foreground">
         {value}
       </div>
-      <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+      <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', KPI_DOT[tone])} />
         {label}
       </div>
     </div>

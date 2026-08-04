@@ -593,41 +593,36 @@ export function Inbox() {
                           key: 'open',
                           label: t('inbox.stats.open', { defaultValue: 'open' }),
                           value: openCount,
-                          tile: 'bg-success ring-success/40 shadow-lg shadow-success/25',
-                          num: 'text-white',
+                          dot: 'bg-success',
                         },
                         {
                           key: 'urgent',
                           label: t('inbox.stats.urgent', { defaultValue: 'urgent' }),
                           value: urgentCount,
-                          tile: 'bg-destructive ring-destructive/40 shadow-lg shadow-destructive/25',
-                          num: 'text-white',
+                          dot: 'bg-destructive',
                         },
                         {
                           key: 'unread',
                           label: t('inbox.stats.unread', { defaultValue: 'unread' }),
                           value: unreadCount,
-                          tile: 'bg-sky ring-sky/40 shadow-lg shadow-sky/25',
-                          num: 'text-white',
+                          dot: 'bg-sky',
                         },
                       ] as const
                     ).map((s) => (
                       <div
                         key={s.key}
-                        className={cn(
-                          'rounded-3xl p-5 shadow-soft ring-1 ring-foreground/[0.04]',
-                          s.tile,
-                        )}
+                        // Colour as accent, not surface: white card, ink numeral,
+                        // state dot. Solid fills here read as a toy dashboard.
+                        className="rounded-3xl bg-card p-5 shadow-soft ring-1 ring-border"
                       >
-                        <div
-                          className={cn(
-                            'text-4xl font-extrabold leading-none tabular-nums tracking-[-0.04em]',
-                            s.num,
-                          )}
-                        >
+                        <div className="text-4xl font-bold leading-none tabular-nums tracking-[-0.03em] text-foreground">
                           {s.value}
                         </div>
-                        <div className="mt-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-white/85">
+                        <div className="mt-1.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          <span
+                            aria-hidden
+                            className={cn('h-1.5 w-1.5 shrink-0 rounded-full', s.dot)}
+                          />
                           {s.label}
                         </div>
                       </div>

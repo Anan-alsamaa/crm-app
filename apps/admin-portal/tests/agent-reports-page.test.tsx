@@ -46,7 +46,9 @@ function renderPage(which: ReportKind = 'tickets') {
 /** Read the KPI tiles as `{ label: value }` (value div, then label div). */
 function kpis(container: HTMLElement) {
   const out: Record<string, string> = {};
-  container.querySelectorAll('.text-3xl').forEach((v) => {
+  // KPI numerals standardized to text-4xl across all report pages (this page
+  // was the one holdout at 3xl) — consistent component vocabulary.
+  container.querySelectorAll('.text-4xl').forEach((v) => {
     const label = v.nextElementSibling?.textContent?.trim();
     if (label) out[label] = v.textContent?.trim() ?? '';
   });
