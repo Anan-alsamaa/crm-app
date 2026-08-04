@@ -593,22 +593,22 @@ export function Inbox() {
                           key: 'open',
                           label: t('inbox.stats.open', { defaultValue: 'open' }),
                           value: openCount,
-                          tile: 'bg-success-tint ring-success/35',
-                          num: 'text-success',
+                          tile: 'bg-success ring-success/40 shadow-lg shadow-success/25',
+                          num: 'text-white',
                         },
                         {
                           key: 'urgent',
                           label: t('inbox.stats.urgent', { defaultValue: 'urgent' }),
                           value: urgentCount,
-                          tile: 'bg-destructive-tint ring-destructive/35',
-                          num: 'text-destructive',
+                          tile: 'bg-destructive ring-destructive/40 shadow-lg shadow-destructive/25',
+                          num: 'text-white',
                         },
                         {
                           key: 'unread',
                           label: t('inbox.stats.unread', { defaultValue: 'unread' }),
                           value: unreadCount,
-                          tile: 'bg-sky-tint ring-sky/35',
-                          num: 'text-sky',
+                          tile: 'bg-sky ring-sky/40 shadow-lg shadow-sky/25',
+                          num: 'text-white',
                         },
                       ] as const
                     ).map((s) => (
@@ -627,7 +627,7 @@ export function Inbox() {
                         >
                           {s.value}
                         </div>
-                        <div className="mt-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        <div className="mt-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-white/85">
                           {s.label}
                         </div>
                       </div>

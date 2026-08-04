@@ -10,7 +10,7 @@
 import './telemetry.js'; // MUST be first: starts OTel before http/ioredis load.
 import Fastify, { type FastifyBaseLogger } from 'fastify';
 import { Queue, Worker } from 'bullmq';
-import { createRedis, bullPrefix } from '@yiji/shared-config';
+import { createRedis, bullPrefix } from '@yiji/shared-config/redis';
 import pino from 'pino';
 import { createServiceClient } from '@yiji/shared-config';
 import { QUEUES, type QueueName } from '@yiji/shared-types';

@@ -1,5 +1,5 @@
 import { Queue } from 'bullmq';
-import { createRedis, bullPrefix } from '@yiji/shared-config';
+import { createRedis, bullPrefix } from '@yiji/shared-config/redis';
 import type { Redis, Cluster } from 'ioredis';
 import type { Logger } from 'pino';
 import {

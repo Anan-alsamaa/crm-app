@@ -20,4 +20,8 @@ export {
   type AuthClientOptions,
 } from './auth.js';
 
-export { createRedis, isClusterUrl, bullPrefix } from './redis.js';
+/* NOTE: ./redis is deliberately NOT re-exported here. It imports ioredis,
+ * which is Node-only, and the browser portals import this package for auth —
+ * re-exporting it pulled ioredis into the portal bundle and the app rendered
+ * a blank page at runtime while the build still passed. Server code imports
+ * it explicitly:  import { createRedis } from '@yiji/shared-config/redis'  */

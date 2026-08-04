@@ -153,11 +153,11 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
 /* ── KPI card — vibrant tinted card, colored number (reference style) ────── */
 type Tone = 'blue' | 'violet' | 'green' | 'amber' | 'crimson' | 'slate';
 const TILE_TONE: Record<Tone, string> = {
-  blue: 'bg-sky-tint ring-sky/35',
-  violet: 'bg-violet-tint ring-violet/35',
-  green: 'bg-success-tint ring-success/35',
-  amber: 'bg-warning-tint ring-warning/40',
-  crimson: 'bg-destructive-tint ring-destructive/35',
+  blue: 'bg-sky ring-sky/40 shadow-lg shadow-sky/25',
+  violet: 'bg-violet ring-violet/40 shadow-lg shadow-violet/25',
+  green: 'bg-success ring-success/40 shadow-lg shadow-success/25',
+  amber: 'bg-warning ring-warning/40 shadow-lg shadow-warning/25',
+  crimson: 'bg-destructive ring-destructive/40 shadow-lg shadow-destructive/25',
   slate: 'bg-card ring-foreground/[0.06]',
 };
 const NUM_TONE: Record<Tone, string> = {
