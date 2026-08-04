@@ -40,7 +40,7 @@
 :root,
 :root[data-theme='light'],
 .theme-light {
-  --radius: 0.5rem;
+  --radius: 0.75rem;
 
   /* Surface ramp — tinted canvas → pure white card → tinted popover. */
 
@@ -163,7 +163,7 @@
  * <html data-theme="light">.
  */
 :root[data-theme='dark'] {
-  --radius: 0.5rem;
+  --radius: 0.75rem;
   /* Elevation ladder with real separation so surfaces read as distinct layers,
      not one flat wall of dark: base < card < secondary/popover. */
   --background: 0.135 0.014 265;

@@ -159,7 +159,8 @@ module.exports = {
         md: 'calc(var(--radius) - 2px)',
         lg: 'var(--radius)',
         xl: 'calc(var(--radius) + 2px)',
-        '2xl': 'calc(var(--radius) + 6px)',
+        '2xl': 'calc(var(--radius) + 8px)',
+        '3xl': 'calc(var(--radius) + 14px)',
         full: '9999px',
       },
       boxShadow: {
