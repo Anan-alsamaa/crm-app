@@ -204,8 +204,6 @@
     "bulkSetStatus": "تعيين الحالة…",
     "bulkAddTag": "إضافة وسم…",
     "bulkClear": "مسح",
-    "bulkStatusDone": "تم تحديث {{count}} محادثة.",
-    "bulkTagDone": "تم وسم {{count}} محادثة.",
     "stats": {
       "open": "مفتوحة",
       "urgent": "عاجلة",
@@ -218,11 +216,16 @@
       "openCount": "{{count}} مفتوحة",
       "zeroTitle": "صندوق فارغ.",
       "zeroAccent": "خذ نفسًا.",
-      "waiting": "{{count}} محادثة بانتظارك.",
       "urgentAccent": "{{count}} عاجلة.",
       "pace": "أنت تحدّد الإيقاع.",
       "recent": "النشاط الأخير",
-      "zeroArt": "ستصل المحادثات الجديدة هنا عندما يتواصل العملاء عبر الأداة أو البريد أو القنوات الأخرى."
+      "zeroArt": "ستصل المحادثات الجديدة هنا عندما يتواصل العملاء عبر الأداة أو البريد أو القنوات الأخرى.",
+      "waiting_zero": "لا توجد محادثات بانتظارك.",
+      "waiting_one": "محادثة واحدة بانتظارك.",
+      "waiting_two": "محادثتان بانتظارك.",
+      "waiting_few": "{{count}} محادثات بانتظارك.",
+      "waiting_many": "{{count}} محادثة بانتظارك.",
+      "waiting_other": "{{count}} محادثة بانتظارك."
     },
     "resizeList": "تغيير حجم قائمة المحادثات",
     "loadError": "تعذّر تحميل المحادثات",
@@ -230,7 +233,19 @@
     "attachmentPreview": "مرفق",
     "youPrefix": "أنت:",
     "noMessagesYet": "لا توجد رسائل بعد",
-    "sort": "الترتيب"
+    "sort": "الترتيب",
+    "bulkStatusDone_zero": "لم يتم تحديث أي محادثة.",
+    "bulkStatusDone_one": "تم تحديث محادثة واحدة.",
+    "bulkStatusDone_two": "تم تحديث محادثتين.",
+    "bulkStatusDone_few": "تم تحديث {{count}} محادثات.",
+    "bulkStatusDone_many": "تم تحديث {{count}} محادثة.",
+    "bulkStatusDone_other": "تم تحديث {{count}} محادثة.",
+    "bulkTagDone_zero": "لم يتم وسم أي محادثة.",
+    "bulkTagDone_one": "تم وسم محادثة واحدة.",
+    "bulkTagDone_two": "تم وسم محادثتين.",
+    "bulkTagDone_few": "تم وسم {{count}} محادثات.",
+    "bulkTagDone_many": "تم وسم {{count}} محادثة.",
+    "bulkTagDone_other": "تم وسم {{count}} محادثة."
   },
   "conversation": {
     "replyPlaceholder": "اكتب ردًا…",

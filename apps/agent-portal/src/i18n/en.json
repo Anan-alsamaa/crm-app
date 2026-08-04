@@ -49,7 +49,7 @@
     "moreItems": "more",
     "ask": "Ask",
     "askAi": "Ask AI about orders",
-    "askPlaceholder": "Ask about the order(s)…",
+    "askPlaceholder": "Ask about these orders…",
     "orderIdLabel": "Order ID (optional)",
     "orderIdPlaceholder": "Order ID (blank = latest orders)",
     "latestOrder": "Latest order",
@@ -204,8 +204,6 @@
     "bulkSetStatus": "Set status…",
     "bulkAddTag": "Add tag…",
     "bulkClear": "Clear",
-    "bulkStatusDone": "Updated {{count}} conversation(s).",
-    "bulkTagDone": "Tagged {{count}} conversation(s).",
     "stats": {
       "open": "open",
       "urgent": "urgent",
@@ -218,11 +216,12 @@
       "openCount": "{{count}} open",
       "zeroTitle": "Inbox zero.",
       "zeroAccent": "Take a breath.",
-      "waiting": "{{count}} conversation(s) waiting.",
       "urgentAccent": "{{count}} urgent.",
       "pace": "You set the pace.",
       "recent": "Recent activity",
-      "zeroArt": "New conversations will land here as customers reach out through the widget, email, or other channels."
+      "zeroArt": "New conversations will land here as customers reach out through the widget, email, or other channels.",
+      "waiting_one": "{{count}} conversation waiting.",
+      "waiting_other": "{{count}} conversations waiting."
     },
     "resizeList": "Resize conversation list",
     "loadError": "Could not load conversations",
@@ -230,7 +229,11 @@
     "attachmentPreview": "Attachment",
     "youPrefix": "You:",
     "noMessagesYet": "No messages yet",
-    "sort": "Sort"
+    "sort": "Sort",
+    "bulkStatusDone_one": "Updated {{count}} conversation.",
+    "bulkStatusDone_other": "Updated {{count}} conversations.",
+    "bulkTagDone_one": "Tagged {{count}} conversation.",
+    "bulkTagDone_other": "Tagged {{count}} conversations."
   },
   "conversation": {
     "replyPlaceholder": "Type a reply…",
@@ -377,7 +380,6 @@
     "fromChat": "From this chat",
     "includeOrder": "Attach order details",
     "includeAttachments": "Attach files shared in this chat",
-    "includeAttachmentsCount": "{{count}} file(s) from this session",
     "orderSnapshotTitle": "Order from this chat",
     "orderRestaurant": "Restaurant",
     "orderItems": "Items",
@@ -396,7 +398,9 @@
     "addToTicket": "Add",
     "added": "Added",
     "orderNoItems": "No line items on this order.",
-    "orderCapturedAt": "Snapshot taken {{at}}"
+    "orderCapturedAt": "Snapshot taken {{at}}",
+    "includeAttachmentsCount_one": "{{count}} file from this session",
+    "includeAttachmentsCount_other": "{{count}} files from this session"
   },
   "notifications": {
     "title": "Notifications",

@@ -284,7 +284,7 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
                   </span>
                   <span className="mt-0.5 block text-muted-foreground">
                     {t('tickets.includeAttachmentsCount', {
-                      defaultValue: '{{count}} file(s) from this session',
+                      defaultValue: '{{count}} files from this session',
                       count: sessionFileIds.length,
                     })}
                   </span>
