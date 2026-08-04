@@ -370,7 +370,7 @@
     "created": "Ticket created",
     "createHint": "Capture the work as a ticket so it can be tracked against an SLA.",
     "filterAll": "All",
-    "overdue": "overdue",
+    "overdue": "Overdue",
     "emptyHint": "Tickets are created from conversations that need follow-up.",
     "selectHint": "Pick a ticket on the left to see its workflow, SLA timeline, and history.",
     "slaSection": "SLA",

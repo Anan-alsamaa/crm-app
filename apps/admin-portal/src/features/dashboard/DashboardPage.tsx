@@ -35,12 +35,17 @@ const fmtPct = (p: number | null) => (p === null ? '—' : `${Math.round(p)}%`);
 type KpiTone = 'blue' | 'violet' | 'green' | 'amber' | 'crimson';
 // Vivid solid icon chips (Sara Connect style) — a categorical color per card,
 // used ONLY on the small icon chip; the card itself stays white.
+/* Design tokens, not raw Tailwind shades. The preset overrides `violet` as a
+ * FLAT token, so `bg-violet` was invalid and rendered an empty chip — which
+ * is exactly why the Avg-response card showed no icon background while the others
+ * (sky/emerald/orange/rose from Tailwind's default palette) worked. `warning`
+ * takes dark ink because it is a light hue. */
 const KPI_TILE: Record<KpiTone, string> = {
-  blue: 'bg-sky-500 text-white',
-  violet: 'bg-violet-500 text-white',
-  green: 'bg-emerald-500 text-white',
-  amber: 'bg-orange-400 text-white',
-  crimson: 'bg-rose-500 text-white',
+  blue: 'bg-sky text-white',
+  violet: 'bg-violet text-white',
+  green: 'bg-success text-white',
+  amber: 'bg-warning text-warning-foreground',
+  crimson: 'bg-destructive text-white',
 };
 
 /** KPI card — label top-left, vivid icon chip top-right, big number, hint. */

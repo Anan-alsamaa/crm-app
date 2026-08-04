@@ -254,7 +254,7 @@ export function TicketsPage() {
                               )}
                               {overdue && (
                                 <Pill tone="destructive" size="sm">
-                                  {t('tickets.overdue', { defaultValue: 'overdue' })}
+                                  {t('tickets.overdue', { defaultValue: 'Overdue' })}
                                 </Pill>
                               )}
                             </div>

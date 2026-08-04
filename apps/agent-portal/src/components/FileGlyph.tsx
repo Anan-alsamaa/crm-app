@@ -70,11 +70,11 @@ const PATHS: Record<FileKind, JSX.Element> = {
 const TONE: Record<FileKind, string> = {
   image: 'bg-primary-subtle text-primary',
   pdf: 'bg-rose-500/12 text-rose-500',
-  doc: 'bg-sky-500/12 text-sky-500',
+  doc: 'bg-sky/12 text-sky',
   sheet: 'bg-emerald-500/12 text-emerald-500',
   text: 'bg-secondary text-muted-foreground',
   archive: 'bg-amber-500/14 text-amber-500',
-  audio: 'bg-violet-500/12 text-violet-500',
+  audio: 'bg-violet/12 text-violet',
   video: 'bg-indigo-500/12 text-indigo-500',
   file: 'bg-secondary text-muted-foreground',
 };

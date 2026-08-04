@@ -96,8 +96,8 @@ interface NavSection {
 /* Colorful nav: each item's icon sits in its own vivid tinted tile that pops
  * against the dark navy rail. */
 const NAV_TILES = [
-  'bg-sky-400/25 text-sky-300',
-  'bg-violet-400/25 text-violet-300',
+  'bg-sky/25 text-sky',
+  'bg-violet/25 text-violet',
   'bg-rose-400/25 text-rose-300',
   'bg-orange-400/25 text-orange-300',
   'bg-emerald-400/25 text-emerald-300',

@@ -492,10 +492,10 @@ function AgentTable({ agents }: { agents: AgentLoad[] }) {
 
 /** Colored dot per status for the filter-tab bar. */
 const STATUS_DOT: Record<string, string> = {
-  new: 'bg-sky-500',
+  new: 'bg-sky',
   open: 'bg-emerald-500',
   pending: 'bg-orange-400',
-  resolved: 'bg-violet-500',
+  resolved: 'bg-violet',
   closed: 'bg-slate-400',
 };
 
