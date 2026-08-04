@@ -97,6 +97,7 @@ module.exports = {
         violet: 'oklch(var(--violet) / <alpha-value>)',
         'violet-tint': 'oklch(var(--violet-tint) / <alpha-value>)',
         sky: 'oklch(var(--sky) / <alpha-value>)',
+        'rail-deep': 'oklch(var(--rail-deep) / <alpha-value>)',
         'sky-tint': 'oklch(var(--sky-tint) / <alpha-value>)',
         magenta: 'oklch(var(--magenta) / <alpha-value>)',
         // Incoming chat bubble surface (messenger-vibrant direction).

@@ -53,7 +53,11 @@ export interface AppShellProps {
   children: ReactNode;
 }
 
-const RAIL_CLASS = 'relative z-30 flex shrink-0 flex-col bg-rail text-rail-foreground';
+// Vertical gradient rather than a flat fill: the rail is the tallest surface on
+// screen, and a single flat colour makes it read as a slab. Same hue top to
+// bottom so it still reads as one brand surface.
+const RAIL_CLASS =
+  'relative z-30 flex shrink-0 flex-col bg-gradient-to-b from-rail to-rail-deep text-rail-foreground';
 
 export function AppShell({
   rail,

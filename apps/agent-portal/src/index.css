@@ -123,6 +123,9 @@
    * Labels lifted 0.90 -> 0.965 and the active pill is the vivid brand teal.
    * Ratios: labels 12.9:1 on the rail, white on the active pill 4.54:1. */
   --rail: 0.288 0.068 196;
+  /* Deeper stop for the rail gradient — same hue, lower lightness, slightly
+   * more chroma so the fade reads as brand depth rather than as grime. */
+  --rail-deep: 0.208 0.072 202;
   --rail-foreground: 0.965 0.014 196;
   --rail-active: 0.535 0.135 193;
   --rail-active-foreground: 1 0 0;
@@ -195,6 +198,7 @@
   --ring: 0.68 0.11 196;
   --shadow-color: 0 0 0;
   /* Flat full-height sidebar, one step darker than the canvas. */
+  --rail-deep: 0.13 0.045 202;
   --rail: 0.17 0.035 196;
   --rail-foreground: 0.82 0.02 250;
   --rail-active: 0.3 0.07 196;
