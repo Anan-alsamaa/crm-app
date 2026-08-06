@@ -9,6 +9,8 @@ export interface BootstrapEnv {
     database: string;
     user: string;
     password: string;
+    /** Managed Postgres (RDS/Cloud SQL) usually refuses plaintext. */
+    ssl?: { rejectUnauthorized: boolean };
   };
 }
 
@@ -29,6 +31,14 @@ export function loadEnv(): BootstrapEnv {
       database: process.env.DB_DATABASE ?? 'yiji_crm',
       user: process.env.DB_USER ?? 'directus',
       password: process.env.DB_PASSWORD ?? 'directus',
+      // The constraints step talks to Postgres DIRECTLY (raw index/constraint
+      // SQL the Directus API cannot express), so it needs its own TLS setting.
+      // RDS with rds.force_ssl=1 rejects a plaintext connection outright, and
+      // the failure surfaces only at the very end of an otherwise successful
+      // bootstrap. `rejectUnauthorized: false` matches what Directus itself is
+      // configured with (DB_SSL__REJECT_UNAUTHORIZED=false) — the RDS CA is not
+      // in the local trust store.
+      ...(process.env.DB_SSL === 'true' ? { ssl: { rejectUnauthorized: false } } : {}),
     },
   };
 }
