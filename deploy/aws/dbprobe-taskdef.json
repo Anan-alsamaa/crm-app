@@ -1,0 +1,20 @@
+{
+  "family": "yiji-crm-dbprobe",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [
+    {
+      "name": "probe",
+      "image": "directus/directus:11",
+      "essential": true,
+      "entryPoint": [],
+      "command": [
+        "node",
+        "-e",
+        "const net=require('net');const s=net.connect(5432,'test-yiji.ctqnuieahhb8.us-east-2.rds.amazonaws.com');s.setTimeout(10000);s.on('connect',()=>{console.log('TCP OK');process.exit(71)});s.on('timeout',()=>process.exit(72));s.on('error',e=>{console.log(e.code);process.exit(e.code==='ECONNREFUSED'?73:70)});"
+      ]
+    }
+  ]
+}

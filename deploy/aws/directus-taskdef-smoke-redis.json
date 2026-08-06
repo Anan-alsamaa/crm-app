@@ -34,7 +34,7 @@
         },
         {
           "name": "DB_USER",
-          "value": "Yijicrm"
+          "value": "yijicrm"
         },
         {
           "name": "DB_SSL__REJECT_UNAUTHORIZED",
