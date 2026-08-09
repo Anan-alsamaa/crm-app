@@ -93,6 +93,21 @@ async function main(): Promise<void> {
     transports: config.SOCKET_TRANSPORTS,
   });
 
+  // Say the operational requirement OUT LOUD at boot. Missing stickiness cannot
+  // be detected from inside the process — the failure appears only at 2+ tasks,
+  // as clients that connect then immediately disconnect — so the one thing this
+  // process CAN do is state the dependency where an operator will see it.
+  if (config.SOCKET_TRANSPORTS.includes('polling')) {
+    logger.warn(
+      { transports: config.SOCKET_TRANSPORTS },
+      'polling transport enabled: the load balancer target group MUST have ' +
+        'stickiness turned on, or handshakes break once more than one task runs. ' +
+        'Set SOCKET_TRANSPORTS=websocket to remove that requirement.',
+    );
+  } else {
+    logger.info({ transports: config.SOCKET_TRANSPORTS }, 'websocket-only: no stickiness required');
+  }
+
   // --- Metrics ---
   const metrics = new Registry();
   metrics.collectDefaultMetrics('socket-gateway');

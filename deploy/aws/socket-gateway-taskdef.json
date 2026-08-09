@@ -1,0 +1,98 @@
+{
+  "_comment": [
+    "ECS Fargate task definition for the Yiji socket-gateway — us-east-2.",
+    "",
+    "Replace <ACCOUNT_ID>, <ECR_IMAGE>, YIJI_JWT_SECRET and the portal origins.",
+    "",
+    "SOCKET_TRANSPORTS is set EXPLICITLY here, and the value has an infrastructure",
+    "consequence you cannot skip:",
+    "  polling,websocket -> keeps the fallback for clients behind WebSocket-blocking",
+    "                       proxies (the customer widget runs on arbitrary vendor",
+    "                       storefronts), and REQUIRES the target group to have",
+    "                       stickiness enabled. Without it, handshakes break as soon",
+    "                       as a second task runs.",
+    "  websocket         -> no stickiness needed, no fallback.",
+    "",
+    "CORS_ORIGIN must NOT be * — the config refuses to boot in production if it is.",
+    "REDIS_ENABLED must be true in production.",
+    "",
+    "REDIS is the cluster configuration endpoint; the gateway builds a cluster-aware",
+    "client for clustercfg.* hosts (packages/shared-config/src/redis.ts) for BOTH the",
+    "BullMQ producer and the Socket.IO adapter."
+  ],
+  "family": "yiji-crm-socket-gateway",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [
+    {
+      "name": "socket-gateway",
+      "image": "<ECR_IMAGE>",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        },
+        {
+          "containerPort": 8081,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "PORT",
+          "value": "8080"
+        },
+        {
+          "name": "DIRECTUS_INTERNAL_URL",
+          "value": "http://yiji-crm-alb-1204214335.us-east-2.elb.amazonaws.com"
+        },
+        {
+          "name": "REDIS_URL",
+          "value": "redis://clustercfg.redis-yiji.6ea0wx.use2.cache.amazonaws.com:6379"
+        },
+        {
+          "name": "REDIS_ENABLED",
+          "value": "true"
+        },
+        {
+          "name": "SOCKET_TRANSPORTS",
+          "value": "polling,websocket"
+        },
+        {
+          "name": "CORS_ORIGIN",
+          "value": "CHANGE-ME-portal-origins-comma-separated"
+        },
+        {
+          "name": "WIDGET_CORS_ORIGIN",
+          "value": "*"
+        },
+        {
+          "name": "SVC_GATEWAY_TOKEN",
+          "value": "CHANGE-ME-svc-gateway-token"
+        },
+        {
+          "name": "YIJI_JWT_SECRET",
+          "value": "CHANGE-ME-at-least-32-chars"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "info"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -qO- http://127.0.0.1:8081/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

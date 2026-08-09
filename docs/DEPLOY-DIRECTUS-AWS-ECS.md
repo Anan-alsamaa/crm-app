@@ -202,6 +202,40 @@ new service and delete the old one.
 
 ---
 
+## 9b. socket-gateway: the stickiness step you cannot skip
+
+When you add the gateway, its target group needs one setting that is easy to miss and
+whose absence is invisible until the service scales.
+
+Socket.IO negotiates on **HTTP long-polling first**, and that handshake spans several
+requests. Behind an ALB with two or more tasks and no stickiness, those requests land on
+different instances, and the instance that did not create the session answers
+`Session ID unknown`. Clients then fail to connect, or connect and immediately drop.
+
+**At one task everything works.** The failure appears only when you scale — after every
+test has passed.
+
+Two supported options. Pick one:
+
+| Option          | `SOCKET_TRANSPORTS` | Target group stickiness | Trade-off                                                                                                                   |
+| --------------- | ------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **A** (default) | `polling,websocket` | **REQUIRED**            | Keeps the fallback for clients behind WebSocket-blocking proxies — the customer widget runs on arbitrary vendor storefronts |
+| **B**           | `websocket`         | not needed              | Simpler and lighter, but no fallback                                                                                        |
+
+**To enable stickiness (Option A):**
+
+EC2 → Target Groups → select the gateway's target group → **Attributes** tab → **Edit** →
+tick **Stickiness** → type **Load balancer generated cookie** → duration `1 day` → **Save**.
+
+**Verification, either way:** the gateway states its own requirement at boot. With
+`polling` enabled it logs a warning naming the stickiness dependency; with
+`websocket` only it logs `websocket-only: no stickiness required`. Once CloudWatch logs
+exist (§9) that line is the fastest confirmation you configured the pair consistently.
+
+The task definition `deploy/aws/socket-gateway-taskdef.json` ships with Option A.
+
+---
+
 ## 10. Debugging with no logs
 
 You cannot read an error, so make the **exit code** carry the answer. `deploy/aws/dbprobe-taskdef.json`
