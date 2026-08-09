@@ -15,7 +15,8 @@ import Fastify, {
   type FastifyReply,
   type FastifyRequest,
 } from 'fastify';
-import { Redis } from 'ioredis';
+import type { Redis, Cluster } from 'ioredis';
+import { createRedis } from '@yiji/shared-config/redis';
 import { Server as SocketServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import pino from 'pino';
@@ -77,7 +78,20 @@ async function main(): Promise<void> {
   // admin/AI REST (e.g. POST /jobs/*) stays pinned to CORS_ORIGIN.
   const corsOrigin = parseCors(config.CORS_ORIGIN);
   const widgetCorsOrigin = parseCors(config.WIDGET_CORS_ORIGIN);
-  const io = new SocketServer(httpServer, { cors: { origin: widgetCorsOrigin } });
+  // `transports` is EXPLICIT because the default (polling, then upgrade) is unsafe
+  // behind a load balancer running more than one task: the long-polling handshake
+  // spans several HTTP requests, and without sticky sessions each one can land on
+  // a different instance, which answers "Session ID unknown". The symptom only
+  // appears at 2+ tasks, so it passes every single-instance test.
+  //
+  // Default keeps the polling fallback (the customer widget is embedded on
+  // arbitrary vendor storefronts, some behind WebSocket-blocking proxies) and
+  // REQUIRES stickiness on the ALB target group. Set SOCKET_TRANSPORTS=websocket
+  // to drop the fallback and remove the stickiness requirement entirely.
+  const io = new SocketServer(httpServer, {
+    cors: { origin: widgetCorsOrigin },
+    transports: config.SOCKET_TRANSPORTS,
+  });
 
   // --- Metrics ---
   const metrics = new Registry();
@@ -93,8 +107,8 @@ async function main(): Promise<void> {
   activeConnections.onCollect(() => activeConnections.set(io.engine.clientsCount ?? 0));
   io.on('connection', () => connectionsTotal.inc());
 
-  let pubClient: Redis | undefined;
-  let subClient: Redis | undefined;
+  let pubClient: Redis | Cluster | undefined;
+  let subClient: Redis | Cluster | undefined;
   if (config.REDIS_ENABLED) {
     // maxRetriesPerRequest=null + retry strategy: survive Redis hiccups (e.g.
     // WSL restart) instead of throwing MaxRetriesPerRequestError and exiting.
@@ -104,8 +118,17 @@ async function main(): Promise<void> {
       enableReadyCheck: true,
       retryStrategy: (attempts: number) => Math.min(attempts * 200, 5000),
     } as const;
-    pubClient = new Redis(config.REDIS_URL, redisOpts);
-    subClient = pubClient.duplicate();
+    // createRedis(), NOT `new Redis()`: on a cluster-mode ElastiCache the
+    // `clustercfg.` endpoint answers with MOVED redirects that a standalone
+    // client cannot follow, so the adapter's pub/sub silently stops working and
+    // agents on different instances stop seeing each other's messages. This is
+    // the same fix already applied to the BullMQ producer in queue.ts.
+    //
+    // Two independent clients rather than `.duplicate()` — a Cluster's duplicate
+    // does not carry the dnsLookup override the factory installs for
+    // ElastiCache's private node addresses.
+    pubClient = createRedis(config.REDIS_URL, redisOpts);
+    subClient = createRedis(config.REDIS_URL, redisOpts);
     pubClient.on('error', (err) => logger.warn({ err: err.message }, 'redis pub error (retrying)'));
     subClient.on('error', (err) => logger.warn({ err: err.message }, 'redis sub error (retrying)'));
     await pubClient.connect();

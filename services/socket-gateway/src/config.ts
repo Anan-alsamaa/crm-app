@@ -26,6 +26,21 @@ const schema = z
     // by its origin. Set an explicit list only if the widget lives on known domains.
     WIDGET_CORS_ORIGIN: z.string().default('*'),
     LOG_LEVEL: z.string().default('info'),
+    // Socket.IO transports, comma-separated, in negotiation order.
+    // 'polling,websocket' (default) keeps the fallback for clients behind
+    // WebSocket-blocking proxies but REQUIRES sticky sessions on the load
+    // balancer once more than one instance runs. 'websocket' drops the fallback
+    // and needs no stickiness. See the comment in index.ts.
+    SOCKET_TRANSPORTS: z
+      .string()
+      .default('polling,websocket')
+      .transform((v) =>
+        v
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean),
+      )
+      .pipe(z.array(z.enum(['polling', 'websocket'])).nonempty()),
     // Inbound webhook HMAC secret. When empty, POST /webhooks/yiji returns 503
     // (not configured) so the endpoint is never an unauthenticated open door.
     YIJI_WEBHOOK_SECRET: z.string().default(''),
