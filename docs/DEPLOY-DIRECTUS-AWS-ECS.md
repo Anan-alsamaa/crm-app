@@ -202,6 +202,35 @@ new service and delete the old one.
 
 ---
 
+## 9a. Redis and the single-shard assumption
+
+Directus runs with Redis for both cache and rate limiter, pointed at the cluster-mode
+configuration endpoint. Verified on 2026-08-06, not assumed:
+
+- `/server/health` reports `cache:responseTime` (~1 ms) and `rateLimiter:responseTime`
+  (~1.5 ms). **Both are absent when `CACHE_ENABLED=false`** — their presence is the proof.
+- 100 distinct cache keys exercised through the API: **0 failures**.
+
+Two things worth knowing:
+
+**The health checks are named by ROLE, not backend.** There is no `redis:` key — searching
+the health payload for "redis" returns nothing and reads as "Redis is off" when it is
+connected. Look for `cache:responseTime`.
+
+**Why it works: `redis-yiji` is a SINGLE-SHARD cluster.** The config endpoint advertises
+one node (`192.168.120.118`). With one shard every key lives on that shard, so the server
+never issues a `MOVED` redirect, and Directus's non-cluster-aware client never has to
+follow one.
+
+> **If anyone adds shards to `redis-yiji`, re-test Directus immediately.** On a
+> multi-shard cluster its client would start hitting `MOVED` on every key that hashes
+> elsewhere, appearing as intermittent 500s rather than a clean failure. Our own services
+> are unaffected — the gateway and workers build a cluster-aware client
+> (`packages/shared-config/src/redis.ts`). Directus does not, and cannot be configured to.
+> The fallback is `CACHE_ENABLED=false`; Directus runs correctly on in-memory cache.
+
+---
+
 ## 9b. socket-gateway: the stickiness step you cannot skip
 
 When you add the gateway, its target group needs one setting that is easy to miss and
