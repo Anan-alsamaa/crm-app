@@ -66,6 +66,11 @@
    * dark ink (6.74:1). `--sky` is new, for
    * informational surfaces that were borrowing the brand teal and blurring it. */
   --primary: 0.536 0.132 194;
+  /* Readable green ink for green-on-green: `primary` on a primary/10
+   * tint is 3.99:1, under AA for small text. Solved to the LIGHTEST
+   * value that still clears 4.5:1 (4.52:1), so it stays the brand
+   * colour rather than drifting to near-black. */
+  --primary-strong: 0.505 0.132 194;
   --primary-foreground: 1 0 0;
   --primary-subtle: 0.581 0.132 194 / 0.22;
   --brand: 0.581 0.132 194;
@@ -140,6 +145,7 @@
   --popover-foreground: 0.96 0.005 250;
   /* Brand teal, lifted for dark ink. */
   --primary: 0.7 0.145 194;
+  --primary-strong: 0.78 0.145 194;
   --primary-foreground: 0.16 0.02 200;
   --primary-subtle: 0.68 0.11 196 / 0.18;
   --brand: 0.7 0.145 194;

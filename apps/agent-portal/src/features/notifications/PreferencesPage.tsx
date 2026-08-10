@@ -314,7 +314,16 @@ export function PreferencesPage() {
                             choice (in-app / email / both / none), not on-off. */}
                         <SelectMenu
                           size="sm"
-                          className="w-28 shrink-0"
+                          // Same green as the icon chip beside it — the control
+                          // and the glyph then read as one component rather than
+                          // a coloured icon next to a neutral form field. Muted
+                          // rows keep the plain treatment so "none" still reads
+                          // as switched off.
+                          className={cn(
+                            'w-28 shrink-0',
+                            !muted &&
+                              'border-primary/35 bg-primary/10 font-medium text-primary-strong hover:bg-primary/15',
+                          )}
                           value={draft[type] ?? 'both'}
                           onChange={(v: string) => setDraft((d) => ({ ...d, [type]: v }))}
                           aria-label={type}

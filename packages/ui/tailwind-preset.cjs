@@ -49,6 +49,7 @@ module.exports = {
           DEFAULT: 'oklch(var(--primary) / <alpha-value>)',
           foreground: 'oklch(var(--primary-foreground) / <alpha-value>)',
           subtle: 'oklch(var(--primary-subtle) / <alpha-value>)',
+          strong: 'oklch(var(--primary-strong) / <alpha-value>)',
         },
         secondary: {
           DEFAULT: 'oklch(var(--secondary) / <alpha-value>)',
