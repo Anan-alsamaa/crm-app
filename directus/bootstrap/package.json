@@ -10,7 +10,8 @@
     "validate-compose": "node scripts/validate-compose.mjs",
     "validate-compose:prod": "node scripts/validate-compose.mjs docker-compose.prod.yml",
     "check-idempotence": "node scripts/check-idempotence.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed:showcase": "tsx src/seed-showcase.ts"
   },
   "dependencies": {
     "@directus/sdk": "^17.0.0",
