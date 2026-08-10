@@ -374,11 +374,16 @@ export function ConversationSidebar({
       </section>
 
       {/* Orders — the customer's latest order (live Yiji data), right in the inbox */}
-      {contact.data?.external_customer_id && contact.data?.vendor?.yiji_vendor_id && (
+      {/* Gated on the VENDOR only, not on the contact being linked to a commerce
+          customer. The unlinked case is exactly when the agent needs to type an
+          order number by hand, so hiding the panel there removed the tool at the
+          moment it was needed. */}
+      {contact.data?.vendor?.yiji_vendor_id && (
         <section className="px-5 py-4">
           <LatestOrder
             vendorId={contact.data.vendor.yiji_vendor_id}
-            customerId={contact.data.external_customer_id}
+            customerId={contact.data.external_customer_id ?? undefined}
+            conversationId={c.id}
           />
         </section>
       )}

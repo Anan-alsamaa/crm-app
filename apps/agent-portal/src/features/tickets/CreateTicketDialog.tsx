@@ -10,6 +10,7 @@ import { useConversationAttachmentIds, useCreateTicketFromConversation } from '.
 import { orderToSnapshot, type TicketOrderSnapshot } from './OrderSnapshotCard.js';
 import { useContact } from '../contacts/api.js';
 import { commerce } from '../../lib/commerce-client.js';
+import { clearPinnedOrder, getPinnedOrder } from '../commerce/pinned-order.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
@@ -139,7 +140,11 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
     },
     staleTime: 60_000,
   });
-  const latestOrder = ordersQuery.data ?? null;
+  // Fall back to the order the agent pinned by hand. For an unlinked contact the
+  // automatic lookup returns nothing, and that is precisely the conversation
+  // where they typed the number in — the ticket must carry it, or the manual
+  // lookup was busywork.
+  const latestOrder = ordersQuery.data ?? getPinnedOrder(conversationId) ?? null;
   const sessionFiles = useConversationAttachmentIds(conversationId ?? null);
   const sessionFileIds = sessionFiles.data ?? [];
 
@@ -174,6 +179,10 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
         },
         attachmentFileIds: includeFiles ? sessionFileIds : [],
       });
+      // The ticket now holds a snapshot of the order, so the sidebar pin has done
+      // its job. Leaving it would show the same order twice — live in the sidebar
+      // and frozen on the ticket — with no way to tell which is authoritative.
+      if (includeOrder && latestOrder) clearPinnedOrder(conversationId);
       toast.success(t('tickets.created', { defaultValue: 'Ticket created' }), {
         description: values.subject,
       });

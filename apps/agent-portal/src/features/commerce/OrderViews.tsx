@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { cn, Pill, Skeleton } from '@yiji/ui';
 import type { YijiOrder } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
+import { getPinnedOrder, pinOrder, subscribePinnedOrders } from './pinned-order.js';
 
 /**
  * Direct order views (no AI). The Yiji list endpoint returns order SUMMARIES
@@ -366,7 +367,13 @@ function ExpandableOrder({
  * end reading "No orders yet" while the customer is reading an order number down
  * the line, this lets them type it and fetch it directly.
  */
-function ManualOrderLookup({ vendorId }: { vendorId: string }) {
+function ManualOrderLookup({
+  vendorId,
+  conversationId,
+}: {
+  vendorId: string;
+  conversationId?: string;
+}) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
   const [orderId, setOrderId] = useState('');
@@ -374,10 +381,23 @@ function ManualOrderLookup({ vendorId }: { vendorId: string }) {
   const q = useQuery({
     queryKey: ['yiji-order-manual', vendorId, orderId],
     enabled: !!vendorId && !!orderId,
-    queryFn: () => commerce.getOrder(vendorId, orderId),
+    queryFn: async () => {
+      const order = await commerce.getOrder(vendorId, orderId);
+      // Pin it so it survives navigating away, and so the ticket dialog can
+      // snapshot it without the agent retyping the number.
+      if (order && conversationId) pinOrder(conversationId, order as YijiOrder);
+      return order;
+    },
     retry: false,
     staleTime: 60_000,
   });
+
+  const pinned = useSyncExternalStore(
+    subscribePinnedOrders,
+    () => getPinnedOrder(conversationId),
+    () => null,
+  );
+  const shown = (q.data as YijiOrder | undefined) ?? pinned;
 
   return (
     <div className="space-y-2">
@@ -415,25 +435,37 @@ function ManualOrderLookup({ vendorId }: { vendorId: string }) {
             defaultValue: 'No order {{orderId}} for this vendor.',
           })}
         </p>
-      ) : q.data ? (
-        <ExpandableOrder vendorId={vendorId} summary={q.data as YijiOrder} defaultOpen />
+      ) : shown ? (
+        // `shown` prefers the fresh result but falls back to the pinned one, so
+        // the order stays on screen after navigating away and back.
+        <ExpandableOrder vendorId={vendorId} summary={shown} defaultOpen />
       ) : null}
     </div>
   );
 }
 
-export function LatestOrder({ vendorId, customerId }: { vendorId: string; customerId: string }) {
+export function LatestOrder({
+  vendorId,
+  customerId,
+  conversationId,
+}: {
+  vendorId: string;
+  customerId?: string;
+  conversationId?: string;
+}) {
   const { t } = useTranslation();
   const orders = useQuery({
     queryKey: ['yiji-orders', vendorId, customerId, 2],
     enabled: !!vendorId && !!customerId,
-    queryFn: () => commerce.getOrders(vendorId, customerId, { limit: 2 }),
+    // `enabled` already guards this, but the compiler cannot see that.
+    queryFn: () => commerce.getOrders(vendorId, customerId as string, { limit: 2 }),
     staleTime: 60_000,
   });
 
-  // Not linked to a Yiji customer — render nothing rather than a misleading
-  // "no orders" (the query is disabled, so there is nothing to show).
-  if (!vendorId || !customerId) return null;
+  // With no linked customer there is nothing to look up automatically, but the
+  // agent can still find an order by number — that is the whole point of the
+  // manual path, so render it rather than bailing out.
+  if (!vendorId) return null;
 
   // The last 2 orders (list is already newest-first from the client).
   const recent = (orders.data ?? []).slice(0, 2);
@@ -467,7 +499,7 @@ export function LatestOrder({ vendorId, customerId }: { vendorId: string; custom
               defaultValue: 'No orders found for this contact. Enter an order ID to look it up.',
             })}
           </p>
-          <ManualOrderLookup vendorId={vendorId} />
+          <ManualOrderLookup vendorId={vendorId} conversationId={conversationId} />
         </div>
       )}
     </div>
