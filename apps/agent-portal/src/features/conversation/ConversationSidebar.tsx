@@ -210,20 +210,25 @@ export function ConversationSidebar({
     >
       {handle}
       {/* Identity hero — avatar in a subtle accent ring. */}
-      <div className="relative overflow-hidden px-6 pb-6 pt-8">
-        <div className="relative flex flex-col items-center gap-3 text-center">
+      {/* Compact identity header. The tall centred hero looked good empty but
+          pushed the order panel — the thing an agent actually needs mid-call —
+          below the fold on a laptop. Horizontal layout reclaims ~90px. */}
+      <div className="relative overflow-hidden px-5 pb-4 pt-5">
+        <div className="relative flex items-center gap-3 text-start">
           <span className="rounded-full bg-primary/30 p-[2px]">
             <span className="block rounded-full bg-background p-[3px]">
               <Avatar
                 name={c.contact?.name}
                 email={c.contact?.email}
                 phone={c.contact?.phone}
-                size="lg"
+                size="md"
               />
             </span>
           </span>
-          <div className="space-y-1.5">
-            <h3 className="text-xl font-extrabold tracking-tight text-foreground">{contactName}</h3>
+          <div className="min-w-0 space-y-0.5">
+            <h3 className="truncate text-base font-bold tracking-tight text-foreground">
+              {contactName}
+            </h3>
           </div>
         </div>
       </div>

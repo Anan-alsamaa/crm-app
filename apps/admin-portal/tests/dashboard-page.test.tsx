@@ -73,7 +73,7 @@ describe('DashboardPage', () => {
   it('renders the loading skeleton when data is missing but not loading', () => {
     api.useDashboardMetrics.mockReturnValue({ isLoading: false, isError: false, data: undefined });
     renderPage();
-    expect(screen.queryByText('SLA compliance')).not.toBeInTheDocument();
+    expect(screen.queryByText('Answered on time')).not.toBeInTheDocument();
     expect(screen.getByText('Overview')).toBeInTheDocument();
   });
 
@@ -87,10 +87,10 @@ describe('DashboardPage', () => {
 
     // Stat labels. "Conversations" appears twice (hero banner + KPI card).
     expect(screen.getAllByText('Conversations').length).toBeGreaterThan(0);
-    expect(screen.getByText('Avg response')).toBeInTheDocument();
-    expect(screen.getByText('SLA compliance')).toBeInTheDocument();
-    expect(screen.getByText('Resolution')).toBeInTheDocument();
-    expect(screen.getByText('CSAT')).toBeInTheDocument();
+    expect(screen.getByText('First reply time')).toBeInTheDocument();
+    expect(screen.getByText('Answered on time')).toBeInTheDocument();
+    expect(screen.getByText('Tickets solved')).toBeInTheDocument();
+    expect(screen.getByText('Customer rating')).toBeInTheDocument();
 
     // Formatted values.
     expect(screen.getAllByText('128').length).toBeGreaterThan(0); // conversationVolume (hero + KPI)
@@ -100,10 +100,10 @@ describe('DashboardPage', () => {
     expect(screen.getByText('4.2')).toBeInTheDocument(); // csatAvg
 
     // Card titles.
-    expect(screen.getByText('Conversation volume')).toBeInTheDocument();
-    expect(screen.getByText('By status')).toBeInTheDocument();
-    expect(screen.getByText('Agent productivity')).toBeInTheDocument();
-    expect(screen.getByText('Vendor activity')).toBeInTheDocument();
+    expect(screen.getByText('Conversations per day')).toBeInTheDocument();
+    expect(screen.getByText('Where conversations stand')).toBeInTheDocument();
+    expect(screen.getByText('Busiest agents')).toBeInTheDocument();
+    expect(screen.getByText('Busiest vendors')).toBeInTheDocument();
 
     // Status breakdown (sorted desc: resolved 60 first). "resolved" also
     // appears as the agent-productivity unit, so match at least one.

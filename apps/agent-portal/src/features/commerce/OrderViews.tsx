@@ -356,6 +356,72 @@ function ExpandableOrder({
  * details (restaurant, items, delivery) lazily on expand. The most recent order
  * is auto-expanded; the second stays collapsed until the agent opens it.
  */
+
+/**
+ * Manual order lookup.
+ *
+ * The automatic list resolves orders from the contact's linked customer id, which
+ * fails whenever the CRM contact is not matched to a commerce customer — a common
+ * case for a phone or walk-in enquiry. Rather than leaving the agent at a dead
+ * end reading "No orders yet" while the customer is reading an order number down
+ * the line, this lets them type it and fetch it directly.
+ */
+function ManualOrderLookup({ vendorId }: { vendorId: string }) {
+  const { t } = useTranslation();
+  const [input, setInput] = useState('');
+  const [orderId, setOrderId] = useState('');
+
+  const q = useQuery({
+    queryKey: ['yiji-order-manual', vendorId, orderId],
+    enabled: !!vendorId && !!orderId,
+    queryFn: () => commerce.getOrder(vendorId, orderId),
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  return (
+    <div className="space-y-2">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const v = input.trim();
+          if (v) setOrderId(v);
+        }}
+        className="flex items-center gap-2"
+      >
+        <input
+          value={input}
+          onChange={(e) => setInput(e.currentTarget.value)}
+          inputMode="numeric"
+          aria-label={t('commerce.lookupLabel', { defaultValue: 'Look up an order by ID' })}
+          placeholder={t('commerce.lookupPlaceholder', { defaultValue: 'Order ID…' })}
+          className="h-8 min-w-0 flex-1 rounded-lg bg-card px-2.5 text-xs text-foreground ring-1 ring-border placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+        />
+        <button
+          type="submit"
+          disabled={!input.trim()}
+          className="h-8 shrink-0 rounded-lg bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-opacity disabled:opacity-40"
+        >
+          {t('commerce.lookupGo', { defaultValue: 'Find' })}
+        </button>
+      </form>
+
+      {q.isFetching ? (
+        <Skeleton className="h-20 w-full rounded-2xl" />
+      ) : q.isError ? (
+        <p className="text-xs text-destructive">
+          {t('commerce.lookupNotFound', {
+            orderId,
+            defaultValue: 'No order {{orderId}} for this vendor.',
+          })}
+        </p>
+      ) : q.data ? (
+        <ExpandableOrder vendorId={vendorId} summary={q.data as YijiOrder} defaultOpen />
+      ) : null}
+    </div>
+  );
+}
+
 export function LatestOrder({ vendorId, customerId }: { vendorId: string; customerId: string }) {
   const { t } = useTranslation();
   const orders = useQuery({
@@ -395,9 +461,14 @@ export function LatestOrder({ vendorId, customerId }: { vendorId: string; custom
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-muted-foreground">
-          {t('commerce.noOrders', { defaultValue: 'No orders yet.' })}
-        </p>
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            {t('commerce.noOrdersHint', {
+              defaultValue: 'No orders found for this contact. Enter an order ID to look it up.',
+            })}
+          </p>
+          <ManualOrderLookup vendorId={vendorId} />
+        </div>
       )}
     </div>
   );

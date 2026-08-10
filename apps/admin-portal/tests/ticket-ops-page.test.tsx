@@ -223,9 +223,9 @@ describe('TicketOpsPage', () => {
     const { container } = renderPage();
 
     expect(timings(container)).toEqual({
-      'Median 1st response': '45m',
-      'Median resolution': '5.0h',
-      'Avg resolution': '2.0d',
+      'Typical first reply': '45m',
+      'Typical time to fix': '5.0h',
+      'Average time to fix': '2.0d',
     });
   });
 
@@ -238,15 +238,15 @@ describe('TicketOpsPage', () => {
       },
     });
     const { container } = renderPage();
-    expect(timings(container)['Median resolution']).toBe('—');
+    expect(timings(container)['Typical time to fix']).toBe('—');
   });
 
   it('renders the status and priority breakdowns with counts', () => {
     api.useTicketOps.mockReturnValue({ isLoading: false, data: report });
     renderPage();
 
-    expect(screen.getByText('By status')).toBeInTheDocument();
-    expect(screen.getByText('By priority')).toBeInTheDocument();
+    expect(screen.getByText('Where tickets stand')).toBeInTheDocument();
+    expect(screen.getByText('How urgent they are')).toBeInTheDocument();
     // Each breakdown row shows its count next to a percentage of the total.
     expect(screen.getAllByText('25%')).toHaveLength(8); // 4 statuses + 4 priorities
   });

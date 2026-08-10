@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 // Moved here when the Ticket report page was retired: the register belongs with
 // the Tickets report, the workload table with Agent KPI.
-import { AgentTable, TicketRegister } from '../ticket-ops/TicketOpsPage.js';
+import { AgentTable } from '../ticket-ops/TicketOpsPage.js';
 import { useTicketOps } from '../ticket-ops/api.js';
 import {
   Button,
@@ -151,6 +151,40 @@ function SlaPill({ state }: { state: SlaOutcome }) {
 
 /* ── Report 1: Tickets + order data ───────────────────────────────────── */
 
+/** One status tab: label + count, selected state carried by fill not just weight. */
+function FilterChip({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast',
+        active
+          ? 'bg-primary text-primary-foreground'
+          : 'bg-secondary/60 text-muted-foreground ring-1 ring-border hover:text-foreground',
+      )}
+    >
+      {label}
+      <span
+        className={cn('tabular-nums', active ? 'text-primary-foreground/80' : 'text-foreground/60')}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
 function TicketsReport({
   rows,
   tr,
@@ -168,6 +202,8 @@ function TicketsReport({
   const includeOrders = true;
   const [cols, setCols] = useState<Set<TicketColumnKey>>(() => new Set(TICKET_COLUMN_KEYS));
   const [showCols, setShowCols] = useState(false);
+  // Status filter, folded in from the register that used to duplicate this table.
+  const [status, setStatus] = useState<string>('all');
 
   const contactIds = useMemo(
     () => rows.map((r) => r.contactId).filter((id): id is string => !!id),
@@ -177,12 +213,28 @@ function TicketsReport({
   const ordersMap = orders.data;
 
   const merged = useMemo<TicketReportRow[]>(() => {
-    if (!ordersMap) return rows;
-    return rows.map((r) => ({
-      ...r,
-      order: r.contactId ? (ordersMap.get(r.contactId) ?? undefined) : undefined,
-    }));
-  }, [rows, ordersMap]);
+    const withOrders = ordersMap
+      ? rows.map((r) => ({
+          ...r,
+          order: r.contactId ? (ordersMap.get(r.contactId) ?? undefined) : undefined,
+        }))
+      : rows;
+    return status === 'all'
+      ? withOrders
+      : withOrders.filter((r) => String(r.status).toLowerCase() === status);
+  }, [rows, ordersMap, status]);
+
+  /** Status tabs with live counts, built from the UNFILTERED rows so the numbers
+   *  do not change as you filter — a count that moves with the filter tells you
+   *  nothing about the dataset. */
+  const statusCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) {
+      const k = String(r.status).toLowerCase();
+      m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [rows]);
 
   const onExport = () => {
     if (merged.length === 0) {
@@ -233,6 +285,25 @@ function TicketsReport({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
+        {/* Status filter, folded in from the register this table replaced. Counts
+            come from the unfiltered set so they stay stable while filtering. */}
+        <div className="flex flex-wrap items-center gap-1">
+          <FilterChip
+            label={t('agentReports.statusAll', { defaultValue: 'All' })}
+            count={rows.length}
+            active={status === 'all'}
+            onClick={() => setStatus('all')}
+          />
+          {statusCounts.map(([k, n]) => (
+            <FilterChip
+              key={k}
+              label={t(`status.${k}`, { ns: 'common', defaultValue: k })}
+              count={n}
+              active={status === k}
+              onClick={() => setStatus(k)}
+            />
+          ))}
+        </div>
         <div className="relative ms-auto flex items-center gap-2">
           {/* Column picker — which columns land in the .xlsx (all by default). */}
           <button
@@ -729,11 +800,12 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
 
               {which === 'tickets' && (
                 <>
+                  {/* ONE table. The register that used to sit below duplicated
+                      these same tickets with different column names, which read as
+                      two sources of truth for one dataset. This table wins because
+                      it already carries the order columns and the Excel export;
+                      the register's status filter was folded into it. */}
                   <TicketsReport rows={data.tickets} tr={tr} days={days} />
-                  {/* Ticket register, moved from the retired Ticket report. It
-                      carries its own status filter and its own CSV export, so the
-                      two downloads on this page stay independent. */}
-                  {ops.data && <TicketRegister rows={ops.data.rows} />}
                 </>
               )}
               {which === 'agents' && (

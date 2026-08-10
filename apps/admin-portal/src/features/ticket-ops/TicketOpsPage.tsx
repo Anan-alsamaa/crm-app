@@ -380,15 +380,15 @@ export function TicketOpsPage() {
             {/* Lifecycle timing */}
             <div className="grid grid-cols-3 gap-3 rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.05] shadow-soft">
               <Timing
-                label={t('ticketOps.medianResponse', { defaultValue: 'Median 1st response' })}
+                label={t('ticketOps.medianResponse', { defaultValue: 'Typical first reply' })}
                 value={fmtDuration(data.timing.medianResponseMin)}
               />
               <Timing
-                label={t('ticketOps.medianResolution', { defaultValue: 'Median resolution' })}
+                label={t('ticketOps.medianResolution', { defaultValue: 'Typical time to fix' })}
                 value={fmtDuration(data.timing.medianResolutionMin)}
               />
               <Timing
-                label={t('ticketOps.avgResolution', { defaultValue: 'Avg resolution' })}
+                label={t('ticketOps.avgResolution', { defaultValue: 'Average time to fix' })}
                 value={fmtDuration(data.timing.avgResolutionMin)}
               />
             </div>
@@ -396,13 +396,13 @@ export function TicketOpsPage() {
             {/* Breakdowns */}
             <div className="grid gap-3 md:grid-cols-2">
               <Breakdown
-                title={t('ticketOps.byStatus', { defaultValue: 'By status' })}
+                title={t('ticketOps.byStatus', { defaultValue: 'Where tickets stand' })}
                 items={data.byStatus}
                 label={(k) => t(`status.${k}`, { ns: 'common', defaultValue: k })}
                 toneClass={(k) => STATUS_BAR[k] ?? 'bg-primary'}
               />
               <Breakdown
-                title={t('ticketOps.byPriority', { defaultValue: 'By priority' })}
+                title={t('ticketOps.byPriority', { defaultValue: 'How urgent they are' })}
                 items={data.byPriority}
                 label={(k) => t(`priority.${k}`, { ns: 'common', defaultValue: k })}
                 toneClass={(k) => PRIORITY_BAR[k] ?? 'bg-primary'}
@@ -454,7 +454,7 @@ export function AgentTable({ agents }: { agents: AgentLoad[] }) {
                 {t('ticketOps.colResolved', { defaultValue: 'Resolved' })}
               </Th>
               <Th className="text-end">
-                {t('ticketOps.colAvgResolution', { defaultValue: 'Avg resolution' })}
+                {t('ticketOps.colAvgResolution', { defaultValue: 'Average time to fix' })}
               </Th>
             </tr>
           </thead>
@@ -848,27 +848,27 @@ export function TicketAnalytics({ data }: { data: TicketOps }) {
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3 rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.05]">
         <Timing
-          label={t('ticketOps.medianResponse', { defaultValue: 'Median 1st response' })}
+          label={t('ticketOps.medianResponse', { defaultValue: 'Typical first reply' })}
           value={fmtDuration(data.timing.medianResponseMin)}
         />
         <Timing
-          label={t('ticketOps.medianResolution', { defaultValue: 'Median resolution' })}
+          label={t('ticketOps.medianResolution', { defaultValue: 'Typical time to fix' })}
           value={fmtDuration(data.timing.medianResolutionMin)}
         />
         <Timing
-          label={t('ticketOps.avgResolution', { defaultValue: 'Avg resolution' })}
+          label={t('ticketOps.avgResolution', { defaultValue: 'Average time to fix' })}
           value={fmtDuration(data.timing.avgResolutionMin)}
         />
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <Breakdown
-          title={t('ticketOps.byStatus', { defaultValue: 'By status' })}
+          title={t('ticketOps.byStatus', { defaultValue: 'Where tickets stand' })}
           items={data.byStatus}
           label={(k) => t(`status.${k}`, { ns: 'common', defaultValue: k })}
           toneClass={(k) => STATUS_BAR[k] ?? 'bg-primary'}
         />
         <Breakdown
-          title={t('ticketOps.byPriority', { defaultValue: 'By priority' })}
+          title={t('ticketOps.byPriority', { defaultValue: 'How urgent they are' })}
           items={data.byPriority}
           label={(k) => t(`priority.${k}`, { ns: 'common', defaultValue: k })}
           toneClass={(k) => PRIORITY_BAR[k] ?? 'bg-primary'}

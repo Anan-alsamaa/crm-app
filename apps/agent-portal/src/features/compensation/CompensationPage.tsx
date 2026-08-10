@@ -87,7 +87,7 @@ function RequestQueue() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
+    <div className="mx-auto h-full w-full max-w-4xl overflow-y-auto px-4 py-6 sm:px-6">
       <header className="mb-4">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
           {t('compensation.title', { defaultValue: 'Compensation' })}
@@ -212,7 +212,7 @@ function RequestDetail({ id }: { id: string }) {
 
   if (isLoading) {
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-3 px-4 py-6 sm:px-6">
+      <div className="mx-auto h-full w-full max-w-3xl space-y-3 overflow-y-auto px-4 py-6 sm:px-6">
         <Skeleton className="h-8 w-40" />
         <Skeleton className="h-40 w-full rounded-2xl" />
         <Skeleton className="h-40 w-full rounded-2xl" />

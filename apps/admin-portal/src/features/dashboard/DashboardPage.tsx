@@ -378,21 +378,21 @@ export function DashboardPage() {
               <BentoStat
                 icon={<ClockIcon size={18} />}
                 tone="violet"
-                label={t('dashboard.avgResponse', { defaultValue: 'Avg response' })}
+                label={t('dashboard.avgResponse', { defaultValue: 'First reply time' })}
                 value={fmtMinutes(m.data.avgResponseMinutes)}
-                hint={t('dashboard.firstReply', { defaultValue: 'first reply' })}
+                hint={t('dashboard.firstReply', { defaultValue: 'how fast we answer' })}
               />
               <BentoStat
                 icon={<ShieldIcon size={18} />}
                 tone="green"
-                label={t('dashboard.slaCompliance', { defaultValue: 'SLA compliance' })}
+                label={t('dashboard.slaCompliance', { defaultValue: 'Answered on time' })}
                 value={fmtPct(m.data.slaCompliancePct)}
                 hint={t('dashboard.onTime', { defaultValue: 'on-time' })}
               />
               <BentoStat
                 icon={<ZapIcon size={18} />}
                 tone="amber"
-                label={t('dashboard.resolution', { defaultValue: 'Resolution' })}
+                label={t('dashboard.resolution', { defaultValue: 'Tickets solved' })}
                 value={fmtPct(m.data.ticketResolutionPct)}
                 hint={t('dashboard.ofTickets', {
                   count: m.data.ticketTotal,
@@ -402,7 +402,7 @@ export function DashboardPage() {
               <BentoStat
                 icon={<SparkleIcon size={18} />}
                 tone="crimson"
-                label={t('dashboard.csat', { defaultValue: 'CSAT' })}
+                label={t('dashboard.csat', { defaultValue: 'Customer rating' })}
                 value={m.data.csatAvg === null ? '—' : `${m.data.csatAvg.toFixed(1)}`}
                 hint={t('dashboard.responses', {
                   count: m.data.csatCount,
@@ -412,7 +412,7 @@ export function DashboardPage() {
 
               {/* Wide chart tile. */}
               <Panel
-                title={t('dashboard.volume', { defaultValue: 'Conversation volume' })}
+                title={t('dashboard.volume', { defaultValue: 'Conversations per day' })}
                 className="col-span-2 row-span-2"
               >
                 <VolumeBars series={m.data.volumeSeries} />
@@ -420,7 +420,7 @@ export function DashboardPage() {
 
               {/* Status breakdown tile. */}
               <Panel
-                title={t('dashboard.byStatus', { defaultValue: 'By status' })}
+                title={t('dashboard.byStatus', { defaultValue: 'Where conversations stand' })}
                 className="col-span-2 row-span-2"
               >
                 <StatusBreakdown data={m.data.conversationsByStatus} />
@@ -437,7 +437,7 @@ export function DashboardPage() {
 
               {/* Two rank-list tiles. */}
               <Panel
-                title={t('dashboard.topAgents', { defaultValue: 'Agent productivity' })}
+                title={t('dashboard.topAgents', { defaultValue: 'Busiest agents' })}
                 className="col-span-2 row-span-2"
               >
                 <RankList
@@ -450,7 +450,7 @@ export function DashboardPage() {
                 />
               </Panel>
               <Panel
-                title={t('dashboard.topVendors', { defaultValue: 'Vendor activity' })}
+                title={t('dashboard.topVendors', { defaultValue: 'Busiest vendors' })}
                 className="col-span-2 row-span-2"
               >
                 <RankList

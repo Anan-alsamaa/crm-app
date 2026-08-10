@@ -114,7 +114,11 @@ describe('LatestOrder (inbox)', () => {
   it('shows "no orders" for a customer with an empty history', async () => {
     client.getOrders.mockResolvedValue([]);
     renderView(<LatestOrder vendorId="v1" customerId="cust-guid" />);
-    await waitFor(() => expect(screen.getByText('No orders yet.')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.getByText('No orders found for this contact. Enter an order ID to look it up.'),
+      ).toBeInTheDocument(),
+    );
   });
 
   it('shows "unavailable" when the commerce proxy errors', async () => {
