@@ -1,6 +1,10 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+// Absorbed from the retired standalone Ticket report: the Overview is now the
+// single dashboard, so its status/priority mix and lifecycle timing live here.
+import { TicketAnalytics } from '../ticket-ops/TicketOpsPage.js';
+import { useTicketOps } from '../ticket-ops/api.js';
 import {
   ClockIcon,
   cn,
@@ -278,6 +282,9 @@ export function DashboardPage() {
   const { t } = useTranslation();
   const [days, setDays] = useState(30);
   const m = useDashboardMetrics(days);
+  // Ticket lifecycle analytics, absorbed from the retired Ticket report so the
+  // Overview is genuinely the ONE dashboard rather than half of two.
+  const ops = useTicketOps(days);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -418,6 +425,15 @@ export function DashboardPage() {
               >
                 <StatusBreakdown data={m.data.conversationsByStatus} />
               </Panel>
+
+              {/* Ticket lifecycle — status/priority mix and timing, formerly its own
+                  page. Full-width below the bento so it reads as a second band
+                  rather than competing with the headline tiles. */}
+              {ops.data && (
+                <div className="col-span-2 lg:col-span-4" style={{ gridRow: 'span 3' }}>
+                  <TicketAnalytics data={ops.data} />
+                </div>
+              )}
 
               {/* Two rank-list tiles. */}
               <Panel

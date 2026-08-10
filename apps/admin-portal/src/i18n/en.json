@@ -48,8 +48,7 @@
     "reportExports": "Excel exports",
     "analytics": "Analytics",
     "ticketOps": "Ticket operations",
-    "ticketReport": "Ticket report",
-    "reportTickets": "Tickets & orders",
+    "reportTickets": "Tickets",
     "reportAgents": "Agent KPI",
     "reportConversations": "Conversation status"
   },
@@ -535,7 +534,7 @@
       "conversationId": "Conversation ID",
       "lastMessage": "Last message"
     },
-    "ticketsTitle": "Tickets & orders",
+    "ticketsTitle": "Tickets",
     "ticketsSubtitle": "Every ticket with SLA timings and the linked customer order — export to Excel.",
     "agentsTitle": "Agent KPI",
     "agentsSubtitle": "Per-agent first-response time, SLA compliance and CSAT — export to Excel.",

@@ -138,7 +138,7 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
         },
         {
           id: 'go-report-tickets',
-          label: t('nav.reportTickets', { defaultValue: 'Tickets & orders' }),
+          label: t('nav.reportTickets', { defaultValue: 'Tickets' }),
           icon: <DownloadIcon size={16} />,
           keywords: ['xlsx', 'excel', 'download', 'export', 'orders', 'tickets', 'report'],
           onSelect: () => navigate('/report-tickets'),

@@ -48,8 +48,7 @@
     "reportExports": "تصدير Excel",
     "analytics": "التحليلات",
     "ticketOps": "عمليات التذاكر",
-    "ticketReport": "تقرير التذاكر",
-    "reportTickets": "التذاكر والطلبات",
+    "reportTickets": "التذاكر",
     "reportAgents": "مؤشرات الوكلاء",
     "reportConversations": "حالة المحادثات"
   },
@@ -535,7 +534,7 @@
       "conversationId": "معرّف المحادثة",
       "lastMessage": "آخر رسالة"
     },
-    "ticketsTitle": "التذاكر والطلبات",
+    "ticketsTitle": "التذاكر",
     "ticketsSubtitle": "كل تذكرة مع أزمنة SLA والطلب المرتبط بالعميل — قابلة للتصدير إلى Excel.",
     "agentsTitle": "مؤشرات الوكلاء",
     "agentsSubtitle": "لكل وكيل: زمن أول استجابة والالتزام بـ SLA ورضا العملاء — قابلة للتصدير إلى Excel.",

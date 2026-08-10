@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+// Moved here when the Ticket report page was retired: the register belongs with
+// the Tickets report, the workload table with Agent KPI.
+import { AgentTable, TicketRegister } from '../ticket-ops/TicketOpsPage.js';
+import { useTicketOps } from '../ticket-ops/api.js';
 import {
   Button,
   cn,
@@ -157,7 +161,11 @@ function TicketsReport({
   days: number;
 }) {
   const { t } = useTranslation();
-  const [includeOrders, setIncludeOrders] = useState(false);
+  // Order data is ALWAYS fetched: the Tickets report exists to show tickets
+  // ALONGSIDE the customer's order, so hiding it behind a checkbox made the
+  // report's whole point opt-in. Kept as a const so the query below reads the
+  // same as before.
+  const includeOrders = true;
   const [cols, setCols] = useState<Set<TicketColumnKey>>(() => new Set(TICKET_COLUMN_KEYS));
   const [showCols, setShowCols] = useState(false);
 
@@ -225,22 +233,6 @@ function TicketsReport({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-secondary/60 px-3 py-1.5 text-sm text-foreground ring-1 ring-border">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-border text-primary focus:ring-primary/60"
-            checked={includeOrders}
-            onChange={(e) => setIncludeOrders(e.currentTarget.checked)}
-          />
-          {t('agentReports.includeOrders', { defaultValue: 'Include order data' })}
-        </label>
-        {includeOrders && (
-          <span className="text-2xs text-muted-foreground">
-            {t('agentReports.ordersHint', {
-              defaultValue: 'Fetches each customer’s latest order from Yiji (best-effort).',
-            })}
-          </span>
-        )}
         <div className="relative ms-auto flex items-center gap-2">
           {/* Column picker — which columns land in the .xlsx (all by default). */}
           <button
@@ -608,7 +600,7 @@ const META: Record<
 > = {
   tickets: {
     titleKey: 'agentReports.ticketsTitle',
-    titleDefault: 'Tickets & orders',
+    titleDefault: 'Tickets',
     subKey: 'agentReports.ticketsSubtitle',
     subDefault: 'Every ticket with SLA timings and the linked customer order — export to Excel.',
   },
@@ -634,6 +626,10 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
     noSubject: t('agentReports.noSubject', { defaultValue: '(no subject)' }),
   });
   const tr: Translate = (key, opts) => String(t(key, opts));
+  // The retired Ticket report owned two blocks that belong to these reports.
+  // Only fetched for the kinds that render them, so the Conversation report
+  // pays nothing for it.
+  const ops = useTicketOps(which === 'tickets' || which === 'agents' ? days : 0);
   const data = report.data;
   const meta = META[which];
 
@@ -731,8 +727,22 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
                 />
               </div>
 
-              {which === 'tickets' && <TicketsReport rows={data.tickets} tr={tr} days={days} />}
-              {which === 'agents' && <AgentKpiReport agents={data.agents} tr={tr} days={days} />}
+              {which === 'tickets' && (
+                <>
+                  <TicketsReport rows={data.tickets} tr={tr} days={days} />
+                  {/* Ticket register, moved from the retired Ticket report. It
+                      carries its own status filter and its own CSV export, so the
+                      two downloads on this page stay independent. */}
+                  {ops.data && <TicketRegister rows={ops.data.rows} />}
+                </>
+              )}
+              {which === 'agents' && (
+                <>
+                  <AgentKpiReport agents={data.agents} tr={tr} days={days} />
+                  {/* Agent workload, moved from the retired Ticket report. */}
+                  {ops.data && <AgentTable agents={ops.data.agents} />}
+                </>
+              )}
               {which === 'conversations' && (
                 <ConversationReport report={data.conversations} tr={tr} days={days} />
               )}

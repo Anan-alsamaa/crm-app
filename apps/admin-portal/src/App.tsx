@@ -19,7 +19,6 @@ import {
   Spinner,
   StoreIcon,
   TeamIcon,
-  TicketIcon,
   Toaster,
   UploadIcon,
   UsersIcon,
@@ -65,9 +64,6 @@ const ReportExportsPage = lazy(() =>
 );
 const SlaReportsPage = lazy(() =>
   import('./features/sla-reports/SlaReportsPage.js').then((m) => ({ default: m.SlaReportsPage })),
-);
-const TicketOpsPage = lazy(() =>
-  import('./features/ticket-ops/TicketOpsPage.js').then((m) => ({ default: m.TicketOpsPage })),
 );
 const CustomFieldsPage = lazy(() =>
   import('./features/custom-fields/CustomFieldsPage.js').then((m) => ({
@@ -271,18 +267,13 @@ function Shell({ children }: { children: React.ReactNode }) {
       heading: t('nav.reportsGroup', { defaultValue: 'Reports' }),
       items: [
         {
-          to: '/ticket-ops',
-          label: t('nav.ticketReport', { defaultValue: 'Ticket report' }),
-          icon: TicketIcon,
-        },
-        {
           to: '/sla-reports',
           label: t('nav.slaReports', { defaultValue: 'SLA performance' }),
           icon: ClockIcon,
         },
         {
           to: '/report-tickets',
-          label: t('nav.reportTickets', { defaultValue: 'Tickets & orders' }),
+          label: t('nav.reportTickets', { defaultValue: 'Tickets' }),
           icon: DownloadIcon,
         },
         {
@@ -546,22 +537,15 @@ export function App() {
           />
           {/* Old combined route → first individual report. */}
           <Route path="/report-exports" element={<Navigate to="/report-tickets" replace />} />
+          {/* Ticket report was merged away: analytics -> dashboard, register ->
+              Tickets, workload -> Agent KPI. Redirect rather than 404. */}
+          <Route path="/ticket-ops" element={<Navigate to="/dashboard" replace />} />
           <Route
             path="/sla-reports"
             element={
               <ProtectedRoute>
                 <Shell>
                   <SlaReportsPage />
-                </Shell>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/ticket-ops"
-            element={
-              <ProtectedRoute>
-                <Shell>
-                  <TicketOpsPage />
                 </Shell>
               </ProtectedRoute>
             }

@@ -22,7 +22,7 @@ import {
   useTableSort,
 } from '@yiji/ui';
 import { commerce } from '../../lib/commerce-client.js';
-import { useTicketOps, type AgentLoad, type TicketOpsRow } from './api.js';
+import { useTicketOps, type AgentLoad, type TicketOpsRow, type TicketOps } from './api.js';
 
 const RANGE_DAYS = [7, 30, 90] as const;
 
@@ -434,7 +434,8 @@ function Timing({ label, value }: { label: string; value: string }) {
   );
 }
 
-function AgentTable({ agents }: { agents: AgentLoad[] }) {
+/** Agent workload — now ALSO rendered by the Agent KPI report. */
+export function AgentTable({ agents }: { agents: AgentLoad[] }) {
   const { t } = useTranslation();
   return (
     <div className="space-y-2">
@@ -499,7 +500,8 @@ const STATUS_DOT: Record<string, string> = {
   closed: 'bg-slate-400',
 };
 
-function TicketRegister({ rows }: { rows: TicketOpsRow[] }) {
+/** Ticket register — now ALSO rendered by the Tickets report. */
+export function TicketRegister({ rows }: { rows: TicketOpsRow[] }) {
   const { t } = useTranslation();
   const [openId, setOpenId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -815,6 +817,63 @@ function TicketOrderCard({ vendorId, customerId }: { vendorId: string; customerI
           {t('ticketOps.orderNoItems', { defaultValue: 'No line items on this order.' })}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Ticket analytics — status/priority mix and lifecycle timing.
+ *
+ * Extracted when the standalone Ticket report was retired so the Overview
+ * dashboard could absorb it. Kept in this file next to Breakdown/Timing, which
+ * it composes, rather than copied into the dashboard: two drifting copies of the
+ * same panel is exactly the redundancy the merge set out to remove.
+ */
+export function TicketAnalytics({ data }: { data: TicketOps }) {
+  const { t } = useTranslation();
+  const STATUS_BAR: Record<string, string> = {
+    new: 'bg-primary',
+    open: 'bg-success',
+    pending: 'bg-warning',
+    resolved: 'bg-primary/60',
+    closed: 'bg-muted-foreground/50',
+  };
+  const PRIORITY_BAR: Record<string, string> = {
+    urgent: 'bg-destructive',
+    high: 'bg-warning',
+    medium: 'bg-primary',
+    low: 'bg-muted-foreground/50',
+  };
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3 rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.05]">
+        <Timing
+          label={t('ticketOps.medianResponse', { defaultValue: 'Median 1st response' })}
+          value={fmtDuration(data.timing.medianResponseMin)}
+        />
+        <Timing
+          label={t('ticketOps.medianResolution', { defaultValue: 'Median resolution' })}
+          value={fmtDuration(data.timing.medianResolutionMin)}
+        />
+        <Timing
+          label={t('ticketOps.avgResolution', { defaultValue: 'Avg resolution' })}
+          value={fmtDuration(data.timing.avgResolutionMin)}
+        />
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <Breakdown
+          title={t('ticketOps.byStatus', { defaultValue: 'By status' })}
+          items={data.byStatus}
+          label={(k) => t(`status.${k}`, { ns: 'common', defaultValue: k })}
+          toneClass={(k) => STATUS_BAR[k] ?? 'bg-primary'}
+        />
+        <Breakdown
+          title={t('ticketOps.byPriority', { defaultValue: 'By priority' })}
+          items={data.byPriority}
+          label={(k) => t(`priority.${k}`, { ns: 'common', defaultValue: k })}
+          toneClass={(k) => PRIORITY_BAR[k] ?? 'bg-primary'}
+        />
+      </div>
     </div>
   );
 }

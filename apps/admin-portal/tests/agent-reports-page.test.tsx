@@ -210,7 +210,7 @@ describe('AgentReportsPage — shell', () => {
   it('renders skeletons while the report loads', () => {
     api.useAgentReportData.mockReturnValue({ isLoading: true, isError: false, data: undefined });
     const { container } = renderPage();
-    expect(screen.getAllByText('Tickets & orders').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Tickets').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     expect(container.querySelectorAll('.animate-shimmer').length).toBeGreaterThanOrEqual(5);
   });
@@ -339,7 +339,7 @@ describe('AgentReportsPage — tickets report', () => {
     dl.restore();
   });
 
-  it('adds the Restaurant column and enables enrichment when order data is included', async () => {
+  it('always enriches with order data — it is no longer opt-in', async () => {
     api.useAgentReportData.mockReturnValue(ok);
     api.useTicketOrders.mockReturnValue({
       data: new Map([
@@ -349,14 +349,12 @@ describe('AgentReportsPage — tickets report', () => {
     });
     renderPage('tickets');
 
-    // Enrichment is off by default.
-    expect(api.useTicketOrders).toHaveBeenLastCalledWith(['c1', 'c2'], false, 30);
-    expect(screen.queryByText('Restaurant')).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('checkbox', { name: /Include order data/ }));
-
+    // The "Include order data" checkbox is gone: this report exists to show
+    // tickets ALONGSIDE the customer's order, so hiding that behind a toggle
+    // made the report's whole purpose opt-in.
+    expect(screen.queryByRole('checkbox', { name: /Include order data/ })).not.toBeInTheDocument();
     expect(api.useTicketOrders).toHaveBeenLastCalledWith(['c1', 'c2'], true, 30);
-    expect(screen.getByText('Restaurant')).toBeInTheDocument();
+    expect(await screen.findByText('Restaurant')).toBeInTheDocument();
     expect(screen.getByText('La Casa — Riyadh')).toBeInTheDocument();
   });
 

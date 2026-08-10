@@ -29,7 +29,7 @@
 :root,
 :root[data-theme='light'],
 .theme-light {
-  --radius: 0.75rem;
+  --radius: 0.875rem;
 
   /* SURFACE LADDER (contrast pass 2026-07-29).
    * White cards used to sit on a 0.985 canvas — a 1.5% lightness difference,
@@ -47,7 +47,7 @@
    * are visible without becoming boxes. Dark theme already had separation and
    * is untouched. */
   --background: 0.95 0.006 230;
-  --canvas: 0.95 0.006 230;
+  --canvas: 0.938 0.008 230;
   --foreground: 0.155 0.006 250;
   --card: 1 0 0;
   --card-foreground: 0.155 0.006 250;
@@ -128,7 +128,7 @@
 /* DEFAULT THEME — "midnight ink" (mirrors agent portal). Light via
    <html data-theme="light">. */
 :root[data-theme='dark'] {
-  --radius: 0.75rem;
+  --radius: 0.875rem;
   /* Elevation ladder with real separation so surfaces read as distinct layers,
      not one flat wall of dark: base < card < secondary/popover. */
   --background: 0.135 0.014 265;
