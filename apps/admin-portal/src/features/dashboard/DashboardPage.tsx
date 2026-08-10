@@ -55,6 +55,8 @@ function BentoStat({
   label,
   value,
   hint,
+  delta,
+  deltaGood,
   className,
 }: {
   icon: ReactNode;
@@ -62,6 +64,11 @@ function BentoStat({
   label: string;
   value: string;
   hint?: string;
+  /** Period-over-period change, already formatted (e.g. "+12%"). */
+  delta?: string;
+  /** Whether the change is an improvement — a FALLING response time is good, a
+   *  falling CSAT is not, so direction alone cannot decide the colour. */
+  deltaGood?: boolean;
   className?: string;
 }) {
   return (
@@ -89,7 +96,19 @@ function BentoStat({
         <div className="text-[2.5rem] font-extrabold leading-none tabular-nums tracking-[-0.04em] text-foreground">
           {value}
         </div>
-        {hint && <div className="mt-1.5 text-xs text-muted-foreground">{hint}</div>}
+        <div className="mt-1.5 flex items-center gap-2">
+          {delta && (
+            <span
+              className={cn(
+                'inline-flex items-center rounded-full px-1.5 py-0.5 text-2xs font-semibold tabular-nums',
+                deltaGood ? 'bg-success/12 text-success' : 'bg-destructive/12 text-destructive',
+              )}
+            >
+              {delta}
+            </span>
+          )}
+          {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+        </div>
       </div>
     </div>
   );
@@ -303,31 +322,45 @@ export function DashboardPage() {
             /* BENTO grid — mixed tile sizes, oversized numbers, color blocks. */
             <div className="grid auto-rows-[150px] grid-cols-2 gap-4 lg:grid-cols-4">
               {/* Feature tile — flat surface, the two headline numbers. */}
-              <div className="col-span-2 row-span-2 flex flex-col justify-between rounded-3xl bg-card p-6 shadow-soft ring-1 ring-foreground/[0.08]">
-                <div>
-                  <h2 className="text-2xl font-extrabold tracking-[-0.03em] text-foreground">
+              {/* FEATURE tile — the one saturated surface on the page. Exactly one
+                  card earns a gradient; a grid where everything shouts has no
+                  hierarchy at all, which is why the reference dashboards colour a
+                  single hero and leave the rest white. */}
+              <div className="relative col-span-2 row-span-2 flex flex-col justify-between overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-sky p-6 shadow-float ring-1 ring-foreground/[0.08]">
+                {/* Soft light-form, echoing the reference hero cards. Pure decoration,
+                    so it is aria-hidden and sits behind the content. */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-white/15 blur-2xl"
+                />
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute -bottom-24 -left-10 h-56 w-56 rounded-full bg-white/10 blur-2xl"
+                />
+                <div className="relative">
+                  <h2 className="text-2xl font-bold tracking-[-0.03em] text-white">
                     {t('dashboard.heroTitle', { defaultValue: 'Workspace overview' })}
                   </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <p className="mt-1 text-sm text-white/75">
                     {t('dashboard.heroHint', {
                       defaultValue: 'Support performance across every channel.',
                     })}
                   </p>
                 </div>
-                <div className="flex items-end gap-8">
+                <div className="relative flex items-end gap-8">
                   <div>
-                    <div className="text-6xl font-extrabold leading-none tabular-nums tracking-[-0.05em] text-foreground">
+                    <div className="text-6xl font-bold leading-none tabular-nums tracking-[-0.05em] text-white">
                       {m.data.conversationVolume}
                     </div>
-                    <div className="mt-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.12em] text-white/75">
                       {t('dashboard.conversations', { defaultValue: 'Conversations' })}
                     </div>
                   </div>
                   <div>
-                    <div className="text-4xl font-extrabold leading-none tabular-nums tracking-[-0.04em] text-foreground">
+                    <div className="text-4xl font-bold leading-none tabular-nums tracking-[-0.04em] text-white">
                       {m.data.ticketTotal}
                     </div>
-                    <div className="mt-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.12em] text-white/75">
                       {t('dashboard.ofTicketsShort', { defaultValue: 'Tickets' })}
                     </div>
                   </div>
