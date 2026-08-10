@@ -1,0 +1,77 @@
+# Claude on GitHub — lets a non-engineer request work in plain English.
+#
+# WHY THIS EXISTS
+# A Claude Code session is single-user: nobody can join the maintainer's terminal
+# session. So a teammate who should be able to CONTRIBUTE without making
+# technical changes needs a different door, and this is it. They describe what
+# they want in an issue or PR comment and mention @claude; Claude does the work
+# and opens a PULL REQUEST.
+#
+# The safety property is that this workflow's only output is a PR. It never
+# pushes to `main`. Combined with branch protection (require a PR, require the CI
+# gate, require a CODEOWNERS review) the requester cannot land anything a
+# maintainer has not read — however the request was phrased.
+#
+# SETUP
+#  1. Repo Settings > Secrets and variables > Actions > New repository secret:
+#       ANTHROPIC_API_KEY = <your key>
+#     Billing follows that key, so treat it as spend and review who can trigger.
+#  2. Settings > Branches > add a rule for `main`:
+#       - Require a pull request before merging
+#       - Require status checks: the CI "verify" job
+#       - Require review from Code Owners
+#       - Do not allow bypassing the above
+#  3. Give the teammate the LEAST role that lets them comment. `Triage` is
+#     usually enough — it permits issues and comments but NOT pushing code.
+#     `Write` also works but hands them direct branch access you may not want.
+name: Claude
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+
+# Only ever act on an explicit @claude mention. Without this guard every comment
+# on the repository would start a billable run.
+jobs:
+  claude:
+    if: contains(github.event.comment.body || github.event.issue.body, '@claude')
+    runs-on: ubuntu-latest
+    # Least privilege: enough to read the repo and open a PR, and nothing that
+    # could alter settings, secrets, or protected branches.
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # The house rules. Claude already reads CLAUDE.md, PRODUCT.md and
+          # DESIGN.md from the checkout; this adds the constraints that only
+          # matter for a request arriving from outside the maintainer's session.
+          prompt: |
+            You are working in the Yiji CRM monorepo on behalf of a teammate who
+            is NOT an engineer. Follow CLAUDE.md, PRODUCT.md and DESIGN.md.
+
+            Hard rules for requests arriving through this workflow:
+            - NEVER modify: .github/, deploy/, docker-compose*.yml, any
+              Dockerfile, .husky/, or any file under directus/bootstrap/.
+              These are infrastructure and release plumbing. If a request needs
+              one of them, explain why and stop — a maintainer will do it.
+            - NEVER change dependencies (package.json, pnpm-lock.yaml) or
+              tsconfig/eslint/prettier configuration.
+            - NEVER touch secrets, tokens, or environment values.
+            - Run `pnpm verify` before opening the PR. If it fails, fix it or
+              explain what is blocking. Do not open a PR on a red gate.
+            - Keep the change small and focused on what was actually asked.
+
+            Open a pull request. Do not push to main.
