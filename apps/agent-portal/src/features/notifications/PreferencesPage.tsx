@@ -186,12 +186,12 @@ export function PreferencesPage() {
               from the server-saved channel rows below. */}
           <section className="space-y-3">
             <div className="space-y-1 px-1">
-              <h2 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <h2 className="text-sm font-semibold tracking-tight text-foreground">
                 {t('preferences.group.sound', { defaultValue: 'Sound' })}
               </h2>
-              <p className="text-sm text-foreground/80">{t('sound.prefHint')}</p>
+              <p className="text-sm text-muted-foreground">{t('sound.prefHint')}</p>
             </div>
-            <ul className="rounded-2xl bg-card px-5 shadow-soft ring-1 ring-border">
+            <ul className="rounded-2xl bg-card px-5 shadow-soft ring-1 ring-foreground/[0.06]">
               <li className="flex flex-col gap-2.5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <span
@@ -252,14 +252,14 @@ export function PreferencesPage() {
           {GROUPS.map((g) => (
             <section key={g.key} className="space-y-3">
               <div className="space-y-1 px-1">
-                <h2 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">
                   {t(g.titleKey, { defaultValue: g.titleFallback })}
                 </h2>
                 <p className="text-sm text-foreground/80">
                   {t(g.descriptionKey, { defaultValue: g.descriptionFallback })}
                 </p>
               </div>
-              <ul className="divide-y divide-border rounded-2xl bg-card px-5 shadow-soft ring-1 ring-border">
+              <ul className="divide-y divide-border rounded-2xl bg-card px-5 shadow-soft ring-1 ring-foreground/[0.06]">
                 {g.types.map((type) => {
                   const meta = META[type];
                   const Icon = meta?.icon;

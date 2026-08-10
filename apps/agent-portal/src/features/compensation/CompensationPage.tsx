@@ -224,7 +224,7 @@ function RequestDetail({ id }: { id: string }) {
   }
   if (!r) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+      <div className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-4 py-6 sm:px-6">
         <Button variant="ghost" size="sm" onClick={() => navigate('/compensation')}>
           <ArrowLeftIcon size={16} className="rtl:-scale-x-100" />{' '}
           {t('compensation.back', { defaultValue: 'Back' })}
@@ -237,7 +237,7 @@ function RequestDetail({ id }: { id: string }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6 sm:px-6">
+    <div className="mx-auto h-full w-full max-w-3xl space-y-4 overflow-y-auto px-4 py-6 sm:px-6">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => navigate('/compensation')}>
           <ArrowLeftIcon size={16} className="rtl:-scale-x-100" />{' '}

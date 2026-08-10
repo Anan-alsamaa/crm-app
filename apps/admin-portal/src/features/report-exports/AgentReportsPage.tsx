@@ -2,8 +2,6 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 // Moved here when the Ticket report page was retired: the register belongs with
 // the Tickets report, the workload table with Agent KPI.
-import { AgentTable } from '../ticket-ops/TicketOpsPage.js';
-import { useTicketOps } from '../ticket-ops/api.js';
 import {
   Button,
   cn,
@@ -697,10 +695,6 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
     noSubject: t('agentReports.noSubject', { defaultValue: '(no subject)' }),
   });
   const tr: Translate = (key, opts) => String(t(key, opts));
-  // The retired Ticket report owned two blocks that belong to these reports.
-  // Only fetched for the kinds that render them, so the Conversation report
-  // pays nothing for it.
-  const ops = useTicketOps(which === 'tickets' || which === 'agents' ? days : 0);
   const data = report.data;
   const meta = META[which];
 
@@ -810,9 +804,11 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
               )}
               {which === 'agents' && (
                 <>
+                  {/* ONE table. The workload table moved here from the retired
+                      Ticket report listed the same agents with overlapping
+                      columns, so the page showed one dataset twice. This report's
+                      own table wins — it has the Excel export. */}
                   <AgentKpiReport agents={data.agents} tr={tr} days={days} />
-                  {/* Agent workload, moved from the retired Ticket report. */}
-                  {ops.data && <AgentTable agents={ops.data.agents} />}
                 </>
               )}
               {which === 'conversations' && (

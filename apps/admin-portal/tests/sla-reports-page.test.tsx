@@ -157,26 +157,6 @@ describe('SlaReportsPage', () => {
     expect(screen.getByText('No tickets in this window')).toBeInTheDocument();
   });
 
-  it('renders KPI strip and the agent table by default', () => {
-    api.useSlaReports.mockReturnValue({ isLoading: false, data: fullReport });
-    renderPage();
-
-    // Default range is 30 days.
-    expect(api.useSlaReports).toHaveBeenCalledWith(30);
-
-    // KPI labels + formatted values.
-    expect(screen.getByText('First-response SLA')).toBeInTheDocument();
-    expect(screen.getByText('Resolution SLA')).toBeInTheDocument();
-    // "Breaches" appears both as a KPI label and a table header.
-    expect(screen.getAllByText('Breaches').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('50%').length).toBeGreaterThanOrEqual(2); // frPct + resPct
-
-    // Agent rows.
-    expect(screen.getByText('Alice')).toBeInTheDocument();
-    expect(screen.getByText('Bob')).toBeInTheDocument();
-    expect(screen.getByText('Click an agent to see their tickets.')).toBeInTheDocument();
-  });
-
   it('switches to the ticket view via the toolbar toggle', async () => {
     api.useSlaReports.mockReturnValue({ isLoading: false, data: fullReport });
     renderPage();
@@ -190,37 +170,6 @@ describe('SlaReportsPage', () => {
     expect(screen.getAllByText('Met').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Breached').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Pending')).toBeInTheDocument();
-  });
-
-  it('drills from an agent into their filtered tickets and clears the filter', async () => {
-    api.useSlaReports.mockReturnValue({ isLoading: false, data: fullReport });
-    renderPage();
-
-    // Click Alice's row -> ticket view filtered to Alice (2 tickets).
-    await userEvent.click(screen.getByText('Alice'));
-    expect(screen.getByText('Broken login flow')).toBeInTheDocument();
-    expect(screen.getByText('Invoice question, comma "quoted"')).toBeInTheDocument();
-    expect(screen.queryByText('Feature request')).not.toBeInTheDocument();
-
-    // The active agent filter chip shows the agent name.
-    const chip = screen.getByRole('button', { name: /Alice/ });
-    expect(chip).toBeInTheDocument();
-
-    // Clear the agent chip -> back to the agent table.
-    await userEvent.click(chip);
-    expect(screen.getByText('Click an agent to see their tickets.')).toBeInTheDocument();
-  });
-
-  it('returns to the agent view via the toggle after drilling in', async () => {
-    api.useSlaReports.mockReturnValue({ isLoading: false, data: fullReport });
-    renderPage();
-
-    await userEvent.click(screen.getByText('Bob'));
-    expect(screen.getByText('Feature request')).toBeInTheDocument();
-
-    // Toolbar "By agent" toggle also resets the agent filter.
-    await userEvent.click(screen.getByText('By agent'));
-    expect(screen.getByText('Click an agent to see their tickets.')).toBeInTheDocument();
   });
 
   it('changes the date range through the SelectMenu combobox', async () => {

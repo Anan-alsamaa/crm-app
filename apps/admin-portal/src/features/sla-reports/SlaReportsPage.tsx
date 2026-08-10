@@ -15,7 +15,7 @@ import {
   ToolbarSpacer,
   Tr,
 } from '@yiji/ui';
-import { useSlaReports, type AgentSla, type SlaCell, type TicketSla } from './api.js';
+import { useSlaReports, type SlaCell, type TicketSla } from './api.js';
 
 const RANGE_DAYS = [7, 30, 90] as const;
 
@@ -37,14 +37,6 @@ const fmtPct = (n: number | null) => (n == null ? '—' : `${Math.round(n)}%`);
 const fmtMins = (n: number | null) =>
   n == null ? '—' : n < 60 ? `${Math.round(n)}m` : `${(n / 60).toFixed(1)}h`;
 /** Tone for a compliance %: green ≥90, amber ≥75, red below. */
-const pctTone = (n: number | null) =>
-  n == null
-    ? 'text-muted-foreground'
-    : n >= 90
-      ? 'text-success'
-      : n >= 75
-        ? 'text-warning-foreground'
-        : 'text-destructive';
 
 function SlaPill({ cell }: { cell: SlaCell }) {
   const { t } = useTranslation();
@@ -132,11 +124,6 @@ export function SlaReportsPage() {
   const [view, setView] = useState<'agent' | 'ticket'>('agent');
   const [agentFilter, setAgentFilter] = useState<{ id: string | null; name: string } | null>(null);
   const report = useSlaReports(days);
-
-  const drillToAgent = (a: AgentSla) => {
-    setAgentFilter({ id: a.agentId, name: a.agentName });
-    setView('ticket');
-  };
 
   const ticketsShown = useMemo(() => {
     const all = report.data?.tickets ?? [];
@@ -297,92 +284,19 @@ export function SlaReportsPage() {
               />
             </div>
 
-            {view === 'agent' ? (
-              <AgentTable agents={report.data.agents} onDrill={drillToAgent} />
-            ) : (
-              <TicketTable
-                tickets={ticketsShown}
-                agentFilter={agentFilter}
-                onClearAgent={() => {
-                  setAgentFilter(null);
-                  setView('agent');
-                }}
-              />
-            )}
+            {/* ONE table. This page used to toggle between a per-agent view and a
+                per-ticket view, and the per-agent one duplicated the Agent KPI
+                report. SLA performance is about which TICKETS met their promise,
+                so the ticket table is the one that belongs here; per-agent
+                performance lives in Agent KPI. */}
+            <TicketTable
+              tickets={ticketsShown}
+              agentFilter={agentFilter}
+              onClearAgent={() => setAgentFilter(null)}
+            />
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function AgentTable({ agents, onDrill }: { agents: AgentSla[]; onDrill: (a: AgentSla) => void }) {
-  const { t } = useTranslation();
-  return (
-    <div className="space-y-2">
-      <TableSurface>
-        <Table>
-          <thead>
-            <tr>
-              <Th>{t('slaReports.colAgent', { defaultValue: 'Agent' })}</Th>
-              <Th className="text-end">
-                {t('slaReports.colTickets', { defaultValue: 'Tickets' })}
-              </Th>
-              <Th className="text-end">
-                {t('slaReports.colFirstResponse', { defaultValue: 'First response' })}
-              </Th>
-              <Th className="text-end">
-                {t('slaReports.colResolution', { defaultValue: 'Resolution' })}
-              </Th>
-              <Th className="text-end">
-                {t('slaReports.colAvgReply', { defaultValue: 'Avg 1st reply' })}
-              </Th>
-              <Th className="text-end">
-                {t('slaReports.colBreaches', { defaultValue: 'Breaches' })}
-              </Th>
-            </tr>
-          </thead>
-          <tbody>
-            {agents.map((a) => (
-              <Tr
-                key={a.agentId ?? '__unassigned__'}
-                onClick={() => onDrill(a)}
-                className="cursor-pointer"
-              >
-                <Td className="font-medium">{a.agentName}</Td>
-                <Td className="text-end tabular-nums text-muted-foreground">{a.tickets}</Td>
-                <Td className="text-end tabular-nums">
-                  <span className={cn('font-semibold', pctTone(a.frPct))}>{fmtPct(a.frPct)}</span>
-                  <span className="ms-1.5 text-2xs text-muted-foreground">
-                    {a.frMet}/{a.frMet + a.frBreached}
-                  </span>
-                </Td>
-                <Td className="text-end tabular-nums">
-                  <span className={cn('font-semibold', pctTone(a.resPct))}>{fmtPct(a.resPct)}</span>
-                  <span className="ms-1.5 text-2xs text-muted-foreground">
-                    {a.resMet}/{a.resMet + a.resBreached}
-                  </span>
-                </Td>
-                <Td className="text-end tabular-nums text-muted-foreground">
-                  {fmtMins(a.avgResponseMin)}
-                </Td>
-                <Td className="text-end tabular-nums">
-                  <span
-                    className={
-                      a.breaches > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground'
-                    }
-                  >
-                    {a.breaches}
-                  </span>
-                </Td>
-              </Tr>
-            ))}
-          </tbody>
-        </Table>
-      </TableSurface>
-      <p className="px-1 text-2xs text-muted-foreground">
-        {t('slaReports.drillHint', { defaultValue: 'Click an agent to see their tickets.' })}
-      </p>
     </div>
   );
 }

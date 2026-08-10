@@ -12,7 +12,6 @@ import {
   DownloadIcon,
   ErrorBoundary,
   SearchTrigger,
-  SettingsIcon,
   ShieldIcon,
   SignOutIcon,
   SparkleIcon,
@@ -23,7 +22,6 @@ import {
   UploadIcon,
   UsersIcon,
   YijiLogo,
-  ZapIcon,
 } from '@yiji/ui';
 import { RouteError } from './components/RouteError.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
@@ -51,9 +49,6 @@ const SlaPoliciesPage = lazy(() =>
 const VendorsPage = lazy(() =>
   import('./features/vendors/VendorsPage.js').then((m) => ({ default: m.VendorsPage })),
 );
-const AutomationPage = lazy(() =>
-  import('./features/automation/AutomationPage.js').then((m) => ({ default: m.AutomationPage })),
-);
 const ReportsPage = lazy(() =>
   import('./features/reports/ReportsPage.js').then((m) => ({ default: m.ReportsPage })),
 );
@@ -64,11 +59,6 @@ const ReportExportsPage = lazy(() =>
 );
 const SlaReportsPage = lazy(() =>
   import('./features/sla-reports/SlaReportsPage.js').then((m) => ({ default: m.SlaReportsPage })),
-);
-const CustomFieldsPage = lazy(() =>
-  import('./features/custom-fields/CustomFieldsPage.js').then((m) => ({
-    default: m.CustomFieldsPage,
-  })),
 );
 const ImportsPage = lazy(() =>
   import('./features/imports/ImportsPage.js').then((m) => ({ default: m.ImportsPage })),
@@ -308,19 +298,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     },
     {
       heading: t('nav.policies', { defaultValue: 'Policies' }),
-      items: [
-        { to: '/sla', label: t('nav.sla'), icon: ShieldIcon },
-        {
-          to: '/automation',
-          label: t('nav.automation', { defaultValue: 'Automation' }),
-          icon: ZapIcon,
-        },
-        {
-          to: '/custom-fields',
-          label: t('nav.customFields', { defaultValue: 'Custom fields' }),
-          icon: SettingsIcon,
-        },
-      ],
+      items: [{ to: '/sla', label: t('nav.sla'), icon: ShieldIcon }],
     },
     {
       heading: t('nav.intelligence', { defaultValue: 'Intelligence' }),
@@ -486,16 +464,6 @@ export function App() {
             }
           />
           <Route
-            path="/automation"
-            element={
-              <ProtectedRoute>
-                <Shell>
-                  <AutomationPage />
-                </Shell>
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/reports"
             element={
               <ProtectedRoute>
@@ -537,6 +505,10 @@ export function App() {
           />
           {/* Old combined route → first individual report. */}
           <Route path="/report-exports" element={<Navigate to="/report-tickets" replace />} />
+          {/* Automation and Custom fields are disabled for now — hidden from the
+              nav, routes redirect so old links do not dead-end. */}
+          <Route path="/automation" element={<Navigate to="/sla" replace />} />
+          <Route path="/custom-fields" element={<Navigate to="/sla" replace />} />
           {/* Ticket report was merged away: analytics -> dashboard, register ->
               Tickets, workload -> Agent KPI. Redirect rather than 404. */}
           <Route path="/ticket-ops" element={<Navigate to="/dashboard" replace />} />
@@ -546,16 +518,6 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <SlaReportsPage />
-                </Shell>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/custom-fields"
-            element={
-              <ProtectedRoute>
-                <Shell>
-                  <CustomFieldsPage />
                 </Shell>
               </ProtectedRoute>
             }
