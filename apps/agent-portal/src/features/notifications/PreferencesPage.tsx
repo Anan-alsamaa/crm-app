@@ -6,7 +6,6 @@ import {
   ClockIcon,
   cn,
   InboxIcon,
-  SelectMenu,
   SettingsIcon,
   SoundOffIcon,
   SoundOnIcon,
@@ -122,6 +121,56 @@ const META: Record<string, RowMeta> = {
     fallbackDescription: 'An automation rule ran on your behalf.',
   },
 };
+
+/**
+ * Channel picker as a segmented control rather than a dropdown.
+ *
+ * There are only four choices and they are mutually exclusive, which is exactly
+ * the case a segmented control is for: every option is on screen, changing one is
+ * a single click, and a column of rows can be compared at a glance. A <select>
+ * hides three of the four behind an interaction and forces you to open every row
+ * to see how it is configured.
+ */
+function ChannelSegments({
+  value,
+  onChange,
+  label,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5"
+    >
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              'rounded-md px-2.5 py-1 text-2xs font-medium transition-colors duration-fast ease-out',
+              active
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export function PreferencesPage() {
   const { t } = useTranslation();
@@ -263,7 +312,7 @@ export function PreferencesPage() {
                   notification type is its OWN card rather than a row in a shared
                   list. A divided list reads as settings-you-scan; discrete cards
                   read as features-you-choose, which is what these are. */}
-              <ul className="grid gap-3 sm:grid-cols-2">
+              <ul className="grid gap-2.5">
                 {g.types.map((type) => {
                   const meta = META[type];
                   const Icon = meta?.icon;
@@ -306,12 +355,10 @@ export function PreferencesPage() {
                         {/* Control sits on the TITLE line, as on the AI assistance
                             cards — the eye scans name → setting on one row instead
                             of dropping to a second. */}
-                        <SelectMenu
-                          size="sm"
-                          className="w-28 shrink-0"
+                        <ChannelSegments
                           value={draft[type] ?? 'both'}
                           onChange={(v) => setDraft((d) => ({ ...d, [type]: v }))}
-                          aria-label={type}
+                          label={type}
                           options={CHANNELS.map((c) => ({
                             value: c,
                             label: t(`preferences.channels.${c}`, { defaultValue: c }),
