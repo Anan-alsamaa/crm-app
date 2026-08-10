@@ -45,10 +45,14 @@ describe('ImportsPage', () => {
     Element.prototype.scrollIntoView = vi.fn();
     renderPage();
     fireEvent.click(screen.getByRole('combobox', { name: 'Target vendor' }));
-    expect(screen.getByText('Acme (acme-1)')).toBeInTheDocument();
+    // getAllByText, not getByText: a sole vendor is now preselected, so its label
+    // appears twice — once as the trigger's value and once as the open option.
+    expect(screen.getAllByText('Acme (acme-1)').length).toBeGreaterThan(0);
   });
 
-  it('disables the queue button until a vendor and file are set', () => {
+  it('disables the queue button until a file is uploaded', () => {
+    // The vendor auto-selects when there is exactly one, so the file is the only
+    // remaining precondition.
     renderPage();
     expect(screen.getByText('Queue import').closest('button')).toBeDisabled();
   });

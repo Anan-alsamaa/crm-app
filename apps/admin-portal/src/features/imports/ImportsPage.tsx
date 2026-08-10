@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import { uploadFiles } from '@directus/sdk';
@@ -6,7 +6,6 @@ import {
   Button,
   EmptyState,
   FormField,
-  Input,
   SelectMenu,
   Skeleton,
   Table,
@@ -14,6 +13,7 @@ import {
   Td,
   Th,
   toast,
+  cn,
   Toolbar,
   ToolbarSpacer,
   Tr,
@@ -46,6 +46,15 @@ export function ImportsPage() {
   const vendors = useVendors();
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [vendorId, setVendorId] = useState('');
+
+  // With a single vendor the picker is a decision the operator cannot get wrong,
+  // so making them open it just to choose the only option is friction — and an
+  // empty "—" reads as "nothing configured". Preselect it; the control stays
+  // visible and editable for when there is more than one.
+  const vendorList = vendors.data ?? [];
+  useEffect(() => {
+    if (!vendorId && vendorList.length === 1) setVendorId(vendorList[0]!.id);
+  }, [vendorId, vendorList]);
   const [mapping, setMapping] = useState<Record<string, ContactField>>({});
 
   const upload = useMutation({
@@ -170,13 +179,36 @@ export function ImportsPage() {
 
         {/* File upload */}
         <section className="rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft px-5 py-5">
-          <FormField
-            label={t('imports.file', { defaultValue: 'CSV file' })}
-            hint={t('imports.fileHint', {
-              defaultValue: 'Header row required. UTF-8 recommended.',
-            })}
-          >
-            <Input type="file" accept=".csv,text/csv" onChange={onFileChange} />
+          <FormField label={t('imports.file', { defaultValue: 'CSV file' })}>
+            {/* A bare <input type="file"> renders the BROWSER's control — grey
+                "Choose File | No file chosen" — which ignores the design system
+                entirely and is the one obviously foreign element on the page.
+                The input stays (it is what actually opens the picker and what
+                assistive tech drives) but is visually hidden inside a styled
+                label, so the whole area is a proper drop target. */}
+            <label
+              className={cn(
+                'flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border bg-secondary/40 px-4 py-7 text-center transition-colors duration-fast',
+                'hover:border-primary/50 hover:bg-primary/[0.04] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/40',
+              )}
+            >
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={onFileChange}
+                className="sr-only"
+              />
+              <span className="text-sm font-medium text-foreground">
+                {preview
+                  ? t('imports.chooseAnother', { defaultValue: 'Choose a different CSV' })
+                  : t('imports.chooseFile', { defaultValue: 'Choose a CSV file' })}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {t('imports.fileHint', {
+                  defaultValue: 'Header row required. UTF-8 recommended.',
+                })}
+              </span>
+            </label>
           </FormField>
           {upload.isPending && <Skeleton className="h-4 w-32 mt-2" />}
           {preview && (
