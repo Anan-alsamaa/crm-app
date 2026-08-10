@@ -9,6 +9,7 @@ import {
   type AutomationJob,
   type ImportJob,
   type ReportJob,
+  type RoutingJob,
 } from '@yiji/shared-types';
 import type { MailTransport } from '../mail/index.js';
 import type { YijiDirectusClient } from '@yiji/shared-config';
@@ -23,7 +24,8 @@ import {
 } from './automation.js';
 import { processImportJob, type ImportsDeps } from './imports.js';
 import { processReportJob, type ReportsDeps } from './reports.js';
-import { createTicketRepo, createNotificationsRepo } from './directus-repos.js';
+import { handleRouting } from '../routing.js';
+import { createTicketRepo, createNotificationsRepo, createRoutingRepo } from './directus-repos.js';
 
 /**
  * Queue processor registry — every queue (sla, notifications, ai, automation,
@@ -124,6 +126,22 @@ export const processors: Record<QueueName, Processor> = {
       logger: deps.logger,
     };
     await processReportJob(job as Job<ReportJob>, reportDeps);
+  },
+  [QUEUES.routing]: async (job, deps) => {
+    const routingJob = job.data as RoutingJob;
+    await handleRouting(routingJob, {
+      // The queue's own Redis connection doubles as the presence reader — the
+      // gateway writes the online set to the same instance.
+      redis: (deps.queues[QUEUES.routing].opts.connection ?? {}) as never,
+      directus: createRoutingRepo(deps.directus),
+      schedule: async (next, delayMs) => {
+        await deps.queues[QUEUES.routing].add(next.stage, next, {
+          delay: delayMs,
+          jobId: `route-${next.stage}-${next.conversationId}-${Date.now()}`,
+        });
+      },
+      log: (msg, extra) => deps.logger.info(extra ?? {}, msg),
+    });
   },
 };
 

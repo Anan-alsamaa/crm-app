@@ -9,6 +9,7 @@ import {
   type ImportJob,
   type NotificationJob,
   type ReportJob,
+  type RoutingJob,
 } from '@yiji/shared-types';
 
 /**
@@ -29,6 +30,12 @@ export interface SideEffectProducer {
   /** Agent-triggered: notify the assignee of a conversation/ticket. `jobId` is
    *  deterministic (assign-<type>-<entity>-<assignee>) so repeat calls collapse. */
   enqueueNotification(job: NotificationJob, jobId: string): Promise<string | null>;
+  /**
+   * Kick off auto-assignment for a conversation nobody owns yet. The jobId is
+   * deterministic per conversation so a burst of customer messages starts ONE
+   * ladder rather than racing several against each other.
+   */
+  enqueueRouting(job: RoutingJob): Promise<string | null>;
   close(): Promise<void>;
 }
 
@@ -39,6 +46,10 @@ class NoopProducer implements SideEffectProducer {
   }
   async messageReceived(): Promise<void> {
     this.logger.debug('side-effect skipped (Redis disabled): message_received');
+  }
+  async enqueueRouting(): Promise<string | null> {
+    this.logger.warn('auto-assignment skipped (Redis disabled)');
+    return null;
   }
   async enqueueImport(): Promise<string | null> {
     this.logger.warn('enqueue import skipped (Redis disabled)');
@@ -60,6 +71,7 @@ class BullProducer implements SideEffectProducer {
   private readonly imports: Queue;
   private readonly reports: Queue;
   private readonly notifications: Queue;
+  private readonly routing: Queue;
   private readonly connection: Redis | Cluster;
   /* On a cluster a queue's keys must hash to ONE shard or BullMQ's Lua
    * scripts fail with CROSSSLOT — hence the hash tag. undefined on
@@ -88,6 +100,7 @@ class BullProducer implements SideEffectProducer {
       connection: this.connection,
       prefix: this.prefix,
     });
+    this.routing = new Queue(QUEUES.routing, { connection: this.connection, prefix: this.prefix });
   }
   async enqueueImport(job: ImportJob): Promise<string | null> {
     const added = await this.imports.add('import', job, DEFAULT_JOB_OPTIONS);
@@ -99,6 +112,15 @@ class BullProducer implements SideEffectProducer {
   }
   async enqueueNotification(job: NotificationJob, jobId: string): Promise<string | null> {
     const added = await this.notifications.add(job.type, job, { ...DEFAULT_JOB_OPTIONS, jobId });
+    return added.id ?? null;
+  }
+  async enqueueRouting(job: RoutingJob): Promise<string | null> {
+    // Deterministic id per conversation+stage: a burst of customer messages must
+    // start ONE ladder, not race several that fight over the same assignee.
+    const added = await this.routing.add(job.stage, job, {
+      ...DEFAULT_JOB_OPTIONS,
+      jobId: `route-${job.stage}-${job.conversationId}`,
+    });
     return added.id ?? null;
   }
   async conversationCreated(conversationId: string): Promise<void> {

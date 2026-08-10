@@ -149,3 +149,55 @@ export function createNotificationsRepo(client: YijiDirectusClient): Notificatio
     },
   };
 }
+
+/**
+ * Directus access for the auto-assignment ladder.
+ *
+ * Deliberately narrow: three calls, no caching. Routing decisions must read the
+ * CURRENT assignee and reply count, because the whole point of the escalation
+ * timers is to notice a change that happened while they were pending.
+ */
+export function createRoutingRepo(client: YijiDirectusClient) {
+  return {
+    async getConversation(id: string) {
+      const rows = (await client.request(
+        readItems('conversations' as never, {
+          filter: { id: { _eq: id } },
+          fields: ['id', 'assigned_agent', 'status'],
+          limit: 1,
+        }) as never,
+      )) as Array<{ id: string; assigned_agent: string | null; status: string }>;
+      return rows[0] ?? null;
+    },
+
+    /**
+     * Agent replies only. An inbound customer message must NOT cancel an
+     * escalation — a customer chasing an unanswered chat would otherwise reset
+     * the very timer meant to rescue them.
+     */
+    async countOutboundMessages(conversationId: string) {
+      const rows = (await client.request(
+        readItems('messages' as never, {
+          filter: {
+            conversation: { _eq: conversationId },
+            sender_type: { _eq: 'agent' },
+          },
+          aggregate: { count: 'id' },
+        }) as never,
+      )) as Array<{ count: { id: number | string } }>;
+      return Number(rows[0]?.count?.id ?? 0);
+    },
+
+    async assign(conversationId: string, agentId: string | null) {
+      await client.request(
+        updateItem(
+          'conversations' as never,
+          conversationId as never,
+          {
+            assigned_agent: agentId,
+          } as never,
+        ) as never,
+      );
+    },
+  };
+}
