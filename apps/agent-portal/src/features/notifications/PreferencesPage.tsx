@@ -6,6 +6,7 @@ import {
   ClockIcon,
   cn,
   InboxIcon,
+  SelectMenu,
   SettingsIcon,
   SoundOffIcon,
   SoundOnIcon,
@@ -122,56 +123,6 @@ const META: Record<string, RowMeta> = {
   },
 };
 
-/**
- * Channel picker as a segmented control rather than a dropdown.
- *
- * There are only four choices and they are mutually exclusive, which is exactly
- * the case a segmented control is for: every option is on screen, changing one is
- * a single click, and a column of rows can be compared at a glance. A <select>
- * hides three of the four behind an interaction and forces you to open every row
- * to see how it is configured.
- */
-function ChannelSegments({
-  value,
-  onChange,
-  label,
-  options,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  label: string;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <div
-      role="radiogroup"
-      aria-label={label}
-      className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5"
-    >
-      {options.map((o) => {
-        const active = o.value === value;
-        return (
-          <button
-            key={o.value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onChange(o.value)}
-            className={cn(
-              'rounded-md px-2.5 py-1 text-2xs font-medium transition-colors duration-fast ease-out',
-              active
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 export function PreferencesPage() {
   const { t } = useTranslation();
   const prefs = useNotificationPreferences();
@@ -235,11 +186,11 @@ export function PreferencesPage() {
             {/* New-message sound — a per-browser toggle, kept visually distinct
               from the server-saved channel rows below. */}
             <section className="space-y-3">
-              <div className="space-y-1 border-b border-foreground/10 pb-3">
-                <h2 className="text-base font-bold tracking-[-0.01em] text-foreground">
+              <div className="space-y-1 px-1">
+                <h2 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   {t('preferences.group.sound', { defaultValue: 'Sound' })}
                 </h2>
-                <p className="text-sm text-muted-foreground">{t('sound.prefHint')}</p>
+                <p className="text-sm text-foreground/80">{t('sound.prefHint')}</p>
               </div>
               <ul className="rounded-2xl bg-card px-5 shadow-soft ring-1 ring-foreground/[0.06]">
                 <li className="flex flex-col gap-2.5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
@@ -302,7 +253,7 @@ export function PreferencesPage() {
             {GROUPS.map((g) => (
               <section key={g.key} className="space-y-3">
                 <div className="space-y-1 px-1">
-                  <h2 className="text-base font-bold tracking-[-0.01em] text-foreground">
+                  <h2 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     {t(g.titleKey, { defaultValue: g.titleFallback })}
                   </h2>
                   <p className="text-sm text-muted-foreground">
@@ -313,7 +264,7 @@ export function PreferencesPage() {
                   notification type is its OWN card rather than a row in a shared
                   list. A divided list reads as settings-you-scan; discrete cards
                   read as features-you-choose, which is what these are. */}
-                <ul className="divide-y divide-foreground/[0.06] overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+                <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {g.types.map((type) => {
                     const meta = META[type];
                     const Icon = meta?.icon;
@@ -322,53 +273,56 @@ export function PreferencesPage() {
                       <li
                         key={type}
                         className={cn(
-                          'group px-5 py-4 transition-colors duration-fast',
-                          // A row whose channel is "none" is switched OFF and should
-                          // read that way at a glance, not look identical to an
-                          // active one with different text in the control.
-                          muted ? 'bg-secondary/30' : 'hover:bg-secondary/30',
+                          'group flex items-start gap-3.5 rounded-2xl px-4 py-4 transition-colors duration-fast ease-out',
+                          // Same active/inactive treatment as the AI assistance
+                          // cards: a live setting is tinted and ringed, a disabled
+                          // one recedes, so the grid is readable without reading.
+                          muted
+                            ? 'bg-card/60 ring-1 ring-foreground/[0.04]'
+                            : 'bg-primary-subtle/50 shadow-soft ring-1 ring-primary/25',
                         )}
                       >
-                        <div className="flex items-center gap-3">
-                          {Icon && (
-                            <span
-                              className={cn(
-                                'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-opacity',
-                                meta.tone,
-                                muted && 'opacity-40',
-                              )}
-                            >
-                              <Icon size={16} />
-                            </span>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div
-                              className={cn(
-                                'truncate text-sm font-semibold tracking-tight',
-                                muted ? 'text-muted-foreground' : 'text-foreground',
-                              )}
-                            >
-                              {t(`notifications.type.${type}`, { defaultValue: type })}
-                            </div>
+                        {Icon && (
+                          <span
+                            aria-hidden
+                            className={cn(
+                              'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors duration-fast ease-out',
+                              muted
+                                ? 'bg-secondary/60 text-muted-foreground ring-1 ring-foreground/[0.04]'
+                                : 'bg-primary/15 text-primary ring-1 ring-primary/20',
+                            )}
+                          >
+                            <Icon size={18} />
+                          </span>
+                        )}
+                        <div className="min-w-0 flex-1 pt-0.5">
+                          <div
+                            className={cn(
+                              'text-sm font-medium transition-colors duration-fast ease-out',
+                              muted ? 'text-foreground/90' : 'text-foreground',
+                            )}
+                          >
+                            {t(`notifications.type.${type}`, { defaultValue: type })}
                           </div>
-                          {/* Control sits on the TITLE line, as on the AI assistance
-                            cards — the eye scans name → setting on one row instead
-                            of dropping to a second. */}
-                          <ChannelSegments
-                            value={draft[type] ?? 'both'}
-                            onChange={(v) => setDraft((d) => ({ ...d, [type]: v }))}
-                            label={type}
-                            options={CHANNELS.map((c) => ({
-                              value: c,
-                              label: t(`preferences.channels.${c}`, { defaultValue: c }),
-                            }))}
-                          />
+                          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                            {t(meta?.descriptionKey ?? '', {
+                              defaultValue: meta?.fallbackDescription ?? '',
+                            })}
+                          </p>
                         </div>
-                        <p className="mt-1.5 ps-11 text-xs leading-relaxed text-muted-foreground">
-                          {t(meta?.descriptionKey ?? '', {
-                            defaultValue: meta?.fallbackDescription ?? '',
-                          })}
-                        </p>
+                        {/* Dropdown rather than a toggle: this is a four-way
+                            choice (in-app / email / both / none), not on-off. */}
+                        <SelectMenu
+                          size="sm"
+                          className="w-28 shrink-0"
+                          value={draft[type] ?? 'both'}
+                          onChange={(v: string) => setDraft((d) => ({ ...d, [type]: v }))}
+                          aria-label={type}
+                          options={CHANNELS.map((c) => ({
+                            value: c,
+                            label: t(`preferences.channels.${c}`, { defaultValue: c }),
+                          }))}
+                        />
                       </li>
                     );
                   })}
