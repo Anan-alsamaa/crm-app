@@ -259,16 +259,20 @@ export function PreferencesPage() {
                   {t(g.descriptionKey, { defaultValue: g.descriptionFallback })}
                 </p>
               </div>
-              <ul className="divide-y divide-border rounded-2xl bg-card px-5 shadow-soft ring-1 ring-foreground/[0.06]">
+              {/* Two-column card grid, matching the AI assistance page: each
+                  notification type is its OWN card rather than a row in a shared
+                  list. A divided list reads as settings-you-scan; discrete cards
+                  read as features-you-choose, which is what these are. */}
+              <ul className="grid gap-3 sm:grid-cols-2">
                 {g.types.map((type) => {
                   const meta = META[type];
                   const Icon = meta?.icon;
                   return (
                     <li
                       key={type}
-                      className="flex flex-col gap-2.5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+                      className="flex flex-col gap-3 rounded-2xl bg-card px-4 py-4 shadow-soft ring-1 ring-foreground/[0.06]"
                     >
-                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
                         {Icon && (
                           <span
                             className={cn(
@@ -292,7 +296,7 @@ export function PreferencesPage() {
                       </div>
                       <SelectMenu
                         size="sm"
-                        className="w-full sm:w-44"
+                        className="w-full"
                         value={draft[type] ?? 'both'}
                         onChange={(v) => setDraft((d) => ({ ...d, [type]: v }))}
                         aria-label={type}
