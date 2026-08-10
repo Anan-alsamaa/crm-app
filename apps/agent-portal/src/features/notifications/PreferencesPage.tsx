@@ -267,44 +267,62 @@ export function PreferencesPage() {
                 {g.types.map((type) => {
                   const meta = META[type];
                   const Icon = meta?.icon;
+                  const muted = draft[type] === 'none';
                   return (
                     <li
                       key={type}
-                      className="flex flex-col gap-3 rounded-2xl bg-card px-4 py-4 shadow-soft ring-1 ring-foreground/[0.06]"
+                      className={cn(
+                        'group rounded-2xl px-4 py-3.5 ring-1 transition-colors duration-fast',
+                        // A card whose channel is "none" is switched OFF, and it
+                        // should read that way at a glance rather than looking
+                        // identical to an active one with different dropdown text.
+                        muted
+                          ? 'bg-secondary/40 ring-border'
+                          : 'bg-card shadow-soft ring-foreground/[0.06]',
+                      )}
                     >
-                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                      <div className="flex items-center gap-3">
                         {Icon && (
                           <span
                             className={cn(
-                              'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+                              'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-opacity',
                               meta.tone,
+                              muted && 'opacity-40',
                             )}
                           >
-                            <Icon size={18} />
+                            <Icon size={16} />
                           </span>
                         )}
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-foreground">
+                        <div className="min-w-0 flex-1">
+                          <div
+                            className={cn(
+                              'truncate text-sm font-semibold tracking-tight',
+                              muted ? 'text-muted-foreground' : 'text-foreground',
+                            )}
+                          >
                             {t(`notifications.type.${type}`, { defaultValue: type })}
                           </div>
-                          <p className="mt-0.5 text-xs text-muted-foreground">
-                            {t(meta?.descriptionKey ?? '', {
-                              defaultValue: meta?.fallbackDescription ?? '',
-                            })}
-                          </p>
                         </div>
+                        {/* Control sits on the TITLE line, as on the AI assistance
+                            cards — the eye scans name → setting on one row instead
+                            of dropping to a second. */}
+                        <SelectMenu
+                          size="sm"
+                          className="w-28 shrink-0"
+                          value={draft[type] ?? 'both'}
+                          onChange={(v) => setDraft((d) => ({ ...d, [type]: v }))}
+                          aria-label={type}
+                          options={CHANNELS.map((c) => ({
+                            value: c,
+                            label: t(`preferences.channels.${c}`, { defaultValue: c }),
+                          }))}
+                        />
                       </div>
-                      <SelectMenu
-                        size="sm"
-                        className="w-full"
-                        value={draft[type] ?? 'both'}
-                        onChange={(v) => setDraft((d) => ({ ...d, [type]: v }))}
-                        aria-label={type}
-                        options={CHANNELS.map((c) => ({
-                          value: c,
-                          label: t(`preferences.channels.${c}`, { defaultValue: c }),
-                        }))}
-                      />
+                      <p className="mt-1.5 ps-11 text-xs leading-relaxed text-muted-foreground">
+                        {t(meta?.descriptionKey ?? '', {
+                          defaultValue: meta?.fallbackDescription ?? '',
+                        })}
+                      </p>
                     </li>
                   );
                 })}
