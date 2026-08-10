@@ -153,7 +153,10 @@ function QueueCard({ row, onOpen }: { row: CompensationRow; onOpen: () => void }
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full items-center gap-4 rounded-xl px-4 py-3 text-start transition-colors duration-fast hover:bg-secondary/60"
+      // Each request is a CARD, not a bare row. On the tinted canvas the old
+      // transparent rows had no edges, so four requests read as one run-on block
+      // with no sense of where one ended and the next began.
+      className="flex w-full items-center gap-4 rounded-2xl bg-card px-4 py-3.5 text-start shadow-soft ring-1 ring-border transition-[box-shadow,transform] duration-fast ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
