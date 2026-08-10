@@ -26,6 +26,7 @@ import { GatewayDirectus } from './directus.js';
 import { createHs256Verifier } from './auth/customer-jwt.js';
 import { validateAgentToken } from './auth/agent-jwt.js';
 import { createProducer } from './queue.js';
+import { createPresenceStore } from './presence-store.js';
 import { registerConnection, getAgentPresenceSnapshot } from './connection.js';
 import { Registry } from './metrics.js';
 import { parseAttachmentPolicy } from './attachments.js';
@@ -161,11 +162,17 @@ async function main(): Promise<void> {
     logger,
   );
 
+  // Shared presence for auto-assignment. Reuses the adapter's pub client rather
+  // than opening a third connection — it is a plain key/sorted-set writer, and
+  // the pub client is not blocked on a subscription the way the sub client is.
+  const presenceStore = pubClient ? createPresenceStore(pubClient) : undefined;
+
   registerConnection({
     io,
     directus,
     directusUrl: config.DIRECTUS_INTERNAL_URL,
     verifier,
+    presenceStore,
     producer,
     logger,
     attachmentPolicy: parseAttachmentPolicy(

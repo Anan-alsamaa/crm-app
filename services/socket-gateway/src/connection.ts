@@ -49,6 +49,16 @@ export interface ConnectionDeps {
   // work; index.ts always passes them from config.
   attachmentPolicy?: AttachmentPolicy;
   rateLimit?: { capacity: number; refillPerSec: number };
+  /**
+   * Cross-instance presence, used by auto-assignment. Optional: without Redis
+   * there is no shared presence and no routing, and the gateway still works as a
+   * single in-memory instance.
+   */
+  presenceStore?: {
+    online(userId: string): Promise<void>;
+    offline(userId: string): Promise<void>;
+    touch(userId: string): Promise<void>;
+  };
 }
 
 const DEFAULT_ATTACHMENT_POLICY: AttachmentPolicy = {
@@ -156,6 +166,10 @@ export function registerConnection(deps: ConnectionDeps): void {
       // tab dup or a reconnect inside the grace window) — that's the only
       // case we need to broadcast for.
       if (agentPresence.add(socket.id, data.agentId)) broadcastAgentPresence(io);
+      // Publish to the shared registry so the workers service can route to this
+      // agent. Fire-and-forget: presence is a routing hint, and failing to
+      // record it must never stop an agent connecting.
+      void deps.presenceStore?.online(data.agentId).catch(() => undefined);
     }
 
     registerHandlers(socket, deps);
@@ -171,7 +185,13 @@ export function registerConnection(deps: ConnectionDeps): void {
         // Transport-level disconnect: schedule a grace timer. If a reload
         // reconnects within OFFLINE_GRACE_MS, the timer is cancelled and we
         // never broadcast offline → no flicker.
-        agentPresence.remove(socket.id, false, () => broadcastAgentPresence(io));
+        const leavingAgentId = data.agentId;
+        agentPresence.remove(socket.id, false, () => {
+          broadcastAgentPresence(io);
+          if (leavingAgentId) {
+            void deps.presenceStore?.offline(leavingAgentId).catch(() => undefined);
+          }
+        });
       }
     });
   });
@@ -328,6 +348,27 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId });
       // Carry the message text so keyword-based automation rules can match.
       await producer.messageReceived(conversationId, content);
+
+      // Auto-assignment: only a CUSTOMER message starts the ladder. An agent
+      // typing is the opposite signal — the conversation is already being
+      // handled. The stage-0 job is idempotent per conversation, so a customer
+      // sending three messages in a row starts one ladder, not three racing
+      // ones; and the worker stands down if someone already owns it.
+      if (senderType === 'customer') {
+        void producer
+          .enqueueRouting({
+            conversationId,
+            stage: 'assign',
+            attemptedAgentIds: [],
+            outboundCountAtSchedule: 0,
+          })
+          .catch((err: unknown) => logger.warn({ err }, 'auto-assign enqueue failed'));
+      }
+      // Agent activity pushes them to the back of the idle queue, so the next
+      // conversation goes to whoever has been waiting longest.
+      if (senderType === 'agent' && data.agentId) {
+        void deps.presenceStore?.touch(data.agentId).catch(() => undefined);
+      }
     } catch (err) {
       logger.error({ err }, 'message:send failed');
       socket.emit(SOCKET_EVENTS.error, {

@@ -29,6 +29,7 @@ import {
   type InboxFilters,
 } from '../features/inbox/api.js';
 import { ConversationView } from '../features/conversation/ConversationView.js';
+import { useAuth } from '../lib/auth/AuthContext.js';
 import { getSocket } from '../lib/socket.js';
 
 const STATUSES: ConversationStatus[] = ['open', 'pending', 'resolved', 'closed'];
@@ -56,8 +57,24 @@ export function Inbox() {
     min: 288,
     max: 480,
   });
-  const [filters, setFilters] = useState<InboxFilters>({ status: 'open', sort: 'recent' });
-  const conversations = useConversations(filters);
+  const { user } = useAuth();
+  /**
+   * A manager sees everything; an agent sees their own work plus the unassigned
+   * pool. `admin_access` is the authoritative signal — in Directus 11 admin is a
+   * property of policies, not of the role's name, so matching on "Administrator"
+   * would miss anyone granted it a different way.
+   */
+  const isManager = !!user?.admin_access;
+  const [filters, setFilters] = useState<InboxFilters>({
+    status: 'open',
+    sort: 'recent',
+    assignment: 'mine',
+  });
+  // Managers default to the whole inbox; agents to their own queue.
+  useEffect(() => {
+    setFilters((f) => ({ ...f, assignment: isManager ? 'all' : 'mine' }));
+  }, [isManager]);
+  const conversations = useConversations({ ...filters, currentUserId: user?.id });
   const previews = useConversationPreviews((conversations.data ?? []).map((c) => c.id));
   const tags = useTags();
   const [selected, setSelected] = useState<string | null>(null);
@@ -258,6 +275,27 @@ export function Inbox() {
               />
             </div>
             <div className="flex flex-wrap items-center gap-0.5">
+              {/* Whose queue. Shown to everyone: a manager needs to narrow to
+                  their own work, and an agent needs to reach the wider inbox to
+                  pick up something the ladder released. */}
+              <GhostSelect
+                size="sm"
+                value={filters.assignment ?? 'all'}
+                display={
+                  (filters.assignment ?? 'all') === 'mine'
+                    ? t('inbox.assignedMine', { defaultValue: 'My queue' })
+                    : t('inbox.assignedAll', { defaultValue: 'All conversations' })
+                }
+                aria-label={t('inbox.assignedAll', { defaultValue: 'All conversations' })}
+                onChange={(v) => setFilters((f) => ({ ...f, assignment: v as 'mine' | 'all' }))}
+                options={[
+                  { value: 'mine', label: t('inbox.assignedMine', { defaultValue: 'My queue' }) },
+                  {
+                    value: 'all',
+                    label: t('inbox.assignedAll', { defaultValue: 'All conversations' }),
+                  },
+                ]}
+              />
               <GhostSelect
                 size="sm"
                 value={filters.status ?? 'all'}

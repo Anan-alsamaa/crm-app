@@ -39,12 +39,32 @@ export interface InboxFilters {
   priority?: Priority | 'all';
   search?: string;
   sort?: 'recent' | 'oldest' | 'priority';
+  /**
+   * Whose conversations to show.
+   *   'mine'  — assigned to me, plus the unassigned pool. The working view for
+   *             an agent once auto-assignment is on: without it every agent
+   *             still sees every chat and the assignment means nothing.
+   *   'all'   — everything, whoever it belongs to. For a manager who needs to
+   *             find a conversation another agent handled.
+   * Undefined behaves as 'all', which keeps existing callers unchanged.
+   */
+  assignment?: 'mine' | 'all';
+  /** Required when assignment === 'mine'. */
+  currentUserId?: string;
 }
 
 function buildFilter(f: InboxFilters): Record<string, unknown> | undefined {
   const and: Array<Record<string, unknown>> = [];
   if (f.status && f.status !== 'all') and.push({ status: { _eq: f.status } });
   if (f.priority && f.priority !== 'all') and.push({ priority: { _eq: f.priority } });
+  if (f.assignment === 'mine' && f.currentUserId) {
+    // Mine OR nobody's. The unassigned half matters: it is where the escalation
+    // ladder drops a conversation nobody picked up, and an agent who could not
+    // see those would never rescue one.
+    and.push({
+      _or: [{ assigned_agent: { _eq: f.currentUserId } }, { assigned_agent: { _null: true } }],
+    });
+  }
   if (f.search?.trim()) {
     const s = f.search.trim();
     and.push({
