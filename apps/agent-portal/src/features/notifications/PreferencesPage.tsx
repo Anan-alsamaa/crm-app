@@ -230,152 +230,152 @@ export function PreferencesPage() {
           <Spinner />
         </div>
       ) : (
-        <div className="mx-auto w-full max-w-3xl flex-1 overflow-auto px-5 py-6 space-y-5 sm:px-8">
-          {/* New-message sound — a per-browser toggle, kept visually distinct
+        <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="mx-auto w-full max-w-4xl space-y-8 px-5 py-8 sm:px-8">
+            {/* New-message sound — a per-browser toggle, kept visually distinct
               from the server-saved channel rows below. */}
-          <section className="space-y-3">
-            <div className="space-y-1 px-1">
-              <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                {t('preferences.group.sound', { defaultValue: 'Sound' })}
-              </h2>
-              <p className="text-sm text-muted-foreground">{t('sound.prefHint')}</p>
-            </div>
-            <ul className="rounded-2xl bg-card px-5 shadow-soft ring-1 ring-foreground/[0.06]">
-              <li className="flex flex-col gap-2.5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <span
-                    className={cn(
-                      'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors',
-                      soundOn
-                        ? 'bg-primary-subtle text-primary'
-                        : 'bg-secondary text-muted-foreground',
-                    )}
-                  >
-                    {soundOn ? <SoundOnIcon size={18} /> : <SoundOffIcon size={18} />}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-foreground">
-                      {t('sound.prefTitle')}
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {soundOn ? t('sound.statusOn') : t('sound.statusMuted')}
-                    </p>
-                  </div>
-                </div>
-                <div
-                  role="group"
-                  aria-label={t('sound.prefTitle')}
-                  className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5 text-xs"
-                >
-                  <button
-                    type="button"
-                    aria-pressed={soundOn}
-                    onClick={() => setSound(true)}
-                    className={cn(
-                      'rounded-md px-3.5 py-1.5 font-medium transition-colors duration-fast ease-out',
-                      soundOn
-                        ? 'bg-card text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {t('sound.on')}
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={!soundOn}
-                    onClick={() => setSound(false)}
-                    className={cn(
-                      'rounded-md px-3.5 py-1.5 font-medium transition-colors duration-fast ease-out',
-                      !soundOn
-                        ? 'bg-card text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {t('sound.off')}
-                  </button>
-                </div>
-              </li>
-            </ul>
-          </section>
-
-          {GROUPS.map((g) => (
-            <section key={g.key} className="space-y-3">
-              <div className="space-y-1 px-1">
-                <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                  {t(g.titleKey, { defaultValue: g.titleFallback })}
+            <section className="space-y-3">
+              <div className="space-y-1 border-b border-foreground/10 pb-3">
+                <h2 className="text-base font-bold tracking-[-0.01em] text-foreground">
+                  {t('preferences.group.sound', { defaultValue: 'Sound' })}
                 </h2>
-                <p className="text-sm text-foreground/80">
-                  {t(g.descriptionKey, { defaultValue: g.descriptionFallback })}
-                </p>
+                <p className="text-sm text-muted-foreground">{t('sound.prefHint')}</p>
               </div>
-              {/* Two-column card grid, matching the AI assistance page: each
+              <ul className="rounded-2xl bg-card px-5 shadow-soft ring-1 ring-foreground/[0.06]">
+                <li className="flex flex-col gap-2.5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <span
+                      className={cn(
+                        'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors',
+                        soundOn
+                          ? 'bg-primary-subtle text-primary'
+                          : 'bg-secondary text-muted-foreground',
+                      )}
+                    >
+                      {soundOn ? <SoundOnIcon size={18} /> : <SoundOffIcon size={18} />}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-foreground">
+                        {t('sound.prefTitle')}
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {soundOn ? t('sound.statusOn') : t('sound.statusMuted')}
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    role="group"
+                    aria-label={t('sound.prefTitle')}
+                    className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5 text-xs"
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={soundOn}
+                      onClick={() => setSound(true)}
+                      className={cn(
+                        'rounded-md px-3.5 py-1.5 font-medium transition-colors duration-fast ease-out',
+                        soundOn
+                          ? 'bg-card text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {t('sound.on')}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={!soundOn}
+                      onClick={() => setSound(false)}
+                      className={cn(
+                        'rounded-md px-3.5 py-1.5 font-medium transition-colors duration-fast ease-out',
+                        !soundOn
+                          ? 'bg-card text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {t('sound.off')}
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </section>
+
+            {GROUPS.map((g) => (
+              <section key={g.key} className="space-y-3">
+                <div className="space-y-1 px-1">
+                  <h2 className="text-base font-bold tracking-[-0.01em] text-foreground">
+                    {t(g.titleKey, { defaultValue: g.titleFallback })}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {t(g.descriptionKey, { defaultValue: g.descriptionFallback })}
+                  </p>
+                </div>
+                {/* Two-column card grid, matching the AI assistance page: each
                   notification type is its OWN card rather than a row in a shared
                   list. A divided list reads as settings-you-scan; discrete cards
                   read as features-you-choose, which is what these are. */}
-              <ul className="grid gap-2.5">
-                {g.types.map((type) => {
-                  const meta = META[type];
-                  const Icon = meta?.icon;
-                  const muted = draft[type] === 'none';
-                  return (
-                    <li
-                      key={type}
-                      className={cn(
-                        'group rounded-2xl px-4 py-3.5 ring-1 transition-colors duration-fast',
-                        // A card whose channel is "none" is switched OFF, and it
-                        // should read that way at a glance rather than looking
-                        // identical to an active one with different dropdown text.
-                        muted
-                          ? 'bg-secondary/40 ring-border'
-                          : 'bg-card shadow-soft ring-foreground/[0.06]',
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        {Icon && (
-                          <span
-                            className={cn(
-                              'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-opacity',
-                              meta.tone,
-                              muted && 'opacity-40',
-                            )}
-                          >
-                            <Icon size={16} />
-                          </span>
+                <ul className="divide-y divide-foreground/[0.06] overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+                  {g.types.map((type) => {
+                    const meta = META[type];
+                    const Icon = meta?.icon;
+                    const muted = draft[type] === 'none';
+                    return (
+                      <li
+                        key={type}
+                        className={cn(
+                          'group px-5 py-4 transition-colors duration-fast',
+                          // A row whose channel is "none" is switched OFF and should
+                          // read that way at a glance, not look identical to an
+                          // active one with different text in the control.
+                          muted ? 'bg-secondary/30' : 'hover:bg-secondary/30',
                         )}
-                        <div className="min-w-0 flex-1">
-                          <div
-                            className={cn(
-                              'truncate text-sm font-semibold tracking-tight',
-                              muted ? 'text-muted-foreground' : 'text-foreground',
-                            )}
-                          >
-                            {t(`notifications.type.${type}`, { defaultValue: type })}
+                      >
+                        <div className="flex items-center gap-3">
+                          {Icon && (
+                            <span
+                              className={cn(
+                                'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-opacity',
+                                meta.tone,
+                                muted && 'opacity-40',
+                              )}
+                            >
+                              <Icon size={16} />
+                            </span>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div
+                              className={cn(
+                                'truncate text-sm font-semibold tracking-tight',
+                                muted ? 'text-muted-foreground' : 'text-foreground',
+                              )}
+                            >
+                              {t(`notifications.type.${type}`, { defaultValue: type })}
+                            </div>
                           </div>
-                        </div>
-                        {/* Control sits on the TITLE line, as on the AI assistance
+                          {/* Control sits on the TITLE line, as on the AI assistance
                             cards — the eye scans name → setting on one row instead
                             of dropping to a second. */}
-                        <ChannelSegments
-                          value={draft[type] ?? 'both'}
-                          onChange={(v) => setDraft((d) => ({ ...d, [type]: v }))}
-                          label={type}
-                          options={CHANNELS.map((c) => ({
-                            value: c,
-                            label: t(`preferences.channels.${c}`, { defaultValue: c }),
-                          }))}
-                        />
-                      </div>
-                      <p className="mt-1.5 ps-11 text-xs leading-relaxed text-muted-foreground">
-                        {t(meta?.descriptionKey ?? '', {
-                          defaultValue: meta?.fallbackDescription ?? '',
-                        })}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ))}
+                          <ChannelSegments
+                            value={draft[type] ?? 'both'}
+                            onChange={(v) => setDraft((d) => ({ ...d, [type]: v }))}
+                            label={type}
+                            options={CHANNELS.map((c) => ({
+                              value: c,
+                              label: t(`preferences.channels.${c}`, { defaultValue: c }),
+                            }))}
+                          />
+                        </div>
+                        <p className="mt-1.5 ps-11 text-xs leading-relaxed text-muted-foreground">
+                          {t(meta?.descriptionKey ?? '', {
+                            defaultValue: meta?.fallbackDescription ?? '',
+                          })}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
         </div>
       )}
     </div>
