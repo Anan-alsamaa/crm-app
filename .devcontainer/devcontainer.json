@@ -1,0 +1,55 @@
+{
+  "//": [
+    "GitHub Codespaces definition — a contributor environment that requires NOTHING",
+    "on the contributor's machine except a browser.",
+    "",
+    "WHY: a collaborator without Docker, and without permission to install a Node",
+    "toolchain, cannot run the stack locally. Asking them to install one is also the",
+    "step most likely to break their machine and burn a day. A Codespace moves the",
+    "whole environment into a container GitHub runs, defined by THIS file, so:",
+    "  - they install nothing and cannot 'get the setup wrong';",
+    "  - everyone gets the identical Node and pnpm the CI gate uses;",
+    "  - access is revoked by removing their repo permission, with nothing left",
+    "    behind on their hardware.",
+    "",
+    "The portals need only VITE_* URLs, not a database, so a contributor can work on",
+    "the UI against a shared Directus without a local Postgres at all. Point",
+    "VITE_DIRECTUS_URL at a DEV Directus — never production: a Codespace has real",
+    "write access to whatever it is pointed at.",
+    "",
+    "Ports 5173/5174 are forwarded automatically and open as private HTTPS URLs that",
+    "only the Codespace owner can reach."
+  ],
+  "name": "Yiji CRM — contributor",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-20-bookworm",
+
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  "forwardPorts": [5173, 5174],
+  "portsAttributes": {
+    "5173": { "label": "Agent portal", "onAutoForward": "notify" },
+    "5174": { "label": "Admin portal", "onAutoForward": "notify" }
+  },
+
+  "onCreateCommand": "corepack enable && corepack prepare pnpm@9.15.0 --activate",
+  "postCreateCommand": "pnpm install --frozen-lockfile",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "anthropic.claude-code"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+      }
+    }
+  },
+
+  "remoteUser": "node"
+}
