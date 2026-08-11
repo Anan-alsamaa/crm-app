@@ -733,7 +733,7 @@
     "apply": "Apply",
     "clear": "Clear",
     "loadError": "Could not load the dashboard",
-    "summary": "{{n}} complaints · {{money}} compensation",
+    "summary": "Showing {{n}} complaints from {{from}} to {{to}} · {{money}} compensation",
     "noMatch": "No complaints match these filters.",
     "kpiTotal": "Complaints",
     "months": "{{n}} month(s)",
@@ -807,6 +807,8 @@
     "donutTotal": "total",
     "unsolvedByAgent": "Unsolved complaints by agent",
     "unsolvedHint": "{{n}} still open across the filtered range.",
-    "nothingOutstanding": "Nothing outstanding — every complaint in this range is closed."
+    "nothingOutstanding": "Nothing outstanding — every complaint in this range is closed.",
+    "topNofM": "top {{n}} of {{m}}",
+    "compensatedCount": "{{n}} compensated · {{v}} avg each"
   }
 }
