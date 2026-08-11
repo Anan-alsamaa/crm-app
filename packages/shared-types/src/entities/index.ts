@@ -3,6 +3,10 @@ import { directusDefaults, Id } from './common.js';
 import {
   AutomationActionType,
   AutomationTrigger,
+  CommunicationMethod,
+  Compensation,
+  ComplaintSource,
+  ComplaintType,
   ConversationStatus,
   CustomFieldEntity,
   CustomFieldType,
@@ -12,6 +16,7 @@ import {
   Priority,
   ReportType,
   SenderType,
+  ServiceType,
   TicketEventType,
   TicketStatus,
   VendorStatus,
@@ -124,6 +129,25 @@ export const Ticket = z.object({
   first_responded_at: z.string().datetime().nullable().optional(),
   resolved_at: z.string().datetime().nullable().optional(),
   closed_at: z.string().datetime().nullable().optional(),
+
+  /* Complaint classification — the operations team's own columns, so a ticket
+   * raised here reports alongside the complaints they already log by hand.
+   * ALL nullable: tickets predate these fields, and the inbox still creates
+   * plain support tickets that are not complaints at all. Only fill what the
+   * agent actually knows; a guessed complaint_type is worse than an empty one,
+   * because it lands in a report that reads as fact. */
+  complaint_type: ComplaintType.nullable().optional(),
+  service_type: ServiceType.nullable().optional(),
+  complaint_source: ComplaintSource.nullable().optional(),
+  communication_method: CommunicationMethod.nullable().optional(),
+  /** What was done about it, in the agent's words (their "Response Desc"). */
+  response_desc: z.string().nullable().optional(),
+  compensation: Compensation.nullable().optional(),
+  coupon_code: z.string().nullable().optional(),
+  /** Coupon face value in SAR. Their dashboard sums this as "total compensation". */
+  coupon_value: z.number().nullable().optional(),
+  /** Coupon discount as a percentage (0–100), for percent-off coupons. */
+  coupon_percent: z.number().nullable().optional(),
 });
 export type Ticket = z.infer<typeof Ticket>;
 

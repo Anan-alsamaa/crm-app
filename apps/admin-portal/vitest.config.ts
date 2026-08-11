@@ -19,6 +19,11 @@ export default defineConfig({
     // peak RSS low so the suite is stable on constrained runners.
     pool: 'forks',
     poolOptions: { forks: { singleFork: true } },
+    /* WINDOWS: see the matching note in apps/agent-portal/vitest.config.ts —
+     * react-i18next left external hands Node a backslash absolute path it
+     * treats as a package name, killing every suite that renders a translated
+     * component. Reproduces only on a fresh Windows checkout (a new worktree). */
+    server: { deps: { inline: [/react-i18next/] } },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'text-summary', 'json-summary', 'lcov'],

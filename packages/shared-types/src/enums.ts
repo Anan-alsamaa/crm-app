@@ -20,6 +20,70 @@ export type Priority = z.infer<typeof Priority>;
 export const SenderType = z.enum(['customer', 'agent', 'system']);
 export type SenderType = z.infer<typeof SenderType>;
 
+/* ── Complaint vocabulary ────────────────────────────────────────────────────
+ *
+ * The operations team's own dropdown lists, taken VERBATIM from their complaint
+ * app (`Ayman/dropdown_options.json`), which derived them from 1,673 real
+ * complaints logged Jan–Jul 2026.
+ *
+ * The spellings are theirs — "Comp. Twiter", "Comp.Instgram", "Dinning",
+ * "Instore preparation late order". Do NOT "fix" them: these strings are the
+ * stored values in the history that gets imported, and correcting one here
+ * silently splits a category in two across the old and new rows. The typos are
+ * data, not a bug. Where a value reads badly on screen it is given a clean
+ * display label in the portal's i18n bundle, leaving the stored value alone.
+ */
+
+export const ComplaintType = z.enum([
+  'Accuracy',
+  'Cleanness',
+  'Driver attitude',
+  'Foreign object found',
+  'Hospitality',
+  'Instore preparation late order',
+  'Late order',
+  'Missing condiments',
+  'Missing item',
+  'Order cold',
+  'Order Late in store',
+  'Product',
+  'Roach found',
+  'Technical issue',
+]);
+export type ComplaintType = z.infer<typeof ComplaintType>;
+
+/** How the order was fulfilled. */
+export const ServiceType = z.enum(['Delivery', 'Dinning', 'Drive Thru', 'Pickup', 'TakeOut']);
+export type ServiceType = z.infer<typeof ServiceType>;
+
+/** Where the complaint came in from. */
+export const ComplaintSource = z.enum([
+  'Comp. Phone Call',
+  'Comp. Twiter',
+  'Comp. WhatsApp',
+  'Comp.Instgram',
+  'WeCare Channels',
+]);
+export type ComplaintSource = z.infer<typeof ComplaintSource>;
+
+/**
+ * How the agent talked to the customer about it. Overlaps ComplaintSource by
+ * design — the two are separate columns in their sheet because a complaint that
+ * arrives on Twitter is routinely answered on WhatsApp, and they report on both.
+ */
+export const CommunicationMethod = z.enum([
+  'AFCO APP',
+  'Comp. Phone Call',
+  'Comp. Twiter',
+  'Comp. WhatsApp',
+  'Comp.Instgram',
+]);
+export type CommunicationMethod = z.infer<typeof CommunicationMethod>;
+
+/** Whether the customer was compensated. "Initial" = not decided yet. */
+export const Compensation = z.enum(['Initial', 'Compensated', 'Not Compensated']);
+export type Compensation = z.infer<typeof Compensation>;
+
 export const TicketEventType = z.enum([
   'created',
   'status_changed',
