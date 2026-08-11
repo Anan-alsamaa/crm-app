@@ -265,7 +265,16 @@ export function StoresPage() {
     const q = query.trim().toLowerCase();
     if (!q) return list;
     return list.filter((s) =>
-      [s.code, s.name, s.city, s.area_manager, s.chain_manager, s.brand?.name, s.brand?.code]
+      [
+        s.yiji_restaurant_id,
+        s.code,
+        s.name,
+        s.city,
+        s.area_manager,
+        s.chain_manager,
+        s.brand?.name,
+        s.brand?.code,
+      ]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(q)),
     );
@@ -408,6 +417,9 @@ export function StoresPage() {
               <thead>
                 <tr className="text-2xs uppercase tracking-wide text-muted-foreground">
                   <th className="px-3 py-2 text-start font-semibold">
+                    {t('stores.colRestaurantId', { defaultValue: 'Restaurant ID' })}
+                  </th>
+                  <th className="px-3 py-2 text-start font-semibold">
                     {t('stores.colStore', { defaultValue: 'Store' })}
                   </th>
                   <th className="px-3 py-2 text-start font-semibold">
@@ -434,6 +446,17 @@ export function StoresPage() {
                       'hover:bg-secondary/50',
                     )}
                   >
+                    <td className="whitespace-nowrap px-3 py-2.5">
+                      {s.yiji_restaurant_id ? (
+                        <span className="font-mono text-xs tabular-nums text-foreground">
+                          {s.yiji_restaurant_id}
+                        </span>
+                      ) : (
+                        // Blank, not "0" or "—" in the same weight as a real id:
+                        // an unmapped store must not read as a mapped one at a glance.
+                        <span className="font-mono text-xs text-muted-foreground/60">—</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5">
                       <button
                         type="button"
@@ -517,6 +540,25 @@ export function StoresPage() {
               defaultValue: 'The code and name as they appear in your operations sheet.',
             })}
           >
+            {/* First field, mirroring the leftmost table column: this is the join
+                key to the order feed, so it should be the first thing you see and
+                the first thing you can correct. */}
+            <FormField
+              label={t('stores.yijiRestaurantId', { defaultValue: 'Restaurant ID' })}
+              hint={
+                canEditYijiId
+                  ? t('stores.yijiRestaurantIdHint', {
+                      defaultValue:
+                        'The id from the order system. When set, it takes priority over name matching for every by-store report.',
+                    })
+                  : t('stores.yijiRestaurantIdLocked', {
+                      defaultValue:
+                        'Only the Administrator can change this. It is the join key to the order feed: a wrong value does not error, it silently reports tickets against the wrong branch.',
+                    })
+              }
+            >
+              <Input {...register('yiji_restaurant_id')} disabled={!canEditYijiId} />
+            </FormField>
             <FormField
               label={t('stores.name', { defaultValue: 'Store name' })}
               error={errors.name?.message}
@@ -564,33 +606,6 @@ export function StoresPage() {
                   {t('stores.inactive', { defaultValue: 'Inactive' })}
                 </option>
               </Select>
-            </FormField>
-          </DrawerSection>
-
-          <DrawerSection
-            title={t('stores.sectionMatching', { defaultValue: 'Order matching' })}
-            description={t('stores.sectionMatchingHint', {
-              defaultValue:
-                'Orders are matched by name automatically. Set the order-system id to make the match exact and immune to naming differences.',
-            })}
-          >
-            <FormField
-              label={t('stores.yijiRestaurantId', {
-                defaultValue: 'Restaurant ID in the order system',
-              })}
-              hint={
-                canEditYijiId
-                  ? t('stores.yijiRestaurantIdHint', {
-                      defaultValue:
-                        'The join key for every by-store report. When set, it takes priority over name matching.',
-                    })
-                  : t('stores.yijiRestaurantIdLocked', {
-                      defaultValue:
-                        'Only the Administrator can change this. It is the join key to the order feed: a wrong value does not error, it silently reports tickets against the wrong branch.',
-                    })
-              }
-            >
-              <Input {...register('yiji_restaurant_id')} disabled={!canEditYijiId} />
             </FormField>
           </DrawerSection>
         </form>

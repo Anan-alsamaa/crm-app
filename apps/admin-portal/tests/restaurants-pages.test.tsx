@@ -200,7 +200,24 @@ describe('StoresPage', () => {
     renderPage(<StoresPage />);
     await user.click(screen.getByText('Masief Plaza'));
     await screen.findByRole('dialog');
-    expect(screen.getByLabelText(/Restaurant ID in the order system/)).not.toBeDisabled();
+    expect(screen.getByLabelText(/Restaurant ID/)).not.toBeDisabled();
+  });
+
+  it('shows the restaurant id as the first column, and can search by it', async () => {
+    api.useStores.mockReturnValue({
+      data: [{ ...STORES[0], yiji_restaurant_id: '39' }, STORES[1]],
+      isLoading: false,
+      isError: false,
+    });
+    const user = userEvent.setup({ delay: null });
+    renderPage(<StoresPage />);
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers[0]).toBe('Restaurant ID');
+    // Searching by id is the fastest way to check a branch against the order
+    // system, so it must hit even though no other column contains "39".
+    await user.type(screen.getByPlaceholderText(/Search store/), '39');
+    expect(screen.getByText('Masief Plaza')).toBeInTheDocument();
+    expect(screen.queryByText('Orphan Branch')).not.toBeInTheDocument();
   });
 
   it('locks the Yiji restaurant id for anyone below Administrator', async () => {
@@ -211,7 +228,7 @@ describe('StoresPage', () => {
     renderPage(<StoresPage />);
     await user.click(screen.getByText('Masief Plaza'));
     await screen.findByRole('dialog');
-    expect(screen.getByLabelText(/Restaurant ID in the order system/)).toBeDisabled();
+    expect(screen.getByLabelText(/Restaurant ID/)).toBeDisabled();
     expect(screen.getByText(/Only the Administrator can change this/)).toBeInTheDocument();
   });
 
