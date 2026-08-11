@@ -544,3 +544,65 @@ describe('complaint dashboard — service health composition', () => {
     expect(d.health.avgChatWaitMinutes).toBe(1);
   });
 });
+
+describe('complaint dashboard — unsolved work per agent', () => {
+  it('ranks who is holding open complaints, not who logged the most', async () => {
+    mockData({
+      tickets: [
+        // Amjad logs a lot but finishes everything.
+        ticket({ assigned_agent: 'u1', status: 'closed' }),
+        ticket({ assigned_agent: 'u1', status: 'closed' }),
+        ticket({ assigned_agent: 'u1', status: 'closed' }),
+        // Sara logs less but is sitting on two.
+        ticket({ assigned_agent: 'u2', status: 'open' }),
+        ticket({ assigned_agent: 'u2', status: 'pending' }),
+      ],
+      stores: STORES,
+      users: [...USERS, { id: 'u2', first_name: 'Sara', last_name: null, email: 's@x.com' }],
+    });
+    const d = await run();
+    // The busiest agent leads "by agent"...
+    expect(d.byAgent[0]?.label).toBe('Amjad');
+    // ...but is absent from the unsolved list entirely, which is the point.
+    expect(d.byOpenAgent).toEqual([{ key: 'u2', label: 'Sara', count: 2 }]);
+    expect(d.open).toBe(2);
+  });
+
+  it('leaves the unsolved list empty when everything is closed', async () => {
+    mockData({
+      tickets: [ticket({ status: 'closed' }), ticket({ status: 'resolved' })],
+      stores: STORES,
+      users: USERS,
+    });
+    const d = await run();
+    expect(d.byOpenAgent).toEqual([]);
+  });
+
+  it('names unassigned open complaints rather than dropping them', async () => {
+    mockData({
+      tickets: [ticket({ assigned_agent: null, status: 'open' })],
+      stores: STORES,
+      users: USERS,
+    });
+    const d = await run();
+    expect(d.byOpenAgent).toEqual([{ key: '', label: 'Unassigned', count: 1 }]);
+  });
+
+  it('does not cap the unsolved list — every agent holding work must show', async () => {
+    const users = Array.from({ length: 14 }, (_, i) => ({
+      id: `a${i}`,
+      first_name: `Agent${i}`,
+      last_name: null,
+      email: null,
+    }));
+    mockData({
+      tickets: users.map((u) => ticket({ assigned_agent: u.id, status: 'open' })),
+      stores: STORES,
+      users,
+    });
+    const d = await run();
+    // The ranked "by agent" cut still tops out at 10; the chase list does not.
+    expect(d.byAgent).toHaveLength(10);
+    expect(d.byOpenAgent).toHaveLength(14);
+  });
+});

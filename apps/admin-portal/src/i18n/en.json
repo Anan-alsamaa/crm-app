@@ -801,6 +801,12 @@
     "colChatsSolved": "Chats solved",
     "byArea": "By area",
     "byAreaHint": "The area manager responsible for the branch.",
-    "byAgent": "By agent"
+    "byAgent": "By agent",
+    "statusMix": "Complaint status mix",
+    "brandMix": "Where complaints come from",
+    "donutTotal": "total",
+    "unsolvedByAgent": "Unsolved complaints by agent",
+    "unsolvedHint": "{{n}} still open across the filtered range.",
+    "nothingOutstanding": "Nothing outstanding — every complaint in this range is closed."
   }
 }
