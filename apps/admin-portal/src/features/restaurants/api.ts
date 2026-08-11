@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, createItem, updateItem, deleteItem, createItems } from '@directus/sdk';
 import { buildStoreIndex, type StoreRecord } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { brandKey, partitionNew, storeKey } from './dedupe.js';
 
 /**
  * Restaurant master data: brands and their branches ("stores").
@@ -123,7 +124,14 @@ export interface StoreInput {
   chain_manager?: string | null;
   yiji_restaurant_id?: string | null;
   status?: 'active' | 'inactive';
+  /** Brand id (the Directus relation). */
   brand?: string | null;
+  /**
+   * Brand CODE, for duplicate matching only — never written to Directus, which
+   * has no such field. Only consulted for codeless rows, whose name alone is
+   * ambiguous across brands. Stripped from the payload before insert.
+   */
+  brand_code?: string | null;
 }
 
 export function useCreateStore() {
@@ -151,35 +159,78 @@ export function useDeleteStore() {
   });
 }
 
+/** What a repeatable import did: rows inserted vs rows we already had. */
+export interface ImportOutcome {
+  added: number;
+  alreadyPresent: number;
+}
+
 /**
- * Bulk insert for the CSV import. Chunked because Directus rejects very large
- * payloads and a 200-row sheet is the normal case, not the exception.
+ * Bulk insert for the CSV import — REPEATABLE.
+ *
+ * Uploading the same master twice used to insert every row twice, because this
+ * called `createItems` blindly. Now existing rows are skipped: new rows are
+ * inserted, known rows are counted, and nothing is ever updated or deleted (a
+ * re-upload of a stale sheet must not revert a correction made in the UI).
+ *
+ * The existing rows are re-read HERE rather than taken from the React Query
+ * cache: the cache can be minutes old, and deciding "we already have this" from
+ * stale data is exactly how a duplicate slips through.
+ *
+ * Chunked because Directus rejects very large payloads and a 200-row sheet is
+ * the normal case, not the exception.
  */
 export function useBulkCreateStores() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: StoreInput[]) => {
+    mutationFn: async (rows: StoreInput[]): Promise<ImportOutcome> => {
+      const existing = (await directus.request(
+        readItems('stores', { limit: -1, fields: ['code', 'name', 'brand.code'] as never }),
+      )) as Array<{ code: string | null; name: string; brand: { code: string } | null }>;
+
+      const { fresh, alreadyPresent } = partitionNew(
+        rows,
+        existing.map((s) => storeKey({ code: s.code, name: s.name, brandCode: s.brand?.code })),
+        // The incoming row carries `brand` as an id, not a code, so the
+        // brand-scoped name fallback reads the separate `brand_code` the
+        // importer attaches for exactly this purpose.
+        (r) => storeKey({ code: r.code, name: r.name, brandCode: r.brand_code }),
+      );
+
       const CHUNK = 50;
-      let created = 0;
-      for (let i = 0; i < rows.length; i += CHUNK) {
-        const slice = rows.slice(i, i + CHUNK);
+      for (let i = 0; i < fresh.length; i += CHUNK) {
+        // `brand_code` is ours, for matching only — Directus has no such field.
+        const slice = fresh.slice(i, i + CHUNK).map(({ brand_code: _ignored, ...row }) => row);
         await directus.request(createItems('stores', slice as never));
-        created += slice.length;
       }
-      return created;
+      return { added: fresh.length, alreadyPresent };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['stores'] }),
   });
 }
 
-/** Bulk insert for brands, used by the same import when brands are new. */
+/**
+ * Bulk insert for brands, used by the same import when brands are new.
+ * Repeatable on the same terms as the stores import above.
+ */
 export function useBulkCreateBrands() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: BrandInput[]) => {
-      if (rows.length === 0) return 0;
-      await directus.request(createItems('brands', rows as never));
-      return rows.length;
+    mutationFn: async (rows: BrandInput[]): Promise<ImportOutcome> => {
+      if (rows.length === 0) return { added: 0, alreadyPresent: 0 };
+
+      const existing = (await directus.request(
+        readItems('brands', { limit: -1, fields: ['code', 'name'] as never }),
+      )) as Array<{ code: string; name: string }>;
+
+      const { fresh, alreadyPresent } = partitionNew(
+        rows,
+        existing.map((b) => brandKey(b)),
+        (r) => brandKey(r),
+      );
+
+      if (fresh.length > 0) await directus.request(createItems('brands', fresh as never));
+      return { added: fresh.length, alreadyPresent };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['brands'] }),
   });
