@@ -160,7 +160,10 @@ describe('DashboardPage', () => {
     renderPage();
     expect(screen.getByText('No activity in range.')).toBeInTheDocument();
     expect(screen.getByText('No conversations in range.')).toBeInTheDocument();
-    expect(screen.getAllByText('No data yet.').length).toBe(2);
+    // Four rank lists now: agents, vendors, stores, brands. The store/brand
+    // panels render empty here because this fixture predates those fields,
+    // which also exercises the `?? []` guard against a stale cached shape.
+    expect(screen.getAllByText('No data yet.').length).toBe(4);
   });
 
   it('renders the error state and retries on click', async () => {

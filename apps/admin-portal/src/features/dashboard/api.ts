@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems, readUsers } from '@directus/sdk';
+import { buildStoreIndex, matchStore } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -21,6 +22,13 @@ export interface DashboardMetrics {
   csatCount: number;
   topAgents: Array<{ id: string; name: string; resolved: number }>;
   topVendors: Array<{ id: string; name: string; conversations: number }>;
+  /** Tickets per store / per brand, busiest first. */
+  topStores: Array<{ id: string; name: string; tickets: number }>;
+  topBrands: Array<{ id: string; name: string; tickets: number }>;
+  /** Tickets that carry an order but whose branch is not in the store list. */
+  unmappedStoreTickets: number;
+  /** Tickets carrying any order snapshot at all — the denominator for the above. */
+  ticketsWithOrder: number;
 }
 
 const minutesBetween = (a: string, b: string) =>
@@ -35,7 +43,7 @@ export function useDashboardMetrics(days: number) {
       const since = new Date(Date.now() - days * 86_400_000).toISOString();
       const dateFilter = { date_created: { _gte: since } };
 
-      const [conversations, tickets, csat, users, vendors] = await Promise.all([
+      const [conversations, tickets, csat, users, vendors, storeRows] = await Promise.all([
         directus.request(
           readItems('conversations', {
             filter: dateFilter,
@@ -55,6 +63,11 @@ export function useDashboardMetrics(days: number) {
               'first_responded_at',
               'first_response_due_at',
               'assigned_agent',
+              // The snapshot taken when the ticket was raised. Using it rather
+              // than re-querying the order API keeps the dashboard to one round
+              // trip, works when the commerce proxy is down, and reflects the
+              // order that was actually linked to the ticket.
+              'order_snapshot',
             ],
             limit: -1,
           }),
@@ -66,6 +79,11 @@ export function useDashboardMetrics(days: number) {
             first_responded_at: string | null;
             first_response_due_at: string | null;
             assigned_agent: string | null;
+            order_snapshot: {
+              brandName?: string | null;
+              restaurantName?: string | null;
+              restaurantId?: string | null;
+            } | null;
           }>
         >,
         directus.request(
@@ -87,6 +105,34 @@ export function useDashboardMetrics(days: number) {
         >,
         directus.request(readItems('vendors', { fields: ['id', 'name'], limit: -1 })) as Promise<
           Array<{ id: string; name: string }>
+        >,
+        directus.request(
+          readItems('stores', {
+            fields: [
+              'id',
+              'code',
+              'name',
+              'city',
+              'area_manager',
+              'chain_manager',
+              'yiji_restaurant_id',
+              'brand.id',
+              'brand.code',
+              'brand.name',
+            ],
+            limit: -1,
+          }),
+        ) as Promise<
+          Array<{
+            id: string;
+            code: string | null;
+            name: string;
+            city: string | null;
+            area_manager: string | null;
+            chain_manager: string | null;
+            yiji_restaurant_id: string | null;
+            brand: { id: string; code: string; name: string } | null;
+          }>
         >,
       ]);
 
@@ -147,6 +193,64 @@ export function useDashboardMetrics(days: number) {
         .sort((a, b) => b.resolved - a.resolved)
         .slice(0, 5);
 
+      /* Tickets by store and by brand.
+       *
+       * Counted from each ticket's own order snapshot, then joined onto the
+       * operations store list. A ticket whose branch is missing from that list
+       * is counted as unmapped rather than dropped — silently omitting it would
+       * make the "busiest store" ranking quietly wrong. Brand still counts when
+       * only the brand resolved, which is why the two totals differ. */
+      const storeIndex = buildStoreIndex(
+        storeRows.map((s) => ({
+          id: s.id,
+          code: s.code,
+          name: s.name,
+          city: s.city,
+          areaManager: s.area_manager,
+          chainManager: s.chain_manager,
+          brandCode: s.brand?.code ?? null,
+          brandName: s.brand?.name ?? null,
+          yijiRestaurantId: s.yiji_restaurant_id,
+        })),
+      );
+      const byStore = new Map<string, { name: string; tickets: number }>();
+      const byBrand = new Map<string, { name: string; tickets: number }>();
+      let unmappedStoreTickets = 0;
+      let ticketsWithOrder = 0;
+      for (const tk of tickets) {
+        const snap = tk.order_snapshot;
+        if (!snap || (!snap.restaurantName && !snap.restaurantId)) continue;
+        ticketsWithOrder += 1;
+        const m = matchStore(storeIndex, {
+          restaurantId: snap.restaurantId ?? undefined,
+          restaurantName: snap.restaurantName ?? undefined,
+          brandName: snap.brandName ?? undefined,
+        });
+        if (m.store) {
+          const key = m.store.id;
+          const cur = byStore.get(key) ?? { name: m.restaurantName || m.store.name, tickets: 0 };
+          cur.tickets += 1;
+          byStore.set(key, cur);
+        } else {
+          unmappedStoreTickets += 1;
+        }
+        const brandLabel = m.brandName.trim();
+        if (brandLabel) {
+          const key = brandLabel.toLowerCase();
+          const cur = byBrand.get(key) ?? { name: brandLabel, tickets: 0 };
+          cur.tickets += 1;
+          byBrand.set(key, cur);
+        }
+      }
+      const topStores = Array.from(byStore.entries())
+        .map(([id, v]) => ({ id, name: v.name, tickets: v.tickets }))
+        .sort((a, b) => b.tickets - a.tickets)
+        .slice(0, 8);
+      const topBrands = Array.from(byBrand.entries())
+        .map(([id, v]) => ({ id, name: v.name, tickets: v.tickets }))
+        .sort((a, b) => b.tickets - a.tickets)
+        .slice(0, 8);
+
       const csatScores = csat.map((r) => r.score).filter((s): s is number => typeof s === 'number');
 
       return {
@@ -163,6 +267,10 @@ export function useDashboardMetrics(days: number) {
         csatCount: csatScores.length,
         topAgents,
         topVendors,
+        topStores,
+        topBrands,
+        unmappedStoreTickets,
+        ticketsWithOrder,
       };
     },
   });

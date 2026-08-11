@@ -92,6 +92,19 @@ export interface TicketOrderInfo {
   items: string;
   total: number | null;
   currency: string;
+  /* Raw values straight off the order, kept so the store lookup can run on
+   * them. `restaurant` above is a display join and is lossy for matching. */
+  rawBrandName?: string;
+  rawRestaurantName?: string;
+  rawRestaurantId?: string;
+  /* Resolved from the operations store master data (see @yiji/shared-types
+   * restaurants). Present once the store index has loaded. */
+  brand?: string;
+  city?: string;
+  areaManager?: string;
+  chainManager?: string;
+  /** False when no store row matched — surfaced as "Not mapped" in the sheet. */
+  storeMapped?: boolean;
 }
 
 export interface AgentKpiRow {
@@ -569,6 +582,12 @@ export function useTicketOrders(contactIds: string[], enabled: boolean, days: nu
             items: summariseItems(o.items ?? []),
             total: typeof o.total === 'number' ? o.total : null,
             currency: o.currency ?? '',
+            // Untouched originals for the store match. Yiji ships brandName
+            // with a leading space, so nothing here is pre-trimmed on purpose —
+            // the matcher owns normalisation.
+            rawBrandName: o.brandName ?? undefined,
+            rawRestaurantName: o.restaurantName ?? undefined,
+            rawRestaurantId: o.restaurantId ?? undefined,
           });
         } catch {
           // Leave this contact absent from the map → blank order columns.

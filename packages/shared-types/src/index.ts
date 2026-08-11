@@ -7,6 +7,7 @@ export * from './entities/common.js';
 export * from './entities/index.js';
 export * from './yiji.js';
 export * from './yiji-impl.js';
+export * from './restaurants.js';
 export * from './socket.js';
 export * from './ai.js';
 export * from './queues.js';

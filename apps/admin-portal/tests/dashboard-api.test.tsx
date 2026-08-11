@@ -27,13 +27,19 @@ beforeEach(() => {
   vi.spyOn(Date, 'now').mockReturnValue(NOW);
 });
 
-/** Queue the five directus.request calls in order: conversations, tickets, csat, users, vendors. */
+/**
+ * Queue the six directus.request calls IN ORDER:
+ * conversations, tickets, csat, users, vendors, stores.
+ * The order matters — they are a positional Promise.all, so adding a query to
+ * the hook without adding it here makes every later mock line up wrong.
+ */
 function mockData(opts: {
   conversations?: unknown[];
   tickets?: unknown[];
   csat?: unknown[];
   users?: unknown[];
   vendors?: unknown[];
+  stores?: unknown[];
 }) {
   request
     .mockResolvedValueOnce(opts.conversations ?? [])
@@ -42,7 +48,8 @@ function mockData(opts: {
     .mockResolvedValueOnce(
       opts.users ?? [{ id: 'u1', first_name: 'Ann', last_name: 'Lee', email: 'a@x.com' }],
     )
-    .mockResolvedValueOnce(opts.vendors ?? [{ id: 'v1', name: 'Acme' }]);
+    .mockResolvedValueOnce(opts.vendors ?? [{ id: 'v1', name: 'Acme' }])
+    .mockResolvedValueOnce(opts.stores ?? []);
 }
 
 describe('dashboard api', () => {
@@ -62,7 +69,9 @@ describe('dashboard api', () => {
     expect(d.csatCount).toBe(0);
     expect(d.topAgents).toEqual([]);
     expect(d.topVendors).toEqual([]);
-    expect(request).toHaveBeenCalledTimes(5);
+    // conversations, tickets, csat, users, vendors, stores — the dashboard is
+    // one round trip per collection and this pins that it stays that way.
+    expect(request).toHaveBeenCalledTimes(6);
   });
 
   it('aggregates conversation volume, status breakdown, day series and top vendors', async () => {
@@ -167,6 +176,103 @@ describe('dashboard api', () => {
     const d = result.current.data!;
     expect(d.csatCount).toBe(2);
     expect(d.csatAvg).toBe(3); // (4 + 2) / 2
+  });
+
+  describe('tickets by store and brand', () => {
+    /** Two seeded branches of one brand, matching the real ops sheet shape. */
+    const STORES = [
+      {
+        id: 's1',
+        code: 'LCP-041',
+        name: 'Masief Plaza',
+        city: 'Riyadh',
+        area_manager: 'Ahmed Samir',
+        chain_manager: 'Mo’men Elsharkawy',
+        yiji_restaurant_id: null,
+        brand: { id: 'b1', code: 'LCP', name: 'La Casa Pasta' },
+      },
+      {
+        id: 's2',
+        code: 'CND-001',
+        name: 'Reine Plaza',
+        city: 'Khobar',
+        area_manager: 'Aly AbdulRahman',
+        chain_manager: 'Aly AbdulRahman',
+        yiji_restaurant_id: null,
+        brand: { id: 'b2', code: 'CND', name: 'CND Express' },
+      },
+    ];
+
+    const ticket = (id: string, restaurantName: string | null, brandName: string | null) => ({
+      id,
+      status: 'open',
+      date_created: past(2),
+      first_responded_at: null,
+      first_response_due_at: null,
+      assigned_agent: null,
+      order_snapshot: restaurantName === null ? null : { restaurantName, brandName },
+    });
+
+    it('ranks stores and brands by ticket count from the order snapshots', async () => {
+      mockData({
+        stores: STORES,
+        tickets: [
+          // Real-world shape: "<city> - <branch>" and a brand with a LEADING
+          // SPACE, exactly as order 946641 arrives from Yiji.
+          ticket('t1', 'Riyadh - Masief Plaza', ' La Casa Pasta'),
+          ticket('t2', 'Riyadh - Masief Plaza', ' La Casa Pasta'),
+          ticket('t3', 'Khobar - Reine Plaza', 'CND Express'),
+          ticket('t4', null, null), // no order at all — must not be counted
+        ],
+      });
+      const { result } = renderHook(() => useDashboardMetrics(30), { wrapper: wrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const d = result.current.data!;
+
+      expect(d.ticketsWithOrder).toBe(3);
+      expect(d.topStores).toEqual([
+        { id: 's1', name: 'LCP-041 Masief Plaza', tickets: 2 },
+        { id: 's2', name: 'CND-001 Reine Plaza', tickets: 1 },
+      ]);
+      expect(d.topBrands).toEqual([
+        { id: 'la casa pasta', name: 'La Casa Pasta', tickets: 2 },
+        { id: 'cnd express', name: 'CND Express', tickets: 1 },
+      ]);
+      expect(d.unmappedStoreTickets).toBe(0);
+    });
+
+    it('counts an unknown branch as unmapped instead of dropping it', async () => {
+      mockData({
+        stores: STORES,
+        tickets: [
+          ticket('t1', 'Riyadh - Masief Plaza', ' La Casa Pasta'),
+          ticket('t2', 'Jeddah - A Branch We Never Added', 'Some Other Brand'),
+        ],
+      });
+      const { result } = renderHook(() => useDashboardMetrics(30), { wrapper: wrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const d = result.current.data!;
+
+      // Silently dropping it would make "busiest store" quietly wrong; the
+      // dashboard surfaces the gap instead.
+      expect(d.ticketsWithOrder).toBe(2);
+      expect(d.unmappedStoreTickets).toBe(1);
+      expect(d.topStores).toEqual([{ id: 's1', name: 'LCP-041 Masief Plaza', tickets: 1 }]);
+    });
+
+    it('still counts the brand when only the brand resolves', async () => {
+      mockData({
+        stores: STORES,
+        tickets: [ticket('t1', 'Riyadh - Some New LCP Branch', 'La Casa Pasta')],
+      });
+      const { result } = renderHook(() => useDashboardMetrics(30), { wrapper: wrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const d = result.current.data!;
+
+      expect(d.topStores).toEqual([]);
+      expect(d.unmappedStoreTickets).toBe(1);
+      expect(d.topBrands).toEqual([{ id: 'la casa pasta', name: 'La Casa Pasta', tickets: 1 }]);
+    });
   });
 
   it('caps top agents and vendors at 5 entries', async () => {

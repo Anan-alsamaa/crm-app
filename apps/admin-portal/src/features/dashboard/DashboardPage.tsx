@@ -462,6 +462,50 @@ export function DashboardPage() {
                   unit={t('dashboard.convsUnit', { defaultValue: 'convos' })}
                 />
               </Panel>
+
+              {/* Where the tickets are actually coming from — by branch and by
+                  brand. Both are counted from each ticket's own order snapshot
+                  joined onto Restaurants → Stores. */}
+              <Panel
+                title={t('dashboard.topStores', { defaultValue: 'Most tickets by store' })}
+                className="col-span-2 row-span-2"
+              >
+                <RankList
+                  // `?? []` guards a cached result from a previous deploy that
+                  // predates these fields — react-query will happily hand back
+                  // the old shape, and a crashed dashboard is a worse failure
+                  // than an empty panel.
+                  rows={(m.data.topStores ?? []).map((s) => ({
+                    id: s.id,
+                    name: s.name,
+                    value: s.tickets,
+                  }))}
+                  unit={t('dashboard.ticketsUnit', { defaultValue: 'tickets' })}
+                />
+                {(m.data.unmappedStoreTickets ?? 0) > 0 && (
+                  <p className="mt-3 text-2xs leading-relaxed text-warning-foreground">
+                    {t('dashboard.unmappedStores', {
+                      defaultValue:
+                        '{{n}} of {{total}} tickets with an order could not be matched to a store. Add the missing branches under Restaurants → Stores so this ranking is complete.',
+                      n: m.data.unmappedStoreTickets,
+                      total: m.data.ticketsWithOrder,
+                    })}
+                  </p>
+                )}
+              </Panel>
+              <Panel
+                title={t('dashboard.topBrands', { defaultValue: 'Most tickets by brand' })}
+                className="col-span-2 row-span-2"
+              >
+                <RankList
+                  rows={(m.data.topBrands ?? []).map((b) => ({
+                    id: b.id,
+                    name: b.name,
+                    value: b.tickets,
+                  }))}
+                  unit={t('dashboard.ticketsUnit', { defaultValue: 'tickets' })}
+                />
+              </Panel>
             </div>
           )}
         </div>

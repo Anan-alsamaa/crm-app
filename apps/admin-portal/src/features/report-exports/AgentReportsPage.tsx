@@ -21,6 +21,7 @@ import {
   Tr,
   useTableSort,
 } from '@yiji/ui';
+import { matchStore, isUnmappedStore } from '@yiji/shared-types';
 import {
   useAgentReportData,
   useTicketOrders,
@@ -29,6 +30,7 @@ import {
   type SlaOutcome,
   type TicketReportRow,
 } from './api.js';
+import { useStoreIndex } from '../restaurants/api.js';
 import {
   buildAgentKpiSheets,
   buildConversationSheets,
@@ -147,6 +149,38 @@ function SlaPill({ state }: { state: SlaOutcome }) {
   );
 }
 
+/**
+ * A store-derived cell (brand / city / manager).
+ *
+ * Keeps three states apart on screen exactly as the export does: no order at
+ * all is an em dash, an order whose branch is missing from Restaurants → Stores
+ * is a visible "Not mapped" pill, and a resolved store shows its value. A blank
+ * would read as "no order" and hide the gap that skews the by-store totals.
+ */
+function StoreTd({
+  order,
+  pick,
+}: {
+  order: TicketReportRow['order'];
+  pick: (o: NonNullable<TicketReportRow['order']>) => string | undefined;
+}) {
+  const { t } = useTranslation();
+  if (!order) return <Td className="text-muted-foreground">—</Td>;
+  if (order.storeMapped === false)
+    return (
+      <Td>
+        <Pill tone="warning" size="sm">
+          {t('agentReports.notMapped', { defaultValue: 'Not mapped' })}
+        </Pill>
+      </Td>
+    );
+  return (
+    <Td className="max-w-[10rem] truncate text-muted-foreground" title={pick(order) ?? ''}>
+      {pick(order) || '—'}
+    </Td>
+  );
+}
+
 /* ── Report 1: Tickets + order data ───────────────────────────────────── */
 
 /** One status tab: label + count, selected state carried by fill not just weight. */
@@ -209,18 +243,38 @@ function TicketsReport({
   );
   const orders = useTicketOrders(contactIds, includeOrders, days);
   const ordersMap = orders.data;
+  const { index: storeIndex } = useStoreIndex();
 
   const merged = useMemo<TicketReportRow[]>(() => {
     const withOrders = ordersMap
-      ? rows.map((r) => ({
-          ...r,
-          order: r.contactId ? (ordersMap.get(r.contactId) ?? undefined) : undefined,
-        }))
+      ? rows.map((r) => {
+          const order = r.contactId ? (ordersMap.get(r.contactId) ?? undefined) : undefined;
+          if (!order) return { ...r, order: undefined };
+          // Join the order onto the operations store master data. The order API
+          // gives a brand name and a "<city> - <branch>" string and nothing
+          // else — city, managers and the canonical brand come from here.
+          const m = matchStore(storeIndex, {
+            restaurantId: order.rawRestaurantId,
+            restaurantName: order.rawRestaurantName,
+            brandName: order.rawBrandName,
+          });
+          return {
+            ...r,
+            order: {
+              ...order,
+              brand: m.brandName,
+              city: m.city,
+              areaManager: m.areaManager,
+              chainManager: m.chainManager,
+              storeMapped: !isUnmappedStore(m),
+            },
+          };
+        })
       : rows;
     return status === 'all'
       ? withOrders
       : withOrders.filter((r) => String(r.status).toLowerCase() === status);
-  }, [rows, ordersMap, status]);
+  }, [rows, ordersMap, status, storeIndex]);
 
   /** Status tabs with live counts, built from the UNFILTERED rows so the numbers
    *  do not change as you filter — a count that moves with the filter tells you
@@ -392,7 +446,13 @@ function TicketsReport({
                 {tr('agentReports.col.resolutionMin', { defaultValue: 'Resolution (min)' })}
               </SortTh>
               {includeOrders && (
-                <Th>{tr('agentReports.col.restaurant', { defaultValue: 'Restaurant' })}</Th>
+                <>
+                  <Th>{tr('agentReports.col.restaurant', { defaultValue: 'Restaurant' })}</Th>
+                  <Th>{tr('agentReports.col.brand', { defaultValue: 'Brand' })}</Th>
+                  <Th>{tr('agentReports.col.city', { defaultValue: 'City' })}</Th>
+                  <Th>{tr('agentReports.col.areaManager', { defaultValue: 'Area manager' })}</Th>
+                  <Th>{tr('agentReports.col.chainManager', { defaultValue: 'Chain manager' })}</Th>
+                </>
               )}
             </tr>
           </thead>
@@ -422,16 +482,22 @@ function TicketsReport({
                   {r.resolutionMinutes == null ? '—' : Math.round(r.resolutionMinutes)}
                 </Td>
                 {includeOrders && (
-                  <Td
-                    className="max-w-[12rem] truncate text-muted-foreground"
-                    title={r.order?.restaurant ?? ''}
-                  >
-                    {orders.isFetching && !r.order ? (
-                      <span className="text-2xs opacity-60">…</span>
-                    ) : (
-                      (r.order?.restaurant ?? '—')
-                    )}
-                  </Td>
+                  <>
+                    <Td
+                      className="max-w-[12rem] truncate text-muted-foreground"
+                      title={r.order?.restaurant ?? ''}
+                    >
+                      {orders.isFetching && !r.order ? (
+                        <span className="text-2xs opacity-60">…</span>
+                      ) : (
+                        (r.order?.restaurant ?? '—')
+                      )}
+                    </Td>
+                    <StoreTd order={r.order} pick={(o) => o.brand} />
+                    <StoreTd order={r.order} pick={(o) => o.city} />
+                    <StoreTd order={r.order} pick={(o) => o.areaManager} />
+                    <StoreTd order={r.order} pick={(o) => o.chainManager} />
+                  </>
                 )}
               </Tr>
             ))}

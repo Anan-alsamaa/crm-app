@@ -57,6 +57,10 @@ const appendOnly = (collection: string): PermissionSpec[] => [
 const ALL_BUSINESS = [
   'vendors',
   'teams',
+  // Restaurant master data (brands + their branches). Admins maintain these by
+  // hand and via CSV import; every other role only reads them.
+  'brands',
+  'stores',
   'contacts',
   'conversations',
   'messages',
@@ -104,6 +108,10 @@ export const roles: RoleSpec[] = [
     permissions: [
       ...readOnly('vendors'),
       ...readOnly('teams'),
+      // Read-only so the agent inbox can show which branch an order came from
+      // without letting agents edit the operations team's master data.
+      ...readOnly('brands'),
+      ...readOnly('stores'),
       // Agents can create custom tags on the fly (and rename/recolour), read
       // them, and delete one from the library (cascades out of all junctions) —
       // in addition to assigning via the conversations_tags junction below.

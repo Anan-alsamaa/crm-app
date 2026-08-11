@@ -49,6 +49,12 @@ const SlaPoliciesPage = lazy(() =>
 const VendorsPage = lazy(() =>
   import('./features/vendors/VendorsPage.js').then((m) => ({ default: m.VendorsPage })),
 );
+const BrandsPage = lazy(() =>
+  import('./features/restaurants/BrandsPage.js').then((m) => ({ default: m.BrandsPage })),
+);
+const StoresPage = lazy(() =>
+  import('./features/restaurants/StoresPage.js').then((m) => ({ default: m.StoresPage })),
+);
 const ReportsPage = lazy(() =>
   import('./features/reports/ReportsPage.js').then((m) => ({ default: m.ReportsPage })),
 );
@@ -297,6 +303,13 @@ function Shell({ children }: { children: React.ReactNode }) {
       ],
     },
     {
+      heading: t('nav.restaurants', { defaultValue: 'Restaurants' }),
+      items: [
+        { to: '/brands', label: t('nav.brands', { defaultValue: 'Brands' }), icon: StoreIcon },
+        { to: '/stores', label: t('nav.stores', { defaultValue: 'Stores' }), icon: StoreIcon },
+      ],
+    },
+    {
       heading: t('nav.policies', { defaultValue: 'Policies' }),
       items: [{ to: '/sla', label: t('nav.sla'), icon: ShieldIcon }],
     },
@@ -449,6 +462,26 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <VendorsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/brands"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <BrandsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/stores"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <StoresPage />
                 </Shell>
               </ProtectedRoute>
             }

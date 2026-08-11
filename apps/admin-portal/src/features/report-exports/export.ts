@@ -31,6 +31,29 @@ function roundMin(n: number | null): CellValue {
   return n == null ? '' : Math.round(n);
 }
 
+/**
+ * A store-derived cell (brand / city / manager).
+ *
+ * Three states, and they must stay distinguishable:
+ *   no order at all      → blank
+ *   order, no store row  → "Not mapped"  (someone must add the store)
+ *   order + store row    → the value, or blank if that field is simply empty
+ *
+ * Collapsing the middle case to a blank cell is the failure mode to avoid: it
+ * reads as "this ticket had no order" and hides a mapping gap that silently
+ * skews every by-store and by-brand total.
+ */
+function storeCell(
+  r: TicketReportRow,
+  pick: (o: NonNullable<TicketReportRow['order']>) => string | undefined,
+  t: Translate,
+): string {
+  const o = r.order;
+  if (!o) return '';
+  if (o.storeMapped === false) return t('agentReports.notMapped', { defaultValue: 'Not mapped' });
+  return pick(o) ?? '';
+}
+
 function round1(n: number | null): CellValue {
   return n == null ? '' : Math.round(n * 10) / 10;
 }
@@ -64,6 +87,10 @@ export const TICKET_COLUMN_KEYS = [
   'resolutionSla',
   'orderId',
   'restaurant',
+  'brand',
+  'city',
+  'areaManager',
+  'chainManager',
   'orderStatus',
   'delivery',
   'items',
@@ -87,6 +114,10 @@ export const TICKET_COLUMN_LABELS: Record<TicketColumnKey, { key: string; def: s
   resolutionSla: { key: 'agentReports.col.resolutionSla', def: 'Resolution SLA' },
   orderId: { key: 'agentReports.col.orderId', def: 'Order ID' },
   restaurant: { key: 'agentReports.col.restaurant', def: 'Restaurant' },
+  brand: { key: 'agentReports.col.brand', def: 'Brand' },
+  city: { key: 'agentReports.col.city', def: 'City' },
+  areaManager: { key: 'agentReports.col.areaManager', def: 'Area manager' },
+  chainManager: { key: 'agentReports.col.chainManager', def: 'Chain manager' },
   orderStatus: { key: 'agentReports.col.orderStatus', def: 'Order status' },
   delivery: { key: 'agentReports.col.delivery', def: 'Delivery' },
   items: { key: 'agentReports.col.items', def: 'Items' },
@@ -119,7 +150,11 @@ export function buildTicketsSheets(
     resolutionMin: 16,
     resolutionSla: 14,
     orderId: 16,
-    restaurant: 22,
+    restaurant: 26,
+    brand: 20,
+    city: 16,
+    areaManager: 22,
+    chainManager: 22,
     orderStatus: 16,
     delivery: 26,
     items: 40,
@@ -141,6 +176,13 @@ export function buildTicketsSheets(
     resolutionSla: (r) => slaLabel(r.resolutionState, t),
     orderId: (r) => r.order?.orderId ?? '',
     restaurant: (r) => r.order?.restaurant ?? '',
+    // A ticket with an order but no matching store row says so explicitly. A
+    // blank cell reads as "no order", which would hide the mapping gap that
+    // someone needs to fix in Restaurants → Stores.
+    brand: (r) => storeCell(r, (o) => o.brand, t),
+    city: (r) => storeCell(r, (o) => o.city, t),
+    areaManager: (r) => storeCell(r, (o) => o.areaManager, t),
+    chainManager: (r) => storeCell(r, (o) => o.chainManager, t),
     orderStatus: (r) => r.order?.status ?? '',
     delivery: (r) => r.order?.delivery ?? '',
     items: (r) => r.order?.items ?? '',

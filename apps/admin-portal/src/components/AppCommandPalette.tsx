@@ -83,8 +83,22 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
           id: 'go-vendors',
           label: t('nav.vendors', { defaultValue: 'Vendors' }),
           icon: <StoreIcon size={16} />,
-          keywords: ['brands', 'tenants'],
+          keywords: ['tenants'],
           onSelect: () => navigate('/vendors'),
+        },
+        {
+          id: 'go-brands',
+          label: t('nav.brands', { defaultValue: 'Brands' }),
+          icon: <StoreIcon size={16} />,
+          keywords: ['restaurants', 'brand'],
+          onSelect: () => navigate('/brands'),
+        },
+        {
+          id: 'go-stores',
+          label: t('nav.stores', { defaultValue: 'Stores' }),
+          icon: <StoreIcon size={16} />,
+          keywords: ['restaurants', 'branches', 'outlets'],
+          onSelect: () => navigate('/stores'),
         },
         {
           id: 'go-imports',

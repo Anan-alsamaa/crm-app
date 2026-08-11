@@ -83,6 +83,49 @@ export const collections: CollectionSpec[] = [
     ],
   },
   {
+    collection: 'brands',
+    note: 'Restaurant brands — operations master data, editable in the admin portal.',
+    fields: [
+      { field: 'code', type: 'string', required: true, unique: true, note: 'e.g. LCP' },
+      { field: 'name', type: 'string', required: true, note: 'e.g. La Casa Pasta' },
+      {
+        field: 'yiji_brand_name',
+        type: 'string',
+        index: true,
+        note: 'Exactly what the Yiji order API returns in brandName. Only needed when it differs from name. Matching trims it — Yiji ships values with a leading space.',
+      },
+      {
+        field: 'status',
+        type: 'string',
+        choices: ['active', 'inactive'],
+        defaultValue: 'active',
+      },
+    ],
+  },
+  {
+    collection: 'stores',
+    note: 'Restaurant branches — operations master data. Mapped onto Yiji orders so tickets can be reported by store, brand and city.',
+    fields: [
+      { field: 'code', type: 'string', index: true, note: 'e.g. LCP-002' },
+      { field: 'name', type: 'string', required: true, index: true, note: 'e.g. Marina Mall 2' },
+      { field: 'city', type: 'string', index: true },
+      { field: 'area_manager', type: 'string' },
+      { field: 'chain_manager', type: 'string' },
+      {
+        field: 'yiji_restaurant_id',
+        type: 'string',
+        index: true,
+        note: "Yiji's own restaurant id. Optional: the ops sheets do not carry it today, and matching falls back to a normalised name compare. Set it and this store matches exactly, regardless of naming drift.",
+      },
+      {
+        field: 'status',
+        type: 'string',
+        choices: ['active', 'inactive'],
+        defaultValue: 'active',
+      },
+    ],
+  },
+  {
     collection: 'contacts',
     note: 'Customers of vendors; deduped per vendor by phone/email',
     fields: [
@@ -324,6 +367,10 @@ export const collections: CollectionSpec[] = [
 /** Many-to-one relations (foreign keys). */
 export const relations: RelationSpec[] = [
   { collection: 'contacts', field: 'vendor', related: 'vendors', onDelete: 'CASCADE' },
+  // SET NULL, not CASCADE: deleting a brand must never silently delete the
+  // branches under it — those rows carry the city and manager mapping the
+  // ticket reports depend on.
+  { collection: 'stores', field: 'brand', related: 'brands', onDelete: 'SET NULL' },
   { collection: 'conversations', field: 'vendor', related: 'vendors', onDelete: 'CASCADE' },
   { collection: 'conversations', field: 'contact', related: 'contacts', onDelete: 'CASCADE' },
   {
