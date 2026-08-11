@@ -63,17 +63,18 @@ interface BrandSeed {
  * order 946641), so without the alias a ticket at an unlisted Casa Pasta branch
  * would fall out of the brand ranking.
  *
- * CND Express and CND Casual are two formats of ONE brand, Chick N Dip, so both
- * carry that name and the dashboard totals them as a single brand. The codes
- * keep the format distinction on each store row.
+ * Exactly the four brands operations run, with the codes their master file
+ * uses. Confirmed against Yiji's own restaurant list, which spells them
+ * Casa Pasta / Poshak / Okashi / Chick 'N' Dip against LCP / PSK / OKA / CND
+ * codes.
  *
- * HD and MGA were dropped on 2026-08-11 at operations' request — they are not
- * brands of this business. Do NOT re-add them here; a CSV import that contains
- * them will still create them on demand, which is the right escape hatch.
+ * Only "CND Casual" appears in the master data — there is no CND Express, and
+ * HD/MGA were dropped on 2026-08-11 as not being brands of this business. Do
+ * NOT re-add any of them; a CSV import that contains a new brand still creates
+ * it on demand, which is the right escape hatch.
  */
 const BRANDS: BrandSeed[] = [
   { code: 'LCP', name: 'Casa Pasta', yiji_brand_name: 'La Casa Pasta' },
-  { code: 'CND Express', name: 'Chick N Dip' },
   { code: 'CND Casual', name: 'Chick N Dip' },
   { code: 'OKA', name: 'Okashi' },
   { code: 'PSK', name: 'Poshak' },

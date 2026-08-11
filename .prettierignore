@@ -12,3 +12,8 @@ specs/
 .specify/
 .claude/
 CLAUDE.md
+
+# Third-party reference material (the operations manager's own CRM + its data).
+# Never reformat it: it is evidence, and its exact bytes are what we compare
+# our import against. It is also gitignored — see .gitignore.
+Ayman/

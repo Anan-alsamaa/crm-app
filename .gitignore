@@ -131,3 +131,10 @@ stream details.txt
 # Incident-response runtime output (captured logs may contain sensitive data)
 scripts/incident/reports/
 var/
+
+# The operations manager's own CRM and its live export, dropped in here as
+# reference material. CONTAINS REAL CUSTOMER PII: Complaints_History_Import.csv
+# holds 1,672 rows with real Saudi mobile numbers and complaint text, and
+# users.json holds staff accounts. It sat untracked-but-not-ignored, one
+# `git add -A` away from being published to GitHub.
+Ayman/
