@@ -6,6 +6,7 @@
  * and a naive split silently shifts every later column one place left — the
  * city ends up in the manager field and nothing errors.
  */
+import { splitStoreCode } from '@yiji/shared-types';
 
 /** Split one CSV line, honouring double-quoted fields and "" escapes. */
 export function splitCsvLine(line: string): string[] {
@@ -89,27 +90,13 @@ const HEADER_ALIASES: Record<string, keyof ParsedStoreRow | 'ignore'> = {
 /**
  * "LCP-002 Marina Mall 2" → { code: "LCP-002", name: "Marina Mall 2" }.
  *
- * The operations master spells the same code four ways, and the original
- * pattern only understood one of them — so "LCP- 089 Nada Plaza RYD",
- * "LCP058-ARAMCO" and "LCP.073 - Amer Mall" imported with NO code at all and
- * could not be joined to Yiji's branch list:
- *
- *   LCP-032 Masief Plaza    dash
- *   LCP- 089 Nada Plaza     dash + space
- *   LCP058-ARAMCO           no separator, dash AFTER the number
- *   LCP.073 - Amer Mall     dot, then a dash separating the name
- *
- * Normalise all four to `PREFIX-NNN`, and strip a leading dash from what is
- * left so the name does not come out as "- Amer Mall".
+ * Lives in @yiji/shared-types because the store matcher needs the very same
+ * parse: it recovers the store code from a branch string to match on it (see
+ * the `store_code` tier). Two copies of a four-spellings regex would drift,
+ * and the failure would be silent — an unmatched store reads as a data gap,
+ * not as a parser that fell behind.
  */
-export function splitStoreCode(raw: string): { code: string | null; name: string } {
-  const s = raw.trim();
-  const m = /^([A-Za-z]{2,6})[\s.\-_]*(\d{1,4})\s*[-–]?\s*(.*)$/.exec(s);
-  if (m && m[3]?.trim()) {
-    return { code: `${m[1]!.toUpperCase()}-${m[2]}`, name: m[3].trim() };
-  }
-  return { code: null, name: s };
-}
+export { splitStoreCode };
 
 /**
  * Map a parsed sheet onto store rows.

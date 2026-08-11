@@ -62,7 +62,7 @@ export interface OrderRestaurantRef {
 export interface StoreMatch {
   store: StoreRecord | null;
   /** How the row was matched — surfaced in the UI so gaps are diagnosable. */
-  via: 'yiji_id' | 'exact_name' | 'normalised_name' | 'brand_only' | 'none';
+  via: 'yiji_id' | 'exact_name' | 'normalised_name' | 'store_code' | 'brand_only' | 'none';
   /** Brand name to display, from the store when matched, else from the order. */
   brandName: string;
   city: string;
@@ -73,6 +73,40 @@ export interface StoreMatch {
 }
 
 const STORE_CODE_PREFIX = /^[A-Za-z]{2,6}[-\s]?\d{1,4}\s+/;
+
+/**
+ * The operations master spells the same store code four ways, so anything that
+ * wants the code out of a branch string has to understand all four:
+ *
+ *   LCP-032 Masief Plaza    dash
+ *   LCP- 089 Nada Plaza     dash + space
+ *   LCP058-ARAMCO           no separator, dash AFTER the number
+ *   LCP.073 - Amer Mall     dot, then a dash separating the name
+ */
+const STORE_CODE_ANY = /^([A-Za-z]{2,6})[\s.\-_]*(\d{1,4})\s*[-–]?\s*(.*)$/;
+
+/**
+ * "LCP-002 Marina Mall 2" → { code: "LCP-002", name: "Marina Mall 2" }.
+ *
+ * Normalise all four spellings above to `PREFIX-NNN`, and drop the leading dash
+ * from what is left so the name does not come out as "- Amer Mall". A string
+ * with no trailing name ("LCP-002") is NOT treated as a code, because then
+ * every bare branch name would parse as one.
+ */
+export function splitStoreCode(raw: string | null | undefined): {
+  code: string | null;
+  name: string;
+} {
+  const s = String(raw ?? '').trim();
+  const m = STORE_CODE_ANY.exec(s);
+  if (m && m[3]?.trim()) return { code: `${m[1]!.toUpperCase()}-${m[2]}`, name: m[3].trim() };
+  return { code: null, name: s };
+}
+
+/** Canonical `PREFIX-NNN` store code embedded in a branch string, if any. */
+export function storeCodeFrom(raw: string | null | undefined): string {
+  return splitStoreCode(raw).code ?? '';
+}
 
 /**
  * Collapse a restaurant name to something comparable across the two systems.
@@ -124,6 +158,15 @@ export interface StoreIndex {
   byYijiId: Map<string, StoreRecord>;
   byExactName: Map<string, StoreRecord>;
   byNormalisedName: Map<string, StoreRecord>;
+  /**
+   * Store code → store, and ONLY for codes that identify exactly one store.
+   * Unlike the name maps this is not first-writer-wins: a code is supposed to
+   * be the master's primary key, so a duplicated one means the master is
+   * broken. Guessing between the two would attribute complaints to whichever
+   * row happened to load first, so a duplicated code resolves to nothing and
+   * the row falls through to the brand fallback / NOT_MAPPED instead.
+   */
+  byCode: Map<string, StoreRecord>;
   byBrand: Map<string, StoreRecord>;
 }
 
@@ -131,8 +174,15 @@ export function buildStoreIndex(stores: readonly StoreRecord[]): StoreIndex {
   const byYijiId = new Map<string, StoreRecord>();
   const byExactName = new Map<string, StoreRecord>();
   const byNormalisedName = new Map<string, StoreRecord>();
+  const byCode = new Map<string, StoreRecord>();
+  const duplicateCodes = new Set<string>();
   const byBrand = new Map<string, StoreRecord>();
   for (const s of stores) {
+    const code = (s.code ?? '').trim().toUpperCase();
+    if (code) {
+      if (byCode.has(code) && byCode.get(code) !== s) duplicateCodes.add(code);
+      else byCode.set(code, s);
+    }
     if (s.yijiRestaurantId) byYijiId.set(String(s.yijiRestaurantId).trim(), s);
     const full = [s.code, s.name].filter(Boolean).join(' ').trim();
     // First writer wins, so an earlier row is never silently replaced by a
@@ -149,7 +199,8 @@ export function buildStoreIndex(stores: readonly StoreRecord[]): StoreIndex {
       if (brandKey && !byBrand.has(brandKey)) byBrand.set(brandKey, s);
     }
   }
-  return { byYijiId, byExactName, byNormalisedName, byBrand };
+  for (const code of duplicateCodes) byCode.delete(code);
+  return { byYijiId, byExactName, byNormalisedName, byCode, byBrand };
 }
 
 /** Label used wherever a store could not be resolved. */
@@ -198,6 +249,21 @@ export function matchStore(index: StoreIndex, order: OrderRestaurantRef | null):
       const hit = index.byNormalisedName.get(norm);
       if (hit) return resolved(hit, 'normalised_name');
     }
+  }
+
+  // Neither name tier fired. If the branch string carries an ops store code,
+  // that code IS the master's key and beats any further name guessing — the
+  // names drift in ways the codes do not. Real case: the complaints history
+  // says "LCP-006 Panorama Mall" where the master says "LCP-006 Panorama Mall
+  // RYD", so both name tiers miss on a city suffix while the code is exact.
+  //
+  // Deliberately placed AFTER the name tiers, not before: every row that
+  // matches today keeps matching the same way, so this can only rescue rows
+  // that were about to be reported as unmapped.
+  const code = storeCodeFrom(orderName);
+  if (code) {
+    const hit = index.byCode.get(code);
+    if (hit) return resolved(hit, 'store_code');
   }
 
   // Nothing matched the branch. The BRAND may still be known, which is enough
