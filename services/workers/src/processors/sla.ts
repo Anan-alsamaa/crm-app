@@ -2,7 +2,7 @@ import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
 import { QUEUES, type NotificationJob, type Priority, type SlaJob } from '@yiji/shared-types';
 import { computeDueAt, warningAt } from '../lib/sla-clock.js';
-import type { TicketRepo, TicketRow, SlaPolicyRow } from './repos.js';
+import type { TicketRepo, TicketRow, SlaPolicyRow, TeamRepo } from './repos.js';
 
 /**
  * SLA processor (T071) — handles three job kinds:
@@ -20,6 +20,7 @@ type Deadline = 'first_response' | 'resolution';
 
 export interface SlaDeps {
   tickets: TicketRepo;
+  teams: TeamRepo;
   slaQueue: Queue;
   notificationsQueue: Queue;
   logger: Logger;
@@ -88,23 +89,64 @@ async function enqueueNotification(
   ticket: TicketRow,
   deadline: Deadline,
   extraPayload: Record<string, unknown> = {},
+  /**
+   * Escalation copy differs for a teammate. The bell renders this body verbatim,
+   * and "the ticket has been escalated" reads as an FYI — which is exactly the
+   * diffusion-of-responsibility failure the fanout exists to prevent. A teammate
+   * needs to be told the ticket is unowned and that picking it up is the action.
+   */
+  tail?: string,
 ): Promise<void> {
   const copy = NOTIFICATION_COPY[type];
+  const suffix = tail ?? (type === 'escalation' ? ' The ticket has been escalated.' : '');
   const job: NotificationJob = {
     recipientId: recipient,
     type,
     title: `${copy.title} ${ticket.id}`,
-    body: `${deadline === 'first_response' ? 'First-response' : 'Resolution'} ${copy.state} for ticket ${ticket.id}.${
-      type === 'escalation' ? ' The ticket has been escalated.' : ''
-    }`,
+    body: `${deadline === 'first_response' ? 'First-response' : 'Resolution'} ${copy.state} for ticket ${ticket.id}.${suffix}`,
     link: `/tickets/${ticket.id}`,
     payload: { ticketId: ticket.id, deadline, ...extraPayload },
   };
-  // Deterministic id per (type, ticket, deadline) so a retry / stalled re-run of
-  // the warning/breach job does not enqueue a duplicate SLA notification.
+  // Deterministic id per (type, ticket, deadline, RECIPIENT) so a retry / stalled
+  // re-run does not enqueue a duplicate SLA notification. The recipient must be
+  // part of the key: escalation now fans out to a whole team, and without it
+  // BullMQ would collapse every teammate's job into one and only the first
+  // person would ever be paged.
   await deps.notificationsQueue.add(type, job, {
-    jobId: `slanotif-${type}-${ticket.id}-${deadline}`,
+    jobId: `slanotif-${type}-${ticket.id}-${deadline}-${recipient}`,
   });
+}
+
+/**
+ * Who hears about an escalation: the assigned agent AND everyone on the
+ * assigned team, deduped and order-stable (agent first).
+ *
+ * Escalating is precisely the moment the audience should widen — the point is
+ * that the owner did NOT act, so paging only the owner re-asks the person who
+ * already missed it. This also covers the previously silent case of a breach on
+ * an UNASSIGNED ticket that has a team: before, nobody was paged at all.
+ *
+ * A team read failure must not sink the escalation — the priority bump and the
+ * audit event are the load-bearing parts, so we log and fall back to the agent.
+ */
+async function escalationRecipients(deps: SlaDeps, ticket: TicketRow): Promise<string[]> {
+  const recipients = new Set<string>();
+  if (ticket.assigned_agent) recipients.add(ticket.assigned_agent);
+  if (ticket.assigned_team) {
+    try {
+      for (const id of await deps.teams.listMemberIds(ticket.assigned_team)) recipients.add(id);
+    } catch (err) {
+      deps.logger.warn(
+        {
+          ticketId: ticket.id,
+          team: ticket.assigned_team,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        'could not read team members for escalation fanout — notifying the assigned agent only',
+      );
+    }
+  }
+  return [...recipients];
 }
 
 // ---------------- reconcile ----------------
@@ -223,23 +265,48 @@ export async function runBreach(
     team: t.assigned_team,
   });
 
-  const recipient = t.assigned_agent;
-  if (recipient) {
-    await enqueueNotification(deps, recipient, 'sla_breach', t, deadline);
-    // Separate escalation notification so it is distinguishable in the inbox
-    // (and routable by notification preferences) from the plain breach notice.
-    await enqueueNotification(deps, recipient, 'escalation', t, deadline, {
-      reason: 'sla_breach',
-      fromPriority,
-      toPriority: ESCALATED_PRIORITY,
-      team: t.assigned_team,
-    });
-  } else {
-    // Unassigned ticket: nobody to page. The sla_escalated event + priority bump
-    // still land, so the ticket surfaces at the top of the queue views.
+  // The plain breach notice stays OWNER-ONLY: it reports that this agent's
+  // deadline was missed, and sending that to eight teammates is noise, not
+  // signal. Only the escalation widens.
+  if (t.assigned_agent) {
+    await enqueueNotification(deps, t.assigned_agent, 'sla_breach', t, deadline);
+  }
+
+  // Separate escalation notification so it is distinguishable in the inbox
+  // (and routable by notification preferences) from the plain breach notice.
+  const recipients = await escalationRecipients(deps, t);
+  for (const recipient of recipients) {
+    const isAssignee = recipient === t.assigned_agent;
+    await enqueueNotification(
+      deps,
+      recipient,
+      'escalation',
+      t,
+      deadline,
+      {
+        reason: 'sla_breach',
+        fromPriority,
+        toPriority: ESCALATED_PRIORITY,
+        team: t.assigned_team,
+        // Lets the portal distinguish "your ticket escalated" from "a ticket on
+        // your team escalated" without re-reading the ticket.
+        isAssignee,
+      },
+      isAssignee
+        ? ' The ticket has been escalated.'
+        : t.assigned_agent
+          ? ' It is now urgent and still unanswered on your team — pick it up if the assignee cannot.'
+          : ' It is now urgent, unassigned and unanswered on your team — please pick it up.',
+    );
+  }
+
+  if (recipients.length === 0) {
+    // No agent and no team (or an empty team): nobody to page. The sla_escalated
+    // event + priority bump still land, so the ticket surfaces at the top of the
+    // queue views.
     deps.logger.warn(
       { ticketId: t.id, deadline, team: t.assigned_team },
-      'sla breach escalated on an unassigned ticket — no notification recipient',
+      'sla breach escalated but no agent or team member to notify',
     );
   }
 }

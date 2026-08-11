@@ -68,6 +68,20 @@ export interface TicketRepo {
   listTicketEvents(ticketId: string, type?: TicketEventType): Promise<TicketEventRow[]>;
 }
 
+export interface TeamRepo {
+  /**
+   * User ids belonging to a team (`directus_users.team` is a FK to `teams`).
+   *
+   * Escalation fans out to individual users rather than writing one row against
+   * a team, because `notifications.recipient` is a user FK by design: read
+   * state, the per-user channel preferences in `getUserPreferences`, the email
+   * address in `getUserEmail`, and the gateway's push to a personal socket room
+   * are ALL keyed on a user. A team-addressed row would have no owner for any
+   * of them. "Notify the team" therefore means N per-user notifications.
+   */
+  listMemberIds(teamId: string): Promise<string[]>;
+}
+
 export interface NotificationsRepo {
   /** Notification preferences map: type → channel. */
   getUserPreferences(userId: string): Promise<Record<string, string>>;

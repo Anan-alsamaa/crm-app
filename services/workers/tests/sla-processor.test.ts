@@ -13,6 +13,7 @@ import type {
   TicketRow,
   SlaPolicyRow,
   TicketEventType,
+  TeamRepo,
 } from '../src/processors/repos.js';
 
 function makeRepo(tickets: TicketRow[], policies: SlaPolicyRow[]) {
@@ -39,6 +40,11 @@ function makeRepo(tickets: TicketRow[], policies: SlaPolicyRow[]) {
         })),
   };
   return { repo, patched, events };
+}
+
+/** Team membership stub: teamId → member user ids. */
+function makeTeams(members: Record<string, string[]> = {}): TeamRepo {
+  return { listMemberIds: async (teamId) => members[teamId] ?? [] };
 }
 
 function makeQueues() {
@@ -92,6 +98,7 @@ describe('runReconcile (T067)', () => {
     const q = makeQueues();
     const deps: SlaDeps = {
       tickets: repo,
+      teams: makeTeams(),
       slaQueue: q.slaQueue,
       notificationsQueue: q.notificationsQueue,
       logger,
@@ -123,6 +130,7 @@ describe('runReconcile (T067)', () => {
     const q = makeQueues();
     const deps: SlaDeps = {
       tickets: repo,
+      teams: makeTeams(),
       slaQueue: q.slaQueue,
       notificationsQueue: q.notificationsQueue,
       logger,
@@ -137,6 +145,7 @@ describe('runReconcile (T067)', () => {
     const q = makeQueues();
     const deps: SlaDeps = {
       tickets: repo,
+      teams: makeTeams(),
       slaQueue: q.slaQueue,
       notificationsQueue: q.notificationsQueue,
       logger,
@@ -152,6 +161,7 @@ describe('runWarning + runBreach (T067)', () => {
     const q = makeQueues();
     const deps: SlaDeps = {
       tickets: repo,
+      teams: makeTeams(),
       slaQueue: q.slaQueue,
       notificationsQueue: q.notificationsQueue,
       logger,
@@ -163,7 +173,7 @@ describe('runWarning + runBreach (T067)', () => {
     expect(q.notifications).toHaveLength(1);
     expect((q.notifications[0]?.data as { type: string }).type).toBe('sla_warning');
     // Deterministic jobId so a retry / stalled re-run doesn't double-notify.
-    expect(q.notifications[0]?.opts?.jobId).toBe('slanotif-sla_warning-t1-first_response');
+    expect(q.notifications[0]?.opts?.jobId).toBe('slanotif-sla_warning-t1-first_response-user-1');
   });
 
   it('writes sla_breached event + enqueues a sla_breach notification', async () => {
@@ -171,6 +181,7 @@ describe('runWarning + runBreach (T067)', () => {
     const q = makeQueues();
     const deps: SlaDeps = {
       tickets: repo,
+      teams: makeTeams(),
       slaQueue: q.slaQueue,
       notificationsQueue: q.notificationsQueue,
       logger,
@@ -182,7 +193,7 @@ describe('runWarning + runBreach (T067)', () => {
       payload: { deadline: 'resolution' },
     });
     expect((q.notifications[0]?.data as { type: string }).type).toBe('sla_breach');
-    expect(q.notifications[0]?.opts?.jobId).toBe('slanotif-sla_breach-t1-resolution');
+    expect(q.notifications[0]?.opts?.jobId).toBe('slanotif-sla_breach-t1-resolution-user-1');
   });
 
   it('no-op when first-response warning fires after the agent has already responded', async () => {
@@ -191,6 +202,7 @@ describe('runWarning + runBreach (T067)', () => {
     const q = makeQueues();
     const deps: SlaDeps = {
       tickets: repo,
+      teams: makeTeams(),
       slaQueue: q.slaQueue,
       notificationsQueue: q.notificationsQueue,
       logger,
@@ -206,6 +218,7 @@ describe('runWarning + runBreach (T067)', () => {
     const q = makeQueues();
     const deps: SlaDeps = {
       tickets: repo,
+      teams: makeTeams(),
       slaQueue: q.slaQueue,
       notificationsQueue: q.notificationsQueue,
       logger,
@@ -216,11 +229,12 @@ describe('runWarning + runBreach (T067)', () => {
 });
 
 describe('runBreach escalation (FR-017)', () => {
-  function setup(ticket: TicketRow = { ...baseTicket }) {
+  function setup(ticket: TicketRow = { ...baseTicket }, members: Record<string, string[]> = {}) {
     const { repo, patched, events } = makeRepo([ticket], [POLICY]);
     const q = makeQueues();
     const deps: SlaDeps = {
       tickets: repo,
+      teams: makeTeams(members),
       slaQueue: q.slaQueue,
       notificationsQueue: q.notificationsQueue,
       logger,
@@ -243,13 +257,19 @@ describe('runBreach escalation (FR-017)', () => {
   });
 
   it('notifies the assigned agent with a distinct escalation notification', async () => {
-    const { deps, q } = setup({ ...baseTicket, priority: 'low', assigned_team: 'team-9' });
+    // Team with the assignee as its only member: the fanout must not duplicate.
+    const { deps, q } = setup(
+      { ...baseTicket, priority: 'low', assigned_team: 'team-9' },
+      {
+        'team-9': ['user-1'],
+      },
+    );
     await runBreach(deps, 't1', 'resolution');
 
     const types = q.notifications.map((n) => (n.data as { type: string }).type);
     expect(types).toEqual(['sla_breach', 'escalation']);
     const esc = q.notifications[1]!;
-    expect(esc.opts?.jobId).toBe('slanotif-escalation-t1-resolution');
+    expect(esc.opts?.jobId).toBe('slanotif-escalation-t1-resolution-user-1');
     expect((esc.data as { payload: Record<string, unknown> }).payload).toMatchObject({
       ticketId: 't1',
       deadline: 'resolution',
@@ -257,6 +277,7 @@ describe('runBreach escalation (FR-017)', () => {
       fromPriority: 'low',
       toPriority: 'urgent',
       team: 'team-9',
+      isAssignee: true,
     });
   });
 
@@ -291,7 +312,7 @@ describe('runBreach escalation (FR-017)', () => {
     expect(events.map((e) => e.type)).toEqual(['sla_breached', 'sla_escalated']);
   });
 
-  it('escalates an unassigned ticket without enqueuing notifications', async () => {
+  it('escalates an unassigned, teamless ticket without enqueuing notifications', async () => {
     const { deps, patched, events, q } = setup({
       ...baseTicket,
       priority: 'high',
@@ -302,5 +323,161 @@ describe('runBreach escalation (FR-017)', () => {
     expect(patched).toEqual([{ id: 't1', patch: { priority: 'urgent' } }]);
     expect(events.map((e) => e.type)).toEqual(['sla_breached', 'sla_escalated']);
     expect(q.notifications).toHaveLength(0);
+  });
+});
+
+describe('escalation fans out to the assigned team', () => {
+  function setup(ticket: TicketRow, members: Record<string, string[]> = {}) {
+    const { repo, events } = makeRepo([ticket], [POLICY]);
+    const q = makeQueues();
+    const deps: SlaDeps = {
+      tickets: repo,
+      teams: makeTeams(members),
+      slaQueue: q.slaQueue,
+      notificationsQueue: q.notificationsQueue,
+      logger,
+    };
+    return { deps, events, q };
+  }
+
+  const recipientsOf = (q: ReturnType<typeof makeQueues>, type: string) =>
+    q.notifications
+      .filter((n) => (n.data as { type: string }).type === type)
+      .map((n) => (n.data as { recipientId: string }).recipientId);
+
+  it('pages every teammate on escalation, not just the assignee', async () => {
+    const { deps, q } = setup(
+      { ...baseTicket, assigned_team: 'team-9' },
+      {
+        'team-9': ['user-1', 'user-2', 'user-3'],
+      },
+    );
+    await runBreach(deps, 't1', 'resolution');
+
+    expect(recipientsOf(q, 'escalation')).toEqual(['user-1', 'user-2', 'user-3']);
+    // Each teammate needs their own dedup key or BullMQ collapses them into one job.
+    const ids = q.notifications
+      .filter((n) => (n.data as { type: string }).type === 'escalation')
+      .map((n) => n.opts?.jobId);
+    expect(new Set(ids).size).toBe(3);
+  });
+
+  it('keeps the plain breach notice owner-only', async () => {
+    const { deps, q } = setup(
+      { ...baseTicket, assigned_team: 'team-9' },
+      {
+        'team-9': ['user-1', 'user-2', 'user-3'],
+      },
+    );
+    await runBreach(deps, 't1', 'resolution');
+
+    // The breach reports THIS agent's miss; broadcasting it is noise.
+    expect(recipientsOf(q, 'sla_breach')).toEqual(['user-1']);
+  });
+
+  it('marks teammates as non-assignees so the portal can word it differently', async () => {
+    const { deps, q } = setup(
+      { ...baseTicket, assigned_team: 'team-9' },
+      {
+        'team-9': ['user-1', 'user-2'],
+      },
+    );
+    await runBreach(deps, 't1', 'resolution');
+
+    const flags = q.notifications
+      .filter((n) => (n.data as { type: string }).type === 'escalation')
+      .map((n) => (n.data as { payload: { isAssignee: boolean } }).payload.isAssignee);
+    expect(flags).toEqual([true, false]);
+  });
+
+  it('pages the team when the breached ticket has NO assignee (previously silent)', async () => {
+    const { deps, q } = setup(
+      { ...baseTicket, assigned_agent: null, assigned_team: 'team-9' },
+      {
+        'team-9': ['user-2', 'user-3'],
+      },
+    );
+    await runBreach(deps, 't1', 'first_response');
+
+    // No owner, so no owner-only breach notice — but the team still gets paged.
+    expect(recipientsOf(q, 'sla_breach')).toEqual([]);
+    expect(recipientsOf(q, 'escalation')).toEqual(['user-2', 'user-3']);
+  });
+
+  it('dedups an assignee who is also listed as a team member', async () => {
+    const { deps, q } = setup(
+      { ...baseTicket, assigned_team: 'team-9' },
+      {
+        'team-9': ['user-2', 'user-1'],
+      },
+    );
+    await runBreach(deps, 't1', 'resolution');
+
+    expect(recipientsOf(q, 'escalation')).toEqual(['user-1', 'user-2']);
+  });
+
+  it('still escalates when the team read fails — agent notified, breach not lost', async () => {
+    const { repo, events } = makeRepo([{ ...baseTicket, assigned_team: 'team-9' }], [POLICY]);
+    const q = makeQueues();
+    const deps: SlaDeps = {
+      tickets: repo,
+      teams: {
+        listMemberIds: async () => {
+          throw new Error('directus 403');
+        },
+      },
+      slaQueue: q.slaQueue,
+      notificationsQueue: q.notificationsQueue,
+      logger,
+    };
+    await runBreach(deps, 't1', 'resolution');
+
+    // Priority bump + audit are load-bearing; they must survive a fanout failure.
+    expect(events.map((e) => e.type)).toEqual(['sla_breached', 'sla_escalated']);
+    expect(recipientsOf(q, 'escalation')).toEqual(['user-1']);
+  });
+
+  it('tells a teammate to act, not just that something happened', async () => {
+    const { deps, q } = setup(
+      { ...baseTicket, assigned_team: 'team-9' },
+      {
+        'team-9': ['user-1', 'user-2'],
+      },
+    );
+    await runBreach(deps, 't1', 'resolution');
+
+    const bodies = q.notifications
+      .filter((n) => (n.data as { type: string }).type === 'escalation')
+      .map((n) => (n.data as { body: string }).body);
+    expect(bodies[0]).toContain('The ticket has been escalated.');
+    expect(bodies[1]).toContain('pick it up if the assignee cannot');
+  });
+
+  it('asks an unassigned ticket’s team to pick it up outright', async () => {
+    const { deps, q } = setup(
+      { ...baseTicket, assigned_agent: null, assigned_team: 'team-9' },
+      {
+        'team-9': ['user-2'],
+      },
+    );
+    await runBreach(deps, 't1', 'resolution');
+
+    expect((q.notifications[0]?.data as { body: string }).body).toContain(
+      'unassigned and unanswered on your team — please pick it up',
+    );
+  });
+
+  it('is still idempotent across a retry with a team attached', async () => {
+    const { deps, q, events } = setup(
+      { ...baseTicket, assigned_team: 'team-9' },
+      {
+        'team-9': ['user-1', 'user-2'],
+      },
+    );
+    await runBreach(deps, 't1', 'resolution');
+    await runBreach(deps, 't1', 'resolution');
+
+    expect(events.map((e) => e.type)).toEqual(['sla_breached', 'sla_escalated']);
+    expect(q.notifications).toHaveLength(3); // 1 breach + 2 escalations
   });
 });

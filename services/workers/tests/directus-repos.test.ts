@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { YijiDirectusClient } from '@yiji/shared-config';
-import { createTicketRepo, createNotificationsRepo } from '../src/processors/directus-repos.js';
+import {
+  createTicketRepo,
+  createNotificationsRepo,
+  createTeamRepo,
+} from '../src/processors/directus-repos.js';
 
 const request = vi.fn();
 const client = { request } as unknown as YijiDirectusClient;
@@ -43,6 +47,39 @@ describe('createTicketRepo', () => {
     request.mockResolvedValueOnce(undefined);
     await repo.createTicketEvent('t1', 'assigned');
     expect(request).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createTeamRepo', () => {
+  const repo = createTeamRepo(client);
+
+  it('listMemberIds maps the rows down to ids', async () => {
+    request.mockResolvedValueOnce([{ id: 'u1' }, { id: 'u2' }]);
+    expect(await repo.listMemberIds('team-9')).toEqual(['u1', 'u2']);
+  });
+
+  it('returns [] for a team with no members', async () => {
+    request.mockResolvedValueOnce([]);
+    expect(await repo.listMemberIds('team-empty')).toEqual([]);
+  });
+
+  it('filters to active members of the requested team only', async () => {
+    request.mockResolvedValueOnce([]);
+    await repo.listMemberIds('team-9');
+    // The SDK hands `request` a builder closure, so resolve it to see the query
+    // that actually reaches Directus. Worth asserting: an unscoped read would
+    // page the entire company, and suspended/invited accounts must be excluded.
+    const [builder] = request.mock.calls[0] as [
+      (c: unknown) => { path: string; params: { filter?: Record<string, unknown> } },
+    ];
+    const { path, params } = builder({});
+    expect(path).toBe('/users');
+    expect(params.filter).toEqual({ team: { _eq: 'team-9' }, status: { _eq: 'active' } });
+  });
+
+  it('propagates a read failure so the caller can fall back', async () => {
+    request.mockRejectedValueOnce(new Error('403'));
+    await expect(repo.listMemberIds('team-9')).rejects.toThrow('403');
   });
 });
 

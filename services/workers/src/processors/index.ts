@@ -25,7 +25,12 @@ import {
 import { processImportJob, type ImportsDeps } from './imports.js';
 import { processReportJob, type ReportsDeps } from './reports.js';
 import { handleRouting } from '../routing.js';
-import { createTicketRepo, createNotificationsRepo, createRoutingRepo } from './directus-repos.js';
+import {
+  createTicketRepo,
+  createNotificationsRepo,
+  createRoutingRepo,
+  createTeamRepo,
+} from './directus-repos.js';
 
 /**
  * Queue processor registry — every queue (sla, notifications, ai, automation,
@@ -51,6 +56,7 @@ export const processors: Record<QueueName, Processor> = {
   [QUEUES.sla]: async (job, deps) => {
     const slaDeps: SlaDeps = {
       tickets: createTicketRepo(deps.directus),
+      teams: createTeamRepo(deps.directus),
       slaQueue: deps.queues[QUEUES.sla],
       notificationsQueue: deps.queues[QUEUES.notifications],
       logger: deps.logger,

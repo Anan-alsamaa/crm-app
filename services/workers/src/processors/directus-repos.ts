@@ -1,8 +1,9 @@
-import { readItems, updateItem, createItem, readUser } from '@directus/sdk';
+import { readItems, updateItem, createItem, readUser, readUsers } from '@directus/sdk';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import type {
   NotificationsRepo,
   SlaPolicyRow,
+  TeamRepo,
   TicketEventRow,
   TicketEventType,
   TicketRepo,
@@ -99,6 +100,24 @@ export function createTicketRepo(client: YijiDirectusClient): TicketRepo {
           limit: 100,
         }),
       )) as TicketEventRow[];
+    },
+  };
+}
+
+export function createTeamRepo(client: YijiDirectusClient): TeamRepo {
+  return {
+    async listMemberIds(teamId: string) {
+      // `status` filter: suspended/archived accounts must not be paged. Draft and
+      // invited users have never signed in, so they'd get an in-app row nobody
+      // reads plus an email to an unconfirmed address.
+      const rows = (await client.request(
+        readUsers({
+          filter: { team: { _eq: teamId }, status: { _eq: 'active' } },
+          fields: ['id'],
+          limit: -1,
+        }),
+      )) as Array<{ id: string }>;
+      return rows.map((r) => r.id);
     },
   };
 }
