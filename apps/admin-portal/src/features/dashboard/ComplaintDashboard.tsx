@@ -139,6 +139,106 @@ function Bars({ rows, total, color }: { rows: Breakdown[]; total: number; color:
 }
 
 /**
+ * His donut: a ring with the total in the middle and a legend of count · share.
+ *
+ * It answers a different question from the bar list beside it — the bars rank,
+ * the ring shows how the whole divides — which is why he draws both from the
+ * same numbers and why the categorical palette is fixed and shared, so a colour
+ * means the same thing in every ring on the page.
+ *
+ * Drawn with stroke-dasharray on one circle per slice rather than arc paths:
+ * no trigonometry to get wrong, and it degrades to a plain ring at any size.
+ */
+const SLICE = [
+  'var(--primary)',
+  'var(--warning)',
+  'var(--success)',
+  'var(--violet)',
+  'var(--sky)',
+  'var(--destructive)',
+];
+
+function Donut({ rows }: { rows: Breakdown[] }) {
+  const { t } = useTranslation();
+  const total = rows.reduce((s, r) => s + r.count, 0);
+  if (total === 0)
+    return (
+      <p className="text-sm text-muted-foreground">
+        {t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
+      </p>
+    );
+
+  const R = 54;
+  const C = 2 * Math.PI * R;
+  let offset = 0;
+
+  return (
+    <div className="flex flex-wrap items-center gap-5">
+      <svg
+        width="140"
+        height="140"
+        viewBox="0 0 140 140"
+        role="img"
+        aria-hidden
+        className="shrink-0"
+      >
+        {rows.map((r, i) => {
+          const len = (r.count / total) * C;
+          const seg = (
+            <circle
+              key={r.key}
+              r={R}
+              cx="70"
+              cy="70"
+              fill="none"
+              stroke={SLICE[i % SLICE.length]}
+              strokeWidth="22"
+              strokeDasharray={`${len} ${C - len}`}
+              strokeDashoffset={-offset}
+              transform="rotate(-90 70 70)"
+            />
+          );
+          offset += len;
+          return seg;
+        })}
+        {/* Punch the middle out with the card colour, then print the total —
+            the number every reader looks for first. */}
+        <circle r="43" cx="70" cy="70" className="fill-card" />
+        <text
+          x="70"
+          y="67"
+          textAnchor="middle"
+          className="fill-foreground text-xl font-bold tabular-nums"
+        >
+          {total}
+        </text>
+        <text x="70" y="84" textAnchor="middle" className="fill-muted-foreground text-[10px]">
+          {t('complaintDash.donutTotal', { defaultValue: 'total' })}
+        </text>
+      </svg>
+      <ul className="min-w-0 flex-1 space-y-1.5">
+        {rows.map((r, i) => (
+          <li key={r.key} className="flex items-center gap-2 text-xs">
+            <span
+              aria-hidden
+              className="h-2.5 w-2.5 shrink-0 rounded-sm"
+              style={{ background: SLICE[i % SLICE.length] }}
+            />
+            <span className="min-w-0 flex-1 truncate text-foreground" title={r.label}>
+              {r.label}
+            </span>
+            <span className="shrink-0 tabular-nums text-muted-foreground">
+              <strong className="font-semibold text-foreground">{r.count}</strong> ·{' '}
+              {Math.round((r.count / total) * 100)}%
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
  * His split bar: one strip showing how a whole divides, with a key underneath.
  * Zero-value segments are dropped rather than rendered as slivers you cannot
  * read or tell apart.
@@ -557,6 +657,27 @@ export function ComplaintDashboard() {
             </p>
           )}
 
+          {/* ── The two rings ────────────────────────────────────────────
+              Same numbers as the By-status and By-brand bars further down, read
+              a different way: the bars rank, these show the split. He keeps
+              both, and on a page people scan rather than study, that is the
+              point rather than a duplication. */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card title={t('complaintDash.statusMix', { defaultValue: 'Complaint status mix' })}>
+              <Donut
+                rows={d.byStatus.map((r) => ({
+                  ...r,
+                  label: t(`status.${r.key}`, { ns: 'common', defaultValue: r.key }),
+                }))}
+              />
+            </Card>
+            <Card
+              title={t('complaintDash.brandMix', { defaultValue: 'Where complaints come from' })}
+            >
+              <Donut rows={d.byBrand} />
+            </Card>
+          </div>
+
           {/* ── Service health ───────────────────────────────────────────
               His gauge + composition strip: one glance at whether the work is
               finishing well, and whether chats are being picked up. */}
@@ -826,6 +947,36 @@ export function ComplaintDashboard() {
 
           {/* ── Breakdowns ───────────────────────────────────────────────── */}
           <div className="grid gap-4 md:grid-cols-2">
+            {/* Leads the grid, as it does on his page. Not the same cut as "By
+                agent": that ranks who logged the most, this ranks who is still
+                holding unfinished work — a heavy logger with nothing
+                outstanding is the opposite of a problem. */}
+            <Card
+              title={t('complaintDash.unsolvedByAgent', {
+                defaultValue: 'Unsolved complaints by agent',
+              })}
+              hint={
+                d.byOpenAgent.length > 0
+                  ? t('complaintDash.unsolvedHint', {
+                      defaultValue: '{{n}} still open across the filtered range.',
+                      n: d.open,
+                    })
+                  : undefined
+              }
+              className="md:col-span-2"
+            >
+              {d.byOpenAgent.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {t('complaintDash.nothingOutstanding', {
+                    defaultValue: 'Nothing outstanding — every complaint in this range is closed.',
+                  })}
+                </p>
+              ) : (
+                // Shares are OF THE OPEN PILE, not of every complaint: "40% of
+                // what is still open" is the question being asked here.
+                <Bars rows={d.byOpenAgent} total={d.open} color="bg-destructive" />
+              )}
+            </Card>
             <Card
               title={t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' })}
               hint={

@@ -134,6 +134,13 @@ export interface ComplaintMetrics {
   byServiceType: Breakdown[];
   bySource: Breakdown[];
   byAgent: Breakdown[];
+  /**
+   * UNSOLVED complaints per agent — deliberately not the same cut as `byAgent`.
+   * Who has logged the most says who is busy; who is sitting on the most
+   * unfinished work is what a supervisor actually chases, and a heavy logger
+   * with nothing outstanding is the opposite of a problem.
+   */
+  byOpenAgent: Breakdown[];
   agents: AgentPerformance[];
   chatAgents: ChatAgentPerformance[];
   health: ServiceHealth;
@@ -432,6 +439,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       const byServiceType = new Map<string, number>();
       const bySource = new Map<string, number>();
       const byAgentCount = new Map<string, number>();
+      const byOpenAgentCount = new Map<string, number>();
 
       const agentAgg = new Map<
         string,
@@ -482,12 +490,12 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         bump(byStatus, r.status);
         bump(byServiceType, r.service_type);
         bump(bySource, r.complaint_source);
-        byAgentCount.set(
-          r.assigned_agent ?? '',
-          (byAgentCount.get(r.assigned_agent ?? '') ?? 0) + 1,
-        );
-
         const agentId = r.assigned_agent ?? '';
+        byAgentCount.set(agentId, (byAgentCount.get(agentId) ?? 0) + 1);
+        if (!CLOSED_STATUSES.has(r.status)) {
+          byOpenAgentCount.set(agentId, (byOpenAgentCount.get(agentId) ?? 0) + 1);
+        }
+
         const a = agentAgg.get(agentId) ?? { logged: 0, solved: 0, open: 0, hours: [], money: 0 };
         a.logged += 1;
         a.money += money;
@@ -612,7 +620,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         );
 
       const agentLabels = new Map(
-        Array.from(byAgentCount.keys()).map((id) => [id, nameOf(id)] as const),
+        [...byAgentCount.keys(), ...byOpenAgentCount.keys()].map((id) => [id, nameOf(id)] as const),
       );
 
       return {
@@ -638,6 +646,9 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         byServiceType: topN(byServiceType, 6),
         bySource: topN(bySource, 6),
         byAgent: topN(byAgentCount, 10, agentLabels),
+        // No cap: a supervisor chasing unfinished work must see everyone
+        // holding some, not the worst ten.
+        byOpenAgent: topN(byOpenAgentCount, Number.MAX_SAFE_INTEGER, agentLabels),
         agents,
         chatAgents,
         health: {
