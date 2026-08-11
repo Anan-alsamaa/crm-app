@@ -24,9 +24,11 @@ function deps(over: {
 }) {
   const assign = vi.fn().mockResolvedValue(undefined);
   const schedule = vi.fn().mockResolvedValue(undefined);
+  const recordOutcome = vi.fn().mockResolvedValue(undefined);
   return {
     assign,
     schedule,
+    recordOutcome,
     d: {
       redis: fakeRedis(over.online ?? []),
       directus: {
@@ -39,6 +41,7 @@ function deps(over: {
           ),
         countOutboundMessages: vi.fn().mockResolvedValue(over.outbound ?? 0),
         assign,
+        recordOutcome,
       },
       schedule,
       log: () => undefined,
@@ -174,6 +177,49 @@ describe('auto-assignment ladder', () => {
         d,
       );
       expect(assign).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('outcome recording (the source of the miss-rate metric)', () => {
+    it('records a MISS against the agent who let the timer expire', async () => {
+      const { d, recordOutcome } = deps({
+        online: ['a1', 'a2'],
+        convo: { id: 'c1', assigned_agent: 'a1', status: 'open' },
+        outbound: 0,
+      });
+      await handleRouting(job({ stage: 'escalate', attemptedAgentIds: ['a1'] }), d);
+      expect(recordOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: 'a1', outcome: 'missed', conversationId: 'c1' }),
+      );
+    });
+
+    it('records ANSWERED when the agent replied before the timer', async () => {
+      const { d, recordOutcome } = deps({
+        online: ['a2'],
+        convo: { id: 'c1', assigned_agent: 'a1', status: 'open' },
+        outbound: 3,
+      });
+      await handleRouting(
+        job({ stage: 'escalate', attemptedAgentIds: ['a1'], outboundCountAtSchedule: 2 }),
+        d,
+      );
+      expect(recordOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: 'a1', outcome: 'answered' }),
+      );
+    });
+
+    it('attributes the miss to the agent who HELD it, not the next in line', async () => {
+      // The bug this guards: recording against the incoming agent would blame
+      // whoever picks up the escalation for the previous agent's silence.
+      const { d, recordOutcome } = deps({
+        online: ['a1', 'a2', 'a3'],
+        convo: { id: 'c1', assigned_agent: 'a2', status: 'open' },
+        outbound: 0,
+      });
+      await handleRouting(job({ stage: 'broadcast', attemptedAgentIds: ['a1', 'a2'] }), d);
+      expect(recordOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: 'a2', outcome: 'missed' }),
+      );
     });
   });
 });

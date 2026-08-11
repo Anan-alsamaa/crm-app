@@ -188,6 +188,27 @@ export function createRoutingRepo(client: YijiDirectusClient) {
       return Number(rows[0]?.count?.id ?? 0);
     },
 
+    async recordOutcome(row: {
+      conversationId: string;
+      agentId: string;
+      outcome: 'answered' | 'missed';
+      stage: string;
+      secondsHeld: number;
+    }) {
+      await client.request(
+        createItem(
+          'routing_events' as never,
+          {
+            conversation: row.conversationId,
+            agent: row.agentId,
+            outcome: row.outcome,
+            stage: row.stage,
+            seconds_held: row.secondsHeld,
+          } as never,
+        ) as never,
+      );
+    },
+
     async assign(conversationId: string, agentId: string | null) {
       await client.request(
         updateItem(

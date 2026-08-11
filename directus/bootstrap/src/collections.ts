@@ -168,6 +168,29 @@ export const collections: CollectionSpec[] = [
     ],
   },
   {
+    collection: 'routing_events',
+    note: 'APPEND-ONLY record of auto-assignment outcomes (who was offered a conversation, and whether they answered)',
+    fields: [
+      {
+        field: 'outcome',
+        type: 'string',
+        choices: ['answered', 'missed'],
+        required: true,
+      },
+      {
+        field: 'stage',
+        type: 'string',
+        choices: ['assign', 'escalate', 'broadcast'],
+        required: true,
+      },
+      /* Seconds the agent had the conversation before this outcome was decided.
+       * Stored rather than derived: the timer thresholds are configuration and
+       * will change, and a historical row must keep the answer that was true
+       * when it happened. */
+      { field: 'seconds_held', type: 'integer' },
+    ],
+  },
+  {
     collection: 'notifications',
     fields: [
       {
@@ -341,6 +364,20 @@ export const relations: RelationSpec[] = [
   { collection: 'tickets', field: 'assigned_team', related: 'teams', onDelete: 'SET NULL' },
   { collection: 'tickets', field: 'sla_policy', related: 'sla_policies', onDelete: 'SET NULL' },
   { collection: 'ticket_events', field: 'ticket', related: 'tickets', onDelete: 'CASCADE' },
+  {
+    collection: 'routing_events',
+    field: 'conversation',
+    related: 'conversations',
+    onDelete: 'CASCADE',
+  },
+  /* SET NULL, not CASCADE: a deleted agent must not erase the history of how
+   * conversations were routed while they worked here. */
+  {
+    collection: 'routing_events',
+    field: 'agent',
+    related: 'directus_users',
+    onDelete: 'SET NULL',
+  },
   { collection: 'ticket_events', field: 'actor', related: 'directus_users', onDelete: 'SET NULL' },
   {
     collection: 'notifications',

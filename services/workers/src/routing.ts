@@ -36,6 +36,19 @@ export interface RoutingDeps {
     } | null>;
     countOutboundMessages(conversationId: string): Promise<number>;
     assign(conversationId: string, agentId: string | null): Promise<void>;
+    /**
+     * Append the outcome of one offer. This is the ONLY place the system learns
+     * that an agent was given a conversation and did not answer it — the ladder
+     * silently moves on, so without a record "missed" is unmeasurable after the
+     * fact.
+     */
+    recordOutcome(row: {
+      conversationId: string;
+      agentId: string;
+      outcome: 'answered' | 'missed';
+      stage: RoutingJob['stage'];
+      secondsHeld: number;
+    }): Promise<void>;
   };
   /** Enqueue the next stage after `delayMs`. */
   schedule(job: RoutingJob, delayMs: number): Promise<void>;
@@ -91,14 +104,37 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
 
   // --- escalate / broadcast both first ask: did anyone actually reply? ---
   const outboundNow = await directus.countOutboundMessages(convo.id);
+  const held = job.stage === 'escalate' ? ROUTING_FIRST_WAIT_MS : ROUTING_SECOND_WAIT_MS;
+  const offeredTo = job.attemptedAgentIds[job.attemptedAgentIds.length - 1];
+
   if (outboundNow > job.outboundCountAtSchedule) {
+    if (offeredTo) {
+      await directus.recordOutcome({
+        conversationId: convo.id,
+        agentId: offeredTo,
+        outcome: 'answered',
+        stage: job.stage,
+        secondsHeld: Math.round(held / 1000),
+      });
+    }
     log('routing: agent replied, escalation cancelled', { id: convo.id });
     return;
   }
 
+  // Reaching here means the timer expired with no reply — a miss for whoever
+  // was holding it.
+  if (offeredTo) {
+    await directus.recordOutcome({
+      conversationId: convo.id,
+      agentId: offeredTo,
+      outcome: 'missed',
+      stage: job.stage,
+      secondsHeld: Math.round(held / 1000),
+    });
+  }
+
   // A human reassigned it to someone outside our ladder — respect that and stop.
-  const last = job.attemptedAgentIds[job.attemptedAgentIds.length - 1];
-  if (convo.assigned_agent && convo.assigned_agent !== last) {
+  if (convo.assigned_agent && convo.assigned_agent !== offeredTo) {
     log('routing: reassigned by a human, standing down', { id: convo.id });
     return;
   }
