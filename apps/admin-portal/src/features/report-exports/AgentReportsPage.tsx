@@ -26,6 +26,7 @@ import {
   useAgentReportData,
   useTicketOrders,
   type AgentKpiRow,
+  type ComplaintReportRow,
   type ConversationStatusReport,
   type SlaOutcome,
   type TicketReportRow,
@@ -33,19 +34,23 @@ import {
 import { useStoreIndex } from '../restaurants/api.js';
 import {
   buildAgentKpiSheets,
+  buildComplaintsSheets,
   buildConversationSheets,
   buildTicketsSheets,
+  COMPLAINT_COLUMN_KEYS,
+  COMPLAINT_COLUMN_LABELS,
   fmtDateTime,
   reportFilename,
   TICKET_COLUMN_KEYS,
   TICKET_COLUMN_LABELS,
+  type ComplaintColumnKey,
   type TicketColumnKey,
   type Translate,
 } from './export.js';
 import { downloadWorkbook } from './xlsx.js';
 
-/** Which of the three exportable reports this page instance renders. */
-export type ReportKind = 'tickets' | 'agents' | 'conversations';
+/** Which of the four exportable reports this page instance renders. */
+export type ReportKind = 'tickets' | 'agents' | 'conversations' | 'complaints';
 const RANGE_DAYS = [7, 30, 90] as const;
 
 const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructive'> = {
@@ -521,6 +526,237 @@ function TicketsReport({
   );
 }
 
+/* ── Report 4: Complaints (the operations manager's own report) ───────── */
+
+/**
+ * The complaints report as operations already keep it by hand — same columns,
+ * same order, same headings — produced from CRM data instead.
+ *
+ * The store columns (chain, area, brand, city, restaurant) are joined here
+ * rather than in `api.ts` because this is where the store index lives. Unlike
+ * the Tickets report this needs no live order lookup: everything it reports
+ * comes from the ticket and its stored order snapshot, so a row keeps
+ * reporting the same values however the upstream order later changes.
+ */
+function ComplaintsReport({
+  rows,
+  tr,
+  days,
+}: {
+  rows: ComplaintReportRow[];
+  tr: Translate;
+  days: number;
+}) {
+  const { t } = useTranslation();
+  const [cols, setCols] = useState<Set<ComplaintColumnKey>>(() => new Set(COMPLAINT_COLUMN_KEYS));
+  const [showCols, setShowCols] = useState(false);
+  const { index: storeIndex } = useStoreIndex();
+
+  const joined = useMemo<ComplaintReportRow[]>(
+    () =>
+      rows.map((r) => {
+        if (!r.restaurantName && !r.brand) return r;
+        const m = matchStore(storeIndex, {
+          restaurantName: r.restaurantName,
+          brandName: r.brand,
+        });
+        return {
+          ...r,
+          chain: m.chainManager,
+          area: m.areaManager,
+          brand: m.brandName,
+          city: m.city,
+          // Once matched, report the branch as the OPERATIONS master names it —
+          // that is the spelling her sheet uses.
+          restaurantName: m.restaurantName || r.restaurantName,
+          storeMapped: !isUnmappedStore(m),
+        };
+      }),
+    [rows, storeIndex],
+  );
+
+  /** Rows whose store could not be resolved — a count worth seeing, because
+   *  each one is a store someone must add in Restaurants → Stores. */
+  const unmapped = useMemo(
+    () => joined.filter((r) => (r.restaurantName || r.brand) && !r.storeMapped).length,
+    [joined],
+  );
+
+  const onExport = () => {
+    if (joined.length === 0) {
+      toast.error(t('agentReports.nothingToExport', { defaultValue: 'Nothing to export.' }));
+      return;
+    }
+    const chosen = COMPLAINT_COLUMN_KEYS.filter((k) => cols.has(k));
+    downloadWorkbook(
+      reportFilename('reports-complaints', days),
+      buildComplaintsSheets(joined, tr, chosen),
+    );
+    toast.success(
+      t('agentReports.exported', {
+        count: joined.length,
+        defaultValue: 'Exported {{count}} rows.',
+      }),
+    );
+  };
+
+  const toggleCol = (k: ComplaintColumnKey) =>
+    setCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) {
+        if (next.size > 1) next.delete(k); // keep at least one column
+      } else {
+        next.add(k);
+      }
+      return next;
+    });
+
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(joined.length / PAGE_SIZE));
+  const current = Math.min(page, pageCount);
+  const pageRows = joined.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        {unmapped > 0 && (
+          <Pill tone="warning" size="sm">
+            {t('complaintReport.unmappedStores', {
+              count: unmapped,
+              defaultValue: '{{count}} rows with an unmapped store',
+            })}
+          </Pill>
+        )}
+        <div className="relative ms-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowCols((v) => !v)}
+            aria-expanded={showCols}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors duration-fast hover:bg-secondary hover:text-foreground"
+          >
+            {t('agentReports.columns', { defaultValue: 'Columns' })}
+            <span className="tabular-nums opacity-70">
+              {cols.size}/{COMPLAINT_COLUMN_KEYS.length}
+            </span>
+          </button>
+          {showCols && (
+            <>
+              <button
+                type="button"
+                aria-hidden
+                tabIndex={-1}
+                className="fixed inset-0 z-30 cursor-default"
+                onClick={() => setShowCols(false)}
+              />
+              <div className="absolute end-0 top-9 z-40 max-h-80 w-64 overflow-auto rounded-xl bg-card p-2 shadow-float ring-1 ring-foreground/10">
+                <div className="flex items-center justify-between px-1.5 pb-1.5">
+                  <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                    {t('agentReports.exportColumns', { defaultValue: 'Export columns' })}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-2xs font-medium text-primary hover:underline"
+                    onClick={() => setCols(new Set(COMPLAINT_COLUMN_KEYS))}
+                  >
+                    {t('agentReports.selectAll', { defaultValue: 'All' })}
+                  </button>
+                </div>
+                <ul className="space-y-0.5">
+                  {COMPLAINT_COLUMN_KEYS.map((k) => (
+                    <li key={k}>
+                      <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-xs text-foreground hover:bg-secondary/60">
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary/60"
+                          checked={cols.has(k)}
+                          onChange={() => toggleCol(k)}
+                        />
+                        {t(COMPLAINT_COLUMN_LABELS[k].key, {
+                          defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
+                        })}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </>
+          )}
+          <Button size="sm" onClick={onExport}>
+            {t('agentReports.exportExcel', { defaultValue: 'Export to Excel' })}
+          </Button>
+        </div>
+      </div>
+
+      {/* On-screen preview carries the columns you can read at a glance; the
+          export carries all 24. Showing 24 columns here would need a horizontal
+          scroll that makes none of them readable. */}
+      <TableSurface>
+        <Table>
+          <thead>
+            <tr>
+              <Th>{tr('complaintReport.col.date', { defaultValue: 'Date' })}</Th>
+              <Th>{tr('complaintReport.col.time', { defaultValue: 'Time' })}</Th>
+              <Th>
+                {tr('complaintReport.col.restaurantName', { defaultValue: 'Restaurant name' })}
+              </Th>
+              <Th>{tr('complaintReport.col.city', { defaultValue: 'City' })}</Th>
+              <Th>{tr('complaintReport.col.complaintType', { defaultValue: 'Complaint type' })}</Th>
+              <Th>{tr('complaintReport.col.serviceType', { defaultValue: 'Service type' })}</Th>
+              <Th>{tr('complaintReport.col.agent', { defaultValue: 'Agent' })}</Th>
+              <Th>{tr('complaintReport.col.compensation', { defaultValue: 'Compensation' })}</Th>
+              <Th>
+                {tr('complaintReport.col.complaintStatus', { defaultValue: 'Complaint status' })}
+              </Th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.map((r) => (
+              <Tr key={r.id}>
+                <Td className="tabular-nums">{r.date || '—'}</Td>
+                <Td className="tabular-nums text-muted-foreground">{r.time || '—'}</Td>
+                <Td className="max-w-[14rem] truncate" title={r.restaurantName}>
+                  {r.restaurantName || '—'}
+                </Td>
+                {/* A store that did not resolve says so, rather than showing a
+                    blank city that reads as "this complaint had no branch". */}
+                {r.restaurantName || r.brand ? (
+                  r.storeMapped ? (
+                    <Td className="text-muted-foreground">{r.city || '—'}</Td>
+                  ) : (
+                    <Td>
+                      <Pill tone="warning" size="sm">
+                        {t('agentReports.notMapped', { defaultValue: 'Not mapped' })}
+                      </Pill>
+                    </Td>
+                  )
+                ) : (
+                  <Td className="text-muted-foreground">—</Td>
+                )}
+                <Td className="text-muted-foreground">{r.complaintType || '—'}</Td>
+                <Td className="text-muted-foreground">{r.serviceType || '—'}</Td>
+                <Td className="text-muted-foreground">{r.agent}</Td>
+                <Td className="text-muted-foreground">{r.compensation || '—'}</Td>
+                <Td>
+                  <StatusPill value={r.complaintStatus} />
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </Table>
+      </TableSurface>
+
+      <PreviewNote shown={pageRows.length} total={joined.length} />
+      <Pagination
+        page={current}
+        pageCount={pageCount}
+        onPage={setPage}
+        prevLabel={t('agentReports.prev', { defaultValue: 'Previous' })}
+        nextLabel={t('agentReports.next', { defaultValue: 'Next' })}
+      />
+    </div>
+  );
+}
+
 /* ── Report 2: Agent KPI ──────────────────────────────────────────────── */
 
 function AgentKpiReport({
@@ -772,6 +1008,13 @@ const META: Record<
     subKey: 'agentReports.conversationsSubtitle',
     subDefault: 'Conversations by status, priority and day — export to Excel.',
   },
+  complaints: {
+    titleKey: 'complaintReport.title',
+    titleDefault: 'Complaints',
+    subKey: 'complaintReport.subtitle',
+    subDefault:
+      'The operations complaints report — same columns as the sheet operations keep by hand, joined to the store master. Export to Excel.',
+  },
 };
 
 export function AgentReportsPage({ report: which }: { report: ReportKind }) {
@@ -790,7 +1033,9 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
       ? !!data && data.tickets.length === 0
       : which === 'agents'
         ? !!data && data.agents.length === 0
-        : !!data && data.conversations.total === 0;
+        : which === 'complaints'
+          ? !!data && data.complaints.length === 0
+          : !!data && data.conversations.total === 0;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -901,6 +1146,23 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
               {which === 'conversations' && (
                 <ConversationReport report={data.conversations} tr={tr} days={days} />
               )}
+              {which === 'complaints' &&
+                (data.complaintFieldsAvailable ? (
+                  <ComplaintsReport rows={data.complaints} tr={tr} days={days} />
+                ) : (
+                  /* Better than 24 blank columns: this Directus simply has not
+                     had the complaint schema applied yet, which is an operator
+                     action, not a data problem. */
+                  <EmptyState
+                    title={t('complaintReport.noSchema', {
+                      defaultValue: 'Complaint fields are not available here',
+                    })}
+                    description={t('complaintReport.noSchemaHint', {
+                      defaultValue:
+                        'This Directus does not yet have the complaint fields. Apply the Directus bootstrap, then reload.',
+                    })}
+                  />
+                ))}
 
               <p className="pt-1 text-2xs text-muted-foreground">
                 {t('agentReports.generatedAt', {

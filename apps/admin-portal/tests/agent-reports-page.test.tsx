@@ -27,6 +27,14 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/report-exports/api.js', () => api);
 
+/**
+ * The store master the Complaints report joins against. A REAL index (not a
+ * stub) so the join under test is the one that ships — including the
+ * `store_code` tier that rescues a branch whose name drifted.
+ */
+const storesApi = vi.hoisted(() => ({ useStoreIndex: vi.fn() }));
+vi.mock('../src/features/restaurants/api.js', () => storesApi);
+
 // export.ts / xlsx.ts stay REAL: clicking "Export to Excel" must actually build
 // a workbook, which is the behaviour worth asserting.
 import {
@@ -34,6 +42,7 @@ import {
   type ReportKind,
 } from '../src/features/report-exports/AgentReportsPage.js';
 import { TICKET_COLUMN_KEYS } from '../src/features/report-exports/export.js';
+import { buildStoreIndex } from '@yiji/shared-types';
 
 function renderPage(which: ReportKind = 'tickets') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -178,8 +187,74 @@ const conversations = {
   total: 31,
 };
 
+/**
+ * Complaint rows as `api.ts` hands them over: store columns still blank, the
+ * branch name straight off the stored order snapshot. The page does the join.
+ */
+const complaints = [
+  {
+    id: 'k1',
+    date: '2026-03-14',
+    time: '19:11',
+    chain: '',
+    area: '',
+    brand: 'Casa Pasta',
+    city: '',
+    // The master spells this "LCP-006 Panorama Mall RYD" — only the code tier
+    // resolves it. Real case from the operations complaints history.
+    restaurantName: 'LCP-006 Panorama Mall',
+    storeMapped: false,
+    serviceType: 'Delivery',
+    complaintType: 'Missing item',
+    customerName: '',
+    customerMobile: '0500000000',
+    complaintDescription: 'One pasta missing',
+    responseDesc: 'Apologised, coupon issued',
+    complaintSource: 'WeCare Channels',
+    orderAmount: 102.85,
+    orderNumber: '946641',
+    communicationMethod: 'Comp. WhatsApp',
+    couponCode: 'OPS - 46',
+    couponValue: 25,
+    couponPercent: null,
+    complaintStatus: 'closed',
+    agent: 'Amjad',
+    compensation: 'Compensated',
+  },
+  {
+    id: 'k2',
+    date: '2026-03-15',
+    time: '09:02',
+    chain: '',
+    area: '',
+    brand: 'Chick N Dip',
+    city: '',
+    // No such store in the master — must stay visibly unmapped.
+    restaurantName: 'CND-009 Nakhil Mall',
+    storeMapped: false,
+    serviceType: 'Pickup',
+    complaintType: 'Accuracy',
+    customerName: '',
+    customerMobile: '0511111111',
+    complaintDescription: 'Wrong item',
+    responseDesc: '',
+    complaintSource: 'Comp. WhatsApp',
+    orderAmount: null,
+    orderNumber: '',
+    communicationMethod: 'Comp. WhatsApp',
+    couponCode: '',
+    couponValue: null,
+    couponPercent: null,
+    complaintStatus: 'open',
+    agent: 'Ali',
+    compensation: 'Not Compensated',
+  },
+];
+
 const data = {
   tickets,
+  complaints,
+  complaintFieldsAvailable: true,
   agents,
   conversations,
   csatOverall: { avg: 4.25, count: 8 },
@@ -188,10 +263,29 @@ const data = {
 
 const ok = { isLoading: false, isError: false, data };
 
+const PANORAMA = {
+  id: 's1',
+  code: 'LCP-006',
+  name: 'Panorama Mall RYD',
+  city: 'Riyadh',
+  areaManager: "Mo'men Elsharkasy",
+  chainManager: 'Medhat Sayed',
+  brandCode: 'LCP',
+  brandName: 'Casa Pasta',
+  brandYijiName: 'La Casa Pasta',
+  yijiRestaurantId: null,
+};
+
 beforeEach(() => {
   api.useAgentReportData.mockReset();
   api.useTicketOrders.mockReset();
   api.useTicketOrders.mockReturnValue({ data: undefined, isFetching: false });
+  storesApi.useStoreIndex.mockReset();
+  storesApi.useStoreIndex.mockReturnValue({
+    index: buildStoreIndex([PANORAMA]),
+    isLoading: false,
+    count: 1,
+  });
   if (!Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = vi.fn();
   }
@@ -448,5 +542,71 @@ describe('AgentReportsPage — conversation status report', () => {
     });
     renderPage('conversations');
     expect(screen.queryByText(/Showing the last/)).not.toBeInTheDocument();
+  });
+});
+
+describe('AgentReportsPage — complaints report', () => {
+  it("renders the operations manager's report under her own heading", () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    renderPage('complaints');
+    expect(screen.getAllByText('Complaints').length).toBeGreaterThan(0);
+    expect(screen.getByText('2026-03-14')).toBeInTheDocument();
+    expect(screen.getByText('19:11')).toBeInTheDocument();
+  });
+
+  it('resolves a branch whose name drifted, via its store code', () => {
+    // The snapshot says "LCP-006 Panorama Mall"; the master says
+    // "LCP-006 Panorama Mall RYD". Both name tiers miss, the code tier does
+    // not — and the row must show the master's city, not "Not mapped".
+    api.useAgentReportData.mockReturnValue(ok);
+    const { container } = renderPage('complaints');
+    const firstRow = container.querySelectorAll('tbody tr')[0]!;
+    expect(within(firstRow as HTMLElement).getByText('LCP-006 Panorama Mall RYD')).toBeTruthy();
+    expect(within(firstRow as HTMLElement).getByText('Riyadh')).toBeTruthy();
+  });
+
+  it('shows a store that is genuinely missing as "Not mapped", never blank', () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    const { container } = renderPage('complaints');
+    const secondRow = container.querySelectorAll('tbody tr')[1]! as HTMLElement;
+    // The branch name survives — it is what someone needs in order to add it.
+    expect(within(secondRow).getByText('CND-009 Nakhil Mall')).toBeTruthy();
+    expect(within(secondRow).getByText('Not mapped')).toBeTruthy();
+  });
+
+  it('counts the unmapped rows so the gap is visible without reading the table', () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    renderPage('complaints');
+    expect(screen.getByText('1 rows with an unmapped store')).toBeInTheDocument();
+  });
+
+  it('exports a complaints workbook', async () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    const dl = captureDownloads();
+    renderPage('complaints');
+
+    await userEvent.click(screen.getByText('Export to Excel'));
+    expect(dl.blobs).toHaveLength(1);
+    expect(dl.names[0]).toMatch(/^reports-complaints-30d-\d{4}-\d{2}-\d{2}\.xlsx$/);
+    dl.restore();
+  });
+
+  it('offers all 24 of her columns in the picker', async () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    renderPage('complaints');
+    expect(screen.getByText('24/24')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('Columns'));
+    expect(screen.getByLabelText('Customer mobile')).toBeInTheDocument();
+    expect(screen.getByLabelText('Restaurant manager ID')).toBeInTheDocument();
+  });
+
+  it('says the schema is missing rather than rendering 24 blank columns', () => {
+    api.useAgentReportData.mockReturnValue({
+      ...ok,
+      data: { ...data, complaintFieldsAvailable: false },
+    });
+    renderPage('complaints');
+    expect(screen.getByText('Complaint fields are not available here')).toBeInTheDocument();
+    expect(screen.queryByText('Export to Excel')).not.toBeInTheDocument();
   });
 });

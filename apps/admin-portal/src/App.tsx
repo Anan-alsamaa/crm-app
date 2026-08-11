@@ -262,6 +262,11 @@ function Shell({ children }: { children: React.ReactNode }) {
           icon: ClockIcon,
         },
         {
+          to: '/report-complaints',
+          label: t('nav.reportComplaints', { defaultValue: 'Complaints' }),
+          icon: DownloadIcon,
+        },
+        {
           to: '/report-tickets',
           label: t('nav.reportTickets', { defaultValue: 'Tickets' }),
           icon: DownloadIcon,
@@ -536,6 +541,16 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <ReportsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/report-complaints"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <ReportExportsPage report="complaints" />
                 </Shell>
               </ProtectedRoute>
             }

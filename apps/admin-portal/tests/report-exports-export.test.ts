@@ -1,17 +1,22 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type {
   AgentKpiRow,
+  ComplaintReportRow,
   ConversationStatusReport,
   TicketReportRow,
 } from '../src/features/report-exports/api.js';
 import {
   buildAgentKpiSheets,
+  buildComplaintsSheets,
   buildConversationSheets,
   buildTicketsSheets,
+  COMPLAINT_COLUMN_KEYS,
+  COMPLAINT_COLUMN_LABELS,
   fmtDateTime,
   reportFilename,
   TICKET_COLUMN_KEYS,
   TICKET_COLUMN_LABELS,
+  type ComplaintColumnKey,
   type TicketColumnKey,
 } from '../src/features/report-exports/export.js';
 
@@ -374,6 +379,146 @@ describe('fmtDateTime', () => {
 
   it('returns a blank cell for an unparseable string rather than "Invalid Date"', () => {
     expect(fmtDateTime('not-a-timestamp')).toBe('');
+  });
+});
+
+describe('buildComplaintsSheets', () => {
+  /** A row shaped like the operations sheet's own rows, store already joined. */
+  function complaint(over: Partial<ComplaintReportRow> = {}): ComplaintReportRow {
+    return {
+      id: 'c1',
+      date: '2026-03-14',
+      time: '19:11',
+      chain: 'Medhat Sayed',
+      area: "Mo'men Elsharkasy",
+      brand: 'Casa Pasta',
+      city: 'Riyadh',
+      restaurantName: 'LCP-006 Panorama Mall RYD',
+      storeMapped: true,
+      serviceType: 'Delivery',
+      complaintType: 'Missing item',
+      customerName: '',
+      customerMobile: '0500000000',
+      complaintDescription: 'One pasta missing from the order',
+      responseDesc: 'Apologised and issued a coupon',
+      complaintSource: 'WeCare Channels',
+      orderAmount: 102.85,
+      orderNumber: '946641',
+      communicationMethod: 'Comp. WhatsApp',
+      couponCode: 'OPS - 46',
+      couponValue: 25,
+      couponPercent: null,
+      complaintStatus: 'closed',
+      agent: 'Amjad',
+      compensation: 'Compensated',
+      ...over,
+    };
+  }
+
+  it("emits the operations sheet's 24 columns, in her order", () => {
+    const [sheet] = buildComplaintsSheets([complaint()], makeT());
+    expect(sheet!.columns).toHaveLength(24);
+    expect(headers(sheet!.columns).slice(0, 9)).toEqual([
+      'Date',
+      'Time',
+      'Chain',
+      'Area',
+      'Brand',
+      'City',
+      'Restaurant name',
+      'Service type',
+      'Complaint type',
+    ]);
+    expect(headers(sheet!.columns).slice(-4)).toEqual([
+      'Complaint status',
+      'Restaurant manager ID',
+      'Agent',
+      'Compensation',
+    ]);
+  });
+
+  it('keeps date and time in separate cells, as the sheet does', () => {
+    const [sheet] = buildComplaintsSheets([complaint()], makeT());
+    expect(sheet!.rows[0]![0]).toBe('2026-03-14');
+    expect(sheet!.rows[0]![1]).toBe('19:11');
+  });
+
+  it('routes the status through the shared common namespace', () => {
+    const [sheet] = buildComplaintsSheets([complaint()], makeT());
+    // index 20 = complaintStatus
+    expect(sheet!.rows[0]![20]).toBe('Closed');
+  });
+
+  it('exports the mobile as text so Excel cannot eat a leading zero', () => {
+    const [sheet] = buildComplaintsSheets([complaint({ customerMobile: '0500000000' })], makeT());
+    expect(sheet!.rows[0]![10]).toBe('0500000000');
+    expect(typeof sheet!.rows[0]![10]).toBe('string');
+  });
+
+  it('exports amounts and coupon values as numbers Excel can sum', () => {
+    const [sheet] = buildComplaintsSheets([complaint()], makeT());
+    expect(sheet!.rows[0]![14]).toBe(102.85); // order amount
+    expect(sheet!.rows[0]![18]).toBe(25); // coupon value
+    expect(sheet!.rows[0]![19]).toBe(''); // coupon percent — absent, not 0
+  });
+
+  it('says "Not mapped" rather than leaving the store columns blank', () => {
+    // A blank city reads as "this complaint had no branch"; the point of the
+    // column is to make the gap in Restaurants → Stores visible.
+    const [sheet] = buildComplaintsSheets(
+      [complaint({ storeMapped: false, chain: '', area: '', brand: '', city: '' })],
+      makeT(),
+    );
+    expect(sheet!.rows[0]!.slice(2, 6)).toEqual([
+      'Not mapped',
+      'Not mapped',
+      'Not mapped',
+      'Not mapped',
+    ]);
+    // The branch name itself survives — it is what someone needs to FIX it.
+    expect(sheet!.rows[0]![6]).toBe('LCP-006 Panorama Mall RYD');
+  });
+
+  it('leaves the store columns blank when there was no restaurant at all', () => {
+    // Distinct from "Not mapped": there is nothing to map in the first place.
+    const [sheet] = buildComplaintsSheets(
+      [complaint({ restaurantName: '', brand: '', city: '', chain: '', area: '' })],
+      makeT(),
+    );
+    expect(sheet!.rows[0]!.slice(2, 7)).toEqual(['', '', '', '', '']);
+  });
+
+  it('keeps the unsourced Restaurant manager ID column, always blank', () => {
+    const [sheet] = buildComplaintsSheets([complaint()], makeT());
+    expect(sheet!.rows[0]![21]).toBe('');
+  });
+
+  it('honours the column picker, in the order the caller asked for', () => {
+    // Same contract as buildTicketsSheets: the builder preserves the caller's
+    // order. The page passes COMPLAINT_COLUMN_KEYS.filter(...), so the sheet
+    // comes out in the manager's order — see the next test.
+    const chosen: ComplaintColumnKey[] = ['agent', 'date', 'complaintType'];
+    const [sheet] = buildComplaintsSheets([complaint()], makeT(), chosen);
+    expect(headers(sheet!.columns)).toEqual(['Agent', 'Date', 'Complaint type']);
+    expect(sheet!.rows[0]).toEqual(['Amjad', '2026-03-14', 'Missing item']);
+  });
+
+  it("keeps the manager's order when the page filters the canonical list", () => {
+    const picked = new Set<ComplaintColumnKey>(['agent', 'date', 'complaintType']);
+    const chosen = COMPLAINT_COLUMN_KEYS.filter((k) => picked.has(k));
+    const [sheet] = buildComplaintsSheets([complaint()], makeT(), chosen);
+    expect(headers(sheet!.columns)).toEqual(['Date', 'Complaint type', 'Agent']);
+  });
+
+  it('falls back to every column when the picker is empty', () => {
+    const [sheet] = buildComplaintsSheets([complaint()], makeT(), []);
+    expect(sheet!.columns).toHaveLength(COMPLAINT_COLUMN_KEYS.length);
+  });
+
+  it('has a label for every column key', () => {
+    for (const k of COMPLAINT_COLUMN_KEYS) {
+      expect(COMPLAINT_COLUMN_LABELS[k]?.def).toBeTruthy();
+    }
   });
 });
 
