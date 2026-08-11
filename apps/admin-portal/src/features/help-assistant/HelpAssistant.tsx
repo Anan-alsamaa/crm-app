@@ -221,6 +221,59 @@ export function HelpAssistant(): JSX.Element {
           defaultValue:
             'Ask how something works in this CRM. Follow-up questions keep their context; the chat is cleared when you close this panel and nothing is saved.',
         })}
+        // The composer belongs in the STICKY footer, not the scrolling body:
+        // trailing the last reply meant it drifted off-screen exactly when the
+        // conversation got long enough to want another question.
+        footer={
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit();
+            }}
+            className="w-full space-y-3"
+          >
+            <FormField
+              label={t('helpAssistant.label', { defaultValue: 'Your question' })}
+              htmlFor="help-assistant-question"
+            >
+              <Textarea
+                id="help-assistant-question"
+                rows={3}
+                maxLength={MAX_LENGTH}
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  // Chat convention: Enter sends, Shift+Enter newlines.
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submit();
+                  }
+                }}
+                placeholder={t('helpAssistant.placeholder', {
+                  defaultValue: 'How do I add an agent to a team?',
+                })}
+              />
+            </FormField>
+
+            <div className="flex items-center justify-between gap-3">
+              <span
+                aria-live="polite"
+                className="text-2xs tabular-nums text-muted-foreground"
+                data-testid="help-assistant-counter"
+              >
+                {/* `chars`, not `count` — `count` is i18next's plural selector. */}
+                {t('helpAssistant.counter', {
+                  defaultValue: '{{chars}}/{{max}}',
+                  chars: question.length,
+                  max: MAX_LENGTH,
+                })}
+              </span>
+              <Button type="submit" size="sm" disabled={!canSend} loading={ask.isPending}>
+                {t('helpAssistant.send', { defaultValue: 'Ask' })}
+              </Button>
+            </div>
+          </form>
+        }
       >
         {/* Transcript — this session only, cleared when the panel closes. */}
         <div className="space-y-3" aria-live="polite">
@@ -303,55 +356,6 @@ export function HelpAssistant(): JSX.Element {
           {/* Scroll anchor — the Drawer body is the scroller, not this div. */}
           <div ref={feedRef} />
         </div>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-          className="space-y-3"
-        >
-          <FormField
-            label={t('helpAssistant.label', { defaultValue: 'Your question' })}
-            htmlFor="help-assistant-question"
-          >
-            <Textarea
-              id="help-assistant-question"
-              rows={3}
-              maxLength={MAX_LENGTH}
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                // Chat convention: Enter sends, Shift+Enter newlines.
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  submit();
-                }
-              }}
-              placeholder={t('helpAssistant.placeholder', {
-                defaultValue: 'How do I add an agent to a team?',
-              })}
-            />
-          </FormField>
-
-          <div className="flex items-center justify-between gap-3">
-            <span
-              aria-live="polite"
-              className="text-2xs tabular-nums text-muted-foreground"
-              data-testid="help-assistant-counter"
-            >
-              {/* `chars`, not `count` — `count` is i18next's plural selector. */}
-              {t('helpAssistant.counter', {
-                defaultValue: '{{chars}}/{{max}}',
-                chars: question.length,
-                max: MAX_LENGTH,
-              })}
-            </span>
-            <Button type="submit" size="sm" disabled={!canSend} loading={ask.isPending}>
-              {t('helpAssistant.send', { defaultValue: 'Ask' })}
-            </Button>
-          </div>
-        </form>
       </Drawer>
     </>
   );
