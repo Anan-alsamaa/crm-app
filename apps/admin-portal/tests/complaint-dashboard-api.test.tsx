@@ -13,6 +13,7 @@ vi.mock('../src/lib/directus.js', () => ({ directus: { request } }));
 vi.mock('@directus/sdk', () => ({
   readItems: (collection: string, opts: unknown) => ({ collection, opts }),
   readUsers: (opts: unknown) => ({ collection: 'directus_users', opts }),
+  aggregate: (collection: string, opts: unknown) => ({ collection, opts, aggregate: true }),
 }));
 
 import {
@@ -39,8 +40,8 @@ beforeEach(() => {
 });
 
 /**
- * Queue the five directus.request calls IN ORDER:
- * tickets, stores, users, csat, conversations.
+ * Queue the seven directus.request calls IN ORDER:
+ * tickets, stores, users, csat, conversations, routing_events, message counts.
  * They are a positional Promise.all — adding a query to the hook without adding
  * it here silently shifts every later mock onto the wrong result.
  */
@@ -50,13 +51,17 @@ function mockData(opts: {
   users?: unknown[];
   csat?: unknown[];
   conversations?: unknown[];
+  routing?: unknown[];
+  messages?: unknown[];
 }) {
   request
     .mockResolvedValueOnce(opts.tickets ?? [])
     .mockResolvedValueOnce(opts.stores ?? [])
     .mockResolvedValueOnce(opts.users ?? [])
     .mockResolvedValueOnce(opts.csat ?? [])
-    .mockResolvedValueOnce(opts.conversations ?? []);
+    .mockResolvedValueOnce(opts.conversations ?? [])
+    .mockResolvedValueOnce(opts.routing ?? [])
+    .mockResolvedValueOnce(opts.messages ?? []);
 }
 
 const STORES = [
@@ -102,6 +107,7 @@ function ticket(over: Record<string, unknown> = {}) {
     complaint_source: 'Comp. WhatsApp',
     compensation: 'Compensated',
     coupon_value: 10,
+    contact: { phone: '0551141059' },
     order_snapshot: null,
     ...over,
   };
@@ -357,5 +363,184 @@ describe('complaint dashboard — breakdowns', () => {
     ]);
     expect(d.brandOptions.map((b) => b.name)).toEqual(['Casa Pasta', 'Pasketti']);
     expect(d.cityOptions).toEqual(['Dammam', 'Khobar']);
+  });
+});
+
+describe('complaint dashboard — the dimensions his dashboard slices by', () => {
+  it('breaks down by area manager and by agent', async () => {
+    mockData({
+      tickets: [
+        ticket({ store: 'st1', assigned_agent: 'u1' }),
+        ticket({ store: 'st1', assigned_agent: null }),
+        ticket({ store: 'st2', assigned_agent: 'u1' }),
+      ],
+      stores: STORES,
+      users: USERS,
+    });
+    const d = await run();
+    // st2 has no area manager, so only st1's two complaints carry an area.
+    expect(d.byArea).toEqual([{ key: 'Aly', label: 'Aly', count: 2 }]);
+    expect(d.byAgent.map((r) => [r.label, r.count])).toEqual([
+      ['Amjad', 2],
+      ['Unassigned', 1],
+    ]);
+  });
+
+  it('filters by area manager', async () => {
+    mockData({
+      tickets: [ticket({ store: 'st1' }), ticket({ store: 'st2' })],
+      stores: STORES,
+      users: USERS,
+    });
+    expect((await run({ ...emptyComplaintFilters, area: 'Aly' })).total).toBe(1);
+  });
+
+  it('matches a partial customer mobile the way his filter does', async () => {
+    const tickets = [
+      ticket({ contact: { phone: '0551141059' } }),
+      ticket({ contact: { phone: '0509876543' } }),
+      ticket({ contact: null }),
+    ];
+    mockData({ tickets, stores: STORES, users: USERS });
+    // "41059" is a fragment in the middle of the first number.
+    expect((await run({ ...emptyComplaintFilters, phone: '41059' })).total).toBe(1);
+
+    mockData({ tickets, stores: STORES, users: USERS });
+    // Formatting must not defeat the match — digits are compared, not strings.
+    expect((await run({ ...emptyComplaintFilters, phone: '055 114' })).total).toBe(1);
+  });
+
+  it('offers area options from the store master', async () => {
+    mockData({ tickets: [], stores: STORES, users: USERS });
+    const d = await run();
+    expect(d.areaOptions).toEqual(['Aly']);
+  });
+});
+
+describe('complaint dashboard — chat performance', () => {
+  const CONVERSATIONS = [
+    { id: 'c1', status: 'open', assigned_agent: 'u1' },
+    { id: 'c2', status: 'closed', assigned_agent: 'u1' },
+    { id: 'c3', status: 'open', assigned_agent: null },
+  ];
+
+  it('reports offered / answered / timed-out and the average wait per agent', async () => {
+    mockData({
+      tickets: [],
+      stores: STORES,
+      users: USERS,
+      conversations: CONVERSATIONS,
+      routing: [
+        { id: 'r1', agent: 'u1', outcome: 'answered', seconds_held: 60 },
+        { id: 'r2', agent: 'u1', outcome: 'answered', seconds_held: 120 },
+        { id: 'r3', agent: 'u1', outcome: 'missed', seconds_held: 30 },
+      ],
+      messages: [{ sender_user: 'u1', count: 7 }],
+    });
+    const d = await run();
+    const a = d.chatAgents.find((x) => x.id === 'u1')!;
+    expect(a.offered).toBe(3);
+    expect(a.answered).toBe(2);
+    expect(a.missed).toBe(1);
+    // Only ANSWERED events count toward the wait — a timed-out offer says
+    // nothing about how long that agent made the customer wait.
+    expect(a.avgWaitMinutes).toBe(1.5);
+    expect(a.messages).toBe(7);
+    expect(a.chatsHandled).toBe(2);
+    expect(a.chatsSolved).toBe(1);
+  });
+
+  it('reads the alternate Directus aggregate shape for message counts', async () => {
+    mockData({
+      tickets: [],
+      stores: STORES,
+      users: USERS,
+      conversations: CONVERSATIONS,
+      messages: [{ group: { sender_user: 'u1' }, count: { '*': 12 } }],
+    });
+    const d = await run();
+    expect(d.chatAgents.find((x) => x.id === 'u1')?.messages).toBe(12);
+  });
+
+  it('survives an aggregate the server refuses rather than blanking the page', async () => {
+    request
+      .mockResolvedValueOnce([]) // tickets
+      .mockResolvedValueOnce(STORES)
+      .mockResolvedValueOnce(USERS)
+      .mockResolvedValueOnce([]) // csat
+      .mockResolvedValueOnce(CONVERSATIONS)
+      .mockResolvedValueOnce([]) // routing
+      .mockRejectedValueOnce(new Error('forbidden')); // message aggregate
+    const d = await run();
+    expect(d.chatAgents.find((x) => x.id === 'u1')?.messages).toBe(0);
+    expect(d.chatAgents.find((x) => x.id === 'u1')?.chatsHandled).toBe(2);
+  });
+
+  it('carries each agent chat workload onto the complaints table too', async () => {
+    mockData({
+      tickets: [ticket({ assigned_agent: 'u1' })],
+      stores: STORES,
+      users: USERS,
+      conversations: CONVERSATIONS,
+    });
+    const d = await run();
+    const a = d.agents.find((x) => x.id === 'u1')!;
+    expect(a.chatsOpen).toBe(1);
+    expect(a.chatsSolved).toBe(1);
+  });
+});
+
+describe('complaint dashboard — service health composition', () => {
+  it('splits the range into satisfied / unsatisfied / unrated / open / overdue', async () => {
+    mockData({
+      tickets: [
+        ticket({ status: 'closed', conversation: 'c1' }),
+        ticket({ status: 'closed', conversation: 'c2' }),
+        ticket({ status: 'closed', conversation: null }),
+        ticket({ status: 'open' }),
+        ticket({
+          status: 'open',
+          first_responded_at: null,
+          first_response_due_at: iso('2026-07-14T09:00:00Z'),
+        }),
+      ],
+      stores: STORES,
+      users: USERS,
+      csat: [
+        { id: 'r1', score: 5, conversation: 'c1' },
+        { id: 'r2', score: 1, conversation: 'c2' },
+      ],
+    });
+    const d = await run();
+    expect(d.health.closedSatisfied).toBe(1);
+    expect(d.health.closedUnsatisfied).toBe(1);
+    expect(d.health.closedUnrated).toBe(1);
+    // The overdue one is NOT double-counted as plain open — the strip has to
+    // add up to the total or it is not a composition.
+    expect(d.health.openNotOverdue).toBe(1);
+    expect(d.health.overdue).toBe(1);
+    const sum =
+      d.health.closedSatisfied +
+      d.health.closedUnsatisfied +
+      d.health.closedUnrated +
+      d.health.openNotOverdue +
+      d.health.overdue;
+    expect(sum).toBe(d.total);
+  });
+
+  it('averages the customer wait across every answered conversation', async () => {
+    mockData({
+      tickets: [],
+      stores: STORES,
+      users: USERS,
+      routing: [
+        { id: 'r1', agent: 'u1', outcome: 'answered', seconds_held: 30 },
+        { id: 'r2', agent: 'u2', outcome: 'answered', seconds_held: 90 },
+        { id: 'r3', agent: 'u2', outcome: 'missed', seconds_held: 300 },
+      ],
+    });
+    const d = await run();
+    expect(d.health.chatsAnswered).toBe(2);
+    expect(d.health.avgChatWaitMinutes).toBe(1);
   });
 });
