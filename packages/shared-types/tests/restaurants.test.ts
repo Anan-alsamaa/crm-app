@@ -116,6 +116,26 @@ describe('matchStore', () => {
     expect(m.store?.id).toBe('s2');
   });
 
+  it('matches the brand by its ORDER-SYSTEM alias, not just the display name', () => {
+    // Operations call it "Casa Pasta"; Yiji sends "La Casa Pasta". Without
+    // indexing the alias this silently returns via:'none' and the ticket drops
+    // out of the brand ranking — and only for branches missing from the store
+    // list, which is precisely when the fallback is meant to help.
+    const opsWording: StoreRecord = {
+      ...LCP_MASIEF,
+      brandName: 'Casa Pasta',
+      brandYijiName: 'La Casa Pasta',
+    };
+    const idx = buildStoreIndex([opsWording]);
+    const m = matchStore(idx, {
+      restaurantName: 'Riyadh - A Branch Not In The Sheet',
+      brandName: ' La Casa Pasta',
+    });
+    expect(m.via).toBe('brand_only');
+    // Reported under the wording operations use, not Yiji's.
+    expect(m.brandName).toBe('Casa Pasta');
+  });
+
   it('falls back to brand-only when the branch is unknown', () => {
     const m = matchStore(index, {
       restaurantName: 'Riyadh - A Brand New Branch',

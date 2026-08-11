@@ -29,7 +29,7 @@ export interface Store {
   chain_manager: string | null;
   yiji_restaurant_id: string | null;
   status: 'active' | 'inactive';
-  brand: { id: string; code: string; name: string } | null;
+  brand: { id: string; code: string; name: string; yiji_brand_name?: string | null } | null;
 }
 
 const BRAND_FIELDS = ['id', 'code', 'name', 'yiji_brand_name', 'status'] as const;
@@ -45,6 +45,7 @@ const STORE_FIELDS = [
   'brand.id',
   'brand.code',
   'brand.name',
+  'brand.yiji_brand_name',
 ] as const;
 
 /* ── Brands ───────────────────────────────────────────────────────────── */
@@ -197,6 +198,7 @@ export function toStoreRecord(s: Store): StoreRecord {
     chainManager: s.chain_manager,
     brandCode: s.brand?.code ?? null,
     brandName: s.brand?.name ?? null,
+    brandYijiName: s.brand?.yiji_brand_name ?? null,
     yijiRestaurantId: s.yiji_restaurant_id,
   };
 }

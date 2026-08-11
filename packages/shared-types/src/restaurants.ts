@@ -33,8 +33,17 @@ export interface StoreRecord {
   chainManager: string | null;
   /** Brand code, e.g. "LCP". */
   brandCode: string | null;
-  /** Brand display name, e.g. "La Casa Pasta". */
+  /** Brand display name as operations call it, e.g. "Casa Pasta". */
   brandName: string | null;
+  /**
+   * What the ORDER SYSTEM calls this brand, when that differs from the display
+   * name — Yiji says "La Casa Pasta" where operations say "Casa Pasta". Without
+   * indexing this alias, renaming a brand to the operations wording silently
+   * breaks the brand-only fallback: the store-level match still works, so the
+   * failure only shows up for branches that are missing from the store list,
+   * which is exactly when the fallback was supposed to save you.
+   */
+  brandYijiName?: string | null;
   /**
    * Yiji's own restaurant id, when operations have been able to supply it.
    * Optional by necessity — the sheets do not carry it today. When present it
@@ -133,8 +142,12 @@ export function buildStoreIndex(stores: readonly StoreRecord[]): StoreIndex {
       byExactName.set(s.name.trim().toLowerCase(), s);
     const norm = normaliseRestaurantName(s.name);
     if (norm && !byNormalisedName.has(norm)) byNormalisedName.set(norm, s);
-    const brandKey = normaliseBrandName(s.brandName);
-    if (brandKey && !byBrand.has(brandKey)) byBrand.set(brandKey, s);
+    // Index the brand under BOTH what operations call it and what the order
+    // system sends, so a rename in one system cannot orphan the other.
+    for (const alias of [s.brandName, s.brandYijiName]) {
+      const brandKey = normaliseBrandName(alias);
+      if (brandKey && !byBrand.has(brandKey)) byBrand.set(brandKey, s);
+    }
   }
   return { byYijiId, byExactName, byNormalisedName, byBrand };
 }

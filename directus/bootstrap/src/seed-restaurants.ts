@@ -55,21 +55,30 @@ interface BrandSeed {
 }
 
 /**
- * Brands as they appear in the operations sheet's Brand column.
+ * Brands. `code` is the label in the operations sheet's Brand column; `name` is
+ * what the business actually calls the brand (confirmed by operations).
  *
- * `yiji_brand_name` is set only for LCP, where the live order API is known to
- * return "La Casa Pasta" (order 946641). The rest use the sheet's own label
- * until someone confirms what the order system sends for them — guessing an
- * expansion would create a mapping that looks configured but never matches.
+ * `yiji_brand_name` matters where the ORDER SYSTEM spells it differently. Yiji
+ * sends "La Casa Pasta" for what operations call "Casa Pasta" (verified on
+ * order 946641), so without the alias a ticket at an unlisted Casa Pasta branch
+ * would fall out of the brand ranking.
+ *
+ * CND Express and CND Casual are two formats of ONE brand, Chick N Dip, so both
+ * carry that name and the dashboard totals them as a single brand. The codes
+ * keep the format distinction on each store row.
+ *
+ * HD and MGA are still their sheet codes — operations named four brands and
+ * these two were not among them, and inventing an expansion would produce a
+ * mapping that looks configured and never matches.
  */
 const BRANDS: BrandSeed[] = [
-  { code: 'LCP', name: 'La Casa Pasta', yiji_brand_name: 'La Casa Pasta' },
-  { code: 'CND Express', name: 'CND Express' },
-  { code: 'CND Casual', name: 'CND Casual' },
+  { code: 'LCP', name: 'Casa Pasta', yiji_brand_name: 'La Casa Pasta' },
+  { code: 'CND Express', name: 'Chick N Dip' },
+  { code: 'CND Casual', name: 'Chick N Dip' },
+  { code: 'OKA', name: 'Okashi' },
+  { code: 'PSK', name: 'Poshak' },
   { code: 'HD', name: 'HD' },
   { code: 'MGA', name: 'MGA' },
-  { code: 'OKA', name: 'OKA' },
-  { code: 'PSK', name: 'PSK' },
 ];
 
 interface StoreSeed {
@@ -270,17 +279,27 @@ async function main() {
   const brandId = new Map(existingBrands.data.map((b) => [b.code.trim().toLowerCase(), b.id]));
 
   let brandsCreated = 0;
+  let brandsUpdated = 0;
   for (const b of wanted.values()) {
     const key = b.code.trim().toLowerCase();
-    if (brandId.has(key)) continue;
+    const body = {
+      code: b.code,
+      name: b.name,
+      yiji_brand_name: b.yiji_brand_name ?? null,
+      status: 'active',
+    };
+    const hit = brandId.get(key);
+    if (hit) {
+      // UPSERT, not create-if-absent: brand names get corrected (a code stays
+      // put while the display name changes), and a seeder that only ever
+      // inserts would leave the old wording in place with no sign of it.
+      await api(`/items/brands/${hit}`, { method: 'PATCH', body: JSON.stringify(body) });
+      brandsUpdated++;
+      continue;
+    }
     const created = await api<{ data: { id: string } }>('/items/brands', {
       method: 'POST',
-      body: JSON.stringify({
-        code: b.code,
-        name: b.name,
-        yiji_brand_name: b.yiji_brand_name ?? null,
-        status: 'active',
-      }),
+      body: JSON.stringify(body),
     });
     brandId.set(key, created.data.id);
     brandsCreated++;
@@ -317,7 +336,8 @@ async function main() {
   }
 
   console.log(
-    `Done. brands: +${brandsCreated} (${wanted.size} total) · stores: +${created} created, ${updated} updated`,
+    `Done. brands: +${brandsCreated} created, ${brandsUpdated} updated (${wanted.size} total) · ` +
+      `stores: +${created} created, ${updated} updated`,
   );
   if (!csvPath) {
     console.log(
