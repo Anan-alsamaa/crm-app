@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cn, FormField, Input, Textarea } from '@yiji/ui';
+import { cn, FormField, Input, Spinner, Textarea } from '@yiji/ui';
 import {
   CommunicationMethod,
   Compensation,
@@ -9,6 +9,7 @@ import {
   ServiceType,
 } from '@yiji/shared-types';
 import type { TicketOrderSnapshot } from './OrderSnapshotCard.js';
+import { useStores, type StoreRow } from './useStoreMatch.js';
 
 /**
  * The operations manager's "New Complaint" fields, shared by the two places a
@@ -273,6 +274,228 @@ function Combobox({
         </ul>
       )}
     </div>
+  );
+}
+
+/* ── Branch picker ─────────────────────────────────────────────────────────
+ *
+ * His restaurant field is THE locked autocomplete in his app: type a few
+ * letters, pick from the master list, and Area / City / Brand / Chain fill in
+ * from that branch's record. Same thing here, over our `stores` collection.
+ *
+ * It is a separate control from the option comboboxes above because a branch is
+ * a ROW, not a string: it is stored as an id (`tickets.store`), searched across
+ * code + name + city, and its city/managers are shown once chosen so the agent
+ * can confirm they picked the right one of several similarly-named branches.
+ */
+
+/** "LCP-002 Marina Mall 2" — how operations say a branch out loud. */
+export function storeLabel(s: StoreRow): string {
+  return [s.code, s.name].filter(Boolean).join(' ');
+}
+
+export function StorePicker({
+  value,
+  onChange,
+  /** Where a pre-filled value came from, shown so the agent knows to check it. */
+  inferredFrom,
+}: {
+  value: string;
+  onChange: (storeId: string) => void;
+  inferredFrom?: string | null;
+}) {
+  const { t } = useTranslation();
+  const stores = useStores();
+  const rows = useMemo(() => stores.data ?? [], [stores.data]);
+
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState<string | null>(null);
+  const [active, setActive] = useState(0);
+  const wrap = useRef<HTMLDivElement>(null);
+  const listId = useId();
+  const inputId = useId();
+
+  const selected = rows.find((s) => s.id === value) ?? null;
+
+  const filtered = useMemo(() => {
+    const q = (query ?? '').trim().toLowerCase();
+    // Cap the unfiltered list: 134 branches in one popover is a scroll, not a
+    // choice. Typing is the intended interaction, exactly as in his app.
+    if (!q) return rows.slice(0, 50);
+    return rows
+      .filter((s) =>
+        [s.code, s.name, s.city, s.brand?.code].some((f) => f?.toLowerCase().includes(q)),
+      )
+      .slice(0, 50);
+  }, [rows, query]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrap.current && !wrap.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery(null);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const commit = (id: string) => {
+    onChange(id);
+    setQuery(null);
+    setOpen(false);
+  };
+
+  // His auto-fill: the branch's own record answers city / area / chain, so the
+  // agent never types them and they cannot disagree with the master list.
+  const detail = selected
+    ? [
+        selected.brand?.code,
+        selected.city,
+        selected.area_manager &&
+          `${t('complaint.area', { defaultValue: 'Area' })}: ${selected.area_manager}`,
+        selected.chain_manager &&
+          `${t('complaint.chain', { defaultValue: 'Chain' })}: ${selected.chain_manager}`,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
+
+  return (
+    <FormField
+      label={t('complaint.branch', { defaultValue: 'Restaurant / branch' })}
+      htmlFor={inputId}
+      hint={
+        detail ||
+        (inferredFrom
+          ? t('complaint.branchInferred', {
+              defaultValue: 'From the order — change it if the complaint is about another branch.',
+            })
+          : t('complaint.branchHint', {
+              defaultValue: 'Search by code, name or city.',
+            }))
+      }
+    >
+      <div ref={wrap} className="relative">
+        <Input
+          id={inputId}
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          autoComplete="off"
+          placeholder={
+            stores.isLoading
+              ? t('actions.loading', { ns: 'common', defaultValue: 'Loading' })
+              : t('complaint.branchSearch', { defaultValue: 'Type to search branches…' })
+          }
+          value={query ?? (selected ? storeLabel(selected) : '')}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActive(0);
+            setOpen(true);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              setOpen(true);
+              setActive((i) => {
+                const n = filtered.length;
+                if (!n) return 0;
+                return e.key === 'ArrowDown' ? (i + 1) % n : (i - 1 + n) % n;
+              });
+            } else if (e.key === 'Enter' && open) {
+              e.preventDefault();
+              const pick = filtered[active];
+              if (pick) commit(pick.id);
+            } else if (e.key === 'Escape' && open) {
+              e.preventDefault();
+              e.stopPropagation();
+              setOpen(false);
+              setQuery(null);
+            } else if (e.key === 'Backspace' && query === null && value) {
+              e.preventDefault();
+              commit('');
+            }
+          }}
+          className="pe-8"
+        />
+        {value && (
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => commit('')}
+            aria-label={t('actions.clear', { ns: 'common', defaultValue: 'Clear' })}
+            className="absolute end-2 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-full text-muted-foreground transition-colors duration-fast hover:text-foreground"
+          >
+            <svg viewBox="0 0 16 16" className="h-3 w-3" aria-hidden>
+              <path
+                d="M4 4l8 8M12 4l-8 8"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        )}
+        {open && (
+          <ul
+            id={listId}
+            role="listbox"
+            className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl bg-card p-1 shadow-float ring-1 ring-foreground/[0.08]"
+          >
+            {stores.isLoading ? (
+              <li className="flex justify-center py-4">
+                <Spinner size={16} />
+              </li>
+            ) : filtered.length === 0 ? (
+              <li className="px-3 py-2 text-xs text-muted-foreground">
+                {/* Agents cannot add a branch — that is operations master data,
+                    maintained in the admin portal. Say so, rather than letting
+                    them type a name that would never match a real store. */}
+                {rows.length === 0
+                  ? t('complaint.noStores', { defaultValue: 'Branch list unavailable.' })
+                  : t('complaint.noBranch', {
+                      defaultValue: 'No branch matches. Ask an admin to add it.',
+                    })}
+              </li>
+            ) : (
+              filtered.map((s, i) => (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={s.id === value}
+                    onMouseEnter={() => setActive(i)}
+                    onClick={() => commit(s.id)}
+                    className={cn(
+                      'block w-full rounded-lg px-3 py-1.5 text-start transition-colors duration-fast',
+                      i === active ? 'bg-secondary' : '',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'block text-sm text-foreground',
+                        s.id === value && 'font-semibold',
+                      )}
+                    >
+                      {storeLabel(s)}
+                    </span>
+                    {(s.city || s.brand?.code) && (
+                      <span className="block text-2xs text-muted-foreground">
+                        {[s.brand?.code, s.city].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        )}
+      </div>
+    </FormField>
   );
 }
 

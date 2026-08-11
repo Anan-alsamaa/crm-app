@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React, { useState } from 'react';
@@ -10,16 +10,53 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+// The branch picker reads the operations store master. Mocked so the fieldset
+// renders without a Directus client, and so the list is a known fixture.
+const STORES = [
+  {
+    id: 's1',
+    code: 'LCP-002',
+    name: 'Dhahran Mall',
+    city: 'Khobar',
+    area_manager: 'Aly Abdullah',
+    chain_manager: 'Ahmed Sami',
+    yiji_restaurant_id: null,
+    brand: { id: 'b1', code: 'LCP', name: 'Casa Pasta' },
+  },
+  {
+    id: 's2',
+    code: 'PSK-014',
+    name: 'Doha Plaza',
+    city: 'Dammam',
+    area_manager: null,
+    chain_manager: null,
+    yiji_restaurant_id: null,
+    brand: { id: 'b2', code: 'PSK', name: 'Pasketti' },
+  },
+];
+const storeApi = vi.hoisted(() => ({
+  useStores: vi.fn(),
+  useStoreIndex: vi.fn(),
+  useOrderStore: vi.fn(),
+}));
+vi.mock('../src/features/tickets/useStoreMatch.js', () => storeApi);
+
 import {
   ComplaintClassification,
   ComplaintResolution,
+  StorePicker,
   complaintHasErrors,
   complaintPatch,
   emptyComplaint,
   optionLabel,
   serviceTypeFromOrder,
+  storeLabel,
   type ComplaintValues,
 } from '../src/features/tickets/ComplaintFields.js';
+
+beforeEach(() => {
+  storeApi.useStores.mockReturnValue({ data: STORES, isLoading: false });
+});
 
 /** Renders the fieldset with real state so typing behaves as it does in the app. */
 function Harness({ onValues }: { onValues?: (v: ComplaintValues) => void }) {
@@ -173,5 +210,84 @@ describe('the option comboboxes are locked to the list', () => {
     render(<Harness />);
     await user.type(screen.getByLabelText('Coupon %'), '150');
     expect(screen.getByText('Enter a percentage between 0 and 100.')).toBeTruthy();
+  });
+});
+
+describe('StorePicker — his locked restaurant field, over our store master', () => {
+  function BranchHarness({ onPick }: { onPick?: (id: string) => void }) {
+    const [id, setId] = useState('');
+    return (
+      <StorePicker
+        value={id}
+        onChange={(v) => {
+          setId(v);
+          onPick?.(v);
+        }}
+      />
+    );
+  }
+
+  it('stores the branch ID, not its name — the name is master data that can change', async () => {
+    const user = userEvent.setup();
+    let picked: string | null = null;
+    render(<BranchHarness onPick={(v) => (picked = v)} />);
+
+    const box = screen.getByLabelText('Restaurant / branch');
+    await user.click(box);
+    await user.type(box, 'doha');
+    await user.click(screen.getByRole('option', { name: /Doha Plaza/ }));
+
+    expect(picked).toBe('s2');
+  });
+
+  it('searches on code and city as well as name, the way ops refer to a branch', async () => {
+    const user = userEvent.setup();
+    render(<BranchHarness />);
+    const box = screen.getByLabelText('Restaurant / branch');
+
+    await user.click(box);
+    await user.type(box, 'lcp-002');
+    expect(screen.getByRole('option', { name: /Dhahran Mall/ })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: /Doha Plaza/ })).toBeNull();
+
+    await user.clear(box);
+    await user.type(box, 'dammam');
+    expect(screen.getByRole('option', { name: /Doha Plaza/ })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: /Dhahran Mall/ })).toBeNull();
+  });
+
+  it("fills in the branch's city and managers once chosen, as his auto-fill does", async () => {
+    const user = userEvent.setup();
+    render(<BranchHarness />);
+    const box = screen.getByLabelText('Restaurant / branch');
+    await user.click(box);
+    await user.type(box, 'dhahran');
+    await user.click(screen.getByRole('option', { name: /Dhahran Mall/ }));
+
+    expect(screen.getByText(/LCP · Khobar · Area: Aly Abdullah · Chain: Ahmed Sami/)).toBeTruthy();
+  });
+
+  it('tells the agent to ask an admin rather than letting them invent a branch', async () => {
+    const user = userEvent.setup();
+    render(<BranchHarness />);
+    const box = screen.getByLabelText('Restaurant / branch');
+    await user.click(box);
+    await user.type(box, 'a branch that does not exist');
+
+    expect(screen.getByText('No branch matches. Ask an admin to add it.')).toBeTruthy();
+    await user.click(document.body);
+    expect((box as HTMLInputElement).value).toBe('');
+  });
+
+  it('degrades to a clear message when the store list cannot be read', async () => {
+    storeApi.useStores.mockReturnValue({ data: [], isLoading: false });
+    const user = userEvent.setup();
+    render(<BranchHarness />);
+    await user.click(screen.getByLabelText('Restaurant / branch'));
+    expect(screen.getByText('Branch list unavailable.')).toBeTruthy();
+  });
+
+  it('labels a branch the way operations say it out loud', () => {
+    expect(storeLabel(STORES[0]!)).toBe('LCP-002 Dhahran Mall');
   });
 });

@@ -17,6 +17,7 @@ import {
   ComplaintClassification,
   ComplaintResolution,
   ComplaintSection,
+  StorePicker,
   complaintHasErrors,
   complaintPatch,
   emptyComplaint,
@@ -53,6 +54,9 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
   const [priority, setPriority] = useState<Priority>('medium');
   const [assignedAgent, setAssignedAgent] = useState('');
   const [complaint, setComplaint] = useState<ComplaintValues>(emptyComplaint);
+  // No order to infer the branch from here — this flow exists precisely for
+  // complaints that arrived by phone or social, so the agent picks it.
+  const [storeId, setStoreId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -87,6 +91,7 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
         contact: contactId,
         vendor: vendorId,
         assigned_agent: assignedAgent || null,
+        store: storeId || null,
         ...complaintPatch(complaint),
       } as Parameters<typeof createTicket.mutateAsync>[0])) as { id?: string } | undefined;
       toast.success(t('tickets.created', { defaultValue: 'Ticket created' }), {
@@ -241,6 +246,7 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
                   </div>
                 )}
               </FormField>
+              <StorePicker value={storeId} onChange={setStoreId} />
             </ComplaintSection>
 
             {/* ── What happened ─────────────────────────────────────────── */}

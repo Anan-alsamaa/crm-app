@@ -53,6 +53,8 @@ export interface TicketRow extends Partial<TicketComplaintFields> {
   assigned_agent: string | null;
   assigned_team: string | null;
   conversation: string | null;
+  /** Branch the complaint is about (`stores` id), when one was recorded. */
+  store?: string | null;
   contact: { id: string; name: string | null; email: string | null; phone: string | null } | null;
   first_response_due_at: string | null;
   resolution_due_at: string | null;
@@ -122,6 +124,7 @@ export function useTicket(id: string | null) {
             'first_responded_at',
             'date_created',
             'order_snapshot',
+            'store',
             ...COMPLAINT_FIELDS,
             { contact: ['id', 'name', 'email', 'phone'] },
             {
@@ -184,6 +187,8 @@ export interface CreateTicketInput extends Partial<TicketComplaintFields> {
   assigned_agent?: string | null;
   /** Structured point-in-time copy of the order the ticket is about. */
   order_snapshot?: TicketOrderSnapshot | null;
+  /** Branch the complaint is about (`stores` id). */
+  store?: string | null;
 }
 
 export function useCreateTicket() {
@@ -290,6 +295,7 @@ export function useCreateTicketFromConversation() {
 }
 
 export interface UpdateTicketInput extends Partial<TicketComplaintFields> {
+  store?: string | null;
   status?: TicketStatus;
   priority?: Priority;
   assigned_agent?: string | null;

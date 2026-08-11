@@ -16,7 +16,7 @@ import { directus } from '../../lib/directus.js';
  * Cached for the session: this is slow-moving master data, and the card renders
  * once per ticket, so refetching per render would be pure waste.
  */
-interface StoreRow {
+export interface StoreRow {
   id: string;
   code: string | null;
   name: string;
@@ -27,8 +27,13 @@ interface StoreRow {
   brand: { id: string; code: string; name: string; yiji_brand_name?: string | null } | null;
 }
 
-export function useStoreIndex() {
-  const q = useQuery({
+/**
+ * The operations store master, as rows — for the branch picker on the complaint
+ * form, which needs to list and search the branches rather than match one order
+ * against them. Shares `useStoreIndex`'s query key, so both read one cached copy.
+ */
+export function useStores() {
+  return useQuery({
     queryKey: ['agent-stores'],
     staleTime: 10 * 60_000,
     queryFn: () =>
@@ -53,6 +58,10 @@ export function useStoreIndex() {
     // A missing/forbidden stores collection must not break the order card.
     retry: false,
   });
+}
+
+export function useStoreIndex() {
+  const q = useStores();
 
   const index = buildStoreIndex(
     (q.data ?? []).map((s) => ({
