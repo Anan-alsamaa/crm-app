@@ -32,6 +32,29 @@ interface RawTicket {
   resolution_due_at: string | null;
   resolved_at: string | null;
   contact: { id: string; name: string | null; email: string | null; phone: string | null } | null;
+  /* The operations complaint fields. Optional on the type because they are
+   * requested best-effort — see COMPLAINT_FIELDS. */
+  description?: string | null;
+  complaint_type?: string | null;
+  service_type?: string | null;
+  complaint_source?: string | null;
+  communication_method?: string | null;
+  response_desc?: string | null;
+  compensation?: string | null;
+  coupon_code?: string | null;
+  coupon_value?: number | null;
+  coupon_percent?: number | null;
+  order_snapshot?: RawOrderSnapshot | null;
+}
+
+/** The stored point-in-time order copy, as much of it as this report reads. */
+interface RawOrderSnapshot {
+  orderId?: string | null;
+  total?: number | null;
+  currency?: string | null;
+  brandName?: string | null;
+  restaurantName?: string | null;
+  restaurantId?: string | null;
 }
 
 interface RawConversation {
@@ -107,6 +130,56 @@ export interface TicketOrderInfo {
   storeMapped?: boolean;
 }
 
+/**
+ * One row of the operations manager's own complaints report.
+ *
+ * The columns, their order and their names come from the sheet operations
+ * have kept by hand (`Complaints_History_Import.csv`, 1,673 rows covering
+ * 2026-01-01 → 2026-07-31), so that the same report can be produced from the
+ * CRM instead of maintained manually — and so the two can be compared
+ * column-for-column while both exist.
+ *
+ * `date` and `time` are separate on purpose: her sheet splits them, and the
+ * split is what makes the by-hour cut possible in Excel without a formula.
+ *
+ * Store-derived fields (chain, area, brand, city, restaurant) come from the
+ * order snapshot joined onto the store master — NOT from a live order lookup,
+ * so rows keep reporting correctly long after the upstream order has changed.
+ */
+export interface ComplaintReportRow {
+  id: string;
+  /** Local `YYYY-MM-DD` of ticket creation. */
+  date: string;
+  /** Local `HH:mm` of ticket creation. */
+  time: string;
+  /** Chain manager, from the matched store. */
+  chain: string;
+  /** Area manager, from the matched store. */
+  area: string;
+  brand: string;
+  city: string;
+  restaurantName: string;
+  /** False when no store row matched — rendered as "Not mapped", never blank. */
+  storeMapped: boolean;
+  serviceType: string;
+  complaintType: string;
+  customerName: string;
+  customerMobile: string;
+  complaintDescription: string;
+  responseDesc: string;
+  complaintSource: string;
+  orderAmount: number | null;
+  orderNumber: string;
+  communicationMethod: string;
+  couponCode: string;
+  couponValue: number | null;
+  couponPercent: number | null;
+  /** Ticket status — translated to the manager's wording at export time. */
+  complaintStatus: string;
+  agent: string;
+  compensation: string;
+}
+
 export interface AgentKpiRow {
   agentId: string | null;
   agentName: string;
@@ -154,6 +227,14 @@ export interface ConversationStatusReport {
 
 export interface AgentReportData {
   tickets: TicketReportRow[];
+  /** Rows for the Complaints report, before the store join is applied. */
+  complaints: ComplaintReportRow[];
+  /**
+   * False when this Directus does not yet carry the operations complaint
+   * fields, so the Complaints report can say "the schema is not applied here"
+   * instead of rendering 24 columns of blanks and looking broken.
+   */
+  complaintFieldsAvailable: boolean;
   agents: AgentKpiRow[];
   conversations: ConversationStatusReport;
   /** Overall CSAT across all rated conversations in the window. */
@@ -185,6 +266,64 @@ function displayName(u: RawUser): string {
   return [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '—';
 }
 
+/** Ticket fields every report needs. */
+const BASE_TICKET_FIELDS = [
+  'id',
+  'subject',
+  'status',
+  'priority',
+  'assigned_agent',
+  'date_created',
+  'first_response_due_at',
+  'first_responded_at',
+  'resolution_due_at',
+  'resolved_at',
+  { contact: ['id', 'name', 'email', 'phone'] },
+] as const;
+
+/**
+ * The operations complaint fields, requested on top of the base set.
+ *
+ * Fetched in the SAME query rather than a second round-trip, but behind a
+ * retry: a Directus that has not had the complaint schema applied rejects the
+ * whole request for one unknown field, which would take Tickets, Agent KPI and
+ * Conversation status down with it. One failed attempt then costs a second
+ * request; the alternative costs every other report on this page.
+ */
+const COMPLAINT_FIELDS = [
+  'description',
+  'complaint_type',
+  'service_type',
+  'complaint_source',
+  'communication_method',
+  'response_desc',
+  'compensation',
+  'coupon_code',
+  'coupon_value',
+  'coupon_percent',
+  'order_snapshot',
+] as const;
+
+/** Local `YYYY-MM-DD` + `HH:mm`, split the way the operations sheet splits it. */
+function splitLocalDateTime(iso: string | null): { date: string; time: string } {
+  if (!iso) return { date: '', time: '' };
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { date: '', time: '' };
+  const p = (n: number) => String(n).padStart(2, '0');
+  return {
+    date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+    time: `${p(d.getHours())}:${p(d.getMinutes())}`,
+  };
+}
+
+/** Numeric cell that tolerates the sheet's `-`, `""` and `"102.85 SR"`. */
+function toNumber(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v !== 'string') return null;
+  const m = /-?\d+(\.\d+)?/.exec(v.replace(/,/g, ''));
+  return m ? Number(m[0]) : null;
+}
+
 /* ── Base report data (Directus only — no commerce) ───────────────────── */
 
 export function useAgentReportData(
@@ -198,27 +337,29 @@ export function useAgentReportData(
       const since = new Date(Date.now() - days * DAY_MS).toISOString();
       const now = Date.now();
 
+      // Attempt the richer field list first; fall back to the base one if this
+      // Directus has no complaint schema (see COMPLAINT_FIELDS).
+      let complaintFieldsAvailable = true;
+      const readTickets = async (): Promise<RawTicket[]> => {
+        const query = (fields: readonly unknown[]) =>
+          directus.request(
+            readItems('tickets', {
+              filter: { date_created: { _gte: since } },
+              fields: fields as never,
+              limit: -1,
+              sort: ['-date_created'],
+            }),
+          ) as Promise<RawTicket[]>;
+        try {
+          return await query([...BASE_TICKET_FIELDS, ...COMPLAINT_FIELDS]);
+        } catch {
+          complaintFieldsAvailable = false;
+          return await query(BASE_TICKET_FIELDS);
+        }
+      };
+
       const [tickets, conversations, csat, users] = await Promise.all([
-        directus.request(
-          readItems('tickets', {
-            filter: { date_created: { _gte: since } },
-            fields: [
-              'id',
-              'subject',
-              'status',
-              'priority',
-              'assigned_agent',
-              'date_created',
-              'first_response_due_at',
-              'first_responded_at',
-              'resolution_due_at',
-              'resolved_at',
-              { contact: ['id', 'name', 'email', 'phone'] },
-            ],
-            limit: -1,
-            sort: ['-date_created'],
-          }),
-        ) as Promise<RawTicket[]>,
+        readTickets(),
         directus.request(
           readItems('conversations', {
             filter: { date_created: { _gte: since } },
@@ -299,6 +440,44 @@ export function useAgentReportData(
         resolutionMinutes: minutesBetween(t.date_created, t.resolved_at),
         resolutionState: slaOutcome(t.resolution_due_at, t.resolved_at, now),
       }));
+
+      /* Report 4: the operations complaints report. The store-derived columns
+       * are filled in by the page, which owns the store index; here we carry
+       * the raw order snapshot values through so the join has something to
+       * match on. */
+      const complaintRows: ComplaintReportRow[] = tickets.map((t) => {
+        const { date, time } = splitLocalDateTime(t.date_created);
+        const snap = t.order_snapshot ?? null;
+        return {
+          id: t.id,
+          date,
+          time,
+          // Filled by the store join on the page; blank here rather than
+          // guessed, so an unjoined row is visibly unjoined.
+          chain: '',
+          area: '',
+          brand: snap?.brandName?.trim() ?? '',
+          city: '',
+          restaurantName: snap?.restaurantName?.trim() ?? '',
+          storeMapped: false,
+          serviceType: t.service_type ?? '',
+          complaintType: t.complaint_type ?? '',
+          customerName: t.contact?.name ?? '',
+          customerMobile: t.contact?.phone ?? '',
+          complaintDescription: t.description ?? '',
+          responseDesc: t.response_desc ?? '',
+          complaintSource: t.complaint_source ?? '',
+          orderAmount: toNumber(snap?.total),
+          orderNumber: snap?.orderId ? String(snap.orderId) : '',
+          communicationMethod: t.communication_method ?? '',
+          couponCode: t.coupon_code ?? '',
+          couponValue: toNumber(t.coupon_value),
+          couponPercent: toNumber(t.coupon_percent),
+          complaintStatus: t.status,
+          agent: agentOf(t.assigned_agent),
+          compensation: t.compensation ?? '',
+        };
+      });
 
       /* Report 2: agent KPI — first response + CSAT. */
       interface Acc {
@@ -450,6 +629,8 @@ export function useAgentReportData(
 
       return {
         tickets: ticketRows,
+        complaints: complaintRows,
+        complaintFieldsAvailable,
         agents,
         conversations: conversationsReport,
         csatOverall: {

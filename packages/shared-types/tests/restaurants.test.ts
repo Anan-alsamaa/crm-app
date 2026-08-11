@@ -6,6 +6,8 @@ import {
   normaliseBrandName,
   cityFromRestaurantName,
   isUnmappedStore,
+  splitStoreCode,
+  storeCodeFrom,
   type StoreRecord,
 } from '../src/restaurants.js';
 
@@ -174,5 +176,112 @@ describe('matchStore', () => {
     const m = matchStore(idx, { restaurantName: 'Riyadh - Masief Plaza' });
     expect(m.store?.id).toBe('s1');
     expect(m.city).toBe('Riyadh');
+  });
+});
+
+describe('matchStore — the store_code tier', () => {
+  /**
+   * Real case from the operations complaints history: the sheet writes
+   * "LCP-006 Panorama Mall", the store master writes "LCP-006 Panorama Mall
+   * RYD". Both name tiers miss on the city suffix, so before this tier five
+   * complaints were reported as an unmapped store that plainly exists.
+   */
+  const PANORAMA: StoreRecord = {
+    id: 's3',
+    code: 'LCP-006',
+    name: 'Panorama Mall RYD',
+    city: 'Riyadh',
+    areaManager: "Mo'men Elsharkasy",
+    chainManager: 'Medhat Sayed',
+    brandCode: 'LCP',
+    brandName: 'Casa Pasta',
+    yijiRestaurantId: null,
+  };
+  const idx = buildStoreIndex([PANORAMA]);
+
+  it('recovers a store whose name drifted but whose code did not', () => {
+    const m = matchStore(idx, { restaurantName: 'LCP-006 Panorama Mall', brandName: 'LCP' });
+    expect(m.via).toBe('store_code');
+    expect(m.store?.id).toBe('s3');
+    expect(m.city).toBe('Riyadh');
+    expect(m.chainManager).toBe('Medhat Sayed');
+    // Reported under the master's spelling once matched.
+    expect(m.restaurantName).toBe('LCP-006 Panorama Mall RYD');
+    expect(isUnmappedStore(m)).toBe(false);
+  });
+
+  it('reads the code in all four spellings the master uses', () => {
+    for (const written of [
+      'LCP-006 Panorama Mall',
+      'LCP- 006 Panorama Mall',
+      'LCP006-Panorama Mall',
+      'LCP.006 - Panorama Mall',
+    ]) {
+      expect(matchStore(idx, { restaurantName: written }).store?.id).toBe('s3');
+    }
+  });
+
+  it('never outranks a name match — existing rows keep matching as they did', () => {
+    // "CND-001 Reine Plaza" is an exact name hit AND carries a code. The name
+    // tier must still win, or every dashboard's `via` breakdown shifts.
+    expect(matchStore(index, { restaurantName: 'CND-001 Reine Plaza' }).via).toBe('exact_name');
+    expect(matchStore(index, { restaurantName: 'Riyadh - Masief Plaza' }).via).toBe(
+      'normalised_name',
+    );
+  });
+
+  it('refuses to guess when one code names two stores', () => {
+    // A duplicated code means the master is broken. Picking whichever row
+    // loaded first would attribute complaints to an arbitrary branch, so the
+    // code resolves to nothing and the brand fallback takes over.
+    const clash: StoreRecord = { ...PANORAMA, id: 's4', name: 'Somewhere Else', city: 'Jeddah' };
+    const broken = buildStoreIndex([PANORAMA, clash]);
+    expect(broken.byCode.has('LCP-006')).toBe(false);
+    const m = matchStore(broken, { restaurantName: 'LCP-006 Panorama Mall', brandName: 'LCP' });
+    expect(m.store).toBeNull();
+    expect(isUnmappedStore(m)).toBe(true);
+  });
+
+  it('does not invent a store from a branch name that merely looks like a code', () => {
+    // "Mall 2 Riyadh" parses to "MALL-2", which is not in the master — so it
+    // must fall through rather than resolve to anything.
+    expect(matchStore(idx, { restaurantName: 'Mall 2 Riyadh' }).store).toBeNull();
+  });
+
+  it('still reports a genuinely absent store as unmapped', () => {
+    // "CND-009 Nakhil Mall" — the one complaint in the history whose store is
+    // missing from the master entirely. No tier may rescue this one.
+    const m = matchStore(idx, { restaurantName: 'CND-009 Nakhil Mall', brandName: 'CND Casual' });
+    expect(m.store).toBeNull();
+    expect(isUnmappedStore(m)).toBe(true);
+  });
+});
+
+describe('splitStoreCode', () => {
+  it('normalises the four spellings to PREFIX-NNN', () => {
+    expect(splitStoreCode('LCP-032 Masief Plaza')).toEqual({
+      code: 'LCP-032',
+      name: 'Masief Plaza',
+    });
+    expect(splitStoreCode('LCP- 089 Nada Plaza RYD')).toEqual({
+      code: 'LCP-089',
+      name: 'Nada Plaza RYD',
+    });
+    expect(splitStoreCode('LCP058-ARAMCO')).toEqual({ code: 'LCP-058', name: 'ARAMCO' });
+    expect(splitStoreCode('LCP.073 - Amer Mall')).toEqual({ code: 'LCP-073', name: 'Amer Mall' });
+  });
+
+  it('leaves a plain branch name alone', () => {
+    expect(splitStoreCode('Marina Mall 2')).toEqual({ code: null, name: 'Marina Mall 2' });
+    expect(splitStoreCode('7 Days Plaza')).toEqual({ code: null, name: '7 Days Plaza' });
+  });
+
+  it('does not treat a bare code as a code — there would be no branch left', () => {
+    expect(splitStoreCode('LCP-002')).toEqual({ code: null, name: 'LCP-002' });
+  });
+
+  it('survives nullish input', () => {
+    expect(splitStoreCode(null)).toEqual({ code: null, name: '' });
+    expect(storeCodeFrom(undefined)).toBe('');
   });
 });
