@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { cn, Pill, Skeleton } from '@yiji/ui';
 import type { YijiOrder } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
+import { useOrderStore } from './useStoreMatch.js';
 
 /**
  * The order a ticket was raised about, captured when the ticket was created.
@@ -27,6 +28,14 @@ export interface TicketOrderSnapshot {
   items: TicketOrderSnapshotItem[];
   brandName?: string;
   restaurantName?: string;
+  /**
+   * Yiji's own restaurant id. Persisted because it is the ONLY stable key
+   * between an order and the operations store list — the names do not line up
+   * ("Riyadh - Masief Plaza" vs "LCP-041 Masief Plaza"). It is available only
+   * on the single-order endpoint, so if it is not captured here it is lost for
+   * that ticket forever, leaving reporting on fuzzy name matching.
+   */
+  restaurantId?: string;
   deliveryType?: string;
   deliveryAddress?: string;
   paymentStatus?: string;
@@ -51,6 +60,7 @@ export function orderToSnapshot(order: YijiOrder): TicketOrderSnapshot {
     })),
     ...(order.brandName ? { brandName: order.brandName } : {}),
     ...(order.restaurantName ? { restaurantName: order.restaurantName } : {}),
+    ...(order.restaurantId ? { restaurantId: order.restaurantId } : {}),
     ...(order.deliveryType ? { deliveryType: order.deliveryType } : {}),
     ...(order.deliveryAddress ? { deliveryAddress: order.deliveryAddress } : {}),
     ...(order.paymentStatus ? { paymentStatus: order.paymentStatus } : {}),
@@ -189,7 +199,21 @@ export function OrderSnapshotCard({
   className?: string;
 }) {
   const { t } = useTranslation();
-  const restaurant = [order.brandName, order.restaurantName].filter(Boolean).join(' — ');
+  // Resolve against the operations store list so the agent sees the branch as
+  // operations name it, plus the city and who owns it. Falls back to Yiji's
+  // wording when the branch is not in the list.
+  const store = useOrderStore(order);
+  const restaurant =
+    store.restaurantName || [order.brandName, order.restaurantName].filter(Boolean).join(' — ');
+  const subline = [store.brandName, store.city].filter(Boolean).join(' · ');
+  const owners = [
+    store.areaManager &&
+      `${t('tickets.areaManager', { defaultValue: 'Area' })}: ${store.areaManager}`,
+    store.chainManager &&
+      `${t('tickets.chainManager', { defaultValue: 'Chain' })}: ${store.chainManager}`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const itemsSubtotal = order.items.reduce((sum, it) => sum + it.price * it.qty, 0);
   const showSubtotal = itemsSubtotal > 0 && Math.abs(order.total - itemsSubtotal) > 0.005;
 
@@ -220,8 +244,10 @@ export function OrderSnapshotCard({
 
       <div className="px-4 py-3">
         {restaurant && (
-          <div className="mb-2.5 text-sm font-semibold tracking-tight text-foreground">
-            {restaurant}
+          <div className="mb-2.5">
+            <div className="text-sm font-semibold tracking-tight text-foreground">{restaurant}</div>
+            {subline && <div className="mt-0.5 text-xs text-muted-foreground">{subline}</div>}
+            {owners && <div className="mt-0.5 text-2xs text-muted-foreground">{owners}</div>}
           </div>
         )}
 

@@ -60,10 +60,21 @@ beforeEach(() => {
   initSpy.mockReset();
   signSpy.mockReset();
   document.body.innerHTML = '';
+  // Pin the env this suite depends on.
+  //
+  // demo.ts reads `import.meta.env.VITE_SOCKET_URL`, and Vite loads the
+  // developer's gitignored `.env.local` into that during tests — so whichever
+  // gateway a developer happens to be pointing at (a tunnel, a LAN address)
+  // silently decided whether this suite passed. Pointing the widget at an
+  // ngrok URL to share it was enough to turn the suite red on a machine that
+  // had changed nothing about the widget's behaviour.
+  vi.stubEnv('VITE_SOCKET_URL', 'http://localhost:8080');
+  vi.stubEnv('VITE_WIDGET_JWT_SECRET', 'dev-yiji-secret');
 });
 
 afterEach(() => {
   vi.resetModules();
+  vi.unstubAllEnvs();
 });
 
 describe('demo.ts: resolveIdentity via YijiChat.init token', () => {

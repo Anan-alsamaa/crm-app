@@ -21,8 +21,10 @@ import {
   Tr,
   useTableSort,
 } from '@yiji/ui';
+import { matchStore } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
 import { useTicketOps, type AgentLoad, type TicketOpsRow, type TicketOps } from './api.js';
+import { useStoreIndex } from '../restaurants/api.js';
 
 const RANGE_DAYS = [7, 30, 90] as const;
 
@@ -741,6 +743,7 @@ export function TicketRegister({ rows }: { rows: TicketOpsRow[] }) {
 
 /** Linked customer order for a ticket — lazily fetched on expand. */
 function TicketOrderCard({ vendorId, customerId }: { vendorId: string; customerId: string }) {
+  const { index: storeIndex } = useStoreIndex();
   const { t } = useTranslation();
   const q = useQuery({
     queryKey: ['ticket-order', vendorId, customerId],
@@ -770,7 +773,17 @@ function TicketOrderCard({ vendorId, customerId }: { vendorId: string; customerI
     );
   }
   const o = q.data;
-  const restaurant = [o.brandName, o.restaurantName].filter(Boolean).join(' — ');
+  // Same store lookup the ticket report and dashboards use, so one branch is
+  // named identically everywhere rather than as Yiji's raw label here and the
+  // operations wording there.
+  const store = matchStore(storeIndex, {
+    restaurantId: o.restaurantId,
+    restaurantName: o.restaurantName,
+    brandName: o.brandName,
+  });
+  const restaurant =
+    store.restaurantName || [o.brandName, o.restaurantName].filter(Boolean).join(' — ');
+  const storeMeta = [store.brandName, store.city].filter(Boolean).join(' · ');
 
   return (
     <div className="rounded-2xl bg-card p-4 ring-1 ring-foreground/[0.06] shadow-soft">
@@ -794,7 +807,12 @@ function TicketOrderCard({ vendorId, customerId }: { vendorId: string; customerI
         </span>
       </div>
 
-      {restaurant && <div className="mt-2 text-sm font-semibold text-foreground">{restaurant}</div>}
+      {restaurant && (
+        <div className="mt-2">
+          <div className="text-sm font-semibold text-foreground">{restaurant}</div>
+          {storeMeta && <div className="mt-0.5 text-xs text-muted-foreground">{storeMeta}</div>}
+        </div>
+      )}
 
       {o.items && o.items.length > 0 ? (
         <ul className="mt-2 space-y-1 text-xs">

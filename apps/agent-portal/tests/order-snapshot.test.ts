@@ -76,6 +76,7 @@ describe('orderToSnapshot', () => {
       items: [{ sku: 'X', name: 'Vegetable Pasta', qty: 1, price: 26, category: 'Original Pasta' }],
       brandName: 'La Casa Pasta',
       restaurantName: 'Riyadh - Masief Plaza',
+      restaurantId: '312',
       deliveryType: 'carhop',
       paymentStatus: 'paid',
       paymentMode: 'apple_pay',
@@ -89,6 +90,10 @@ describe('orderToSnapshot', () => {
       currency: 'SAR',
       brandName: 'La Casa Pasta',
       restaurantName: 'Riyadh - Masief Plaza',
+      // The ONLY stable key between an order and the operations store list.
+      // It exists solely on the single-order endpoint, so a ticket that fails
+      // to capture it can never be joined by id — only by fuzzy name match.
+      restaurantId: '312',
       deliveryType: 'carhop',
       paymentStatus: 'paid',
       paymentMode: 'apple_pay',

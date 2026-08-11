@@ -373,7 +373,11 @@ describe('TicketOpsPage', () => {
     expect(commerceMock.commerce.getOrder).toHaveBeenCalledWith('v-7', 'o-9');
     expect(card.textContent).toContain('Out For Delivery'); // status, titleized
     expect(card.textContent).toContain('In Delivery'); // deliveryType, titleized
-    expect(card.textContent).toContain('La Casa — Riyadh — Masief');
+    // Branch and brand are now separate lines rather than one run-on string,
+    // matching the ticket report and the dashboards. With no store row to match
+    // (none is mocked here) both fall back to the values the order carried.
+    expect(card.textContent).toContain('Riyadh — Masief');
+    expect(card.textContent).toContain('La Casa');
     expect(card.textContent).toContain('2×');
     expect(card.textContent).toContain('Pasta');
   });
