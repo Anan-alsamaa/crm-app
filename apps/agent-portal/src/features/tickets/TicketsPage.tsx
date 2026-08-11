@@ -33,7 +33,6 @@ import {
   type TicketRow,
 } from './api.js';
 import { useAgents, useTeamOptions } from '../inbox/api.js';
-import { NewTicketDialog } from './NewTicketDialog.js';
 import { TicketAttachments } from './TicketAttachments.js';
 import {
   ComplaintClassification,
@@ -69,9 +68,9 @@ export function TicketsPage() {
   const { t } = useTranslation();
   const tickets = useTickets();
   const isDesktop = useIsDesktop();
+  const navigate = useNavigate();
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<TicketFilter>('all');
-  const [creating, setCreating] = useState(false);
 
   // Deep-link support: open a specific ticket from /tickets?id=<id> (command
   // palette, AI search) or /tickets/<id> (notification "View" links).
@@ -167,14 +166,10 @@ export function TicketsPage() {
           })}
         </div>
         <ToolbarSpacer />
-        <Button type="button" size="sm" onClick={() => setCreating(true)}>
+        <Button type="button" size="sm" onClick={() => navigate('/new-ticket')}>
           {t('tickets.newTicket', { defaultValue: '+ New ticket' })}
         </Button>
       </Toolbar>
-
-      {creating && (
-        <NewTicketDialog onClose={() => setCreating(false)} onCreated={(id) => setSelected(id)} />
-      )}
 
       {/* Below: list + detail — no card wrapping. Single-column on mobile:
           the list and the detail view swap places. */}
@@ -399,7 +394,7 @@ function ChatMediaRow({
 /**
  * Modal picker for attaching files the customer (or agent) already shared in the
  * linked chat — the "add it later if it wasn't carried over at creation" flow.
- * Mirrors NewTicketDialog's overlay/scale-in styling.
+ * Mirrors the app's overlay/scale-in dialog styling.
  */
 function ChatMediaDialog({
   items,

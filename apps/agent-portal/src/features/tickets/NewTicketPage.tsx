@@ -1,23 +1,26 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, EmptyState, Skeleton } from '@yiji/ui';
+import { Button, Skeleton } from '@yiji/ui';
 import { conversationVendorId, useConversation } from '../inbox/api.js';
+import type { ContactRow } from '../contacts/api.js';
+import { ContactPicker } from './ContactPicker.js';
 import { CreateTicketDialog } from './CreateTicketDialog.js';
 
 /**
- * The "New ticket" page — where clicking an order id in the inbox lands.
+ * "Add ticket" — the one place a ticket is raised, in either of its two shapes.
  *
- * It is a route rather than a modal because that is how the operations team
- * already works: their tool opens a full New Complaint screen, and the form has
- * three sections they fill in one pass. The cost is that the conversation is no
- * longer on screen, so the order and the customer ride across with the ticket
- * (pinned order in sessionStorage, contact off the conversation) and the header
- * keeps an explicit way back.
+ * FROM A CHAT (`?conversation=…`, reached by clicking the order id in the
+ * inbox): the customer, the order and the branch come with it, so most of the
+ * form is already answered.
+ *
+ * STANDALONE (reached from the top nav): a complaint that arrived by phone or
+ * social with no chat behind it, so the agent searches for the customer first.
  *
  * Only the conversation id travels in the URL. Contact and vendor are read from
  * the conversation itself — passing them as parameters too would let a hand-
- * edited or stale link file a ticket against the wrong customer, and there is
- * nothing in a bare id that would reveal the mismatch.
+ * edited or stale link file a ticket against the wrong customer, and a bare id
+ * gives nothing that would reveal the mismatch.
  */
 export function NewTicketPage() {
   const { t } = useTranslation();
@@ -26,52 +29,35 @@ export function NewTicketPage() {
   const conversationId = params.get('conversation');
 
   const conversation = useConversation(conversationId);
-  const contactId = conversation.data?.contact?.id ?? null;
-  const vendorId = conversationVendorId(conversation.data) || null;
+  const [picked, setPicked] = useState<ContactRow | null>(null);
 
-  const backToInbox = () =>
-    navigate(conversationId ? `/inbox/${conversationId}` : '/inbox', { replace: true });
+  // From a chat the customer is settled; standalone, the agent picks one. A
+  // contact with no vendor cannot carry a ticket, so it does not count as
+  // chosen — submit stays disabled rather than failing on save.
+  const fromChat = !!conversationId;
+  const contactId = fromChat ? (conversation.data?.contact?.id ?? null) : (picked?.id ?? null);
+  const vendorId = fromChat
+    ? conversationVendorId(conversation.data) || null
+    : (picked?.vendor?.id ?? null);
 
-  if (conversation.isLoading) {
+  const goBack = () =>
+    navigate(conversationId ? `/inbox/${conversationId}` : '/tickets', { replace: true });
+
+  if (fromChat && conversation.isLoading) {
     return (
-      <div className="mx-auto w-full max-w-2xl space-y-3 p-6">
-        <Skeleton className="h-8 w-52" />
-        <Skeleton className="h-64 w-full rounded-3xl" />
-      </div>
-    );
-  }
-
-  // A ticket needs a customer and a vendor to belong to. Rendering the form
-  // without them would let the agent fill in every field and only then fail on
-  // save, with the work lost.
-  if (!conversationId || !contactId || !vendorId) {
-    return (
-      <div className="grid flex-1 place-items-center p-6">
-        <EmptyState
-          title={t('tickets.newMissingContext', {
-            defaultValue: 'This ticket has no conversation behind it',
-          })}
-          description={t('tickets.newMissingContextHint', {
-            defaultValue:
-              'Open the chat and use the order id there, so the customer and the order come with it.',
-          })}
-          action={
-            <Button variant="secondary" size="md" onClick={backToInbox}>
-              {t('tickets.backToInbox', { defaultValue: 'Back to the inbox' })}
-            </Button>
-          }
-        />
+      <div className="flex min-h-0 flex-1 flex-col gap-3 p-4 sm:p-6">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="min-h-0 flex-1 rounded-2xl" />
       </div>
     );
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-3 px-4 pt-4 sm:px-6">
-        <Button variant="ghost" size="sm" onClick={backToInbox}>
+      <div className="flex items-center gap-3 px-4 pt-3 sm:px-6">
+        <Button variant="ghost" size="sm" onClick={goBack}>
           <span aria-hidden className="me-1.5">
-            {/* Logical direction: this arrow points "back", which is right in
-                LTR and left in RTL. A hard-coded ← would point forward in Arabic. */}
+            {/* Mirrored in RTL: a hard-coded ← points forward in Arabic. */}
             <svg
               viewBox="0 0 16 16"
               fill="none"
@@ -84,17 +70,20 @@ export function NewTicketPage() {
               <path d="M10 3 5 8l5 5" />
             </svg>
           </span>
-          {t('tickets.backToChat', { defaultValue: 'Back to the chat' })}
+          {fromChat
+            ? t('tickets.backToChat', { defaultValue: 'Back to the chat' })
+            : t('tickets.backToTickets', { defaultValue: 'Back to tickets' })}
         </Button>
       </div>
       <CreateTicketDialog
-        chrome="page"
         contactId={contactId}
         vendorId={vendorId}
         conversationId={conversationId}
-        onClose={backToInbox}
-        // Land on the ticket that was just raised, not back in a chat that has
-        // already been dealt with.
+        onClose={goBack}
+        // Standalone only: from a chat the customer is not a choice, and
+        // offering to change it would invite filing against the wrong one.
+        contactField={fromChat ? undefined : <ContactPicker value={picked} onChange={setPicked} />}
+        // Land on the ticket just raised, not back where it was started.
         onCreated={(ticketId) => navigate(`/tickets/${ticketId}`, { replace: true })}
       />
     </div>

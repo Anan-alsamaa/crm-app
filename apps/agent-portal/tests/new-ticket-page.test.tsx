@@ -28,11 +28,19 @@ const inbox = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/inbox/api.js', () => inbox);
 
-/** The form itself is covered by its own tests; here it is just a marker. */
+vi.mock('../src/features/tickets/ContactPicker.js', () => ({
+  ContactPicker: () => <div data-testid="contact-picker" />,
+}));
+
+/** The form itself has its own tests; here it is just a marker for its inputs. */
 vi.mock('../src/features/tickets/CreateTicketDialog.js', () => ({
-  CreateTicketDialog: (p: { chrome?: string; contactId: string; vendorId: string }) => (
-    <div data-testid="ticket-form" data-chrome={p.chrome}>
-      form for {p.contactId}/{p.vendorId}
+  CreateTicketDialog: (p: {
+    contactId: string | null;
+    vendorId: string | null;
+    contactField?: React.ReactNode;
+  }) => (
+    <div data-testid="ticket-form" data-contact={p.contactId ?? ''} data-vendor={p.vendorId ?? ''}>
+      {p.contactField}
     </div>
   ),
 }));
@@ -51,44 +59,70 @@ beforeEach(() => {
   });
 });
 
-describe('NewTicketPage', () => {
-  it('renders the ticket form as a page, not a modal', () => {
-    renderPage();
-    expect(screen.getByTestId('ticket-form')).toHaveAttribute('data-chrome', 'page');
-    // A page is not a dialog: announcing one would tell a screen reader the rest
-    // of the app is inert when it is simply gone.
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
+describe('NewTicketPage — raised from a chat', () => {
   it('takes the contact and vendor from the conversation, not the URL', () => {
     renderPage();
-    expect(screen.getByTestId('ticket-form')).toHaveTextContent('form for k1/v1');
+    const form = screen.getByTestId('ticket-form');
+    expect(form).toHaveAttribute('data-contact', 'k1');
+    expect(form).toHaveAttribute('data-vendor', 'v1');
   });
 
-  it('refuses to render the form when the conversation has no contact', () => {
-    // Filling in fifteen fields and only then failing on save loses the work.
-    inbox.useConversation.mockReturnValue({
-      data: { id: 'c1', contact: null, vendor: { id: 'v1' } },
-      isLoading: false,
-    });
+  it('offers no contact picker — the customer is not a choice here', () => {
+    // Offering to change them would invite filing the ticket against someone
+    // other than the person in the chat.
     renderPage();
-    expect(screen.queryByTestId('ticket-form')).not.toBeInTheDocument();
-    expect(screen.getByText(/no conversation behind it/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('contact-picker')).not.toBeInTheDocument();
   });
 
-  it('refuses to render the form when the link carries no conversation at all', () => {
-    search.value = '';
-    inbox.useConversation.mockReturnValue({ data: undefined, isLoading: false });
+  it('is a page, not a dialog', () => {
     renderPage();
-    expect(screen.queryByTestId('ticket-form')).not.toBeInTheDocument();
+    // Announcing a route as a modal tells a screen reader the rest of the app
+    // is inert when it is simply gone.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('shows a skeleton while the conversation loads', () => {
     inbox.useConversation.mockReturnValue({ data: undefined, isLoading: true });
     renderPage();
-    // Not the empty state: "no conversation" and "not loaded yet" look identical
-    // to a user, and showing the dead end first reads as a broken link.
-    expect(screen.queryByText(/no conversation behind it/i)).not.toBeInTheDocument();
+    // Rendering the empty form first would let an agent start typing against a
+    // customer that has not resolved yet.
     expect(screen.queryByTestId('ticket-form')).not.toBeInTheDocument();
+  });
+
+  it('still renders the form when the conversation has no contact, with none set', () => {
+    // The form disables its own submit; blanking the page would lose the branch
+    // and complaint fields the agent can still fill in.
+    inbox.useConversation.mockReturnValue({
+      data: { id: 'c1', contact: null, vendor: { id: 'v1' } },
+      isLoading: false,
+    });
+    renderPage();
+    expect(screen.getByTestId('ticket-form')).toHaveAttribute('data-contact', '');
+  });
+});
+
+describe('NewTicketPage — standalone from the nav', () => {
+  beforeEach(() => {
+    search.value = '';
+    inbox.useConversation.mockReturnValue({ data: undefined, isLoading: false });
+  });
+
+  it('renders the form with a contact picker instead of a dead end', () => {
+    renderPage();
+    expect(screen.getByTestId('ticket-form')).toBeInTheDocument();
+    expect(screen.getByTestId('contact-picker')).toBeInTheDocument();
+  });
+
+  it('starts with no contact chosen', () => {
+    renderPage();
+    expect(screen.getByTestId('ticket-form')).toHaveAttribute('data-contact', '');
+  });
+
+  it('does not wait on a conversation that was never asked for', () => {
+    inbox.useConversation.mockReturnValue({ data: undefined, isLoading: true });
+    renderPage();
+    // `useConversation(null)` idles as "loading"; gating on it here would leave
+    // the nav entry showing a skeleton forever.
+    expect(screen.getByTestId('ticket-form')).toBeInTheDocument();
   });
 });

@@ -13,11 +13,7 @@ import {
   type YijiOrder,
 } from '@yiji/shared-types';
 import { useConversationAttachmentIds, useCreateTicketFromConversation } from './api.js';
-import {
-  OrderSnapshotCard,
-  orderToSnapshot,
-  type TicketOrderSnapshot,
-} from './OrderSnapshotCard.js';
+import { orderToSnapshot, type TicketOrderSnapshot } from './OrderSnapshotCard.js';
 import {
   ComplaintClassification,
   ComplaintResolution,
@@ -45,16 +41,20 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 interface Props {
-  contactId: string;
-  vendorId: string;
+  /**
+   * Null while the agent has not chosen a customer yet — the standalone route
+   * has no conversation to take one from. Submit stays disabled until both are
+   * known rather than failing on save with the form filled in.
+   */
+  contactId: string | null;
+  vendorId: string | null;
+  /**
+   * The customer control, supplied by the route so this form does not need to
+   * know whether the contact came from a chat or a search.
+   */
+  contactField?: React.ReactNode;
   conversationId?: string | null;
   onClose: () => void;
-  /**
-   * `overlay` floats the form over whatever raised it; `page` drops the modal
-   * chrome so a route can own the layout. Same form either way — the fields,
-   * the pre-fill and the branch attribution are defined once.
-   */
-  chrome?: 'overlay' | 'page';
   /** The new ticket's id, for callers that navigate to it. */
   onCreated?: (ticketId: string) => void;
 }
@@ -139,7 +139,7 @@ export function CreateTicketDialog({
   vendorId,
   conversationId,
   onClose,
-  chrome = 'overlay',
+  contactField,
   onCreated,
 }: Props) {
   const { t, i18n } = useTranslation();
@@ -158,7 +158,7 @@ export function CreateTicketDialog({
   // Chat context (#3): the order shown in this chat + the files shared in it.
   // Both are best-effort — a chat with no linked Yiji customer or no attachments
   // simply hides that row; ticket creation never depends on either resolving.
-  const contact = useContact(contactId);
+  const contact = useContact(contactId ?? '');
   const yijiVendorId = contact.data?.vendor?.yiji_vendor_id ?? '';
   const externalCustomerId = contact.data?.external_customer_id ?? '';
   const ordersQuery = useQuery({
@@ -251,6 +251,7 @@ export function CreateTicketDialog({
   }, [onClose]);
 
   const onSubmit = handleSubmit(async (values) => {
+    if (!contactId || !vendorId) return;
     if (complaintHasErrors(complaint)) return;
     try {
       // The description stays the agent's OWN words. The order rides along as
@@ -300,183 +301,244 @@ export function CreateTicketDialog({
   });
 
   const hasChatContext = !!conversationId && (!!latestOrder || sessionFileIds.length > 0);
-  const asPage = chrome === 'page';
+  const canSubmit = !!contactId && !!vendorId && !complaintHasErrors(complaint);
 
   return (
-    <div
-      // A page is not a dialog. Announcing one as `role="dialog"` with
-      // `aria-modal` tells a screen reader the rest of the app is inert when it
-      // is simply gone, and there is no backdrop to dismiss.
-      {...(asPage
-        ? {}
-        : {
-            role: 'dialog',
-            'aria-modal': true as const,
-            onClick: (e: React.MouseEvent) => {
-              if (e.target === e.currentTarget) onClose();
-            },
-          })}
-      className={cn(
-        asPage
-          ? 'flex min-h-0 flex-1 justify-center overflow-y-auto p-4 sm:p-6'
-          : 'fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md animate-fade-in',
-      )}
-    >
-      {/* Wide, scrolling sheet rather than the old max-w-md card: this is a
-          form with three sections now, and his agents fill it in one pass. */}
-      <div
-        className={cn(
-          'flex w-full max-w-2xl flex-col rounded-3xl bg-card ring-1 ring-foreground/[0.06]',
-          asPage
-            ? // On its own page the outer container scrolls, so the sheet grows
-              // with the form instead of trapping a second scrollbar inside it.
-              'h-fit shadow-sm'
-            : 'max-h-[90vh] overflow-hidden shadow-2xl shadow-foreground/15 animate-scale-in',
-        )}
-      >
-        <div className="space-y-1.5 px-7 pb-4 pt-7">
-          <h3 className="text-xl font-semibold tracking-[-0.02em] text-foreground">
+    <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
+      {/* Actions live in the header, not below the fields. On a multi-column
+          form the Save button would otherwise sit under whichever column
+          happened to be longest, and the agent would scroll to find it. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-foreground/[0.06] bg-card px-4 py-3 sm:px-6">
+        <div className="min-w-0">
+          <h1 className="text-base font-semibold tracking-[-0.01em] text-foreground">
             {t('tickets.createTitle')}
-          </h3>
-          <p className="text-sm leading-relaxed text-muted-foreground">
+          </h1>
+          <p className="truncate text-xs text-muted-foreground">
             {t('tickets.createHint', {
               defaultValue: 'Capture the work as a ticket so it can be tracked against an SLA.',
             })}
           </p>
         </div>
-        <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-7 pb-2">
-            {/* ── Order & branch ───────────────────────────────────────────
-                His first section. Ours is the real order card plus the
-                opt-in toggles, so the agent sees exactly what is being
-                attached instead of trusting a checkbox label.
-                Always rendered — the branch has to be recordable even when
-                there is no order to infer it from. */}
-            <ComplaintSection
-              title={t('complaint.orderAndBranch', { defaultValue: 'Order & branch' })}
-            >
-              <StorePicker
-                value={storeId}
-                onChange={setStoreId}
-                inferredFrom={inferredStoreId || null}
-              />
-              {hasChatContext && (
-                <>
-                  {latestOrder && (
-                    <>
-                      <IncludeToggle checked={includeOrder} onChange={setIncludeOrder}>
-                        <span className="font-medium">
-                          {t('tickets.includeOrder', { defaultValue: 'Attach order details' })}
-                        </span>
-                        {/* This is the customer's LATEST order, which may be
-                          unrelated to this chat (the conversation schema carries
-                          no order reference), so the agent must be able to see
-                          which order it is before attaching it. */}
-                        <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-muted-foreground">
-                          <span className="font-mono">#{latestOrder.orderId}</span>
-                          <Pill tone="neutral" size="sm">
-                            {titleize(latestOrder.status)}
-                          </Pill>
-                          <span className="tabular-nums">
-                            {money(latestOrder.total, latestOrder.currency)}
-                          </span>
-                          <span aria-hidden>·</span>
-                          <span className="tabular-nums">
-                            {formatOrderDate(latestOrder.placedAt, i18n.language)}
-                          </span>
-                        </span>
-                      </IncludeToggle>
-                      {includeOrder && orderSnapshotView && (
-                        <OrderSnapshotCard order={orderSnapshotView} className="mt-1" />
-                      )}
-                    </>
-                  )}
-                  {sessionFileIds.length > 0 && (
-                    <IncludeToggle checked={includeFiles} onChange={setIncludeFiles}>
-                      <span className="font-medium">
-                        {t('tickets.includeAttachments', {
-                          defaultValue: 'Attach files shared in this chat',
-                        })}
-                      </span>
-                      <span className="mt-0.5 block text-muted-foreground">
-                        {t('tickets.includeAttachmentsCount', {
-                          defaultValue: '{{count}} files from this session',
-                          count: sessionFileIds.length,
-                        })}
-                      </span>
-                    </IncludeToggle>
-                  )}
-                </>
-              )}
-            </ComplaintSection>
-
-            {/* ── What happened ─────────────────────────────────────────── */}
-            <ComplaintSection
-              title={t('complaint.whatHappened', { defaultValue: 'What happened' })}
-            >
-              <FormField
-                label={t('tickets.subject')}
-                htmlFor="ticket-subject"
-                error={errors.subject?.message}
-              >
-                <Input id="ticket-subject" invalid={!!errors.subject} {...register('subject')} />
-              </FormField>
-              <FormField label={t('tickets.description')} htmlFor="ticket-description">
-                <Textarea
-                  id="ticket-description"
-                  rows={3}
-                  dir="auto"
-                  {...register('description')}
-                />
-              </FormField>
-              <ComplaintClassification
-                values={complaint}
-                onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
-              />
-              <FormField label={t('conversation.priority')} htmlFor="ticket-priority">
-                <Controller
-                  control={control}
-                  name="priority"
-                  render={({ field }) => (
-                    <SelectMenu
-                      fullWidth
-                      value={field.value}
-                      onChange={field.onChange}
-                      aria-label={t('conversation.priority')}
-                      options={PRIORITIES.map((p) => ({
-                        value: p,
-                        label: t(`priority.${p}`, { ns: 'common' }),
-                      }))}
-                    />
-                  )}
-                />
-              </FormField>
-            </ComplaintSection>
-
-            {/* ── Resolution ────────────────────────────────────────────── */}
-            <ComplaintSection title={t('complaint.resolution', { defaultValue: 'Resolution' })}>
-              <ComplaintResolution
-                values={complaint}
-                onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
-              />
-            </ComplaintSection>
-          </div>
-
-          <div className="flex justify-end gap-2 border-t border-foreground/[0.06] px-7 py-4">
-            <Button type="button" variant="ghost" size="md" onClick={onClose}>
-              {t('actions.cancel', { ns: 'common' })}
-            </Button>
-            <Button
-              type="submit"
-              size="md"
-              disabled={complaintHasErrors(complaint)}
-              loading={isSubmitting || createFromChat.isPending}
-            >
-              {t('tickets.create')}
-            </Button>
-          </div>
-        </form>
+        <div className="ms-auto flex shrink-0 items-center gap-2">
+          <Button type="button" variant="ghost" size="md" onClick={onClose}>
+            {t('actions.cancel', { ns: 'common' })}
+          </Button>
+          <Button
+            type="submit"
+            size="md"
+            disabled={!canSubmit}
+            loading={isSubmitting || createFromChat.isPending}
+          >
+            {t('tickets.create')}
+          </Button>
+        </div>
       </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+        {/* Columns rather than one tall stack: fourteen fields in a single
+            column is two screens of scrolling, and this is filled in one pass.
+            The order rail comes last so it reads as reference, not input. */}
+        <div className="mx-auto grid w-full max-w-[104rem] items-start gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_18rem] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_19rem]">
+          <ComplaintSection title={t('complaint.ticket', { defaultValue: 'Ticket' })}>
+            {contactField}
+            <FormField
+              label={t('tickets.subject')}
+              htmlFor="ticket-subject"
+              error={errors.subject?.message}
+            >
+              <Input id="ticket-subject" invalid={!!errors.subject} {...register('subject')} />
+            </FormField>
+            <FormField label={t('tickets.description')} htmlFor="ticket-description">
+              <Textarea id="ticket-description" rows={3} dir="auto" {...register('description')} />
+            </FormField>
+            <FormField label={t('conversation.priority')} htmlFor="ticket-priority">
+              <Controller
+                control={control}
+                name="priority"
+                render={({ field }) => (
+                  <SelectMenu
+                    fullWidth
+                    value={field.value}
+                    onChange={field.onChange}
+                    aria-label={t('conversation.priority')}
+                    options={PRIORITIES.map((p) => ({
+                      value: p,
+                      label: t(`priority.${p}`, { ns: 'common' }),
+                    }))}
+                  />
+                )}
+              />
+            </FormField>
+            {/* Always rendered: the branch has to be recordable even when there
+                is no order to infer it from. */}
+            <StorePicker
+              value={storeId}
+              onChange={setStoreId}
+              inferredFrom={inferredStoreId || null}
+            />
+          </ComplaintSection>
+
+          <ComplaintSection title={t('complaint.whatHappened', { defaultValue: 'What happened' })}>
+            <ComplaintClassification
+              values={complaint}
+              onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
+            />
+          </ComplaintSection>
+
+          <ComplaintSection title={t('complaint.resolution', { defaultValue: 'Resolution' })}>
+            <ComplaintResolution
+              values={complaint}
+              onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
+            />
+          </ComplaintSection>
+
+          <OrderRail
+            order={latestOrder}
+            store={chosenMatch}
+            includeOrder={includeOrder}
+            onIncludeOrder={setIncludeOrder}
+            includeFiles={includeFiles}
+            onIncludeFiles={setIncludeFiles}
+            fileCount={sessionFileIds.length}
+            hasChatContext={hasChatContext}
+            locale={i18n.language}
+          />
+        </div>
+      </div>
+    </form>
+  );
+}
+
+/** One reference line in the rail: quiet label, readable value. */
+function RailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-xs">
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className="min-w-0 truncate text-end font-medium text-foreground">{value}</span>
     </div>
+  );
+}
+
+/**
+ * The order and the branch it came from, as a narrow reference column.
+ *
+ * Deliberately NOT the full OrderSnapshotCard used on the ticket itself: here
+ * the order is context for filling in a form, not the subject of the page, and
+ * at this width its line items and totals would push the actual inputs off
+ * screen. Everything is read-only apart from the two attach toggles, which
+ * decide what the ticket keeps.
+ */
+function OrderRail({
+  order,
+  store,
+  includeOrder,
+  onIncludeOrder,
+  includeFiles,
+  onIncludeFiles,
+  fileCount,
+  hasChatContext,
+  locale,
+}: {
+  order: YijiOrder | null;
+  store: StoreMatch | null;
+  includeOrder: boolean;
+  onIncludeOrder: (v: boolean) => void;
+  includeFiles: boolean;
+  onIncludeFiles: (v: boolean) => void;
+  fileCount: number;
+  hasChatContext: boolean;
+  locale: string;
+}) {
+  const { t } = useTranslation();
+  const matched = store?.store ?? null;
+
+  if (!order && !matched) {
+    return (
+      <aside className="rounded-2xl bg-secondary/40 p-4 text-xs leading-relaxed text-muted-foreground ring-1 ring-foreground/[0.05]">
+        {t('tickets.noOrderContext', {
+          defaultValue:
+            'No order attached. Pick a branch on the left so the ticket still reports against one.',
+        })}
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="space-y-3 rounded-2xl bg-secondary/40 p-4 ring-1 ring-foreground/[0.05]">
+      {order && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-mono text-xs font-semibold text-foreground">
+              #{order.orderId}
+            </span>
+            <Pill tone="neutral" size="sm">
+              {titleize(order.status)}
+            </Pill>
+          </div>
+          <RailRow
+            label={t('commerce.total', { defaultValue: 'Total' })}
+            value={<span className="tabular-nums">{money(order.total, order.currency)}</span>}
+          />
+          <RailRow
+            label={t('commerce.placed', { defaultValue: 'Placed' })}
+            value={<span className="tabular-nums">{formatOrderDate(order.placedAt, locale)}</span>}
+          />
+        </div>
+      )}
+
+      {matched && (
+        <div className="space-y-2 border-t border-foreground/[0.06] pt-3">
+          <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t('complaint.branch', { defaultValue: 'Restaurant / branch' })}
+          </p>
+          <p className="text-xs font-semibold leading-snug text-foreground">
+            {store?.restaurantName}
+          </p>
+          <RailRow label={t('stores.brand', { defaultValue: 'Brand' })} value={store?.brandName} />
+          {store?.city && (
+            <RailRow label={t('stores.city', { defaultValue: 'City' })} value={store.city} />
+          )}
+          {store?.areaManager && (
+            <RailRow
+              label={t('tickets.areaManager', { defaultValue: 'Area' })}
+              value={store.areaManager}
+            />
+          )}
+          {store?.chainManager && (
+            <RailRow
+              label={t('tickets.chainManager', { defaultValue: 'Chain' })}
+              value={store.chainManager}
+            />
+          )}
+        </div>
+      )}
+
+      {hasChatContext && (
+        <div className="space-y-2.5 border-t border-foreground/[0.06] pt-3">
+          {order && (
+            <IncludeToggle checked={includeOrder} onChange={onIncludeOrder}>
+              <span className="font-medium">
+                {t('tickets.includeOrder', { defaultValue: 'Attach order details' })}
+              </span>
+            </IncludeToggle>
+          )}
+          {fileCount > 0 && (
+            <IncludeToggle checked={includeFiles} onChange={onIncludeFiles}>
+              <span className="font-medium">
+                {t('tickets.includeAttachments', {
+                  defaultValue: 'Attach files shared in this chat',
+                })}
+              </span>
+              <span className="mt-0.5 block text-muted-foreground">
+                {t('tickets.includeAttachmentsCount', {
+                  defaultValue: '{{count}} files from this session',
+                  count: fileCount,
+                })}
+              </span>
+            </IncludeToggle>
+          )}
+        </div>
+      )}
+    </aside>
   );
 }

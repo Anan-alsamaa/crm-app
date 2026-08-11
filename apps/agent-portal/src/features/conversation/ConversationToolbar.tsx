@@ -52,7 +52,7 @@ export function ConversationToolbar({
   // One screen for one task: two different shapes for "new ticket" is the kind
   // of inconsistency agents learn around rather than notice.
   const openNewTicket = () =>
-    navigate(`/tickets/new?conversation=${encodeURIComponent(conversation.id)}`);
+    navigate(`/new-ticket?conversation=${encodeURIComponent(conversation.id)}`);
   // #6: once a chat is closed/resolved, nudge the agent to turn it into a ticket
   // so no conversation is left without a follow-up record. Dismissible, and reset
   // per conversation so a dismissal doesn't leak across threads.

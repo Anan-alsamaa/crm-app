@@ -12,6 +12,7 @@ export { Avatar } from './Avatar.js';
 export type { AvatarProps } from './Avatar.js';
 export {
   InboxIcon,
+  AddTicketIcon,
   TicketIcon,
   BellIcon,
   SettingsIcon,

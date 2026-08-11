@@ -568,7 +568,7 @@ export function ConversationView({
   // both the navigation and a refresh of the new page.
   const openTicketForOrder = () => {
     setDetailsOpen(false);
-    navigate(`/tickets/new?conversation=${encodeURIComponent(conversationId)}`);
+    navigate(`/new-ticket?conversation=${encodeURIComponent(conversationId)}`);
   };
 
   const copyMessage = (text: string) => {

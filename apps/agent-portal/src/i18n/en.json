@@ -187,7 +187,8 @@
     "work": "Work",
     "account": "Account",
     "compensation": "Compensation",
-    "reports": "Reports"
+    "reports": "Reports",
+    "addTicket": "Add ticket"
   },
   "inbox": {
     "title": "Shared Inbox",

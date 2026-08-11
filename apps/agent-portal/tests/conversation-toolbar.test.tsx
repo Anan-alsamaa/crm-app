@@ -90,7 +90,7 @@ describe('ConversationToolbar', () => {
   it('sends the agent to the New ticket page, carrying the conversation', async () => {
     renderToolbar();
     await userEvent.click(screen.getByText(/tickets.createTitle/));
-    expect(navigateSpy).toHaveBeenCalledWith('/tickets/new?conversation=c1');
+    expect(navigateSpy).toHaveBeenCalledWith('/new-ticket?conversation=c1');
   });
 
   it('opens no dialog of its own', async () => {

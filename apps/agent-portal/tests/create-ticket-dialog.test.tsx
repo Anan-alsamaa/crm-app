@@ -8,6 +8,10 @@ import React from 'react';
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (k: string, o?: { defaultValue?: string }) => o?.defaultValue ?? k,
+    // The form formats the order date, so it reads i18n.language. Omitting it
+    // made the whole component throw rather than the assertion fail, which is
+    // the kind of mock gap that reads as a product bug.
+    i18n: { language: 'en' },
   }),
 }));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
@@ -44,10 +48,12 @@ beforeEach(() => {
   hooks.useConversationAttachmentIds.mockReturnValue({ data: [] });
 });
 
-describe('CreateTicketDialog', () => {
-  it('renders the dialog with its fields', () => {
+describe('CreateTicketForm', () => {
+  it('renders as a page with its fields, not a modal', () => {
     renderDialog();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    // Every entry point is a route now. Announcing it as a dialog would tell a
+    // screen reader the rest of the app is inert when it is simply gone.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('tickets.subject')).toBeInTheDocument();
     expect(screen.getByText('tickets.description')).toBeInTheDocument();
   });

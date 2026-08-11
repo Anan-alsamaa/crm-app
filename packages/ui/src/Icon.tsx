@@ -44,6 +44,18 @@ export function TicketIcon({ size = 18, className, ...rest }: IconProps): JSX.El
   );
 }
 
+/** A ticket with a plus — raising one, as opposed to browsing them. */
+export function AddTicketIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h9" />
+      <path d="M22 12V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v2" />
+      <path d="M18 15v6" />
+      <path d="M15 18h6" />
+    </svg>
+  );
+}
+
 export function BellIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
   return (
     <svg {...svgProps(size, className)} {...rest}>

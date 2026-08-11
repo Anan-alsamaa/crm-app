@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
+  AddTicketIcon,
   AppShell,
   type AppShellRailContext,
   Avatar,
@@ -328,6 +329,11 @@ function Shell({ children }: { children: React.ReactNode }) {
       heading: t('nav.work', { defaultValue: 'Work' }),
       items: [
         { to: '/', end: true, label: t('nav.inbox'), icon: InboxIcon },
+        {
+          to: '/new-ticket',
+          label: t('nav.addTicket', { defaultValue: 'Add ticket' }),
+          icon: AddTicketIcon,
+        },
         { to: '/tickets', label: t('nav.tickets'), icon: TicketIcon },
         {
           to: '/contacts',
@@ -508,11 +514,10 @@ export function App() {
               </ProtectedRoute>
             }
           />
-          {/* Before the :ticketId route so "new" is never read as an id. React
-              Router ranks static segments higher anyway, but the ordering says
-              the intent out loud. */}
+          {/* Top-level, not /tickets/new: it is its own nav entry, and nested
+              under /tickets both items would light up at once. */}
           <Route
-            path="/tickets/new"
+            path="/new-ticket"
             element={
               <ProtectedRoute>
                 <Shell>
