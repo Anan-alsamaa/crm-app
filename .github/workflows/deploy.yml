@@ -95,6 +95,12 @@ jobs:
           [ -z "${{ vars.VITE_DIRECTUS_URL }}" ] && missing="$missing VITE_DIRECTUS_URL"
           [ -z "${{ vars.VITE_SOCKET_URL }}" ] && missing="$missing VITE_SOCKET_URL"
           [ -z "${{ vars.VITE_AI_GATEWAY_URL }}" ] && missing="$missing VITE_AI_GATEWAY_URL"
+          # Was missing from this guard AND from build-args, so every published
+          # portal image up to v1.6.0 baked the Dockerfile's localhost:3031
+          # default. Assignment notifications then fail silently in prod: the
+          # producer call is best-effort and its caller swallows the error, so
+          # nothing surfaces except notifications that never arrive.
+          [ -z "${{ vars.VITE_JOB_PRODUCER_URL }}" ] && missing="$missing VITE_JOB_PRODUCER_URL"
           if [ -n "$missing" ]; then
             echo "::error::Refusing to build ${{ matrix.name }}: unset repo Variable(s):$missing"
             echo "::error::These are compiled into the SPA. Unset means the image would ship"
@@ -132,6 +138,7 @@ jobs:
             VITE_DIRECTUS_URL=${{ vars.VITE_DIRECTUS_URL }}
             VITE_SOCKET_URL=${{ vars.VITE_SOCKET_URL }}
             VITE_AI_GATEWAY_URL=${{ vars.VITE_AI_GATEWAY_URL }}
+            VITE_JOB_PRODUCER_URL=${{ vars.VITE_JOB_PRODUCER_URL }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
           provenance: false
