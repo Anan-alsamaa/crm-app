@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -16,6 +16,14 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/dashboard/api.js', () => api);
 
+// The page now opens on the COMPLAINTS tab; these tests are about the support
+// view, so its data layer is stubbed out and every test switches tabs first.
+const complaintsApi = vi.hoisted(() => ({
+  useComplaintMetrics: vi.fn(() => ({ isLoading: true, isError: false, data: undefined })),
+  emptyComplaintFilters: { from: '', to: '', brand: '', city: '', store: '' },
+}));
+vi.mock('../src/features/dashboard/complaints-api.js', () => complaintsApi);
+
 import { DashboardPage } from '../src/features/dashboard/DashboardPage.js';
 
 function renderPage() {
@@ -23,7 +31,11 @@ function renderPage() {
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return render(<DashboardPage />, { wrapper: Wrapper });
+  const rendered = render(<DashboardPage />, { wrapper: Wrapper });
+  // Complaints is the default tab; these assertions are all about the support
+  // overview, so switch to it. fireEvent keeps renderPage synchronous.
+  fireEvent.click(screen.getByText('Support activity'));
+  return rendered;
 }
 
 const fullMetrics = {
