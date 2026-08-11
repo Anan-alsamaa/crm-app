@@ -45,14 +45,16 @@ const conversation = {
   vendor: { id: 'v1' },
 };
 
-function renderToolbar() {
+function renderToolbar(props: Partial<React.ComponentProps<typeof ConversationToolbar>> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
       <MemoryRouter>{children}</MemoryRouter>
     </QueryClientProvider>
   );
-  return render(<ConversationToolbar conversation={conversation as never} />, { wrapper: Wrapper });
+  return render(<ConversationToolbar conversation={conversation as never} {...props} />, {
+    wrapper: Wrapper,
+  });
 }
 
 beforeEach(() => {
@@ -78,5 +80,25 @@ describe('ConversationToolbar', () => {
     renderToolbar();
     await userEvent.click(screen.getByText(/tickets.createTitle/));
     expect(screen.getByText('create-ticket-dialog')).toBeInTheDocument();
+  });
+
+  // The sidebar's order id opens this same dialog, and the two are siblings —
+  // so the conversation can take ownership of the open state. These cover that
+  // seam: with no props the toolbar still owns it (the test above).
+  it('shows the dialog when a parent opens it — the sidebar order-id path', () => {
+    renderToolbar({ ticketDialogOpen: true, onTicketDialogOpenChange: vi.fn() });
+    expect(screen.getByText('create-ticket-dialog')).toBeInTheDocument();
+  });
+
+  it('delegates to the parent when controlled, rather than opening itself', async () => {
+    const onOpenChange = vi.fn();
+    renderToolbar({ ticketDialogOpen: false, onTicketDialogOpenChange: onOpenChange });
+
+    await userEvent.click(screen.getByText(/tickets.createTitle/));
+
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+    // Nothing opens until the parent says so — otherwise the toolbar would
+    // fork its own state and the two would drift apart.
+    expect(screen.queryByText('create-ticket-dialog')).not.toBeInTheDocument();
   });
 });
