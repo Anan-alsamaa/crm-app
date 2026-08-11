@@ -23,6 +23,7 @@ export {
   MenuIcon,
   CloseIcon,
   ArrowLeftIcon,
+  ChevronDownIcon,
   InfoIcon,
   SoundOnIcon,
   SoundOffIcon,
