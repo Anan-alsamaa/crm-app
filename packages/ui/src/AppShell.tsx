@@ -153,9 +153,11 @@ export function AppShell({
           {/* Light band. Hairline below rather than above: it separates the nav
               from the content, while the dark/light tone change already does
               the separating above. */}
+          {/* `relative z-30` so a nav dropdown paints over the page content
+              below rather than being covered by stacking contexts inside it. */}
           <nav
             aria-label={navLabel}
-            className="flex h-12 shrink-0 items-center border-b border-border bg-card px-4"
+            className="relative z-30 flex h-12 shrink-0 items-center border-b border-border bg-card px-4"
           >
             {navBar}
           </nav>

@@ -73,17 +73,8 @@ const AiConfigPage = lazy(() =>
   import('./features/ai-config/AiConfigPage.js').then((m) => ({ default: m.AiConfigPage })),
 );
 
-interface NavItem {
-  to: string;
-  label: string;
-  icon: typeof UsersIcon;
-  hint?: string;
-}
-
-interface NavSection {
-  heading?: string;
-  items: NavItem[];
-}
+import type { NavSection } from './nav.js';
+import { TopNav } from './components/TopNav.js';
 
 /* Colorful nav: each item's icon sits in its own vivid tinted tile that pops
  * against the dark navy rail. */
@@ -113,7 +104,10 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
         <YijiLogo variant="tile" size={32} className="bg-background/95 shadow-sm shrink-0" />
         {!isCollapsed && (
           <div className="min-w-0 leading-tight">
-            <div className="flex items-baseline gap-1.5 text-[15px] font-semibold tracking-[-0.015em] text-rail-active-foreground">
+            <div
+              dir="ltr"
+              className="flex items-baseline gap-1.5 text-[15px] font-semibold tracking-[-0.015em] text-rail-active-foreground"
+            >
               <span>Yiji</span>
               <span className="text-rail-foreground/70 font-normal">CRM</span>
             </div>
@@ -226,7 +220,7 @@ function MobileBrand() {
   return (
     <div className="flex items-center gap-2">
       <YijiLogo variant="tile" size={28} className="bg-rail shadow-sm shrink-0" />
-      <span className="text-[15px] font-semibold tracking-[-0.015em] text-foreground">
+      <span dir="ltr" className="text-[15px] font-semibold tracking-[-0.015em] text-foreground">
         Yiji <span className="font-normal text-muted-foreground">CRM</span>
       </span>
     </div>
@@ -236,7 +230,7 @@ function MobileBrand() {
 function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const displayName =
     [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || 'Admin';
   // Command-palette open state is lifted here so the top-bar search trigger and
@@ -324,10 +318,9 @@ function Shell({ children }: { children: React.ReactNode }) {
       ],
     },
   ];
-  // Current section label — anchors the left of the top bar beside the search
-  // box so the bar reads as context-left / actions-right.
-  const pageTitle =
-    sections.flatMap((s) => s.items).find((it) => location.pathname.startsWith(it.to))?.label ?? '';
+  // The top bar used to carry the current section label. The nav band below it
+  // now shows the active area as a filled pill, so a title here would repeat
+  // it; the brand lockup takes that slot, where it sat at the top of the rail.
   return (
     <>
       <AppShell
@@ -346,35 +339,76 @@ function Shell({ children }: { children: React.ReactNode }) {
         }
         topBar={
           <div className="flex w-full items-center gap-4">
-            {/* Left: bold page title */}
-            <div className="flex min-w-0 flex-1 items-center">
-              <span className="hidden truncate text-lg font-bold tracking-[-0.02em] text-foreground md:block">
-                {pageTitle}
-              </span>
+            {/* Start: brand lockup, back from the top of the rail. */}
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <YijiLogo variant="tile" size={30} className="shrink-0 bg-background/95 shadow-sm" />
+              <div className="hidden min-w-0 leading-tight md:block">
+                {/* dir=ltr: the product name is a brand lockup, not prose. Left
+                    to mirror it renders "CRM Yiji" in Arabic. */}
+                <div
+                  dir="ltr"
+                  className="flex items-baseline gap-1.5 text-[15px] font-semibold tracking-[-0.015em] text-rail-active-foreground"
+                >
+                  <span>Yiji</span>
+                  <span className="font-normal text-rail-foreground/70">CRM</span>
+                </div>
+                <div className="mt-0.5 text-2xs text-rail-foreground/75">
+                  {t('app.console', { defaultValue: 'Admin console' })}
+                </div>
+              </div>
             </div>
             {/* Center: the search field */}
             <div className="flex w-full max-w-sm justify-center">
               <SearchTrigger
                 fullWidth
+                tone="dark"
                 label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
                 aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
                 onClick={() => setPaletteOpen(true)}
               />
             </div>
-            {/* Right: utility cluster + user chip */}
+            {/* End: utility cluster + user chip + sign out */}
             <div className="flex flex-1 items-center justify-end gap-2">
-              <div className="flex items-center gap-0.5 rounded-xl bg-secondary/50 p-1 text-muted-foreground ring-1 ring-border">
+              <div
+                className="flex items-center gap-0.5 rounded-xl bg-white/[0.08] p-1 ring-1 ring-white/15"
+                style={
+                  {
+                    // The utility triggers hardcode the light-surface tokens,
+                    // which are near-invisible on the rail teal. Rebinding the
+                    // tokens re-tones them without forking the components; the
+                    // help drawer portals out, so this scope never reaches it.
+                    // Measured on --rail: label 8.1:1, hover label 19:1.
+                    '--muted-foreground': '0.86 0.02 196',
+                    '--foreground': '0.99 0.005 196',
+                    '--secondary': '0.40 0.06 196',
+                  } as React.CSSProperties
+                }
+              >
                 <HelpAssistant />
+                {/* Both of these lived in the rail footer, which desktop no
+                    longer renders — without moving them there is no way to
+                    switch language or sign out on desktop. */}
+                <LanguageToggle />
               </div>
-              <span className="hidden items-center gap-2 rounded-full bg-secondary/50 py-1 pe-3 ps-1 ring-1 ring-border sm:flex">
+              <span className="hidden items-center gap-2 rounded-full bg-white/[0.08] py-1 pe-1 ps-1 ring-1 ring-white/15 sm:flex">
                 <Avatar name={displayName} email={user?.email} size="sm" />
-                <span className="max-w-[9rem] truncate text-xs font-semibold text-foreground">
+                <span className="max-w-[9rem] truncate text-xs font-semibold text-rail-foreground">
                   {displayName}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => void logout()}
+                  aria-label={t('auth.signOut', { ns: 'common' })}
+                  title={t('auth.signOut', { ns: 'common' })}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-rail-foreground/70 transition-[background-color,color] duration-fast ease-out hover:bg-white/15 hover:text-rail-foreground motion-safe:active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-foreground/60"
+                >
+                  <SignOutIcon size={14} />
+                </button>
               </span>
             </div>
           </div>
         }
+        navBar={<TopNav sections={sections} />}
         resizeStorageKey="yiji.admin.sidebarWidth"
         navLabel={t('nav.primary', { defaultValue: 'Primary navigation' })}
         menuLabel={t('nav.openMenu', { defaultValue: 'Open menu' })}

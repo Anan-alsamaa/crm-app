@@ -222,6 +222,15 @@ export function ArrowLeftIcon({ size = 18, className, ...rest }: IconProps): JSX
   );
 }
 
+/** Disclosure caret for menu triggers. Vertical, so it needs no RTL mirroring. */
+export function ChevronDownIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
 export function InfoIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
   return (
     <svg {...svgProps(size, className)} {...rest}>
