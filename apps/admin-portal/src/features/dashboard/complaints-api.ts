@@ -51,6 +51,20 @@ export interface Breakdown {
   count: number;
 }
 
+/**
+ * A breakdown plus the number of distinct groups behind it.
+ *
+ * `distinct` exists so the UI can say "top 10 of 24". A capped list that does
+ * not admit it is capped reads as the whole picture — someone scanning "By
+ * complaint type" would conclude there are ten types when there are twenty-four.
+ * His app prints this on every chart; ours has to as well or it is quietly less
+ * truthful than the tool it replaces.
+ */
+export interface Cut {
+  rows: Breakdown[];
+  distinct: number;
+}
+
 export interface AgentPerformance {
   id: string;
   name: string;
@@ -121,26 +135,31 @@ export interface ComplaintMetrics {
   satisfiedPct: number | null;
   compensation: number;
   avgCompensation: number | null;
+  /** Complaints actually marked Compensated — not the same as "has a coupon". */
+  compensated: number;
+  /** Oldest / newest complaint in the filtered set (`yyyy-mm-dd`), for the header. */
+  firstDate: string | null;
+  lastDate: string | null;
   chatsWaiting: number;
   chatsTotal: number;
 
   months: MonthPoint[];
-  byRestaurant: Breakdown[];
-  byType: Breakdown[];
-  byBrand: Breakdown[];
-  byArea: Breakdown[];
-  byCity: Breakdown[];
-  byStatus: Breakdown[];
-  byServiceType: Breakdown[];
-  bySource: Breakdown[];
-  byAgent: Breakdown[];
+  byRestaurant: Cut;
+  byType: Cut;
+  byBrand: Cut;
+  byArea: Cut;
+  byCity: Cut;
+  byStatus: Cut;
+  byServiceType: Cut;
+  bySource: Cut;
+  byAgent: Cut;
   /**
    * UNSOLVED complaints per agent — deliberately not the same cut as `byAgent`.
    * Who has logged the most says who is busy; who is sitting on the most
    * unfinished work is what a supervisor actually chases, and a heavy logger
    * with nothing outstanding is the opposite of a problem.
    */
-  byOpenAgent: Breakdown[];
+  byOpenAgent: Cut;
   agents: AgentPerformance[];
   chatAgents: ChatAgentPerformance[];
   health: ServiceHealth;
@@ -195,11 +214,11 @@ interface StoreRecordRow {
 }
 
 /** Sort a count map into his "biggest first, top N" bar list. */
-function topN(counts: Map<string, number>, n: number, label?: Map<string, string>): Breakdown[] {
-  return Array.from(counts.entries())
+function topN(counts: Map<string, number>, n: number, label?: Map<string, string>): Cut {
+  const rows = Array.from(counts.entries())
     .map(([key, count]) => ({ key, label: label?.get(key) ?? key, count }))
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-    .slice(0, n);
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  return { rows: rows.slice(0, n), distinct: rows.length };
 }
 
 const bump = (m: Map<string, number>, key: string | null | undefined) => {
@@ -428,6 +447,9 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       let closedUnsatisfied = 0;
       let openNotOverdue = 0;
       let compensation = 0;
+      let compensated = 0;
+      let firstDate: string | null = null;
+      let lastDate: string | null = null;
       const monthMap = new Map<string, MonthPoint>();
 
       const byRestaurant = new Map<string, number>();
@@ -449,6 +471,16 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       for (const r of rows) {
         const money = typeof r.coupon_value === 'number' ? r.coupon_value : 0;
         compensation += money;
+        // Their own field, not "coupon_value > 0" — an agent can mark a
+        // complaint Compensated before the coupon amount is filled in, and the
+        // two questions ("was it settled" / "what did it cost") are different.
+        if (r.compensation === 'Compensated') compensated += 1;
+
+        const day = (r.date_created ?? '').slice(0, 10);
+        if (day) {
+          if (!firstDate || day < firstDate) firstDate = day;
+          if (!lastDate || day > lastDate) lastDate = day;
+        }
 
         const isOverdue =
           !r.first_responded_at &&
@@ -634,18 +666,21 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         satisfiedPct: rated ? (satisfied / rated) * 100 : null,
         compensation,
         avgCompensation: rows.length ? compensation / rows.length : null,
+        compensated,
+        firstDate,
+        lastDate,
         chatsWaiting,
         chatsTotal: conversations.length,
         months,
         byRestaurant: topN(byRestaurant, 10),
-        byType: topN(byType, 10),
-        byBrand: topN(byBrand, 6),
-        byArea: topN(byArea, 8),
-        byCity: topN(byCity, 8),
-        byStatus: topN(byStatus, 6),
-        byServiceType: topN(byServiceType, 6),
-        bySource: topN(bySource, 6),
-        byAgent: topN(byAgentCount, 10, agentLabels),
+        byType: topN(byType, 12),
+        byBrand: topN(byBrand, 10),
+        byArea: topN(byArea, 10),
+        byCity: topN(byCity, 10),
+        byStatus: topN(byStatus, 10),
+        byServiceType: topN(byServiceType, 8),
+        bySource: topN(bySource, 8),
+        byAgent: topN(byAgentCount, 12, agentLabels),
         // No cap: a supervisor chasing unfinished work must see everyone
         // holding some, not the worst ten.
         byOpenAgent: topN(byOpenAgentCount, Number.MAX_SAFE_INTEGER, agentLabels),

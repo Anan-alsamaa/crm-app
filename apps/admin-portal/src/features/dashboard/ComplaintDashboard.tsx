@@ -6,6 +6,7 @@ import {
   useComplaintMetrics,
   type Breakdown,
   type ComplaintFilters,
+  type Cut,
   type MonthPoint,
 } from './complaints-api.js';
 
@@ -79,11 +80,14 @@ function Kpi({
 function Card({
   title,
   hint,
+  aside,
   children,
   className,
 }: {
   title: string;
   hint?: string;
+  /** Right-aligned note in the header — his "top 10 of 24". */
+  aside?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {
@@ -91,7 +95,10 @@ function Card({
     <section
       className={cn('rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]', className)}
     >
-      <h2 className="text-sm font-semibold tracking-tight text-foreground">{title}</h2>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-semibold tracking-tight text-foreground">{title}</h2>
+        {aside && <span className="shrink-0 text-2xs text-muted-foreground">{aside}</span>}
+      </div>
       {hint && <p className="mt-0.5 text-2xs leading-relaxed text-muted-foreground">{hint}</p>}
       <div className="mt-4">{children}</div>
     </section>
@@ -135,6 +142,48 @@ function Bars({ rows, total, color }: { rows: Breakdown[]; total: number; color:
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * One breakdown card: title, his "top N of M" note when the list is capped, and
+ * the bars. Wrapping it keeps that note impossible to forget on a new card —
+ * the previous version capped every list and admitted it on none.
+ */
+function CutCard({
+  title,
+  hint,
+  cut,
+  total,
+  color,
+  className,
+}: {
+  title: string;
+  hint?: string;
+  cut: Cut;
+  total: number;
+  color: string;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  const hidden = cut.distinct > cut.rows.length;
+  return (
+    <Card
+      title={title}
+      hint={hint}
+      className={className}
+      aside={
+        hidden
+          ? t('complaintDash.topNofM', {
+              defaultValue: 'top {{n}} of {{m}}',
+              n: cut.rows.length,
+              m: cut.distinct,
+            })
+          : undefined
+      }
+    >
+      <Bars rows={cut.rows} total={total} color={color} />
+    </Card>
   );
 }
 
@@ -571,8 +620,14 @@ export function ComplaintDashboard() {
           <p className="px-1 text-xs text-muted-foreground">
             {d.total > 0
               ? t('complaintDash.summary', {
-                  defaultValue: '{{n}} complaints · {{money}} compensation',
+                  // The span is the range the DATA covers, which is not the
+                  // range you filtered on — "last 90 days" over three
+                  // complaints logged in one week should say so.
+                  defaultValue:
+                    'Showing {{n}} complaints from {{from}} to {{to}} · {{money}} compensation',
                   n: d.total.toLocaleString(),
+                  from: d.firstDate ?? '—',
+                  to: d.lastDate ?? '—',
                   money: SAR(d.compensation),
                 })
               : t('complaintDash.noMatch', {
@@ -631,12 +686,13 @@ export function ComplaintDashboard() {
               value={d.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               label={t('complaintDash.kpiCompensation', { defaultValue: 'Compensation SAR' })}
               sub={
-                d.avgCompensation === null
-                  ? ''
-                  : t('complaintDash.avgEach', {
-                      defaultValue: '{{v}} avg each',
-                      v: d.avgCompensation.toFixed(1),
+                d.total
+                  ? t('complaintDash.compensatedCount', {
+                      defaultValue: '{{n}} compensated · {{v}} avg each',
+                      n: d.compensated,
+                      v: (d.avgCompensation ?? 0).toFixed(1),
                     })
+                  : ''
               }
             />
             <Kpi
@@ -671,7 +727,7 @@ export function ComplaintDashboard() {
           <div className="grid gap-4 md:grid-cols-2">
             <Card title={t('complaintDash.statusMix', { defaultValue: 'Complaint status mix' })}>
               <Donut
-                rows={d.byStatus.map((r) => ({
+                rows={d.byStatus.rows.map((r) => ({
                   ...r,
                   label: t(`status.${r.key}`, { ns: 'common', defaultValue: r.key }),
                 }))}
@@ -680,7 +736,7 @@ export function ComplaintDashboard() {
             <Card
               title={t('complaintDash.brandMix', { defaultValue: 'Where complaints come from' })}
             >
-              <Donut rows={d.byBrand} />
+              <Donut rows={d.byBrand.rows} />
             </Card>
           </div>
 
@@ -962,7 +1018,7 @@ export function ComplaintDashboard() {
                 defaultValue: 'Unsolved complaints by agent',
               })}
               hint={
-                d.byOpenAgent.length > 0
+                d.byOpenAgent.rows.length > 0
                   ? t('complaintDash.unsolvedHint', {
                       defaultValue: '{{n}} still open across the filtered range.',
                       n: d.open,
@@ -971,7 +1027,7 @@ export function ComplaintDashboard() {
               }
               className="md:col-span-2"
             >
-              {d.byOpenAgent.length === 0 ? (
+              {d.byOpenAgent.rows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {t('complaintDash.nothingOutstanding', {
                     defaultValue: 'Nothing outstanding — every complaint in this range is closed.',
@@ -980,10 +1036,10 @@ export function ComplaintDashboard() {
               ) : (
                 // Shares are OF THE OPEN PILE, not of every complaint: "40% of
                 // what is still open" is the question being asked here.
-                <Bars rows={d.byOpenAgent} total={d.open} color="bg-destructive" />
+                <Bars rows={d.byOpenAgent.rows} total={d.open} color="bg-destructive" />
               )}
             </Card>
-            <Card
+            <CutCard
               title={t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' })}
               hint={
                 d.unattributed > 0
@@ -994,51 +1050,71 @@ export function ComplaintDashboard() {
                     })
                   : undefined
               }
-            >
-              <Bars rows={d.byRestaurant} total={d.total} color="bg-foreground" />
-            </Card>
-            <Card title={t('complaintDash.byType', { defaultValue: 'By complaint type' })}>
-              <Bars rows={d.byType} total={d.total} color="bg-violet" />
-            </Card>
-            <Card title={t('complaintDash.byBrand', { defaultValue: 'By brand' })}>
-              <Bars rows={d.byBrand} total={d.total} color="bg-warning" />
-            </Card>
-            <Card
+              cut={d.byRestaurant}
+              total={d.total}
+              color="bg-foreground"
+            />
+            <CutCard
+              title={t('complaintDash.byType', { defaultValue: 'By complaint type' })}
+              cut={d.byType}
+              total={d.total}
+              color="bg-violet"
+            />
+            <CutCard
+              title={t('complaintDash.byBrand', { defaultValue: 'By brand' })}
+              cut={d.byBrand}
+              total={d.total}
+              color="bg-warning"
+            />
+            <CutCard
               title={t('complaintDash.byArea', { defaultValue: 'By area' })}
               hint={t('complaintDash.byAreaHint', {
                 defaultValue: 'The area manager responsible for the branch.',
               })}
-            >
-              <Bars rows={d.byArea} total={d.total} color="bg-warning" />
-            </Card>
-            <Card title={t('complaintDash.byCity', { defaultValue: 'By city' })}>
-              <Bars rows={d.byCity} total={d.total} color="bg-sky" />
-            </Card>
-            <Card title={t('complaintDash.byAgent', { defaultValue: 'By agent' })}>
-              <Bars rows={d.byAgent} total={d.total} color="bg-violet" />
-            </Card>
-            <Card title={t('complaintDash.byStatus', { defaultValue: 'By status' })}>
-              <Bars
-                rows={d.byStatus.map((r) => ({
+              cut={d.byArea}
+              total={d.total}
+              color="bg-warning"
+            />
+            <CutCard
+              title={t('complaintDash.byCity', { defaultValue: 'By city' })}
+              cut={d.byCity}
+              total={d.total}
+              color="bg-sky"
+            />
+            <CutCard
+              title={t('complaintDash.byAgent', { defaultValue: 'By agent' })}
+              cut={d.byAgent}
+              total={d.total}
+              color="bg-violet"
+            />
+            <CutCard
+              title={t('complaintDash.byStatus', { defaultValue: 'By status' })}
+              cut={{
+                ...d.byStatus,
+                rows: d.byStatus.rows.map((r) => ({
                   ...r,
                   label: t(`status.${r.key}`, { ns: 'common', defaultValue: r.key }),
-                }))}
-                total={d.total}
-                color="bg-success"
-              />
-            </Card>
-            <Card title={t('complaintDash.byServiceType', { defaultValue: 'By service type' })}>
-              <Bars rows={d.byServiceType} total={d.total} color="bg-primary" />
-            </Card>
+                })),
+              }}
+              total={d.total}
+              color="bg-success"
+            />
+            <CutCard
+              title={t('complaintDash.byServiceType', { defaultValue: 'By service type' })}
+              cut={d.byServiceType}
+              total={d.total}
+              color="bg-primary"
+            />
             {/* Retitled off his wording deliberately: he uses "Where complaints
                 come from" for the BRAND ring above. Two cards under one title
                 showing different things is worse than losing his phrasing. */}
-            <Card
+            <CutCard
               title={t('complaintDash.bySource', { defaultValue: 'How complaints reach us' })}
               className="md:col-span-2"
-            >
-              <Bars rows={d.bySource} total={d.total} color="bg-destructive" />
-            </Card>
+              cut={d.bySource}
+              total={d.total}
+              color="bg-destructive"
+            />
           </div>
         </>
       )}

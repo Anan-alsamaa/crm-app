@@ -2,9 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
 
+// Interpolates {{placeholders}} the way i18next does. Without this the mock
+// renders "top {{n}} of {{m}}" literally and any assertion on a formatted
+// string silently tests nothing.
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (k: string, o?: { defaultValue?: string }) => o?.defaultValue ?? k,
+    t: (k: string, o?: Record<string, unknown> & { defaultValue?: string }) =>
+      String(o?.defaultValue ?? k).replace(/\{\{(\w+)\}\}/g, (_m, name: string) =>
+        String(o?.[name] ?? ''),
+      ),
   }),
 }));
 
@@ -17,6 +23,8 @@ vi.mock('../src/features/dashboard/complaints-api.js', () => api);
 import { ComplaintDashboard } from '../src/features/dashboard/ComplaintDashboard.js';
 
 const bd = (label: string, count: number) => ({ key: label, label, count });
+/** A cut whose `distinct` exceeds what is shown, so the "top N of M" note renders. */
+const cut = (rows: ReturnType<typeof bd>[], distinct = rows.length) => ({ rows, distinct });
 
 const METRICS = {
   total: 10,
@@ -29,22 +37,25 @@ const METRICS = {
   satisfiedPct: 75,
   compensation: 250,
   avgCompensation: 25,
+  compensated: 4,
+  firstDate: '2026-06-02',
+  lastDate: '2026-07-29',
   chatsWaiting: 2,
   chatsTotal: 9,
   months: [
     { month: '2026-06', count: 4, compensation: 100 },
     { month: '2026-07', count: 6, compensation: 150 },
   ],
-  byRestaurant: [bd('LCP-002 Dhahran Mall', 6)],
-  byType: [bd('Missing item', 7), bd('Late order', 3)],
-  byBrand: [bd('Casa Pasta', 7), bd('Pasketti', 3)],
-  byArea: [bd('Aly', 5)],
-  byCity: [bd('Khobar', 6)],
-  byStatus: [bd('closed', 6), bd('open', 4)],
-  byServiceType: [bd('Delivery', 8)],
-  bySource: [bd('Comp. WhatsApp', 5)],
-  byAgent: [bd('Amjad', 8)],
-  byOpenAgent: [bd('Sara', 3)],
+  byRestaurant: cut([bd('LCP-002 Dhahran Mall', 6)]),
+  byType: cut([bd('Missing item', 7), bd('Late order', 3)]),
+  byBrand: cut([bd('Casa Pasta', 7), bd('Pasketti', 3)]),
+  byArea: cut([bd('Aly', 5)]),
+  byCity: cut([bd('Khobar', 6)], 24),
+  byStatus: cut([bd('closed', 6), bd('open', 4)]),
+  byServiceType: cut([bd('Delivery', 8)]),
+  bySource: cut([bd('Comp. WhatsApp', 5)]),
+  byAgent: cut([bd('Amjad', 8)]),
+  byOpenAgent: cut([bd('Sara', 3)]),
   agents: [
     {
       id: 'u1',
@@ -166,5 +177,27 @@ describe('ComplaintDashboard — donut slices are actually painted', () => {
     const circumference = 2 * Math.PI * 54;
     // Largest slice first: 6 of 10.
     expect(len).toBeCloseTo(circumference * 0.6, 1);
+  });
+});
+
+describe('ComplaintDashboard — a capped list admits what it hides', () => {
+  it('prints "top N of M" only on the cuts that are actually truncated', () => {
+    render(<ComplaintDashboard />);
+    // byCity shows 1 of 24 distinct cities.
+    expect(screen.getByText('top 1 of 24')).toBeInTheDocument();
+    // byType shows all 2 of its 2, so it must NOT claim to be capped.
+    expect(screen.queryByText('top 2 of 2')).not.toBeInTheDocument();
+  });
+
+  it('states the period the data actually covers, not the filter', () => {
+    render(<ComplaintDashboard />);
+    expect(
+      screen.getByText(/Showing 10 complaints from 2026-06-02 to 2026-07-29/),
+    ).toBeInTheDocument();
+  });
+
+  it('shows how many complaints were settled, not just what was spent', () => {
+    render(<ComplaintDashboard />);
+    expect(screen.getByText('4 compensated · 25.0 avg each')).toBeInTheDocument();
   });
 });

@@ -172,8 +172,8 @@ describe('complaint dashboard — branch attribution', () => {
       users: USERS,
     });
     const d = await run();
-    expect(d.byRestaurant[0]?.label).toBe('PSK-014 Doha Plaza');
-    expect(d.byCity[0]?.label).toBe('Dammam');
+    expect(d.byRestaurant.rows[0]?.label).toBe('PSK-014 Doha Plaza');
+    expect(d.byCity.rows[0]?.label).toBe('Dammam');
   });
 
   it('falls back to the order snapshot for tickets raised before the branch field existed', async () => {
@@ -188,7 +188,7 @@ describe('complaint dashboard — branch attribution', () => {
       users: USERS,
     });
     const d = await run();
-    expect(d.byRestaurant[0]?.label).toBe('LCP-002 Dhahran Mall');
+    expect(d.byRestaurant.rows[0]?.label).toBe('LCP-002 Dhahran Mall');
     expect(d.unattributed).toBe(0);
   });
 
@@ -344,12 +344,12 @@ describe('complaint dashboard — breakdowns', () => {
       users: USERS,
     });
     const d = await run();
-    expect(d.byType.map((r) => [r.label, r.count])).toEqual([
+    expect(d.byType.rows.map((r) => [r.label, r.count])).toEqual([
       ['Late order', 2],
       ['Missing item', 1],
     ]);
     // The null service type is not a category called "".
-    expect(d.byServiceType).toEqual([{ key: 'Delivery', label: 'Delivery', count: 2 }]);
+    expect(d.byServiceType.rows).toEqual([{ key: 'Delivery', label: 'Delivery', count: 2 }]);
   });
 
   it('offers filter options from the store master, not from what happens to have complaints', async () => {
@@ -379,8 +379,8 @@ describe('complaint dashboard — the dimensions his dashboard slices by', () =>
     });
     const d = await run();
     // st2 has no area manager, so only st1's two complaints carry an area.
-    expect(d.byArea).toEqual([{ key: 'Aly', label: 'Aly', count: 2 }]);
-    expect(d.byAgent.map((r) => [r.label, r.count])).toEqual([
+    expect(d.byArea.rows).toEqual([{ key: 'Aly', label: 'Aly', count: 2 }]);
+    expect(d.byAgent.rows.map((r) => [r.label, r.count])).toEqual([
       ['Amjad', 2],
       ['Unassigned', 1],
     ]);
@@ -562,9 +562,9 @@ describe('complaint dashboard — unsolved work per agent', () => {
     });
     const d = await run();
     // The busiest agent leads "by agent"...
-    expect(d.byAgent[0]?.label).toBe('Amjad');
+    expect(d.byAgent.rows[0]?.label).toBe('Amjad');
     // ...but is absent from the unsolved list entirely, which is the point.
-    expect(d.byOpenAgent).toEqual([{ key: 'u2', label: 'Sara', count: 2 }]);
+    expect(d.byOpenAgent.rows).toEqual([{ key: 'u2', label: 'Sara', count: 2 }]);
     expect(d.open).toBe(2);
   });
 
@@ -575,7 +575,7 @@ describe('complaint dashboard — unsolved work per agent', () => {
       users: USERS,
     });
     const d = await run();
-    expect(d.byOpenAgent).toEqual([]);
+    expect(d.byOpenAgent.rows).toEqual([]);
   });
 
   it('names unassigned open complaints rather than dropping them', async () => {
@@ -585,7 +585,7 @@ describe('complaint dashboard — unsolved work per agent', () => {
       users: USERS,
     });
     const d = await run();
-    expect(d.byOpenAgent).toEqual([{ key: '', label: 'Unassigned', count: 1 }]);
+    expect(d.byOpenAgent.rows).toEqual([{ key: '', label: 'Unassigned', count: 1 }]);
   });
 
   it('does not cap the unsolved list — every agent holding work must show', async () => {
@@ -601,8 +601,10 @@ describe('complaint dashboard — unsolved work per agent', () => {
       users,
     });
     const d = await run();
-    // The ranked "by agent" cut still tops out at 10; the chase list does not.
-    expect(d.byAgent).toHaveLength(10);
-    expect(d.byOpenAgent).toHaveLength(14);
+    // The ranked "by agent" cut still tops out (12, matching his); the chase
+    // list does not — and it reports how many it hid.
+    expect(d.byAgent.rows).toHaveLength(12);
+    expect(d.byAgent.distinct).toBe(14);
+    expect(d.byOpenAgent.rows).toHaveLength(14);
   });
 });
