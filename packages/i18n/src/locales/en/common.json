@@ -18,7 +18,8 @@
     "change": "Change",
     "done": "Done",
     "toggleLanguage": "Toggle language",
-    "retry": "Retry"
+    "retry": "Retry",
+    "clear": "Clear"
   },
   "auth": {
     "signIn": "Sign in",

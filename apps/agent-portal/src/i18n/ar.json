@@ -411,7 +411,8 @@
     "addToTicket": "إضافة",
     "added": "مُضاف",
     "orderNoItems": "لا توجد عناصر في هذا الطلب.",
-    "orderCapturedAt": "أُخذت اللقطة {{at}}"
+    "orderCapturedAt": "أُخذت اللقطة {{at}}",
+    "noOption": "لا يوجد خيار مطابق."
   },
   "notifications": {
     "title": "التنبيهات",
@@ -557,5 +558,29 @@
     "mismatch": "كلمتا المرور غير متطابقتين.",
     "invalidToken": "رابط إعادة التعيين هذا غير صالح أو انتهت صلاحيته. اطلب رابطًا جديدًا.",
     "missingToken": "رابط إعادة التعيين هذا غير مكتمل. اطلب رابطًا جديدًا من صفحة تسجيل الدخول."
+  },
+  "complaint": {
+    "section": "تفاصيل الشكوى",
+    "add": "إضافة تفاصيل الشكوى",
+    "none": "لم تُصنَّف كشكوى بعد.",
+    "saved": "تم حفظ تفاصيل الشكوى",
+    "whatHappened": "ما الذي حدث",
+    "resolution": "المعالجة",
+    "customer": "العميل",
+    "search": "اكتب للبحث…",
+    "type": "نوع الشكوى",
+    "serviceType": "نوع الخدمة",
+    "source": "مصدر الشكوى",
+    "sourceHint": "من أين وردت",
+    "communication": "وسيلة التواصل",
+    "communicationHint": "كيف تم الرد",
+    "response": "ملاحظات المعالجة",
+    "responsePlaceholder": "ما الذي قمت به…",
+    "compensation": "التعويض",
+    "couponCode": "رمز القسيمة",
+    "couponValue": "قيمة القسيمة (ريال)",
+    "couponPercent": "نسبة القسيمة %",
+    "badValue": "أدخل مبلغاً يساوي 0 أو أكثر.",
+    "badPercent": "أدخل نسبة بين 0 و 100."
   }
 }

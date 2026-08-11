@@ -11,7 +11,38 @@ export interface TicketAttachment {
   file: { id: string; filename: string | null; type: string | null } | null;
 }
 
-export interface TicketRow {
+/**
+ * The operations team's complaint columns, carried on every ticket. All
+ * nullable — tickets predate them and not every ticket is a complaint.
+ * Values are their own vocabulary (see ComplaintType in @yiji/shared-types);
+ * the two coupon numbers are real numbers so compensation can be summed.
+ */
+export interface TicketComplaintFields {
+  complaint_type: string | null;
+  service_type: string | null;
+  complaint_source: string | null;
+  communication_method: string | null;
+  response_desc: string | null;
+  compensation: string | null;
+  coupon_code: string | null;
+  coupon_value: number | null;
+  coupon_percent: number | null;
+}
+
+/** Field names as Directus stores them — reused by every read that needs them. */
+export const COMPLAINT_FIELDS = [
+  'complaint_type',
+  'service_type',
+  'complaint_source',
+  'communication_method',
+  'response_desc',
+  'compensation',
+  'coupon_code',
+  'coupon_value',
+  'coupon_percent',
+] as const;
+
+export interface TicketRow extends Partial<TicketComplaintFields> {
   id: string;
   subject: string;
   description: string | null;
@@ -58,6 +89,9 @@ export function useTickets() {
             'resolution_due_at',
             'first_responded_at',
             'date_created',
+            // The list is scanned by category the way the ops team scan their
+            // own sheet, so the type rides along with the summary read.
+            'complaint_type',
             { contact: ['id', 'name', 'email', 'phone'] },
           ],
           sort: ['-date_created'],
@@ -88,6 +122,7 @@ export function useTicket(id: string | null) {
             'first_responded_at',
             'date_created',
             'order_snapshot',
+            ...COMPLAINT_FIELDS,
             { contact: ['id', 'name', 'email', 'phone'] },
             {
               attachments: ['id', { directus_files_id: ['id', 'filename_download', 'type'] }],
@@ -139,7 +174,7 @@ export function useTicketEvents(ticketId: string | null) {
   });
 }
 
-export interface CreateTicketInput {
+export interface CreateTicketInput extends Partial<TicketComplaintFields> {
   subject: string;
   description?: string;
   priority: Priority;
@@ -221,10 +256,9 @@ export interface CreateTicketFromConversationInput {
  * best-effort (`Promise.allSettled`) so one bad file id never discards the
  * ticket that was already created.
  *
- * The order snapshot travels in `ticket.description` for now — the tickets
- * collection has no structured order field yet.
- * TODO: add a JSON `order_snapshot` column to the tickets collection and persist
- * the order there instead of inlining it into the description.
+ * The order travels as structured JSON on `ticket.order_snapshot`, and the
+ * complaint columns ride along on the same insert, so the ticket is complete
+ * the moment it exists rather than needing a follow-up PATCH.
  */
 export function useCreateTicketFromConversation() {
   const qc = useQueryClient();
@@ -255,7 +289,7 @@ export function useCreateTicketFromConversation() {
   });
 }
 
-export interface UpdateTicketInput {
+export interface UpdateTicketInput extends Partial<TicketComplaintFields> {
   status?: TicketStatus;
   priority?: Priority;
   assigned_agent?: string | null;

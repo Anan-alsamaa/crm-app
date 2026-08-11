@@ -22,6 +22,20 @@ export default defineConfig({
     // peak RSS low so the suite is stable on constrained runners.
     pool: 'forks',
     poolOptions: { forks: { singleFork: true } },
+    /* WINDOWS: react-i18next's ESM build imports `html-parse-stringify`, which
+     * ships no `exports` map. Left external, Vite hands Node a bare WINDOWS
+     * path (`D:\...\html-parse-stringify.js`); Node's ESM loader only accepts
+     * forward slashes or a file:// URL for an absolute specifier, so it reads
+     * the backslash path as a PACKAGE NAME and fails with "Cannot find package
+     * 'D:\...'". Every suite that renders a translated component dies at import
+     * time — before a single assertion runs.
+     *
+     * Inlining it makes Vite resolve the import itself, which sidesteps the
+     * path entirely. It stayed hidden because CI is Linux (forward slashes) and
+     * a dev machine that has run `pnpm dev` has a warm .vite/deps cache that
+     * serves the pre-bundled copy — so it reproduces only on a FRESH Windows
+     * checkout, which is exactly what a new git worktree is. */
+    server: { deps: { inline: [/react-i18next/] } },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'text-summary', 'json-summary', 'lcov'],

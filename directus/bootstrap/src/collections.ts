@@ -5,6 +5,14 @@
  * the generated snapshot in directus/snapshot/.
  */
 
+import {
+  CommunicationMethod,
+  Compensation,
+  ComplaintSource,
+  ComplaintType,
+  ServiceType,
+} from '@yiji/shared-types';
+
 export type FieldType =
   | 'string'
   | 'text'
@@ -183,6 +191,58 @@ export const collections: CollectionSpec[] = [
       // and so it stays queryable. The order may change or vanish upstream,
       // which is exactly why this is a snapshot rather than a live lookup.
       { field: 'order_snapshot', type: 'json' },
+
+      /* Complaint classification — the operations team's own complaint columns,
+       * so a ticket raised in the portal reports alongside the complaints they
+       * log by hand today. Choices come from @yiji/shared-types so this schema
+       * and the portal's dropdowns cannot drift apart; the odd spellings there
+       * are deliberate (see the note on ComplaintType).
+       *
+       * Every one is nullable: existing tickets have none of them, and the
+       * inbox still raises ordinary support tickets that are not complaints. */
+      {
+        field: 'complaint_type',
+        type: 'string',
+        choices: [...ComplaintType.options],
+        index: true,
+        note: 'What the customer complained about. Indexed — every ops report groups by it.',
+      },
+      {
+        field: 'service_type',
+        type: 'string',
+        choices: [...ServiceType.options],
+        note: 'How the order was fulfilled (Delivery, Pickup, …). Pre-filled from the order snapshot when the order says.',
+      },
+      {
+        field: 'complaint_source',
+        type: 'string',
+        choices: [...ComplaintSource.options],
+        note: 'Channel the complaint ARRIVED on.',
+      },
+      {
+        field: 'communication_method',
+        type: 'string',
+        choices: [...CommunicationMethod.options],
+        note: 'Channel the agent ANSWERED on. Deliberately separate from complaint_source — a Twitter complaint is routinely answered on WhatsApp, and both are reported.',
+      },
+      {
+        field: 'response_desc',
+        type: 'text',
+        note: 'What was done about it, in the agent’s words (their "Response Desc" column).',
+      },
+      {
+        field: 'compensation',
+        type: 'string',
+        choices: [...Compensation.options],
+        note: 'Whether the customer was compensated. "Initial" = not decided yet.',
+      },
+      { field: 'coupon_code', type: 'string', note: 'Coupon issued to the customer, if any.' },
+      {
+        field: 'coupon_value',
+        type: 'float',
+        note: 'Coupon face value in SAR. Their dashboard sums this as total compensation, so it must be a number — never a formatted string.',
+      },
+      { field: 'coupon_percent', type: 'float', note: 'Coupon discount as a percentage (0–100).' },
     ],
   },
   {

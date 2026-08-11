@@ -13,6 +13,15 @@ import {
 } from '@yiji/ui';
 import type { Priority } from '@yiji/shared-types';
 import { useCreateTicket } from './api.js';
+import {
+  ComplaintClassification,
+  ComplaintResolution,
+  ComplaintSection,
+  complaintHasErrors,
+  complaintPatch,
+  emptyComplaint,
+  type ComplaintValues,
+} from './ComplaintFields.js';
 import { useContactSearch, type ContactRow } from '../contacts/api.js';
 import { useAgents } from '../inbox/api.js';
 
@@ -43,6 +52,7 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('medium');
   const [assignedAgent, setAssignedAgent] = useState('');
+  const [complaint, setComplaint] = useState<ComplaintValues>(emptyComplaint);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -63,10 +73,11 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
 
   const contactId = selectedContact?.id ?? null;
   const vendorId = selectedContact?.vendor?.id ?? null;
-  const canSubmit = !!subject.trim() && !!contactId && !!vendorId && !submitting;
+  const canSubmit =
+    !!subject.trim() && !!contactId && !!vendorId && !submitting && !complaintHasErrors(complaint);
 
   const submit = async () => {
-    if (!subject.trim() || !contactId || !vendorId) return;
+    if (!subject.trim() || !contactId || !vendorId || complaintHasErrors(complaint)) return;
     setSubmitting(true);
     try {
       const created = (await createTicket.mutateAsync({
@@ -76,6 +87,7 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
         contact: contactId,
         vendor: vendorId,
         assigned_agent: assignedAgent || null,
+        ...complaintPatch(complaint),
       } as Parameters<typeof createTicket.mutateAsync>[0])) as { id?: string } | undefined;
       toast.success(t('tickets.created', { defaultValue: 'Ticket created' }), {
         description: subject.trim(),
@@ -98,8 +110,10 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-3xl bg-card p-7 shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in">
-        <div className="mb-6 space-y-1.5">
+      {/* Wide, scrolling sheet: this is his three-section New Complaint form
+          now, not a four-field card. */}
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-card shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in">
+        <div className="space-y-1.5 px-7 pb-4 pt-7">
           <h3 className="text-xl font-semibold tracking-[-0.02em] text-foreground">
             {t('tickets.newTitle', { defaultValue: 'New ticket' })}
           </h3>
@@ -115,164 +129,189 @@ export function NewTicketDialog({ onClose, onCreated }: Props) {
             e.preventDefault();
             void submit();
           }}
-          className="space-y-5"
+          className="flex min-h-0 flex-1 flex-col"
           noValidate
         >
-          {/* Contact picker — searchable. The chosen contact supplies the vendor id. */}
-          <FormField
-            label={t('tickets.contact', { defaultValue: 'Contact' })}
-            htmlFor="ticket-contact-search"
-          >
-            {selectedContact ? (
-              <div className="flex items-center gap-2.5 rounded-xl bg-secondary px-3 py-2 ring-1 ring-foreground/[0.05]">
-                <Avatar
-                  name={selectedContact.name}
-                  email={selectedContact.email}
-                  phone={selectedContact.phone}
-                  size="sm"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-foreground">
-                    {selectedContact.name ??
-                      selectedContact.phone ??
-                      selectedContact.email ??
-                      selectedContact.id}
-                  </div>
-                  {(selectedContact.phone ?? selectedContact.email) && (
-                    <div className="truncate text-xs text-muted-foreground">
-                      {selectedContact.phone ?? selectedContact.email}
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-7 pb-2">
+            <ComplaintSection title={t('complaint.customer', { defaultValue: 'Customer' })}>
+              {/* Contact picker — searchable. The chosen contact supplies the vendor id. */}
+              <FormField
+                label={t('tickets.contact', { defaultValue: 'Contact' })}
+                htmlFor="ticket-contact-search"
+              >
+                {selectedContact ? (
+                  <div className="flex items-center gap-2.5 rounded-xl bg-secondary px-3 py-2 ring-1 ring-foreground/[0.05]">
+                    <Avatar
+                      name={selectedContact.name}
+                      email={selectedContact.email}
+                      phone={selectedContact.phone}
+                      size="sm"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-foreground">
+                        {selectedContact.name ??
+                          selectedContact.phone ??
+                          selectedContact.email ??
+                          selectedContact.id}
+                      </div>
+                      {(selectedContact.phone ?? selectedContact.email) && (
+                        <div className="truncate text-xs text-muted-foreground">
+                          {selectedContact.phone ?? selectedContact.email}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedContact(null);
-                    setSearch('');
-                  }}
-                >
-                  {t('actions.change', { ns: 'common', defaultValue: 'Change' })}
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <Input
-                  id="ticket-contact-search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t('tickets.contactSearch', {
-                    defaultValue: 'Search by phone number, name, or email…',
-                  })}
-                  autoComplete="off"
-                  inputMode="tel"
-                />
-                {/* Empty until the agent searches. Phone is the primary lookup —
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedContact(null);
+                        setSearch('');
+                      }}
+                    >
+                      {t('actions.change', { ns: 'common', defaultValue: 'Change' })}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Input
+                      id="ticket-contact-search"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder={t('tickets.contactSearch', {
+                        defaultValue: 'Search by phone number, name, or email…',
+                      })}
+                      autoComplete="off"
+                      inputMode="tel"
+                    />
+                    {/* Empty until the agent searches. Phone is the primary lookup —
                     many contacts have no name — so we don't list the whole
                     directory (which would also be unworkable at thousands). */}
-                {tooShort ? (
-                  <p className="rounded-xl px-3 py-6 text-center text-xs text-muted-foreground ring-1 ring-foreground/[0.05]">
-                    {t('tickets.contactSearchPrompt', {
-                      defaultValue: 'Type a phone number or name to find a contact.',
-                    })}
-                  </p>
-                ) : (
-                  <div className="max-h-52 overflow-auto rounded-xl ring-1 ring-foreground/[0.05]">
-                    {contactSearch.isFetching ? (
-                      <div className="flex items-center justify-center py-6 text-muted-foreground">
-                        <Spinner size={16} />
-                      </div>
-                    ) : matches.length > 0 ? (
-                      <ul className="divide-y divide-foreground/[0.04]">
-                        {matches.map((c) => (
-                          <li key={c.id}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedContact(c)}
-                              className={cn(
-                                'flex w-full items-center gap-2.5 px-3 py-2 text-start transition-colors duration-fast ease-out hover:bg-secondary',
-                                !c.vendor && 'opacity-60',
-                              )}
-                            >
-                              <Avatar name={c.name} email={c.email} phone={c.phone} size="sm" />
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-medium text-foreground">
-                                  {c.name ?? c.phone ?? c.email ?? c.id}
-                                </div>
-                                {(c.phone ?? c.email) && (
-                                  <div className="truncate text-xs text-muted-foreground">
-                                    {c.phone ?? c.email}
-                                  </div>
-                                )}
-                              </div>
-                              {!c.vendor && (
-                                <span className="shrink-0 text-2xs text-muted-foreground">
-                                  {t('tickets.noVendor', { defaultValue: 'No vendor' })}
-                                </span>
-                              )}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-                        {t('tickets.noContacts', { defaultValue: 'No matching contacts.' })}
+                    {tooShort ? (
+                      <p className="rounded-xl px-3 py-6 text-center text-xs text-muted-foreground ring-1 ring-foreground/[0.05]">
+                        {t('tickets.contactSearchPrompt', {
+                          defaultValue: 'Type a phone number or name to find a contact.',
+                        })}
                       </p>
+                    ) : (
+                      <div className="max-h-52 overflow-auto rounded-xl ring-1 ring-foreground/[0.05]">
+                        {contactSearch.isFetching ? (
+                          <div className="flex items-center justify-center py-6 text-muted-foreground">
+                            <Spinner size={16} />
+                          </div>
+                        ) : matches.length > 0 ? (
+                          <ul className="divide-y divide-foreground/[0.04]">
+                            {matches.map((c) => (
+                              <li key={c.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedContact(c)}
+                                  className={cn(
+                                    'flex w-full items-center gap-2.5 px-3 py-2 text-start transition-colors duration-fast ease-out hover:bg-secondary',
+                                    !c.vendor && 'opacity-60',
+                                  )}
+                                >
+                                  <Avatar name={c.name} email={c.email} phone={c.phone} size="sm" />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-sm font-medium text-foreground">
+                                      {c.name ?? c.phone ?? c.email ?? c.id}
+                                    </div>
+                                    {(c.phone ?? c.email) && (
+                                      <div className="truncate text-xs text-muted-foreground">
+                                        {c.phone ?? c.email}
+                                      </div>
+                                    )}
+                                  </div>
+                                  {!c.vendor && (
+                                    <span className="shrink-0 text-2xs text-muted-foreground">
+                                      {t('tickets.noVendor', { defaultValue: 'No vendor' })}
+                                    </span>
+                                  )}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                            {t('tickets.noContacts', { defaultValue: 'No matching contacts.' })}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
+              </FormField>
+            </ComplaintSection>
+
+            {/* ── What happened ─────────────────────────────────────────── */}
+            <ComplaintSection
+              title={t('complaint.whatHappened', { defaultValue: 'What happened' })}
+            >
+              <FormField label={t('tickets.subject')} htmlFor="ticket-subject">
+                <Input
+                  id="ticket-subject"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                />
+              </FormField>
+
+              <FormField label={t('tickets.description')} htmlFor="ticket-description">
+                <Textarea
+                  id="ticket-description"
+                  rows={3}
+                  dir="auto"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </FormField>
+
+              <ComplaintClassification
+                values={complaint}
+                onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
+              />
+
+              <div className="grid gap-3.5 sm:grid-cols-2">
+                <FormField label={t('conversation.priority')} htmlFor="ticket-priority">
+                  <SelectMenu
+                    fullWidth
+                    value={priority}
+                    onChange={(v) => setPriority(v as Priority)}
+                    aria-label={t('conversation.priority')}
+                    options={PRIORITIES.map((p) => ({
+                      value: p,
+                      label: t(`priority.${p}`, { ns: 'common' }),
+                    }))}
+                  />
+                </FormField>
+
+                <FormField label={t('conversation.agent')} htmlFor="ticket-agent">
+                  <SelectMenu
+                    fullWidth
+                    value={assignedAgent}
+                    onChange={(v) => setAssignedAgent(v)}
+                    aria-label={t('conversation.agent')}
+                    options={[
+                      { value: '', label: t('conversation.unassigned') },
+                      ...(agents.data ?? []).map((a) => ({
+                        value: a.id,
+                        label: a.first_name ?? a.email ?? '',
+                      })),
+                    ]}
+                  />
+                </FormField>
               </div>
-            )}
-          </FormField>
+            </ComplaintSection>
 
-          <FormField label={t('tickets.subject')} htmlFor="ticket-subject">
-            <Input
-              id="ticket-subject"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-            />
-          </FormField>
+            {/* ── Resolution ────────────────────────────────────────────── */}
+            <ComplaintSection title={t('complaint.resolution', { defaultValue: 'Resolution' })}>
+              <ComplaintResolution
+                values={complaint}
+                onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
+              />
+            </ComplaintSection>
+          </div>
 
-          <FormField label={t('tickets.description')} htmlFor="ticket-description">
-            <Textarea
-              id="ticket-description"
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </FormField>
-
-          <FormField label={t('conversation.priority')} htmlFor="ticket-priority">
-            <SelectMenu
-              fullWidth
-              value={priority}
-              onChange={(v) => setPriority(v as Priority)}
-              aria-label={t('conversation.priority')}
-              options={PRIORITIES.map((p) => ({
-                value: p,
-                label: t(`priority.${p}`, { ns: 'common' }),
-              }))}
-            />
-          </FormField>
-
-          <FormField label={t('conversation.agent')} htmlFor="ticket-agent">
-            <SelectMenu
-              fullWidth
-              value={assignedAgent}
-              onChange={(v) => setAssignedAgent(v)}
-              aria-label={t('conversation.agent')}
-              options={[
-                { value: '', label: t('conversation.unassigned') },
-                ...(agents.data ?? []).map((a) => ({
-                  value: a.id,
-                  label: a.first_name ?? a.email ?? '',
-                })),
-              ]}
-            />
-          </FormField>
-
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 border-t border-foreground/[0.06] px-7 py-4">
             <Button type="button" variant="ghost" size="md" onClick={onClose}>
               {t('actions.cancel', { ns: 'common' })}
             </Button>

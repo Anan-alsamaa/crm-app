@@ -30,10 +30,19 @@ import {
   useConversationAttachments,
   useAttachExistingFileToTicket,
   type ChatAttachment,
+  type TicketRow,
 } from './api.js';
 import { useAgents, useTeamOptions } from '../inbox/api.js';
 import { NewTicketDialog } from './NewTicketDialog.js';
 import { TicketAttachments } from './TicketAttachments.js';
+import {
+  ComplaintClassification,
+  ComplaintResolution,
+  complaintHasErrors,
+  complaintPatch,
+  optionLabel,
+  type ComplaintValues,
+} from './ComplaintFields.js';
 import {
   LegacyOrderSnapshotCard,
   OrderSnapshotCard,
@@ -242,6 +251,15 @@ export function TicketsPage() {
                             </div>
                             <div className="mt-0.5 flex items-center gap-2">
                               <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                                {/* The ops team scan this list by category the
+                                    way they scan their own sheet, so the
+                                    complaint type leads when there is one. */}
+                                {tk.complaint_type && (
+                                  <span className="font-medium text-foreground/70">
+                                    {optionLabel(tk.complaint_type)}
+                                    <span aria-hidden> · </span>
+                                  </span>
+                                )}
                                 {tk.contact?.name ??
                                   tk.contact?.email ??
                                   tk.contact?.phone ??
@@ -829,6 +847,12 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
 
         {/* Main column — the ticket narrative: attachments + notes + history. */}
         <div className="min-w-0 space-y-6 lg:order-1">
+          {/* Complaint detail — the ops team's own columns. Editable here as
+              well as at creation because compensation is almost always decided
+              AFTER the ticket is raised; a create-only form would mean the
+              coupon columns stayed empty on exactly the tickets that had one. */}
+          <TicketComplaintPanel ticket={tk} />
+
           {/* Attachments — front and center with live image previews, so the
               agent sees what was shared without clicking anything. */}
           <section className="space-y-3">
@@ -1018,6 +1042,167 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The nine complaint columns on an existing ticket: a compact summary that
+ * turns into the same fieldset the New Complaint form uses.
+ *
+ * Read-first by design. Most visits to a ticket are to look something up, and a
+ * grid of filled-in inputs reads as "unsaved work" when it is really just
+ * stored data. `Edit` swaps in the form; `Save` patches only what changed.
+ */
+function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
+  const { t } = useTranslation();
+  const update = useUpdateTicket();
+  const [editing, setEditing] = useState(false);
+
+  // Directus hands back numbers for the coupon columns and nulls for anything
+  // unset; the form works in strings, so normalise on the way in.
+  const stored: ComplaintValues = useMemo(
+    () => ({
+      complaint_type: ticket.complaint_type ?? '',
+      service_type: ticket.service_type ?? '',
+      complaint_source: ticket.complaint_source ?? '',
+      communication_method: ticket.communication_method ?? '',
+      response_desc: ticket.response_desc ?? '',
+      compensation: ticket.compensation ?? '',
+      coupon_code: ticket.coupon_code ?? '',
+      coupon_value:
+        ticket.coupon_value === null || ticket.coupon_value === undefined
+          ? ''
+          : String(ticket.coupon_value),
+      coupon_percent:
+        ticket.coupon_percent === null || ticket.coupon_percent === undefined
+          ? ''
+          : String(ticket.coupon_percent),
+    }),
+    [ticket],
+  );
+  const [draft, setDraft] = useState<ComplaintValues>(stored);
+
+  // Re-sync when a different ticket is selected, or the row is refetched after
+  // a save — without this the panel would show the previous ticket's answers.
+  useEffect(() => {
+    if (!editing) setDraft(stored);
+  }, [stored, editing]);
+
+  const rows: Array<[string, string]> = [
+    [t('complaint.type', { defaultValue: 'Complaint type' }), stored.complaint_type],
+    [t('complaint.serviceType', { defaultValue: 'Service type' }), stored.service_type],
+    [t('complaint.source', { defaultValue: 'Complaint source' }), stored.complaint_source],
+    [
+      t('complaint.communication', { defaultValue: 'Communication method' }),
+      stored.communication_method,
+    ],
+    [t('complaint.compensation', { defaultValue: 'Compensation' }), stored.compensation],
+    [t('complaint.couponCode', { defaultValue: 'Coupon code' }), stored.coupon_code],
+    [
+      t('complaint.couponValue', { defaultValue: 'Coupon value (SAR)' }),
+      stored.coupon_value && `${stored.coupon_value} SAR`,
+    ],
+    [
+      t('complaint.couponPercent', { defaultValue: 'Coupon %' }),
+      stored.coupon_percent && `${stored.coupon_percent}%`,
+    ],
+  ].filter((r): r is [string, string] => !!r[1]);
+
+  const save = async () => {
+    if (complaintHasErrors(draft)) return;
+    try {
+      await update.mutateAsync({ id: ticket.id, patch: complaintPatch(draft) });
+      setEditing(false);
+      toast.success(t('complaint.saved', { defaultValue: 'Complaint details saved' }));
+    } catch {
+      toast.error(t('errors.updateFailed', { ns: 'common' }));
+    }
+  };
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold tracking-tight text-foreground">
+          {t('complaint.section', { defaultValue: 'Complaint details' })}
+        </h3>
+        {!editing && (
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(stored);
+              setEditing(true);
+            }}
+            className="text-xs font-medium text-primary transition-colors duration-fast ease-out hover:underline"
+          >
+            {rows.length
+              ? t('actions.edit', { ns: 'common', defaultValue: 'Edit' })
+              : t('complaint.add', { defaultValue: 'Add complaint details' })}
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="space-y-4 rounded-2xl bg-card p-4 shadow-soft">
+          <ComplaintClassification
+            values={draft}
+            onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+          />
+          <ComplaintResolution
+            values={draft}
+            onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+          />
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setDraft(stored);
+                setEditing(false);
+              }}
+            >
+              {t('actions.cancel', { ns: 'common' })}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              loading={update.isPending}
+              disabled={complaintHasErrors(draft)}
+              onClick={() => void save()}
+            >
+              {t('actions.save', { ns: 'common', defaultValue: 'Save' })}
+            </Button>
+          </div>
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {t('complaint.none', {
+            defaultValue: 'Not classified as a complaint yet.',
+          })}
+        </p>
+      ) : (
+        <>
+          <dl className="grid gap-x-6 gap-y-2 rounded-2xl bg-card p-4 shadow-soft sm:grid-cols-2">
+            {rows.map(([label, value]) => (
+              <div key={label} className="flex items-baseline justify-between gap-3">
+                <dt className="shrink-0 text-2xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                  {label}
+                </dt>
+                <dd className="min-w-0 text-end text-xs text-foreground">{optionLabel(value)}</dd>
+              </div>
+            ))}
+          </dl>
+          {stored.response_desc && (
+            <p
+              dir="auto"
+              className="max-w-prose whitespace-pre-wrap rounded-xl bg-secondary/50 px-4 py-3 text-sm leading-relaxed text-foreground/85"
+            >
+              {stored.response_desc}
+            </p>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

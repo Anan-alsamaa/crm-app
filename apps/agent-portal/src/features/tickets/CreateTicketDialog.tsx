@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -7,7 +7,21 @@ import { useTranslation } from 'react-i18next';
 import { Button, cn, FormField, Input, Pill, SelectMenu, Textarea, toast } from '@yiji/ui';
 import type { Priority, YijiOrder } from '@yiji/shared-types';
 import { useConversationAttachmentIds, useCreateTicketFromConversation } from './api.js';
-import { orderToSnapshot, type TicketOrderSnapshot } from './OrderSnapshotCard.js';
+import {
+  OrderSnapshotCard,
+  orderToSnapshot,
+  type TicketOrderSnapshot,
+} from './OrderSnapshotCard.js';
+import {
+  ComplaintClassification,
+  ComplaintResolution,
+  ComplaintSection,
+  complaintHasErrors,
+  complaintPatch,
+  emptyComplaint,
+  serviceTypeFromOrder,
+  type ComplaintValues,
+} from './ComplaintFields.js';
 import { useContact } from '../contacts/api.js';
 import { commerce } from '../../lib/commerce-client.js';
 import { clearPinnedOrder, getPinnedOrder } from '../commerce/pinned-order.js';
@@ -150,6 +164,20 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
 
   const [includeOrder, setIncludeOrder] = useState(true);
   const [includeFiles, setIncludeFiles] = useState(true);
+  const [complaint, setComplaint] = useState<ComplaintValues>(emptyComplaint);
+
+  // The order already knows how it was fulfilled, so pre-fill service type
+  // rather than making the agent read it off the card and retype it. Only fills
+  // a field the agent has not touched — never overwrites their choice.
+  const orderSnapshotView = useMemo(
+    () => (latestOrder ? orderToSnapshot(latestOrder) : null),
+    [latestOrder],
+  );
+  const inferredService = serviceTypeFromOrder(orderSnapshotView);
+  useEffect(() => {
+    if (!inferredService) return;
+    setComplaint((c) => (c.service_type ? c : { ...c, service_type: inferredService }));
+  }, [inferredService]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -160,6 +188,7 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
   }, [onClose]);
 
   const onSubmit = handleSubmit(async (values) => {
+    if (complaintHasErrors(complaint)) return;
     try {
       // The description stays the agent's OWN words. The order rides along as
       // structured JSON so the ticket can render it as a real order card
@@ -176,6 +205,7 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
           conversation: conversationId ?? null,
           assigned_agent: user?.id ?? null,
           order_snapshot: includeOrder && latestOrder ? orderSnapshot(latestOrder) : null,
+          ...complaintPatch(complaint),
         },
         attachmentFileIds: includeFiles ? sessionFileIds : [],
       });
@@ -203,8 +233,10 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-3xl bg-card p-7 shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in">
-        <div className="mb-6 space-y-1.5">
+      {/* Wide, scrolling sheet rather than the old max-w-md card: this is a
+          form with three sections now, and his agents fill it in one pass. */}
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-card shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in">
+        <div className="space-y-1.5 px-7 pb-4 pt-7">
           <h3 className="text-xl font-semibold tracking-[-0.02em] text-foreground">
             {t('tickets.createTitle')}
           </h3>
@@ -214,99 +246,123 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
             })}
           </p>
         </div>
-        <form onSubmit={onSubmit} className="space-y-5" noValidate>
-          <FormField
-            label={t('tickets.subject')}
-            htmlFor="ticket-subject"
-            error={errors.subject?.message}
-          >
-            <Input id="ticket-subject" invalid={!!errors.subject} {...register('subject')} />
-          </FormField>
-          <FormField label={t('tickets.description')} htmlFor="ticket-description">
-            <Textarea id="ticket-description" rows={3} {...register('description')} />
-          </FormField>
-          <FormField label={t('conversation.priority')} htmlFor="ticket-priority">
-            <Controller
-              control={control}
-              name="priority"
-              render={({ field }) => (
-                <SelectMenu
-                  fullWidth
-                  value={field.value}
-                  onChange={field.onChange}
-                  aria-label={t('conversation.priority')}
-                  options={PRIORITIES.map((p) => ({
-                    value: p,
-                    label: t(`priority.${p}`, { ns: 'common' }),
-                  }))}
-                />
-              )}
-            />
-          </FormField>
-
-          {/* From-this-chat context (#3): the order + files shared in this
-              session, carried onto the ticket. Only shown when the chat has
-              something to carry over. */}
-          {hasChatContext && (
-            <div className="space-y-3 rounded-2xl bg-secondary/50 p-3.5 ring-1 ring-foreground/[0.05]">
-              <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('tickets.fromChat', { defaultValue: 'From this chat' })}
-              </div>
-              {latestOrder && (
-                <IncludeToggle checked={includeOrder} onChange={setIncludeOrder}>
-                  <span className="font-medium">
-                    {t('tickets.includeOrder', { defaultValue: 'Attach order details' })}
-                  </span>
-                  {/* Surface exactly which order is being snapshotted. This is the
-                      customer's LATEST order, which may be unrelated to this chat
-                      (the conversation schema carries no order reference), so the
-                      agent must be able to see the id, date and restaurant before
-                      attaching it rather than opting in blindly. */}
-                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-muted-foreground">
-                    <span className="font-mono">#{latestOrder.orderId}</span>
-                    <Pill tone="neutral" size="sm">
-                      {titleize(latestOrder.status)}
-                    </Pill>
-                    <span className="tabular-nums">
-                      {money(latestOrder.total, latestOrder.currency)}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-muted-foreground">
-                    <span className="tabular-nums">
-                      {formatOrderDate(latestOrder.placedAt, i18n.language)}
-                    </span>
-                    {latestOrder.restaurantName && (
-                      <>
+        <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-7 pb-2">
+            {/* ── Order & customer ─────────────────────────────────────────
+                His first section. Ours is the real order card plus the
+                opt-in toggles, so the agent sees exactly what is being
+                attached instead of trusting a checkbox label. */}
+            {hasChatContext && (
+              <ComplaintSection title={t('tickets.fromChat', { defaultValue: 'From this chat' })}>
+                {latestOrder && (
+                  <>
+                    <IncludeToggle checked={includeOrder} onChange={setIncludeOrder}>
+                      <span className="font-medium">
+                        {t('tickets.includeOrder', { defaultValue: 'Attach order details' })}
+                      </span>
+                      {/* This is the customer's LATEST order, which may be
+                          unrelated to this chat (the conversation schema carries
+                          no order reference), so the agent must be able to see
+                          which order it is before attaching it. */}
+                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-muted-foreground">
+                        <span className="font-mono">#{latestOrder.orderId}</span>
+                        <Pill tone="neutral" size="sm">
+                          {titleize(latestOrder.status)}
+                        </Pill>
+                        <span className="tabular-nums">
+                          {money(latestOrder.total, latestOrder.currency)}
+                        </span>
                         <span aria-hidden>·</span>
-                        <span className="min-w-0 truncate">{latestOrder.restaurantName}</span>
-                      </>
+                        <span className="tabular-nums">
+                          {formatOrderDate(latestOrder.placedAt, i18n.language)}
+                        </span>
+                      </span>
+                    </IncludeToggle>
+                    {includeOrder && orderSnapshotView && (
+                      <OrderSnapshotCard order={orderSnapshotView} className="mt-1" />
                     )}
-                  </span>
-                </IncludeToggle>
-              )}
-              {sessionFileIds.length > 0 && (
-                <IncludeToggle checked={includeFiles} onChange={setIncludeFiles}>
-                  <span className="font-medium">
-                    {t('tickets.includeAttachments', {
-                      defaultValue: 'Attach files shared in this chat',
-                    })}
-                  </span>
-                  <span className="mt-0.5 block text-muted-foreground">
-                    {t('tickets.includeAttachmentsCount', {
-                      defaultValue: '{{count}} files from this session',
-                      count: sessionFileIds.length,
-                    })}
-                  </span>
-                </IncludeToggle>
-              )}
-            </div>
-          )}
+                  </>
+                )}
+                {sessionFileIds.length > 0 && (
+                  <IncludeToggle checked={includeFiles} onChange={setIncludeFiles}>
+                    <span className="font-medium">
+                      {t('tickets.includeAttachments', {
+                        defaultValue: 'Attach files shared in this chat',
+                      })}
+                    </span>
+                    <span className="mt-0.5 block text-muted-foreground">
+                      {t('tickets.includeAttachmentsCount', {
+                        defaultValue: '{{count}} files from this session',
+                        count: sessionFileIds.length,
+                      })}
+                    </span>
+                  </IncludeToggle>
+                )}
+              </ComplaintSection>
+            )}
 
-          <div className="flex justify-end gap-2 pt-2">
+            {/* ── What happened ─────────────────────────────────────────── */}
+            <ComplaintSection
+              title={t('complaint.whatHappened', { defaultValue: 'What happened' })}
+            >
+              <FormField
+                label={t('tickets.subject')}
+                htmlFor="ticket-subject"
+                error={errors.subject?.message}
+              >
+                <Input id="ticket-subject" invalid={!!errors.subject} {...register('subject')} />
+              </FormField>
+              <FormField label={t('tickets.description')} htmlFor="ticket-description">
+                <Textarea
+                  id="ticket-description"
+                  rows={3}
+                  dir="auto"
+                  {...register('description')}
+                />
+              </FormField>
+              <ComplaintClassification
+                values={complaint}
+                onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
+              />
+              <FormField label={t('conversation.priority')} htmlFor="ticket-priority">
+                <Controller
+                  control={control}
+                  name="priority"
+                  render={({ field }) => (
+                    <SelectMenu
+                      fullWidth
+                      value={field.value}
+                      onChange={field.onChange}
+                      aria-label={t('conversation.priority')}
+                      options={PRIORITIES.map((p) => ({
+                        value: p,
+                        label: t(`priority.${p}`, { ns: 'common' }),
+                      }))}
+                    />
+                  )}
+                />
+              </FormField>
+            </ComplaintSection>
+
+            {/* ── Resolution ────────────────────────────────────────────── */}
+            <ComplaintSection title={t('complaint.resolution', { defaultValue: 'Resolution' })}>
+              <ComplaintResolution
+                values={complaint}
+                onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
+              />
+            </ComplaintSection>
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-foreground/[0.06] px-7 py-4">
             <Button type="button" variant="ghost" size="md" onClick={onClose}>
               {t('actions.cancel', { ns: 'common' })}
             </Button>
-            <Button type="submit" size="md" loading={isSubmitting || createFromChat.isPending}>
+            <Button
+              type="submit"
+              size="md"
+              disabled={complaintHasErrors(complaint)}
+              loading={isSubmitting || createFromChat.isPending}
+            >
               {t('tickets.create')}
             </Button>
           </div>
