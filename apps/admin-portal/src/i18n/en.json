@@ -88,7 +88,8 @@
     "topStores": "Most tickets by store",
     "topBrands": "Most tickets by brand",
     "ticketsUnit": "tickets",
-    "unmappedStores": "{{n}} of {{total}} tickets with an order could not be matched to a store. Add the missing branches under Restaurants → Stores so this ranking is complete."
+    "unmappedStores": "{{n}} of those could not be matched to a store. Add the missing branches under Restaurants → Stores so this ranking is complete.",
+    "storeBasis": "From {{total}} of {{all}} tickets that have a linked order."
   },
   "automation": {
     "title": "Automation",

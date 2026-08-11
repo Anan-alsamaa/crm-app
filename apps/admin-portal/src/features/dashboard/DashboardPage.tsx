@@ -482,13 +482,23 @@ export function DashboardPage() {
                   }))}
                   unit={t('dashboard.ticketsUnit', { defaultValue: 'tickets' })}
                 />
+                {/* State the denominator. Only tickets that captured an order
+                    snapshot can be attributed to a branch, so this count is
+                    legitimately lower than the ticket total — saying so stops it
+                    reading as a bug. */}
+                <p className="mt-3 text-2xs leading-relaxed text-muted-foreground">
+                  {t('dashboard.storeBasis', {
+                    defaultValue: 'From {{total}} of {{all}} tickets that have a linked order.',
+                    total: m.data.ticketsWithOrder ?? 0,
+                    all: m.data.ticketTotal,
+                  })}
+                </p>
                 {(m.data.unmappedStoreTickets ?? 0) > 0 && (
-                  <p className="mt-3 text-2xs leading-relaxed text-warning-foreground">
+                  <p className="mt-1.5 text-2xs leading-relaxed text-warning-foreground">
                     {t('dashboard.unmappedStores', {
                       defaultValue:
-                        '{{n}} of {{total}} tickets with an order could not be matched to a store. Add the missing branches under Restaurants → Stores so this ranking is complete.',
+                        '{{n}} of those could not be matched to a store. Add the missing branches under Restaurants → Stores so this ranking is complete.',
                       n: m.data.unmappedStoreTickets,
-                      total: m.data.ticketsWithOrder,
                     })}
                   </p>
                 )}

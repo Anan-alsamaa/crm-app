@@ -262,6 +262,12 @@ function TicketsReport({
             ...r,
             order: {
               ...order,
+              // Once matched, show the branch as the OPERATIONS sheet names it
+              // ("LCP-041 Masief Plaza"), not Yiji's "<brand> — <city> - <place>"
+              // label: the brand now has its own column, so the raw label just
+              // repeats it in different words. Unmatched rows keep Yiji's label
+              // rather than going blank.
+              restaurant: m.restaurantName || order.restaurant,
               brand: m.brandName,
               city: m.city,
               areaManager: m.areaManager,
