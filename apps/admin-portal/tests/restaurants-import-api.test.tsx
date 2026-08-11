@@ -16,14 +16,20 @@ import React from 'react';
 interface Op {
   op: string;
   collection: string;
+  id?: string;
   items?: unknown;
 }
 vi.mock('@directus/sdk', () => ({
   readItems: (collection: string) => ({ op: 'readItems', collection }),
   createItems: (collection: string, items: unknown) => ({ op: 'createItems', collection, items }),
   createItem: (collection: string, items: unknown) => ({ op: 'createItem', collection, items }),
-  updateItem: (collection: string) => ({ op: 'updateItem', collection }),
-  deleteItem: (collection: string) => ({ op: 'deleteItem', collection }),
+  updateItem: (collection: string, id: string, items: unknown) => ({
+    op: 'updateItem',
+    collection,
+    id,
+    items,
+  }),
+  deleteItem: (collection: string, id: string) => ({ op: 'deleteItem', collection, id }),
 }));
 
 const { request } = vi.hoisted(() => ({ request: vi.fn() }));
@@ -32,6 +38,9 @@ vi.mock('../src/lib/directus.js', () => ({ directus: { request } }));
 import {
   useBulkCreateStores,
   useBulkCreateBrands,
+  useUpdateStore,
+  useDeleteStore,
+  useUpdateBrand,
   type StoreInput,
 } from '../src/features/restaurants/api.js';
 
@@ -53,7 +62,7 @@ function stubDirectus(existing: Record<string, unknown[]>) {
   request.mockImplementation(async (op: Op) => {
     sent.push(op);
     if (op.op === 'readItems') return existing[op.collection] ?? [];
-    return op.items;
+    return op.items ?? { id: op.id ?? 'ok' };
   });
 }
 
@@ -312,5 +321,118 @@ describe('useBulkCreateBrands — repeat safety', () => {
     const outcome = await result.current.mutateAsync([]);
     expect(outcome).toEqual({ added: 0, alreadyPresent: 0 });
     expect(sent).toHaveLength(0);
+  });
+});
+
+/**
+ * Editing a store must never rewrite what a past ticket reported. Tickets
+ * normally record their own attribution when raised, so this guard is for the
+ * one that slipped through — and it has to run BEFORE the store changes,
+ * because afterwards the old values are gone for good.
+ */
+describe('editing a store cannot rewrite history', () => {
+  const STORES = [
+    {
+      id: 's1',
+      code: 'LCP-041',
+      name: 'Masief Plaza',
+      city: 'Riyadh',
+      area_manager: 'Ahmed Samir',
+      chain_manager: 'Medhat Sayed',
+      yiji_restaurant_id: null,
+      status: 'active',
+      brand: { id: 'b1', code: 'LCP', name: 'Casa Pasta', yiji_brand_name: null },
+    },
+  ];
+  const EXPOSED = [
+    {
+      id: 't1',
+      order_snapshot: { restaurantName: 'LCP-041 Masief Plaza', brandName: 'Casa Pasta' },
+    },
+  ];
+
+  it('freezes an exposed ticket before writing the store, not after', async () => {
+    stubDirectus({ tickets: EXPOSED, stores: STORES });
+    const { result } = renderHook(() => useUpdateStore(), { wrapper: wrapper() });
+
+    await result.current.mutateAsync({
+      id: 's1',
+      name: 'Masief Plaza',
+      area_manager: 'Someone New',
+    });
+
+    const ticketWrite = sent.findIndex((o) => o.op === 'updateItem' && o.collection === 'tickets');
+    const storeWrite = sent.findIndex((o) => o.op === 'updateItem' && o.collection === 'stores');
+    expect(ticketWrite).toBeGreaterThanOrEqual(0);
+    expect(storeWrite).toBeGreaterThanOrEqual(0);
+    // Order is the whole point: freeze first, then edit.
+    expect(ticketWrite).toBeLessThan(storeWrite);
+  });
+
+  it('freezes the values as they are BEFORE the edit', async () => {
+    stubDirectus({ tickets: EXPOSED, stores: STORES });
+    const { result } = renderHook(() => useUpdateStore(), { wrapper: wrapper() });
+
+    await result.current.mutateAsync({
+      id: 's1',
+      name: 'Masief Plaza',
+      area_manager: 'Someone New',
+    });
+
+    const frozen = sent.find((o) => o.op === 'updateItem' && o.collection === 'tickets')!.items as {
+      store_snapshot: { areaManager: string };
+    };
+    expect(frozen.store_snapshot.areaManager).toBe('Ahmed Samir');
+  });
+
+  it('does nothing when every ticket already carries its own attribution', async () => {
+    // The normal case — one cheap read and no writes to tickets at all.
+    stubDirectus({ tickets: [], stores: STORES });
+    const { result } = renderHook(() => useUpdateStore(), { wrapper: wrapper() });
+
+    await result.current.mutateAsync({ id: 's1', name: 'Renamed' });
+
+    expect(sent.some((o) => o.op === 'updateItem' && o.collection === 'tickets')).toBe(false);
+    expect(sent.some((o) => o.op === 'updateItem' && o.collection === 'stores')).toBe(true);
+  });
+
+  it('guards deleting a store too — the most destructive case', async () => {
+    stubDirectus({ tickets: EXPOSED, stores: STORES });
+    const { result } = renderHook(() => useDeleteStore(), { wrapper: wrapper() });
+
+    await result.current.mutateAsync('s1');
+
+    const ticketWrite = sent.findIndex((o) => o.op === 'updateItem' && o.collection === 'tickets');
+    const del = sent.findIndex((o) => o.op === 'deleteItem');
+    expect(ticketWrite).toBeGreaterThanOrEqual(0);
+    expect(ticketWrite).toBeLessThan(del);
+  });
+
+  it('guards renaming a brand, which changes the brand column on every report', async () => {
+    stubDirectus({ tickets: EXPOSED, stores: STORES });
+    const { result } = renderHook(() => useUpdateBrand(), { wrapper: wrapper() });
+
+    await result.current.mutateAsync({ id: 'b1', code: 'LCP', name: 'Renamed Brand' });
+
+    const ticketWrite = sent.findIndex((o) => o.op === 'updateItem' && o.collection === 'tickets');
+    const brandWrite = sent.findIndex((o) => o.op === 'updateItem' && o.collection === 'brands');
+    expect(ticketWrite).toBeLessThan(brandWrite);
+  });
+
+  it('still lets the edit through if the safety net itself fails', async () => {
+    // Blocking a legitimate correction because a guard broke would be worse
+    // than the guard not running.
+    sent.length = 0;
+    request.mockImplementation(async (op: Op) => {
+      sent.push(op);
+      if (op.op === 'readItems' && op.collection === 'tickets')
+        throw new Error('tickets unreadable');
+      if (op.op === 'readItems') return [];
+      return op.items ?? { id: op.id ?? 'ok' };
+    });
+    const { result } = renderHook(() => useUpdateStore(), { wrapper: wrapper() });
+
+    await expect(result.current.mutateAsync({ id: 's1', name: 'Renamed' })).resolves.toBeDefined();
+    expect(sent.some((o) => o.op === 'updateItem' && o.collection === 'stores')).toBe(true);
   });
 });

@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, createItem, updateItem, deleteItem, createItems } from '@directus/sdk';
-import { buildStoreIndex, type StoreRecord } from '@yiji/shared-types';
+import {
+  buildStoreIndex,
+  planStoreSnapshotBackfill,
+  type OrderRestaurantRef,
+  type StoreRecord,
+} from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { brandKey, partitionNew, storeKey } from './dedupe.js';
 
@@ -49,6 +54,55 @@ const STORE_FIELDS = [
   'brand.yiji_brand_name',
 ] as const;
 
+/**
+ * Freeze the current attribution onto any ticket still missing one, BEFORE a
+ * store or brand changes underneath it.
+ *
+ * Tickets record their own attribution when they are raised, so normally there
+ * is nothing to do here and this is one cheap filtered read. It exists for the
+ * ticket that slipped through anyway — raised before snapshots existed, or by
+ * some future path that forgets — because such a ticket would otherwise have
+ * its history quietly rewritten by this very edit, and nobody would know.
+ *
+ * Deliberately automatic rather than a maintenance command: a guarantee that
+ * depends on someone remembering to run something is not a guarantee.
+ *
+ * Best-effort by design. If it cannot run, the edit still proceeds — blocking a
+ * legitimate correction because a safety net failed would be the worse outcome.
+ */
+async function freezeExposedTickets(): Promise<void> {
+  try {
+    const exposed = (await directus.request(
+      readItems(
+        'tickets' as never,
+        {
+          filter: { store_snapshot: { _null: true } },
+          fields: ['id', 'order_snapshot'],
+          limit: -1,
+        } as never,
+      ) as never,
+    )) as Array<{ id: string; order_snapshot: OrderRestaurantRef | null }>;
+    if (exposed.length === 0) return;
+
+    const stores = (await directus.request(
+      readItems('stores', { limit: -1, fields: STORE_FIELDS as never }),
+    )) as Store[];
+
+    const plan = planStoreSnapshotBackfill(
+      exposed.map((t) => ({ id: t.id, storeSnapshot: null, order: t.order_snapshot })),
+      buildStoreIndex(stores.map(toStoreRecord)),
+      new Date().toISOString(),
+    );
+    for (const { id, snapshot } of plan.toFreeze) {
+      await directus.request(
+        updateItem('tickets' as never, id, { store_snapshot: snapshot } as never),
+      );
+    }
+  } catch {
+    // See above: never block the edit on the safety net.
+  }
+}
+
 /* ── Brands ───────────────────────────────────────────────────────────── */
 
 export function useBrands() {
@@ -79,8 +133,11 @@ export function useCreateBrand() {
 export function useUpdateBrand() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...patch }: BrandInput & { id: string }) =>
-      directus.request(updateItem('brands', id, patch as never)),
+    mutationFn: async ({ id, ...patch }: BrandInput & { id: string }) => {
+      // Renaming a brand changes the brand column on every report too.
+      await freezeExposedTickets();
+      return directus.request(updateItem('brands', id, patch as never));
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['brands'] });
       // A brand rename changes the label on every store row too.
@@ -92,7 +149,10 @@ export function useUpdateBrand() {
 export function useDeleteBrand() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => directus.request(deleteItem('brands', id)),
+    mutationFn: async (id: string) => {
+      await freezeExposedTickets();
+      return directus.request(deleteItem('brands', id));
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['brands'] });
       qc.invalidateQueries({ queryKey: ['stores'] });
@@ -145,8 +205,12 @@ export function useCreateStore() {
 export function useUpdateStore() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...patch }: StoreInput & { id: string }) =>
-      directus.request(updateItem('stores', id, patch as never)),
+    mutationFn: async ({ id, ...patch }: StoreInput & { id: string }) => {
+      // Preserve what is true NOW before changing it — afterwards the old
+      // values are gone and no report could recover them.
+      await freezeExposedTickets();
+      return directus.request(updateItem('stores', id, patch as never));
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['stores'] }),
   });
 }
@@ -154,7 +218,12 @@ export function useUpdateStore() {
 export function useDeleteStore() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => directus.request(deleteItem('stores', id)),
+    mutationFn: async (id: string) => {
+      // A deleted store is the most destructive case of all: every ticket that
+      // pointed at it would fall back to "Not mapped" retroactively.
+      await freezeExposedTickets();
+      return directus.request(deleteItem('stores', id));
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['stores'] }),
   });
 }
