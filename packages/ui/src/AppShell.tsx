@@ -42,6 +42,17 @@ export interface AppShellProps {
    * No-op on mobile, where `topBarActions` already serves that role.
    */
   topBar?: ReactNode;
+  /**
+   * Optional horizontal primary nav, rendered as a second row directly under
+   * `topBar` on desktop. Supplying it switches the desktop layout from "side
+   * rail + content" to "two stacked bars + content": row 1 (`topBar`) becomes
+   * the dark brand utility bar, row 2 (`navBar`) is the light nav band, and the
+   * side rail is not rendered at all.
+   *
+   * `rail` is still required and still used — it backs the mobile drawer, which
+   * keeps the vertical nav below `lg` where a horizontal bar cannot fit.
+   */
+  navBar?: ReactNode;
   /** localStorage key persisting the desktop rail width. */
   resizeStorageKey: string;
   /** Accessible label for the nav landmark. */
@@ -64,6 +75,7 @@ export function AppShell({
   topBarBrand,
   topBarActions,
   topBar,
+  navBar,
   resizeStorageKey,
   navLabel,
   menuLabel,
@@ -127,6 +139,30 @@ export function AppShell({
         </div>
       </nav>
     );
+
+    // Top-nav layout: no side rail at all. Two stacked bars — the dark brand
+    // utility bar, then the light nav band — over the full-bleed content.
+    // The brand surface survives the move from the rail as the top strip, so
+    // the product still opens on teal rather than on an all-white page.
+    if (navBar) {
+      return (
+        <div className="flex h-full flex-col text-foreground">
+          <header className="flex h-14 shrink-0 items-center bg-gradient-to-b from-rail to-rail-deep px-4 text-rail-foreground">
+            {topBar}
+          </header>
+          {/* Light band. Hairline below rather than above: it separates the nav
+              from the content, while the dark/light tone change already does
+              the separating above. */}
+          <nav
+            aria-label={navLabel}
+            className="flex h-12 shrink-0 items-center border-b border-border bg-card px-4"
+          >
+            {navBar}
+          </nav>
+          <main className="app-aurora min-h-0 min-w-0 flex-1 overflow-hidden">{children}</main>
+        </div>
+      );
+    }
 
     // With a top navbar: the content column carries a slim header above the
     // card. Without one: the card fills the column (legacy behaviour).
