@@ -515,19 +515,44 @@ export function StorePicker({
 }
 
 /** One titled group of fields — his "Order & location" / "Complaint Details" cards. */
+/**
+ * Each section owns a hue, carried by a single dot.
+ *
+ * Colour as an accent, never as a surface (DESIGN.md): the card stays white so
+ * it floats off the tinted canvas, and the dot is what tells the three columns
+ * apart at a glance. A tinted section fill was the first attempt and read as a
+ * wireframe, which is the same failure the KPI tiles went through.
+ */
+const SECTION_DOT = {
+  primary: 'bg-primary',
+  violet: 'bg-violet',
+  success: 'bg-success',
+  sky: 'bg-sky',
+} as const;
+
 export function ComplaintSection({
   title,
+  tone = 'primary',
+  hint,
   children,
 }: {
   title: string;
+  tone?: keyof typeof SECTION_DOT;
+  /** Quiet counterweight on the title line: a count, or what the section is for. */
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-3.5 rounded-2xl bg-secondary/40 p-4 ring-1 ring-foreground/[0.05]">
-      <h4 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {title}
-      </h4>
-      {children}
+    <section className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-border">
+      {/* Not an uppercase eyebrow: the field labels below are already uppercase,
+          and two tracked-caps sizes stacked reads as noise rather than
+          hierarchy. Weight and the dot carry it instead. */}
+      <header className="mb-4 flex items-baseline gap-2">
+        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', SECTION_DOT[tone])} aria-hidden />
+        <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">{title}</h2>
+        {hint && <span className="ms-auto shrink-0 text-2xs text-muted-foreground">{hint}</span>}
+      </header>
+      <div className="space-y-3.5">{children}</div>
     </section>
   );
 }

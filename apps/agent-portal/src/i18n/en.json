@@ -404,7 +404,13 @@
     "orderCapturedAt": "Snapshot taken {{at}}",
     "includeAttachmentsCount_one": "{{count}} file from this session",
     "includeAttachmentsCount_other": "{{count}} files from this session",
-    "noOption": "No matching option."
+    "noOption": "No matching option.",
+    "newEyebrow": "New",
+    "pickContactFirst": "Choose a customer to continue",
+    "fixFieldsFirst": "Check the highlighted fields",
+    "backToTickets": "Back to tickets",
+    "backToChat": "Back to the chat",
+    "noOrderContext": "No order attached. Pick a branch on the left so the ticket still reports against one."
   },
   "notifications": {
     "title": "Notifications",
@@ -582,6 +588,10 @@
     "noBranch": "No branch matches. Ask an admin to add it.",
     "noStores": "Branch list unavailable.",
     "area": "Area",
-    "chain": "Chain"
+    "chain": "Chain",
+    "ticket": "Ticket",
+    "context": "Context",
+    "readOnly": "Read only",
+    "optional": "Optional"
   }
 }

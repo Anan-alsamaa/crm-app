@@ -303,23 +303,66 @@ export function CreateTicketDialog({
   const hasChatContext = !!conversationId && (!!latestOrder || sessionFileIds.length > 0);
   const canSubmit = !!contactId && !!vendorId && !complaintHasErrors(complaint);
 
+  // Identify the ticket by who and what it is about, not by restating the
+  // page's purpose. Empty on a blank standalone form, where the generic hint
+  // is still the most useful thing to say.
+  const contextLine = [
+    contact.data?.name ?? contact.data?.phone ?? null,
+    latestOrder ? `#${latestOrder.orderId}` : null,
+    chosenMatch?.store ? chosenMatch.restaurantName : null,
+  ].filter((v): v is string => !!v);
+
+  const blockedReason = !contactId
+    ? t('tickets.pickContactFirst', { defaultValue: 'Choose a customer to continue' })
+    : complaintHasErrors(complaint)
+      ? t('tickets.fixFieldsFirst', { defaultValue: 'Check the highlighted fields' })
+      : '';
+
   return (
     <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
-      {/* Actions live in the header, not below the fields. On a multi-column
-          form the Save button would otherwise sit under whichever column
-          happened to be longest, and the agent would scroll to find it. */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-foreground/[0.06] bg-card px-4 py-3 sm:px-6">
+      {/* Sticky so Save is reachable from anywhere in the form, and on the card
+          surface so it reads as page chrome rather than a fourth column. */}
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-border bg-card px-5 py-3.5 shadow-xs sm:px-7">
         <div className="min-w-0">
-          <h1 className="text-base font-semibold tracking-[-0.01em] text-foreground">
-            {t('tickets.createTitle')}
-          </h1>
-          <p className="truncate text-xs text-muted-foreground">
-            {t('tickets.createHint', {
-              defaultValue: 'Capture the work as a ticket so it can be tracked against an SLA.',
-            })}
+          <div className="flex items-center gap-2">
+            {/* The one eyebrow on this page (DESIGN.md caps it at one per three
+                sections), so the section headings below can stay plain. */}
+            <span className="rounded-full bg-secondary-brand/12 px-2 py-0.5 text-2xs font-semibold uppercase tracking-[0.08em] text-secondary-brand">
+              {t('tickets.newEyebrow', { defaultValue: 'New' })}
+            </span>
+            <h1 className="truncate text-xl font-semibold tracking-[-0.01em] text-display">
+              {t('tickets.createTitle')}
+            </h1>
+          </div>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+            {contextLine.length > 0 ? (
+              // Who and what this ticket is about, rather than a sentence of
+              // instructions the agent stops reading on the second visit.
+              contextLine.map((bit, i) => (
+                <span key={bit} className="flex items-center gap-2">
+                  {i > 0 && (
+                    <span aria-hidden className="text-muted-foreground/40">
+                      ·
+                    </span>
+                  )}
+                  <span className="truncate">{bit}</span>
+                </span>
+              ))
+            ) : (
+              <span>
+                {t('tickets.createHint', {
+                  defaultValue: 'Capture the work as a ticket so it can be tracked against an SLA.',
+                })}
+              </span>
+            )}
           </p>
         </div>
         <div className="ms-auto flex shrink-0 items-center gap-2">
+          {!canSubmit && (
+            // Says WHY the button is dead. A disabled control with no reason is
+            // the single most common way a form wastes an agent's time.
+            <span className="hidden text-xs text-muted-foreground sm:inline">{blockedReason}</span>
+          )}
           <Button type="button" variant="ghost" size="md" onClick={onClose}>
             {t('actions.cancel', { ns: 'common' })}
           </Button>
@@ -334,12 +377,15 @@ export function CreateTicketDialog({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7">
         {/* Columns rather than one tall stack: fourteen fields in a single
             column is two screens of scrolling, and this is filled in one pass.
             The order rail comes last so it reads as reference, not input. */}
-        <div className="mx-auto grid w-full max-w-[104rem] items-start gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_18rem] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_19rem]">
-          <ComplaintSection title={t('complaint.ticket', { defaultValue: 'Ticket' })}>
+        <div className="mx-auto grid w-full max-w-[104rem] items-start gap-5 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_18rem] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_19rem]">
+          <ComplaintSection
+            tone="primary"
+            title={t('complaint.ticket', { defaultValue: 'Ticket' })}
+          >
             {contactField}
             <FormField
               label={t('tickets.subject')}
@@ -378,14 +424,22 @@ export function CreateTicketDialog({
             />
           </ComplaintSection>
 
-          <ComplaintSection title={t('complaint.whatHappened', { defaultValue: 'What happened' })}>
+          <ComplaintSection
+            tone="violet"
+            title={t('complaint.whatHappened', { defaultValue: 'What happened' })}
+            hint={t('complaint.optional', { defaultValue: 'Optional' })}
+          >
             <ComplaintClassification
               values={complaint}
               onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
             />
           </ComplaintSection>
 
-          <ComplaintSection title={t('complaint.resolution', { defaultValue: 'Resolution' })}>
+          <ComplaintSection
+            tone="success"
+            title={t('complaint.resolution', { defaultValue: 'Resolution' })}
+            hint={t('complaint.optional', { defaultValue: 'Optional' })}
+          >
             <ComplaintResolution
               values={complaint}
               onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
@@ -454,7 +508,7 @@ function OrderRail({
 
   if (!order && !matched) {
     return (
-      <aside className="rounded-2xl bg-secondary/40 p-4 text-xs leading-relaxed text-muted-foreground ring-1 ring-foreground/[0.05]">
+      <aside className="rounded-2xl bg-card p-5 text-xs leading-relaxed text-muted-foreground shadow-soft ring-1 ring-border">
         {t('tickets.noOrderContext', {
           defaultValue:
             'No order attached. Pick a branch on the left so the ticket still reports against one.',
@@ -464,11 +518,22 @@ function OrderRail({
   }
 
   return (
-    <aside className="space-y-3 rounded-2xl bg-secondary/40 p-4 ring-1 ring-foreground/[0.05]">
+    <aside className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-border">
+      {/* Same head as the form sections, in the fourth hue, so the rail reads as
+          a peer of the columns rather than a stray panel. */}
+      <header className="mb-4 flex items-baseline gap-2">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky" aria-hidden />
+        <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
+          {t('complaint.context', { defaultValue: 'Context' })}
+        </h2>
+        <span className="ms-auto shrink-0 text-2xs text-muted-foreground">
+          {t('complaint.readOnly', { defaultValue: 'Read only' })}
+        </span>
+      </header>
       {order && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-mono text-xs font-semibold text-foreground">
+            <span className="font-mono text-sm font-semibold tabular-nums text-foreground">
               #{order.orderId}
             </span>
             <Pill tone="neutral" size="sm">
@@ -487,11 +552,11 @@ function OrderRail({
       )}
 
       {matched && (
-        <div className="space-y-2 border-t border-foreground/[0.06] pt-3">
-          <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="mt-4 space-y-2 border-t border-border pt-4">
+          <p className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             {t('complaint.branch', { defaultValue: 'Restaurant / branch' })}
           </p>
-          <p className="text-xs font-semibold leading-snug text-foreground">
+          <p className="text-sm font-semibold leading-snug text-foreground">
             {store?.restaurantName}
           </p>
           <RailRow label={t('stores.brand', { defaultValue: 'Brand' })} value={store?.brandName} />
@@ -514,7 +579,7 @@ function OrderRail({
       )}
 
       {hasChatContext && (
-        <div className="space-y-2.5 border-t border-foreground/[0.06] pt-3">
+        <div className="mt-4 space-y-2.5 border-t border-border pt-4">
           {order && (
             <IncludeToggle checked={includeOrder} onChange={onIncludeOrder}>
               <span className="font-medium">
