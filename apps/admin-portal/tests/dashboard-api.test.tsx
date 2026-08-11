@@ -213,6 +213,43 @@ describe('dashboard api', () => {
       order_snapshot: restaurantName === null ? null : { restaurantName, brandName },
     });
 
+    it('counts a ticket under the branch it was FROZEN against, not the live one', async () => {
+      // The branch was renamed and rebranded after the ticket was raised. A
+      // dashboard is a report about what happened: the ticket must stay where
+      // it was, or last month's totals silently change shape.
+      mockData({
+        stores: [
+          {
+            ...STORES[0],
+            name: 'Renamed Since',
+            brand: { id: 'b9', code: 'NEW', name: 'Rebranded Since' },
+          },
+        ],
+        tickets: [
+          {
+            ...ticket('t1', 'Riyadh - Masief Plaza', ' La Casa Pasta'),
+            store_snapshot: {
+              storeId: 's1',
+              code: 'LCP-041',
+              restaurantName: 'LCP-041 Masief Plaza',
+              brandName: 'La Casa Pasta',
+              city: 'Riyadh',
+              areaManager: 'Ahmed Samir',
+              chainManager: 'Mo’men Elsharkawy',
+              via: 'normalised_name',
+              capturedAt: '2026-03-14T19:11:00.000Z',
+            },
+          },
+        ],
+      });
+      const { result } = renderHook(() => useDashboardMetrics(30), { wrapper: wrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const d = result.current.data!;
+
+      expect(d.topStores).toEqual([{ id: 's1', name: 'LCP-041 Masief Plaza', tickets: 1 }]);
+      expect(d.topBrands).toEqual([{ id: 'la casa pasta', name: 'La Casa Pasta', tickets: 1 }]);
+    });
+
     it('ranks stores and brands by ticket count from the order snapshots', async () => {
       mockData({
         stores: STORES,
