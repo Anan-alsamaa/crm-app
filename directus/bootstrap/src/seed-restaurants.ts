@@ -67,9 +67,9 @@ interface BrandSeed {
  * carry that name and the dashboard totals them as a single brand. The codes
  * keep the format distinction on each store row.
  *
- * HD and MGA are still their sheet codes — operations named four brands and
- * these two were not among them, and inventing an expansion would produce a
- * mapping that looks configured and never matches.
+ * HD and MGA were dropped on 2026-08-11 at operations' request — they are not
+ * brands of this business. Do NOT re-add them here; a CSV import that contains
+ * them will still create them on demand, which is the right escape hatch.
  */
 const BRANDS: BrandSeed[] = [
   { code: 'LCP', name: 'Casa Pasta', yiji_brand_name: 'La Casa Pasta' },
@@ -77,8 +77,6 @@ const BRANDS: BrandSeed[] = [
   { code: 'CND Casual', name: 'Chick N Dip' },
   { code: 'OKA', name: 'Okashi' },
   { code: 'PSK', name: 'Poshak' },
-  { code: 'HD', name: 'HD' },
-  { code: 'MGA', name: 'MGA' },
 ];
 
 interface StoreSeed {
@@ -132,22 +130,6 @@ const STORES: StoreSeed[] = [
     area_manager: 'Aly AbdulRahman',
     chain_manager: 'Aly AbdulRahman',
     brandCode: 'CND Express',
-  },
-  {
-    code: 'HD-002',
-    name: 'Doha Plaza',
-    city: 'Dammam',
-    area_manager: 'Fahad Mostafa',
-    chain_manager: 'Fahad Mostafa',
-    brandCode: 'HD',
-  },
-  {
-    code: 'MGA-001',
-    name: 'Gurnida Plaza',
-    city: 'Dammam',
-    area_manager: 'Mareoon Cruz',
-    chain_manager: 'Mareoon Cruz',
-    brandCode: 'MGA',
   },
   {
     code: 'OKA-001',
