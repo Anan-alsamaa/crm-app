@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { readItems, readUsers } from '@directus/sdk';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
+import type { StoreSnapshot } from '@yiji/shared-types';
 
 /**
  * Agent reports — three exportable cuts the client asked for (feature #8), all
@@ -45,6 +46,7 @@ interface RawTicket {
   coupon_value?: number | null;
   coupon_percent?: number | null;
   order_snapshot?: RawOrderSnapshot | null;
+  store_snapshot?: StoreSnapshot | null;
 }
 
 /** The stored point-in-time order copy, as much of it as this report reads. */
@@ -105,6 +107,8 @@ export interface TicketReportRow {
   resolutionState: SlaOutcome;
   /** Best-effort linked-order enrichment (undefined until/if it resolves). */
   order?: TicketOrderInfo | null;
+  /** Branch attribution frozen at ticket creation; null on older tickets. */
+  storeSnapshot: StoreSnapshot | null;
 }
 
 export interface TicketOrderInfo {
@@ -178,6 +182,12 @@ export interface ComplaintReportRow {
   complaintStatus: string;
   agent: string;
   compensation: string;
+  /**
+   * The branch attribution frozen onto the ticket when it was raised. Null
+   * for tickets raised before snapshots existed, which fall back to a live
+   * lookup and therefore DO move if a store is edited.
+   */
+  storeSnapshot: StoreSnapshot | null;
 }
 
 export interface AgentKpiRow {
@@ -302,6 +312,7 @@ const COMPLAINT_FIELDS = [
   'coupon_value',
   'coupon_percent',
   'order_snapshot',
+  'store_snapshot',
 ] as const;
 
 /** Local `YYYY-MM-DD` + `HH:mm`, split the way the operations sheet splits it. */
@@ -439,6 +450,7 @@ export function useAgentReportData(
         firstResponseState: slaOutcome(t.first_response_due_at, t.first_responded_at, now),
         resolutionMinutes: minutesBetween(t.date_created, t.resolved_at),
         resolutionState: slaOutcome(t.resolution_due_at, t.resolved_at, now),
+        storeSnapshot: t.store_snapshot ?? null,
       }));
 
       /* Report 4: the operations complaints report. The store-derived columns
@@ -476,6 +488,7 @@ export function useAgentReportData(
           complaintStatus: t.status,
           agent: agentOf(t.assigned_agent),
           compensation: t.compensation ?? '',
+          storeSnapshot: t.store_snapshot ?? null,
         };
       });
 

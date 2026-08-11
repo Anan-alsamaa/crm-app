@@ -291,3 +291,102 @@ export function matchStore(index: StoreIndex, order: OrderRestaurantRef | null):
 export function isUnmappedStore(m: StoreMatch): boolean {
   return m.store === null;
 }
+
+/**
+ * The store as it stood when a ticket was raised, frozen onto the ticket.
+ *
+ * WHY THIS EXISTS — reporting must not rewrite the past. Resolving the store
+ * live at render time means editing one field today silently changes every
+ * report ever produced: move a branch to a new area manager and last quarter's
+ * complaints retroactively belong to someone who was not responsible for them.
+ * Nobody notices, because the old report still "looks right".
+ *
+ * So the attribution is captured with the ticket and read back from there.
+ * Same reasoning, and the same shape, as `tickets.order_snapshot`: the source
+ * may legitimately change, and a report about the past has to stay about the
+ * past.
+ *
+ * This freezes the store's ATTRIBUTION, not the store. Renaming a branch for
+ * clarity still shows the old name on old tickets — that is the point. Editing
+ * a store is a change from now on, never a correction of history; if history
+ * itself was wrong, that is a data fix, not a field edit.
+ */
+export interface StoreSnapshot {
+  /** Store row this resolved to, or null when it never resolved to one. */
+  storeId: string | null;
+  code: string | null;
+  /** Branch name as reported at capture time. */
+  restaurantName: string;
+  brandName: string;
+  city: string;
+  areaManager: string;
+  chainManager: string;
+  /** How it was matched, kept so a weak match stays visible in hindsight. */
+  via: StoreMatch['via'];
+  /** ISO timestamp of capture. */
+  capturedAt: string;
+}
+
+/** Freeze a live match onto a ticket. */
+export function toStoreSnapshot(m: StoreMatch, capturedAt: string): StoreSnapshot {
+  return {
+    storeId: m.store?.id ?? null,
+    code: m.store?.code ?? null,
+    restaurantName: m.restaurantName,
+    brandName: m.brandName,
+    city: m.city,
+    areaManager: m.areaManager,
+    chainManager: m.chainManager,
+    via: m.via,
+    capturedAt,
+  };
+}
+
+/**
+ * Read a frozen attribution back as a StoreMatch, so every report and dashboard
+ * consumes one shape whether the values came from the ticket or from a live
+ * lookup. Returns null for a ticket with no snapshot — those predate this and
+ * can only fall back to the live join.
+ */
+export function fromStoreSnapshot(s: StoreSnapshot | null | undefined): StoreMatch | null {
+  if (!s || typeof s !== 'object') return null;
+  return {
+    // A synthetic record: enough for isUnmappedStore and for display, without
+    // pretending we froze fields we did not.
+    store: s.storeId
+      ? {
+          id: s.storeId,
+          code: s.code ?? null,
+          name: s.restaurantName,
+          city: s.city || null,
+          areaManager: s.areaManager || null,
+          chainManager: s.chainManager || null,
+          brandCode: null,
+          brandName: s.brandName || null,
+          yijiRestaurantId: null,
+        }
+      : null,
+    via: s.via,
+    brandName: s.brandName,
+    city: s.city,
+    areaManager: s.areaManager,
+    chainManager: s.chainManager,
+    restaurantName: s.restaurantName,
+  };
+}
+
+/**
+ * The attribution to report for a ticket: what was frozen onto it, else a live
+ * lookup for tickets raised before snapshots existed.
+ *
+ * Always prefer this over calling `matchStore` directly in a report.
+ */
+export function resolveStoreAttribution(
+  snapshot: StoreSnapshot | null | undefined,
+  liveMatch: () => StoreMatch,
+): { match: StoreMatch; fromSnapshot: boolean } {
+  const frozen = fromStoreSnapshot(snapshot);
+  return frozen
+    ? { match: frozen, fromSnapshot: true }
+    : { match: liveMatch(), fromSnapshot: false };
+}
