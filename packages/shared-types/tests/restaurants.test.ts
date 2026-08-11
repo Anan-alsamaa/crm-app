@@ -10,6 +10,7 @@ import {
   storeCodeFrom,
   toStoreSnapshot,
   resolveStoreAttribution,
+  planStoreSnapshotBackfill,
   type StoreRecord,
 } from '../src/restaurants.js';
 
@@ -388,5 +389,108 @@ describe('store attribution is frozen onto the ticket, not re-derived', () => {
       );
       expect(fromSnapshot).toBe(false);
     }
+  });
+});
+
+describe('planStoreSnapshotBackfill — closing the gap for older tickets', () => {
+  const STORE: StoreRecord = {
+    id: 's1',
+    code: 'LCP-041',
+    name: 'Masief Plaza',
+    city: 'Riyadh',
+    areaManager: 'Ahmed Samir',
+    chainManager: 'Medhat Sayed',
+    brandCode: 'LCP',
+    brandName: 'Casa Pasta',
+    yijiRestaurantId: null,
+  };
+  const idx = buildStoreIndex([STORE]);
+  const order = { restaurantName: 'LCP-041 Masief Plaza', brandName: 'Casa Pasta' };
+
+  it('freezes a ticket that has an order but no snapshot', () => {
+    const plan = planStoreSnapshotBackfill([{ id: 't1', storeSnapshot: null, order }], idx, 'now');
+    expect(plan.toFreeze).toHaveLength(1);
+    expect(plan.toFreeze[0]!.snapshot.areaManager).toBe('Ahmed Samir');
+  });
+
+  it('marks what it writes as backfilled, never passing it off as a real capture', () => {
+    // These values are the store as it stands today, not as it stood when the
+    // ticket was raised. Saying so is the difference between knowing and
+    // assuming.
+    const plan = planStoreSnapshotBackfill([{ id: 't1', storeSnapshot: null, order }], idx, 'now');
+    expect(plan.toFreeze[0]!.snapshot.backfilled).toBe(true);
+  });
+
+  it('never overwrites a snapshot that already exists', () => {
+    // An existing snapshot IS the historical record this change protects.
+    const existing = toStoreSnapshot(matchStore(idx, order), 'earlier');
+    const plan = planStoreSnapshotBackfill(
+      [{ id: 't1', storeSnapshot: existing, order }],
+      idx,
+      'now',
+    );
+    expect(plan.toFreeze).toHaveLength(0);
+    expect(plan.alreadyFrozen).toBe(1);
+  });
+
+  it('invents nothing for a ticket with no order to attribute', () => {
+    const plan = planStoreSnapshotBackfill(
+      [
+        { id: 't1', storeSnapshot: null, order: null },
+        { id: 't2', storeSnapshot: null, order: {} },
+      ],
+      idx,
+      'now',
+    );
+    expect(plan.toFreeze).toHaveLength(0);
+    expect(plan.noOrder).toBe(2);
+  });
+
+  it('still freezes an unmapped store, and counts it', () => {
+    // Freezing "unmapped" is right: it is what the report said at the time, and
+    // leaving it live would let a later store edit change the past.
+    const plan = planStoreSnapshotBackfill(
+      [{ id: 't1', storeSnapshot: null, order: { restaurantName: 'Jeddah - Nowhere' } }],
+      idx,
+      'now',
+    );
+    expect(plan.toFreeze).toHaveLength(1);
+    expect(plan.unmapped).toBe(1);
+    expect(plan.toFreeze[0]!.snapshot.storeId).toBeNull();
+  });
+
+  it('is a no-op on a second run', () => {
+    const first = planStoreSnapshotBackfill([{ id: 't1', storeSnapshot: null, order }], idx, 'now');
+    const applied = first.toFreeze.map((f) => ({
+      id: f.id,
+      storeSnapshot: f.snapshot,
+      order,
+    }));
+    const second = planStoreSnapshotBackfill(applied, idx, 'later');
+    expect(second.toFreeze).toHaveLength(0);
+    expect(second.alreadyFrozen).toBe(1);
+  });
+
+  it('after a backfill, editing the store no longer moves the ticket', () => {
+    // The whole point, end to end.
+    const plan = planStoreSnapshotBackfill([{ id: 't1', storeSnapshot: null, order }], idx, 'now');
+    const frozen = plan.toFreeze[0]!.snapshot;
+
+    const moved = buildStoreIndex([{ ...STORE, areaManager: 'Khaled Abdellah' }]);
+    const { match } = resolveStoreAttribution(frozen, () => matchStore(moved, order));
+    expect(match.areaManager).toBe('Ahmed Samir');
+  });
+
+  it('accounts for every ticket it was given', () => {
+    const plan = planStoreSnapshotBackfill(
+      [
+        { id: 'a', storeSnapshot: null, order },
+        { id: 'b', storeSnapshot: toStoreSnapshot(matchStore(idx, order), 'x'), order },
+        { id: 'c', storeSnapshot: null, order: null },
+      ],
+      idx,
+      'now',
+    );
+    expect(plan.toFreeze.length + plan.alreadyFrozen + plan.noOrder).toBe(3);
   });
 });

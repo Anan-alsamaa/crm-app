@@ -325,6 +325,16 @@ export interface StoreSnapshot {
   via: StoreMatch['via'];
   /** ISO timestamp of capture. */
   capturedAt: string;
+  /**
+   * True when this was reconstructed for a ticket raised before snapshots
+   * existed, rather than captured as the ticket was raised.
+   *
+   * It matters: a backfilled row froze the store as it stood on the backfill
+   * date, which is the best that can be done once the original values are
+   * gone. Recording that honestly is the difference between "we know this was
+   * true then" and "we assume it was".
+   */
+  backfilled?: boolean;
 }
 
 /** Freeze a live match onto a ticket. */
@@ -389,4 +399,66 @@ export function resolveStoreAttribution(
   return frozen
     ? { match: frozen, fromSnapshot: true }
     : { match: liveMatch(), fromSnapshot: false };
+}
+
+/** A ticket considered for backfill: what it already has, and its order. */
+export interface StoreSnapshotCandidate {
+  id: string;
+  /** Whatever is already frozen on the ticket, if anything. */
+  storeSnapshot: StoreSnapshot | null | undefined;
+  order: OrderRestaurantRef | null | undefined;
+}
+
+export interface StoreSnapshotBackfillPlan {
+  toFreeze: Array<{ id: string; snapshot: StoreSnapshot }>;
+  /** Already frozen — left exactly as they are. */
+  alreadyFrozen: number;
+  /** No order, so no branch to attribute and nothing to freeze. */
+  noOrder: number;
+  /** Will be frozen, but as an unmapped store. */
+  unmapped: number;
+}
+
+/**
+ * Decide what a backfill should freeze onto tickets raised before snapshots
+ * existed — the tickets whose reported branch would otherwise still move when
+ * someone edits a store.
+ *
+ * Pure, so the rules are testable without a database. The risky part is not the
+ * HTTP but the judgement: never overwrite an existing snapshot (it is the
+ * historical record this whole change exists to protect), and never invent one
+ * for a ticket that has no order to attribute.
+ *
+ * Everything planned here is marked `backfilled`, because these values are the
+ * store as it stands NOW, not as it stood when the ticket was raised.
+ */
+export function planStoreSnapshotBackfill(
+  tickets: readonly StoreSnapshotCandidate[],
+  index: StoreIndex,
+  capturedAt: string,
+): StoreSnapshotBackfillPlan {
+  const plan: StoreSnapshotBackfillPlan = {
+    toFreeze: [],
+    alreadyFrozen: 0,
+    noOrder: 0,
+    unmapped: 0,
+  };
+  for (const t of tickets) {
+    if (t.storeSnapshot) {
+      plan.alreadyFrozen += 1;
+      continue;
+    }
+    const o = t.order;
+    if (!o || (!o.restaurantName && !o.restaurantId)) {
+      plan.noOrder += 1;
+      continue;
+    }
+    const match = matchStore(index, o);
+    if (!match.store) plan.unmapped += 1;
+    plan.toFreeze.push({
+      id: t.id,
+      snapshot: { ...toStoreSnapshot(match, capturedAt), backfilled: true },
+    });
+  }
+  return plan;
 }
