@@ -59,6 +59,28 @@ describe('splitStoreCode', () => {
   it('leaves an uncoded name alone', () => {
     expect(splitStoreCode('Marina Mall 2')).toEqual({ code: null, name: 'Marina Mall 2' });
   });
+
+  // The operations master spells the same code four ways. Each of these three
+  // previously parsed to code:null, so the branch could not be joined to Yiji's
+  // list by code and silently went without a restaurant id.
+  it('handles a space after the dash', () => {
+    expect(splitStoreCode('LCP- 089 Nada Plaza RYD')).toEqual({
+      code: 'LCP-089',
+      name: 'Nada Plaza RYD',
+    });
+  });
+
+  it('handles no separator with the dash after the number', () => {
+    expect(splitStoreCode('LCP058-ARAMCO')).toEqual({ code: 'LCP-058', name: 'ARAMCO' });
+  });
+
+  it('handles a dot separator and strips the dash before the name', () => {
+    expect(splitStoreCode('LCP.073 - Amer Mall')).toEqual({ code: 'LCP-073', name: 'Amer Mall' });
+  });
+
+  it('still refuses to treat a bare number as a code', () => {
+    expect(splitStoreCode('7 Days Plaza')).toEqual({ code: null, name: '7 Days Plaza' });
+  });
 });
 
 describe('parseStoresCsv', () => {
