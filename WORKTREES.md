@@ -35,7 +35,8 @@ visible to all of them.** Only one session at a time should touch
 | `feat/new-complaint-form` | `crm-app-wt/new-complaint-form` | 1    | Ticket form reshaped to the operations manager's New Complaint layout, plus the nine new fields |
 | `feat/inbox-order-link`   | `crm-app-wt/inbox-order-link`   | 2    | Clicking the order id in the inbox opens the ticket page                                        |
 | `feat/top-nav`            | `crm-app-wt/top-nav`            | 3    | Sidebar navigation moved to a top bar                                                           |
-| `feat/complaints-import`  | `crm-app-wt/complaints-import`  | 4    | Import the 1,673 historical complaints                                                          |
+| `feat/complaints-import`  | `crm-app-wt/complaints-import`  | 4    | Repeatable Restaurants CSV upload — insert new rows, skip existing, never overwrite             |
+| `feat/store-csat`         | `crm-app-wt/store-csat`         | 5    | Branch-level satisfaction from the customer's post-chat rating                                  |
 
 These four were chosen because they barely overlap in the files they touch. Two
 sessions both editing the ticket form would still collide at merge time — the
