@@ -205,16 +205,25 @@ export function StoresPage() {
       const wanted = Array.from(
         new Set(parsed.rows.map((r) => r.brandCode).filter((c): c is string => !!c)),
       );
-      const missing = wanted.filter((c) => !brandIdByKey.has(c.trim().toLowerCase()));
-      if (missing.length > 0) {
-        await bulkBrands.mutateAsync(
-          missing.map((code) => ({ code: code.trim(), name: code.trim(), status: 'active' })),
-        );
+      // Hand the hook every brand the sheet references, not just the ones this
+      // (possibly stale) cache thinks are missing — it re-reads and skips the
+      // ones that already exist. Filtering here as well would only decide from
+      // older data than the hook has.
+      const brandResult = await bulkBrands.mutateAsync(
+        wanted.map((code) => ({ code: code.trim(), name: code.trim(), status: 'active' as const })),
+      );
+      // Refresh when brands were created OR when this cache simply does not
+      // know a brand the sheet needs. "Already present" means the row exists in
+      // Directus, NOT that its id is in this cache — and without the id the
+      // store is imported with no brand at all, which looks like a data problem
+      // rather than a stale cache and silently breaks brand-level reporting.
+      const unresolved = wanted.some((c) => !brandIdByKey.has(c.trim().toLowerCase()));
+      if (brandResult.added > 0 || unresolved) {
         const refreshed = await brands.refetch();
         for (const b of refreshed.data ?? []) brandIdByKey.set(b.code.trim().toLowerCase(), b.id);
       }
 
-      const created = await bulkStores.mutateAsync(
+      const storeResult = await bulkStores.mutateAsync(
         parsed.rows.map((r) => ({
           code: r.code,
           name: r.name,
@@ -226,16 +235,27 @@ export function StoresPage() {
           // would fail the whole import rather than just that column.
           ...(canEditYijiId ? { yiji_restaurant_id: r.yijiRestaurantId } : {}),
           brand: r.brandCode ? (brandIdByKey.get(r.brandCode.trim().toLowerCase()) ?? null) : null,
+          // Matching only — stripped before the insert. Lets a codeless row be
+          // told apart from a same-named branch of a different brand.
+          brand_code: r.brandCode,
           status: 'active' as const,
         })),
       );
 
       // Report what was DROPPED as loudly as what landed — a silent skip in an
-      // import is how a store goes missing from every later report.
-      const bits = [t('stores.importOk', { defaultValue: '{{n}} stores imported', n: created })];
-      if (missing.length)
+      // import is how a store goes missing from every later report. "Already
+      // present" is stated even when it is the whole file, so re-running the
+      // same upload reads as a no-op rather than as a failure.
+      const bits = [
+        t('stores.importAdded', { defaultValue: '{{n}} added', n: storeResult.added }),
+        t('stores.importExisting', {
+          defaultValue: '{{n}} already present',
+          n: storeResult.alreadyPresent,
+        }),
+      ];
+      if (brandResult.added)
         bits.push(
-          t('stores.importBrands', { defaultValue: '{{n}} brands created', n: missing.length }),
+          t('stores.importBrands', { defaultValue: '{{n}} brands created', n: brandResult.added }),
         );
       if (parsed.skipped.length)
         bits.push(
