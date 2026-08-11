@@ -581,10 +581,33 @@ async function applyServiceUsers(client: AnyClient): Promise<void> {
  * have. Mismatch = abort, because writing to the wrong database is worse than
  * not writing at all.
  */
+/** What to change when the direct connection is wrong or absent. */
+const DIRECT_DB_HINT =
+  `  Set DB_HOST_EXTERNAL/DB_PORT_EXTERNAL to the Postgres BEHIND DIRECTUS.\n` +
+  `  Locally that is the compose container, published by docker-compose.yml on\n` +
+  `  127.0.0.1:\${DB_PORT_EXTERNAL:-5434}. If nothing is listening there, the\n` +
+  `  container predates that mapping — recreate it with:  docker compose up -d postgres\n` +
+  `  Do NOT reach for 5432/5433 because something answers: on a machine with a\n` +
+  `  native PostgreSQL install those are a DIFFERENT database, and writing this\n` +
+  `  schema's indexes into it succeeds silently.`;
+
 async function assertSameDatabase(pool: pg.Pool, where: string): Promise<void> {
-  const { rows } = await pool.query<{ table_name: string; column_name: string }>(
-    `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'`,
-  );
+  let rows: Array<{ table_name: string; column_name: string }>;
+  try {
+    ({ rows } = await pool.query<{ table_name: string; column_name: string }>(
+      `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'`,
+    ));
+  } catch (err) {
+    // A raw ECONNREFUSED/auth stack here reads as "the bootstrap is broken".
+    // It is not — the schema and roles are already applied; only the direct
+    // socket is misconfigured. Say which address failed and what to do.
+    throw new Error(
+      `Cannot reach ${where} for the raw-SQL step: ${errorMessage(err)}\n` +
+        `  (Collections, fields, roles and permissions applied fine — those go\n` +
+        `  through the Directus API. Only the direct Postgres connection failed.)\n` +
+        DIRECT_DB_HINT,
+    );
+  }
   const present = new Set(rows.map((r) => `${r.table_name}.${r.column_name}`));
   const missing: string[] = [];
   for (const spec of collections) {
@@ -600,10 +623,7 @@ async function assertSameDatabase(pool: pg.Pool, where: string): Promise<void> {
   throw new Error(
     `Refusing to run raw SQL: ${where} is NOT the database Directus is using.\n` +
       `  ${missing.length} field(s) applied via the API a moment ago are missing there: ${shown}${more}\n` +
-      `  Point DB_HOST_EXTERNAL/DB_PORT_EXTERNAL at the Postgres behind Directus.\n` +
-      `  Locally that is the compose container's published port (docker-compose.yml\n` +
-      `  maps it to 127.0.0.1:\${DB_PORT_EXTERNAL:-5434}); note that ports 5432/5433\n` +
-      `  may belong to a native PostgreSQL install that is NOT this project's database.`,
+      DIRECT_DB_HINT,
   );
 }
 

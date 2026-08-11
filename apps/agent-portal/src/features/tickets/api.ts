@@ -55,6 +55,8 @@ export interface TicketRow extends Partial<TicketComplaintFields> {
   assigned_agent: string | null;
   assigned_team: string | null;
   conversation: string | null;
+  /** Branch the complaint is about (`stores` id), when one was recorded. */
+  store?: string | null;
   contact: { id: string; name: string | null; email: string | null; phone: string | null } | null;
   first_response_due_at: string | null;
   resolution_due_at: string | null;
@@ -124,6 +126,7 @@ export function useTicket(id: string | null) {
             'first_responded_at',
             'date_created',
             'order_snapshot',
+            'store',
             ...COMPLAINT_FIELDS,
             { contact: ['id', 'name', 'email', 'phone'] },
             {
@@ -186,7 +189,16 @@ export interface CreateTicketInput extends Partial<TicketComplaintFields> {
   assigned_agent?: string | null;
   /** Structured point-in-time copy of the order the ticket is about. */
   order_snapshot?: TicketOrderSnapshot | null;
-  /** Branch attribution frozen at creation — see StoreSnapshot. */
+  /**
+   * Which branch, as a live link — what reports group by, and what an agent
+   * corrects when the order resolved to the wrong place.
+   */
+  store?: string | null;
+  /**
+   * What that branch WAS at creation: name, brand, city, both managers, and how
+   * it was matched. Frozen, because resolving live means one edit to a store
+   * rewrites every past report. See StoreSnapshot.
+   */
   store_snapshot?: StoreSnapshot | null;
 }
 
@@ -294,6 +306,7 @@ export function useCreateTicketFromConversation() {
 }
 
 export interface UpdateTicketInput extends Partial<TicketComplaintFields> {
+  store?: string | null;
   status?: TicketStatus;
   priority?: Priority;
   assigned_agent?: string | null;

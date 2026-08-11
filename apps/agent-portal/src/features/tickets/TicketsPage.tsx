@@ -38,11 +38,14 @@ import { TicketAttachments } from './TicketAttachments.js';
 import {
   ComplaintClassification,
   ComplaintResolution,
+  StorePicker,
   complaintHasErrors,
   complaintPatch,
   optionLabel,
+  storeLabel,
   type ComplaintValues,
 } from './ComplaintFields.js';
+import { useStores } from './useStoreMatch.js';
 import {
   LegacyOrderSnapshotCard,
   OrderSnapshotCard,
@@ -1056,7 +1059,9 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
 function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
   const { t } = useTranslation();
   const update = useUpdateTicket();
+  const stores = useStores();
   const [editing, setEditing] = useState(false);
+  const [storeId, setStoreId] = useState(ticket.store ?? '');
 
   // Directus hands back numbers for the coupon columns and nulls for anything
   // unset; the form works in strings, so normalise on the way in.
@@ -1085,10 +1090,19 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
   // Re-sync when a different ticket is selected, or the row is refetched after
   // a save — without this the panel would show the previous ticket's answers.
   useEffect(() => {
-    if (!editing) setDraft(stored);
-  }, [stored, editing]);
+    if (!editing) {
+      setDraft(stored);
+      setStoreId(ticket.store ?? '');
+    }
+  }, [stored, editing, ticket.store]);
+
+  const branch = (stores.data ?? []).find((s) => s.id === ticket.store) ?? null;
 
   const rows: Array<[string, string]> = [
+    [
+      t('complaint.branch', { defaultValue: 'Restaurant / branch' }),
+      branch ? storeLabel(branch) : '',
+    ],
     [t('complaint.type', { defaultValue: 'Complaint type' }), stored.complaint_type],
     [t('complaint.serviceType', { defaultValue: 'Service type' }), stored.service_type],
     [t('complaint.source', { defaultValue: 'Complaint source' }), stored.complaint_source],
@@ -1111,7 +1125,10 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
   const save = async () => {
     if (complaintHasErrors(draft)) return;
     try {
-      await update.mutateAsync({ id: ticket.id, patch: complaintPatch(draft) });
+      await update.mutateAsync({
+        id: ticket.id,
+        patch: { ...complaintPatch(draft), store: storeId || null },
+      });
       setEditing(false);
       toast.success(t('complaint.saved', { defaultValue: 'Complaint details saved' }));
     } catch {
@@ -1130,6 +1147,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
             type="button"
             onClick={() => {
               setDraft(stored);
+              setStoreId(ticket.store ?? '');
               setEditing(true);
             }}
             className="text-xs font-medium text-primary transition-colors duration-fast ease-out hover:underline"
@@ -1143,6 +1161,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
 
       {editing ? (
         <div className="space-y-4 rounded-2xl bg-card p-4 shadow-soft">
+          <StorePicker value={storeId} onChange={setStoreId} />
           <ComplaintClassification
             values={draft}
             onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
@@ -1158,6 +1177,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
               size="sm"
               onClick={() => {
                 setDraft(stored);
+                setStoreId(ticket.store ?? '');
                 setEditing(false);
               }}
             >

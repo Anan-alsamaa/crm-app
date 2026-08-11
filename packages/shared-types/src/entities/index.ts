@@ -124,6 +124,12 @@ export const Ticket = z.object({
   assigned_agent: z.string().nullable().optional(),
   assigned_team: z.string().nullable().optional(),
   sla_policy: z.string().nullable().optional(),
+  /**
+   * Branch the complaint is about (`stores`). Set from the order snapshot when
+   * the ticket came from an app order, and picked by hand otherwise — most
+   * complaints arrive by phone or social and have no order to infer it from.
+   */
+  store: z.string().nullable().optional(),
   first_response_due_at: z.string().datetime().nullable().optional(),
   resolution_due_at: z.string().datetime().nullable().optional(),
   first_responded_at: z.string().datetime().nullable().optional(),

@@ -62,7 +62,19 @@ export interface OrderRestaurantRef {
 export interface StoreMatch {
   store: StoreRecord | null;
   /** How the row was matched — surfaced in the UI so gaps are diagnosable. */
-  via: 'yiji_id' | 'exact_name' | 'normalised_name' | 'store_code' | 'brand_only' | 'none';
+  via:
+    | 'yiji_id'
+    | 'exact_name'
+    | 'normalised_name'
+    | 'store_code'
+    | 'brand_only'
+    | 'none'
+    // The agent picked the branch by hand, overriding whatever the order said.
+    // Recorded distinctly on purpose: their choice is what the ticket reports
+    // against, but a manual attribution and one keyed off restaurantId are not
+    // the same evidence, and a report that blends them silently cannot be
+    // audited when the two disagree.
+    | 'manual';
   /** Brand name to display, from the store when matched, else from the order. */
   brandName: string;
   city: string;
@@ -325,6 +337,26 @@ export interface StoreSnapshot {
   via: StoreMatch['via'];
   /** ISO timestamp of capture. */
   capturedAt: string;
+}
+
+/**
+ * The match for a branch the agent chose by hand.
+ *
+ * Used when the order resolved to nothing, or to the wrong place. The branch's
+ * own record answers city and both managers — the agent picks one thing, not
+ * five, so a hand-attributed ticket carries the same ownership data as an
+ * automatic one and does not fall out of the by-manager reports.
+ */
+export function manualStoreMatch(store: StoreRecord): StoreMatch {
+  return {
+    store,
+    via: 'manual',
+    brandName: store.brandName ?? store.brandCode ?? NOT_MAPPED,
+    city: store.city ?? '',
+    areaManager: store.areaManager ?? '',
+    chainManager: store.chainManager ?? '',
+    restaurantName: store.code ? `${store.code} ${store.name}` : store.name,
+  };
 }
 
 /** Freeze a live match onto a ticket. */

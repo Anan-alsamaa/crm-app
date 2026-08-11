@@ -572,6 +572,15 @@
     "couponValue": "Coupon value (SAR)",
     "couponPercent": "Coupon %",
     "badValue": "Enter an amount of 0 or more.",
-    "badPercent": "Enter a percentage between 0 and 100."
+    "badPercent": "Enter a percentage between 0 and 100.",
+    "orderAndBranch": "Order & branch",
+    "branch": "Restaurant / branch",
+    "branchSearch": "Type to search branches…",
+    "branchHint": "Search by code, name or city.",
+    "branchInferred": "From the order — change it if the complaint is about another branch.",
+    "noBranch": "No branch matches. Ask an admin to add it.",
+    "noStores": "Branch list unavailable.",
+    "area": "Area",
+    "chain": "Chain"
   }
 }

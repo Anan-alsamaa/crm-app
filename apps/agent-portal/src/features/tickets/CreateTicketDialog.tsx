@@ -5,8 +5,13 @@ import { z } from 'zod';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Button, cn, FormField, Input, Pill, SelectMenu, Textarea, toast } from '@yiji/ui';
-import { toStoreSnapshot, type Priority, type YijiOrder } from '@yiji/shared-types';
-import { useOrderStore } from './useStoreMatch.js';
+import {
+  manualStoreMatch,
+  toStoreSnapshot,
+  type Priority,
+  type StoreMatch,
+  type YijiOrder,
+} from '@yiji/shared-types';
 import { useConversationAttachmentIds, useCreateTicketFromConversation } from './api.js';
 import {
   OrderSnapshotCard,
@@ -17,12 +22,14 @@ import {
   ComplaintClassification,
   ComplaintResolution,
   ComplaintSection,
+  StorePicker,
   complaintHasErrors,
   complaintPatch,
   complaintFromConversation,
   serviceTypeFromOrder,
   type ComplaintValues,
 } from './ComplaintFields.js';
+import { useOrderStore, useStores, toStoreRecord } from './useStoreMatch.js';
 import { useContact } from '../contacts/api.js';
 import { commerce } from '../../lib/commerce-client.js';
 import { clearPinnedOrder, getPinnedOrder } from '../commerce/pinned-order.js';
@@ -176,18 +183,49 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
     () => (latestOrder ? orderToSnapshot(latestOrder) : null),
     [latestOrder],
   );
-  // The branch this order belongs to, resolved now so it can be frozen onto
-  // the ticket at creation rather than looked up again at report time.
-  const storeMatch = useOrderStore({
-    restaurantId: latestOrder?.restaurantId,
-    restaurantName: latestOrder?.restaurantName,
-    brandName: latestOrder?.brandName,
-  });
   const inferredService = serviceTypeFromOrder(orderSnapshotView);
   useEffect(() => {
     if (!inferredService) return;
     setComplaint((c) => (c.service_type ? c : { ...c, service_type: inferredService }));
   }, [inferredService]);
+
+  // Same idea for the branch: resolve the order's restaurant against the store
+  // master and pre-select it. `brand_only` is deliberately excluded — it means
+  // we matched the BRAND, not a branch, and pre-filling one of that brand's
+  // branches would be a guess the agent has no reason to doubt.
+  const [storeId, setStoreId] = useState('');
+  const orderStore = useOrderStore(orderSnapshotView ?? {});
+  const inferredStoreId =
+    orderStore.store && orderStore.via !== 'brand_only' && orderStore.via !== 'none'
+      ? orderStore.store.id
+      : '';
+  useEffect(() => {
+    if (!inferredStoreId) return;
+    setStoreId((cur) => cur || inferredStoreId);
+  }, [inferredStoreId]);
+
+  /**
+   * The branch the ticket is actually filed against, and the single source for
+   * BOTH the `store` link and the frozen `store_snapshot` — deriving them
+   * separately is how a ticket ends up linked to one branch while its report
+   * row names another.
+   *
+   * Leaving the pre-selection untouched keeps the automatic match and its
+   * evidence (`via: 'yiji_id'`). Changing it makes the agent's choice
+   * authoritative and records it as `via: 'manual'`, so a hand-attributed
+   * ticket stays distinguishable from one keyed off the order's restaurantId.
+   */
+  const stores = useStores();
+  const chosenMatch = useMemo<StoreMatch | null>(() => {
+    if (storeId && storeId !== orderStore.store?.id) {
+      const picked = (stores.data ?? []).find((s) => s.id === storeId);
+      if (picked) return manualStoreMatch(toStoreRecord(picked));
+    }
+    // No order and no pick means there is nothing to attribute — record
+    // nothing rather than an empty snapshot that reads as a failed match.
+    if (!orderSnapshotView && !storeId) return null;
+    return orderStore;
+  }, [storeId, orderStore, stores.data, orderSnapshotView]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -215,13 +253,17 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
           conversation: conversationId ?? null,
           assigned_agent: user?.id ?? null,
           order_snapshot: includeOrder && latestOrder ? orderSnapshot(latestOrder) : null,
-          // Freeze WHO this branch belonged to, not just which branch it was.
-          // Resolved live at report time, one edit to a store would rewrite
-          // every past report — see StoreSnapshot in @yiji/shared-types.
-          store_snapshot:
-            includeOrder && latestOrder
-              ? toStoreSnapshot(storeMatch, new Date().toISOString())
-              : null,
+          // Which branch, live — what reports group by and what gets corrected.
+          store: chosenMatch?.store?.id ?? null,
+          // ...and who it belonged to at the time. Frozen, because resolved
+          // live at report time one edit to a store would rewrite every past
+          // report — see StoreSnapshot in @yiji/shared-types.
+          //
+          // Both come from the SAME match, so the link and the frozen copy can
+          // never describe different branches.
+          store_snapshot: chosenMatch
+            ? toStoreSnapshot(chosenMatch, new Date().toISOString())
+            : null,
           ...complaintPatch(complaint),
         },
         attachmentFileIds: includeFiles ? sessionFileIds : [],
@@ -265,58 +307,69 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
         </div>
         <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-7 pb-2">
-            {/* ── Order & customer ─────────────────────────────────────────
+            {/* ── Order & branch ───────────────────────────────────────────
                 His first section. Ours is the real order card plus the
                 opt-in toggles, so the agent sees exactly what is being
-                attached instead of trusting a checkbox label. */}
-            {hasChatContext && (
-              <ComplaintSection title={t('tickets.fromChat', { defaultValue: 'From this chat' })}>
-                {latestOrder && (
-                  <>
-                    <IncludeToggle checked={includeOrder} onChange={setIncludeOrder}>
-                      <span className="font-medium">
-                        {t('tickets.includeOrder', { defaultValue: 'Attach order details' })}
-                      </span>
-                      {/* This is the customer's LATEST order, which may be
+                attached instead of trusting a checkbox label.
+                Always rendered — the branch has to be recordable even when
+                there is no order to infer it from. */}
+            <ComplaintSection
+              title={t('complaint.orderAndBranch', { defaultValue: 'Order & branch' })}
+            >
+              <StorePicker
+                value={storeId}
+                onChange={setStoreId}
+                inferredFrom={inferredStoreId || null}
+              />
+              {hasChatContext && (
+                <>
+                  {latestOrder && (
+                    <>
+                      <IncludeToggle checked={includeOrder} onChange={setIncludeOrder}>
+                        <span className="font-medium">
+                          {t('tickets.includeOrder', { defaultValue: 'Attach order details' })}
+                        </span>
+                        {/* This is the customer's LATEST order, which may be
                           unrelated to this chat (the conversation schema carries
                           no order reference), so the agent must be able to see
                           which order it is before attaching it. */}
-                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-muted-foreground">
-                        <span className="font-mono">#{latestOrder.orderId}</span>
-                        <Pill tone="neutral" size="sm">
-                          {titleize(latestOrder.status)}
-                        </Pill>
-                        <span className="tabular-nums">
-                          {money(latestOrder.total, latestOrder.currency)}
+                        <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-muted-foreground">
+                          <span className="font-mono">#{latestOrder.orderId}</span>
+                          <Pill tone="neutral" size="sm">
+                            {titleize(latestOrder.status)}
+                          </Pill>
+                          <span className="tabular-nums">
+                            {money(latestOrder.total, latestOrder.currency)}
+                          </span>
+                          <span aria-hidden>·</span>
+                          <span className="tabular-nums">
+                            {formatOrderDate(latestOrder.placedAt, i18n.language)}
+                          </span>
                         </span>
-                        <span aria-hidden>·</span>
-                        <span className="tabular-nums">
-                          {formatOrderDate(latestOrder.placedAt, i18n.language)}
-                        </span>
+                      </IncludeToggle>
+                      {includeOrder && orderSnapshotView && (
+                        <OrderSnapshotCard order={orderSnapshotView} className="mt-1" />
+                      )}
+                    </>
+                  )}
+                  {sessionFileIds.length > 0 && (
+                    <IncludeToggle checked={includeFiles} onChange={setIncludeFiles}>
+                      <span className="font-medium">
+                        {t('tickets.includeAttachments', {
+                          defaultValue: 'Attach files shared in this chat',
+                        })}
+                      </span>
+                      <span className="mt-0.5 block text-muted-foreground">
+                        {t('tickets.includeAttachmentsCount', {
+                          defaultValue: '{{count}} files from this session',
+                          count: sessionFileIds.length,
+                        })}
                       </span>
                     </IncludeToggle>
-                    {includeOrder && orderSnapshotView && (
-                      <OrderSnapshotCard order={orderSnapshotView} className="mt-1" />
-                    )}
-                  </>
-                )}
-                {sessionFileIds.length > 0 && (
-                  <IncludeToggle checked={includeFiles} onChange={setIncludeFiles}>
-                    <span className="font-medium">
-                      {t('tickets.includeAttachments', {
-                        defaultValue: 'Attach files shared in this chat',
-                      })}
-                    </span>
-                    <span className="mt-0.5 block text-muted-foreground">
-                      {t('tickets.includeAttachmentsCount', {
-                        defaultValue: '{{count}} files from this session',
-                        count: sessionFileIds.length,
-                      })}
-                    </span>
-                  </IncludeToggle>
-                )}
-              </ComplaintSection>
-            )}
+                  )}
+                </>
+              )}
+            </ComplaintSection>
 
             {/* ── What happened ─────────────────────────────────────────── */}
             <ComplaintSection

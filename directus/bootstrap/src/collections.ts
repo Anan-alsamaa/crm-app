@@ -477,6 +477,18 @@ export const relations: RelationSpec[] = [
   },
   { collection: 'tickets', field: 'assigned_team', related: 'teams', onDelete: 'SET NULL' },
   { collection: 'tickets', field: 'sla_policy', related: 'sla_policies', onDelete: 'SET NULL' },
+  /* The branch the complaint is about.
+   *
+   * The order snapshot already names a restaurant, but only for complaints that
+   * arrived through a Yiji app order. Most do not — their own source list is
+   * phone, WhatsApp, Instagram, X and WeCare — and a dine-in complaint has no
+   * order at all. Without this column those tickets carry no branch, and every
+   * report the operations team runs is grouped by branch, so they would be
+   * invisible in exactly the reporting this feature exists to feed.
+   *
+   * SET NULL, not CASCADE: retiring a branch from the master list must never
+   * delete the complaints logged against it. */
+  { collection: 'tickets', field: 'store', related: 'stores', onDelete: 'SET NULL' },
   { collection: 'ticket_events', field: 'ticket', related: 'tickets', onDelete: 'CASCADE' },
   {
     collection: 'routing_events',
