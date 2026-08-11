@@ -106,6 +106,10 @@ export interface AgentKpiRow {
   csatCount: number;
   /** Mean CSAT score 1–5 over the agent's rated conversations. */
   csatAvg: number | null;
+  /** Conversations auto-assigned to this agent that they did not answer in time. */
+  missed: number;
+  /** Auto-assignment offers made to them — the denominator for `missed`. */
+  offered: number;
 }
 
 export interface StatusCount {
@@ -348,6 +352,29 @@ export function useAgentReportData(
         a.csatCount += 1;
       }
 
+      // Auto-assignment outcomes. Read separately because they live on their own
+      // append-only table: a "miss" is not visible anywhere in tickets or
+      // messages — the ladder just moves on — so it has to be counted here.
+      const missedBy = new Map<string, number>();
+      const offeredBy = new Map<string, number>();
+      try {
+        const events = (await directus.request(
+          readItems('routing_events' as never, {
+            filter: { date_created: { _gte: since } },
+            fields: ['agent', 'outcome'],
+            limit: -1,
+          }) as never,
+        )) as Array<{ agent: string | null; outcome: string }>;
+        for (const e of events) {
+          if (!e.agent) continue;
+          offeredBy.set(e.agent, (offeredBy.get(e.agent) ?? 0) + 1);
+          if (e.outcome === 'missed') missedBy.set(e.agent, (missedBy.get(e.agent) ?? 0) + 1);
+        }
+      } catch {
+        // Collection not provisioned yet (bootstrap not re-run) — report zeroes
+        // rather than failing the whole KPI query over one optional metric.
+      }
+
       const agents: AgentKpiRow[] = Array.from(accs.values())
         .map((a) => {
           const decided = a.frMet + a.frBreached;
@@ -360,6 +387,8 @@ export function useAgentReportData(
             firstResponsePct: decided ? (a.frMet / decided) * 100 : null,
             csatCount: a.csatCount,
             csatAvg: a.csatCount ? a.csatSum / a.csatCount : null,
+            missed: missedBy.get(a.agentId ?? '') ?? 0,
+            offered: offeredBy.get(a.agentId ?? '') ?? 0,
           };
         })
         .sort((x, y) => y.tickets - x.tickets || x.agentName.localeCompare(y.agentName));

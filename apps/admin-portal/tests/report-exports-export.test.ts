@@ -213,6 +213,8 @@ describe('buildAgentKpiSheets', () => {
       firstResponsePct: 66.6,
       csatCount: 3,
       csatAvg: 4.26,
+      missed: 1,
+      offered: 6,
     },
     {
       agentId: null,
@@ -223,6 +225,8 @@ describe('buildAgentKpiSheets', () => {
       firstResponsePct: null,
       csatCount: 0,
       csatAvg: null,
+      missed: 0,
+      offered: 0,
     },
   ];
 

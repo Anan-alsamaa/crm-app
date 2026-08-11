@@ -508,6 +508,9 @@ function AgentKpiReport({
               <SortTh {...sp('firstResponsePct', 'end')}>
                 {tr('agentReports.col.firstResponsePct', { defaultValue: 'First response SLA %' })}
               </SortTh>
+              <SortTh {...sp('missed', 'end')}>
+                {tr('agentReports.col.missed', { defaultValue: 'Missed' })}
+              </SortTh>
               <SortTh {...sp('csatCount', 'end')}>
                 {tr('agentReports.col.csatCount', { defaultValue: 'CSAT responses' })}
               </SortTh>
@@ -526,6 +529,18 @@ function AgentKpiReport({
                 </Td>
                 <Td className="text-end tabular-nums text-muted-foreground">
                   {fmtPct(a.firstResponsePct)}
+                </Td>
+                <Td className="text-end tabular-nums">
+                  {a.offered === 0 ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <>
+                      <span className={a.missed > 0 ? 'font-semibold text-destructive' : ''}>
+                        {a.missed}
+                      </span>
+                      <span className="text-muted-foreground"> / {a.offered}</span>
+                    </>
+                  )}
                 </Td>
                 <Td className="text-end tabular-nums text-muted-foreground">{a.csatCount}</Td>
                 <Td className="text-end tabular-nums font-semibold">{fmtScore(a.csatAvg)}</Td>
