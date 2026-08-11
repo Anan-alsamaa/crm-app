@@ -166,12 +166,16 @@ export interface ImportOutcome {
 }
 
 /**
- * Bulk insert for the CSV import — REPEATABLE.
+ * Onboard stores from an uploaded sheet.
  *
- * Uploading the same master twice used to insert every row twice, because this
- * called `createItems` blindly. Now existing rows are skipped: new rows are
- * inserted, known rows are counted, and nothing is ever updated or deleted (a
- * re-upload of a stale sheet must not revert a correction made in the UI).
+ * Adding a branch that has just opened should be an upload, not a hand-typed
+ * form — and it has to be safe against a master that is already populated.
+ * New rows are inserted, rows we already have are skipped and counted, and
+ * nothing is ever updated or deleted (onboarding from a slightly stale export
+ * must not revert a correction someone made in the UI).
+ *
+ * The sheet may be just the new branches or the whole master re-exported with
+ * a line added; both land the same newcomers exactly once.
  *
  * The existing rows are re-read HERE rather than taken from the React Query
  * cache: the cache can be minutes old, and deciding "we already have this" from

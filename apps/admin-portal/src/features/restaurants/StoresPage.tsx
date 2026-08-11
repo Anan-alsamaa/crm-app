@@ -183,9 +183,13 @@ export function StoresPage() {
   };
 
   /**
-   * Import the operations sheet. Brands referenced by the file but not yet in
-   * the system are created first, so a fresh install can be populated from one
-   * file without hand-creating every brand beforehand.
+   * Onboard stores from an uploaded sheet — both for the initial load and,
+   * later, for a branch that has just opened. Only rows the portal does not
+   * already have are added; the rest are counted and left alone.
+   *
+   * Brands referenced by the file but not yet in the system are created first,
+   * so a new brand's first branch can be onboarded from the one file without
+   * hand-creating the brand beforehand.
    */
   const onFile = async (file: File) => {
     setImporting(true);
