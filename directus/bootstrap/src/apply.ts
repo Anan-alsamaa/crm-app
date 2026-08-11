@@ -38,6 +38,11 @@ import { collections, junctions, relations, type FieldSpec } from './collections
 import { applyCompensation, PROVISION_COMPENSATION } from './compensation.js';
 import { applyCompensationFlows } from './compensation-flows.js';
 import { constraintStatements } from './constraints.js';
+import {
+  applyConstraintsViaDocker,
+  dockerPostgresAvailable,
+  dockerPostgresContainer,
+} from './constraints-via-docker.js';
 import { roles } from './roles.js';
 import { loadEnv } from './env.js';
 
@@ -641,7 +646,28 @@ async function applyConstraints(): Promise<void> {
   const pool = new pg.Pool(env.db);
   const where = `${env.db.host}:${env.db.port}/${env.db.database}`;
   try {
-    await assertSameDatabase(pool, where);
+    try {
+      await assertSameDatabase(pool, where);
+    } catch (err) {
+      // The host cannot reach the database behind Directus — either nothing is
+      // listening on that port, or (worse, and why assertSameDatabase exists)
+      // something ELSE is. A developer machine running its own PostgreSQL
+      // shadows the container's published port and answers in its place.
+      //
+      // Rather than leave the schema half-applied, run the same SQL inside the
+      // container, where it cannot reach the wrong server. Nothing is
+      // restarted and no port has to be freed.
+      if (dockerPostgresAvailable()) {
+        console.log(`  ! ${where} is not the database behind Directus`);
+        const why = err instanceof Error ? (err.message.split(/\r?\n/)[0] ?? '') : String(err);
+        console.log(`    (${why})`);
+        console.log(`  → applying inside container ${dockerPostgresContainer} instead`);
+        const indexes = applyConstraintsViaDocker();
+        console.log(`  = applied via docker; uq_/idx_ indexes present: ${indexes}`);
+        return;
+      }
+      throw err;
+    }
     console.log(`  = target ${where} confirmed as the database behind Directus`);
     for (const sql of constraintStatements) {
       // Log `=` vs `+` honestly so the idempotence check (check-idempotence.mjs)

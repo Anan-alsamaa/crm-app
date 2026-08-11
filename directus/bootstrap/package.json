@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "seed:showcase": "tsx src/seed-showcase.ts",
     "seed:restaurants": "tsx src/seed-restaurants.ts",
-    "backfill:store-snapshots": "tsx src/backfill-store-snapshots.ts"
+    "backfill:store-snapshots": "tsx src/backfill-store-snapshots.ts",
+    "apply:constraints:docker": "tsx src/constraints-via-docker.ts"
   },
   "dependencies": {
     "@directus/sdk": "^17.0.0",
