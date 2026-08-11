@@ -261,7 +261,7 @@ describe('StoresPage', () => {
   });
 });
 
-describe('StoresPage — repeatable CSV import', () => {
+describe('StoresPage — onboarding stores from a CSV', () => {
   /**
    * This jsdom has no `Blob.prototype.text()`, which every real browser has and
    * which the import uses to read the chosen file. Without the polyfill the
@@ -347,6 +347,52 @@ describe('StoresPage — repeatable CSV import', () => {
     await vi.waitFor(() => expect(brandBulk.mutateAsync).toHaveBeenCalled());
     const brands = brandBulk.mutateAsync.mock.calls[0]![0] as Array<{ code: string }>;
     expect(brands.map((b) => b.code).sort()).toEqual(['LCP', 'PSK']);
+    expect(lastToast()).toContain('1 brands created');
+  });
+
+  it('onboards a newly opened branch from a one-row sheet', async () => {
+    // The case the feature exists for: a branch opens, and someone adds it by
+    // uploading a sheet rather than typing the store in by hand.
+    const bulk = importMutation(1, 0);
+    api.useBulkCreateStores.mockReturnValue(bulk);
+
+    await upload(
+      [
+        'Restaurant,City,Area Manager,Chain Manager,Brand',
+        'LCP-090 Riyadh Park,Riyadh,Ahmed Samir,Medhat Sayed,LCP',
+      ].join('\n'),
+    );
+    await vi.waitFor(() => expect(bulk.mutateAsync).toHaveBeenCalled());
+
+    const rows = bulk.mutateAsync.mock.calls[0]![0] as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ code: 'LCP-090', name: 'Riyadh Park', city: 'Riyadh' });
+    expect(lastToast()).toContain('1 added');
+  });
+
+  it('onboards a branch of a brand the portal has never seen', async () => {
+    // A new brand's first branch: the brand is created as part of the upload,
+    // so a fresh brand does not have to be set up by hand first.
+    const brandBulk = importMutation(1, 0);
+    api.useBulkCreateBrands.mockReturnValue(brandBulk);
+    api.useBrands.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn().mockResolvedValue({ data: [{ id: 'b7', code: 'CND', name: 'CND' }] }),
+    });
+    const bulk = importMutation(1, 0);
+    api.useBulkCreateStores.mockReturnValue(bulk);
+
+    await upload(['Restaurant,City,Brand', 'CND-009 Nakhil Mall,Dammam,CND'].join('\n'));
+    await vi.waitFor(() => expect(bulk.mutateAsync).toHaveBeenCalled());
+
+    expect((brandBulk.mutateAsync.mock.calls[0]![0] as Array<{ code: string }>)[0]!.code).toBe(
+      'CND',
+    );
+    // And the branch is linked to that brand, not left orphaned.
+    const rows = bulk.mutateAsync.mock.calls[0]![0] as Array<Record<string, unknown>>;
+    expect(rows[0]).toMatchObject({ code: 'CND-009', brand: 'b7' });
     expect(lastToast()).toContain('1 brands created');
   });
 

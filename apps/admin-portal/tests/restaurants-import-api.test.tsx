@@ -77,7 +77,7 @@ beforeEach(() => {
   request.mockReset();
 });
 
-describe('useBulkCreateStores — repeatable import', () => {
+describe('useBulkCreateStores — repeat safety', () => {
   it('fresh import: inserts every row', async () => {
     stubDirectus({ stores: [] });
     const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
@@ -199,7 +199,75 @@ describe('useBulkCreateStores — repeatable import', () => {
   });
 });
 
-describe('useBulkCreateBrands — repeatable import', () => {
+/**
+ * The reason this feature exists: a new branch opens, and someone onboards it
+ * by uploading a sheet instead of typing the store in by hand. The master is
+ * already populated at that point, so the upload has to add the newcomer and
+ * leave the existing branches completely alone.
+ */
+describe('useBulkCreateStores — onboarding a new branch', () => {
+  /** The master as it stands before the new branch opens. */
+  const MASTER = [
+    { code: 'LCP-041', name: 'Masief Plaza', brand: { code: 'LCP' } },
+    { code: 'LCP-006', name: 'Panorama Mall RYD', brand: { code: 'LCP' } },
+    { code: 'PSK-002', name: 'Nakhil Mall DMM', brand: { code: 'PSK' } },
+  ];
+
+  it('adds a branch listed on its own, against a populated master', async () => {
+    stubDirectus({ stores: MASTER });
+    const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
+
+    // The operator uploads ONE row — just the branch that opened.
+    const outcome = await result.current.mutateAsync([store('LCP-090', 'Riyadh Park')]);
+
+    expect(outcome).toEqual({ added: 1, alreadyPresent: 0 });
+    expect(inserted('stores').map((r) => r.code)).toEqual(['LCP-090']);
+  });
+
+  it('leaves every existing branch untouched while doing it', async () => {
+    stubDirectus({ stores: MASTER });
+    const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
+
+    await result.current.mutateAsync([store('LCP-090', 'Riyadh Park')]);
+
+    // Nothing but the one insert — no update, no delete, nothing touching the
+    // three branches that were already there.
+    expect(sent.some((o) => o.op === 'updateItem' || o.op === 'deleteItem')).toBe(false);
+    expect(inserted('stores')).toHaveLength(1);
+  });
+
+  it('onboards several new branches in one upload', async () => {
+    stubDirectus({ stores: MASTER });
+    const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
+
+    const outcome = await result.current.mutateAsync([
+      store('LCP-090', 'Riyadh Park'),
+      store('PSK-030', 'Granada Mall'),
+    ]);
+
+    expect(outcome).toEqual({ added: 2, alreadyPresent: 0 });
+    expect(inserted('stores').map((r) => r.code)).toEqual(['LCP-090', 'PSK-030']);
+  });
+
+  it('still onboards the newcomer when the sheet is the whole master again', async () => {
+    // The operator may not keep a "new branches only" sheet — re-exporting the
+    // full master with one extra line has to work just as well.
+    stubDirectus({ stores: MASTER });
+    const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
+
+    const outcome = await result.current.mutateAsync([
+      store('LCP-041', 'Masief Plaza'),
+      store('LCP-006', 'Panorama Mall RYD'),
+      store('PSK-002', 'Nakhil Mall DMM'),
+      store('LCP-090', 'Riyadh Park'),
+    ]);
+
+    expect(outcome).toEqual({ added: 1, alreadyPresent: 3 });
+    expect(inserted('stores').map((r) => r.code)).toEqual(['LCP-090']);
+  });
+});
+
+describe('useBulkCreateBrands — repeat safety', () => {
   it('fresh import: creates every brand', async () => {
     stubDirectus({ brands: [] });
     const { result } = renderHook(() => useBulkCreateBrands(), { wrapper: wrapper() });

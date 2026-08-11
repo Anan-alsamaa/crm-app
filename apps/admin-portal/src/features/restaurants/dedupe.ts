@@ -1,16 +1,22 @@
 import { splitStoreCode } from './csv.js';
 
 /**
- * Identity rules that make the Restaurants import repeatable.
+ * Identity rules for onboarding stores from a CSV.
  *
- * The import used to call `createItems` blindly, so re-uploading the same
- * 134-row master inserted 134 duplicates — and a duplicated store silently
- * splits one branch's complaints across two rows in every later report.
+ * WHAT THIS IS FOR: a new branch opens, and someone adds it to the portal by
+ * uploading a sheet instead of typing the store in by hand. The master is
+ * already populated when that happens, so the upload has to recognise which
+ * rows it has seen before and add only the newcomers.
  *
- * The rule here is deliberately one-directional: a row we already have is
- * SKIPPED, never updated and never deleted. An import must not be able to
- * overwrite a correction someone made by hand in the UI; a re-upload of a
- * stale sheet would otherwise quietly revert it.
+ * That recognition is the whole problem. The import used to call `createItems`
+ * blindly, so onboarding one new branch by re-uploading the master added 134
+ * duplicates alongside it — and a duplicated store silently splits one
+ * branch's complaints across two rows in every later report.
+ *
+ * The rule is deliberately one-directional: a row we already have is SKIPPED,
+ * never updated and never deleted. Onboarding must not be able to overwrite a
+ * correction someone made by hand in the UI, which is what would happen the
+ * moment somebody onboards a new branch using a slightly stale export.
  */
 
 /**
