@@ -31,6 +31,11 @@ interface Props {
   onBack?: () => void;
   /** Mobile-only: open the conversation details/notes panel. */
   onToggleDetails?: () => void;
+  /** Optionally lift the Create ticket dialog's open state to the parent, so
+   *  something outside the toolbar (the sidebar's order id) can open it too.
+   *  Omit both and the toolbar keeps owning the state itself. */
+  ticketDialogOpen?: boolean;
+  onTicketDialogOpenChange?: (open: boolean) => void;
 }
 
 export function ConversationToolbar({
@@ -38,6 +43,8 @@ export function ConversationToolbar({
   customerPresence,
   onBack,
   onToggleDetails,
+  ticketDialogOpen,
+  onTicketDialogOpenChange,
 }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -45,7 +52,12 @@ export function ConversationToolbar({
   const teams = useTeamOptions();
   const update = useUpdateConversation();
   const linkedTickets = useLinkedTickets(conversation.id);
-  const [openTicketDialog, setOpenTicketDialog] = useState(false);
+  const [selfTicketDialog, setSelfTicketDialog] = useState(false);
+  const openTicketDialog = ticketDialogOpen ?? selfTicketDialog;
+  const setOpenTicketDialog = (open: boolean) => {
+    if (onTicketDialogOpenChange) onTicketDialogOpenChange(open);
+    else setSelfTicketDialog(open);
+  };
   // #6: once a chat is closed/resolved, nudge the agent to turn it into a ticket
   // so no conversation is left without a follow-up record. Dismissible, and reset
   // per conversation so a dismissal doesn't leak across threads.

@@ -130,6 +130,8 @@
     "orderIdPlaceholder": "رقم الطلب (فارغ = أحدث الطلبات)",
     "latestOrder": "آخر طلب",
     "latestOrders": "أحدث الطلبات",
+    "orderDetails": "تفاصيل الطلب",
+    "newComplaint": "شكوى جديدة على الطلب",
     "restaurant": "المطعم",
     "restaurantId": "معرّف المطعم",
     "deliveryType": "نوع التوصيل",

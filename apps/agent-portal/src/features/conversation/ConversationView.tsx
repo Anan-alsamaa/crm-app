@@ -85,6 +85,9 @@ export function ConversationView({
   const [draft, setDraft] = useState('');
   const [internalNote, setInternalNote] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // Owned here rather than in the toolbar, because the sidebar's order id opens
+  // it too and the two are siblings.
+  const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [mentionMenu, setMentionMenu] = useState<{ query: string; from: number } | null>(null);
   const [pending, setPending] = useState<
     Array<{ id: string; name: string; type: string; size: number; preview?: string }>
@@ -108,6 +111,7 @@ export function ConversationView({
     setDraft('');
     setInternalNote(false);
     setDetailsOpen(false);
+    setTicketDialogOpen(false);
     setMentionMenu(null);
     setPending([]);
     setUploading(false);
@@ -557,6 +561,16 @@ export function ConversationView({
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   };
 
+  // An order id in the sidebar's Orders panel opens the ticket ("New complaint")
+  // dialog for that order. The order itself already rode across as the
+  // conversation's pinned order, so there is nothing to carry here.
+  const openTicketForOrder = () => {
+    // Mobile: the details drawer and the dialog are both `fixed z-50` and the
+    // drawer renders last, so leaving it open would bury the dialog under it.
+    setDetailsOpen(false);
+    setTicketDialogOpen(true);
+  };
+
   const copyMessage = (text: string) => {
     void navigator.clipboard?.writeText(text).then(
       () => toast.success(t('conversation.copied', { defaultValue: 'Copied' })),
@@ -577,6 +591,8 @@ export function ConversationView({
             customerPresence={customerPresence}
             onBack={onBack}
             onToggleDetails={() => setDetailsOpen(true)}
+            ticketDialogOpen={ticketDialogOpen}
+            onTicketDialogOpenChange={setTicketDialogOpen}
           />
         )}
 
@@ -1002,6 +1018,7 @@ export function ConversationView({
           media={sharedMedia}
           onDeleteNote={deleteNote}
           resizable
+          onCreateTicketForOrder={openTicketForOrder}
         />
       ) : (
         detailsOpen && (
@@ -1026,6 +1043,7 @@ export function ConversationView({
                 media={sharedMedia}
                 onDeleteNote={deleteNote}
                 className="w-[20rem] max-w-[85vw]"
+                onCreateTicketForOrder={openTicketForOrder}
               />
             </div>
           </div>
