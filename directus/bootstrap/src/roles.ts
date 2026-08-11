@@ -250,6 +250,18 @@ export const roles: RoleSpec[] = [
       { collection: 'notifications', action: 'update' },
       { collection: 'conversations', action: 'read' },
       { collection: 'conversations', action: 'update' },
+      // The routing worker appends auto-assignment outcomes. Without create it
+      // fails AFTER assigning, which leaves the conversation routed but the
+      // metric silently empty — the worst shape, because the feature looks like
+      // it worked.
+      { collection: 'routing_events', action: 'create' },
+      { collection: 'routing_events', action: 'read' },
+      /* The ladder decides whether to escalate by counting AGENT replies, so the
+       * worker must be able to read messages. Without it the assign stage writes
+       * the assignment and then throws on the very next call — the conversation
+       * looks correctly routed while the escalation timer was never armed, which
+       * is a silent half-failure rather than a visible one. */
+      { collection: 'messages', action: 'read' },
       { collection: 'automation_rules', action: 'read' },
       { collection: 'automation_rules', action: 'update' },
       { collection: 'reports', action: 'read' },
