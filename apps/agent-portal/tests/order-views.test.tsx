@@ -18,6 +18,7 @@ const client = vi.hoisted(() => ({
 vi.mock('../src/lib/commerce-client.js', () => ({ commerce: client }));
 
 import { LatestOrder, CustomerOrders } from '../src/features/commerce/OrderViews.js';
+import { getPinnedOrder } from '../src/features/commerce/pinned-order.js';
 
 function renderView(node: ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -131,6 +132,49 @@ describe('LatestOrder (inbox)', () => {
     const { container } = renderView(<LatestOrder vendorId="" customerId="" />);
     expect(container).toBeEmptyDOMElement();
     expect(client.getOrders).not.toHaveBeenCalled();
+  });
+
+  it('leaves the order id as plain text when nothing can be raised from it', async () => {
+    client.getOrders.mockResolvedValue([summary('P-1', '2026-06-25T15:00:00')]);
+    client.getOrder.mockImplementation((_v: string, id: string) => Promise.resolve(full(id)));
+    // No conversation to pin against and no handler → no ticket trigger, and
+    // the only button on the row stays the expand/collapse toggle.
+    renderView(<LatestOrder vendorId="v1" customerId="cust-guid" />);
+
+    await waitFor(() => expect(screen.getByText('#P-1')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /New complaint/ })).not.toBeInTheDocument();
+  });
+
+  it('order id is a button that pins THAT order and asks for a ticket', async () => {
+    sessionStorage.clear();
+    // Two orders: the complaint is about the OLDER one, which is exactly the
+    // case the automatic "latest order" lookup gets wrong.
+    client.getOrders.mockResolvedValue([
+      summary('N-1', '2026-06-25T15:00:00'),
+      summary('N-2', '2026-06-20T09:00:00'),
+    ]);
+    client.getOrder.mockImplementation((_v: string, id: string) => Promise.resolve(full(id)));
+    const onCreateTicket = vi.fn();
+    renderView(
+      <LatestOrder
+        vendorId="v1"
+        customerId="cust-guid"
+        conversationId="conv-7"
+        onCreateTicket={onCreateTicket}
+      />,
+    );
+
+    const trigger = await screen.findByRole('button', {
+      name: 'New complaint for order #N-2',
+    });
+    fireEvent.click(trigger);
+
+    expect(onCreateTicket).toHaveBeenCalledTimes(1);
+    expect(onCreateTicket.mock.calls[0]![0]).toMatchObject({ orderId: 'N-2' });
+    // Pinned under the conversation, which is how CreateTicketDialog picks it up.
+    expect(getPinnedOrder('conv-7')?.orderId).toBe('N-2');
+    // Clicking the id must not also expand the card (it sits above the toggle).
+    expect(client.getOrder).not.toHaveBeenCalledWith('v1', 'N-2');
   });
 });
 

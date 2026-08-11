@@ -99,12 +99,33 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 /** Collapsed header — everything the summary already carries. */
-function OrderHeader({ order }: { order: YijiOrder }) {
+function OrderHeader({ order, onCreateTicket }: { order: YijiOrder; onCreateTicket?: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-foreground">#{order.orderId}</span>
+          {onCreateTicket ? (
+            // The order id is the way into a complaint about THAT order. A real
+            // button, so it is reachable by keyboard and named for the order it
+            // opens; `relative z-10` lifts it above the row's toggle overlay so
+            // the click raises a ticket instead of expanding the card.
+            <button
+              type="button"
+              onClick={onCreateTicket}
+              // The id is appended rather than interpolated: it is an opaque
+              // token, not a translatable part of the sentence, and this keeps
+              // it in the accessible name in every locale.
+              aria-label={`${t('commerce.newComplaint', {
+                defaultValue: 'New complaint for order',
+              })} #${order.orderId}`}
+              className="relative z-10 rounded font-mono text-xs text-primary underline decoration-dotted underline-offset-2 transition-colors duration-fast ease-out hover:decoration-solid focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              #{order.orderId}
+            </button>
+          ) : (
+            <span className="font-mono text-xs text-foreground">#{order.orderId}</span>
+          )}
           <Pill tone={orderTone(order.status)} size="sm">
             {titleize(order.status)}
           </Pill>
@@ -306,10 +327,12 @@ function ExpandableOrder({
   vendorId,
   summary,
   defaultOpen = false,
+  onCreateTicket,
 }: {
   vendorId: string;
   summary: YijiOrder;
   defaultOpen?: boolean;
+  onCreateTicket?: (order: YijiOrder) => void;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
@@ -322,15 +345,28 @@ function ExpandableOrder({
 
   return (
     <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-2 px-4 py-3 text-start transition-colors duration-fast ease-out hover:bg-secondary/40 rounded-2xl"
-      >
+      {/* The whole row still expands the card, but the order id inside it is now
+          its own button — so the toggle is a stretched overlay UNDERNEATH the
+          header rather than a <button> wrapping it, which would nest one button
+          inside another. */}
+      <div className="relative flex items-center gap-2 rounded-2xl px-4 py-3 text-start transition-colors duration-fast ease-out hover:bg-secondary/40">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          aria-label={`${t('commerce.orderDetails', {
+            defaultValue: 'Order details',
+          })} #${summary.orderId}`}
+          className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
+        />
         <Chevron open={open} />
-        <OrderHeader order={summary} />
-      </button>
+        <OrderHeader
+          order={summary}
+          // Hand over the fullest order we hold: once expanded, the detail query
+          // has the line items the ticket snapshot wants.
+          onCreateTicket={onCreateTicket ? () => onCreateTicket(detail.data ?? summary) : undefined}
+        />
+      </div>
       {open && (
         <div className="rounded-b-2xl bg-secondary/40 px-4 py-3">
           {detail.isLoading ? (
@@ -370,9 +406,11 @@ function ExpandableOrder({
 function ManualOrderLookup({
   vendorId,
   conversationId,
+  onCreateTicket,
 }: {
   vendorId: string;
   conversationId?: string;
+  onCreateTicket?: (order: YijiOrder) => void;
 }) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -438,7 +476,12 @@ function ManualOrderLookup({
       ) : shown ? (
         // `shown` prefers the fresh result but falls back to the pinned one, so
         // the order stays on screen after navigating away and back.
-        <ExpandableOrder vendorId={vendorId} summary={shown} defaultOpen />
+        <ExpandableOrder
+          vendorId={vendorId}
+          summary={shown}
+          defaultOpen
+          onCreateTicket={onCreateTicket}
+        />
       ) : null}
     </div>
   );
@@ -448,10 +491,13 @@ export function LatestOrder({
   vendorId,
   customerId,
   conversationId,
+  onCreateTicket,
 }: {
   vendorId: string;
   customerId?: string;
   conversationId?: string;
+  /** Inbox only: makes each order id a "New complaint" trigger for that order. */
+  onCreateTicket?: (order: YijiOrder) => void;
 }) {
   const { t } = useTranslation();
   const orders = useQuery({
@@ -469,6 +515,19 @@ export function LatestOrder({
 
   // The last 2 orders (list is already newest-first from the client).
   const recent = (orders.data ?? []).slice(0, 2);
+
+  // Clicking an order id raises a complaint about THAT order, which may not be
+  // the customer's newest one. Pin it first — pinning is already how an order
+  // travels from this panel into ticket creation — then let the conversation
+  // open the dialog. With no conversation there is nothing to pin against and
+  // no dialog to open, so the id stays plain text.
+  const raiseTicket =
+    onCreateTicket && conversationId
+      ? (order: YijiOrder) => {
+          pinOrder(conversationId, order);
+          onCreateTicket(order);
+        }
+      : undefined;
 
   return (
     <div className="space-y-2">
@@ -488,7 +547,12 @@ export function LatestOrder({
           {recent.map((o, i) => (
             <li key={o.orderId}>
               {/* Default-expand only the most recent (i === 0). */}
-              <ExpandableOrder vendorId={vendorId} summary={o} defaultOpen={i === 0} />
+              <ExpandableOrder
+                vendorId={vendorId}
+                summary={o}
+                defaultOpen={i === 0}
+                onCreateTicket={raiseTicket}
+              />
             </li>
           ))}
         </ul>
@@ -499,7 +563,11 @@ export function LatestOrder({
               defaultValue: 'No orders found for this contact. Enter an order ID to look it up.',
             })}
           </p>
-          <ManualOrderLookup vendorId={vendorId} conversationId={conversationId} />
+          <ManualOrderLookup
+            vendorId={vendorId}
+            conversationId={conversationId}
+            onCreateTicket={raiseTicket}
+          />
         </div>
       )}
     </div>

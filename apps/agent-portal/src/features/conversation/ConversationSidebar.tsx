@@ -13,6 +13,7 @@ import {
   formatRelative,
   useResizable,
 } from '@yiji/ui';
+import type { YijiOrder } from '@yiji/shared-types';
 import {
   useConversation,
   useLinkedTickets,
@@ -38,6 +39,10 @@ interface Props {
   className?: string;
   /** Desktop only: make the panel drag-resizable from its leading edge. */
   resizable?: boolean;
+  /** Clicking an order id in the Orders panel raises a complaint about it. The
+   *  order is pinned to the conversation before this fires, so the handler only
+   *  has to open the Create ticket dialog. */
+  onCreateTicketForOrder?: (order: YijiOrder) => void;
 }
 
 function MediaThumb({ a, onOpen }: { a: MessageAttachment; onOpen: (url: string) => void }) {
@@ -115,6 +120,7 @@ export function ConversationSidebar({
   onDeleteNote,
   className,
   resizable,
+  onCreateTicketForOrder,
 }: Props) {
   const [mediaPreview, setMediaPreview] = useState<{
     url: string;
@@ -384,6 +390,7 @@ export function ConversationSidebar({
             vendorId={contact.data.vendor.yiji_vendor_id}
             customerId={contact.data.external_customer_id ?? undefined}
             conversationId={c.id}
+            onCreateTicket={onCreateTicketForOrder}
           />
         </section>
       )}

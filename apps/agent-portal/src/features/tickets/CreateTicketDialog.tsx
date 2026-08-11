@@ -154,11 +154,13 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
     },
     staleTime: 60_000,
   });
-  // Fall back to the order the agent pinned by hand. For an unlinked contact the
-  // automatic lookup returns nothing, and that is precisely the conversation
-  // where they typed the number in — the ticket must carry it, or the manual
-  // lookup was busywork.
-  const latestOrder = ordersQuery.data ?? getPinnedOrder(conversationId) ?? null;
+  // The PINNED order wins over the automatic lookup. A pin is a deliberate act
+  // — the agent typed that order number in, or clicked that order id in the
+  // sidebar to raise a complaint about it — whereas the lookup only ever
+  // guesses the customer's newest order. Preferring the guess would silently
+  // snapshot the wrong order onto the ticket whenever the complaint is about an
+  // older one, and for an unlinked contact the lookup returns nothing at all.
+  const latestOrder = getPinnedOrder(conversationId) ?? ordersQuery.data ?? null;
   const sessionFiles = useConversationAttachmentIds(conversationId ?? null);
   const sessionFileIds = sessionFiles.data ?? [];
 

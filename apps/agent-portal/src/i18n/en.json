@@ -54,6 +54,8 @@
     "orderIdPlaceholder": "Order ID (blank = latest orders)",
     "latestOrder": "Latest order",
     "latestOrders": "Latest orders",
+    "orderDetails": "Order details",
+    "newComplaint": "New complaint for order",
     "restaurant": "Restaurant",
     "restaurantId": "Restaurant ID",
     "deliveryType": "Delivery type",
