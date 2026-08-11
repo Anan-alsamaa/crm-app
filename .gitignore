@@ -6,6 +6,11 @@ node_modules/
 .env
 .env.local
 .env.*.local
+# Backups of a secrets file are still a secrets file. `.env.local` is ignored
+# but `.env.local.bak-*` was not, so a copy made before editing sat untracked
+# and one `git add -A` away from being committed.
+.env*.bak*
+.env.local.*
 
 # Build output
 dist/
