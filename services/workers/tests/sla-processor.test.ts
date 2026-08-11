@@ -467,6 +467,32 @@ describe('escalation fans out to the assigned team', () => {
     );
   });
 
+  it('one failing recipient does not cost the rest of the team their page', async () => {
+    const { repo } = makeRepo([{ ...baseTicket, assigned_team: 'team-9' }], [POLICY]);
+    const notifications: Array<{ data: unknown }> = [];
+    const notificationsQueue = {
+      // user-2's enqueue fails the way a transient Redis blip would.
+      add: vi.fn(async (_name, data: { recipientId: string }) => {
+        if (data.recipientId === 'user-2') throw new Error('redis unavailable');
+        notifications.push({ data });
+      }),
+    } as unknown as Queue;
+    const deps: SlaDeps = {
+      tickets: repo,
+      teams: makeTeams({ 'team-9': ['user-1', 'user-2', 'user-3'] }),
+      slaQueue: makeQueues().slaQueue,
+      notificationsQueue,
+      logger,
+    };
+    await runBreach(deps, 't1', 'resolution');
+
+    // Without isolation the throw would abort the loop, and the retry would hit
+    // the already-escalated guard and never page user-3 at all.
+    const got = notifications.map((n) => (n.data as { recipientId: string }).recipientId);
+    expect(got).toContain('user-3');
+    expect(got).not.toContain('user-2');
+  });
+
   it('is still idempotent across a retry with a team attached', async () => {
     const { deps, q, events } = setup(
       { ...baseTicket, assigned_team: 'team-9' },

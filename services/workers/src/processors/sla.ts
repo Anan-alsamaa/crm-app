@@ -118,6 +118,43 @@ async function enqueueNotification(
 }
 
 /**
+ * Enqueue that cannot abort its caller.
+ *
+ * `runBreach` writes the `sla_escalated` event BEFORE it notifies, and that
+ * event is the idempotency ledger — so if an enqueue throws partway through the
+ * fanout, the retried job sees "already escalated" and returns without paging
+ * the recipients it never reached. One transient Redis error would silently cost
+ * the rest of the team their notification, and the exposure grows with team
+ * size. Isolating each recipient turns that into one missed page, logged. The
+ * deterministic jobId makes the re-enqueue of an already-queued recipient a
+ * no-op, so this is safe rather than duplicative.
+ */
+async function enqueueIsolated(
+  deps: SlaDeps,
+  recipient: string,
+  type: SlaNotificationType,
+  ticket: TicketRow,
+  deadline: Deadline,
+  extraPayload: Record<string, unknown> = {},
+  tail?: string,
+): Promise<void> {
+  try {
+    await enqueueNotification(deps, recipient, type, ticket, deadline, extraPayload, tail);
+  } catch (err) {
+    deps.logger.error(
+      {
+        ticketId: ticket.id,
+        deadline,
+        recipient,
+        type,
+        err: err instanceof Error ? err.message : String(err),
+      },
+      'failed to enqueue an SLA notification — continuing with the remaining recipients',
+    );
+  }
+}
+
+/**
  * Who hears about an escalation: the assigned agent AND everyone on the
  * assigned team, deduped and order-stable (agent first).
  *
@@ -269,7 +306,7 @@ export async function runBreach(
   // deadline was missed, and sending that to eight teammates is noise, not
   // signal. Only the escalation widens.
   if (t.assigned_agent) {
-    await enqueueNotification(deps, t.assigned_agent, 'sla_breach', t, deadline);
+    await enqueueIsolated(deps, t.assigned_agent, 'sla_breach', t, deadline);
   }
 
   // Separate escalation notification so it is distinguishable in the inbox
@@ -277,7 +314,7 @@ export async function runBreach(
   const recipients = await escalationRecipients(deps, t);
   for (const recipient of recipients) {
     const isAssignee = recipient === t.assigned_agent;
-    await enqueueNotification(
+    await enqueueIsolated(
       deps,
       recipient,
       'escalation',
