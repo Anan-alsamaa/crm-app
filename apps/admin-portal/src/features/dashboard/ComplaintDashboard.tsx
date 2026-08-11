@@ -139,6 +139,53 @@ function Bars({ rows, total, color }: { rows: Breakdown[]; total: number; color:
 }
 
 /**
+ * His split bar: one strip showing how a whole divides, with a key underneath.
+ * Zero-value segments are dropped rather than rendered as slivers you cannot
+ * read or tell apart.
+ */
+function Composition({
+  segments,
+}: {
+  segments: Array<{ key: string; label: string; value: number; className: string }>;
+}) {
+  const { t } = useTranslation();
+  const shown = segments.filter((s) => s.value > 0);
+  const total = shown.reduce((sum, s) => sum + s.value, 0);
+  if (total === 0)
+    return (
+      <p className="mt-4 text-sm text-muted-foreground">
+        {t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
+      </p>
+    );
+  return (
+    <div className="mt-4">
+      <div className="flex h-3 overflow-hidden rounded-full bg-secondary">
+        {shown.map((s) => (
+          <span
+            key={s.key}
+            className={s.className}
+            style={{ width: `${(s.value / total) * 100}%` }}
+            title={`${s.label}: ${s.value}`}
+          />
+        ))}
+      </div>
+      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
+        {shown.map((s) => (
+          <li
+            key={s.key}
+            className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground"
+          >
+            <span aria-hidden className={cn('h-2 w-2 shrink-0 rounded-sm', s.className)} />
+            {s.label}
+            <strong className="font-semibold tabular-nums text-foreground">{s.value}</strong>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
  * Complaints per month as columns with compensation overlaid as a line — his
  * chart, and the one that answers the question the volume bars cannot: whether
  * what we pay out is tracking volume or running ahead of it.
@@ -316,6 +363,21 @@ export function ComplaintDashboard() {
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+            {t('complaintDash.area', { defaultValue: 'Area' })}
+          </span>
+          <SelectMenu
+            size="sm"
+            value={draft.area}
+            onChange={(v) => setDraft((f) => ({ ...f, area: v }))}
+            aria-label={t('complaintDash.area', { defaultValue: 'Area' })}
+            options={[
+              { value: '', label: t('complaintDash.allAreas', { defaultValue: 'All areas' }) },
+              ...(d?.areaOptions ?? []).map((a) => ({ value: a, label: a })),
+            ]}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
             {t('complaintDash.city', { defaultValue: 'City' })}
           </span>
           <SelectMenu
@@ -339,6 +401,24 @@ export function ComplaintDashboard() {
             onChange={(v) => setDraft((f) => ({ ...f, store: v }))}
             aria-label={t('complaintDash.restaurant', { defaultValue: 'Restaurant' })}
             options={storeChoices}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+            {t('complaintDash.mobile', { defaultValue: 'Customer mobile' })}
+          </span>
+          {/* Partial match, like his: typing 41059 finds any number containing
+              those digits, which is how the team pull up one caller's history. */}
+          <Input
+            className="h-9 w-[10rem]"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder={t('complaintDash.mobileHint', { defaultValue: 'e.g. 41059' })}
+            value={draft.phone}
+            onChange={(e) => setDraft((f) => ({ ...f, phone: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') setApplied(draft);
+            }}
           />
         </label>
         <div className="flex items-center gap-2 pb-px">
@@ -477,6 +557,110 @@ export function ComplaintDashboard() {
             </p>
           )}
 
+          {/* ── Service health ───────────────────────────────────────────
+              His gauge + composition strip: one glance at whether the work is
+              finishing well, and whether chats are being picked up. */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card
+              title={t('complaintDash.health', { defaultValue: 'Service health' })}
+              hint={t('complaintDash.healthHint', {
+                defaultValue: 'Where every complaint in this range currently stands.',
+              })}
+            >
+              <div className="flex items-baseline gap-3">
+                <span
+                  className={cn(
+                    'text-4xl font-extrabold tabular-nums tracking-[-0.03em]',
+                    d.satisfiedPct === null
+                      ? 'text-muted-foreground'
+                      : d.satisfiedPct >= 80
+                        ? 'text-success'
+                        : d.satisfiedPct >= 50
+                          ? 'text-warning-foreground'
+                          : 'text-destructive',
+                  )}
+                >
+                  {d.satisfiedPct === null ? '—' : `${Math.round(d.satisfiedPct)}%`}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {t('complaintDash.healthGauge', {
+                    defaultValue: 'of rated complaints ended satisfied',
+                  })}
+                </span>
+              </div>
+              <Composition
+                segments={[
+                  {
+                    key: 'sat',
+                    label: t('complaintDash.segSatisfied', { defaultValue: 'Closed satisfied' }),
+                    value: d.health.closedSatisfied,
+                    className: 'bg-success',
+                  },
+                  {
+                    key: 'unsat',
+                    label: t('complaintDash.segUnsatisfied', {
+                      defaultValue: 'Closed unsatisfied',
+                    }),
+                    value: d.health.closedUnsatisfied,
+                    className: 'bg-destructive',
+                  },
+                  {
+                    key: 'unrated',
+                    label: t('complaintDash.segUnrated', { defaultValue: 'Closed, not rated' }),
+                    value: d.health.closedUnrated,
+                    className: 'bg-muted-foreground/40',
+                  },
+                  {
+                    key: 'open',
+                    label: t('complaintDash.segOpen', { defaultValue: 'Still open' }),
+                    value: d.health.openNotOverdue,
+                    className: 'bg-sky',
+                  },
+                  {
+                    key: 'overdue',
+                    label: t('complaintDash.segOverdue', { defaultValue: 'Overdue' }),
+                    value: d.health.overdue,
+                    className: 'bg-violet',
+                  },
+                ]}
+              />
+            </Card>
+
+            <Card
+              title={t('complaintDash.chatHealth', { defaultValue: 'Chat responsiveness' })}
+              hint={t('complaintDash.chatHealthHint', {
+                defaultValue: 'Whether conversations are being picked up, and how fast.',
+              })}
+            >
+              <div className="flex items-baseline gap-3">
+                <span className="text-4xl font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
+                  {d.health.avgChatWaitMinutes === null
+                    ? '—'
+                    : `${d.health.avgChatWaitMinutes.toFixed(1)}m`}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {t('complaintDash.avgWait', { defaultValue: 'average customer wait' })}
+                </span>
+              </div>
+              <Composition
+                segments={[
+                  {
+                    key: 'answered',
+                    label: t('complaintDash.segAnswered', { defaultValue: 'Answered' }),
+                    value: d.health.chatsAnswered,
+                    className: 'bg-success',
+                  },
+                  {
+                    key: 'waiting',
+                    label: t('complaintDash.segWaiting', { defaultValue: 'Still waiting' }),
+                    value: d.health.chatsWaiting,
+                    className: 'bg-warning',
+                  },
+                ]}
+              />
+            </Card>
+          </div>
+
           {/* ── Trend ────────────────────────────────────────────────────── */}
           <Card
             title={t('complaintDash.perMonth', { defaultValue: 'Complaints per month' })}
@@ -522,6 +706,12 @@ export function ComplaintDashboard() {
                         {t('complaintDash.colHours', { defaultValue: 'Avg hrs to close' })}
                       </th>
                       <th className="py-2 text-end font-semibold">
+                        {t('complaintDash.colChatsOpen', { defaultValue: 'Chats open' })}
+                      </th>
+                      <th className="py-2 text-end font-semibold">
+                        {t('complaintDash.colChatsSolved', { defaultValue: 'Chats solved' })}
+                      </th>
+                      <th className="py-2 text-end font-semibold">
                         {t('complaintDash.colMoney', { defaultValue: 'Compensation' })}
                       </th>
                     </tr>
@@ -546,8 +736,85 @@ export function ComplaintDashboard() {
                         <td className="py-2 text-end tabular-nums">
                           {a.avgHoursToClose === null ? '—' : a.avgHoursToClose.toFixed(1)}
                         </td>
+                        <td className="py-2 text-end tabular-nums">{a.chatsOpen}</td>
+                        <td className="py-2 text-end tabular-nums">{a.chatsSolved}</td>
                         <td className="py-2 text-end tabular-nums">
                           {a.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {/* ── Agent performance: chat ──────────────────────────────────
+              His second table. Complaint counts say nothing about who is
+              picking conversations up, which is the other half of the day. */}
+          <Card
+            title={t('complaintDash.chatPerf', { defaultValue: 'Agent performance — chat' })}
+            hint={t('complaintDash.chatPerfHint', {
+              defaultValue:
+                'Conversations routing offered them, who answered, how long the customer waited, and who let one time out.',
+            })}
+          >
+            {d.chatAgents.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {t('complaintDash.noChatActivity', { defaultValue: 'No chat activity yet.' })}
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-2xs uppercase tracking-[0.08em] text-muted-foreground">
+                      <th className="py-2 text-start font-semibold">
+                        {t('complaintDash.colAgent', { defaultValue: 'Agent' })}
+                      </th>
+                      <th className="py-2 text-end font-semibold">
+                        {t('complaintDash.colMessages', { defaultValue: 'Replies sent' })}
+                      </th>
+                      <th className="py-2 text-end font-semibold">
+                        {t('complaintDash.colHandled', { defaultValue: 'Chats handled' })}
+                      </th>
+                      <th className="py-2 text-end font-semibold">
+                        {t('complaintDash.colChatSolved', { defaultValue: 'Chats solved' })}
+                      </th>
+                      <th className="py-2 text-end font-semibold">
+                        {t('complaintDash.colOffered', { defaultValue: 'Offered' })}
+                      </th>
+                      <th className="py-2 text-end font-semibold">
+                        {t('complaintDash.colAnswered', { defaultValue: 'Answered' })}
+                      </th>
+                      <th className="py-2 text-end font-semibold">
+                        {t('complaintDash.colMissed', { defaultValue: 'Timed out' })}
+                      </th>
+                      <th className="py-2 text-end font-semibold">
+                        {t('complaintDash.colWait', { defaultValue: 'Avg wait' })}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {d.chatAgents.map((a) => (
+                      <tr key={a.id}>
+                        <td className="py-2 font-medium text-foreground">{a.name}</td>
+                        <td className="py-2 text-end tabular-nums">{a.messages}</td>
+                        <td className="py-2 text-end tabular-nums">{a.chatsHandled}</td>
+                        <td className="py-2 text-end tabular-nums">{a.chatsSolved}</td>
+                        <td className="py-2 text-end tabular-nums">{a.offered}</td>
+                        <td className="py-2 text-end tabular-nums">{a.answered}</td>
+                        {/* Called out: a conversation nobody picked up in time is
+                            the failure this table exists to surface. */}
+                        <td
+                          className={cn(
+                            'py-2 text-end tabular-nums',
+                            a.missed > 0 && 'font-semibold text-destructive',
+                          )}
+                        >
+                          {a.missed}
+                        </td>
+                        <td className="py-2 text-end tabular-nums">
+                          {a.avgWaitMinutes === null ? '—' : `${a.avgWaitMinutes.toFixed(1)}m`}
                         </td>
                       </tr>
                     ))}
@@ -579,8 +846,19 @@ export function ComplaintDashboard() {
             <Card title={t('complaintDash.byBrand', { defaultValue: 'By brand' })}>
               <Bars rows={d.byBrand} total={d.total} color="bg-warning" />
             </Card>
+            <Card
+              title={t('complaintDash.byArea', { defaultValue: 'By area' })}
+              hint={t('complaintDash.byAreaHint', {
+                defaultValue: 'The area manager responsible for the branch.',
+              })}
+            >
+              <Bars rows={d.byArea} total={d.total} color="bg-warning" />
+            </Card>
             <Card title={t('complaintDash.byCity', { defaultValue: 'By city' })}>
               <Bars rows={d.byCity} total={d.total} color="bg-sky" />
+            </Card>
+            <Card title={t('complaintDash.byAgent', { defaultValue: 'By agent' })}>
+              <Bars rows={d.byAgent} total={d.total} color="bg-violet" />
             </Card>
             <Card title={t('complaintDash.byStatus', { defaultValue: 'By status' })}>
               <Bars
