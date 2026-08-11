@@ -350,6 +350,34 @@ describe('StoresPage — repeatable CSV import', () => {
     expect(lastToast()).toContain('1 brands created');
   });
 
+  it('links stores to brands that exist in Directus but not in a stale cache', async () => {
+    // The page's brand cache can be older than the database. When the hook
+    // reports "already present", the ids are still missing from that cache —
+    // so the page has to refresh before it can attach them. Getting this wrong
+    // imports every store with no brand at all, which reads as a data problem
+    // rather than a caching one and breaks every brand-level report.
+    api.useBrands.mockReturnValue({
+      data: [], // stale: knows about no brands
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn().mockResolvedValue({
+        data: [
+          { id: 'b1', code: 'LCP', name: 'Casa Pasta' },
+          { id: 'b9', code: 'PSK', name: 'Poshak' },
+        ],
+      }),
+    });
+    api.useBulkCreateBrands.mockReturnValue(importMutation(0, 2)); // both already exist
+    const bulk = importMutation(3, 0);
+    api.useBulkCreateStores.mockReturnValue(bulk);
+
+    await upload(SHEET);
+    await vi.waitFor(() => expect(bulk.mutateAsync).toHaveBeenCalled());
+
+    const rows = bulk.mutateAsync.mock.calls[0]![0] as Array<Record<string, unknown>>;
+    expect(rows.map((r) => r.brand)).toEqual(['b1', 'b1', 'b9']);
+  });
+
   it('says nothing about brands when none were created', async () => {
     api.useBulkCreateBrands.mockReturnValue(importMutation(0, 2));
     api.useBulkCreateStores.mockReturnValue(importMutation(0, 3));

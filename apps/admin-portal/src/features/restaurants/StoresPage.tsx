@@ -212,7 +212,13 @@ export function StoresPage() {
       const brandResult = await bulkBrands.mutateAsync(
         wanted.map((code) => ({ code: code.trim(), name: code.trim(), status: 'active' as const })),
       );
-      if (brandResult.added > 0) {
+      // Refresh when brands were created OR when this cache simply does not
+      // know a brand the sheet needs. "Already present" means the row exists in
+      // Directus, NOT that its id is in this cache — and without the id the
+      // store is imported with no brand at all, which looks like a data problem
+      // rather than a stale cache and silently breaks brand-level reporting.
+      const unresolved = wanted.some((c) => !brandIdByKey.has(c.trim().toLowerCase()));
+      if (brandResult.added > 0 || unresolved) {
         const refreshed = await brands.refetch();
         for (const b of refreshed.data ?? []) brandIdByKey.set(b.code.trim().toLowerCase(), b.id);
       }
