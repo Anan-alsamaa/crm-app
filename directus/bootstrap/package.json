@@ -12,7 +12,8 @@
     "check-idempotence": "node scripts/check-idempotence.mjs",
     "typecheck": "tsc --noEmit",
     "seed:showcase": "tsx src/seed-showcase.ts",
-    "seed:restaurants": "tsx src/seed-restaurants.ts"
+    "seed:restaurants": "tsx src/seed-restaurants.ts",
+    "backfill:store-snapshots": "tsx src/backfill-store-snapshots.ts"
   },
   "dependencies": {
     "@directus/sdk": "^17.0.0",
