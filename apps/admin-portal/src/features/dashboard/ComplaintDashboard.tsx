@@ -149,13 +149,19 @@ function Bars({ rows, total, color }: { rows: Breakdown[]; total: number; color:
  * Drawn with stroke-dasharray on one circle per slice rather than arc paths:
  * no trigonometry to get wrong, and it degrades to a plain ring at any size.
  */
+/* The design tokens are raw OKLCH COMPONENTS ("0.536 0.132 194"), not finished
+ * colours, so they only work wrapped in oklch(). Passing `var(--primary)`
+ * straight to `stroke` yields `stroke: 0.536 0.132 194`, which is invalid — the
+ * browser drops the declaration and the slice paints nothing, leaving a donut
+ * that is present in the DOM and invisible on screen. (Same trap the KPI chips
+ * hit with `bg-violet` earlier in this feature.) */
 const SLICE = [
-  'var(--primary)',
-  'var(--warning)',
-  'var(--success)',
-  'var(--violet)',
-  'var(--sky)',
-  'var(--destructive)',
+  'oklch(var(--primary))',
+  'oklch(var(--warning))',
+  'oklch(var(--success))',
+  'oklch(var(--violet))',
+  'oklch(var(--sky))',
+  'oklch(var(--destructive))',
 ];
 
 function Donut({ rows }: { rows: Breakdown[] }) {
@@ -1024,8 +1030,11 @@ export function ComplaintDashboard() {
             <Card title={t('complaintDash.byServiceType', { defaultValue: 'By service type' })}>
               <Bars rows={d.byServiceType} total={d.total} color="bg-primary" />
             </Card>
+            {/* Retitled off his wording deliberately: he uses "Where complaints
+                come from" for the BRAND ring above. Two cards under one title
+                showing different things is worse than losing his phrasing. */}
             <Card
-              title={t('complaintDash.bySource', { defaultValue: 'Where complaints come from' })}
+              title={t('complaintDash.bySource', { defaultValue: 'How complaints reach us' })}
               className="md:col-span-2"
             >
               <Bars rows={d.bySource} total={d.total} color="bg-destructive" />
