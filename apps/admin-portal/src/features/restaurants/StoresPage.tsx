@@ -32,6 +32,7 @@ import {
   type Store,
 } from './api.js';
 import { parseStoresCsv } from './csv.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 
 const schema = z.object({
   code: z.string().optional(),
@@ -93,6 +94,13 @@ const blank = (v: string | undefined) => (v && v.trim() ? v.trim() : null);
 
 export function StoresPage() {
   const { t } = useTranslation();
+  // Only the Administrator may set the Yiji restaurant id. `admin_access` is
+  // the authoritative Directus signal (the built-in Administrator has it; the
+  // CRM "Admin" role does not) — a role-NAME check would be spoofable by
+  // creating a role called "Administrator". This only hides the control; the
+  // real enforcement is the field-scoped permission in roles.ts.
+  const { user } = useAuth();
+  const canEditYijiId = !!user?.admin_access;
   const stores = useStores();
   const brands = useBrands();
   const createStore = useCreateStore();
@@ -213,7 +221,10 @@ export function StoresPage() {
           city: r.city,
           area_manager: r.areaManager,
           chain_manager: r.chainManager,
-          yiji_restaurant_id: r.yijiRestaurantId,
+          // Omit the field entirely for anyone but the Administrator. Sending
+          // it — even as null — is rejected by the field-scoped permission and
+          // would fail the whole import rather than just that column.
+          ...(canEditYijiId ? { yiji_restaurant_id: r.yijiRestaurantId } : {}),
           brand: r.brandCode ? (brandIdByKey.get(r.brandCode.trim().toLowerCase()) ?? null) : null,
           status: 'active' as const,
         })),
@@ -567,11 +578,19 @@ export function StoresPage() {
               label={t('stores.yijiRestaurantId', {
                 defaultValue: 'Restaurant ID in the order system',
               })}
-              hint={t('stores.yijiRestaurantIdHint', {
-                defaultValue: 'Optional. When set, it takes priority over name matching.',
-              })}
+              hint={
+                canEditYijiId
+                  ? t('stores.yijiRestaurantIdHint', {
+                      defaultValue:
+                        'The join key for every by-store report. When set, it takes priority over name matching.',
+                    })
+                  : t('stores.yijiRestaurantIdLocked', {
+                      defaultValue:
+                        'Only the Administrator can change this. It is the join key to the order feed: a wrong value does not error, it silently reports tickets against the wrong branch.',
+                    })
+              }
             >
-              <Input {...register('yiji_restaurant_id')} />
+              <Input {...register('yiji_restaurant_id')} disabled={!canEditYijiId} />
             </FormField>
           </DrawerSection>
         </form>

@@ -59,8 +59,10 @@ const ALL_BUSINESS = [
   'teams',
   // Restaurant master data (brands + their branches). Admins maintain these by
   // hand and via CSV import; every other role only reads them.
+  //
+  // `stores` is NOT here — it needs field-level restriction so only the
+  // Administrator can set yiji_restaurant_id. See STORE_FIELDS_NO_YIJI_ID.
   'brands',
-  'stores',
   'contacts',
   'conversations',
   'messages',
@@ -73,6 +75,27 @@ const ALL_BUSINESS = [
   'custom_fields',
   'custom_field_values',
   'csat_responses',
+];
+
+/**
+ * Every store field EXCEPT `yiji_restaurant_id`.
+ *
+ * That id is the join key between a branch and Yiji's order feed. Getting it
+ * wrong does not error — it silently attributes a ticket to the wrong branch,
+ * and every by-store report inherits the mistake with no visible symptom. So
+ * it is writable ONLY by the Administrator (the sole role with admin_access);
+ * the CRM `Admin` role maintains everything else about a store but cannot
+ * touch it. Field lists are the enforcement — the portal disabling the input
+ * is only a courtesy, and an API call would bypass that.
+ */
+const STORE_FIELDS_NO_YIJI_ID = [
+  'code',
+  'name',
+  'city',
+  'area_manager',
+  'chain_manager',
+  'brand',
+  'status',
 ];
 
 // Agent row-level scoping filters.
@@ -98,6 +121,12 @@ export const roles: RoleSpec[] = [
       ...ALL_BUSINESS.flatMap(crud),
       ...crud('directus_users'),
       ...appendOnly('ticket_events'),
+      // Stores: full read/delete, but create and update are field-scoped so the
+      // Yiji restaurant id stays Administrator-only (see STORE_FIELDS_NO_YIJI_ID).
+      { collection: 'stores', action: 'read' },
+      { collection: 'stores', action: 'delete' },
+      { collection: 'stores', action: 'create', fields: STORE_FIELDS_NO_YIJI_ID },
+      { collection: 'stores', action: 'update', fields: STORE_FIELDS_NO_YIJI_ID },
     ],
   },
   {

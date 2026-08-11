@@ -21,6 +21,7 @@ import {
   updateRole,
   createPolicy,
   createPermission,
+  updatePermission,
   createUser,
   updateUser,
   readUsers,
@@ -409,15 +410,46 @@ async function applyRoles(client: AnyClient): Promise<void> {
       console.log(`  = access ${role.name} (linked)`);
     }
 
-    // Permissions (skip any (collection, action) already present on the policy).
+    /* Permissions.
+     *
+     * Existence alone is NOT enough to call a permission correct: this used to
+     * skip on (collection, action) and never look at `fields` or the row
+     * filter, so tightening an EXISTING permission — say, restricting which
+     * store columns a role may write — was declared in roles.ts, printed as
+     * "(exists)", and never actually applied. The permission matrix could drift
+     * from this file indefinitely with no symptom. Reconcile both. */
     if (!role.permissions) continue;
     const existingPerms = (await client.request(
       readPermissions({ filter: { policy: { _eq: policyId } }, limit: -1 }),
-    )) as Array<{ collection: string; action: string }>;
-    const have = new Set(existingPerms.map((p) => `${p.collection}|${p.action}`));
+    )) as Array<{
+      id: number;
+      collection: string;
+      action: string;
+      fields: string[] | null;
+      permissions: Record<string, unknown> | null;
+    }>;
+    const byKey = new Map(existingPerms.map((p) => [`${p.collection}|${p.action}`, p]));
     for (const p of role.permissions) {
-      if (have.has(`${p.collection}|${p.action}`)) {
-        console.log(`  = perm ${role.name} ${p.action} ${p.collection} (exists)`);
+      const current = byKey.get(`${p.collection}|${p.action}`);
+      if (current) {
+        const wantFields = p.fields ?? ['*'];
+        const wantFilter = p.permissions ?? {};
+        const sameFields =
+          JSON.stringify([...(current.fields ?? [])].sort()) ===
+          JSON.stringify([...wantFields].sort());
+        const sameFilter = JSON.stringify(current.permissions ?? {}) === JSON.stringify(wantFilter);
+        if (sameFields && sameFilter) {
+          console.log(`  = perm ${role.name} ${p.action} ${p.collection} (exists)`);
+          continue;
+        }
+        await idempotent(`perm ${role.name} ${p.action} ${p.collection} (reconciled)`, () =>
+          client.request(
+            updatePermission(current.id, {
+              fields: wantFields,
+              permissions: wantFilter,
+            } as never),
+          ),
+        );
         continue;
       }
       await idempotent(`perm ${role.name} ${p.action} ${p.collection}`, () =>

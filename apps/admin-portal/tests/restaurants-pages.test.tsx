@@ -33,6 +33,16 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/restaurants/api.js', () => api);
 
+/**
+ * Who is signed in. `admin_access` is the Directus signal that separates the
+ * built-in Administrator from the CRM "Admin" role, and it gates whether the
+ * Yiji restaurant id is editable.
+ */
+const session = vi.hoisted(() => ({ user: { admin_access: true } as { admin_access: boolean } }));
+vi.mock('../src/lib/auth/AuthContext.js', () => ({
+  useAuth: () => session,
+}));
+
 import { BrandsPage } from '../src/features/restaurants/BrandsPage.js';
 import { StoresPage } from '../src/features/restaurants/StoresPage.js';
 
@@ -90,6 +100,7 @@ const mutation = () => ({ mutateAsync: vi.fn().mockResolvedValue({}) });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  session.user = { admin_access: true };
   api.useCreateBrand.mockReturnValue(mutation());
   api.useUpdateBrand.mockReturnValue(mutation());
   api.useDeleteBrand.mockReturnValue(mutation());
@@ -182,6 +193,26 @@ describe('StoresPage', () => {
     renderPage(<StoresPage />);
     expect(screen.getByText('No stores yet')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Import CSV' }).length).toBeGreaterThan(0);
+  });
+
+  it('lets the Administrator edit the Yiji restaurant id', async () => {
+    const user = userEvent.setup({ delay: null });
+    renderPage(<StoresPage />);
+    await user.click(screen.getByText('Masief Plaza'));
+    await screen.findByRole('dialog');
+    expect(screen.getByLabelText(/Restaurant ID in the order system/)).not.toBeDisabled();
+  });
+
+  it('locks the Yiji restaurant id for anyone below Administrator', async () => {
+    // The CRM "Admin" role maintains stores but must not touch the join key:
+    // a wrong id does not error, it silently reports against the wrong branch.
+    session.user = { admin_access: false };
+    const user = userEvent.setup({ delay: null });
+    renderPage(<StoresPage />);
+    await user.click(screen.getByText('Masief Plaza'));
+    await screen.findByRole('dialog');
+    expect(screen.getByLabelText(/Restaurant ID in the order system/)).toBeDisabled();
+    expect(screen.getByText(/Only the Administrator can change this/)).toBeInTheDocument();
   });
 
   it('opens the edit drawer prefilled from a row', async () => {
