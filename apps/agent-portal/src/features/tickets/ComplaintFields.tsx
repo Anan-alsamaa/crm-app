@@ -6,6 +6,7 @@ import {
   Compensation,
   ComplaintSource,
   ComplaintType,
+  DEFAULT_COMMUNICATION_METHOD,
   ServiceType,
 } from '@yiji/shared-types';
 import type { TicketOrderSnapshot } from './OrderSnapshotCard.js';
@@ -46,6 +47,20 @@ export const emptyComplaint: ComplaintValues = {
   coupon_code: '',
   coupon_value: '',
   coupon_percent: '',
+};
+
+/**
+ * Starting values for a ticket raised FROM A CONVERSATION.
+ *
+ * The agent is answering inside the CRM, so the communication method is not a
+ * guess — it is the only thing it can be, and making the agent pick it from a
+ * list would just invite a wrong answer. A ticket created standalone keeps
+ * `emptyComplaint`: with no conversation behind it the channel really is
+ * unknown, and defaulting it there would file phone-backs as CRM replies.
+ */
+export const complaintFromConversation: ComplaintValues = {
+  ...emptyComplaint,
+  communication_method: DEFAULT_COMMUNICATION_METHOD,
 };
 
 /**

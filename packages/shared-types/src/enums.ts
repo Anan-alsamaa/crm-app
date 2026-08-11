@@ -72,12 +72,21 @@ export type ComplaintSource = z.infer<typeof ComplaintSource>;
  * arrives on Twitter is routinely answered on WhatsApp, and they report on both.
  */
 export const CommunicationMethod = z.enum([
+  // 'CRM' is ours, not theirs. Their list has no entry for it because their tool
+  // has no chat of its own — every reply left through some other channel. In
+  // this system the agent answers inside the CRM, so a ticket raised from a
+  // conversation is answered on 'CRM' and says so. The rest of the list stays:
+  // an agent who phones the customer back must still be able to record that.
+  'CRM',
   'AFCO APP',
   'Comp. Phone Call',
   'Comp. Twiter',
   'Comp. WhatsApp',
   'Comp.Instgram',
 ]);
+
+/** What a ticket raised from a CRM conversation was answered on. */
+export const DEFAULT_COMMUNICATION_METHOD: CommunicationMethod = 'CRM';
 export type CommunicationMethod = z.infer<typeof CommunicationMethod>;
 
 /** Whether the customer was compensated. "Initial" = not decided yet. */

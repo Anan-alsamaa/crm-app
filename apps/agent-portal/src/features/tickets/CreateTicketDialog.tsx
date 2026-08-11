@@ -18,7 +18,7 @@ import {
   ComplaintSection,
   complaintHasErrors,
   complaintPatch,
-  emptyComplaint,
+  complaintFromConversation,
   serviceTypeFromOrder,
   type ComplaintValues,
 } from './ComplaintFields.js';
@@ -166,7 +166,7 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
 
   const [includeOrder, setIncludeOrder] = useState(true);
   const [includeFiles, setIncludeFiles] = useState(true);
-  const [complaint, setComplaint] = useState<ComplaintValues>(emptyComplaint);
+  const [complaint, setComplaint] = useState<ComplaintValues>(complaintFromConversation);
 
   // The order already knows how it was fulfilled, so pre-fill service type
   // rather than making the agent read it off the card and retype it. Only fills
