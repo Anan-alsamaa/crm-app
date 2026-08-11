@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { aggregate, readItems, readUsers } from '@directus/sdk';
-import { buildStoreIndex, matchStore } from '@yiji/shared-types';
+import { buildStoreIndex, matchStore, type StoreSnapshot } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -200,6 +200,8 @@ interface TicketRecord {
     restaurantName?: string | null;
     restaurantId?: string | null;
   } | null;
+  /** Attribution frozen when the ticket was raised — see StoreSnapshot. */
+  store_snapshot: StoreSnapshot | null;
 }
 
 interface StoreRecordRow {
@@ -263,6 +265,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
                 'compensation',
                 'coupon_value',
                 'order_snapshot',
+                'store_snapshot',
                 // Powers the customer-mobile filter, which is how the ops team
                 // pull up "everything this caller has ever complained about".
                 'contact.phone',
@@ -399,8 +402,22 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         let area = '';
         let city = '';
 
+        // What was frozen onto the ticket WINS over the live store row. The
+        // live row is what the branch looks like today; this dashboard reports
+        // what happened, and moving a branch to a new area manager must not
+        // reassign complaints they never handled.
+        const frozen = tk.store_snapshot;
         const direct = tk.store ? storeById.get(tk.store) : undefined;
-        if (direct) {
+        if (frozen) {
+          storeId = frozen.storeId ?? direct?.id ?? null;
+          restaurantName = frozen.restaurantName;
+          // The brand ID is identity, not attribution — it is only used to
+          // filter, and a renamed brand is still the same brand.
+          brandId = (frozen.storeId ? storeById.get(frozen.storeId)?.brand?.id : null) ?? null;
+          brandName = frozen.brandName;
+          area = frozen.areaManager;
+          city = frozen.city;
+        } else if (direct) {
           storeId = direct.id;
           restaurantName = [direct.code, direct.name].filter(Boolean).join(' ');
           brandId = direct.brand?.id ?? null;

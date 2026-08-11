@@ -1,6 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems, readUsers } from '@directus/sdk';
-import { buildStoreIndex, matchStore } from '@yiji/shared-types';
+import {
+  buildStoreIndex,
+  matchStore,
+  resolveStoreAttribution,
+  type StoreSnapshot,
+} from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -68,6 +73,7 @@ export function useDashboardMetrics(days: number) {
               // trip, works when the commerce proxy is down, and reflects the
               // order that was actually linked to the ticket.
               'order_snapshot',
+              'store_snapshot',
             ],
             limit: -1,
           }),
@@ -79,6 +85,7 @@ export function useDashboardMetrics(days: number) {
             first_responded_at: string | null;
             first_response_due_at: string | null;
             assigned_agent: string | null;
+            store_snapshot: StoreSnapshot | null;
             order_snapshot: {
               brandName?: string | null;
               restaurantName?: string | null;
@@ -228,11 +235,16 @@ export function useDashboardMetrics(days: number) {
         const snap = tk.order_snapshot;
         if (!snap || (!snap.restaurantName && !snap.restaurantId)) continue;
         ticketsWithOrder += 1;
-        const m = matchStore(storeIndex, {
-          restaurantId: snap.restaurantId ?? undefined,
-          restaurantName: snap.restaurantName ?? undefined,
-          brandName: snap.brandName ?? undefined,
-        });
+        // Prefer what was frozen onto the ticket: these are historical counts,
+        // and a store edit must not move tickets between branches or brands
+        // after the fact.
+        const { match: m } = resolveStoreAttribution(tk.store_snapshot, () =>
+          matchStore(storeIndex, {
+            restaurantId: snap.restaurantId ?? undefined,
+            restaurantName: snap.restaurantName ?? undefined,
+            brandName: snap.brandName ?? undefined,
+          }),
+        );
         if (m.store) {
           const key = m.store.id;
           const cur = byStore.get(key) ?? { name: m.restaurantName || m.store.name, tickets: 0 };
