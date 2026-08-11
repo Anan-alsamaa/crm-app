@@ -580,6 +580,40 @@ describe('AgentReportsPage — complaints report', () => {
     expect(screen.getByText('1 rows with an unmapped store')).toBeInTheDocument();
   });
 
+  it('reports the branch as it was when the ticket was raised, not as it is now', async () => {
+    // The store master now says Riyadh / Mo'men Elsharkasy (see PANORAMA), but
+    // this ticket was raised when the branch sat in another city under another
+    // manager. The report must show what was true then — re-resolving it live
+    // would quietly reassign a months-old complaint to someone who never
+    // handled it.
+    api.useAgentReportData.mockReturnValue({
+      ...ok,
+      data: {
+        ...data,
+        complaints: [
+          {
+            ...complaints[0],
+            storeSnapshot: {
+              storeId: 's1',
+              code: 'LCP-006',
+              restaurantName: 'LCP-006 Panorama Mall RYD',
+              brandName: 'Casa Pasta',
+              city: 'Dammam',
+              areaManager: 'Ahmed Samir',
+              chainManager: 'Medhat Sayed',
+              via: 'store_code',
+              capturedAt: '2026-03-14T19:11:00.000Z',
+            },
+          },
+        ],
+      },
+    });
+    const { container } = renderPage('complaints');
+    const row = container.querySelectorAll('tbody tr')[0]! as HTMLElement;
+    expect(within(row).getByText('Dammam')).toBeTruthy();
+    expect(within(row).queryByText('Riyadh')).toBeNull();
+  });
+
   it('exports a complaints workbook', async () => {
     api.useAgentReportData.mockReturnValue(ok);
     const dl = captureDownloads();

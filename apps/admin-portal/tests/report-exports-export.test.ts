@@ -58,6 +58,7 @@ function ticket(over: Partial<TicketReportRow> = {}): TicketReportRow {
     firstResponseState: 'met',
     resolutionMinutes: null,
     resolutionState: 'na',
+    storeSnapshot: null,
     ...over,
   };
 }
@@ -411,6 +412,7 @@ describe('buildComplaintsSheets', () => {
       complaintStatus: 'closed',
       agent: 'Amjad',
       compensation: 'Compensated',
+      storeSnapshot: null,
       ...over,
     };
   }

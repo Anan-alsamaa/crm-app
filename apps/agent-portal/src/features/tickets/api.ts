@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, createItem, updateItem, deleteItem, uploadFiles } from '@directus/sdk';
-import type { Priority, TicketStatus } from '@yiji/shared-types';
+import type { Priority, StoreSnapshot, TicketStatus } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { notifyAssignmentBestEffort } from '../../lib/job-producer.js';
 import type { TicketOrderSnapshot } from './OrderSnapshotCard.js';
@@ -48,6 +48,8 @@ export interface TicketRow extends Partial<TicketComplaintFields> {
   description: string | null;
   /** Structured point-in-time copy of the order the ticket is about. */
   order_snapshot?: TicketOrderSnapshot | null;
+  /** Branch attribution frozen at creation — see StoreSnapshot. */
+  store_snapshot?: StoreSnapshot | null;
   status: TicketStatus;
   priority: Priority;
   assigned_agent: string | null;
@@ -184,6 +186,8 @@ export interface CreateTicketInput extends Partial<TicketComplaintFields> {
   assigned_agent?: string | null;
   /** Structured point-in-time copy of the order the ticket is about. */
   order_snapshot?: TicketOrderSnapshot | null;
+  /** Branch attribution frozen at creation — see StoreSnapshot. */
+  store_snapshot?: StoreSnapshot | null;
 }
 
 export function useCreateTicket() {

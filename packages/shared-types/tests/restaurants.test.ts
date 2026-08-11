@@ -8,6 +8,8 @@ import {
   isUnmappedStore,
   splitStoreCode,
   storeCodeFrom,
+  toStoreSnapshot,
+  resolveStoreAttribution,
   type StoreRecord,
 } from '../src/restaurants.js';
 
@@ -283,5 +285,108 @@ describe('splitStoreCode', () => {
   it('survives nullish input', () => {
     expect(splitStoreCode(null)).toEqual({ code: null, name: '' });
     expect(storeCodeFrom(undefined)).toBe('');
+  });
+});
+
+describe('store attribution is frozen onto the ticket, not re-derived', () => {
+  /**
+   * The requirement: editing a branch changes it FROM NOW ON. A report about
+   * last quarter must still name whoever was responsible last quarter. If the
+   * report re-resolved the store at render time, moving a branch to a new area
+   * manager would silently reassign every complaint they never handled.
+   */
+  const BEFORE: StoreRecord = {
+    id: 's1',
+    code: 'LCP-041',
+    name: 'Masief Plaza',
+    city: 'Riyadh',
+    areaManager: 'Ahmed Samir',
+    chainManager: 'Medhat Sayed',
+    brandCode: 'LCP',
+    brandName: 'Casa Pasta',
+    yijiRestaurantId: null,
+  };
+  /** The same branch after operations hand it to a different area manager. */
+  const AFTER: StoreRecord = { ...BEFORE, areaManager: 'Khaled Abdellah' };
+
+  const order = { restaurantName: 'LCP-041 Masief Plaza', brandName: 'Casa Pasta' };
+
+  it('keeps the manager who was responsible when the ticket was raised', () => {
+    // Ticket raised while Ahmed ran the area — attribution frozen then.
+    const atCreation = matchStore(buildStoreIndex([BEFORE]), order);
+    const frozen = toStoreSnapshot(atCreation, '2026-03-14T19:11:00.000Z');
+    expect(frozen.areaManager).toBe('Ahmed Samir');
+
+    // Months later the branch moves to Khaled. Reporting on the OLD ticket
+    // must still say Ahmed.
+    const laterIndex = buildStoreIndex([AFTER]);
+    const { match, fromSnapshot } = resolveStoreAttribution(frozen, () =>
+      matchStore(laterIndex, order),
+    );
+    expect(fromSnapshot).toBe(true);
+    expect(match.areaManager).toBe('Ahmed Samir');
+
+    // And the live lookup really would have said otherwise — proving the
+    // snapshot is what protected the report, not a coincidence.
+    expect(matchStore(laterIndex, order).areaManager).toBe('Khaled Abdellah');
+  });
+
+  it('freezes every reported store field, not just the manager', () => {
+    const frozen = toStoreSnapshot(matchStore(buildStoreIndex([BEFORE]), order), 'ts');
+    const renamed: StoreRecord = {
+      ...BEFORE,
+      name: 'Masief Plaza (Closed)',
+      city: 'Jeddah',
+      chainManager: 'Someone Else',
+      brandName: 'Rebranded',
+    };
+    const { match } = resolveStoreAttribution(frozen, () =>
+      matchStore(buildStoreIndex([renamed]), order),
+    );
+    expect(match.restaurantName).toBe('LCP-041 Masief Plaza');
+    expect(match.city).toBe('Riyadh');
+    expect(match.chainManager).toBe('Medhat Sayed');
+    expect(match.brandName).toBe('Casa Pasta');
+  });
+
+  it('a NEW ticket after the change gets the new manager', () => {
+    // The freeze must not stop legitimate change going forward.
+    const atCreation = matchStore(buildStoreIndex([AFTER]), order);
+    const frozen = toStoreSnapshot(atCreation, 'ts');
+    expect(frozen.areaManager).toBe('Khaled Abdellah');
+  });
+
+  it('falls back to a live lookup only when there is no snapshot', () => {
+    // Tickets raised before this existed have nothing frozen; they can only be
+    // resolved live, and that is visible rather than pretended otherwise.
+    const { match, fromSnapshot } = resolveStoreAttribution(null, () =>
+      matchStore(buildStoreIndex([AFTER]), order),
+    );
+    expect(fromSnapshot).toBe(false);
+    expect(match.areaManager).toBe('Khaled Abdellah');
+  });
+
+  it('remembers an unmapped store as unmapped, and how weakly it matched', () => {
+    const miss = matchStore(buildStoreIndex([BEFORE]), {
+      restaurantName: 'Jeddah - Nowhere',
+      brandName: 'Casa Pasta',
+    });
+    const frozen = toStoreSnapshot(miss, 'ts');
+    expect(frozen.storeId).toBeNull();
+    expect(frozen.via).toBe('brand_only');
+    const { match } = resolveStoreAttribution(frozen, () => {
+      throw new Error('must not re-resolve');
+    });
+    expect(isUnmappedStore(match)).toBe(true);
+    expect(match.via).toBe('brand_only');
+  });
+
+  it('ignores a malformed snapshot rather than reporting garbage', () => {
+    for (const bad of [null, undefined]) {
+      const { fromSnapshot } = resolveStoreAttribution(bad, () =>
+        matchStore(buildStoreIndex([AFTER]), order),
+      );
+      expect(fromSnapshot).toBe(false);
+    }
   });
 });

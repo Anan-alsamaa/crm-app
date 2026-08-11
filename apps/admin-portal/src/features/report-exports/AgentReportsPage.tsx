@@ -21,7 +21,7 @@ import {
   Tr,
   useTableSort,
 } from '@yiji/ui';
-import { matchStore, isUnmappedStore } from '@yiji/shared-types';
+import { matchStore, isUnmappedStore, resolveStoreAttribution } from '@yiji/shared-types';
 import {
   useAgentReportData,
   useTicketOrders,
@@ -255,14 +255,19 @@ function TicketsReport({
       ? rows.map((r) => {
           const order = r.contactId ? (ordersMap.get(r.contactId) ?? undefined) : undefined;
           if (!order) return { ...r, order: undefined };
-          // Join the order onto the operations store master data. The order API
-          // gives a brand name and a "<city> - <branch>" string and nothing
-          // else — city, managers and the canonical brand come from here.
-          const m = matchStore(storeIndex, {
-            restaurantId: order.rawRestaurantId,
-            restaurantName: order.rawRestaurantName,
-            brandName: order.rawBrandName,
-          });
+          // Prefer the attribution frozen onto the ticket. Only fall back to a
+          // live join for tickets raised before snapshots existed — otherwise
+          // editing a store today would rewrite who owned a months-old ticket.
+          // The order API gives a brand name and a "<city> - <branch>" string
+          // and nothing else; city, managers and the canonical brand come from
+          // the operations store master.
+          const { match: m } = resolveStoreAttribution(r.storeSnapshot, () =>
+            matchStore(storeIndex, {
+              restaurantId: order.rawRestaurantId,
+              restaurantName: order.rawRestaurantName,
+              brandName: order.rawBrandName,
+            }),
+          );
           return {
             ...r,
             order: {
@@ -555,11 +560,14 @@ function ComplaintsReport({
   const joined = useMemo<ComplaintReportRow[]>(
     () =>
       rows.map((r) => {
-        if (!r.restaurantName && !r.brand) return r;
-        const m = matchStore(storeIndex, {
-          restaurantName: r.restaurantName,
-          brandName: r.brand,
-        });
+        if (!r.restaurantName && !r.brand && !r.storeSnapshot) return r;
+        // Prefer what was frozen onto the ticket. Re-resolving live would mean
+        // that editing a store today rewrites who was responsible for a
+        // complaint raised months ago — the report would change under you with
+        // nothing to show that it had.
+        const { match: m } = resolveStoreAttribution(r.storeSnapshot, () =>
+          matchStore(storeIndex, { restaurantName: r.restaurantName, brandName: r.brand }),
+        );
         return {
           ...r,
           chain: m.chainManager,

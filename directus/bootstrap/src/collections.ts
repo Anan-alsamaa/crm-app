@@ -191,6 +191,13 @@ export const collections: CollectionSpec[] = [
       // and so it stays queryable. The order may change or vanish upstream,
       // which is exactly why this is a snapshot rather than a live lookup.
       { field: 'order_snapshot', type: 'json' },
+      // The store's ATTRIBUTION (branch, brand, city, area/chain manager) as it
+      // stood when the ticket was raised. Resolving it live at report time
+      // would let one edit rewrite history: move a branch to a new area
+      // manager and last quarter's complaints silently become theirs. Frozen
+      // here for the same reason `order_snapshot` is — see StoreSnapshot in
+      // @yiji/shared-types.
+      { field: 'store_snapshot', type: 'json' },
 
       /* Complaint classification — the operations team's own complaint columns,
        * so a ticket raised in the portal reports alongside the complaints they

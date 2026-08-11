@@ -5,7 +5,8 @@ import { z } from 'zod';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Button, cn, FormField, Input, Pill, SelectMenu, Textarea, toast } from '@yiji/ui';
-import type { Priority, YijiOrder } from '@yiji/shared-types';
+import { toStoreSnapshot, type Priority, type YijiOrder } from '@yiji/shared-types';
+import { useOrderStore } from './useStoreMatch.js';
 import { useConversationAttachmentIds, useCreateTicketFromConversation } from './api.js';
 import {
   OrderSnapshotCard,
@@ -175,6 +176,13 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
     () => (latestOrder ? orderToSnapshot(latestOrder) : null),
     [latestOrder],
   );
+  // The branch this order belongs to, resolved now so it can be frozen onto
+  // the ticket at creation rather than looked up again at report time.
+  const storeMatch = useOrderStore({
+    restaurantId: latestOrder?.restaurantId,
+    restaurantName: latestOrder?.restaurantName,
+    brandName: latestOrder?.brandName,
+  });
   const inferredService = serviceTypeFromOrder(orderSnapshotView);
   useEffect(() => {
     if (!inferredService) return;
@@ -207,6 +215,13 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
           conversation: conversationId ?? null,
           assigned_agent: user?.id ?? null,
           order_snapshot: includeOrder && latestOrder ? orderSnapshot(latestOrder) : null,
+          // Freeze WHO this branch belonged to, not just which branch it was.
+          // Resolved live at report time, one edit to a store would rewrite
+          // every past report — see StoreSnapshot in @yiji/shared-types.
+          store_snapshot:
+            includeOrder && latestOrder
+              ? toStoreSnapshot(storeMatch, new Date().toISOString())
+              : null,
           ...complaintPatch(complaint),
         },
         attachmentFileIds: includeFiles ? sessionFileIds : [],
