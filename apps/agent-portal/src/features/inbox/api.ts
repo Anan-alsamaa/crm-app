@@ -13,7 +13,20 @@ export interface InboxConversation {
   assigned_agent: string | null;
   assigned_team: string | null;
   contact: { id: string; name: string | null; email: string | null; phone: string | null } | null;
+  /**
+   * Expanded by `useConversation`, absent from the list query. Directus returns
+   * a bare id string when the relation is not expanded, hence the union — read
+   * it through `conversationVendorId` rather than reaching in.
+   */
+  vendor?: { id: string; name?: string | null } | string | null;
   tags?: Array<{ id: string; tags_id: { id: string; name: string; color: string | null } | null }>;
+}
+
+/** The vendor id, whether the relation came back expanded or as a bare id. */
+export function conversationVendorId(c: InboxConversation | null | undefined): string {
+  const v = c?.vendor;
+  if (!v) return '';
+  return typeof v === 'string' ? v : (v.id ?? '');
 }
 
 export interface MessageAttachment {

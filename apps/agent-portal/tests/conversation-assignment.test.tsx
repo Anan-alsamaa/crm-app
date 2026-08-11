@@ -27,6 +27,10 @@ const inbox = vi.hoisted(() => ({
   useAddTagToConversation: vi.fn(),
   useUpdateConversation: vi.fn(),
   useLinkedTickets: vi.fn(),
+  // Not a hook — the toolbar calls it to read the vendor off the conversation,
+  // and mocking the module wholesale would otherwise blank it out.
+  conversationVendorId: (c: { vendor?: { id?: string } | string | null }) =>
+    typeof c?.vendor === 'string' ? c.vendor : (c?.vendor?.id ?? ''),
 }));
 vi.mock('../src/features/inbox/api.js', () => inbox);
 

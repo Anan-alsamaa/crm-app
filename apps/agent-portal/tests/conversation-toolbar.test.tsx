@@ -16,6 +16,14 @@ vi.mock('../src/lib/socket.js', () => ({
   getSocket: vi.fn().mockResolvedValue({ emit: vi.fn(), on: vi.fn() }),
 }));
 
+// The toolbar navigates rather than opening a dialog, so the assertion is on
+// where it sends the agent.
+const navigateSpy = vi.hoisted(() => vi.fn());
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return { ...actual, useNavigate: () => navigateSpy };
+});
+
 const inbox = vi.hoisted(() => ({
   useAgents: vi.fn(),
   useTeamOptions: vi.fn(),
@@ -23,13 +31,12 @@ const inbox = vi.hoisted(() => ({
   useAddTagToConversation: vi.fn(),
   useUpdateConversation: vi.fn(),
   useLinkedTickets: vi.fn(),
+  // Not a hook — the toolbar calls it to read the vendor off the conversation,
+  // and mocking the module wholesale would otherwise blank it out.
+  conversationVendorId: (c: { vendor?: { id?: string } | string | null }) =>
+    typeof c?.vendor === 'string' ? c.vendor : (c?.vendor?.id ?? ''),
 }));
 vi.mock('../src/features/inbox/api.js', () => inbox);
-
-// CreateTicketDialog pulls in its own api/auth; stub it to a marker.
-vi.mock('../src/features/tickets/CreateTicketDialog.js', () => ({
-  CreateTicketDialog: () => <div>create-ticket-dialog</div>,
-}));
 
 import { ConversationToolbar } from '../src/features/conversation/ConversationToolbar.js';
 
@@ -58,6 +65,7 @@ function renderToolbar(props: Partial<React.ComponentProps<typeof ConversationTo
 }
 
 beforeEach(() => {
+  navigateSpy.mockClear();
   inbox.useAgents.mockReturnValue({ data: [{ id: 'a1', first_name: 'Bob', email: 'b@x.com' }] });
   inbox.useTeamOptions.mockReturnValue({ data: [{ id: 'tm1', name: 'Support' }] });
   inbox.useTags.mockReturnValue({ data: [{ id: 'tg1', name: 'VIP', color: null }] });
@@ -76,29 +84,18 @@ describe('ConversationToolbar', () => {
     expect(screen.getByLabelText('conversation.priority')).toBeInTheDocument();
   });
 
-  it('opens the create-ticket dialog from the toolbar', async () => {
+  // Raising a ticket is a page, and the SAME page the sidebar's order id opens.
+  // Two shapes for one task is the kind of inconsistency agents work around
+  // instead of reporting, so this pins the destination rather than a dialog.
+  it('sends the agent to the New ticket page, carrying the conversation', async () => {
     renderToolbar();
     await userEvent.click(screen.getByText(/tickets.createTitle/));
-    expect(screen.getByText('create-ticket-dialog')).toBeInTheDocument();
+    expect(navigateSpy).toHaveBeenCalledWith('/tickets/new?conversation=c1');
   });
 
-  // The sidebar's order id opens this same dialog, and the two are siblings —
-  // so the conversation can take ownership of the open state. These cover that
-  // seam: with no props the toolbar still owns it (the test above).
-  it('shows the dialog when a parent opens it — the sidebar order-id path', () => {
-    renderToolbar({ ticketDialogOpen: true, onTicketDialogOpenChange: vi.fn() });
-    expect(screen.getByText('create-ticket-dialog')).toBeInTheDocument();
-  });
-
-  it('delegates to the parent when controlled, rather than opening itself', async () => {
-    const onOpenChange = vi.fn();
-    renderToolbar({ ticketDialogOpen: false, onTicketDialogOpenChange: onOpenChange });
-
+  it('opens no dialog of its own', async () => {
+    renderToolbar();
     await userEvent.click(screen.getByText(/tickets.createTitle/));
-
-    expect(onOpenChange).toHaveBeenCalledWith(true);
-    // Nothing opens until the parent says so — otherwise the toolbar would
-    // fork its own state and the two would drift apart.
-    expect(screen.queryByText('create-ticket-dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { Socket } from 'socket.io-client';
 import {
@@ -68,6 +69,7 @@ export function ConversationView({
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const isDesktop = useIsDesktop();
   const messagesQuery = useMessages(conversationId);
   const conversation = useConversation(conversationId);
@@ -85,9 +87,6 @@ export function ConversationView({
   const [draft, setDraft] = useState('');
   const [internalNote, setInternalNote] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  // Owned here rather than in the toolbar, because the sidebar's order id opens
-  // it too and the two are siblings.
-  const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [mentionMenu, setMentionMenu] = useState<{ query: string; from: number } | null>(null);
   const [pending, setPending] = useState<
     Array<{ id: string; name: string; type: string; size: number; preview?: string }>
@@ -111,7 +110,6 @@ export function ConversationView({
     setDraft('');
     setInternalNote(false);
     setDetailsOpen(false);
-    setTicketDialogOpen(false);
     setMentionMenu(null);
     setPending([]);
     setUploading(false);
@@ -561,14 +559,16 @@ export function ConversationView({
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   };
 
-  // An order id in the sidebar's Orders panel opens the ticket ("New complaint")
-  // dialog for that order. The order itself already rode across as the
-  // conversation's pinned order, so there is nothing to carry here.
+  // An order id in the sidebar's Orders panel opens the New ticket PAGE for that
+  // order — a route, not a dialog, because that is the screen the operations
+  // team already fills in.
+  //
+  // Only the conversation id travels: the order itself rode across as the
+  // conversation's pinned order, which lives in sessionStorage and so survives
+  // both the navigation and a refresh of the new page.
   const openTicketForOrder = () => {
-    // Mobile: the details drawer and the dialog are both `fixed z-50` and the
-    // drawer renders last, so leaving it open would bury the dialog under it.
     setDetailsOpen(false);
-    setTicketDialogOpen(true);
+    navigate(`/tickets/new?conversation=${encodeURIComponent(conversationId)}`);
   };
 
   const copyMessage = (text: string) => {
@@ -591,8 +591,6 @@ export function ConversationView({
             customerPresence={customerPresence}
             onBack={onBack}
             onToggleDetails={() => setDetailsOpen(true)}
-            ticketDialogOpen={ticketDialogOpen}
-            onTicketDialogOpenChange={setTicketDialogOpen}
           />
         )}
 

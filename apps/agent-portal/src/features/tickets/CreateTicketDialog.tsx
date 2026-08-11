@@ -49,6 +49,14 @@ interface Props {
   vendorId: string;
   conversationId?: string | null;
   onClose: () => void;
+  /**
+   * `overlay` floats the form over whatever raised it; `page` drops the modal
+   * chrome so a route can own the layout. Same form either way — the fields,
+   * the pre-fill and the branch attribution are defined once.
+   */
+  chrome?: 'overlay' | 'page';
+  /** The new ticket's id, for callers that navigate to it. */
+  onCreated?: (ticketId: string) => void;
 }
 
 function money(amount: number, currency: string): string {
@@ -126,7 +134,14 @@ function IncludeToggle({
   );
 }
 
-export function CreateTicketDialog({ contactId, vendorId, conversationId, onClose }: Props) {
+export function CreateTicketDialog({
+  contactId,
+  vendorId,
+  conversationId,
+  onClose,
+  chrome = 'overlay',
+  onCreated,
+}: Props) {
   const { t, i18n } = useTranslation();
   const createFromChat = useCreateTicketFromConversation();
   const { user } = useAuth();
@@ -243,7 +258,7 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
       // instead of a wall of pasted text.
       const description = values.description?.trim() || undefined;
 
-      await createFromChat.mutateAsync({
+      const created = await createFromChat.mutateAsync({
         ticket: {
           subject: values.subject,
           description,
@@ -275,26 +290,50 @@ export function CreateTicketDialog({ contactId, vendorId, conversationId, onClos
       toast.success(t('tickets.created', { defaultValue: 'Ticket created' }), {
         description: values.subject,
       });
-      onClose();
+      // Hand the id back BEFORE closing: a page-hosted form navigates to the new
+      // ticket, and closing first would bounce the agent to the inbox on the way.
+      if (created?.id) onCreated?.(created.id);
+      else onClose();
     } catch {
       toast.error(t('tickets.createError'));
     }
   });
 
   const hasChatContext = !!conversationId && (!!latestOrder || sessionFileIds.length > 0);
+  const asPage = chrome === 'page';
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md animate-fade-in"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      // A page is not a dialog. Announcing one as `role="dialog"` with
+      // `aria-modal` tells a screen reader the rest of the app is inert when it
+      // is simply gone, and there is no backdrop to dismiss.
+      {...(asPage
+        ? {}
+        : {
+            role: 'dialog',
+            'aria-modal': true as const,
+            onClick: (e: React.MouseEvent) => {
+              if (e.target === e.currentTarget) onClose();
+            },
+          })}
+      className={cn(
+        asPage
+          ? 'flex min-h-0 flex-1 justify-center overflow-y-auto p-4 sm:p-6'
+          : 'fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md animate-fade-in',
+      )}
     >
       {/* Wide, scrolling sheet rather than the old max-w-md card: this is a
           form with three sections now, and his agents fill it in one pass. */}
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-card shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in">
+      <div
+        className={cn(
+          'flex w-full max-w-2xl flex-col rounded-3xl bg-card ring-1 ring-foreground/[0.06]',
+          asPage
+            ? // On its own page the outer container scrolls, so the sheet grows
+              // with the form instead of trapping a second scrollbar inside it.
+              'h-fit shadow-sm'
+            : 'max-h-[90vh] overflow-hidden shadow-2xl shadow-foreground/15 animate-scale-in',
+        )}
+      >
         <div className="space-y-1.5 px-7 pb-4 pt-7">
           <h3 className="text-xl font-semibold tracking-[-0.02em] text-foreground">
             {t('tickets.createTitle')}

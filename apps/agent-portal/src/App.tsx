@@ -37,6 +37,9 @@ const Inbox = lazy(() => import('./pages/Inbox.js').then((m) => ({ default: m.In
 const TicketsPage = lazy(() =>
   import('./features/tickets/TicketsPage.js').then((m) => ({ default: m.TicketsPage })),
 );
+const NewTicketPage = lazy(() =>
+  import('./features/tickets/NewTicketPage.js').then((m) => ({ default: m.NewTicketPage })),
+);
 const PreferencesPage = lazy(() =>
   import('./features/notifications/PreferencesPage.js').then((m) => ({
     default: m.PreferencesPage,
@@ -501,6 +504,19 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <TicketsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          {/* Before the :ticketId route so "new" is never read as an id. React
+              Router ranks static segments higher anyway, but the ordering says
+              the intent out loud. */}
+          <Route
+            path="/tickets/new"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <NewTicketPage />
                 </Shell>
               </ProtectedRoute>
             }

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeftIcon, Avatar, Button, cn, GhostSelect, InfoIcon, toast } from '@yiji/ui';
 import { SOCKET_EVENTS, type ConversationStatus, type Priority } from '@yiji/shared-types';
 import {
+  conversationVendorId,
   useAgents,
   useLinkedTickets,
   useTeamOptions,
@@ -11,7 +12,6 @@ import {
   type InboxConversation,
 } from '../inbox/api.js';
 import { getSocket } from '../../lib/socket.js';
-import { CreateTicketDialog } from '../tickets/CreateTicketDialog.js';
 
 const STATUSES: ConversationStatus[] = ['open', 'pending', 'resolved', 'closed'];
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
@@ -34,8 +34,6 @@ interface Props {
   /** Optionally lift the Create ticket dialog's open state to the parent, so
    *  something outside the toolbar (the sidebar's order id) can open it too.
    *  Omit both and the toolbar keeps owning the state itself. */
-  ticketDialogOpen?: boolean;
-  onTicketDialogOpenChange?: (open: boolean) => void;
 }
 
 export function ConversationToolbar({
@@ -43,8 +41,6 @@ export function ConversationToolbar({
   customerPresence,
   onBack,
   onToggleDetails,
-  ticketDialogOpen,
-  onTicketDialogOpenChange,
 }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -52,23 +48,18 @@ export function ConversationToolbar({
   const teams = useTeamOptions();
   const update = useUpdateConversation();
   const linkedTickets = useLinkedTickets(conversation.id);
-  const [selfTicketDialog, setSelfTicketDialog] = useState(false);
-  const openTicketDialog = ticketDialogOpen ?? selfTicketDialog;
-  const setOpenTicketDialog = (open: boolean) => {
-    if (onTicketDialogOpenChange) onTicketDialogOpenChange(open);
-    else setSelfTicketDialog(open);
-  };
+  // Raising a ticket is a full page, the same one the sidebar's order id opens.
+  // One screen for one task: two different shapes for "new ticket" is the kind
+  // of inconsistency agents learn around rather than notice.
+  const openNewTicket = () =>
+    navigate(`/tickets/new?conversation=${encodeURIComponent(conversation.id)}`);
   // #6: once a chat is closed/resolved, nudge the agent to turn it into a ticket
   // so no conversation is left without a follow-up record. Dismissible, and reset
   // per conversation so a dismissal doesn't leak across threads.
   const [promptDismissed, setPromptDismissed] = useState(false);
   useEffect(() => setPromptDismissed(false), [conversation.id]);
 
-  const vendorId =
-    (conversation as unknown as { vendor?: { id?: string } | string }).vendor &&
-    typeof (conversation as unknown as { vendor?: { id?: string } | string }).vendor === 'object'
-      ? (conversation as unknown as { vendor: { id: string } }).vendor.id
-      : ((conversation as unknown as { vendor?: string }).vendor ?? '');
+  const vendorId = conversationVendorId(conversation);
 
   const patch = async (p: Parameters<typeof update.mutateAsync>[0]['patch']) => {
     try {
@@ -293,7 +284,7 @@ export function ConversationToolbar({
             variant="default"
             size="sm"
             disabled={!canCreateTicket}
-            onClick={() => setOpenTicketDialog(true)}
+            onClick={openNewTicket}
           >
             + {t('tickets.createTitle')}
           </Button>
@@ -329,7 +320,7 @@ export function ConversationToolbar({
             </span>
           </p>
           <div className="flex shrink-0 items-center gap-1.5">
-            <Button type="button" size="sm" onClick={() => setOpenTicketDialog(true)}>
+            <Button type="button" size="sm" onClick={openNewTicket}>
               {t('tickets.createFromChat', { defaultValue: 'Create ticket' })}
             </Button>
             <Button
@@ -342,15 +333,6 @@ export function ConversationToolbar({
             </Button>
           </div>
         </div>
-      )}
-
-      {openTicketDialog && conversation.contact?.id && vendorId && (
-        <CreateTicketDialog
-          contactId={conversation.contact.id}
-          vendorId={vendorId}
-          conversationId={conversation.id}
-          onClose={() => setOpenTicketDialog(false)}
-        />
       )}
     </>
   );
