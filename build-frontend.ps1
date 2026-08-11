@@ -31,7 +31,7 @@ $mint = @"
         const SECRET = $($secret | ConvertTo-Json);
         const GATEWAY = 'http://localhost:8080';
         const q = new URL(location.href).searchParams, g = (k) => q.get(k) || undefined;
-        const identity = { vendor_id: g('vendor_id') || 'demo-vendor', customer_id: g('customer_id') || 'demo-customer-1', phone: g('phone') || '+966500000001', email: g('email') || 'demo.customer@example.com', name: g('name') || 'Demo Customer' };
+        const identity = { vendor_id: g('vendor_id') || '1', customer_id: g('customer_id') || 'demo-customer-1', phone: g('phone') || '+966500000001', email: g('email') || 'demo.customer@example.com', name: g('name') || 'Demo Customer' };
         const b64u = (b) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         const s64 = (s) => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         (async () => {

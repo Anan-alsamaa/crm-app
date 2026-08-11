@@ -44,7 +44,7 @@ interface CustomerIdentity {
 // Name and email are optional: pass them via URL params to test the "present" case,
 // e.g. ?name=Ahmed&email=ahmed@example.com (they're then forwarded to the CRM).
 const DEFAULT_IDENTITY: CustomerIdentity = {
-  vendor_id: 'demo-vendor',
+  vendor_id: '1',
   customer_id: 'demo-customer-phone',
   phone: '+966555123456',
 };

@@ -265,8 +265,8 @@ jobs:
           fi
 
       - name: Seed demo vendor
-        # The widget chat spec sends vendor_id=demo-vendor in its JWT; the
-        # gateway then looks up vendors where yiji_vendor_id=demo-vendor.
+        # The widget chat spec sends vendor_id=1 in its JWT; the
+        # gateway then looks up vendors where yiji_vendor_id=1.
         # That row is created by hand via the admin portal locally — seed
         # it here so the spec works headless.
         run: |
@@ -275,16 +275,16 @@ jobs:
             -d "{\"email\":\"$DIRECTUS_ADMIN_EMAIL\",\"password\":\"$DIRECTUS_ADMIN_PASSWORD\"}" \
             | jq -r .data.access_token)
           EXISTING=$(curl -sf -H "authorization: Bearer $TOKEN" \
-            'http://localhost:8055/items/vendors?filter[yiji_vendor_id][_eq]=demo-vendor&fields=id&limit=1' \
+            'http://localhost:8055/items/vendors?filter[yiji_vendor_id][_eq]=1&fields=id&limit=1' \
             | jq -r '.data[0].id // empty')
           if [ -z "$EXISTING" ]; then
             curl -sf -X POST http://localhost:8055/items/vendors \
               -H "authorization: Bearer $TOKEN" \
               -H 'content-type: application/json' \
-              -d '{"yiji_vendor_id":"demo-vendor","name":"Demo Vendor","status":"active"}' > /dev/null
-            echo "Seeded demo-vendor"
+              -d '{"yiji_vendor_id":"1","name":"Demo Vendor","status":"active"}' > /dev/null
+            echo "Seeded 1"
           else
-            echo "demo-vendor already present (id=$EXISTING)"
+            echo "1 already present (id=$EXISTING)"
           fi
 
       - name: Start socket-gateway + dev servers

@@ -94,7 +94,7 @@ describe('demo.ts: resolveIdentity via YijiChat.init token', () => {
     expect(opts.gatewayUrl).toBe('http://localhost:8080');
 
     const payload = JSON.parse(opts.token.replace('signed.', '')) as Record<string, unknown>;
-    expect(payload.vendor_id).toBe('demo-vendor');
+    expect(payload.vendor_id).toBe('1');
     expect(payload.phone).toBe('+966555123456');
     // No customer_id param, but a phone default exists -> derived id.
     expect(payload.customer_id).toBe('cust-966555123456');

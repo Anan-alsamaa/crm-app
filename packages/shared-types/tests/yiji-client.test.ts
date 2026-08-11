@@ -22,44 +22,44 @@ describe('MockYijiClient', () => {
   const mock = new MockYijiClient();
 
   it('returns the seeded demo customer', async () => {
-    const c = await mock.getCustomer('demo-vendor', 'demo-customer-1');
+    const c = await mock.getCustomer('1', 'demo-customer-1');
     expect(c).not.toBeNull();
     expect(c?.name).toBe('Demo Customer');
     expect(c?.phone).toBe('+966500000001');
   });
 
   it('returns null for unknown customer', async () => {
-    expect(await mock.getCustomer('demo-vendor', 'no-such')).toBeNull();
+    expect(await mock.getCustomer('1', 'no-such')).toBeNull();
     expect(await mock.getCustomer('other-vendor', 'demo-customer-1')).toBeNull();
   });
 
   it('returns orders ordered newest first by fixture order', async () => {
-    const orders = await mock.getOrders('demo-vendor', 'demo-customer-1');
+    const orders = await mock.getOrders('1', 'demo-customer-1');
     expect(orders.length).toBeGreaterThan(0);
     expect(orders[0]?.orderId).toBe('O-5921');
   });
 
   it('respects the limit option on getOrders', async () => {
-    const all = await mock.getOrders('demo-vendor', 'demo-customer-1');
-    const limited = await mock.getOrders('demo-vendor', 'demo-customer-1', { limit: 1 });
+    const all = await mock.getOrders('1', 'demo-customer-1');
+    const limited = await mock.getOrders('1', 'demo-customer-1', { limit: 1 });
     expect(limited).toHaveLength(1);
     expect(limited[0]).toEqual(all[0]);
   });
 
   it('returns payment status for a known order', async () => {
-    const p = await mock.getPaymentStatus('demo-vendor', 'O-5921');
+    const p = await mock.getPaymentStatus('1', 'O-5921');
     expect(p?.status).toBe('captured');
     expect(p?.method).toBe('mada');
   });
 
   it('returns shipment tracking with at least one event', async () => {
-    const s = await mock.getShipmentTracking('demo-vendor', 'O-5921');
+    const s = await mock.getShipmentTracking('1', 'O-5921');
     expect(s?.carrier).toBe('SMSA');
     expect(s?.events.length).toBeGreaterThanOrEqual(2);
   });
 
   it('returns purchase activity with lifetime value', async () => {
-    const a = await mock.getPurchaseActivity('demo-vendor', 'demo-customer-1');
+    const a = await mock.getPurchaseActivity('1', 'demo-customer-1');
     expect(a?.lifetimeValue).toBeGreaterThan(0);
     expect(a?.orderCount).toBeGreaterThan(0);
     expect(a?.recent.length).toBeGreaterThan(0);

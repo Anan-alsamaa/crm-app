@@ -75,8 +75,8 @@ async function main(): Promise<void> {
   }
 
   // Vendor (also seeded by CI / the brief; ensure it exists here too).
-  const vendor = await getOrCreate('vendors', 'filter[yiji_vendor_id][_eq]=demo-vendor', {
-    yiji_vendor_id: 'demo-vendor',
+  const vendor = await getOrCreate('vendors', 'filter[yiji_vendor_id][_eq]=1', {
+    yiji_vendor_id: '1',
     name: 'Demo Vendor',
     status: 'active',
   });

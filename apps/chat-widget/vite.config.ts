@@ -46,7 +46,7 @@ function widgetHostPage(secret: string, gatewayUrl: string): Plugin {
         var GATEWAY = ${JSON.stringify(gatewayUrl)};
         var SECRET = ${JSON.stringify(secret)};
         var DEFAULTS = {
-          vendor_id: 'demo-vendor',
+          vendor_id: '1',
           customer_id: 'demo-customer-1',
           phone: '+966500000001',
           email: 'demo.customer@example.com',

@@ -41,7 +41,7 @@ function key(vendorId: string, id: string): string {
 }
 
 /**
- * Build the default fixture set. The `demo-vendor` + `demo-customer-1`
+ * Build the default fixture set. The `1` + `demo-customer-1`
  * shapes match the chat widget demo so opening the demo customer's profile
  * in the agent portal shows realistic data end-to-end.
  */
@@ -54,7 +54,7 @@ function defaultFixtures(): MockFixtures {
     activityByCustomer: new Map(),
   };
 
-  const vendorId = 'demo-vendor';
+  const vendorId = '1';
   const cust: YijiCustomer = {
     externalCustomerId: 'demo-customer-1',
     name: 'Demo Customer',
