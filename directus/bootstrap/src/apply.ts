@@ -561,6 +561,52 @@ async function applyServiceUsers(client: AnyClient): Promise<void> {
   }
 }
 
+/**
+ * Prove the direct Postgres connection is the SAME database Directus writes to,
+ * before running a single line of raw SQL.
+ *
+ * Everything above this point goes through the Directus HTTP API, so it always
+ * lands on the right database. The constraints step is the one place we open our
+ * own socket — and a connection to the WRONG Postgres does not error. It
+ * connects, it runs `CREATE INDEX IF NOT EXISTS`, it succeeds, and the bootstrap
+ * prints a clean run while the live database gained nothing. That is exactly
+ * what happened here: `postgres` was not published to the host, so DB_PORT fell
+ * back to 5432 — an unrelated native PostgreSQL install with an old copy of the
+ * schema — and every index went there, silently, for as long as it had been set
+ * up that way.
+ *
+ * The check: every field this file just declared through the API must be visible
+ * over the direct connection. Table names alone are too weak (a stale copy has
+ * those too); a freshly added column is the thing only the real database can
+ * have. Mismatch = abort, because writing to the wrong database is worse than
+ * not writing at all.
+ */
+async function assertSameDatabase(pool: pg.Pool, where: string): Promise<void> {
+  const { rows } = await pool.query<{ table_name: string; column_name: string }>(
+    `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'`,
+  );
+  const present = new Set(rows.map((r) => `${r.table_name}.${r.column_name}`));
+  const missing: string[] = [];
+  for (const spec of collections) {
+    for (const field of spec.fields) {
+      if (!present.has(`${spec.collection}.${field.field}`)) {
+        missing.push(`${spec.collection}.${field.field}`);
+      }
+    }
+  }
+  if (missing.length === 0) return;
+  const shown = missing.slice(0, 8).join(', ');
+  const more = missing.length > 8 ? ` (+${missing.length - 8} more)` : '';
+  throw new Error(
+    `Refusing to run raw SQL: ${where} is NOT the database Directus is using.\n` +
+      `  ${missing.length} field(s) applied via the API a moment ago are missing there: ${shown}${more}\n` +
+      `  Point DB_HOST_EXTERNAL/DB_PORT_EXTERNAL at the Postgres behind Directus.\n` +
+      `  Locally that is the compose container's published port (docker-compose.yml\n` +
+      `  maps it to 127.0.0.1:\${DB_PORT_EXTERNAL:-5434}); note that ports 5432/5433\n` +
+      `  may belong to a native PostgreSQL install that is NOT this project's database.`,
+  );
+}
+
 async function applyConstraints(): Promise<void> {
   // Raw-SQL partial-unique indexes target the Postgres deployment. The local
   // SQLite dev instance skips them (Directus + the app layer still enforce the
@@ -573,7 +619,10 @@ async function applyConstraints(): Promise<void> {
   console.log('Indexes & constraints (raw SQL):');
   const env = loadEnv();
   const pool = new pg.Pool(env.db);
+  const where = `${env.db.host}:${env.db.port}/${env.db.database}`;
   try {
+    await assertSameDatabase(pool, where);
+    console.log(`  = target ${where} confirmed as the database behind Directus`);
     for (const sql of constraintStatements) {
       // Log `=` vs `+` honestly so the idempotence check (check-idempotence.mjs)
       // can assert "second apply created nothing" — `CREATE ... IF NOT EXISTS`

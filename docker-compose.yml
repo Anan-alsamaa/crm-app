@@ -11,6 +11,17 @@ services:
       POSTGRES_DB: ${DB_DATABASE:-yiji_crm}
       POSTGRES_USER: ${DB_USER:-directus}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-directus}
+    # Dev-only: publish to the host so tools that run OUTSIDE the docker network
+    # can reach this database — chiefly the bootstrap's raw-SQL constraints step,
+    # which talks to Postgres directly rather than through the Directus API.
+    #
+    # Not 5432/5433: this machine already runs native PostgreSQL 17 on 5432 and
+    # 15 on 5433. Without this mapping the bootstrap fell back to localhost:5432
+    # and wrote its indexes into the unrelated native install — succeeding, and
+    # reporting success, against the wrong database. Bound to 127.0.0.1 (same as
+    # redis below) and NOT published in production.
+    ports:
+      - '127.0.0.1:${DB_PORT_EXTERNAL:-5434}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

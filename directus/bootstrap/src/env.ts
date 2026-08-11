@@ -26,8 +26,18 @@ export function loadEnv(): BootstrapEnv {
     adminEmail: req('DIRECTUS_ADMIN_EMAIL'),
     adminPassword: req('DIRECTUS_ADMIN_PASSWORD'),
     db: {
-      host: process.env.DB_HOST ?? 'localhost',
-      port: Number(process.env.DB_PORT ?? 5432),
+      /* DB_HOST/DB_PORT are the CONTAINER's view of Postgres (docker-compose
+       * passes them to Directus as `postgres:5432`). This bootstrap runs on the
+       * HOST, where that name does not resolve and that port belongs to whatever
+       * else is installed locally — so the two vantage points need separate
+       * values. DB_HOST_EXTERNAL/DB_PORT_EXTERNAL are the host-side pair,
+       * matching the `ports:` mapping in docker-compose.yml.
+       *
+       * Falling back to DB_HOST/DB_PORT keeps a deployment that runs bootstrap
+       * INSIDE the network (or against a managed Postgres, where there is only
+       * one address) working unchanged. */
+      host: process.env.DB_HOST_EXTERNAL ?? process.env.DB_HOST ?? 'localhost',
+      port: Number(process.env.DB_PORT_EXTERNAL ?? process.env.DB_PORT ?? 5432),
       database: process.env.DB_DATABASE ?? 'yiji_crm',
       user: process.env.DB_USER ?? 'directus',
       password: process.env.DB_PASSWORD ?? 'directus',
