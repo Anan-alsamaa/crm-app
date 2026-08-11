@@ -30,6 +30,10 @@ test-results/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+# Detached dev servers (PowerShell Start-Process) split stdout/stderr into
+# <name>.log.out / <name>.log.err, which `*.log` does not match.
+*.log.out
+*.log.err
 
 # Editor / OS
 .DS_Store
