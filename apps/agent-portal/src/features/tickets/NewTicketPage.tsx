@@ -53,7 +53,10 @@ export function NewTicketPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // h-full, not flex-1: the shell's <main> has a definite height but is not
+    // itself a flex container, so flex-1 here resolved to nothing and the form
+    // collapsed to content height, leaving dead canvas under it.
+    <div className="flex h-full min-h-0 flex-col">
       <CreateTicketDialog
         contactId={contactId}
         vendorId={vendorId}

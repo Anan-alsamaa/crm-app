@@ -595,7 +595,11 @@ export function ComplaintSection({
         <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">{title}</h2>
         {hint && <span className="ms-auto shrink-0 text-2xs text-muted-foreground">{hint}</span>}
       </header>
-      <div className="space-y-4">{children}</div>
+      {/* Capped, not full-bleed. On a 1920 monitor a half-width column is
+          ~800px, and an 800px-wide single-line input reads as a mistake: the
+          field is nowhere near that much content, and the eye has to travel the
+          whole span to find the caret. */}
+      <div className="max-w-[40rem] space-y-4">{children}</div>
     </section>
   );
 }
