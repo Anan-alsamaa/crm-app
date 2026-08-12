@@ -33,7 +33,8 @@
     "pending": "Pending",
     "resolved": "Resolved",
     "closed": "Closed",
-    "new": "New"
+    "new": "New",
+    "solved": "Solved"
   },
   "priority": {
     "low": "Low",

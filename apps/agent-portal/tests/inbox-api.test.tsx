@@ -88,7 +88,7 @@ describe('inbox api — mutation hooks', () => {
   it('useUpdateConversation patches and resolves', async () => {
     request.mockResolvedValueOnce({ id: 'c1' });
     const { result } = renderHook(() => useUpdateConversation(), { wrapper: wrapper() });
-    await result.current.mutateAsync({ id: 'c1', patch: { status: 'closed' } });
+    await result.current.mutateAsync({ id: 'c1', patch: { status: 'solved' } });
     expect(request).toHaveBeenCalledTimes(1);
   });
 

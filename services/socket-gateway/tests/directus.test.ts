@@ -179,8 +179,9 @@ describe('GatewayDirectus.persistMessage', () => {
       content: 'my order never arrived',
     });
     const { body } = await sentAt(2);
-    // Back into the agent's queue, and the unread bookkeeping still runs.
-    expect(body).toMatchObject({ status: 'pending', unread_count_agent: 3 });
+    // Back into the agent's queue as 'open' — 'pending' is retired. A legacy
+    // 'resolved' row still reopens, which is why the fixture uses it.
+    expect(body).toMatchObject({ status: 'open', unread_count_agent: 3 });
   });
 
   it('leaves the status alone when the conversation is already live', async () => {

@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeftIcon, Avatar, Button, cn, GhostSelect, InfoIcon, toast } from '@yiji/ui';
-import { SOCKET_EVENTS, type ConversationStatus, type Priority } from '@yiji/shared-types';
+import {
+  SOCKET_EVENTS,
+  normaliseConversationStatus,
+  type ConversationStatus,
+  type Priority,
+} from '@yiji/shared-types';
 import {
   conversationVendorId,
   useAgents,
@@ -132,9 +137,7 @@ export function ConversationToolbar({
 
   const statusDot: Record<ConversationStatus, string> = {
     open: 'bg-success',
-    pending: 'bg-warning',
-    resolved: 'bg-primary',
-    closed: 'bg-muted-foreground/50',
+    solved: 'bg-primary',
   };
 
   // A conversation carries at most one ticket (SC-013). If it already has one we
@@ -142,10 +145,11 @@ export function ConversationToolbar({
   // reject on the unique constraint).
   const existingTicket = linkedTickets.data?.[0] ?? null;
   const canCreateTicket = !!conversation.contact?.id && !!vendorId;
-  // The agent sees two states, but the column still holds four. `closed` is
-  // treated as solved so historical threads read correctly, and `open` as not
-  // solved — every conversation the gateway creates starts there.
-  const isSolved = conversation.status === 'resolved' || conversation.status === 'closed';
+  // Read through the normaliser rather than comparing directly: a database that
+  // has not run scripts/migrate-conversation-status.mjs still holds 'resolved'
+  // and 'closed', and a strict compare would show those finished chats as
+  // unfinished work.
+  const isSolved = normaliseConversationStatus(conversation.status) === 'solved';
   // #6: prompt to spin a ticket out of a chat that's been closed/resolved but has
   // no ticket yet. Suppressed once dismissed, once a ticket exists, or when we
   // lack the ids needed to create one.
@@ -282,7 +286,7 @@ export function ConversationToolbar({
             variant={isSolved ? 'outline' : 'success'}
             size="sm"
             iconStart={isSolved ? undefined : <CheckIcon />}
-            onClick={() => void patch({ status: isSolved ? 'pending' : 'resolved' })}
+            onClick={() => void patch({ status: isSolved ? 'open' : 'solved' })}
             title={
               isSolved
                 ? t('conversation.solvedHint', {
@@ -292,7 +296,7 @@ export function ConversationToolbar({
             }
           >
             {isSolved
-              ? t('conversation.markPending', { defaultValue: 'Mark pending' })
+              ? t('conversation.markOpen', { defaultValue: 'Reopen' })
               : t('conversation.markSolved', { defaultValue: 'Mark as solved' })}
           </Button>
 

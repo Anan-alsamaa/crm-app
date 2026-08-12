@@ -136,6 +136,10 @@ export class GatewayDirectus {
   ): Promise<{ id: string; created: boolean }> {
     const live = (await this.client.request(
       readItems('conversations', {
+        // 'pending' is retired (see ConversationStatus) but stays in this
+        // filter on purpose: on a database that has not run
+        // scripts/migrate-conversation-status.mjs yet, dropping it would not
+        // error, it would open a second conversation for a returning customer.
         filter: { contact: { _eq: contactId }, status: { _in: ['open', 'pending'] } },
         fields: ['id'],
         sort: ['-last_message_at'],
@@ -214,8 +218,12 @@ export class GatewayDirectus {
         //
         // Done here, not in the portal, because the reopen has to happen when
         // nobody has the conversation open — which is the normal case.
+        // Reopen a finished chat when the customer writes again. Retired
+        // values are still matched so an un-migrated row reopens too.
         const status = rows[0]?.status;
-        if (status === 'resolved' || status === 'closed') patch.status = 'pending';
+        if (status === 'solved' || status === 'resolved' || status === 'closed') {
+          patch.status = 'open';
+        }
       } else if (input.senderType === 'agent') {
         patch.unread_count_agent = 0;
       }
