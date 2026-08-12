@@ -45,10 +45,12 @@ function TypeToggle({
       disabled={busy}
       aria-pressed={enabled}
       className={cn(
-        'rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition-colors duration-fast ease-out disabled:opacity-60',
+        'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast ease-out disabled:opacity-60',
         enabled
-          ? 'bg-primary text-primary-foreground ring-primary'
-          : 'bg-card text-muted-foreground ring-border hover:text-foreground',
+          ? 'bg-primary text-primary-foreground'
+          : // Filled, not outlined: on a white card a hairline ring is
+            // invisible, and these stop reading as controls at all.
+            'bg-secondary text-muted-foreground hover:text-foreground',
       )}
     >
       {type}
