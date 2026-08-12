@@ -22,6 +22,7 @@ import {
   complaintHasErrors,
   complaintPatch,
   complaintFromConversation,
+  nowLocalInput,
   serviceTypeFromOrder,
   type ComplaintValues,
 } from './ComplaintFields.js';
@@ -189,7 +190,13 @@ export function CreateTicketDialog({
 
   const [includeOrder, setIncludeOrder] = useState(true);
   const [includeFiles, setIncludeFiles] = useState(true);
-  const [complaint, setComplaint] = useState<ComplaintValues>(complaintFromConversation);
+  // Seeded lazily with "now": a module-level default would freeze at import
+  // and stamp every complaint with the time the tab was opened. The agent can
+  // still change it — a complaint phoned in yesterday belongs to yesterday.
+  const [complaint, setComplaint] = useState<ComplaintValues>(() => ({
+    ...complaintFromConversation,
+    complaint_date: nowLocalInput(),
+  }));
 
   // The order already knows how it was fulfilled, so pre-fill service type
   // rather than making the agent read it off the card and retype it. Only fills

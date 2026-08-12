@@ -18,6 +18,8 @@ export interface TicketAttachment {
  * the two coupon numbers are real numbers so compensation can be summed.
  */
 export interface TicketComplaintFields {
+  /** When the complaint happened, as opposed to when the ticket was raised. */
+  complaint_date: string | null;
   complaint_type: string | null;
   service_type: string | null;
   complaint_source: string | null;
@@ -31,6 +33,7 @@ export interface TicketComplaintFields {
 
 /** Field names as Directus stores them — reused by every read that needs them. */
 export const COMPLAINT_FIELDS = [
+  'complaint_date',
   'complaint_type',
   'service_type',
   'complaint_source',

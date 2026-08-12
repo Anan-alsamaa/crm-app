@@ -43,6 +43,7 @@ import {
   complaintPatch,
   optionLabel,
   storeLabel,
+  toDateInput,
   type ComplaintValues,
 } from './ComplaintFields.js';
 import { useStoreIndex, useStores } from './useStoreMatch.js';
@@ -958,6 +959,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
   // unset; the form works in strings, so normalise on the way in.
   const stored: ComplaintValues = useMemo(
     () => ({
+      complaint_date: toDateInput(ticket.complaint_date),
       complaint_type: ticket.complaint_type ?? '',
       service_type: ticket.service_type ?? '',
       complaint_source: ticket.complaint_source ?? '',
@@ -993,6 +995,10 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
     [
       t('complaint.branch', { defaultValue: 'Restaurant / branch' }),
       branch ? storeLabel(branch) : '',
+    ],
+    [
+      t('complaint.date', { defaultValue: 'Complaint date' }),
+      stored.complaint_date ? stored.complaint_date.replace('T', ' ') : '',
     ],
     [t('complaint.type', { defaultValue: 'Complaint type' }), stored.complaint_type],
     [t('complaint.serviceType', { defaultValue: 'Service type' }), stored.service_type],

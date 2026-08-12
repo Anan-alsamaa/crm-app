@@ -604,7 +604,9 @@
     "ticket": "التذكرة",
     "context": "معلومات مرجعية",
     "readOnly": "للقراءة فقط",
-    "optional": "اختياري"
+    "optional": "اختياري",
+    "date": "تاريخ الشكوى",
+    "dateHint": "وقت حدوثها"
   },
   "complaints": {
     "title": "شكاواي",

@@ -593,7 +593,9 @@
     "ticket": "Ticket",
     "context": "Context",
     "readOnly": "Read only",
-    "optional": "Optional"
+    "optional": "Optional",
+    "date": "Complaint date",
+    "dateHint": "When it happened"
   },
   "complaints": {
     "title": "My complaints",
