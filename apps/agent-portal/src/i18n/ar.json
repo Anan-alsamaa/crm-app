@@ -1,7 +1,7 @@
 {
   "brandName": "YIJI CRM",
-  "portalName": "وكيل",
-  "portalFullName": "YIJI CRM · وكيل",
+  "portalName": "المستخدم",
+  "portalFullName": "YIJI CRM · المستخدم",
   "auth": {
     "sessionExpired": "انتهت جلستك. يُرجى تسجيل الدخول مرة أخرى."
   },
@@ -555,7 +555,7 @@
     "unclassified": "غير مصنّف"
   },
   "app": {
-    "workspace": "مساحة عمل الموظف"
+    "workspace": "مساحة عمل المستخدم"
   },
   "reset": {
     "title": "اختر كلمة مرور جديدة",
