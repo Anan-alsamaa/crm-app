@@ -92,27 +92,27 @@ describe('ConversationToolbar', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Mark as solved/ }));
 
-    expect(mutateAsync).toHaveBeenCalledWith({ id: 'c1', patch: { status: 'resolved' } });
+    expect(mutateAsync).toHaveBeenCalledWith({ id: 'c1', patch: { status: 'solved' } });
   });
 
-  it('flips to "Mark pending" once solved, and back again', async () => {
+  it('flips to Reopen once solved, and back again', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({});
     inbox.useUpdateConversation.mockReturnValue({ mutateAsync });
-    renderToolbar({ conversation: { ...conversation, status: 'resolved' } as never });
+    renderToolbar({ conversation: { ...conversation, status: 'solved' } as never });
 
     // Solved is a terminal state for the agent: the only thing left to offer is
     // putting the case back into play.
     expect(screen.queryByRole('button', { name: /Mark as solved/ })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /Mark pending/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Reopen/ }));
 
-    expect(mutateAsync).toHaveBeenCalledWith({ id: 'c1', patch: { status: 'pending' } });
+    expect(mutateAsync).toHaveBeenCalledWith({ id: 'c1', patch: { status: 'open' } });
   });
 
   it('treats a legacy closed conversation as solved', () => {
-    // The column still holds four values; `closed` predates the two-state model
-    // and must not show up as an unfinished case.
+    // 'closed' predates the two-state model. A database that has not run the
+    // migration still holds it, and it must not read as an unfinished case.
     renderToolbar({ conversation: { ...conversation, status: 'closed' } as never });
-    expect(screen.getByRole('button', { name: /Mark pending/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Reopen/ })).toBeInTheDocument();
   });
 
   // Raising a ticket is a page, and the SAME page the sidebar's order id opens.

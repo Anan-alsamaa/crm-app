@@ -584,7 +584,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     // (in the conversation room) so it surfaces the post-chat CSAT survey.
     try {
       const status = await directus.getConversationStatus(conversationId);
-      if (status === 'closed' || status === 'resolved') {
+      if (status === 'solved' || status === 'closed' || status === 'resolved') {
         io.to(rooms.conversation(conversationId)).emit('conversation:closed', {
           conversationId,
           status,

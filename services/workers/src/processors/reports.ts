@@ -315,7 +315,9 @@ export async function reportVendorActivity(
     const b = byVendor.get(v) ?? { total: 0, open: 0, resolved: 0 };
     b.total += 1;
     if (c.status === 'open') b.open += 1;
-    if (c.status === 'resolved' || c.status === 'closed') b.resolved += 1;
+    if (c.status === 'solved' || c.status === 'resolved' || c.status === 'closed') {
+      b.resolved += 1;
+    }
     byVendor.set(v, b);
   }
   const rows: string[][] = [['vendor_id', 'conversations', 'open', 'resolved']];

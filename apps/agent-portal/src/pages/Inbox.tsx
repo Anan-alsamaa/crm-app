@@ -32,14 +32,12 @@ import { ConversationView } from '../features/conversation/ConversationView.js';
 import { useAuth } from '../lib/auth/AuthContext.js';
 import { getSocket } from '../lib/socket.js';
 
-const STATUSES: ConversationStatus[] = ['open', 'pending', 'resolved', 'closed'];
+const STATUSES: ConversationStatus[] = ['open', 'solved'];
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 
-const STATUS_TONE: Record<ConversationStatus, 'success' | 'warning' | 'muted' | 'primary'> = {
+const STATUS_TONE: Record<ConversationStatus, 'success' | 'primary'> = {
   open: 'success',
-  pending: 'warning',
-  resolved: 'primary',
-  closed: 'muted',
+  solved: 'primary',
 };
 
 async function broadcast(conversationId: string): Promise<void> {

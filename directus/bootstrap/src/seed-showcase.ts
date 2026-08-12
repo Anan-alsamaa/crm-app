@@ -260,7 +260,7 @@ async function main(): Promise<void> {
           method: 'POST',
           body: JSON.stringify({
             // No `subject` on conversations — the ticket carries it.
-            status: pick(['open', 'pending', 'resolved', 'closed'] as const),
+            status: pick(['open', 'open', 'solved'] as const),
             priority: pick(['low', 'medium', 'medium', 'high', 'urgent'] as const),
             contact,
             vendor,
@@ -311,6 +311,7 @@ async function main(): Promise<void> {
                     : 'closed';
           const respondedAt = openedAt + firstResponseMin * 60_000;
           const resolvedAt = openedAt + resolutionMin * 60_000;
+          // TICKET status, which still has five values — not the chat's two.
           const done = status === 'resolved' || status === 'closed';
 
           await api('/items/tickets', {

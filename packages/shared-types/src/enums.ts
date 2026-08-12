@@ -8,8 +8,34 @@ export type Locale = z.infer<typeof Locale>;
 export const VendorStatus = z.enum(['active', 'inactive']);
 export type VendorStatus = z.infer<typeof VendorStatus>;
 
-export const ConversationStatus = z.enum(['open', 'pending', 'resolved', 'closed']);
+/**
+ * A chat is either being worked or it is finished. Two states, deliberately.
+ *
+ * It used to carry four (`pending`, `resolved`, `closed` as well) and agents
+ * had to decide between three shades of "not open" that no report distinguished
+ * anyway. Retired values are migrated, not merely dropped from this list:
+ * `pending` -> `open`, and `resolved`/`closed` -> `solved`. Narrowing the enum
+ * alone would leave rows holding a value no filter matches, so those chats
+ * would vanish from the inbox rather than error.
+ *
+ * TICKET status is separate and still has its own five; do not unify them.
+ */
+export const ConversationStatus = z.enum(['open', 'solved']);
 export type ConversationStatus = z.infer<typeof ConversationStatus>;
+
+/** What each retired chat status becomes. Used by the migration and by readers
+ *  of historical rows that predate it. */
+export const RETIRED_CONVERSATION_STATUS: Record<string, ConversationStatus> = {
+  pending: 'open',
+  resolved: 'solved',
+  closed: 'solved',
+};
+
+/** Normalise any stored chat status, including the retired ones. */
+export function normaliseConversationStatus(raw: string | null | undefined): ConversationStatus {
+  if (raw === 'open' || raw === 'solved') return raw;
+  return RETIRED_CONVERSATION_STATUS[raw ?? ''] ?? 'open';
+}
 
 export const TicketStatus = z.enum(['new', 'open', 'pending', 'resolved', 'closed']);
 export type TicketStatus = z.infer<typeof TicketStatus>;

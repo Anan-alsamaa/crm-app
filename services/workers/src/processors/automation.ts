@@ -297,6 +297,7 @@ export async function runInactivitySweep(deps: InactivitySweepDeps): Promise<voi
       // `_lt` already excludes nulls; `_and` keeps the two field conditions
       // unambiguous for the SDK's filter serialization.
       filter: {
+        // 'pending' retired but tolerated, as in the gateway.
         _and: [{ status: { _in: ['open', 'pending'] } }, { last_message_at: { _lt: cutoff } }],
       },
       fields: ['id', 'last_message_at'],

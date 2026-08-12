@@ -57,7 +57,7 @@ describe('useUpdateConversation — assignment notification', () => {
   it('does NOT notify for an unrelated patch (status/priority only)', async () => {
     request.mockResolvedValueOnce({ id: 'c1' });
     const { result } = renderHook(() => useUpdateConversation(), { wrapper: wrapper() });
-    await result.current.mutateAsync({ id: 'c1', patch: { status: 'closed' } });
+    await result.current.mutateAsync({ id: 'c1', patch: { status: 'solved' } });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(notifySpy).not.toHaveBeenCalled();
   });

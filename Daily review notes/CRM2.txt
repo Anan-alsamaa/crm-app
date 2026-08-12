@@ -1,35 +1,38 @@
-in inbox, search by order id also
+in inbox,chat search(currently only name or phone)also wantto search it by order id also
 
-ai sssistance repoly both arabic and english.
-
-
-in add ticket when created, description and resolution notes to be sent to the stores.
-
-in the ticket evert back, no need table in agent. change mark 1st response to mark as solved.
-
-agent performnce
+implement The ai assistance option in chat, which we had before but removed it recently. also if it could repoly both arabic and english.
 
 
-add new agent kpi section in both portal. in agent, should be able to be redirected to the chat on click. on admin just display the data.
-filter: agent
-meeting & not meeting sla
+in add ticket when created, description and resolution notes to be sent to the stores. (this feature could be implemented later as it requires integration with pos api)
+
+in the ticket, revert back, no need table in agent portal. Lets go back to how it was displayed earlier.
+
+change mark 1st response to mark as solved in ticket. 
+
+need new section in agent and admin portal: agent performnce
+
+in agent, should be able to be redirected to the chat on click(this feature can simply redirect to the inbox section to the specific customers chat). in admin just display the data. no need to be redirected or to e showing the inbox.
+first filter by agent
+2 pages/ 2 filters: meeting & not meeting sla (basically metrics for a specific/all users based on the 2 sections)
 date filter
 
-chat: first response
-total chat timing until marked close.
+2 data is mainly required for the agents to measure them:
+chat: first response (the first response from the agent to the customers 1st message)
+total chat timing until marked close. (the total time to mark a chat solved from the inbox.)
 
 
-agent
-chat status. 
+in agent portal-> inbox: please fix the status and stuff which are redundant. as now we have only open/pending and solved. there should only be 2 status for the chat.
 
-in dashboard: new report with compensation issued.
+in dashboard: new report with compensation issued. just define the new section. dont populate it or put the logic. 
 
-When a agent submit to assign a coupon, the superviser must a[pprove it
+When a agent submit to assign a coupon, the superviser must approve it. these features to be properly implemented in future.
 
-from the admin dashboard, remove the search.
+from the admin portal, in the dashboard, remove the search button as not required.
 in restaurants widen the dropdown to display the complete restaurant name.
-in the filters wherever there is brand and restaurant, whenever brand is selected, in the restaurant only the restaurants within that brand should be displayed.
+in the filters wherever there is brand and restaurant, whenever brand is selected, only the restaurants within that brand should be displayed.
 
-in the admin portal, stores page: the import csv should also be applicable to modify the existing stores.
+in the admin portal, stores page: the import csv should also be applicable to modify the existing stores. thre has to be some common data which is used as reference between the excel and the stores data is used to detect the same entry and then the excel value should be updated for that branch. 
 
 Rename the agent portal to the user portal. 
+
+

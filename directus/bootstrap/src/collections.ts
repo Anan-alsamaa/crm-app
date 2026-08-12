@@ -10,6 +10,7 @@ import {
   Compensation,
   ComplaintSource,
   ComplaintType,
+  ConversationStatus,
   ServiceType,
 } from '@yiji/shared-types';
 
@@ -149,9 +150,12 @@ export const collections: CollectionSpec[] = [
     collection: 'conversations',
     fields: [
       {
+        // Two states only — see ConversationStatus. Retired values are migrated
+        // by scripts/migrate-conversation-status.mjs, not just dropped here:
+        // bootstrap reconciles whether a field EXISTS, not what is stored in it.
         field: 'status',
         type: 'string',
-        choices: ['open', 'pending', 'resolved', 'closed'],
+        choices: [...ConversationStatus.options],
         defaultValue: 'open',
       },
       { field: 'priority', type: 'string', choices: PRIORITY, defaultValue: 'medium' },
