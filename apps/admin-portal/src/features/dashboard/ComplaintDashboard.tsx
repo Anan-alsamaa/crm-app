@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, cn, Drawer, ErrorState, Input, SelectMenu, Skeleton } from '@yiji/ui';
 import {
@@ -614,13 +614,26 @@ export function ComplaintDashboard() {
         rows: (d?.rows ?? []).filter((r) => keyOf(r) === row.key && (extra ? extra(r) : true)),
       });
 
+  // Picking a brand narrows the restaurants to that brand's branches. There
+  // are 132 of them across four brands, and a list that ignores the brand you
+  // just chose is a list you have to read rather than pick from.
   const storeChoices = useMemo(
     () => [
       { value: '', label: t('complaintDash.allRestaurants', { defaultValue: 'All restaurants' }) },
-      ...(d?.storeOptions ?? []).map((s) => ({ value: s.id, label: s.name })),
+      ...(d?.storeOptions ?? [])
+        .filter((s) => !draft.brand || s.brandId === draft.brand)
+        .map((s) => ({ value: s.id, label: s.name })),
     ],
-    [d?.storeOptions, t],
+    [d?.storeOptions, draft.brand, t],
   );
+
+  // A restaurant left selected after switching brand is a filter that is set
+  // but no longer visible in its own dropdown, which silently returns nothing.
+  useEffect(() => {
+    if (!draft.store) return;
+    const stillListed = storeChoices.some((c) => c.value === draft.store);
+    if (!stillListed) setDraft((f) => ({ ...f, store: '' }));
+  }, [draft.brand, draft.store, storeChoices]);
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(applied);
   const anyFilter = Object.values(applied).some(Boolean);
@@ -702,6 +715,9 @@ export function ComplaintDashboard() {
           </span>
           <SelectMenu
             size="sm"
+            // Branch names run to "LCP-053 Othaim Mall Khurais Road"; at the
+            // default width they all truncated to the store code.
+            className="w-[16rem]"
             value={draft.store}
             onChange={(v) => setDraft((f) => ({ ...f, store: v }))}
             aria-label={t('complaintDash.restaurant', { defaultValue: 'Restaurant' })}

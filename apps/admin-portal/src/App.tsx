@@ -11,7 +11,6 @@ import {
   cn,
   DownloadIcon,
   ErrorBoundary,
-  SearchTrigger,
   ShieldIcon,
   SignOutIcon,
   SparkleIcon,
@@ -331,12 +330,6 @@ function Shell({ children }: { children: React.ReactNode }) {
         topBarBrand={<MobileBrand />}
         topBarActions={
           <div className="flex items-center gap-1.5 text-muted-foreground">
-            <SearchTrigger
-              label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
-              aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
-              onClick={() => setPaletteOpen(true)}
-              className="hidden sm:inline-flex"
-            />
             <HelpAssistant />
           </div>
         }
@@ -360,16 +353,9 @@ function Shell({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             </div>
-            {/* Center: the search field */}
-            <div className="flex w-full max-w-sm justify-center">
-              <SearchTrigger
-                fullWidth
-                tone="dark"
-                label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
-                aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
-                onClick={() => setPaletteOpen(true)}
-              />
-            </div>
+            {/* No search field here by request. The command palette is still
+                bound to Cmd/Ctrl+K, so nothing is unreachable — only the
+                permanent chrome for it is gone. */}
             {/* End: utility cluster + user chip + sign out */}
             <div className="flex flex-1 items-center justify-end gap-2">
               <div

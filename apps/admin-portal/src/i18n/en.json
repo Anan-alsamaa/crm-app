@@ -91,7 +91,10 @@
     "unmappedStores": "{{n}} of those could not be matched to a store. Add the missing branches under Restaurants → Stores so this ranking is complete.",
     "storeBasis": "From {{total}} of {{all}} tickets that have a linked order.",
     "tabComplaints": "Complaints",
-    "tabSupport": "Support activity"
+    "tabSupport": "Support activity",
+    "compensationIssued": "Compensation issued",
+    "notWiredYet": "Not reporting yet",
+    "compensationIssuedHint": "Coupon value and compensation are already recorded on every ticket. This panel starts reporting once the rules for it are agreed."
   },
   "automation": {
     "title": "Automation",
@@ -718,7 +721,9 @@
     "importUnknownCols": "ignored columns: {{cols}}",
     "importEmpty": "No usable rows found — expected a Restaurant column.",
     "importError": "Import failed.",
-    "yijiRestaurantIdLocked": "Only the Administrator can change this. It is the join key to the order feed: a wrong value does not error, it silently reports tickets against the wrong branch."
+    "yijiRestaurantIdLocked": "Only the Administrator can change this. It is the join key to the order feed: a wrong value does not error, it silently reports tickets against the wrong branch.",
+    "importUpdated": "{{n}} updated",
+    "importExisting": "{{n}} unchanged"
   },
   "complaintDash": {
     "nothingInRange": "Nothing in this range.",

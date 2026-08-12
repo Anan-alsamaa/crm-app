@@ -250,10 +250,14 @@ export function StoresPage() {
       // import is how a store goes missing from every later report. "Already
       // present" is stated even when it is the whole file, so re-running the
       // same upload reads as a no-op rather than as a failure.
+      // Three counts, never merged: "updated" is the one that says the sheet
+      // CHANGED existing branches, and folding it into either of the others
+      // would hide an edit to live master data behind a reassuring number.
       const bits = [
         t('stores.importAdded', { defaultValue: '{{n}} added', n: storeResult.added }),
+        t('stores.importUpdated', { defaultValue: '{{n}} updated', n: storeResult.updated }),
         t('stores.importExisting', {
-          defaultValue: '{{n}} already present',
+          defaultValue: '{{n}} unchanged',
           n: storeResult.alreadyPresent,
         }),
       ];

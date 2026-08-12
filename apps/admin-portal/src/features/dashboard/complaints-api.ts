@@ -203,7 +203,13 @@ export interface ComplaintMetrics {
   brandOptions: Array<{ id: string; name: string }>;
   areaOptions: string[];
   cityOptions: string[];
-  storeOptions: Array<{ id: string; name: string; city: string | null }>;
+  storeOptions: Array<{
+    id: string;
+    name: string;
+    city: string | null;
+    /** Which brand it belongs to, so the restaurant filter can follow the brand. */
+    brandId: string | null;
+  }>;
 
   /** Tickets with no branch resolved at all — the honest gap in every by-branch cut. */
   unattributed: number;
@@ -783,6 +789,8 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
             id: s.id,
             name: [s.code, s.name].filter(Boolean).join(' '),
             city: s.city,
+            // Carried so the picker can narrow to one brand's branches.
+            brandId: typeof s.brand === 'string' ? s.brand : (s.brand?.id ?? null),
           }))
           .sort((a, b) => a.name.localeCompare(b.name)),
         unattributed,

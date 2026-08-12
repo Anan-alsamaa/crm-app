@@ -105,8 +105,8 @@ function renderPage(ui: React.ReactElement) {
 
 const mutation = () => ({ mutateAsync: vi.fn().mockResolvedValue({}) });
 /** The bulk hooks report `{ added, alreadyPresent }`, not a bare count. */
-const importMutation = (added: number, alreadyPresent: number) => ({
-  mutateAsync: vi.fn().mockResolvedValue({ added, alreadyPresent }),
+const importMutation = (added: number, alreadyPresent: number, updated = 0) => ({
+  mutateAsync: vi.fn().mockResolvedValue({ added, updated, alreadyPresent }),
 });
 
 beforeEach(() => {
@@ -304,7 +304,7 @@ describe('StoresPage — onboarding stores from a CSV', () => {
     await upload(SHEET);
     await vi.waitFor(() => expect(toasts.success).toHaveBeenCalled());
     expect(lastToast()).toContain('3 added');
-    expect(lastToast()).toContain('0 already present');
+    expect(lastToast()).toContain('0 unchanged');
   });
 
   it('re-import of the identical file reports 0 added, not a failure', async () => {
@@ -314,7 +314,7 @@ describe('StoresPage — onboarding stores from a CSV', () => {
     await upload(SHEET);
     await vi.waitFor(() => expect(toasts.success).toHaveBeenCalled());
     expect(lastToast()).toContain('0 added');
-    expect(lastToast()).toContain('3 already present');
+    expect(lastToast()).toContain('3 unchanged');
     expect(toasts.error).not.toHaveBeenCalled();
   });
 
@@ -323,7 +323,16 @@ describe('StoresPage — onboarding stores from a CSV', () => {
     await upload(SHEET);
     await vi.waitFor(() => expect(toasts.success).toHaveBeenCalled());
     expect(lastToast()).toContain('1 added');
-    expect(lastToast()).toContain('2 already present');
+    expect(lastToast()).toContain('2 unchanged');
+  });
+
+  it('reports branches the sheet CHANGED as their own count', async () => {
+    // Folding updates into either neighbour would hide an edit to live master
+    // data behind a reassuring number.
+    api.useBulkCreateStores.mockReturnValue(importMutation(1, 2, 4));
+    await upload(SHEET);
+    await vi.waitFor(() => expect(toasts.success).toHaveBeenCalled());
+    expect(lastToast()).toContain('4 updated');
   });
 
   it('passes the brand code through for duplicate matching', async () => {
