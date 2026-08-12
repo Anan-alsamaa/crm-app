@@ -29,7 +29,20 @@ export function ContactPicker({
   const matches = contactSearch.data ?? [];
 
   return (
-    <FormField label={t('tickets.contact', { defaultValue: 'Contact' })} htmlFor="ticket-contact">
+    <FormField
+      label={t('tickets.contact', { defaultValue: 'Contact' })}
+      htmlFor="ticket-contact"
+      // A one-line hint rather than a boxed placeholder panel. The box said the
+      // same thing at four times the height, and on the Add ticket page that
+      // pushed the last field below the fold.
+      hint={
+        !value && tooShort
+          ? t('tickets.contactSearchPrompt', {
+              defaultValue: 'Type a phone number or name to find a contact.',
+            })
+          : undefined
+      }
+    >
       {value ? (
         <div className="flex items-center gap-2.5 rounded-xl bg-secondary px-3 py-2 ring-1 ring-foreground/[0.05]">
           <Avatar name={value.name} email={value.email} phone={value.phone} size="sm" />
@@ -67,13 +80,7 @@ export function ContactPicker({
             autoComplete="off"
             inputMode="tel"
           />
-          {tooShort ? (
-            <p className="rounded-xl px-3 py-4 text-center text-xs text-muted-foreground ring-1 ring-foreground/[0.05]">
-              {t('tickets.contactSearchPrompt', {
-                defaultValue: 'Type a phone number or name to find a contact.',
-              })}
-            </p>
-          ) : (
+          {tooShort ? null : (
             <div className="max-h-44 overflow-auto rounded-xl ring-1 ring-foreground/[0.05]">
               {contactSearch.isFetching ? (
                 <div className="flex items-center justify-center py-5 text-muted-foreground">

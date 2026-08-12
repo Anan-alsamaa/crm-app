@@ -39,6 +39,14 @@ function renderDialog(onClose = vi.fn()) {
   };
 }
 
+/** Pick a complaint type the way an agent does: type, then choose from the list. */
+async function chooseComplaintType(label: string) {
+  const field = screen.getByText('Complaint type').parentElement!.querySelector('input')!;
+  await userEvent.click(field);
+  await userEvent.type(field, label);
+  await userEvent.click(await screen.findByRole('option', { name: label }));
+}
+
 beforeEach(() => {
   hooks.useCreateTicketFromConversation.mockReset();
   hooks.useCreateTicketFromConversation.mockReturnValue({
@@ -54,8 +62,25 @@ describe('CreateTicketForm', () => {
     // Every entry point is a route now. Announcing it as a dialog would tell a
     // screen reader the rest of the app is inert when it is simply gone.
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByText('tickets.subject')).toBeInTheDocument();
     expect(screen.getByText('tickets.description')).toBeInTheDocument();
+  });
+
+  it('has no subject box — the complaint type names the ticket', () => {
+    renderDialog();
+    expect(screen.queryByText('tickets.subject')).not.toBeInTheDocument();
+    expect(screen.getByText('Required — it names the ticket')).toBeInTheDocument();
+  });
+
+  it('puts the ticket fields inside What happened, not in a section of their own', () => {
+    renderDialog();
+    expect(screen.queryByText('Ticket')).not.toBeInTheDocument();
+    const whatHappened = screen.getByText('What happened').closest('section')!;
+    // Communication method is the last classification field; description and
+    // priority follow it in the same section rather than across the page.
+    expect(whatHappened).toHaveTextContent('Communication method');
+    expect(whatHappened).toHaveTextContent('tickets.description');
+    expect(whatHappened).toHaveTextContent('conversation.priority');
+    expect(whatHappened).toHaveTextContent('Restaurant / branch');
   });
 
   it('closes when Cancel is clicked', async () => {
@@ -64,18 +89,30 @@ describe('CreateTicketForm', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('submits a valid form and creates a ticket', async () => {
+  it('refuses to save an unnamed ticket, and says which field is missing', () => {
+    renderDialog();
+    // Not a generic "check the highlighted fields" — that sends the agent
+    // hunting across thirteen fields for the one thing that is missing.
+    expect(screen.getByText('tickets.create').closest('button')).toBeDisabled();
+    expect(screen.getByText('Choose a complaint type — it names the ticket')).toBeInTheDocument();
+  });
+
+  it('saves the complaint type as the subject, verbatim', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({});
     hooks.useCreateTicketFromConversation.mockReturnValue({ mutateAsync });
     const { onClose } = renderDialog();
-    const subject = screen.getByText('tickets.subject').parentElement!.querySelector('input')!;
-    await userEvent.type(subject, 'Refund request');
+
+    await chooseComplaintType('Missing item');
     await userEvent.click(screen.getByText('tickets.create'));
+
     await waitFor(() =>
       expect(mutateAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           ticket: expect.objectContaining({
-            subject: 'Refund request',
+            // The STORED spelling, not the prettified label: the subject has to
+            // match what every ops report groups by.
+            subject: 'Missing item',
+            complaint_type: 'Missing item',
             contact: 'k1',
             vendor: 'v1',
             assigned_agent: 'agent-1',
@@ -85,5 +122,13 @@ describe('CreateTicketForm', () => {
       ),
     );
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it('shows the name the ticket is about to get', async () => {
+    renderDialog();
+    await chooseComplaintType('Missing item');
+    // The header is the only place the agent can read it back now that the
+    // subject box is gone.
+    expect(screen.getAllByText('Missing item').length).toBeGreaterThan(0);
   });
 });
