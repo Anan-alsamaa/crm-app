@@ -35,14 +35,21 @@ They are nonetheless not fixable while we are on Directus 11:
 - `npm audit fix --force` inside `directus/local` would pull Directus 12 and
   break parity with production.
 
-**The only real fix is upgrading Directus 11 → 12**, which is a major upgrade
-of the system holding all customer data: schema migrations, extension
-compatibility, and `directus/bootstrap` (which targets the 11 API). That is a
-deliberate project, not a dependency bump.
+Upgrading to Directus 12 would clear them, and **that is not happening**.
 
-**Current decision (2026-08-12): stay on Directus 11 throughout.** These alerts
-are accepted risk under that decision. If that changes, revisit this file
-first — the alert count should drop by ~58 on the upgrade.
+> **Standing decision (2026-08-12): this project stays on Directus 11.**
+> Not "for now" — permanently. Do not propose, scope or cost a Directus 12
+> upgrade, including as the remedy for these advisories.
+
+This is worth stating plainly because every dependency-security pass
+rediscovers the same 58 alerts and arrives at the same tempting conclusion. It
+has been considered and rejected. Re-raising it wastes a review cycle.
+
+These alerts are therefore **accepted risk**, and are dismissed on GitHub with
+that reason recorded. Be honest about what that means: dismissing them recorded
+a decision, it did not remove the exposure. Any real mitigation has to work
+_within_ Directus 11 — network exposure, reverse-proxy rules, access scoping —
+rather than by moving off it.
 
 ## Stale alerts on our lockfile (36)
 
