@@ -79,6 +79,14 @@ export interface AgentPerformance {
   /** Their chat workload alongside the complaints, as his table shows it. */
   chatsOpen: number;
   chatsSolved: number;
+  /**
+   * Replies this agent sent in the CRM. Stands in for his "WhatsApp Replies"
+   * column, which counted a button that stamped who opened WhatsApp for a
+   * customer — a workaround for WhatsApp not recording who answered. Here the
+   * conversation happens in the CRM, so the reply itself is the record and the
+   * number is a fact rather than a proxy.
+   */
+  replies: number;
 }
 
 /**
@@ -114,6 +122,33 @@ export interface ServiceHealth {
   chatsAnswered: number;
   chatsWaiting: number;
   avgChatWaitMinutes: number | null;
+}
+
+/**
+ * One complaint, flattened for the drill-down list.
+ *
+ * The dashboard already holds every filtered ticket in memory to aggregate it;
+ * handing the same rows back costs nothing and is what lets a click on a bar
+ * show the complaints behind it instead of just a number the reader has to
+ * trust.
+ */
+export interface ComplaintRow {
+  id: string;
+  subject: string;
+  date: string;
+  status: string;
+  agentId: string;
+  agentName: string;
+  restaurantName: string;
+  brandName: string;
+  area: string;
+  city: string;
+  complaintType: string;
+  serviceType: string;
+  source: string;
+  compensation: string;
+  couponValue: number;
+  isOpen: boolean;
 }
 
 export interface MonthPoint {
@@ -172,6 +207,9 @@ export interface ComplaintMetrics {
 
   /** Tickets with no branch resolved at all — the honest gap in every by-branch cut. */
   unattributed: number;
+
+  /** Every complaint behind the numbers above, for click-through. */
+  rows: ComplaintRow[];
 }
 
 /** Statuses that mean "still being worked". */
@@ -180,6 +218,7 @@ const CLOSED_STATUSES = new Set(['resolved', 'closed']);
 
 interface TicketRecord {
   id: string;
+  subject: string | null;
   status: string;
   date_created: string | null;
   resolved_at: string | null;
@@ -250,6 +289,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
               ...(filters.from || filters.to ? { filter: { date_created: dateFilter } } : {}),
               fields: [
                 'id',
+                'subject',
                 'status',
                 'date_created',
                 'resolved_at',
@@ -484,6 +524,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         string,
         { logged: number; solved: number; open: number; hours: number[]; money: number }
       >();
+      const flat: ComplaintRow[] = [];
 
       for (const r of rows) {
         const money = typeof r.coupon_value === 'number' ? r.coupon_value : 0;
@@ -540,6 +581,24 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         bump(byServiceType, r.service_type);
         bump(bySource, r.complaint_source);
         const agentId = r.assigned_agent ?? '';
+        flat.push({
+          id: r.id,
+          subject: r.subject ?? '',
+          date: (r.date_created ?? '').slice(0, 10),
+          status: r.status,
+          agentId,
+          agentName: nameOf(agentId),
+          restaurantName: r.restaurantName,
+          brandName: r.brandName,
+          area: r.area,
+          city: r.city,
+          complaintType: r.complaint_type ?? '',
+          serviceType: r.service_type ?? '',
+          source: r.complaint_source ?? '',
+          compensation: r.compensation ?? '',
+          couponValue: money,
+          isOpen: !CLOSED_STATUSES.has(r.status),
+        });
         byAgentCount.set(agentId, (byAgentCount.get(agentId) ?? 0) + 1);
         if (!CLOSED_STATUSES.has(r.status)) {
           byOpenAgentCount.set(agentId, (byOpenAgentCount.get(agentId) ?? 0) + 1);
@@ -624,6 +683,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
           open: a.open,
           chatsOpen: chatOpenByAgent.get(id) ?? 0,
           chatsSolved: chatSolvedByAgent.get(id) ?? 0,
+          replies: messagesByAgent.get(id) ?? 0,
         }))
         .sort((x, y) => y.logged - x.logged);
 
@@ -726,6 +786,8 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
           }))
           .sort((a, b) => a.name.localeCompare(b.name)),
         unattributed,
+        // Newest first: a drill-down is read like a list of recent cases.
+        rows: flat.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
       };
     },
   });

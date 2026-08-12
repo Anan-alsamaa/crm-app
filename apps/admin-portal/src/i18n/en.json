@@ -809,6 +809,10 @@
     "unsolvedHint": "{{n}} still open across the filtered range.",
     "nothingOutstanding": "Nothing outstanding — every complaint in this range is closed.",
     "topNofM": "top {{n}} of {{m}}",
-    "compensatedCount": "{{n}} compensated · {{v}} avg each"
+    "compensatedCount": "{{n}} compensated · {{v}} avg each",
+    "colReplies": "CRM replies",
+    "drillHint": "Show these complaints",
+    "drillCount": "{{n}} complaint(s) · {{money}} compensation",
+    "untitled": "(no subject)"
   }
 }

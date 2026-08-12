@@ -809,6 +809,10 @@
     "unsolvedHint": "{{n}} ما زالت مفتوحة ضمن النطاق المحدد.",
     "nothingOutstanding": "لا يوجد متبقٍ — كل الشكاوى في هذا النطاق مغلقة.",
     "topNofM": "أعلى {{n}} من {{m}}",
-    "compensatedCount": "{{n}} تم تعويضها · {{v}} متوسط لكل شكوى"
+    "compensatedCount": "{{n}} تم تعويضها · {{v}} متوسط لكل شكوى",
+    "colReplies": "ردود النظام",
+    "drillHint": "عرض هذه الشكاوى",
+    "drillCount": "{{n}} شكوى · {{money}} تعويض",
+    "untitled": "(بدون عنوان)"
   }
 }
