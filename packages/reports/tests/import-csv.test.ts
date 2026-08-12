@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { isBlankCell, parseTicketsCsv, toComplaintDate, toNumberCell } from '../src/import-csv.js';
+import { buildStoreIndex, matchStore, type StoreRecord } from '@yiji/shared-types';
+import {
+  isBlankCell,
+  parseTicketsCsv,
+  ticketPayloadFromCsvRow,
+  toComplaintDate,
+  toNumberCell,
+} from '../src/import-csv.js';
 
 /**
  * The rule is "put each column where it belongs". The work is being forgiving
@@ -145,5 +152,121 @@ describe('isBlankCell', () => {
   it('knows the several ways this sheet writes "nothing"', () => {
     for (const v of ['', '  ', '-', '—', 'N/A', 'n/a']) expect(isBlankCell(v)).toBe(true);
     expect(isBlankCell('0')).toBe(false);
+  });
+});
+
+describe('ticketPayloadFromCsvRow', () => {
+  const STORE: StoreRecord = {
+    id: 's1',
+    code: 'LCP-041',
+    name: 'Masief Plaza',
+    city: 'Riyadh',
+    areaManager: 'Ahmed Samir',
+    chainManager: 'Medhat Sayed',
+    brandCode: 'LCP',
+    brandName: 'Casa Pasta',
+    yijiRestaurantId: null,
+  };
+  const idx = buildStoreIndex([STORE]);
+  const match = matchStore(idx, { restaurantName: 'LCP-041 Masief Plaza' });
+  const base = { store: match, capturedAt: '2026-08-12T00:00:00.000Z' };
+
+  it('maps each column onto its ticket field', () => {
+    const p = ticketPayloadFromCsvRow(
+      {
+        complaintType: 'Missing item',
+        complaintDescription: 'One pasta missing',
+        responseDesc: 'Apologised',
+        serviceType: 'Delivery',
+        complaintSource: 'WeCare Channels',
+        communicationMethod: 'Comp. WhatsApp',
+        compensation: 'Compensated',
+        couponCode: 'OPS - 46',
+        couponValue: '25',
+      },
+      base,
+    );
+    expect(p).toMatchObject({
+      subject: 'Missing item',
+      description: 'One pasta missing',
+      response_desc: 'Apologised',
+      service_type: 'Delivery',
+      complaint_source: 'WeCare Channels',
+      communication_method: 'Comp. WhatsApp',
+      compensation: 'Compensated',
+      coupon_code: 'OPS - 46',
+      coupon_value: 25,
+    });
+  });
+
+  it('imports as closed — these are handled complaints, not new work', () => {
+    // Every historical row is "Closed - Customer Satisfied". Importing them as
+    // open would drop 50 fake items into somebody's queue.
+    expect(ticketPayloadFromCsvRow({}, base).status).toBe('closed');
+  });
+
+  it('freezes the branch attribution, like a ticket raised in the portal', () => {
+    const p = ticketPayloadFromCsvRow({ restaurantName: 'LCP-041 Masief Plaza' }, base) as {
+      store: string;
+      store_snapshot: { areaManager: string };
+    };
+    expect(p.store).toBe('s1');
+    expect(p.store_snapshot.areaManager).toBe('Ahmed Samir');
+  });
+
+  it('always has a subject, because the sheet has no subject column', () => {
+    expect(ticketPayloadFromCsvRow({}, base).subject).toBe('Imported complaint');
+    expect(ticketPayloadFromCsvRow({ complaintDescription: 'Cold food' }, base).subject).toBe(
+      'Cold food',
+    );
+  });
+
+  it('carries the order only when the sheet had one', () => {
+    expect(ticketPayloadFromCsvRow({}, base).order_snapshot).toBeUndefined();
+    const p = ticketPayloadFromCsvRow(
+      { orderNumber: '946641', orderAmount: '102.85 SR' },
+      base,
+    ) as {
+      order_snapshot: { orderId: string; total: number };
+    };
+    expect(p.order_snapshot).toMatchObject({ orderId: '946641', total: 102.85 });
+  });
+
+  it('omits links it was not given rather than writing nulls into relations', () => {
+    const p = ticketPayloadFromCsvRow({}, base);
+    for (const k of ['contact', 'vendor', 'assigned_agent', 'complaint_date']) {
+      expect(p).not.toHaveProperty(k);
+    }
+  });
+
+  it('sets the complaint date when the caller resolved one', () => {
+    const p = ticketPayloadFromCsvRow({}, { ...base, complaintDate: '2026-03-14T19:11:00.000Z' });
+    expect(p.complaint_date).toBe('2026-03-14T19:11:00.000Z');
+  });
+});
+
+describe('the imported order snapshot is renderable', () => {
+  const match = matchStore(buildStoreIndex([]), { restaurantName: 'X' });
+  const base = { store: match, capturedAt: 'now' };
+
+  it('carries every field the order card reads, not just what the sheet had', () => {
+    // The card does `order.items.reduce(...)` and formats `total`; a partial
+    // object crashed the ticket page with "Something went wrong".
+    const p = ticketPayloadFromCsvRow({ orderNumber: '946641' }, base) as {
+      order_snapshot: Record<string, unknown>;
+    };
+    const snap = p.order_snapshot;
+    expect(Array.isArray(snap.items)).toBe(true);
+    expect(typeof snap.total).toBe('number');
+    for (const k of ['orderId', 'status', 'currency', 'placedAt']) {
+      expect(snap[k]).toBeDefined();
+    }
+  });
+
+  it('never emits a null total, which the card cannot format', () => {
+    const p = ticketPayloadFromCsvRow({ orderNumber: '1' }, base) as {
+      order_snapshot: { total: number };
+    };
+    expect(p.order_snapshot.total).toBe(0);
   });
 });

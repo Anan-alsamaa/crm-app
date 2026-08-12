@@ -39,6 +39,8 @@ export {
   toComplaintDate,
   toNumberCell,
   isBlankCell,
+  ticketPayloadFromCsvRow,
+  type TicketPayloadContext,
   type TicketCsvRow,
   type ParseTicketsResult,
 } from './import-csv.js';
