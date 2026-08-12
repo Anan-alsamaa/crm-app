@@ -16,11 +16,9 @@ import {
   toast,
   Toolbar,
   ToolbarSpacer,
-  useIsDesktop,
 } from '@yiji/ui';
 import type { Priority, TicketStatus } from '@yiji/shared-types';
 import {
-  useTickets,
   useTicket,
   useTicketEvents,
   useUpdateTicket,
@@ -33,6 +31,9 @@ import {
   type TicketRow,
 } from './api.js';
 import { useAgents, useTeamOptions } from '../inbox/api.js';
+import { joinComplaintStores } from '@yiji/reports';
+import { ComplaintsTable } from '../complaints/ComplaintsTable.js';
+import { useMyComplaints, type AgentComplaintRow } from '../complaints/api.js';
 import { TicketAttachments } from './TicketAttachments.js';
 import {
   ComplaintClassification,
@@ -44,7 +45,7 @@ import {
   storeLabel,
   type ComplaintValues,
 } from './ComplaintFields.js';
-import { useStores } from './useStoreMatch.js';
+import { useStoreIndex, useStores } from './useStoreMatch.js';
 import {
   LegacyOrderSnapshotCard,
   OrderSnapshotCard,
@@ -66,9 +67,16 @@ const FILTERS: TicketFilter[] = ['all', 'new', 'open', 'pending', 'resolved', 'o
 
 export function TicketsPage() {
   const { t } = useTranslation();
-  const tickets = useTickets();
-  const isDesktop = useIsDesktop();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const agentName =
+    [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim() ||
+    user?.email ||
+    t('complaints.you', { defaultValue: 'You' });
+  // No date window: a range here would quietly hide older tickets an agent
+  // still has to work. The export names itself accordingly.
+  const complaints = useMyComplaints(null, agentName);
+  const { index: storeIndex } = useStoreIndex();
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<TicketFilter>('all');
 
@@ -81,42 +89,42 @@ export function TicketsPage() {
     if (deepLinkId) setSelected(deepLinkId);
   }, [deepLinkId]);
 
-  const isOverdue = (tk: {
-    first_responded_at: string | null;
-    first_response_due_at: string | null;
-  }) =>
-    !tk.first_responded_at &&
-    tk.first_response_due_at !== null &&
-    new Date(tk.first_response_due_at).getTime() < Date.now();
+  const isOverdue = (r: AgentComplaintRow) =>
+    !r.firstRespondedAt &&
+    r.firstResponseDueAt !== null &&
+    new Date(r.firstResponseDueAt).getTime() < Date.now();
 
-  const list = tickets.data ?? [];
+  // Branch attribution runs through the SAME join as the manager's report, so
+  // one complaint is attributed to one branch whoever is looking at it.
+  const list = useMemo<AgentComplaintRow[]>(
+    () => joinComplaintStores(complaints.data ?? [], storeIndex) as AgentComplaintRow[],
+    [complaints.data, storeIndex],
+  );
   const stats = useMemo(() => {
-    const open = list.filter((t) => t.status === 'open' || t.status === 'new').length;
-    const pending = list.filter((t) => t.status === 'pending').length;
+    const open = list.filter(
+      (r) => r.complaintStatus === 'open' || r.complaintStatus === 'new',
+    ).length;
+    const pending = list.filter((r) => r.complaintStatus === 'pending').length;
     const overdue = list.filter(isOverdue).length;
-    const today = list.filter((t) => {
-      if (!t.date_created) return false;
-      const d = new Date(t.date_created);
-      const now = new Date();
-      return (
-        d.getFullYear() === now.getFullYear() &&
-        d.getMonth() === now.getMonth() &&
-        d.getDate() === now.getDate()
-      );
-    }).length;
+    // `date` is already the row's LOCAL calendar day, so comparing strings
+    // avoids re-deriving a timezone the report has settled already.
+    const now = new Date();
+    const p = (n: number) => String(n).padStart(2, '0');
+    const todayKey = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+    const today = list.filter((r) => r.date === todayKey).length;
     return { open, pending, overdue, today };
   }, [list]);
 
   const filtered = useMemo(() => {
     if (filter === 'all') return list;
     if (filter === 'overdue') return list.filter(isOverdue);
-    return list.filter((t) => t.status === filter);
+    return list.filter((r) => r.complaintStatus === filter);
   }, [list, filter]);
 
   const filterCount = (f: TicketFilter) => {
     if (f === 'all') return list.length;
     if (f === 'overdue') return stats.overdue;
-    return list.filter((t) => t.status === f).length;
+    return list.filter((r) => r.complaintStatus === f).length;
   };
 
   return (
@@ -171,155 +179,43 @@ export function TicketsPage() {
         </Button>
       </Toolbar>
 
-      {/* Below: list + detail — no card wrapping. Single-column on mobile:
-          the list and the detail view swap places. */}
-      <div className="flex flex-1 min-h-0 gap-3 p-3">
-        {(isDesktop || selected === null) && (
-          <aside
-            className={cn(
-              'flex shrink-0 flex-col overflow-hidden rounded-2xl bg-card shadow-soft',
-              isDesktop ? 'w-[360px]' : 'w-full',
-            )}
-          >
-            <div className="flex-1 overflow-auto pt-2">
-              {tickets.isLoading ? (
-                <ul className="px-2 space-y-1">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <li key={i} className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5">
-                      <Skeleton className="h-7 w-7 rounded-full" />
-                      <div className="flex-1 space-y-2">
-                        <Skeleton className="h-3 w-3/4" />
-                        <div className="flex items-center gap-1.5">
-                          <Skeleton className="h-3.5 w-12 rounded-full" />
-                          <Skeleton className="h-3.5 w-16 rounded-full" />
-                        </div>
-                        <Skeleton className="h-2.5 w-1/2" />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : filtered.length > 0 ? (
-                <ul className="space-y-2 px-3 py-2">
-                  {filtered.map((tk) => {
-                    const active = selected === tk.id;
-                    const overdue = isOverdue(tk);
-                    return (
-                      <li key={tk.id}>
-                        <button
-                          type="button"
-                          onClick={() => setSelected(tk.id)}
-                          className={cn(
-                            'group flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-start',
-                            'transition-colors duration-fast ease-out',
-                            active ? 'bg-primary-subtle/70' : 'hover:bg-secondary/60',
-                          )}
-                        >
-                          {/* Messenger row: avatar with a status dot, subject +
-                              contact secondary line, time and exception pills. */}
-                          <span className="relative shrink-0">
-                            <Avatar
-                              name={tk.contact?.name}
-                              email={tk.contact?.email}
-                              phone={tk.contact?.phone}
-                              size="md"
-                            />
-                            <span
-                              aria-hidden
-                              title={t(`status.${tk.status}`, { ns: 'common' })}
-                              className={cn(
-                                'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-background',
-                                {
-                                  new: 'bg-primary',
-                                  open: 'bg-success',
-                                  pending: 'bg-warning',
-                                  resolved: 'bg-primary',
-                                  closed: 'bg-muted-foreground/40',
-                                }[tk.status],
-                              )}
-                            />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline justify-between gap-2">
-                              <span className="truncate text-sm font-semibold text-foreground">
-                                {tk.subject}
-                              </span>
-                              <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-                                {formatRelative(tk.date_created)}
-                              </span>
-                            </div>
-                            <div className="mt-0.5 flex items-center gap-2">
-                              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                                {/* The ops team scan this list by category the
-                                    way they scan their own sheet, so the
-                                    complaint type leads when there is one. */}
-                                {tk.complaint_type && (
-                                  <span className="font-medium text-foreground/70">
-                                    {optionLabel(tk.complaint_type)}
-                                    <span aria-hidden> · </span>
-                                  </span>
-                                )}
-                                {tk.contact?.name ??
-                                  tk.contact?.email ??
-                                  tk.contact?.phone ??
-                                  t(`status.${tk.status}`, { ns: 'common' })}
-                              </span>
-                              {(tk.priority === 'urgent' || tk.priority === 'high') && (
-                                <Pill tone={tk.priority === 'urgent' ? 'pink' : 'orange'} size="sm">
-                                  {t(`priority.${tk.priority}`, { ns: 'common' })}
-                                </Pill>
-                              )}
-                              {overdue && (
-                                <Pill tone="destructive" size="sm">
-                                  {t('tickets.overdue', { defaultValue: 'Overdue' })}
-                                </Pill>
-                              )}
-                            </div>
-                          </div>
-                        </button>
-                      </li>
-                    );
+      {/* The operations complaints table IS the list now: the same format the
+          ops team reconcile against, holding only this agent's tickets.
+          Selecting a row opens that ticket underneath, so the SLA timeline,
+          notes and the editable complaint fields all still live here. */}
+      <div className="min-h-0 flex-1 overflow-auto p-3">
+        {!complaints.isLoading && list.length === 0 ? (
+          <div className="flex h-full items-center justify-center px-6 text-center">
+            <div className="flex max-w-md flex-col items-center gap-5">
+              <TicketEmptyArt size={200} />
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold tracking-tight text-display">
+                  {t('tickets.empty')}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {t('tickets.emptyHint', {
+                    defaultValue: 'Tickets are created from conversations that need follow-up.',
                   })}
-                </ul>
-              ) : (
-                <div className="flex flex-col items-center gap-4 p-6 pt-12 text-center">
-                  <TicketEmptyArt size={160} />
-                  <div className="space-y-1">
-                    <h3 className="text-md font-semibold text-foreground">{t('tickets.empty')}</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {t('tickets.emptyHint', {
-                        defaultValue: 'Tickets are created from conversations that need follow-up.',
-                      })}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </aside>
-        )}
-
-        {(isDesktop || selected !== null) && (
-          <section className="flex-1 min-w-0 overflow-auto rounded-2xl bg-card shadow-soft">
-            {selected ? (
-              <TicketDetail ticketId={selected} onBack={() => setSelected(null)} />
-            ) : (
-              <div className="flex h-full items-center justify-center px-6 text-center">
-                <div className="flex max-w-md flex-col items-center gap-5">
-                  <TicketEmptyArt size={200} />
-                  <div className="space-y-2">
-                    <h2 className="text-2xl font-bold text-display tracking-tight">
-                      {t('tickets.selectPrompt', { defaultValue: 'Open a ticket' })}
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                      {t('tickets.selectHint', {
-                        defaultValue:
-                          'Pick a ticket on the left to see its workflow, SLA timeline, and history.',
-                      })}
-                    </p>
-                  </div>
-                </div>
+                </p>
               </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <ComplaintsTable
+              rows={filtered}
+              loading={complaints.isLoading}
+              selectedId={selected}
+              onSelect={(id) => setSelected(id === selected ? null : id)}
+              filenameBase="my-tickets"
+              days={null}
+            />
+            {selected && (
+              <section className="overflow-hidden rounded-2xl bg-card shadow-soft">
+                <TicketDetail ticketId={selected} onBack={() => setSelected(null)} />
+              </section>
             )}
-          </section>
+          </div>
         )}
       </div>
     </div>

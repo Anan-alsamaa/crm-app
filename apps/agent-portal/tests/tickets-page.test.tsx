@@ -36,13 +36,20 @@ vi.mock('../src/features/inbox/api.js', () => ({
   useTeamOptions: () => ({ data: [] }),
 }));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
-  useAuth: () => ({ user: { id: 'agent-1' } }),
+  useAuth: () => ({ user: { id: 'agent-1', first_name: 'Sara', last_name: null, email: null } }),
 }));
-// Force desktop so the master+detail layout (and the select prompt) render.
-vi.mock('@yiji/ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@yiji/ui')>()),
-  useIsDesktop: () => true,
-}));
+// The list is now the operations complaints table, fed by the agent's own
+// complaints and joined against the store master.
+const complaints = vi.hoisted(() => ({ useMyComplaints: vi.fn() }));
+vi.mock('../src/features/complaints/api.js', () => complaints);
+vi.mock('../src/features/tickets/useStoreMatch.js', async () => {
+  const { buildStoreIndex } = await import('@yiji/shared-types');
+  return {
+    useStoreIndex: () => ({ index: buildStoreIndex([]), isLoading: false, count: 0 }),
+    // The detail pane's complaint panel lists branches to pick from.
+    useStores: () => ({ data: [], isLoading: false }),
+  };
+});
 
 import { TicketsPage } from '../src/features/tickets/TicketsPage.js';
 
@@ -72,7 +79,42 @@ const ticket = {
   date_created: '2026-01-01T00:00:00.000Z',
 };
 
+/** What the table actually renders — the ops report row, not the ticket. */
+const complaintRow = {
+  id: 't1',
+  date: '2026-01-01',
+  time: '00:00',
+  chain: '',
+  area: '',
+  brand: '',
+  city: '',
+  restaurantName: '',
+  storeMapped: false,
+  serviceType: 'Delivery',
+  complaintType: 'Refund',
+  customerName: 'Alice',
+  customerMobile: '+966500000000',
+  complaintDescription: 'I want a refund',
+  responseDesc: '',
+  complaintSource: '',
+  orderAmount: null,
+  orderNumber: '946641',
+  communicationMethod: '',
+  couponCode: '',
+  couponValue: null,
+  couponPercent: null,
+  complaintStatus: 'open',
+  agent: 'Sara',
+  compensation: '',
+  storeSnapshot: null,
+  subject: 'Refund please',
+  firstRespondedAt: null,
+  firstResponseDueAt: null,
+};
+
 beforeEach(() => {
+  complaints.useMyComplaints.mockReset();
+  complaints.useMyComplaints.mockReturnValue({ data: [complaintRow], isLoading: false });
   hooks.useTickets.mockReset();
   hooks.useTicket.mockReset();
   hooks.useTicketEvents.mockReset();
@@ -84,28 +126,35 @@ beforeEach(() => {
 
 describe('TicketsPage', () => {
   it('shows the empty state when there are no tickets', () => {
-    hooks.useTickets.mockReturnValue({ data: [], isLoading: false });
+    complaints.useMyComplaints.mockReturnValue({ data: [], isLoading: false });
     renderPage();
     expect(screen.getByText('tickets.empty')).toBeInTheDocument();
   });
 
-  it('renders the ticket list and the select prompt before selection', () => {
-    hooks.useTickets.mockReturnValue({ data: [ticket], isLoading: false });
+  it('lists tickets in the operations report format, not as bespoke rows', () => {
     renderPage();
-    expect(screen.getByText('Refund please')).toBeInTheDocument();
-    expect(screen.getByText('Open a ticket')).toBeInTheDocument();
+    // The columns the ops team read: the order, who complained, the type.
+    expect(screen.getByText('946641')).toBeInTheDocument();
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.getByText('Refund')).toBeInTheDocument();
+    // And the export that makes the table worth having.
+    expect(screen.getByRole('button', { name: /Export to Excel/ })).toBeInTheDocument();
   });
 
-  it('opens ticket detail when a list item is clicked', async () => {
-    hooks.useTickets.mockReturnValue({ data: [ticket], isLoading: false });
+  it('opens the ticket detail under the table when a row is chosen', async () => {
     renderPage();
-    await userEvent.click(screen.getByText('Refund please'));
-    // Detail header shows the contact name and the SLA section. The first-response
-    // action renders its defaultValue ("Mark first response") in tests since no
-    // locale resources are loaded.
+    await userEvent.click(screen.getByText('946641'));
+    // The detail pane still carries everything an agent works with.
     await waitFor(() => expect(screen.getByText('Mark first response')).toBeInTheDocument());
-    // Detail-only: the description and the SLA section heading.
     expect(screen.getByText('I want a refund')).toBeInTheDocument();
     expect(screen.getByText('SLA')).toBeInTheDocument();
+  });
+
+  it('opens a row from the keyboard, not only by mouse', async () => {
+    renderPage();
+    const row = screen.getByText('946641').closest('tr')!;
+    row.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByText('I want a refund')).toBeInTheDocument());
   });
 });

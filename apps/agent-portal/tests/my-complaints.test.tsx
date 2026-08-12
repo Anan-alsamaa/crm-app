@@ -25,6 +25,9 @@ async function sentParams(call = 0): Promise<Record<string, unknown>> {
 const ticket = {
   id: 'tk-1',
   status: 'open',
+  subject: 'Cold delivery',
+  first_responded_at: null,
+  first_response_due_at: null,
   date_created: '2026-08-01T10:30:00',
   description: 'Order arrived cold',
   complaint_type: 'Food quality',
@@ -97,6 +100,9 @@ describe('toComplaintRow', () => {
       {
         id: 'tk-2',
         status: 'pending',
+        subject: null,
+        first_responded_at: null,
+        first_response_due_at: null,
         date_created: null,
         description: null,
         complaint_type: null,

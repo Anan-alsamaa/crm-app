@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate, NavLink, useLocation } from 're
 import { useTranslation } from 'react-i18next';
 import {
   AddTicketIcon,
-  ChartIcon,
   AppShell,
   type AppShellRailContext,
   Avatar,
@@ -46,9 +45,6 @@ const PreferencesPage = lazy(() =>
   import('./features/notifications/PreferencesPage.js').then((m) => ({
     default: m.PreferencesPage,
   })),
-);
-const ComplaintsPage = lazy(() =>
-  import('./features/complaints/ComplaintsPage.js').then((m) => ({ default: m.ComplaintsPage })),
 );
 const ContactsPage = lazy(() =>
   import('./features/contacts/ContactsPage.js').then((m) => ({ default: m.ContactsPage })),
@@ -340,11 +336,6 @@ function Shell({ children }: { children: React.ReactNode }) {
         },
         { to: '/tickets', label: t('nav.tickets'), icon: TicketIcon },
         {
-          to: '/complaints',
-          label: t('nav.complaints', { defaultValue: 'My complaints' }),
-          icon: ChartIcon,
-        },
-        {
           to: '/contacts',
           label: t('nav.contacts', { defaultValue: 'Contacts' }),
           icon: UsersIcon,
@@ -519,18 +510,6 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <TicketsPage />
-                </Shell>
-              </ProtectedRoute>
-            }
-          />
-          {/* The operations complaints report, scoped to the signed-in agent —
-              same columns and same export as the manager's, fewer rows. */}
-          <Route
-            path="/complaints"
-            element={
-              <ProtectedRoute>
-                <Shell>
-                  <ComplaintsPage />
                 </Shell>
               </ProtectedRoute>
             }
