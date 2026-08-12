@@ -1,3 +1,4 @@
+import { toStoreSnapshot, type StoreMatch } from '@yiji/shared-types';
 import { COMPLAINT_COLUMN_KEYS, type ComplaintColumnKey } from './complaints.js';
 
 /**
@@ -197,4 +198,87 @@ export function toNumberCell(v?: string): number | null {
   if (!v || isBlankCell(v)) return null;
   const m = /-?\d+(\.\d+)?/.exec(v.replace(/,/g, ''));
   return m ? Number(m[0]) : null;
+}
+
+/* ── CSV row → ticket ──────────────────────────────────────────────────── */
+
+/** What the caller has already resolved for this row. */
+export interface TicketPayloadContext {
+  /** The branch this row was matched to, however it was matched. */
+  store: StoreMatch;
+  /** Existing or newly created contact for the customer's number. */
+  contactId?: string | null;
+  vendorId?: string | null;
+  /** Directus user id for the agent named in the sheet, when recognised. */
+  agentId?: string | null;
+  /** ISO instant for the complaint itself, from `toComplaintDate`. */
+  complaintDate?: string | null;
+  /** When the branch attribution was frozen. */
+  capturedAt: string;
+}
+
+/**
+ * Turn one parsed CSV row into a ticket ready to insert.
+ *
+ * Pure and shared, because two callers need exactly this mapping — the import
+ * button in the agent portal and the seeding script — and a second copy would
+ * drift until an imported ticket and a seeded one described the same complaint
+ * differently.
+ *
+ * Resolution of the branch, customer and agent happens in the caller: those
+ * need the database, and keeping them out is what makes this testable.
+ */
+export function ticketPayloadFromCsvRow(
+  row: TicketCsvRow,
+  ctx: TicketPayloadContext,
+): Record<string, unknown> {
+  const branch = (row.restaurantName ?? '').trim();
+  const orderNumber = (row.orderNumber ?? '').trim();
+  const orderAmount = toNumberCell(row.orderAmount);
+
+  return {
+    // The sheet has no subject column, and a blank one fails the required
+    // field. The complaint type is what operations would call it anyway.
+    subject: row.complaintType || row.complaintDescription?.slice(0, 80) || 'Imported complaint',
+    description: row.complaintDescription ?? null,
+    // Every historical row is "Closed - Customer Satisfied"; these are records
+    // of handled complaints, not live work arriving in someone's queue.
+    status: 'closed',
+    ...(ctx.complaintDate ? { complaint_date: ctx.complaintDate } : {}),
+    ...(ctx.contactId ? { contact: ctx.contactId } : {}),
+    ...(ctx.vendorId ? { vendor: ctx.vendorId } : {}),
+    ...(ctx.store.store ? { store: ctx.store.store.id } : {}),
+    // Frozen exactly as a ticket raised in the portal freezes it, so editing a
+    // store later cannot rewrite what this row reports.
+    store_snapshot: toStoreSnapshot(ctx.store, ctx.capturedAt),
+    ...(orderNumber || orderAmount !== null
+      ? {
+          // The FULL snapshot shape, not just the fields the sheet happens to
+          // carry. The order card reduces over `items` and formats `total`, so
+          // a partial object crashes the ticket page — the sheet has no line
+          // items, and an empty list is the honest way to say so.
+          order_snapshot: {
+            orderId: orderNumber,
+            status: '',
+            total: orderAmount ?? 0,
+            currency: 'SAR',
+            placedAt: ctx.complaintDate ?? '',
+            items: [],
+            brandName: row.brand ?? null,
+            restaurantName: branch || null,
+            capturedAt: ctx.capturedAt,
+          },
+        }
+      : {}),
+    complaint_type: row.complaintType ?? null,
+    service_type: row.serviceType ?? null,
+    complaint_source: row.complaintSource ?? null,
+    communication_method: row.communicationMethod ?? null,
+    response_desc: row.responseDesc ?? null,
+    compensation: row.compensation ?? null,
+    coupon_code: row.couponCode ?? null,
+    coupon_value: toNumberCell(row.couponValue),
+    coupon_percent: toNumberCell(row.couponPercent),
+    ...(ctx.agentId ? { assigned_agent: ctx.agentId } : {}),
+  };
 }

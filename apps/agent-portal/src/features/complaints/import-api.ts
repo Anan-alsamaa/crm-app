@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createItem, createItems, readItems } from '@directus/sdk';
-import { buildStoreIndex, matchStore, toStoreSnapshot, type StoreRecord } from '@yiji/shared-types';
-import { parseTicketsCsv, toComplaintDate, toNumberCell } from '@yiji/reports';
+import { buildStoreIndex, matchStore, type StoreRecord } from '@yiji/shared-types';
+import { parseTicketsCsv, ticketPayloadFromCsvRow, toComplaintDate } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -169,47 +169,17 @@ export function useImportTickets() {
         const match = matchStore(index, { restaurantName: branch, brandName: row.brand });
         if (branch && !match.store) outcome.unmappedStores += 1;
 
-        const orderNumber = (row.orderNumber ?? '').trim();
-        const orderAmount = toNumberCell(row.orderAmount);
-
-        payloads.push({
-          // The sheet has no subject; the complaint type is what operations
-          // would call it, and a blank subject fails the required field.
-          subject:
-            row.complaintType || row.complaintDescription?.slice(0, 80) || 'Imported complaint',
-          description: row.complaintDescription ?? null,
-          status: 'closed',
-          ...(when ? { complaint_date: when } : {}),
-          ...(contactId ? { contact: contactId } : {}),
-          ...(vendorId ? { vendor: vendorId } : {}),
-          ...(match.store ? { store: match.store.id } : {}),
-          // Freeze the branch as it stands now, exactly as a ticket raised in
-          // the portal does, so editing a store later cannot rewrite this row.
-          store_snapshot: toStoreSnapshot(match, capturedAt),
-          ...(orderNumber || orderAmount !== null
-            ? {
-                order_snapshot: {
-                  orderId: orderNumber,
-                  total: orderAmount,
-                  brandName: row.brand ?? null,
-                  restaurantName: branch || null,
-                  capturedAt,
-                },
-              }
-            : {}),
-          complaint_type: row.complaintType ?? null,
-          service_type: row.serviceType ?? null,
-          complaint_source: row.complaintSource ?? null,
-          communication_method: row.communicationMethod ?? null,
-          response_desc: row.responseDesc ?? null,
-          compensation: row.compensation ?? null,
-          coupon_code: row.couponCode ?? null,
-          coupon_value: toNumberCell(row.couponValue),
-          coupon_percent: toNumberCell(row.couponPercent),
-          ...(row.agent && userByName.has(row.agent.trim().toLowerCase())
-            ? { assigned_agent: userByName.get(row.agent.trim().toLowerCase()) }
-            : {}),
-        });
+        const agentKey = (row.agent ?? '').trim().toLowerCase();
+        payloads.push(
+          ticketPayloadFromCsvRow(row, {
+            store: match,
+            contactId,
+            vendorId,
+            agentId: userByName.get(agentKey) ?? null,
+            complaintDate: when,
+            capturedAt,
+          }),
+        );
         if (!when && row.date) {
           outcome.skipped.push({
             line,
