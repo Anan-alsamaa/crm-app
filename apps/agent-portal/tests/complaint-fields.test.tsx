@@ -78,6 +78,7 @@ function Harness({ onValues }: { onValues?: (v: ComplaintValues) => void }) {
 describe('complaintPatch — what actually reaches Directus', () => {
   it('sends null (not "") for every field the agent left alone', () => {
     expect(complaintPatch(emptyComplaint)).toEqual({
+      complaint_date: null,
       complaint_type: null,
       service_type: null,
       complaint_source: null,

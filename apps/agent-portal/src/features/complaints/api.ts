@@ -44,6 +44,7 @@ interface TicketRow {
   id: string;
   status: string;
   subject: string | null;
+  complaint_date: string | null;
   first_responded_at: string | null;
   first_response_due_at: string | null;
   date_created: string | null;
@@ -79,6 +80,7 @@ const FIELDS = [
   'id',
   'status',
   'subject',
+  'complaint_date',
   'first_responded_at',
   'first_response_due_at',
   'date_created',
@@ -103,7 +105,9 @@ const FIELDS = [
  * relational query for a value we already hold.
  */
 export function toComplaintRow(t: TicketRow, agentName: string): AgentComplaintRow {
-  const when = splitLocalDateTime(t.date_created);
+  // When it HAPPENED, not when it was typed in. Older tickets have no
+  // complaint_date, so they keep dating from creation rather than going blank.
+  const when = splitLocalDateTime(t.complaint_date ?? t.date_created);
   const snap = t.order_snapshot ?? null;
   return {
     id: t.id,

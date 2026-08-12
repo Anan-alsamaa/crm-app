@@ -32,6 +32,9 @@ interface RawTicket {
   priority: string;
   assigned_agent: string | null;
   date_created: string | null;
+  /** When the complaint happened. Null on tickets raised before the field
+   *  existed, which fall back to date_created. */
+  complaint_date?: string | null;
   first_response_due_at: string | null;
   first_responded_at: string | null;
   resolution_due_at: string | null;
@@ -265,6 +268,7 @@ const BASE_TICKET_FIELDS = [
  * request; the alternative costs every other report on this page.
  */
 const COMPLAINT_FIELDS = [
+  'complaint_date',
   'description',
   'complaint_type',
   'service_type',
@@ -410,7 +414,9 @@ export function useAgentReportData(
        * the raw order snapshot values through so the join has something to
        * match on. */
       const complaintRows: ComplaintReportRow[] = tickets.map((t) => {
-        const when = splitLocalDateTime(t.date_created);
+        // When it HAPPENED, not when it was typed in. Older tickets have no
+        // complaint_date and keep dating from creation.
+        const when = splitLocalDateTime(t.complaint_date ?? t.date_created);
         const snap = t.order_snapshot ?? null;
         return {
           id: t.id,

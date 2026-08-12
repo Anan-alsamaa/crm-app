@@ -26,6 +26,7 @@ const ticket = {
   id: 'tk-1',
   status: 'open',
   subject: 'Cold delivery',
+  complaint_date: '2026-07-30T18:05:00',
   first_responded_at: null,
   first_response_due_at: null,
   date_created: '2026-08-01T10:30:00',
@@ -79,8 +80,11 @@ describe('an agent reads their OWN complaints', () => {
     await waitFor(() => expect(result.current.data).toBeDefined());
 
     const r = result.current.data![0]!;
-    expect(r.date).toBe('2026-08-01');
-    expect(r.time).toBe('10:30');
+    // Dated by when the complaint HAPPENED (30 Jul), not when the ticket was
+    // typed in (1 Aug). Getting this backwards files a Friday complaint under
+    // Sunday in every ops report.
+    expect(r.date).toBe('2026-07-30');
+    expect(r.time).toBe('18:05');
     expect(r.orderNumber).toBe('946641');
     // "102.85 SR" must land as a number Excel can sum, not a string.
     expect(r.orderAmount).toBe(102.85);
@@ -94,6 +98,16 @@ describe('an agent reads their OWN complaints', () => {
   });
 });
 
+describe('dating a complaint', () => {
+  it('falls back to the creation date for tickets raised before the field existed', async () => {
+    request.mockResolvedValueOnce([{ ...ticket, complaint_date: null }]);
+    const { result } = renderHook(() => useMyComplaints(30, 'Sara'), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    // Blank would drop the row out of every date-grouped report.
+    expect(result.current.data![0]!.date).toBe('2026-08-01');
+  });
+});
+
 describe('toComplaintRow', () => {
   it('survives a ticket with nothing filled in', () => {
     const bare = toComplaintRow(
@@ -101,6 +115,7 @@ describe('toComplaintRow', () => {
         id: 'tk-2',
         status: 'pending',
         subject: null,
+        complaint_date: null,
         first_responded_at: null,
         first_response_due_at: null,
         date_created: null,

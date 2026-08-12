@@ -25,8 +25,10 @@ import { useStores, type StoreRow } from './useStoreMatch.js';
  * a blank one because it lands in a report that reads as fact.
  */
 
-/** The nine fields, exactly as they are stored on `tickets`. */
+/** The complaint fields, exactly as they are stored on `tickets`. */
 export interface ComplaintValues {
+  /** `datetime-local` value — when the complaint HAPPENED, not when it was typed. */
+  complaint_date: string;
   complaint_type: string;
   service_type: string;
   complaint_source: string;
@@ -38,7 +40,26 @@ export interface ComplaintValues {
   coupon_percent: string;
 }
 
+/**
+ * `YYYY-MM-DDTHH:mm` in LOCAL time, the only format `datetime-local` accepts.
+ * toISOString would hand it UTC and the field would show the wrong clock.
+ */
+export function nowLocalInput(at: Date = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())}T${p(at.getHours())}:${p(
+    at.getMinutes(),
+  )}`;
+}
+
+/** A stored ISO timestamp back into the form's `datetime-local` value. */
+export function toDateInput(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : nowLocalInput(d);
+}
+
 export const emptyComplaint: ComplaintValues = {
+  complaint_date: '',
   complaint_type: '',
   service_type: '',
   complaint_source: '',
@@ -77,6 +98,16 @@ export function complaintPatch(v: ComplaintValues): Record<string, string | numb
     return s.trim() && Number.isFinite(n) ? n : null;
   };
   return {
+    // `datetime-local` is wall-clock with no zone. new Date() reads it as
+    // LOCAL time, which is what the agent meant, and toISOString then stores
+    // the right instant. Parsing it as UTC would shift every complaint by the
+    // offset and quietly move some across midnight into the wrong day.
+    complaint_date: v.complaint_date.trim()
+      ? (() => {
+          const d = new Date(v.complaint_date);
+          return Number.isNaN(d.getTime()) ? null : d.toISOString();
+        })()
+      : null,
     complaint_type: str(v.complaint_type),
     service_type: str(v.service_type),
     complaint_source: str(v.complaint_source),
@@ -572,6 +603,20 @@ export function ComplaintClassification({
   const { t } = useTranslation();
   return (
     <div className="grid gap-3.5 sm:grid-cols-2">
+      {/* First field in the section: every ops report groups and filters by
+          this date, and it is the one thing the agent cannot recover later if
+          they leave it wrong. */}
+      <FormField
+        label={t('complaint.date', { defaultValue: 'Complaint date' })}
+        hint={t('complaint.dateHint', { defaultValue: 'When it happened' })}
+      >
+        <Input
+          type="datetime-local"
+          value={values.complaint_date}
+          max={nowLocalInput()}
+          onChange={(e) => onChange({ complaint_date: e.target.value })}
+        />
+      </FormField>
       <FormField label={t('complaint.type', { defaultValue: 'Complaint type' })}>
         <Combobox
           value={values.complaint_type}

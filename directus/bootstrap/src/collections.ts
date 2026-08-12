@@ -208,6 +208,12 @@ export const collections: CollectionSpec[] = [
        * Every one is nullable: existing tickets have none of them, and the
        * inbox still raises ordinary support tickets that are not complaints. */
       {
+        field: 'complaint_date',
+        type: 'dateTime',
+        index: true,
+        note: 'When the complaint HAPPENED, which is not when it was typed in. A complaint phoned in on Friday and logged on Sunday belongs to Friday in every ops report, and the historical import has dates far older than its rows. Null on tickets raised before this field existed; the reports fall back to date_created, so an old ticket still lands on a sensible day.',
+      },
+      {
         field: 'complaint_type',
         type: 'string',
         choices: [...ComplaintType.options],
