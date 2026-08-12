@@ -51,6 +51,8 @@ export interface TicketRow extends Partial<TicketComplaintFields> {
   description: string | null;
   /** Structured point-in-time copy of the order the ticket is about. */
   order_snapshot?: TicketOrderSnapshot | null;
+  /** Searchable copy of order_snapshot.orderId — json columns cannot be filtered. */
+  order_id?: string | null;
   /** Branch attribution frozen at creation — see StoreSnapshot. */
   store_snapshot?: StoreSnapshot | null;
   status: TicketStatus;
@@ -192,6 +194,8 @@ export interface CreateTicketInput extends Partial<TicketComplaintFields> {
   assigned_agent?: string | null;
   /** Structured point-in-time copy of the order the ticket is about. */
   order_snapshot?: TicketOrderSnapshot | null;
+  /** Searchable copy of order_snapshot.orderId — json columns cannot be filtered. */
+  order_id?: string | null;
   /**
    * Which branch, as a live link — what reports group by, and what an agent
    * corrects when the order resolved to the wrong place.

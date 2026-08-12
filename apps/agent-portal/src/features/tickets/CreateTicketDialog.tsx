@@ -279,6 +279,10 @@ export function CreateTicketDialog({
           conversation: conversationId ?? null,
           assigned_agent: user?.id ?? null,
           order_snapshot: includeOrder && latestOrder ? orderSnapshot(latestOrder) : null,
+          // Lifted out of the snapshot so it is searchable: Directus cannot
+          // filter inside a json column, so an order id that lives only in
+          // order_snapshot cannot be looked up from the inbox search box.
+          order_id: includeOrder && latestOrder ? String(latestOrder.orderId) : null,
           // Which branch, live — what reports group by and what gets corrected.
           store: chosenMatch?.store?.id ?? null,
           // ...and who it belonged to at the time. Frozen, because resolved

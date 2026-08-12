@@ -4,7 +4,10 @@ const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 const page = await ctx.newPage();
 
-for (const [name, url] of [['admin', 'http://localhost:5174/login'], ['agent', 'http://localhost:5173/login']]) {
+for (const [name, url] of [
+  ['admin', 'http://localhost:5174/login'],
+  ['agent', 'http://localhost:5173/login'],
+]) {
   await page.goto(url, { waitUntil: 'networkidle' });
   await page.waitForTimeout(400);
   const info = await page.evaluate(() => {

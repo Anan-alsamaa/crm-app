@@ -22,9 +22,7 @@ const profiles = [
 
 const browser = await chromium.launch();
 for (const p of profiles) {
-  const ctx = await browser.newContext(
-    p.device ?? { viewport: p.viewport },
-  );
+  const ctx = await browser.newContext(p.device ?? { viewport: p.viewport });
   const page = await ctx.newPage();
   await page.goto(URL, { waitUntil: 'networkidle' });
   await page.waitForTimeout(700);

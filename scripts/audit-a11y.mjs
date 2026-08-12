@@ -25,26 +25,33 @@ const EMAIL = process.env.AGENT_EMAIL ?? process.env.DIRECTUS_ADMIN_EMAIL ?? 'e.
 const PASSWORD = process.env.AGENT_PASSWORD ?? process.env.DIRECTUS_ADMIN_PASSWORD ?? '123456';
 
 const ROUTES = [
-  { name: 'admin-login',    url: `${ADMIN_BASE}/login`,       auth: false },
-  { name: 'agent-login',    url: `${AGENT_BASE}/login`,       auth: false },
-  { name: 'widget-host',    url: `${WIDGET_BASE}/`,           auth: false },
-  { name: 'admin-users',    url: `${ADMIN_BASE}/users`,       auth: 'admin' },
-  { name: 'admin-teams',    url: `${ADMIN_BASE}/teams`,       auth: 'admin' },
-  { name: 'admin-sla',      url: `${ADMIN_BASE}/sla`,         auth: 'admin' },
-  { name: 'admin-vendors',  url: `${ADMIN_BASE}/vendors`,     auth: 'admin' },
-  { name: 'admin-ai-config',url: `${ADMIN_BASE}/ai-config`,   auth: 'admin' },
-  { name: 'agent-inbox',    url: `${AGENT_BASE}/`,            auth: 'agent' },
-  { name: 'agent-tickets',  url: `${AGENT_BASE}/tickets`,     auth: 'agent' },
-  { name: 'agent-contacts', url: `${AGENT_BASE}/contacts`,    auth: 'agent' },
+  { name: 'admin-login', url: `${ADMIN_BASE}/login`, auth: false },
+  { name: 'agent-login', url: `${AGENT_BASE}/login`, auth: false },
+  { name: 'widget-host', url: `${WIDGET_BASE}/`, auth: false },
+  { name: 'admin-users', url: `${ADMIN_BASE}/users`, auth: 'admin' },
+  { name: 'admin-teams', url: `${ADMIN_BASE}/teams`, auth: 'admin' },
+  { name: 'admin-sla', url: `${ADMIN_BASE}/sla`, auth: 'admin' },
+  { name: 'admin-vendors', url: `${ADMIN_BASE}/vendors`, auth: 'admin' },
+  { name: 'admin-ai-config', url: `${ADMIN_BASE}/ai-config`, auth: 'admin' },
+  { name: 'agent-inbox', url: `${AGENT_BASE}/`, auth: 'agent' },
+  { name: 'agent-tickets', url: `${AGENT_BASE}/tickets`, auth: 'agent' },
+  { name: 'agent-contacts', url: `${AGENT_BASE}/contacts`, auth: 'agent' },
   { name: 'agent-preferences', url: `${AGENT_BASE}/preferences`, auth: 'agent' },
 ];
 
 const COLORS = {
-  reset: '\x1b[0m', dim: '\x1b[2m', red: '\x1b[31m', yellow: '\x1b[33m',
-  green: '\x1b[32m', cyan: '\x1b[36m', bold: '\x1b[1m',
+  reset: '\x1b[0m',
+  dim: '\x1b[2m',
+  red: '\x1b[31m',
+  yellow: '\x1b[33m',
+  green: '\x1b[32m',
+  cyan: '\x1b[36m',
+  bold: '\x1b[1m',
 };
 
-function color(c, s) { return `${COLORS[c]}${s}${COLORS.reset}`; }
+function color(c, s) {
+  return `${COLORS[c]}${s}${COLORS.reset}`;
+}
 
 async function loginAs(page, base) {
   await page.goto(`${base}/login`, { waitUntil: 'networkidle' });
@@ -99,11 +106,13 @@ for (const route of ROUTES) {
     totalViolations += results.violations.length;
 
     allResults.push({ route: route.name, url: route.url, counts, violations: results.violations });
-    const ind =
-      counts.critical ? color('red', '✗ CRIT')
-      : counts.serious ? color('yellow', '! SER')
-      : counts.moderate || counts.minor ? color('dim', '· info')
-      : color('green', '✓ pass');
+    const ind = counts.critical
+      ? color('red', '✗ CRIT')
+      : counts.serious
+        ? color('yellow', '! SER')
+        : counts.moderate || counts.minor
+          ? color('dim', '· info')
+          : color('green', '✓ pass');
     console.log(
       `${ind}  ${route.name.padEnd(22)} crit:${counts.critical}  ser:${counts.serious}  mod:${counts.moderate}  min:${counts.minor}`,
     );
@@ -123,7 +132,12 @@ const jsonPath = resolve(outDir, `a11y-${new Date().toISOString().slice(0, 10)}.
 await writeFile(jsonPath, JSON.stringify(allResults, null, 2));
 
 console.log('');
-console.log(color('bold', `Total violations: ${totalViolations}  (critical: ${critical}, serious: ${serious})`));
+console.log(
+  color(
+    'bold',
+    `Total violations: ${totalViolations}  (critical: ${critical}, serious: ${serious})`,
+  ),
+);
 console.log(`JSON: ${jsonPath}`);
 
 if (critical > 0 || serious > 0) {

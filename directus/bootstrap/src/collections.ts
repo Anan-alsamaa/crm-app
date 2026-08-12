@@ -195,6 +195,20 @@ export const collections: CollectionSpec[] = [
       // and so it stays queryable. The order may change or vanish upstream,
       // which is exactly why this is a snapshot rather than a live lookup.
       { field: 'order_snapshot', type: 'json' },
+      /**
+       * The order id, lifted OUT of the snapshot into a column of its own.
+       *
+       * Not redundant: Directus cannot filter inside a `json` column at all. A
+       * nested path is rejected as a field-permission error and `_contains` is
+       * refused outright ("json field type does not contain the _contains
+       * filter"), so "find the chat about order 1095975" is unanswerable while
+       * the id lives only in the snapshot. Indexed, because that lookup runs
+       * from the inbox search box on every keystroke.
+       *
+       * The snapshot stays the record of what the order WAS; this is the key
+       * you search on. Same reasoning as stores.yiji_restaurant_id.
+       */
+      { field: 'order_id', type: 'string', index: true },
       // The store's ATTRIBUTION (branch, brand, city, area/chain manager) as it
       // stood when the ticket was raised. Resolving it live at report time
       // would let one edit rewrite history: move a branch to a new area

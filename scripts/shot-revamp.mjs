@@ -83,7 +83,9 @@ try {
 try {
   await page.evaluate(() => {
     const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: !isMac, metaKey: isMac, bubbles: true }));
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'k', ctrlKey: !isMac, metaKey: isMac, bubbles: true }),
+    );
   });
   await page.waitForTimeout(500);
   await shot(page, 'admin-cmdk-revamp');
