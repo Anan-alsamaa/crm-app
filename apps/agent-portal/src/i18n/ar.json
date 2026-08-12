@@ -80,7 +80,8 @@
     "account": "الحساب",
     "compensation": "التعويض",
     "reports": "التقارير",
-    "addTicket": "تذكرة جديدة"
+    "addTicket": "تذكرة جديدة",
+    "complaints": "شكاواي"
   },
   "contacts": {
     "title": "جهات الاتصال",
@@ -604,5 +605,54 @@
     "context": "معلومات مرجعية",
     "readOnly": "للقراءة فقط",
     "optional": "اختياري"
+  },
+  "complaints": {
+    "title": "شكاواي",
+    "subtitle": "الشكاوى المسندة إليك، بالتنسيق الذي يصدّره فريق العمليات.",
+    "range": "النطاق الزمني",
+    "lastDays": "آخر {{count}} يوم",
+    "columns": "الأعمدة",
+    "allColumns": "الكل",
+    "export": "تصدير إلى Excel",
+    "exported": "تم تصدير {{count}} صفًا.",
+    "nothingToExport": "لا يوجد ما يمكن تصديره.",
+    "unmappedStores": "{{count}} شكوى لها فرع غير موجود في قائمة الفروع.",
+    "empty": "لا توجد شكاوى في هذه الفترة.",
+    "emptyHint": "تظهر هنا الشكاوى المسندة إليك، الأحدث أولًا.",
+    "previewNote": "عرض {{shown}} من {{total}}. يحتوي الملف المصدَّر على جميع الصفوف.",
+    "prev": "السابق",
+    "next": "التالي",
+    "you": "أنت"
+  },
+  "complaintReport": {
+    "col": {
+      "date": "التاريخ",
+      "time": "الوقت",
+      "chain": "السلسلة",
+      "area": "المنطقة",
+      "brand": "العلامة التجارية",
+      "city": "المدينة",
+      "restaurantName": "اسم المطعم",
+      "serviceType": "نوع الخدمة",
+      "complaintType": "نوع الشكوى",
+      "customerName": "اسم العميل",
+      "customerMobile": "جوال العميل",
+      "complaintDescription": "وصف الشكوى",
+      "responseDesc": "الرد",
+      "complaintSource": "مصدر الشكوى",
+      "orderAmount": "قيمة الطلب",
+      "orderNumber": "رقم الطلب",
+      "communicationMethod": "طريقة التواصل",
+      "couponCode": "رمز القسيمة",
+      "couponValue": "قيمة القسيمة",
+      "couponPercent": "نسبة القسيمة",
+      "complaintStatus": "حالة الشكوى",
+      "restaurantManagerId": "معرّف مدير المطعم",
+      "agent": "الوكيل",
+      "compensation": "التعويض"
+    }
+  },
+  "agentReports": {
+    "notMapped": "غير مرتبط"
   }
 }

@@ -3,6 +3,10 @@ import { readItems, readUsers } from '@directus/sdk';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
 import type { StoreSnapshot } from '@yiji/shared-types';
+// The complaints row shape is shared with the agent portal — see @yiji/reports.
+import { splitLocalDateTime, type ComplaintReportRow } from '@yiji/reports';
+
+export type { ComplaintReportRow };
 
 /**
  * Agent reports — three exportable cuts the client asked for (feature #8), all
@@ -150,46 +154,6 @@ export interface TicketOrderInfo {
  * order snapshot joined onto the store master — NOT from a live order lookup,
  * so rows keep reporting correctly long after the upstream order has changed.
  */
-export interface ComplaintReportRow {
-  id: string;
-  /** Local `YYYY-MM-DD` of ticket creation. */
-  date: string;
-  /** Local `HH:mm` of ticket creation. */
-  time: string;
-  /** Chain manager, from the matched store. */
-  chain: string;
-  /** Area manager, from the matched store. */
-  area: string;
-  brand: string;
-  city: string;
-  restaurantName: string;
-  /** False when no store row matched — rendered as "Not mapped", never blank. */
-  storeMapped: boolean;
-  serviceType: string;
-  complaintType: string;
-  customerName: string;
-  customerMobile: string;
-  complaintDescription: string;
-  responseDesc: string;
-  complaintSource: string;
-  orderAmount: number | null;
-  orderNumber: string;
-  communicationMethod: string;
-  couponCode: string;
-  couponValue: number | null;
-  couponPercent: number | null;
-  /** Ticket status — translated to the manager's wording at export time. */
-  complaintStatus: string;
-  agent: string;
-  compensation: string;
-  /**
-   * The branch attribution frozen onto the ticket when it was raised. Null
-   * for tickets raised before snapshots existed, which fall back to a live
-   * lookup and therefore DO move if a store is edited.
-   */
-  storeSnapshot: StoreSnapshot | null;
-}
-
 export interface AgentKpiRow {
   agentId: string | null;
   agentName: string;
@@ -314,18 +278,6 @@ const COMPLAINT_FIELDS = [
   'order_snapshot',
   'store_snapshot',
 ] as const;
-
-/** Local `YYYY-MM-DD` + `HH:mm`, split the way the operations sheet splits it. */
-function splitLocalDateTime(iso: string | null): { date: string; time: string } {
-  if (!iso) return { date: '', time: '' };
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return { date: '', time: '' };
-  const p = (n: number) => String(n).padStart(2, '0');
-  return {
-    date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
-    time: `${p(d.getHours())}:${p(d.getMinutes())}`,
-  };
-}
 
 /** Numeric cell that tolerates the sheet's `-`, `""` and `"102.85 SR"`. */
 function toNumber(v: unknown): number | null {
