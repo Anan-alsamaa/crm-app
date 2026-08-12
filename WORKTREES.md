@@ -30,16 +30,31 @@ visible to all of them.** Only one session at a time should touch
 
 ## Current worktrees
 
-| Branch                        | Folder                          | Slot | Scope                                                                                           |
-| ----------------------------- | ------------------------------- | ---- | ----------------------------------------------------------------------------------------------- |
-| `feat/new-complaint-form`     | `crm-app-wt/new-complaint-form` | 1    | Ticket form reshaped to the operations manager's New Complaint layout, plus the nine new fields |
-| `feat/inbox-panel-and-status` | `crm-app-wt/inbox-order-link`   | 2    | Inbox details-panel order, and conversation status reduced to solved/pending                    |
-| `feat/top-nav`                | `crm-app-wt/top-nav`            | 3    | Sidebar navigation moved to a top bar                                                           |
-| `feat/store-csat`             | `crm-app-wt/store-csat`         | 5    | Branch-level satisfaction from the customer's post-chat rating                                  |
+| Branch                        | Folder                        | Slot | Scope                                                                        |
+| ----------------------------- | ----------------------------- | ---- | ---------------------------------------------------------------------------- |
+| `feat/inbox-panel-and-status` | `crm-app-wt/inbox-order-link` | 2    | Inbox details-panel order, and conversation status reduced to solved/pending |
+| `feat/top-nav`                | `crm-app-wt/top-nav`          | 3    | Sidebar navigation moved to a top bar                                        |
+| `feat/store-csat`             | `crm-app-wt/store-csat`       | 5    | Branch-level satisfaction from the customer's post-chat rating               |
 
-These four were chosen because they barely overlap in the files they touch. Two
+These were chosen because they barely overlap in the files they touch. Two
 sessions both editing the ticket form would still collide at merge time — the
 worktree prevents clobbering, not conflicting intent.
+
+Slot 1 (`feat/new-complaint-form`) is closed: the complaint form and the
+operations manager's dashboard are merged. It also left two fixes worth knowing
+about, because both were silent failures rather than errors:
+
+- `docker compose` published Postgres on **5433**, a port this machine's native
+  PostgreSQL 15 already owns, so the binding was shadowed — host connections
+  reached the wrong server and succeeded. The bootstrap's raw-SQL step wrote
+  this schema's indexes into an unrelated database for as long as it had been
+  set up that way. Postgres is now on `127.0.0.1:${DB_PORT_EXTERNAL:-5434}`, and
+  `apply` refuses to run raw SQL until the connection proves it is the database
+  behind Directus.
+- The gitignored `docker-compose.override.yml` pins `postgres:17-alpine` and
+  that pin is load-bearing: the data volume is PG17 and the committed compose
+  file still says `16-alpine`, so bringing the stack up without the override
+  makes Postgres refuse to start on newer data files.
 
 ## Finish one
 
