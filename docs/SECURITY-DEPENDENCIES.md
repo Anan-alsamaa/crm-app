@@ -9,11 +9,11 @@ Last full triage: **2026-08-12**, against `main`.
 
 ## The shape of it
 
-| Source                                | Count | Actionable?               |
-| ------------------------------------- | ----- | ------------------------- |
-| `directus/local/package-lock.json`    | 58    | No — see below            |
-| Our `pnpm-lock.yaml`, already patched | 21    | No — stale alerts         |
-| Genuinely outdated in our code        | 2     | One fixed, one deliberate |
+| Source                                | Count | Actionable?       |
+| ------------------------------------- | ----- | ----------------- |
+| `directus/local/package-lock.json`    | 58    | No — see below    |
+| Our `pnpm-lock.yaml`, already patched | 36    | No — stale alerts |
+| Genuinely outdated in our code        | 1     | Fixed             |
 
 ## Directus 11's own dependency tree (58)
 
@@ -44,12 +44,12 @@ deliberate project, not a dependency bump.
 are accepted risk under that decision. If that changes, revisit this file
 first — the alert count should drop by ~58 on the upgrade.
 
-## Stale alerts on our lockfile (21)
+## Stale alerts on our lockfile (36)
 
-Verified individually against installed versions: `react-router`,
+Verified against the locked versions, not the alert text: `react-router`,
 `nodemailer`, `js-yaml`, `fast-uri`, `postcss`, `vite`, `vitest`,
-`socket.io-parser`, `find-my-way`, `protobufjs`, `form-data`,
-`@opentelemetry/propagator-jaeger` are all at or above their fixed versions.
+`socket.io-parser`, `find-my-way`, `protobufjs`, `form-data`, `esbuild` and
+`@opentelemetry/propagator-jaeger` all sit outside their advisory ranges.
 
 `brace-expansion` deserves a note because it looks wrong and is not: it ships
 three release branches at once, and the advisory lists a first-patched version
@@ -58,27 +58,39 @@ own branch. Comparing 1.1.18 against the 5.x fix makes it look unpatched.
 
 These close when Dependabot rescans; nothing to do.
 
-## Genuinely outdated (2)
+## Genuinely outdated (1)
 
 - **`@babel/core`** — arbitrary file read via a `sourceMappingURL` comment.
   Fixed: bumped inside our existing range, lockfile resolves to 7.29.7.
-- **`esbuild` 0.25.12** — arbitrary file read in its **development server on
-  Windows**. Deliberately not forced. Production serves static files through
-  nginx and never runs that server, and vite 6 constrains esbuild to `^0.25.0`,
-  so an override would risk every build for something that cannot reach
-  production. It wants a considered vite major on its own.
+
+**`esbuild` is NOT one of them**, though it looks like it. The advisory (an
+arbitrary file read in its dev server on Windows) applies to
+`>= 0.27.3, < 0.28.1`. We lock 0.25.12, which is _below_ that range, and 0.28.1.
+Neither is affected. Reading only `first_patched_version` and concluding
+"0.25.12 < 0.28.1, so we are exposed" is wrong, and would have cost a needless
+vite major.
 
 ## How to redo this triage
 
-Do not read the alert count. Compare what is _installed_ against what each
-advisory says is fixed:
+Do not read the alert count — it measures Dependabot's scan lag, not exposure.
+Run:
 
 ```bash
-gh api "repos/<owner>/<repo>/dependabot/alerts?state=open&per_page=100" --paginate \
-  --jq '.[] | [.security_advisory.severity, .dependency.package.name,
-               (.dependency.scope//"runtime"), (.dependency.manifest_path//"?"),
-               (.security_vulnerability.first_patched_version.identifier//"NONE")] | @tsv'
+pnpm check:advisories
 ```
 
-Then check each package's resolved version in `pnpm-lock.yaml`. A package with
-several major branches needs comparing against the fix **for its own branch**.
+It compares every open advisory against what `pnpm-lock.yaml` actually
+resolves, and exits non-zero only on real exposure. Two traps it encodes,
+because both are easy to get wrong by hand and both produce confident
+nonsense:
+
+- **Lower bounds.** Ranges look like `>= 0.27.3, < 0.28.1`. A version below the
+  lower bound is a different release branch and is not affected. This is also
+  what makes `brace-expansion` fine at 1.1.18 / 2.1.4 / 5.0.9 — it ships three
+  branches at once and gets one advisory per branch.
+- **Types packages.** `@types/nodemailer@6.4.23` is not `nodemailer@6.4.23`. A
+  loose substring match invents an exposure that does not exist; entries must
+  be matched anchored.
+
+Status at the last run (2026-08-12): **CLEAN** — all 37 open alerts on our
+manifests are against packages already patched here, awaiting rescan.
