@@ -133,7 +133,7 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
               <span className="text-rail-foreground/70 font-normal">CRM</span>
             </div>
             <div className="text-2xs text-rail-foreground/75 mt-0.5">
-              {t('app.workspace', { defaultValue: 'Agent workspace' })}
+              {t('app.workspace', { defaultValue: 'User workspace' })}
             </div>
           </div>
         )}
@@ -392,7 +392,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                   <span className="font-normal text-rail-foreground/70">CRM</span>
                 </div>
                 <div className="mt-0.5 text-2xs text-rail-foreground/75">
-                  {t('app.workspace', { defaultValue: 'Agent workspace' })}
+                  {t('app.workspace', { defaultValue: 'User workspace' })}
                 </div>
               </div>
             </div>
