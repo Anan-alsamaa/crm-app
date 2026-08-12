@@ -28,9 +28,24 @@ const DAY_MS = 86_400_000;
  */
 const MINE = { assigned_agent: { _eq: '$CURRENT_USER' } };
 
+/**
+ * A complaint row plus the few ticket fields the Tickets page works with but
+ * the operations report has no column for. Kept as an extension rather than
+ * pushed into the shared row, so the exported sheet stays exactly the ops
+ * team's 24 columns.
+ */
+export interface AgentComplaintRow extends ComplaintReportRow {
+  subject: string;
+  firstRespondedAt: string | null;
+  firstResponseDueAt: string | null;
+}
+
 interface TicketRow {
   id: string;
   status: string;
+  subject: string | null;
+  first_responded_at: string | null;
+  first_response_due_at: string | null;
   date_created: string | null;
   description: string | null;
   complaint_type: string | null;
@@ -63,6 +78,9 @@ function toNumber(v: unknown): number | null {
 const FIELDS = [
   'id',
   'status',
+  'subject',
+  'first_responded_at',
+  'first_response_due_at',
   'date_created',
   'description',
   'complaint_type',
@@ -84,7 +102,7 @@ const FIELDS = [
  * signed-in agent by construction, so reading it back per ticket would be a
  * relational query for a value we already hold.
  */
-export function toComplaintRow(t: TicketRow, agentName: string): ComplaintReportRow {
+export function toComplaintRow(t: TicketRow, agentName: string): AgentComplaintRow {
   const { date, time } = splitLocalDateTime(t.date_created);
   const snap = t.order_snapshot ?? null;
   return {
@@ -117,19 +135,27 @@ export function toComplaintRow(t: TicketRow, agentName: string): ComplaintReport
     agent: agentName,
     compensation: t.compensation ?? '',
     storeSnapshot: t.store_snapshot ?? null,
+    subject: t.subject ?? '',
+    firstRespondedAt: t.first_responded_at ?? null,
+    firstResponseDueAt: t.first_response_due_at ?? null,
   };
 }
 
-export function useMyComplaints(days: number, agentName: string) {
+/**
+ * `days` of null means every complaint the agent has, with no date window —
+ * what the Tickets page needs, since a window there would quietly hide older
+ * tickets an agent still has to work.
+ */
+export function useMyComplaints(days: number | null, agentName: string) {
   return useQuery({
     queryKey: ['my-complaints', days, agentName],
     staleTime: 60_000,
-    queryFn: async (): Promise<ComplaintReportRow[]> => {
-      const since = new Date(Date.now() - days * DAY_MS).toISOString();
+    queryFn: async (): Promise<AgentComplaintRow[]> => {
+      const since = days == null ? null : new Date(Date.now() - days * DAY_MS).toISOString();
       const rows = (await directus.request(
         readItems('tickets', {
           limit: -1,
-          filter: { _and: [MINE, { date_created: { _gte: since } }] },
+          filter: since ? { _and: [MINE, { date_created: { _gte: since } }] } : MINE,
           sort: ['-date_created'],
           fields: FIELDS as never,
         }),
