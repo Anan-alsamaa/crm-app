@@ -411,7 +411,8 @@
     "fixFieldsFirst": "Check the highlighted fields",
     "backToTickets": "Back to tickets",
     "backToChat": "Back to the chat",
-    "noOrderContext": "No order attached. Pick a branch on the left so the ticket still reports against one."
+    "noOrderContext": "No order attached. Pick a branch on the left so the ticket still reports against one.",
+    "pickComplaintType": "Choose a complaint type — it names the ticket"
   },
   "notifications": {
     "title": "Notifications",
@@ -595,7 +596,8 @@
     "readOnly": "Read only",
     "optional": "Optional",
     "date": "Complaint date",
-    "dateHint": "When it happened"
+    "dateHint": "When it happened",
+    "typeNames": "Required — it names the ticket"
   },
   "complaints": {
     "title": "My complaints",

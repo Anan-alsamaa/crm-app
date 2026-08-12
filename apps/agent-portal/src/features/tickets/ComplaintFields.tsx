@@ -612,9 +612,17 @@ export function ComplaintSection({
 export function ComplaintClassification({
   values,
   onChange,
+  typeRequired = false,
 }: {
   values: ComplaintValues;
   onChange: (patch: Partial<ComplaintValues>) => void;
+  /**
+   * On the Add ticket form the complaint type IS the ticket's name, so it is
+   * the one field here that must be answered. Off everywhere else: an existing
+   * ticket may predate the field, and editing its resolution must not be held
+   * hostage to back-filling a category nobody recorded at the time.
+   */
+  typeRequired?: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -633,7 +641,14 @@ export function ComplaintClassification({
           onChange={(e) => onChange({ complaint_date: e.target.value })}
         />
       </FormField>
-      <FormField label={t('complaint.type', { defaultValue: 'Complaint type' })}>
+      <FormField
+        label={t('complaint.type', { defaultValue: 'Complaint type' })}
+        hint={
+          typeRequired
+            ? t('complaint.typeNames', { defaultValue: 'Required — it names the ticket' })
+            : undefined
+        }
+      >
         <Combobox
           value={values.complaint_type}
           onChange={(v) => onChange({ complaint_type: v })}

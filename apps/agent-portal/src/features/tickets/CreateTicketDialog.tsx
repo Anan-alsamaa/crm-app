@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Button, cn, FormField, Input, Pill, SelectMenu, Textarea, toast } from '@yiji/ui';
+import { Button, cn, FormField, Pill, SelectMenu, Textarea, toast } from '@yiji/ui';
 import {
   manualStoreMatch,
   toStoreSnapshot,
@@ -23,6 +23,7 @@ import {
   complaintPatch,
   complaintFromConversation,
   nowLocalInput,
+  optionLabel,
   serviceTypeFromOrder,
   type ComplaintValues,
 } from './ComplaintFields.js';
@@ -34,8 +35,14 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
 
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 
+/**
+ * No `subject`. A ticket's name is its complaint type, by request — one list of
+ * agreed categories rather than 1,673 hand-typed titles that no report can group
+ * by. `complaint_type` is therefore the one complaint field that is REQUIRED
+ * here: it is the only thing standing in for a name, and a nameless ticket is
+ * unreadable in every list that shows one.
+ */
 const schema = z.object({
-  subject: z.string().min(1),
   description: z.string().optional(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']),
 });
@@ -153,7 +160,7 @@ export function CreateTicketDialog({
     register,
     handleSubmit,
     control,
-    formState: { errors, isSubmitting },
+    formState: { isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { priority: 'medium' },
@@ -260,9 +267,14 @@ export function CreateTicketDialog({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // The ticket's name. Always the complaint type — never a free-text title —
+  // so the ticket list, the reports and the ops spreadsheet all say the same
+  // thing about the same ticket.
+  const subject = complaint.complaint_type.trim();
+
   const onSubmit = handleSubmit(async (values) => {
     if (!contactId || !vendorId) return;
-    if (complaintHasErrors(complaint)) return;
+    if (complaintHasErrors(complaint) || !subject) return;
     try {
       // The description stays the agent's OWN words. The order rides along as
       // structured JSON so the ticket can render it as a real order card
@@ -271,7 +283,7 @@ export function CreateTicketDialog({
 
       const created = await createFromChat.mutateAsync({
         ticket: {
-          subject: values.subject,
+          subject,
           description,
           priority: values.priority,
           contact: contactId,
@@ -303,7 +315,7 @@ export function CreateTicketDialog({
       // and frozen on the ticket — with no way to tell which is authoritative.
       if (includeOrder && latestOrder) clearPinnedOrder(conversationId);
       toast.success(t('tickets.created', { defaultValue: 'Ticket created' }), {
-        description: values.subject,
+        description: optionLabel(subject),
       });
       // Hand the id back BEFORE closing: a page-hosted form navigates to the new
       // ticket, and closing first would bounce the agent to the inbox on the way.
@@ -315,12 +327,16 @@ export function CreateTicketDialog({
   });
 
   const hasChatContext = !!conversationId && (!!latestOrder || sessionFileIds.length > 0);
-  const canSubmit = !!contactId && !!vendorId && !complaintHasErrors(complaint);
+  const canSubmit = !!contactId && !!vendorId && !complaintHasErrors(complaint) && !!subject;
 
   // Identify the ticket by who and what it is about, not by restating the
   // page's purpose. Empty on a blank standalone form, where the generic hint
   // is still the most useful thing to say.
   const contextLine = [
+    // First, because it is what the ticket will be CALLED. With no subject box
+    // on the form, this is the only place the agent sees the name they are
+    // about to give it.
+    subject ? optionLabel(subject) : null,
     contact.data?.name ?? contact.data?.phone ?? null,
     latestOrder ? `#${latestOrder.orderId}` : null,
     chosenMatch?.store ? chosenMatch.restaurantName : null,
@@ -328,9 +344,15 @@ export function CreateTicketDialog({
 
   const blockedReason = !contactId
     ? t('tickets.pickContactFirst', { defaultValue: 'Choose a customer to continue' })
-    : complaintHasErrors(complaint)
-      ? t('tickets.fixFieldsFirst', { defaultValue: 'Check the highlighted fields' })
-      : '';
+    : !subject
+      ? // Named, not vague: "check the highlighted fields" sends the agent
+        // hunting across a fourteen-field form for the one thing missing.
+        t('tickets.pickComplaintType', {
+          defaultValue: 'Choose a complaint type — it names the ticket',
+        })
+      : complaintHasErrors(complaint)
+        ? t('tickets.fixFieldsFirst', { defaultValue: 'Check the highlighted fields' })
+        : '';
 
   return (
     <form
@@ -415,79 +437,79 @@ export function CreateTicketDialog({
         </div>
       </div>
 
-      {/* Columns rather than one tall stack: fourteen fields in a single
-          column is two screens of scrolling, and this is filled in one pass.
-          Two columns, not three: Ticket alone is about as tall as the other two
-          together, so pairing them balances the page instead of leaving one
-          column half empty and squeezing the coupon fields onto two lines. */}
+      {/* Two sections now, not three: Subject is gone and the rest of what was
+          the Ticket card lives at the foot of "What happened", so the agent
+          fills one story in one pass instead of crossing the page to answer
+          half of it. Still columns rather than one tall stack — thirteen fields
+          in a single column is two screens of scrolling. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-2 lg:overflow-hidden">
+        {/* Columns sized to the fields rather than to the monitor, and centred
+            in whatever is left. Two 50% columns on a 1920 screen put 640px of
+            inputs against a 300px empty gutter each, which reads as a layout
+            that failed rather than one that chose. */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 justify-center overflow-y-auto lg:grid-cols-[minmax(0,44rem)_minmax(0,44rem)] lg:overflow-hidden">
           <div className="min-h-0 lg:overflow-y-auto">
-            <ComplaintSection
-              tone="primary"
-              title={t('complaint.ticket', { defaultValue: 'Ticket' })}
-            >
-              {contactField}
-              <FormField
-                label={t('tickets.subject')}
-                htmlFor="ticket-subject"
-                error={errors.subject?.message}
-              >
-                <Input id="ticket-subject" invalid={!!errors.subject} {...register('subject')} />
-              </FormField>
-              <FormField label={t('tickets.description')} htmlFor="ticket-description">
-                <Textarea
-                  id="ticket-description"
-                  rows={3}
-                  dir="auto"
-                  {...register('description')}
-                />
-              </FormField>
-              <FormField label={t('conversation.priority')} htmlFor="ticket-priority">
-                <Controller
-                  control={control}
-                  name="priority"
-                  render={({ field }) => (
-                    <SelectMenu
-                      fullWidth
-                      value={field.value}
-                      onChange={field.onChange}
-                      aria-label={t('conversation.priority')}
-                      options={PRIORITIES.map((p) => ({
-                        value: p,
-                        label: t(`priority.${p}`, { ns: 'common' }),
-                      }))}
-                    />
-                  )}
-                />
-              </FormField>
-              {/* Always rendered: the branch has to be recordable even when there
-                is no order to infer it from. */}
-              <StorePicker
-                value={storeId}
-                onChange={setStoreId}
-                inferredFrom={inferredStoreId || null}
-              />
-            </ComplaintSection>
-          </div>
-
-          {/* Paired in one column so the page reads as two balanced halves.
-              The rule between them is horizontal; the one against Ticket is
-              vertical and logical, so it swaps sides in Arabic. */}
-          <div className="min-h-0 border-t border-border lg:overflow-y-auto lg:border-s lg:border-t-0">
             <ComplaintSection
               tone="violet"
               title={t('complaint.whatHappened', { defaultValue: 'What happened' })}
-              hint={t('complaint.optional', { defaultValue: 'Optional' })}
             >
               <ComplaintClassification
                 values={complaint}
                 onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
+                // The type names the ticket now, so it is the one complaint
+                // field that cannot be left blank. Said under the field as well
+                // as on the disabled Save button, because that explanation is
+                // hidden below a large screen.
+                typeRequired
               />
-            </ComplaintSection>
 
+              {/* What was the Ticket card, merged in below the classification
+                  and kept in its original order. */}
+              <div className="space-y-4 border-t border-border pt-4">
+                {contactField}
+                <FormField label={t('tickets.description')} htmlFor="ticket-description">
+                  <Textarea
+                    id="ticket-description"
+                    rows={2}
+                    dir="auto"
+                    {...register('description')}
+                  />
+                </FormField>
+                <div className="grid gap-3.5 sm:grid-cols-2">
+                  <FormField label={t('conversation.priority')} htmlFor="ticket-priority">
+                    <Controller
+                      control={control}
+                      name="priority"
+                      render={({ field }) => (
+                        <SelectMenu
+                          fullWidth
+                          value={field.value}
+                          onChange={field.onChange}
+                          aria-label={t('conversation.priority')}
+                          options={PRIORITIES.map((p) => ({
+                            value: p,
+                            label: t(`priority.${p}`, { ns: 'common' }),
+                          }))}
+                        />
+                      )}
+                    />
+                  </FormField>
+                  {/* Always rendered: the branch has to be recordable even when
+                      there is no order to infer it from. */}
+                  <StorePicker
+                    value={storeId}
+                    onChange={setStoreId}
+                    inferredFrom={inferredStoreId || null}
+                  />
+                </div>
+              </div>
+            </ComplaintSection>
+          </div>
+
+          {/* The rule between the columns is vertical and logical, so it swaps
+              sides in Arabic. */}
+          <div className="min-h-0 border-t border-border lg:overflow-y-auto lg:border-s lg:border-t-0">
             <ComplaintSection
-              divider
               tone="success"
               title={t('complaint.resolution', { defaultValue: 'Resolution' })}
               hint={t('complaint.optional', { defaultValue: 'Optional' })}
@@ -559,16 +581,11 @@ function OrderRail({
   const { t } = useTranslation();
   const matched = store?.store ?? null;
 
-  if (!order && !matched) {
-    return (
-      <aside className="w-full shrink-0 overflow-y-auto border-t border-border bg-background px-6 py-5 lg:w-[20rem] lg:border-s lg:border-t-0 text-xs leading-relaxed text-muted-foreground">
-        {t('tickets.noOrderContext', {
-          defaultValue:
-            'No order attached. Pick a branch on the left so the ticket still reports against one.',
-        })}
-      </aside>
-    );
-  }
+  // Nothing to show, so no column. A 20rem rail holding one sentence of advice
+  // is 20rem the form does not get, and the advice it held is already the
+  // branch picker's own hint. It returns the moment there is an order or a
+  // chosen branch, which is also the moment it has something to confirm.
+  if (!order && !matched) return null;
 
   return (
     <aside className="w-full shrink-0 overflow-y-auto border-t border-border bg-background px-6 py-5 lg:w-[20rem] lg:border-s lg:border-t-0">
