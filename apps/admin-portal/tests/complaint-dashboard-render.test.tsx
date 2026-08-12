@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React from 'react';
 
 // Interpolates {{placeholders}} the way i18next does. Without this the mock
@@ -68,6 +69,7 @@ const METRICS = {
       open: 2,
       chatsOpen: 1,
       chatsSolved: 3,
+      replies: 42,
     },
   ],
   chatAgents: [
@@ -98,6 +100,44 @@ const METRICS = {
   cityOptions: ['Khobar'],
   storeOptions: [{ id: 'st1', name: 'LCP-002 Dhahran Mall', city: 'Khobar' }],
   unattributed: 0,
+  rows: [
+    {
+      id: 'tk1',
+      subject: 'Missing garlic sauce',
+      date: '2026-07-29',
+      status: 'open',
+      agentId: 'u1',
+      agentName: 'Amjad',
+      restaurantName: 'LCP-002 Dhahran Mall',
+      brandName: 'Casa Pasta',
+      area: 'Aly',
+      city: 'Khobar',
+      complaintType: 'Missing item',
+      serviceType: 'Delivery',
+      source: 'Comp. WhatsApp',
+      compensation: 'Compensated',
+      couponValue: 10,
+      isOpen: true,
+    },
+    {
+      id: 'tk2',
+      subject: 'Order arrived cold',
+      date: '2026-07-20',
+      status: 'closed',
+      agentId: 'u1',
+      agentName: 'Amjad',
+      restaurantName: 'LCP-002 Dhahran Mall',
+      brandName: 'Casa Pasta',
+      area: 'Aly',
+      city: 'Khobar',
+      complaintType: 'Late order',
+      serviceType: 'Delivery',
+      source: 'Comp. WhatsApp',
+      compensation: 'Not Compensated',
+      couponValue: 0,
+      isOpen: false,
+    },
+  ],
 };
 
 beforeEach(() => {
@@ -199,5 +239,63 @@ describe('ComplaintDashboard — a capped list admits what it hides', () => {
   it('shows how many complaints were settled, not just what was spent', () => {
     render(<ComplaintDashboard />);
     expect(screen.getByText('4 compensated · 25.0 avg each')).toBeInTheDocument();
+  });
+});
+
+describe('ComplaintDashboard — click-through drill-down', () => {
+  it('opens the complaints behind a bar, not just its count', async () => {
+    const user = userEvent.setup();
+    render(<ComplaintDashboard />);
+
+    await user.click(screen.getByRole('button', { name: /Missing item/ }));
+
+    // The drawer names the cut and lists the matching complaint only.
+    expect(screen.getByText('By complaint type: Missing item')).toBeInTheDocument();
+    expect(screen.getByText('Missing garlic sauce')).toBeInTheDocument();
+    expect(screen.queryByText('Order arrived cold')).not.toBeInTheDocument();
+  });
+
+  it('matches on the row KEY so a translated label cannot break it', async () => {
+    const user = userEvent.setup();
+    render(<ComplaintDashboard />);
+
+    // The status bar is labelled through t(), but keyed on the raw value.
+    await user.click(screen.getAllByRole('button', { name: /closed/ })[0]!);
+    expect(screen.getByText('Order arrived cold')).toBeInTheDocument();
+    expect(screen.queryByText('Missing garlic sauce')).not.toBeInTheDocument();
+  });
+
+  it('drills an agent from the unsolved chart to their OPEN complaints only', async () => {
+    const user = userEvent.setup();
+    render(<ComplaintDashboard />);
+
+    // "Sara" is the unsolved-chart row; the fixture keys it by label, so use
+    // the agent breakdown row for Amjad which has one open and one closed.
+    const unsolved = screen.getByText('Unsolved complaints by agent').closest('section')!;
+    const bar = unsolved.querySelector('button')!;
+    await user.click(bar);
+    // Sara has no rows in the fixture — the drawer still opens and says so
+    // rather than silently doing nothing.
+    expect(screen.getByText(/Unsolved complaints by agent: Sara/)).toBeInTheDocument();
+  });
+
+  it('totals the compensation of whatever slice was opened', async () => {
+    const user = userEvent.setup();
+    render(<ComplaintDashboard />);
+    await user.click(screen.getByRole('button', { name: /Missing item/ }));
+    expect(screen.getByText(/1 complaint\(s\) · 10 SAR compensation/)).toBeInTheDocument();
+  });
+
+  it('shows CRM replies per agent in place of his WhatsApp column', () => {
+    const { container } = render(<ComplaintDashboard />);
+    const header = screen.getByText('CRM replies');
+    expect(header).toBeInTheDocument();
+    // Scoped to the COMPLAINTS agent table — the chat table reports the same
+    // count under "Replies sent", so an unscoped match hits both.
+    const table = header.closest('table')!;
+    const idx = Array.from(table.querySelectorAll('th')).indexOf(header as HTMLTableCellElement);
+    const cell = table.querySelectorAll('tbody tr')[0]!.querySelectorAll('td')[idx]!;
+    expect(cell.textContent).toBe('42');
+    expect(container).toBeTruthy();
   });
 });

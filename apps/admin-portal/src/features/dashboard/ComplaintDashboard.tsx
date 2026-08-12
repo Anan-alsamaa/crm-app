@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, cn, ErrorState, Input, SelectMenu, Skeleton } from '@yiji/ui';
+import { Button, cn, Drawer, ErrorState, Input, SelectMenu, Skeleton } from '@yiji/ui';
 import {
   emptyComplaintFilters,
   useComplaintMetrics,
   type Breakdown,
   type ComplaintFilters,
+  type ComplaintRow,
   type Cut,
   type MonthPoint,
 } from './complaints-api.js';
@@ -110,7 +111,18 @@ function Card({
  * is what makes the list readable — 40 complaints means nothing until you know
  * it is a third of everything.
  */
-function Bars({ rows, total, color }: { rows: Breakdown[]; total: number; color: string }) {
+function Bars({
+  rows,
+  total,
+  color,
+  onSelect,
+}: {
+  rows: Breakdown[];
+  total: number;
+  color: string;
+  /** Given, each row becomes a button that opens the complaints behind it. */
+  onSelect?: (row: Breakdown) => void;
+}) {
   const { t } = useTranslation();
   const max = Math.max(1, ...rows.map((r) => r.count));
   if (rows.length === 0)
@@ -121,26 +133,47 @@ function Bars({ rows, total, color }: { rows: Breakdown[]; total: number; color:
     );
   return (
     <ul className="space-y-2">
-      {rows.map((r) => (
-        <li key={r.key} className="flex items-center gap-3">
-          <span className="w-28 shrink-0 truncate text-xs text-foreground" title={r.label}>
-            {r.label}
-          </span>
-          <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-secondary">
+      {rows.map((r) => {
+        const body = (
+          <>
             <span
-              className={cn(
-                'block h-full rounded-full transition-[width] duration-slow ease-out',
-                color,
-              )}
-              style={{ width: `${Math.max(2, (r.count / max) * 100)}%` }}
-            />
-          </span>
-          <span className="w-20 shrink-0 text-end text-2xs tabular-nums text-muted-foreground">
-            <strong className="font-semibold text-foreground">{r.count}</strong>
-            {total > 0 && ` · ${Math.round((r.count / total) * 100)}%`}
-          </span>
-        </li>
-      ))}
+              className="w-28 shrink-0 truncate text-start text-xs text-foreground"
+              title={r.label}
+            >
+              {r.label}
+            </span>
+            <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-secondary">
+              <span
+                className={cn(
+                  'block h-full rounded-full transition-[width] duration-slow ease-out',
+                  color,
+                )}
+                style={{ width: `${Math.max(2, (r.count / max) * 100)}%` }}
+              />
+            </span>
+            <span className="w-20 shrink-0 text-end text-2xs tabular-nums text-muted-foreground">
+              <strong className="font-semibold text-foreground">{r.count}</strong>
+              {total > 0 && ` · ${Math.round((r.count / total) * 100)}%`}
+            </span>
+          </>
+        );
+        return (
+          <li key={r.key}>
+            {onSelect ? (
+              <button
+                type="button"
+                onClick={() => onSelect(r)}
+                title={t('complaintDash.drillHint', { defaultValue: 'Show these complaints' })}
+                className="flex w-full items-center gap-3 rounded-lg px-1 py-0.5 -mx-1 transition-colors duration-fast hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                {body}
+              </button>
+            ) : (
+              <span className="flex items-center gap-3">{body}</span>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -157,6 +190,7 @@ function CutCard({
   total,
   color,
   className,
+  onSelect,
 }: {
   title: string;
   hint?: string;
@@ -164,6 +198,7 @@ function CutCard({
   total: number;
   color: string;
   className?: string;
+  onSelect?: (row: Breakdown) => void;
 }) {
   const { t } = useTranslation();
   const hidden = cut.distinct > cut.rows.length;
@@ -182,7 +217,7 @@ function CutCard({
           : undefined
       }
     >
-      <Bars rows={cut.rows} total={total} color={color} />
+      <Bars rows={cut.rows} total={total} color={color} onSelect={onSelect} />
     </Card>
   );
 }
@@ -213,7 +248,7 @@ const SLICE = [
   'oklch(var(--destructive))',
 ];
 
-function Donut({ rows }: { rows: Breakdown[] }) {
+function Donut({ rows, onSelect }: { rows: Breakdown[]; onSelect?: (row: Breakdown) => void }) {
   const { t } = useTranslation();
   const total = rows.reduce((s, r) => s + r.count, 0);
   if (total === 0)
@@ -272,22 +307,39 @@ function Donut({ rows }: { rows: Breakdown[] }) {
         </text>
       </svg>
       <ul className="min-w-0 flex-1 space-y-1.5">
-        {rows.map((r, i) => (
-          <li key={r.key} className="flex items-center gap-2 text-xs">
-            <span
-              aria-hidden
-              className="h-2.5 w-2.5 shrink-0 rounded-sm"
-              style={{ background: SLICE[i % SLICE.length] }}
-            />
-            <span className="min-w-0 flex-1 truncate text-foreground" title={r.label}>
-              {r.label}
-            </span>
-            <span className="shrink-0 tabular-nums text-muted-foreground">
-              <strong className="font-semibold text-foreground">{r.count}</strong> ·{' '}
-              {Math.round((r.count / total) * 100)}%
-            </span>
-          </li>
-        ))}
+        {rows.map((r, i) => {
+          const body = (
+            <>
+              <span
+                aria-hidden
+                className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                style={{ background: SLICE[i % SLICE.length] }}
+              />
+              <span className="min-w-0 flex-1 truncate text-start text-foreground" title={r.label}>
+                {r.label}
+              </span>
+              <span className="shrink-0 tabular-nums text-muted-foreground">
+                <strong className="font-semibold text-foreground">{r.count}</strong> ·{' '}
+                {Math.round((r.count / total) * 100)}%
+              </span>
+            </>
+          );
+          return (
+            <li key={r.key}>
+              {onSelect ? (
+                <button
+                  type="button"
+                  onClick={() => onSelect(r)}
+                  className="flex w-full items-center gap-2 rounded-lg px-1 py-0.5 -mx-1 text-xs transition-colors duration-fast hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                >
+                  {body}
+                </button>
+              ) : (
+                <span className="flex items-center gap-2 text-xs">{body}</span>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -455,6 +507,85 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
   );
 }
 
+/**
+ * The complaints behind one number.
+ *
+ * A dashboard that only aggregates asks the reader to trust it; "12 late orders
+ * in Khobar" is useless until you can see which twelve. His app answered this
+ * by jumping to the All Complaints screen with filters applied — we have no
+ * such screen in the admin portal, and a drawer is better anyway: the filters,
+ * scroll position and the chart you clicked are all still there behind it.
+ */
+function DrillDown({
+  title,
+  rows,
+  onClose,
+}: {
+  title: string;
+  rows: ComplaintRow[];
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const money = rows.reduce((s, r) => s + r.couponValue, 0);
+  return (
+    <Drawer
+      open
+      onClose={onClose}
+      width="lg"
+      title={title}
+      description={t('complaintDash.drillCount', {
+        defaultValue: '{{n}} complaint(s) · {{money}} compensation',
+        n: rows.length,
+        money: SAR(money),
+      })}
+    >
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
+        </p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {rows.map((r) => (
+            <li key={r.id} className="py-2.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="min-w-0 truncate text-sm font-medium text-foreground">
+                  {r.subject || t('complaintDash.untitled', { defaultValue: '(no subject)' })}
+                </span>
+                <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                  {r.date}
+                </span>
+              </div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-muted-foreground">
+                <span className={cn(r.isOpen ? 'font-semibold text-warning-foreground' : '')}>
+                  {t(`status.${r.status}`, { ns: 'common', defaultValue: r.status })}
+                </span>
+                {[r.restaurantName, r.complaintType, r.serviceType, r.agentName]
+                  .filter(Boolean)
+                  .map((bit, i) => (
+                    <span key={i}>
+                      <span aria-hidden className="me-2">
+                        ·
+                      </span>
+                      {bit}
+                    </span>
+                  ))}
+                {r.couponValue > 0 && (
+                  <span className="tabular-nums">
+                    <span aria-hidden className="me-2">
+                      ·
+                    </span>
+                    {SAR(r.couponValue)}
+                  </span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Drawer>
+  );
+}
+
 export function ComplaintDashboard() {
   const { t } = useTranslation();
   // Draft vs applied: his bar only re-runs the dashboard on Apply, which matters
@@ -463,6 +594,25 @@ export function ComplaintDashboard() {
   const [applied, setApplied] = useState<ComplaintFilters>(emptyComplaintFilters);
   const m = useComplaintMetrics(applied);
   const d = m.data;
+
+  // Which slice of the numbers the reader clicked into.
+  const [drill, setDrill] = useState<{ title: string; rows: ComplaintRow[] } | null>(null);
+
+  /**
+   * Open the complaints behind one breakdown row.
+   *
+   * Matching is on the breakdown's KEY, not its label: agent rows are keyed by
+   * user id and labelled by name, and status rows are keyed by the raw value
+   * while the label is translated. Comparing labels would work in English and
+   * quietly return nothing in Arabic.
+   */
+  const drillInto =
+    (title: string, keyOf: (r: ComplaintRow) => string, extra?: (r: ComplaintRow) => boolean) =>
+    (row: Breakdown) =>
+      setDrill({
+        title: `${title}: ${row.label}`,
+        rows: (d?.rows ?? []).filter((r) => keyOf(r) === row.key && (extra ? extra(r) : true)),
+      });
 
   const storeChoices = useMemo(
     () => [
@@ -731,12 +881,22 @@ export function ComplaintDashboard() {
                   ...r,
                   label: t(`status.${r.key}`, { ns: 'common', defaultValue: r.key }),
                 }))}
+                onSelect={drillInto(
+                  t('complaintDash.statusMix', { defaultValue: 'Complaint status mix' }),
+                  (r) => r.status,
+                )}
               />
             </Card>
             <Card
               title={t('complaintDash.brandMix', { defaultValue: 'Where complaints come from' })}
             >
-              <Donut rows={d.byBrand.rows} />
+              <Donut
+                rows={d.byBrand.rows}
+                onSelect={drillInto(
+                  t('complaintDash.byBrand', { defaultValue: 'By brand' }),
+                  (r) => r.brandName,
+                )}
+              />
             </Card>
           </div>
 
@@ -880,6 +1040,9 @@ export function ComplaintDashboard() {
                         {t('complaintDash.colOpen', { defaultValue: 'Still open' })}
                       </th>
                       <th className="py-2 text-end font-semibold">
+                        {t('complaintDash.colReplies', { defaultValue: 'CRM replies' })}
+                      </th>
+                      <th className="py-2 text-end font-semibold">
                         {t('complaintDash.colSolved', { defaultValue: 'Solved' })}
                       </th>
                       <th className="py-2 text-end font-semibold">
@@ -901,7 +1064,16 @@ export function ComplaintDashboard() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {d.agents.map((a) => (
-                      <tr key={a.id || 'unassigned'}>
+                      <tr
+                        key={a.id || 'unassigned'}
+                        onClick={() =>
+                          setDrill({
+                            title: `${t('complaintDash.agentPerf', { defaultValue: 'Agent performance' })}: ${a.name}`,
+                            rows: (d.rows ?? []).filter((r) => r.agentId === a.id),
+                          })
+                        }
+                        className="cursor-pointer transition-colors duration-fast hover:bg-secondary/60"
+                      >
                         <td className="py-2 font-medium text-foreground">{a.name}</td>
                         <td className="py-2 text-end tabular-nums">{a.logged}</td>
                         <td
@@ -912,6 +1084,7 @@ export function ComplaintDashboard() {
                         >
                           {a.open}
                         </td>
+                        <td className="py-2 text-end tabular-nums">{a.replies}</td>
                         <td className="py-2 text-end tabular-nums">{a.solved}</td>
                         <td className="py-2 text-end tabular-nums">
                           {a.solvedPct === null ? '—' : `${Math.round(a.solvedPct)}%`}
@@ -1036,7 +1209,20 @@ export function ComplaintDashboard() {
               ) : (
                 // Shares are OF THE OPEN PILE, not of every complaint: "40% of
                 // what is still open" is the question being asked here.
-                <Bars rows={d.byOpenAgent.rows} total={d.open} color="bg-destructive" />
+                <Bars
+                  rows={d.byOpenAgent.rows}
+                  total={d.open}
+                  color="bg-destructive"
+                  onSelect={drillInto(
+                    t('complaintDash.unsolvedByAgent', {
+                      defaultValue: 'Unsolved complaints by agent',
+                    }),
+                    (r) => r.agentId,
+                    // His click lands on the UNSOLVED ones only, not everything
+                    // that agent has ever logged.
+                    (r) => r.isOpen,
+                  )}
+                />
               )}
             </Card>
             <CutCard
@@ -1053,18 +1239,30 @@ export function ComplaintDashboard() {
               cut={d.byRestaurant}
               total={d.total}
               color="bg-foreground"
+              onSelect={drillInto(
+                t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' }),
+                (r) => r.restaurantName,
+              )}
             />
             <CutCard
               title={t('complaintDash.byType', { defaultValue: 'By complaint type' })}
               cut={d.byType}
               total={d.total}
               color="bg-violet"
+              onSelect={drillInto(
+                t('complaintDash.byType', { defaultValue: 'By complaint type' }),
+                (r) => r.complaintType,
+              )}
             />
             <CutCard
               title={t('complaintDash.byBrand', { defaultValue: 'By brand' })}
               cut={d.byBrand}
               total={d.total}
               color="bg-warning"
+              onSelect={drillInto(
+                t('complaintDash.byBrand', { defaultValue: 'By brand' }),
+                (r) => r.brandName,
+              )}
             />
             <CutCard
               title={t('complaintDash.byArea', { defaultValue: 'By area' })}
@@ -1074,18 +1272,30 @@ export function ComplaintDashboard() {
               cut={d.byArea}
               total={d.total}
               color="bg-warning"
+              onSelect={drillInto(
+                t('complaintDash.byArea', { defaultValue: 'By area' }),
+                (r) => r.area,
+              )}
             />
             <CutCard
               title={t('complaintDash.byCity', { defaultValue: 'By city' })}
               cut={d.byCity}
               total={d.total}
               color="bg-sky"
+              onSelect={drillInto(
+                t('complaintDash.byCity', { defaultValue: 'By city' }),
+                (r) => r.city,
+              )}
             />
             <CutCard
               title={t('complaintDash.byAgent', { defaultValue: 'By agent' })}
               cut={d.byAgent}
               total={d.total}
               color="bg-violet"
+              onSelect={drillInto(
+                t('complaintDash.byAgent', { defaultValue: 'By agent' }),
+                (r) => r.agentId,
+              )}
             />
             <CutCard
               title={t('complaintDash.byStatus', { defaultValue: 'By status' })}
@@ -1098,12 +1308,20 @@ export function ComplaintDashboard() {
               }}
               total={d.total}
               color="bg-success"
+              onSelect={drillInto(
+                t('complaintDash.byStatus', { defaultValue: 'By status' }),
+                (r) => r.status,
+              )}
             />
             <CutCard
               title={t('complaintDash.byServiceType', { defaultValue: 'By service type' })}
               cut={d.byServiceType}
               total={d.total}
               color="bg-primary"
+              onSelect={drillInto(
+                t('complaintDash.byServiceType', { defaultValue: 'By service type' }),
+                (r) => r.serviceType,
+              )}
             />
             {/* Retitled off his wording deliberately: he uses "Where complaints
                 come from" for the BRAND ring above. Two cards under one title
@@ -1114,10 +1332,16 @@ export function ComplaintDashboard() {
               cut={d.bySource}
               total={d.total}
               color="bg-destructive"
+              onSelect={drillInto(
+                t('complaintDash.bySource', { defaultValue: 'How complaints reach us' }),
+                (r) => r.source,
+              )}
             />
           </div>
         </>
       )}
+
+      {drill && <DrillDown title={drill.title} rows={drill.rows} onClose={() => setDrill(null)} />}
     </div>
   );
 }
