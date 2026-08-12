@@ -1,10 +1,19 @@
-import type { CellValue, Sheet } from './xlsx.js';
-import type {
-  AgentKpiRow,
-  ComplaintReportRow,
-  ConversationStatusReport,
-  TicketReportRow,
-} from './api.js';
+import type { CellValue, Sheet, Translate } from '@yiji/reports';
+import type { AgentKpiRow, ConversationStatusReport, TicketReportRow } from './api.js';
+
+/**
+ * The complaints report is shared with the agent portal, so its row shape,
+ * columns and sheet builder live in `@yiji/reports`. Re-exported here so this
+ * module stays the one import site for "report builders" within this app.
+ */
+export {
+  buildComplaintsSheets,
+  COMPLAINT_COLUMN_KEYS,
+  COMPLAINT_COLUMN_LABELS,
+  reportFilename,
+  type ComplaintColumnKey,
+  type Translate,
+} from '@yiji/reports';
 
 /**
  * Pure builders that turn the aggregated report data into `.xlsx` sheet
@@ -12,8 +21,6 @@ import type {
  * header strings via `t`, so the same builders serve EN and AR (and the values
  * themselves are locale-neutral — ISO-ish dates + raw numbers Excel can sum).
  */
-
-export type Translate = (key: string, opts?: { defaultValue: string; ns?: string }) => string;
 
 /** status.* / priority.* live in the shared `common` namespace, not `agent`. */
 function common(key: string, fallback: string, t: Translate): string {
@@ -210,177 +217,6 @@ export function buildTicketsSheets(
   ];
 }
 
-/* ── Report 4: Complaints (the operations manager's own report) ───────── */
-
-/**
- * The columns of the report operations have kept by hand, in her order and
- * under her headings, so the CRM can produce the same sheet she already reads.
- *
- * Two of these have no source in the CRM today and are deliberately kept
- * anyway, because dropping a column silently changes the shape of a report
- * someone reconciles against:
- *
- *   customerName          — her sheet has it empty for all 1,673 rows, but
- *                           `contacts.name` fills it for anything raised in the
- *                           CRM, so it stops being empty going forward.
- *   restaurantManagerId   — empty in her sheet AND unsourced here; there is no
- *                           per-store manager id anywhere in the schema. Kept
- *                           as a column, always blank, until one exists.
- */
-export const COMPLAINT_COLUMN_KEYS = [
-  'date',
-  'time',
-  'chain',
-  'area',
-  'brand',
-  'city',
-  'restaurantName',
-  'serviceType',
-  'complaintType',
-  'customerName',
-  'customerMobile',
-  'complaintDescription',
-  'responseDesc',
-  'complaintSource',
-  'orderAmount',
-  'orderNumber',
-  'communicationMethod',
-  'couponCode',
-  'couponValue',
-  'couponPercent',
-  'complaintStatus',
-  'restaurantManagerId',
-  'agent',
-  'compensation',
-] as const;
-export type ComplaintColumnKey = (typeof COMPLAINT_COLUMN_KEYS)[number];
-
-export const COMPLAINT_COLUMN_LABELS: Record<ComplaintColumnKey, { key: string; def: string }> = {
-  date: { key: 'complaintReport.col.date', def: 'Date' },
-  time: { key: 'complaintReport.col.time', def: 'Time' },
-  chain: { key: 'complaintReport.col.chain', def: 'Chain' },
-  area: { key: 'complaintReport.col.area', def: 'Area' },
-  brand: { key: 'complaintReport.col.brand', def: 'Brand' },
-  city: { key: 'complaintReport.col.city', def: 'City' },
-  restaurantName: { key: 'complaintReport.col.restaurantName', def: 'Restaurant name' },
-  serviceType: { key: 'complaintReport.col.serviceType', def: 'Service type' },
-  complaintType: { key: 'complaintReport.col.complaintType', def: 'Complaint type' },
-  customerName: { key: 'complaintReport.col.customerName', def: 'Customer name' },
-  customerMobile: { key: 'complaintReport.col.customerMobile', def: 'Customer mobile' },
-  complaintDescription: {
-    key: 'complaintReport.col.complaintDescription',
-    def: 'Complaint description',
-  },
-  responseDesc: { key: 'complaintReport.col.responseDesc', def: 'Response' },
-  complaintSource: { key: 'complaintReport.col.complaintSource', def: 'Complaint source' },
-  orderAmount: { key: 'complaintReport.col.orderAmount', def: 'Order amount' },
-  orderNumber: { key: 'complaintReport.col.orderNumber', def: 'Order number' },
-  communicationMethod: {
-    key: 'complaintReport.col.communicationMethod',
-    def: 'Communication method',
-  },
-  couponCode: { key: 'complaintReport.col.couponCode', def: 'Coupon code' },
-  couponValue: { key: 'complaintReport.col.couponValue', def: 'Coupon value' },
-  couponPercent: { key: 'complaintReport.col.couponPercent', def: 'Coupon %' },
-  complaintStatus: { key: 'complaintReport.col.complaintStatus', def: 'Complaint status' },
-  restaurantManagerId: {
-    key: 'complaintReport.col.restaurantManagerId',
-    def: 'Restaurant manager ID',
-  },
-  agent: { key: 'complaintReport.col.agent', def: 'Agent' },
-  compensation: { key: 'complaintReport.col.compensation', def: 'Compensation' },
-};
-
-/**
- * A store-derived cell on a complaint row. Same three-state discipline as
- * `storeCell` above: an unmatched store says so rather than going blank, so a
- * mapping gap can never be mistaken for missing source data.
- */
-function complaintStoreCell(r: ComplaintReportRow, value: string, t: Translate): string {
-  // No restaurant on the row at all → genuinely nothing to say.
-  if (!r.restaurantName && !r.brand) return '';
-  if (!r.storeMapped) return t('agentReports.notMapped', { defaultValue: 'Not mapped' });
-  return value;
-}
-
-export function buildComplaintsSheets(
-  rows: ComplaintReportRow[],
-  t: Translate,
-  enabled?: readonly ComplaintColumnKey[],
-): Sheet[] {
-  const width: Record<ComplaintColumnKey, number> = {
-    date: 12,
-    time: 8,
-    chain: 22,
-    area: 22,
-    brand: 16,
-    city: 16,
-    restaurantName: 28,
-    serviceType: 14,
-    complaintType: 24,
-    customerName: 20,
-    customerMobile: 16,
-    complaintDescription: 52,
-    responseDesc: 44,
-    complaintSource: 18,
-    orderAmount: 14,
-    orderNumber: 16,
-    communicationMethod: 20,
-    couponCode: 16,
-    couponValue: 12,
-    couponPercent: 10,
-    complaintStatus: 24,
-    restaurantManagerId: 20,
-    agent: 16,
-    compensation: 16,
-  };
-  const value: Record<ComplaintColumnKey, (r: ComplaintReportRow) => CellValue> = {
-    date: (r) => r.date,
-    time: (r) => r.time,
-    chain: (r) => complaintStoreCell(r, r.chain, t),
-    area: (r) => complaintStoreCell(r, r.area, t),
-    brand: (r) => complaintStoreCell(r, r.brand, t),
-    city: (r) => complaintStoreCell(r, r.city, t),
-    // NOT a storeCell: the branch name is the one store column worth keeping
-    // even unmatched — it is what someone needs in order to FIX the mapping.
-    restaurantName: (r) => r.restaurantName,
-    serviceType: (r) => r.serviceType,
-    complaintType: (r) => r.complaintType,
-    customerName: (r) => r.customerName,
-    // Text, not a number: leading zeros and a leading + are part of a mobile
-    // number, and Excel eats both if the cell is numeric.
-    customerMobile: (r) => r.customerMobile,
-    complaintDescription: (r) => r.complaintDescription,
-    responseDesc: (r) => r.responseDesc,
-    complaintSource: (r) => r.complaintSource,
-    orderAmount: (r) => r.orderAmount ?? '',
-    orderNumber: (r) => r.orderNumber,
-    communicationMethod: (r) => r.communicationMethod,
-    couponCode: (r) => r.couponCode,
-    couponValue: (r) => r.couponValue ?? '',
-    couponPercent: (r) => r.couponPercent ?? '',
-    complaintStatus: (r) => common(`status.${r.complaintStatus}`, r.complaintStatus, t),
-    restaurantManagerId: () => '',
-    agent: (r) => r.agent,
-    compensation: (r) => r.compensation,
-  };
-
-  const keys = (enabled && enabled.length ? enabled : COMPLAINT_COLUMN_KEYS).filter(
-    (k): k is ComplaintColumnKey => (COMPLAINT_COLUMN_KEYS as readonly string[]).includes(k),
-  );
-
-  return [
-    {
-      name: t('complaintReport.tab.complaints', { defaultValue: 'Complaints' }),
-      columns: keys.map((k) => ({
-        header: t(COMPLAINT_COLUMN_LABELS[k].key, { defaultValue: COMPLAINT_COLUMN_LABELS[k].def }),
-        width: width[k],
-      })),
-      rows: rows.map((r) => keys.map((k) => value[k](r))),
-    },
-  ];
-}
-
 /* ── Report 2: Agent KPI ──────────────────────────────────────────────── */
 
 export function buildAgentKpiSheets(agents: AgentKpiRow[], t: Translate): Sheet[] {
@@ -497,7 +333,3 @@ export function buildConversationSheets(report: ConversationStatusReport, t: Tra
 }
 
 /** `reports-tickets-30d-2026-07-22.xlsx` style filename. */
-export function reportFilename(base: string, days: number): string {
-  const today = new Date().toISOString().slice(0, 10);
-  return `${base}-${days}d-${today}.xlsx`;
-}

@@ -17,6 +17,7 @@
     "@hookform/resolvers": "^3.9.1",
     "@tanstack/react-query": "^5.62.7",
     "@yiji/i18n": "workspace:*",
+    "@yiji/reports": "workspace:*",
     "@yiji/shared-config": "workspace:*",
     "@yiji/shared-types": "workspace:*",
     "@yiji/ui": "workspace:*",

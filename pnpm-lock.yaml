@@ -84,6 +84,9 @@ importers:
       '@yiji/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@yiji/reports':
+        specifier: workspace:*
+        version: link:../../packages/reports
       '@yiji/shared-config':
         specifier: workspace:*
         version: link:../../packages/shared-config
@@ -172,6 +175,9 @@ importers:
       '@yiji/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@yiji/reports':
+        specifier: workspace:*
+        version: link:../../packages/reports
       '@yiji/shared-config':
         specifier: workspace:*
         version: link:../../packages/shared-config
@@ -310,6 +316,16 @@ importers:
       i18next:
         specifier: ^24.2.0
         version: 24.2.3(typescript@5.9.3)
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/reports:
+    dependencies:
+      '@yiji/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
     devDependencies:
       typescript:
         specifier: ^5.7.2

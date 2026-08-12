@@ -47,7 +47,7 @@ import {
   type TicketColumnKey,
   type Translate,
 } from './export.js';
-import { downloadWorkbook } from './xlsx.js';
+import { countUnmappedComplaints, downloadWorkbook, joinComplaintStores } from '@yiji/reports';
 
 /** Which of the four exportable reports this page instance renders. */
 export type ReportKind = 'tickets' | 'agents' | 'conversations' | 'complaints';
@@ -557,38 +557,13 @@ function ComplaintsReport({
   const [showCols, setShowCols] = useState(false);
   const { index: storeIndex } = useStoreIndex();
 
+  // Shared with the agent portal's own complaints table, so the same complaint
+  // is attributed to the same branch in both. See @yiji/reports.
   const joined = useMemo<ComplaintReportRow[]>(
-    () =>
-      rows.map((r) => {
-        if (!r.restaurantName && !r.brand && !r.storeSnapshot) return r;
-        // Prefer what was frozen onto the ticket. Re-resolving live would mean
-        // that editing a store today rewrites who was responsible for a
-        // complaint raised months ago — the report would change under you with
-        // nothing to show that it had.
-        const { match: m } = resolveStoreAttribution(r.storeSnapshot, () =>
-          matchStore(storeIndex, { restaurantName: r.restaurantName, brandName: r.brand }),
-        );
-        return {
-          ...r,
-          chain: m.chainManager,
-          area: m.areaManager,
-          brand: m.brandName,
-          city: m.city,
-          // Once matched, report the branch as the OPERATIONS master names it —
-          // that is the spelling her sheet uses.
-          restaurantName: m.restaurantName || r.restaurantName,
-          storeMapped: !isUnmappedStore(m),
-        };
-      }),
+    () => joinComplaintStores(rows, storeIndex),
     [rows, storeIndex],
   );
-
-  /** Rows whose store could not be resolved — a count worth seeing, because
-   *  each one is a store someone must add in Restaurants → Stores. */
-  const unmapped = useMemo(
-    () => joined.filter((r) => (r.restaurantName || r.brand) && !r.storeMapped).length,
-    [joined],
-  );
+  const unmapped = useMemo(() => countUnmappedComplaints(joined), [joined]);
 
   const onExport = () => {
     if (joined.length === 0) {

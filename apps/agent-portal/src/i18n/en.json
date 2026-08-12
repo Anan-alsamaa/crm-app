@@ -188,7 +188,8 @@
     "account": "Account",
     "compensation": "Compensation",
     "reports": "Reports",
-    "addTicket": "Add ticket"
+    "addTicket": "Add ticket",
+    "complaints": "My complaints"
   },
   "inbox": {
     "title": "Shared Inbox",
@@ -593,5 +594,54 @@
     "context": "Context",
     "readOnly": "Read only",
     "optional": "Optional"
+  },
+  "complaints": {
+    "title": "My complaints",
+    "subtitle": "The complaints assigned to you, in the format the operations team export.",
+    "range": "Date range",
+    "lastDays": "Last {{count}} days",
+    "columns": "Columns",
+    "allColumns": "All",
+    "export": "Export to Excel",
+    "exported": "Exported {{count}} rows.",
+    "nothingToExport": "Nothing to export.",
+    "unmappedStores": "{{count}} complaints have a branch that is not in the store list.",
+    "empty": "No complaints in this period.",
+    "emptyHint": "Complaints you are assigned appear here, newest first.",
+    "previewNote": "Showing {{shown}} of {{total}}. The export contains all rows.",
+    "prev": "Previous",
+    "next": "Next",
+    "you": "You"
+  },
+  "complaintReport": {
+    "col": {
+      "date": "Date",
+      "time": "Time",
+      "chain": "Chain",
+      "area": "Area",
+      "brand": "Brand",
+      "city": "City",
+      "restaurantName": "Restaurant name",
+      "serviceType": "Service type",
+      "complaintType": "Complaint type",
+      "customerName": "Customer name",
+      "customerMobile": "Customer mobile",
+      "complaintDescription": "Complaint description",
+      "responseDesc": "Response",
+      "complaintSource": "Complaint source",
+      "orderAmount": "Order amount",
+      "orderNumber": "Order number",
+      "communicationMethod": "Communication method",
+      "couponCode": "Coupon code",
+      "couponValue": "Coupon value",
+      "couponPercent": "Coupon %",
+      "complaintStatus": "Complaint status",
+      "restaurantManagerId": "Restaurant manager ID",
+      "agent": "Agent",
+      "compensation": "Compensation"
+    }
+  },
+  "agentReports": {
+    "notMapped": "Not mapped"
   }
 }
