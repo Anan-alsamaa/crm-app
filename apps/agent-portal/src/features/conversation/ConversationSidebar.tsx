@@ -15,6 +15,7 @@ import {
 } from '@yiji/ui';
 import type { YijiOrder } from '@yiji/shared-types';
 import {
+  conversationVendorId,
   useConversation,
   useLinkedTickets,
   type ConversationMessage,
@@ -25,6 +26,7 @@ import { useAssetBlobUrl } from '../../lib/useAssetBlobUrl.js';
 import { downloadAsset } from '../../lib/directus.js';
 import { Lightbox } from '../../components/Lightbox.js';
 import { LatestOrder } from '../commerce/OrderViews.js';
+import { AiPanel } from '../ai/AiPanel.js';
 import { ConversationTags } from './ConversationTags.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 
@@ -42,6 +44,14 @@ interface Props {
    *  order is pinned to the conversation before this fires, so the handler only
    *  has to open the Create ticket dialog. */
   onCreateTicketForOrder?: (order: YijiOrder) => void;
+  /**
+   * The composer's current text, so a suggested reply can build on what the
+   * agent already started. Named for the composer because this component has
+   * its own unrelated `draft` state for the contact edit form.
+   */
+  composerDraft?: string;
+  /** Hands a suggested reply back to the composer for the agent to edit. */
+  onReplySuggested?: (reply: string) => void;
 }
 
 function MediaThumb({ a, onOpen }: { a: MessageAttachment; onOpen: (url: string) => void }) {
@@ -120,6 +130,8 @@ export function ConversationSidebar({
   className,
   resizable,
   onCreateTicketForOrder,
+  composerDraft,
+  onReplySuggested,
 }: Props) {
   const [mediaPreview, setMediaPreview] = useState<{
     url: string;
@@ -169,6 +181,7 @@ export function ConversationSidebar({
     );
   if (!convo.data) return null;
   const c = convo.data;
+  const vendorId = conversationVendorId(c);
   const contactName =
     c.contact?.name ?? c.contact?.phone ?? c.contact?.email ?? t('inbox.unknownContact');
 
@@ -419,6 +432,22 @@ export function ConversationSidebar({
               onClose={() => setMediaPreview(null)}
             />
           )}
+        </section>
+      )}
+
+      {/* AI assistance — summarize the thread, draft a reply, and the rest.
+          Agent-facing on purpose: a suggestion lands in the composer for the
+          agent to edit and send, so nothing reaches the customer unreviewed.
+          That was the point of 3588276 and it still holds.
+          Needs the vendor id, which is what governs the monthly AI budget. */}
+      {vendorId && (
+        <section className="px-5 py-4">
+          <AiPanel
+            conversationId={conversationId}
+            vendorId={vendorId}
+            draft={composerDraft}
+            onReplySuggested={onReplySuggested}
+          />
         </section>
       )}
 
