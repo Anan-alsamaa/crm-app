@@ -26,6 +26,7 @@ import {
   useConversationPreviews,
   useUpdateConversation,
   useAddTagToConversation,
+  usePrefetchInboxOrders,
   useTags,
   type InboxFilters,
 } from '../features/inbox/api.js';
@@ -91,6 +92,7 @@ export function Inbox() {
   });
   const previews = useConversationPreviews((conversations.data ?? []).map((c) => c.id));
   const tags = useTags();
+  const prefetchOrders = usePrefetchInboxOrders();
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   // Deep-link support: /?conv=<id> opens that conversation (used by the
@@ -486,6 +488,12 @@ export function Inbox() {
                         <button
                           type="button"
                           onClick={() => setSelected(c.id)}
+                          // The pointer reaches the row a beat before the click
+                          // does, and that beat is longer than the commerce
+                          // call — so the order panel is already answered by
+                          // the time it mounts. Focus too, for the keyboard.
+                          onMouseEnter={() => prefetchOrders(c)}
+                          onFocus={() => prefetchOrders(c)}
                           className="flex flex-1 items-center gap-3 px-3 py-3 text-start"
                         >
                           {/* Messenger row: ringed avatar, name + last-message

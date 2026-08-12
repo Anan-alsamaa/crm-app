@@ -1,9 +1,10 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn, Pill, Skeleton } from '@yiji/ui';
 import type { YijiOrder } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
+import { inboxOrdersKey, useStampConversationOrder } from '../inbox/api.js';
 import {
   addOrder,
   chooseOrder,
@@ -500,20 +501,33 @@ export function LatestOrder({
   vendorId,
   customerId,
   conversationId,
+  stamped,
   onCreateTicket,
 }: {
   vendorId: string;
   customerId?: string;
   conversationId?: string;
+  /**
+   * The order recorded on this conversation the last time it was worked.
+   * Rendered immediately so the panel is never blank while the live copy is
+   * being fetched — see `conversations.last_order_snapshot`.
+   */
+  stamped?: YijiOrder | null;
   /** Inbox only: makes each order id a "New complaint" trigger for that order. */
   onCreateTicket?: (order: YijiOrder) => void;
 }) {
   const { t } = useTranslation();
+  const qc = useQueryClient();
+  const stampOrder = useStampConversationOrder();
+
   const orders = useQuery({
-    queryKey: ['yiji-orders', vendorId, customerId, 2],
+    queryKey: inboxOrdersKey(vendorId, customerId),
     enabled: !!vendorId && !!customerId,
-    // `enabled` already guards this, but the compiler cannot see that.
-    queryFn: () => commerce.getOrders(vendorId, customerId as string, { limit: 2 }),
+    // ONE call: the list and the newest order's full detail together. They used
+    // to be two sequential round trips with a component mount between them,
+    // which is most of the reason this panel felt slow.
+    // `enabled` already guards customerId, but the compiler cannot see that.
+    queryFn: () => commerce.getInboxOrders(vendorId, customerId as string, { limit: 2 }),
     staleTime: 60_000,
     // Fail fast rather than retrying with backoff. The commerce proxy is an
     // external dependency that can be slow or absent, and three silent retries
@@ -522,6 +536,23 @@ export function LatestOrder({
     // manual box is the useful answer — the agent has the order number anyway.
     retry: false,
   });
+
+  // Hand the detail we already have to the expandable row, so opening the
+  // newest order — which is auto-expanded — costs nothing at all instead of
+  // firing the second request this endpoint exists to avoid.
+  const detail = orders.data?.detail ?? null;
+  useEffect(() => {
+    if (detail) qc.setQueryData(['yiji-order', vendorId, detail.orderId], detail);
+  }, [qc, vendorId, detail]);
+
+  // Record what we resolved onto the conversation. Two jobs: the next open of
+  // this chat paints from Directus before the commerce call has even started,
+  // and "find the chat about order 946641" becomes answerable at all.
+  useEffect(() => {
+    if (!conversationId) return;
+    const resolved = detail ?? orders.data?.orders[0] ?? null;
+    if (resolved) stampOrder(conversationId, resolved);
+  }, [conversationId, detail, orders.data, stampOrder]);
 
   // Orders the agent looked up and kept, alongside the automatic ones.
   const added = useSyncExternalStore(
@@ -535,16 +566,24 @@ export function LatestOrder({
   // manual path, so render it rather than bailing out.
   if (!vendorId) return null;
 
+  // The last 2 orders (list is already newest-first from the client). An order
+  // the agent also added by hand is shown once, as the automatic one, so it
+  // keeps its "cannot be removed" status.
+  //
+  // While the live answer is in flight, this falls back to the copy stamped on
+  // the conversation the last time anybody worked it. That is the difference
+  // between a skeleton and an order: the panel is populated the instant the
+  // chat opens, and the fresh copy replaces it when it lands.
+  const live = orders.data?.orders ?? null;
+  const fetched = (live ?? (stamped ? [stamped] : [])).slice(0, 2);
+
   // A DISABLED query never resolves, so `isLoading` stays true forever and the
   // skeleton sits there pretending to load an order that will never arrive.
   // A contact with no linked commerce customer is the common case for a phone
   // enquiry, which is exactly when the agent needs the manual box instead.
-  const loadingOrders = !!customerId && orders.isFetching;
+  // With a stamped copy on screen there is nothing to skeleton over either.
+  const loadingOrders = !!customerId && orders.isFetching && fetched.length === 0;
 
-  // The last 2 orders (list is already newest-first from the client). An order
-  // the agent also added by hand is shown once, as the automatic one, so it
-  // keeps its "cannot be removed" status.
-  const fetched = (orders.data ?? []).slice(0, 2);
   const fetchedIds = new Set(fetched.map((o) => o.orderId));
   const kept = added.filter((o) => !fetchedIds.has(o.orderId));
 

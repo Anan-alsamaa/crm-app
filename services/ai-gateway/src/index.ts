@@ -17,6 +17,7 @@ import { SlidingWindowLimiter, MonthlyCap, DailyQuota } from './ratelimit/index.
 import { ResponseCache } from './cache/index.js';
 import { GatewayDirectus } from './directus/index.js';
 import { registerCommerceRoutes } from './commerce/index.js';
+import { CommerceCache } from './commerce/cache.js';
 import { Registry } from './metrics.js';
 import { createYijiClient } from '@yiji/shared-types';
 import type { AIProvider } from './provider/types.js';
@@ -162,7 +163,10 @@ async function main(): Promise<void> {
     helpDailyQuota,
   });
 
-  await registerCommerceRoutes(app, { directus, yiji });
+  // Read-through cache in front of Yiji. The inbox opens the same customer's
+  // orders repeatedly and several agents open the same chat; without this every
+  // one of those is a fresh external round trip.
+  await registerCommerceRoutes(app, { directus, yiji, cache: new CommerceCache(redis) });
 
   await app.listen({ port: config.PORT, host: '0.0.0.0' });
   logger.info(`ai-gateway listening on :${config.PORT}`);

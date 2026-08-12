@@ -14,8 +14,12 @@ vi.mock('react-i18next', () => ({
 const client = vi.hoisted(() => ({
   getOrders: vi.fn(),
   getOrder: vi.fn(),
+  getInboxOrders: vi.fn(),
 }));
 vi.mock('../src/lib/commerce-client.js', () => ({ commerce: client }));
+// The panel records the order it resolved back onto the conversation, which is
+// a Directus write. Not the subject of these cases — stub it so it succeeds.
+vi.mock('../src/lib/directus.js', () => ({ directus: { request: vi.fn().mockResolvedValue({}) } }));
 
 import { LatestOrder, CustomerOrders } from '../src/features/commerce/OrderViews.js';
 import {
@@ -66,6 +70,19 @@ function full(id: string, over: Partial<YijiOrder> = {}): YijiOrder {
 beforeEach(() => {
   client.getOrders.mockReset();
   client.getOrder.mockReset();
+  client.getInboxOrders.mockReset();
+  // The inbox panel asks for the list and the newest order's full detail in a
+  // SINGLE call now. Compose that answer from the two mocks each case already
+  // sets, so the cases keep describing what the commerce API returns rather
+  // than which endpoint carried it.
+  client.getInboxOrders.mockImplementation(
+    async (vendorId: string, customerId: string, opts?: { limit?: number }) => {
+      const orders = (await client.getOrders(vendorId, customerId, opts)) ?? [];
+      const first = orders[0];
+      const detail = first ? await client.getOrder(vendorId, first.orderId) : null;
+      return { orders, detail };
+    },
+  );
 });
 
 describe('LatestOrder (inbox)', () => {
