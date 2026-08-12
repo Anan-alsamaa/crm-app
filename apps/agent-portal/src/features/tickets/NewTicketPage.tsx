@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Skeleton } from '@yiji/ui';
+import { Skeleton } from '@yiji/ui';
 import { conversationVendorId, useConversation } from '../inbox/api.js';
 import type { ContactRow } from '../contacts/api.js';
 import { ContactPicker } from './ContactPicker.js';
@@ -54,32 +54,18 @@ export function NewTicketPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-3 px-4 pt-3 sm:px-6">
-        <Button variant="ghost" size="sm" onClick={goBack}>
-          <span aria-hidden className="me-1.5">
-            {/* Mirrored in RTL: a hard-coded ← points forward in Arabic. */}
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-3.5 w-3.5 rtl:-scale-x-100"
-            >
-              <path d="M10 3 5 8l5 5" />
-            </svg>
-          </span>
-          {fromChat
-            ? t('tickets.backToChat', { defaultValue: 'Back to the chat' })
-            : t('tickets.backToTickets', { defaultValue: 'Back to tickets' })}
-        </Button>
-      </div>
       <CreateTicketDialog
         contactId={contactId}
         vendorId={vendorId}
         conversationId={conversationId}
         onClose={goBack}
+        // The form's own header carries the arrow, so the page does not stack a
+        // back-strip on top of a title bar.
+        backLabel={
+          fromChat
+            ? t('tickets.backToChat', { defaultValue: 'Back to the chat' })
+            : t('tickets.backToTickets', { defaultValue: 'Back to tickets' })
+        }
         // Standalone only: from a chat the customer is not a choice, and
         // offering to change it would invite filing against the wrong one.
         contactField={fromChat ? undefined : <ContactPicker value={picked} onChange={setPicked} />}

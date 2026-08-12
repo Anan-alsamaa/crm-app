@@ -56,6 +56,8 @@ interface Props {
   contactField?: React.ReactNode;
   conversationId?: string | null;
   onClose: () => void;
+  /** Names where Cancel returns to, e.g. "Back to the chat". Renders the arrow. */
+  backLabel?: string;
   /** The new ticket's id, for callers that navigate to it. */
   onCreated?: (ticketId: string) => void;
 }
@@ -141,6 +143,7 @@ export function CreateTicketDialog({
   conversationId,
   onClose,
   contactField,
+  backLabel,
   onCreated,
 }: Props) {
   const { t, i18n } = useTranslation();
@@ -326,21 +329,41 @@ export function CreateTicketDialog({
       : '';
 
   return (
-    <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
-      {/* Sticky so Save is reachable from anywhere in the form, and on the card
-          surface so it reads as page chrome rather than a fourth column. */}
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-border bg-card px-5 py-3.5 shadow-xs sm:px-7">
+    <form
+      onSubmit={onSubmit}
+      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card"
+      noValidate
+    >
+      {/* One header, not a back-strip stacked on a title bar. Save stays
+          reachable from anywhere without scrolling to find it. */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-border px-5 py-3.5 sm:px-7">
+        {backLabel && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={backLabel}
+            title={backLabel}
+            className="-ms-1.5 grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:active:scale-[0.97]"
+          >
+            {/* Logical mirroring: a hard-coded arrow points forward in Arabic. */}
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4 rtl:-scale-x-100"
+              aria-hidden
+            >
+              <path d="M10 3 5 8l5 5" />
+            </svg>
+          </button>
+        )}
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            {/* The one eyebrow on this page (DESIGN.md caps it at one per three
-                sections), so the section headings below can stay plain. */}
-            <span className="rounded-full bg-secondary-brand/12 px-2 py-0.5 text-2xs font-semibold uppercase tracking-[0.08em] text-secondary-brand">
-              {t('tickets.newEyebrow', { defaultValue: 'New' })}
-            </span>
-            <h1 className="truncate text-xl font-semibold tracking-[-0.01em] text-display">
-              {t('tickets.createTitle')}
-            </h1>
-          </div>
+          <h1 className="truncate text-xl font-semibold tracking-[-0.01em] text-display">
+            {t('tickets.createTitle')}
+          </h1>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
             {contextLine.length > 0 ? (
               // Who and what this ticket is about, rather than a sentence of
@@ -365,10 +388,14 @@ export function CreateTicketDialog({
           </p>
         </div>
         <div className="ms-auto flex shrink-0 items-center gap-2">
-          {!canSubmit && (
+          {!canSubmit && blockedReason && (
             // Says WHY the button is dead. A disabled control with no reason is
-            // the single most common way a form wastes an agent's time.
-            <span className="hidden text-xs text-muted-foreground sm:inline">{blockedReason}</span>
+            // the single most common way a form wastes an agent's time. The dot
+            // ties it to Create rather than to the Cancel button beside it.
+            <span className="me-1 hidden items-center gap-1.5 text-xs text-muted-foreground lg:inline-flex">
+              <span aria-hidden className="h-1 w-1 rounded-full bg-warning" />
+              {blockedReason}
+            </span>
           )}
           <Button type="button" variant="ghost" size="md" onClick={onClose}>
             {t('actions.cancel', { ns: 'common' })}
@@ -384,87 +411,102 @@ export function CreateTicketDialog({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7">
-        {/* Columns rather than one tall stack: fourteen fields in a single
-            column is two screens of scrolling, and this is filled in one pass.
-            The order rail comes last so it reads as reference, not input. */}
-        <div className="mx-auto grid w-full max-w-[104rem] items-start gap-5 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_18rem] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_19rem]">
-          <ComplaintSection
-            tone="primary"
-            title={t('complaint.ticket', { defaultValue: 'Ticket' })}
-          >
-            {contactField}
-            <FormField
-              label={t('tickets.subject')}
-              htmlFor="ticket-subject"
-              error={errors.subject?.message}
+      {/* Columns rather than one tall stack: fourteen fields in a single
+          column is two screens of scrolling, and this is filled in one pass.
+          Two columns, not three: Ticket alone is about as tall as the other two
+          together, so pairing them balances the page instead of leaving one
+          column half empty and squeezing the coupon fields onto two lines. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-2 lg:overflow-hidden">
+          <div className="min-h-0 lg:overflow-y-auto">
+            <ComplaintSection
+              tone="primary"
+              title={t('complaint.ticket', { defaultValue: 'Ticket' })}
             >
-              <Input id="ticket-subject" invalid={!!errors.subject} {...register('subject')} />
-            </FormField>
-            <FormField label={t('tickets.description')} htmlFor="ticket-description">
-              <Textarea id="ticket-description" rows={3} dir="auto" {...register('description')} />
-            </FormField>
-            <FormField label={t('conversation.priority')} htmlFor="ticket-priority">
-              <Controller
-                control={control}
-                name="priority"
-                render={({ field }) => (
-                  <SelectMenu
-                    fullWidth
-                    value={field.value}
-                    onChange={field.onChange}
-                    aria-label={t('conversation.priority')}
-                    options={PRIORITIES.map((p) => ({
-                      value: p,
-                      label: t(`priority.${p}`, { ns: 'common' }),
-                    }))}
-                  />
-                )}
-              />
-            </FormField>
-            {/* Always rendered: the branch has to be recordable even when there
+              {contactField}
+              <FormField
+                label={t('tickets.subject')}
+                htmlFor="ticket-subject"
+                error={errors.subject?.message}
+              >
+                <Input id="ticket-subject" invalid={!!errors.subject} {...register('subject')} />
+              </FormField>
+              <FormField label={t('tickets.description')} htmlFor="ticket-description">
+                <Textarea
+                  id="ticket-description"
+                  rows={3}
+                  dir="auto"
+                  {...register('description')}
+                />
+              </FormField>
+              <FormField label={t('conversation.priority')} htmlFor="ticket-priority">
+                <Controller
+                  control={control}
+                  name="priority"
+                  render={({ field }) => (
+                    <SelectMenu
+                      fullWidth
+                      value={field.value}
+                      onChange={field.onChange}
+                      aria-label={t('conversation.priority')}
+                      options={PRIORITIES.map((p) => ({
+                        value: p,
+                        label: t(`priority.${p}`, { ns: 'common' }),
+                      }))}
+                    />
+                  )}
+                />
+              </FormField>
+              {/* Always rendered: the branch has to be recordable even when there
                 is no order to infer it from. */}
-            <StorePicker
-              value={storeId}
-              onChange={setStoreId}
-              inferredFrom={inferredStoreId || null}
-            />
-          </ComplaintSection>
+              <StorePicker
+                value={storeId}
+                onChange={setStoreId}
+                inferredFrom={inferredStoreId || null}
+              />
+            </ComplaintSection>
+          </div>
 
-          <ComplaintSection
-            tone="violet"
-            title={t('complaint.whatHappened', { defaultValue: 'What happened' })}
-            hint={t('complaint.optional', { defaultValue: 'Optional' })}
-          >
-            <ComplaintClassification
-              values={complaint}
-              onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
-            />
-          </ComplaintSection>
+          {/* Paired in one column so the page reads as two balanced halves.
+              The rule between them is horizontal; the one against Ticket is
+              vertical and logical, so it swaps sides in Arabic. */}
+          <div className="min-h-0 border-t border-border lg:overflow-y-auto lg:border-s lg:border-t-0">
+            <ComplaintSection
+              tone="violet"
+              title={t('complaint.whatHappened', { defaultValue: 'What happened' })}
+              hint={t('complaint.optional', { defaultValue: 'Optional' })}
+            >
+              <ComplaintClassification
+                values={complaint}
+                onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
+              />
+            </ComplaintSection>
 
-          <ComplaintSection
-            tone="success"
-            title={t('complaint.resolution', { defaultValue: 'Resolution' })}
-            hint={t('complaint.optional', { defaultValue: 'Optional' })}
-          >
-            <ComplaintResolution
-              values={complaint}
-              onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
-            />
-          </ComplaintSection>
-
-          <OrderRail
-            order={latestOrder}
-            store={chosenMatch}
-            includeOrder={includeOrder}
-            onIncludeOrder={setIncludeOrder}
-            includeFiles={includeFiles}
-            onIncludeFiles={setIncludeFiles}
-            fileCount={sessionFileIds.length}
-            hasChatContext={hasChatContext}
-            locale={i18n.language}
-          />
+            <ComplaintSection
+              divider
+              tone="success"
+              title={t('complaint.resolution', { defaultValue: 'Resolution' })}
+              hint={t('complaint.optional', { defaultValue: 'Optional' })}
+            >
+              <ComplaintResolution
+                values={complaint}
+                onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
+              />
+            </ComplaintSection>
+          </div>
         </div>
+
+        <OrderRail
+          order={latestOrder}
+          store={chosenMatch}
+          includeOrder={includeOrder}
+          onIncludeOrder={setIncludeOrder}
+          includeFiles={includeFiles}
+          onIncludeFiles={setIncludeFiles}
+          fileCount={sessionFileIds.length}
+          hasChatContext={hasChatContext}
+          locale={i18n.language}
+        />
       </div>
     </form>
   );
@@ -515,7 +557,7 @@ function OrderRail({
 
   if (!order && !matched) {
     return (
-      <aside className="rounded-2xl bg-card p-5 text-xs leading-relaxed text-muted-foreground shadow-soft ring-1 ring-border">
+      <aside className="w-full shrink-0 overflow-y-auto border-t border-border bg-background px-6 py-5 lg:w-[20rem] lg:border-s lg:border-t-0 text-xs leading-relaxed text-muted-foreground">
         {t('tickets.noOrderContext', {
           defaultValue:
             'No order attached. Pick a branch on the left so the ticket still reports against one.',
@@ -525,7 +567,7 @@ function OrderRail({
   }
 
   return (
-    <aside className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-border">
+    <aside className="w-full shrink-0 overflow-y-auto border-t border-border bg-background px-6 py-5 lg:w-[20rem] lg:border-s lg:border-t-0">
       {/* Same head as the form sections, in the fourth hue, so the rail reads as
           a peer of the columns rather than a stray panel. */}
       <header className="mb-4 flex items-baseline gap-2">

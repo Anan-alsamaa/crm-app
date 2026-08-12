@@ -1,0 +1,35 @@
+in inbox, search by order id also
+
+ai sssistance repoly both arabic and english.
+
+
+in add ticket when created, description and resolution notes to be sent to the stores.
+
+in the ticket evert back, no need table in agent. change mark 1st response to mark as solved.
+
+agent performnce
+
+
+add new agent kpi section in both portal. in agent, should be able to be redirected to the chat on click. on admin just display the data.
+filter: agent
+meeting & not meeting sla
+date filter
+
+chat: first response
+total chat timing until marked close.
+
+
+agent
+chat status. 
+
+in dashboard: new report with compensation issued.
+
+When a agent submit to assign a coupon, the superviser must a[pprove it
+
+from the admin dashboard, remove the search.
+in restaurants widen the dropdown to display the complete restaurant name.
+in the filters wherever there is brand and restaurant, whenever brand is selected, in the restaurant only the restaurants within that brand should be displayed.
+
+in the admin portal, stores page: the import csv should also be applicable to modify the existing stores.
+
+Rename the agent portal to the user portal. 

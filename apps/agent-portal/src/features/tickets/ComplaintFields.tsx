@@ -565,25 +565,37 @@ export function ComplaintSection({
   title,
   tone = 'primary',
   hint,
+  divider = false,
   children,
 }: {
   title: string;
   tone?: keyof typeof SECTION_DOT;
   /** Quiet counterweight on the title line: a count, or what the section is for. */
   hint?: string;
+  /** Hairline against the previous column. Omitted on the first. */
+  divider?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-border">
-      {/* Not an uppercase eyebrow: the field labels below are already uppercase,
-          and two tracked-caps sizes stacked reads as noise rather than
-          hierarchy. Weight and the dot carry it instead. */}
+    <section
+      className={cn(
+        'px-6 py-5',
+        // A hairline, not a box. Four bordered-and-shadowed panels is the
+        // "drop shadows on every panel" admin template PRODUCT.md names as an
+        // anti-reference, and it turns one task into four things to look at.
+        // The rule separates just as well and disappears while reading.
+        divider && 'border-t border-border',
+      )}
+    >
+      {/* Not an uppercase eyebrow: the field labels below are already uppercase
+          and tracked, so a second caps size stacked above them reads as noise
+          rather than hierarchy. Weight plus the hue dot carry it. */}
       <header className="mb-4 flex items-baseline gap-2">
         <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', SECTION_DOT[tone])} aria-hidden />
         <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">{title}</h2>
         {hint && <span className="ms-auto shrink-0 text-2xs text-muted-foreground">{hint}</span>}
       </header>
-      <div className="space-y-3.5">{children}</div>
+      <div className="space-y-4">{children}</div>
     </section>
   );
 }

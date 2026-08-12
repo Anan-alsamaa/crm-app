@@ -1,0 +1,8 @@
+from the inbox right side, select the item in which theyre facing an isue. 
+comment will be the next pge, then business logic they will create a coupon and asign in yij to cutomer. 
+
+selected order id from the inbox below the user name,should open new complain page with the default info like order id branch data in it.
+
+in configuration, restaurant-> should be an import csv from where the sheet can be imported which has restaurant name, brand, area manager, chain manager,city, etc.
+on uploading a new sheet, thre previous/old data with the restaurant nd correspoding area manager/ chain manager data must not change. only data after tht to be affected. 
+

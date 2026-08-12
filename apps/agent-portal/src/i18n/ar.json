@@ -80,7 +80,7 @@
     "account": "الحساب",
     "compensation": "التعويض",
     "reports": "التقارير",
-    "addTicket": "تذكرة جديدة",
+    "addTicket": "إضافة تذكرة",
     "complaints": "شكاواي"
   },
   "contacts": {
@@ -343,7 +343,7 @@
     "empty": "لا توجد تذاكر بعد.",
     "backToList": "كل التذاكر",
     "selectPrompt": "اختر تذكرة لعرض التفاصيل.",
-    "createTitle": "إنشاء تذكرة",
+    "createTitle": "إضافة تذكرة",
     "create": "إنشاء",
     "createError": "تعذّر إنشاء التذكرة",
     "subject": "الموضوع",
@@ -417,7 +417,6 @@
     "orderNoItems": "لا توجد عناصر في هذا الطلب.",
     "orderCapturedAt": "أُخذت اللقطة {{at}}",
     "noOption": "لا يوجد خيار مطابق.",
-    "newEyebrow": "جديدة",
     "pickContactFirst": "اختر العميل للمتابعة",
     "fixFieldsFirst": "راجع الحقول المميزة",
     "backToTickets": "العودة إلى التذاكر",
