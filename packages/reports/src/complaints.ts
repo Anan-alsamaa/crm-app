@@ -187,6 +187,55 @@ function complaintStoreCell(r: ComplaintReportRow, value: string, t: Translate):
   return value;
 }
 
+/**
+ * One cell of the report.
+ *
+ * Exported because the on-screen table and the exported sheet must show the
+ * same value for the same column — two separate implementations of "what goes
+ * in this cell" is how a report and its export quietly start disagreeing, and
+ * the person reconciling them has no way to tell which is right.
+ */
+export function complaintCell(
+  row: ComplaintReportRow,
+  key: ComplaintColumnKey,
+  t: Translate,
+): CellValue {
+  const value: Record<ComplaintColumnKey, (r: ComplaintReportRow) => CellValue> = {
+    date: (r) => r.date,
+    year: (r) => r.year ?? '',
+    month: (r) => r.month ?? '',
+    week: (r) => r.week ?? '',
+    day: (r) => r.day ?? '',
+    time: (r) => r.time,
+    chain: (r) => complaintStoreCell(r, r.chain, t),
+    area: (r) => complaintStoreCell(r, r.area, t),
+    brand: (r) => complaintStoreCell(r, r.brand, t),
+    city: (r) => complaintStoreCell(r, r.city, t),
+    // NOT a storeCell: the branch name is the one store column worth keeping
+    // even unmatched — it is what someone needs in order to FIX the mapping.
+    restaurantName: (r) => r.restaurantName,
+    serviceType: (r) => r.serviceType,
+    complaintType: (r) => r.complaintType,
+    // Text, not a number: leading zeros and a leading + are part of a mobile
+    // number, and Excel eats both if the cell is numeric.
+    customerMobile: (r) => r.customerMobile,
+    complaintDescription: (r) => r.complaintDescription,
+    responseDesc: (r) => r.responseDesc,
+    complaintSource: (r) => r.complaintSource,
+    orderAmount: (r) => r.orderAmount ?? '',
+    orderNumber: (r) => r.orderNumber,
+    communicationMethod: (r) => r.communicationMethod,
+    couponCode: (r) => r.couponCode,
+    couponValue: (r) => r.couponValue ?? '',
+    couponPercent: (r) => r.couponPercent ?? '',
+    complaintStatus: (r) => common(`status.${r.complaintStatus}`, r.complaintStatus, t),
+    restaurantManagerId: () => '',
+    agent: (r) => r.agent,
+    compensation: (r) => r.compensation,
+  };
+  return value[key](row);
+}
+
 export function buildComplaintsSheets(
   rows: ComplaintReportRow[],
   t: Translate,
@@ -221,39 +270,7 @@ export function buildComplaintsSheets(
     agent: 16,
     compensation: 16,
   };
-  const value: Record<ComplaintColumnKey, (r: ComplaintReportRow) => CellValue> = {
-    date: (r) => r.date,
-    year: (r) => r.year ?? '',
-    month: (r) => r.month ?? '',
-    week: (r) => r.week ?? '',
-    day: (r) => r.day ?? '',
-    time: (r) => r.time,
-    chain: (r) => complaintStoreCell(r, r.chain, t),
-    area: (r) => complaintStoreCell(r, r.area, t),
-    brand: (r) => complaintStoreCell(r, r.brand, t),
-    city: (r) => complaintStoreCell(r, r.city, t),
-    // NOT a storeCell: the branch name is the one store column worth keeping
-    // even unmatched — it is what someone needs in order to FIX the mapping.
-    restaurantName: (r) => r.restaurantName,
-    serviceType: (r) => r.serviceType,
-    complaintType: (r) => r.complaintType,
-    // Text, not a number: leading zeros and a leading + are part of a mobile
-    // number, and Excel eats both if the cell is numeric.
-    customerMobile: (r) => r.customerMobile,
-    complaintDescription: (r) => r.complaintDescription,
-    responseDesc: (r) => r.responseDesc,
-    complaintSource: (r) => r.complaintSource,
-    orderAmount: (r) => r.orderAmount ?? '',
-    orderNumber: (r) => r.orderNumber,
-    communicationMethod: (r) => r.communicationMethod,
-    couponCode: (r) => r.couponCode,
-    couponValue: (r) => r.couponValue ?? '',
-    couponPercent: (r) => r.couponPercent ?? '',
-    complaintStatus: (r) => common(`status.${r.complaintStatus}`, r.complaintStatus, t),
-    restaurantManagerId: () => '',
-    agent: (r) => r.agent,
-    compensation: (r) => r.compensation,
-  };
+  const value = (r: ComplaintReportRow, k: ComplaintColumnKey) => complaintCell(r, k, t);
 
   const keys = (enabled && enabled.length ? enabled : COMPLAINT_COLUMN_KEYS).filter(
     (k): k is ComplaintColumnKey => (COMPLAINT_COLUMN_KEYS as readonly string[]).includes(k),
@@ -266,7 +283,7 @@ export function buildComplaintsSheets(
         header: t(COMPLAINT_COLUMN_LABELS[k].key, { defaultValue: COMPLAINT_COLUMN_LABELS[k].def }),
         width: width[k],
       })),
-      rows: rows.map((r) => keys.map((k) => value[k](r))),
+      rows: rows.map((r) => keys.map((k) => value(r, k))),
     },
   ];
 }
@@ -439,3 +456,31 @@ export function reconcileColumnOrder<T>(saved: readonly T[], all: readonly T[]):
   const seen = new Set(kept);
   return [...kept, ...all.filter((k) => !seen.has(k))];
 }
+
+/**
+ * Remember a person's column arrangement.
+ *
+ * A preference, not data: it belongs to the browser, and losing it must never
+ * break the report — hence the swallowed errors. Both portals use these so an
+ * agent and an admin arrange the same report the same way.
+ */
+export function loadColumnOrder<T extends string>(storageKey: string): T[] {
+  try {
+    const raw = globalThis.localStorage?.getItem(storageKey);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveColumnOrder<T extends string>(storageKey: string, order: readonly T[]): void {
+  try {
+    globalThis.localStorage?.setItem(storageKey, JSON.stringify(order));
+  } catch {
+    /* private mode / quota — the arrangement still applies for this session */
+  }
+}
+
+/** Storage key for the ticket report's column arrangement, shared by both portals. */
+export const TICKET_REPORT_ORDER_KEY = 'yiji.ticketReport.columnOrder';

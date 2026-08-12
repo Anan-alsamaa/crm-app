@@ -588,7 +588,9 @@ describe('AgentReportsPage — complaints report', () => {
     const secondRow = container.querySelectorAll('tbody tr')[1]! as HTMLElement;
     // The branch name survives — it is what someone needs in order to add it.
     expect(within(secondRow).getByText('CND-009 Nakhil Mall')).toBeTruthy();
-    expect(within(secondRow).getByText('Not mapped')).toBeTruthy();
+    // Every store-derived column says so now that the table shows them all —
+    // chain, area, brand and city — rather than a single representative cell.
+    expect(within(secondRow).getAllByText('Not mapped').length).toBe(4);
   });
 
   it('counts the unmapped rows so the gap is visible without reading the table', () => {

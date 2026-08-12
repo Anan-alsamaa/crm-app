@@ -49,7 +49,11 @@ import {
   type Translate,
 } from './export.js';
 import {
+  complaintCell,
   countUnmappedComplaints,
+  loadColumnOrder,
+  saveColumnOrder,
+  TICKET_REPORT_ORDER_KEY,
   downloadWorkbook,
   joinComplaintStores,
   filterComplaintRows,
@@ -552,30 +556,6 @@ function TicketsReport({
  * reporting the same values however the upstream order later changes.
  */
 
-/* ── Column order preference ───────────────────────────────────────────── */
-
-const COLUMN_ORDER_KEY = 'yiji.ticketReport.columnOrder';
-
-/** Read the saved order. A corrupt or absent value is simply "no preference". */
-function loadColumnOrder(): ComplaintColumnKey[] {
-  try {
-    const raw = localStorage.getItem(COLUMN_ORDER_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : null;
-    return Array.isArray(parsed) ? (parsed as ComplaintColumnKey[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Persist it. Losing a column preference must never break the report. */
-function saveColumnOrder(order: readonly ComplaintColumnKey[]): void {
-  try {
-    localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(order));
-  } catch {
-    /* private mode / quota — the order still applies for this session */
-  }
-}
-
 function ComplaintsReport({
   rows,
   tr,
@@ -593,7 +573,7 @@ function ComplaintsReport({
   // the current column list on load so a saved preference survives a column
   // being added or removed instead of silently dropping it.
   const [order, setOrder] = useState<ComplaintColumnKey[]>(() =>
-    reconcileColumnOrder(loadColumnOrder(), COMPLAINT_COLUMN_KEYS),
+    reconcileColumnOrder(loadColumnOrder(TICKET_REPORT_ORDER_KEY), COMPLAINT_COLUMN_KEYS),
   );
   const { index: storeIndex } = useStoreIndex();
 
@@ -614,7 +594,7 @@ function ComplaintsReport({
     setOrder((prev) => {
       const from = prev.indexOf(key);
       const next = moveColumn(prev, from, from + delta);
-      saveColumnOrder(next);
+      saveColumnOrder(TICKET_REPORT_ORDER_KEY, next);
       return next;
     });
 
@@ -780,58 +760,45 @@ function ComplaintsReport({
         </div>
       </div>
 
-      {/* On-screen preview carries the columns you can read at a glance; the
-          export carries all 24. Showing 24 columns here would need a horizontal
-          scroll that makes none of them readable. */}
-      <TableSurface>
+      {/* Every chosen column, in the chosen order — the table and the export
+          are the same report, so showing a curated subset here just meant the
+          screen and the file disagreed. Wide by nature, so it scrolls
+          horizontally inside its own surface rather than stretching the page. */}
+      <TableSurface className="overflow-x-auto">
         <Table>
           <thead>
             <tr>
-              <Th>{tr('complaintReport.col.date', { defaultValue: 'Date' })}</Th>
-              <Th>{tr('complaintReport.col.time', { defaultValue: 'Time' })}</Th>
-              <Th>
-                {tr('complaintReport.col.restaurantName', { defaultValue: 'Restaurant name' })}
-              </Th>
-              <Th>{tr('complaintReport.col.city', { defaultValue: 'City' })}</Th>
-              <Th>{tr('complaintReport.col.complaintType', { defaultValue: 'Complaint type' })}</Th>
-              <Th>{tr('complaintReport.col.serviceType', { defaultValue: 'Service type' })}</Th>
-              <Th>{tr('complaintReport.col.agent', { defaultValue: 'Agent' })}</Th>
-              <Th>{tr('complaintReport.col.compensation', { defaultValue: 'Compensation' })}</Th>
-              <Th>
-                {tr('complaintReport.col.complaintStatus', { defaultValue: 'Complaint status' })}
-              </Th>
+              {chosenColumns.map((k) => (
+                <Th key={k}>
+                  {tr(COMPLAINT_COLUMN_LABELS[k].key, {
+                    defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
+                  })}
+                </Th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {pageRows.map((r) => (
               <Tr key={r.id}>
-                <Td className="tabular-nums">{r.date || '—'}</Td>
-                <Td className="tabular-nums text-muted-foreground">{r.time || '—'}</Td>
-                <Td className="max-w-[14rem] truncate" title={r.restaurantName}>
-                  {r.restaurantName || '—'}
-                </Td>
-                {/* A store that did not resolve says so, rather than showing a
-                    blank city that reads as "this complaint had no branch". */}
-                {r.restaurantName || r.brand ? (
-                  r.storeMapped ? (
-                    <Td className="text-muted-foreground">{r.city || '—'}</Td>
-                  ) : (
-                    <Td>
-                      <Pill tone="warning" size="sm">
-                        {t('agentReports.notMapped', { defaultValue: 'Not mapped' })}
-                      </Pill>
+                {chosenColumns.map((k) => {
+                  // An unresolved store says so instead of showing a blank
+                  // cell, exactly as the export does.
+                  const unmapped =
+                    !r.storeMapped &&
+                    (r.restaurantName || r.brand) &&
+                    (['chain', 'area', 'brand', 'city'] as ComplaintColumnKey[]).includes(k);
+                  return (
+                    <Td key={k} className="whitespace-nowrap">
+                      {unmapped ? (
+                        <Pill tone="warning" size="sm">
+                          {t('agentReports.notMapped', { defaultValue: 'Not mapped' })}
+                        </Pill>
+                      ) : (
+                        String(complaintCell(r, k, tr) ?? '')
+                      )}
                     </Td>
-                  )
-                ) : (
-                  <Td className="text-muted-foreground">—</Td>
-                )}
-                <Td className="text-muted-foreground">{r.complaintType || '—'}</Td>
-                <Td className="text-muted-foreground">{r.serviceType || '—'}</Td>
-                <Td className="text-muted-foreground">{r.agent}</Td>
-                <Td className="text-muted-foreground">{r.compensation || '—'}</Td>
-                <Td>
-                  <StatusPill value={r.complaintStatus} />
-                </Td>
+                  );
+                })}
               </Tr>
             ))}
           </tbody>
