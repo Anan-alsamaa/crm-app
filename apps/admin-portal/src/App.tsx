@@ -57,6 +57,11 @@ const StoresPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import('./features/reports/ReportsPage.js').then((m) => ({ default: m.ReportsPage })),
 );
+const StoreNotificationsPage = lazy(() =>
+  import('./features/store-notifications/StoreNotificationsPage.js').then((m) => ({
+    default: m.StoreNotificationsPage,
+  })),
+);
 const AgentPerformancePage = lazy(() =>
   import('./features/performance/AgentPerformancePage.js').then((m) => ({
     default: m.AgentPerformancePage,
@@ -313,6 +318,11 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         { to: '/brands', label: t('nav.brands', { defaultValue: 'Brands' }), icon: StoreIcon },
         { to: '/stores', label: t('nav.stores', { defaultValue: 'Stores' }), icon: StoreIcon },
+        {
+          to: '/store-notifications',
+          label: t('nav.storeNotifications', { defaultValue: 'Branch notifications' }),
+          icon: StoreIcon,
+        },
       ],
     },
     {
@@ -548,6 +558,16 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <ReportExportsPage report="complaints" />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/store-notifications"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <StoreNotificationsPage />
                 </Shell>
               </ProtectedRoute>
             }

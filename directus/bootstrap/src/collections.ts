@@ -287,6 +287,38 @@ export const collections: CollectionSpec[] = [
     ],
   },
   {
+    collection: 'store_notify_rules',
+    note: 'Which complaint types are the BRANCH’s business. A ticket notifies its store only when its complaint_type has an enabled row here. Data, not a constant, because operations change the list without a deploy — and an empty table means "not set up yet", which notifies nobody rather than everybody.',
+    fields: [
+      {
+        field: 'complaint_type',
+        type: 'string',
+        choices: [...ComplaintType.options],
+        required: true,
+        index: true,
+      },
+      { field: 'enabled', type: 'boolean', defaultValue: true },
+    ],
+  },
+  {
+    collection: 'store_notifications',
+    note: 'OUTBOX of branch notifications. A row is the decision that this ticket should reach this branch, taken at save time with the rules as they stood; sending it is a separate concern and waits on the POS integration. Deliberately holds only the description and the resolution notes — a branch needs to know what went wrong and what was promised on their behalf, not the customer’s details or the coupon.',
+    fields: [
+      { field: 'complaint_type', type: 'string', index: true },
+      { field: 'description', type: 'text' },
+      { field: 'resolution_notes', type: 'text' },
+      {
+        field: 'status',
+        type: 'string',
+        choices: ['queued', 'sent', 'failed'],
+        defaultValue: 'queued',
+        index: true,
+      },
+      { field: 'sent_at', type: 'dateTime' },
+      { field: 'error', type: 'text', note: 'Why the last send attempt failed.' },
+    ],
+  },
+  {
     collection: 'ticket_events',
     note: 'APPEND-ONLY audit history (no update/delete in any role)',
     fields: [
@@ -524,6 +556,10 @@ export const relations: RelationSpec[] = [
    * delete the complaints logged against it. */
   { collection: 'tickets', field: 'store', related: 'stores', onDelete: 'SET NULL' },
   { collection: 'ticket_events', field: 'ticket', related: 'tickets', onDelete: 'CASCADE' },
+  // The queue entry has no meaning without its ticket, and a branch that is
+  // deleted has nobody left to tell.
+  { collection: 'store_notifications', field: 'ticket', related: 'tickets', onDelete: 'CASCADE' },
+  { collection: 'store_notifications', field: 'store', related: 'stores', onDelete: 'CASCADE' },
   {
     collection: 'routing_events',
     field: 'conversation',

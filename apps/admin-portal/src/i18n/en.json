@@ -54,7 +54,8 @@
     "restaurants": "Restaurants",
     "brands": "Brands",
     "stores": "Stores",
-    "agentPerformance": "Agent performance"
+    "agentPerformance": "Agent performance",
+    "storeNotifications": "Branch notifications"
   },
   "dashboard": {
     "title": "Overview",
@@ -839,5 +840,22 @@
     "empty": "No chats match these filters.",
     "chatsInRange": "{{n}} chats in range",
     "basis": "First response is measured from the customer’s first message to the first agent reply. Internal notes do not count as a reply. Chats nobody answered are counted under \"No reply\" and left out of the averages."
+  },
+  "storeNotify": {
+    "rulesTitle": "Complaints the branch is told about",
+    "rulesHelp": "A ticket is reported to its branch only when its complaint type is selected here. The branch receives the description and the resolution notes — nothing else about the customer.",
+    "enabledCount": "{{n}} of {{total}} selected",
+    "noneSelected": "Nothing is selected, so no branch is told about anything. Pick the complaint types a branch can act on.",
+    "saveError": "Could not save that change",
+    "queueTitle": "What has been queued",
+    "pendingTransport": "Delivery to the stores is not connected yet",
+    "queueEmpty": "Nothing queued yet.",
+    "branch": "Branch",
+    "type": "Complaint type",
+    "sends": "What the branch gets",
+    "status": "Status",
+    "description": "Description",
+    "resolution": "Resolution notes",
+    "notWritten": "not written"
   }
 }
