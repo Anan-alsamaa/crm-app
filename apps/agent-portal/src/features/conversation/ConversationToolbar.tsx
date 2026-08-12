@@ -13,8 +13,25 @@ import {
 } from '../inbox/api.js';
 import { getSocket } from '../../lib/socket.js';
 
-const STATUSES: ConversationStatus[] = ['open', 'pending', 'resolved', 'closed'];
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
+
+/** Leading check on the "Mark as solved" button. */
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+      aria-hidden
+    >
+      <path d="m3 8.5 3.5 3.5L13 4.5" />
+    </svg>
+  );
+}
 
 async function broadcastUpdate(conversationId: string): Promise<void> {
   const socket = await getSocket();
@@ -31,9 +48,6 @@ interface Props {
   onBack?: () => void;
   /** Mobile-only: open the conversation details/notes panel. */
   onToggleDetails?: () => void;
-  /** Optionally lift the Create ticket dialog's open state to the parent, so
-   *  something outside the toolbar (the sidebar's order id) can open it too.
-   *  Omit both and the toolbar keeps owning the state itself. */
 }
 
 export function ConversationToolbar({
@@ -128,16 +142,15 @@ export function ConversationToolbar({
   // reject on the unique constraint).
   const existingTicket = linkedTickets.data?.[0] ?? null;
   const canCreateTicket = !!conversation.contact?.id && !!vendorId;
-  const isWrappedUp = conversation.status === 'resolved' || conversation.status === 'closed';
+  // The agent sees two states, but the column still holds four. `closed` is
+  // treated as solved so historical threads read correctly, and `open` as not
+  // solved — every conversation the gateway creates starts there.
+  const isSolved = conversation.status === 'resolved' || conversation.status === 'closed';
   // #6: prompt to spin a ticket out of a chat that's been closed/resolved but has
   // no ticket yet. Suppressed once dismissed, once a ticket exists, or when we
   // lack the ids needed to create one.
   const showTicketPrompt =
-    isWrappedUp &&
-    !existingTicket &&
-    !promptDismissed &&
-    canCreateTicket &&
-    !linkedTickets.isLoading;
+    isSolved && !existingTicket && !promptDismissed && canCreateTicket && !linkedTickets.isLoading;
 
   return (
     <>
@@ -212,18 +225,6 @@ export function ConversationToolbar({
           <div className="flex flex-wrap items-center gap-0.5 rounded-full bg-secondary/60 px-1.5 py-1">
             <GhostSelect
               size="sm"
-              label={t('conversation.status')}
-              aria-label={t('conversation.status')}
-              value={conversation.status}
-              display={t(`status.${conversation.status}`, { ns: 'common' })}
-              onChange={(v) => void patch({ status: v as ConversationStatus })}
-              options={STATUSES.map((s) => ({
-                value: s,
-                label: t(`status.${s}`, { ns: 'common' }),
-              }))}
-            />
-            <GhostSelect
-              size="sm"
               label={t('conversation.priority')}
               aria-label={t('conversation.priority')}
               value={conversation.priority}
@@ -269,6 +270,32 @@ export function ConversationToolbar({
               quick View ticket shortcut below when one exists). The old
               SC-013 one-ticket rule and its UX guard are retired; no DB
               unique constraint exists on tickets.conversation. */}
+          {/* The case toggle. Two states only — solved or pending — because the
+              operations team tracks a case as "dealt with or not", and the four
+              raw statuses only ever produced arguments about the difference
+              between open and pending. Solved is a positive terminal action, so
+              it gets a primary-weight button in its own hue; once solved it
+              steps back to a quiet outline, since the case needs nothing more.
+              A new customer message flips it back automatically (gateway). */}
+          <Button
+            type="button"
+            variant={isSolved ? 'outline' : 'success'}
+            size="sm"
+            iconStart={isSolved ? undefined : <CheckIcon />}
+            onClick={() => void patch({ status: isSolved ? 'pending' : 'resolved' })}
+            title={
+              isSolved
+                ? t('conversation.solvedHint', {
+                    defaultValue: 'Solved. Reopen it if the case is not finished.',
+                  })
+                : undefined
+            }
+          >
+            {isSolved
+              ? t('conversation.markPending', { defaultValue: 'Mark pending' })
+              : t('conversation.markSolved', { defaultValue: 'Mark as solved' })}
+          </Button>
+
           {existingTicket && (
             <Button
               type="button"

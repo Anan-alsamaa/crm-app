@@ -3,7 +3,15 @@ import { forwardRef } from 'react';
 import { cn } from './cn.js';
 import { Spinner } from './Spinner.js';
 
-type Variant = 'default' | 'brand' | 'secondary' | 'outline' | 'ghost' | 'destructive' | 'link';
+type Variant =
+  | 'default'
+  | 'brand'
+  | 'secondary'
+  | 'outline'
+  | 'ghost'
+  | 'success'
+  | 'destructive'
+  | 'link';
 type Size = 'sm' | 'md' | 'lg' | 'icon';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -38,6 +46,12 @@ const variants: Record<Variant, string> = {
   outline:
     'bg-card/40 text-foreground border-0 ring-1 ring-foreground/[0.08] hover:bg-card hover:ring-foreground/[0.14]',
   ghost: 'bg-transparent text-foreground border border-transparent hover:bg-secondary/60',
+  // Positive terminal action (resolve, mark solved). Carries the same visual
+  // weight and glow as the default CTA so it reads as a primary action, but in
+  // a different hue so the two are never mistaken for each other.
+  success:
+    'bg-success text-success-foreground border border-transparent ' +
+    'shadow-md shadow-success/25 hover:bg-success/90 hover:shadow-lg hover:shadow-success/35',
   destructive:
     'bg-destructive text-destructive-foreground border border-transparent ' +
     'shadow-sm shadow-destructive/30 hover:bg-destructive/90',

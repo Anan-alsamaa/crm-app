@@ -75,13 +75,44 @@ beforeEach(() => {
 });
 
 describe('ConversationToolbar', () => {
-  it('renders the contact identity and status controls', () => {
+  it('renders the contact identity and property controls', () => {
     renderToolbar();
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('alice@example.com')).toBeInTheDocument();
-    // The four ghost selects expose their aria-labels.
-    expect(screen.getByLabelText('conversation.status')).toBeInTheDocument();
     expect(screen.getByLabelText('conversation.priority')).toBeInTheDocument();
+    // Status is no longer one of the ghost selects — it became the solved
+    // toggle, so the agent picks between two states instead of four.
+    expect(screen.queryByLabelText('conversation.status')).not.toBeInTheDocument();
+  });
+
+  it('marks a live conversation solved', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    inbox.useUpdateConversation.mockReturnValue({ mutateAsync });
+    renderToolbar();
+
+    await userEvent.click(screen.getByRole('button', { name: /Mark as solved/ }));
+
+    expect(mutateAsync).toHaveBeenCalledWith({ id: 'c1', patch: { status: 'resolved' } });
+  });
+
+  it('flips to "Mark pending" once solved, and back again', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    inbox.useUpdateConversation.mockReturnValue({ mutateAsync });
+    renderToolbar({ conversation: { ...conversation, status: 'resolved' } as never });
+
+    // Solved is a terminal state for the agent: the only thing left to offer is
+    // putting the case back into play.
+    expect(screen.queryByRole('button', { name: /Mark as solved/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Mark pending/ }));
+
+    expect(mutateAsync).toHaveBeenCalledWith({ id: 'c1', patch: { status: 'pending' } });
+  });
+
+  it('treats a legacy closed conversation as solved', () => {
+    // The column still holds four values; `closed` predates the two-state model
+    // and must not show up as an unfinished case.
+    renderToolbar({ conversation: { ...conversation, status: 'closed' } as never });
+    expect(screen.getByRole('button', { name: /Mark pending/ })).toBeInTheDocument();
   });
 
   // Raising a ticket is a page, and the SAME page the sidebar's order id opens.

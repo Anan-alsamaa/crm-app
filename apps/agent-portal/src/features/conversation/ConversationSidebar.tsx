@@ -24,7 +24,6 @@ import { useContact, useUpdateContact } from '../contacts/api.js';
 import { useAssetBlobUrl } from '../../lib/useAssetBlobUrl.js';
 import { downloadAsset } from '../../lib/directus.js';
 import { Lightbox } from '../../components/Lightbox.js';
-import { AiPanel } from '../ai/AiPanel.js';
 import { LatestOrder } from '../commerce/OrderViews.js';
 import { ConversationTags } from './ConversationTags.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
@@ -342,6 +341,60 @@ export function ConversationSidebar({
         )}
       </section>
 
+      {/* Orders — the customer's latest order (live Yiji data), right in the inbox */}
+      {/* Gated on the VENDOR only, not on the contact being linked to a commerce
+          customer. The unlinked case is exactly when the agent needs to type an
+          order number by hand, so hiding the panel there removed the tool at the
+          moment it was needed. */}
+      {contact.data?.vendor?.yiji_vendor_id && (
+        <section className="px-5 py-4">
+          <LatestOrder
+            vendorId={contact.data.vendor.yiji_vendor_id}
+            customerId={contact.data.external_customer_id ?? undefined}
+            conversationId={c.id}
+            onCreateTicket={onCreateTicketForOrder}
+          />
+        </section>
+      )}
+
+      {/* Linked tickets — borderless rows with hover lift, not stacked cards. */}
+      <section className="px-5 py-4">
+        <SectionLabel count={tickets.data?.length}>{t('sidebar.linkedTickets')}</SectionLabel>
+        {tickets.isLoading ? (
+          <Spinner />
+        ) : tickets.data && tickets.data.length > 0 ? (
+          <ul className="-mx-2 space-y-0.5">
+            {tickets.data.map((tk) => (
+              <li key={tk.id}>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/tickets/${tk.id}`)}
+                  title={t('sidebar.openTicket', { defaultValue: 'Open ticket' })}
+                  className="block w-full rounded-md px-2 py-2 text-start transition-colors duration-fast ease-out hover:bg-secondary/70"
+                >
+                  <div className="truncate text-sm font-medium text-foreground">{tk.subject}</div>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <Pill tone={TICKET_TONE[tk.status] ?? 'neutral'} size="sm">
+                      {t(`status.${tk.status}`, { ns: 'common' })}
+                    </Pill>
+                    <Pill tone="muted" size="sm">
+                      {t(`priority.${tk.priority}`, { ns: 'common' })}
+                    </Pill>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted-foreground">{t('sidebar.noTickets')}</p>
+        )}
+      </section>
+
+      {/* Tags — the single, interactive home for conversation tags. */}
+      <section className="px-5 py-4">
+        <ConversationTags conversation={c} />
+      </section>
+
       {/* Shared media — images from the thread, messenger-style grid. */}
       {media && media.length > 0 && (
         <section className="px-5 py-4">
@@ -369,48 +422,15 @@ export function ConversationSidebar({
         </section>
       )}
 
-      {/* Tags — the single, interactive home for conversation tags. */}
-      <section className="px-5 py-4">
-        <ConversationTags conversation={c} />
-      </section>
-
       {/* Custom fields (per-conversation) — card hides when nothing renders. */}
       <section className="px-5 py-4 empty:hidden">
         <CustomFieldsSection entityType="conversation" entityId={conversationId} />
       </section>
 
-      {/* Orders — the customer's latest order (live Yiji data), right in the inbox */}
-      {/* Gated on the VENDOR only, not on the contact being linked to a commerce
-          customer. The unlinked case is exactly when the agent needs to type an
-          order number by hand, so hiding the panel there removed the tool at the
-          moment it was needed. */}
-      {contact.data?.vendor?.yiji_vendor_id && (
-        <section className="px-5 py-4">
-          <LatestOrder
-            vendorId={contact.data.vendor.yiji_vendor_id}
-            customerId={contact.data.external_customer_id ?? undefined}
-            conversationId={c.id}
-            onCreateTicket={onCreateTicketForOrder}
-          />
-        </section>
-      )}
-
-      {/* AI assistance */}
-      <section className="px-5 py-4">
-        <AiPanel
-          key={conversationId}
-          conversationId={conversationId}
-          vendorId={
-            (c as unknown as { vendor?: string | { id: string } }).vendor &&
-            typeof (c as unknown as { vendor?: string | { id: string } }).vendor === 'object'
-              ? (c as unknown as { vendor: { id: string } }).vendor.id
-              : ((c as unknown as { vendor?: string }).vendor ?? 'unknown')
-          }
-        />
-      </section>
-
       {/* Internal notes — agent-only side conversation. Authored by the team,
-          rendered out of the customer thread so they can't bleed in visually. */}
+          rendered out of the customer thread so they can't bleed in visually.
+          Kept last with custom fields: both are agent-side bookkeeping, below
+          the customer-facing panels the operations team asked to lead with. */}
       <section className="px-5 py-4">
         <SectionLabel count={notes?.length}>
           {t('sidebar.internalNotes', { defaultValue: 'Internal notes' })}
@@ -458,39 +478,6 @@ export function ConversationSidebar({
           <p className="text-xs text-muted-foreground">
             {t('sidebar.noNotes', { defaultValue: 'No internal notes yet.' })}
           </p>
-        )}
-      </section>
-
-      {/* Linked tickets — borderless rows with hover lift, not stacked cards. */}
-      <section className="px-5 py-4">
-        <SectionLabel count={tickets.data?.length}>{t('sidebar.linkedTickets')}</SectionLabel>
-        {tickets.isLoading ? (
-          <Spinner />
-        ) : tickets.data && tickets.data.length > 0 ? (
-          <ul className="-mx-2 space-y-0.5">
-            {tickets.data.map((tk) => (
-              <li key={tk.id}>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/tickets/${tk.id}`)}
-                  title={t('sidebar.openTicket', { defaultValue: 'Open ticket' })}
-                  className="block w-full rounded-md px-2 py-2 text-start transition-colors duration-fast ease-out hover:bg-secondary/70"
-                >
-                  <div className="truncate text-sm font-medium text-foreground">{tk.subject}</div>
-                  <div className="mt-1 flex items-center gap-1.5">
-                    <Pill tone={TICKET_TONE[tk.status] ?? 'neutral'} size="sm">
-                      {t(`status.${tk.status}`, { ns: 'common' })}
-                    </Pill>
-                    <Pill tone="muted" size="sm">
-                      {t(`priority.${tk.priority}`, { ns: 'common' })}
-                    </Pill>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-muted-foreground">{t('sidebar.noTickets')}</p>
         )}
       </section>
     </aside>
