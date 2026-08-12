@@ -4,7 +4,13 @@ import { useQuery } from '@tanstack/react-query';
 import { cn, Pill, Skeleton } from '@yiji/ui';
 import type { YijiOrder } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
-import { getPinnedOrder, pinOrder, subscribePinnedOrders } from './pinned-order.js';
+import {
+  addOrder,
+  chooseOrder,
+  getAddedOrders,
+  removeOrder,
+  subscribeOrderPins,
+} from './pinned-order.js';
 
 /**
  * Direct order views (no AI). The Yiji list endpoint returns order SUMMARIES
@@ -406,11 +412,12 @@ function ExpandableOrder({
 function ManualOrderLookup({
   vendorId,
   conversationId,
-  onCreateTicket,
+  onAdd,
 }: {
   vendorId: string;
   conversationId?: string;
-  onCreateTicket?: (order: YijiOrder) => void;
+  /** Called when the agent keeps a found order. Absent = nowhere to keep it. */
+  onAdd?: (order: YijiOrder) => void;
 }) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -419,23 +426,15 @@ function ManualOrderLookup({
   const q = useQuery({
     queryKey: ['yiji-order-manual', vendorId, orderId],
     enabled: !!vendorId && !!orderId,
-    queryFn: async () => {
-      const order = await commerce.getOrder(vendorId, orderId);
-      // Pin it so it survives navigating away, and so the ticket dialog can
-      // snapshot it without the agent retyping the number.
-      if (order && conversationId) pinOrder(conversationId, order as YijiOrder);
-      return order;
-    },
+    // Deliberately does NOT keep the order: a lookup is a question ("is this
+    // the right one?"), and answering it by silently adding to the panel makes
+    // every mistyped number permanent. The agent adds it explicitly.
+    queryFn: () => commerce.getOrder(vendorId, orderId),
     retry: false,
     staleTime: 60_000,
   });
 
-  const pinned = useSyncExternalStore(
-    subscribePinnedOrders,
-    () => getPinnedOrder(conversationId),
-    () => null,
-  );
-  const shown = (q.data as YijiOrder | undefined) ?? pinned;
+  const found = q.data as YijiOrder | undefined;
 
   return (
     <div className="space-y-2">
@@ -473,15 +472,25 @@ function ManualOrderLookup({
             defaultValue: 'No order {{orderId}} for this vendor.',
           })}
         </p>
-      ) : shown ? (
-        // `shown` prefers the fresh result but falls back to the pinned one, so
-        // the order stays on screen after navigating away and back.
-        <ExpandableOrder
-          vendorId={vendorId}
-          summary={shown}
-          defaultOpen
-          onCreateTicket={onCreateTicket}
-        />
+      ) : found ? (
+        <div className="space-y-1.5 rounded-2xl bg-secondary/40 p-2">
+          <ExpandableOrder vendorId={vendorId} summary={found} defaultOpen />
+          <button
+            type="button"
+            onClick={() => {
+              if (!conversationId || !onAdd) return;
+              onAdd(found);
+              // Clear the search so the panel shows the kept copy, not a
+              // duplicate of it sitting in the result slot.
+              setInput('');
+              setOrderId('');
+            }}
+            disabled={!conversationId || !onAdd}
+            className="h-7 w-full rounded-lg bg-primary/10 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-40"
+          >
+            {t('commerce.addToPanel', { defaultValue: '+ Keep this order' })}
+          </button>
+        </div>
       ) : null}
     </div>
   );
@@ -508,43 +517,65 @@ export function LatestOrder({
     staleTime: 60_000,
   });
 
+  // Orders the agent looked up and kept, alongside the automatic ones.
+  const added = useSyncExternalStore(
+    subscribeOrderPins,
+    () => getAddedOrders(conversationId),
+    () => [] as readonly YijiOrder[],
+  );
+
   // With no linked customer there is nothing to look up automatically, but the
   // agent can still find an order by number — that is the whole point of the
   // manual path, so render it rather than bailing out.
   if (!vendorId) return null;
 
-  // The last 2 orders (list is already newest-first from the client).
-  const recent = (orders.data ?? []).slice(0, 2);
+  // A DISABLED query never resolves, so `isLoading` stays true forever and the
+  // skeleton sits there pretending to load an order that will never arrive.
+  // A contact with no linked commerce customer is the common case for a phone
+  // enquiry, which is exactly when the agent needs the manual box instead.
+  const loadingOrders = !!customerId && orders.isFetching;
 
-  // Clicking an order id raises a complaint about THAT order, which may not be
-  // the customer's newest one. Pin it first — pinning is already how an order
-  // travels from this panel into ticket creation — then let the conversation
-  // open the dialog. With no conversation there is nothing to pin against and
-  // no dialog to open, so the id stays plain text.
+  // The last 2 orders (list is already newest-first from the client). An order
+  // the agent also added by hand is shown once, as the automatic one, so it
+  // keeps its "cannot be removed" status.
+  const fetched = (orders.data ?? []).slice(0, 2);
+  const fetchedIds = new Set(fetched.map((o) => o.orderId));
+  const kept = added.filter((o) => !fetchedIds.has(o.orderId));
+
+  /**
+   * Clicking an order id raises a complaint about THAT order, which may not be
+   * the customer's newest. Record the choice first — that is what the ticket
+   * snapshots — then let the conversation open the dialog. With no
+   * conversation there is nothing to record against and no dialog to open, so
+   * the id stays plain text.
+   */
   const raiseTicket =
     onCreateTicket && conversationId
       ? (order: YijiOrder) => {
-          pinOrder(conversationId, order);
+          chooseOrder(conversationId, order);
           onCreateTicket(order);
         }
       : undefined;
 
+  const total = fetched.length + kept.length;
+
   return (
     <div className="space-y-2">
       <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {recent.length > 1
+        {total > 1
           ? t('commerce.latestOrders', { defaultValue: 'Latest orders' })
           : t('commerce.latestOrder', { defaultValue: 'Latest order' })}
       </h3>
-      {orders.isLoading ? (
+
+      {loadingOrders ? (
         <Skeleton className="h-20 w-full rounded-2xl" />
-      ) : orders.isError ? (
+      ) : customerId && orders.isError ? (
         <p className="text-xs text-muted-foreground">
           {t('commerce.unavailable', { defaultValue: 'Commerce data unavailable.' })}
         </p>
-      ) : recent.length > 0 ? (
+      ) : total > 0 ? (
         <ul className="space-y-2">
-          {recent.map((o, i) => (
+          {fetched.map((o, i) => (
             <li key={o.orderId}>
               {/* Default-expand only the most recent (i === 0). */}
               <ExpandableOrder
@@ -555,21 +586,47 @@ export function LatestOrder({
               />
             </li>
           ))}
+          {kept.map((o) => (
+            <li key={o.orderId} className="space-y-1">
+              <ExpandableOrder
+                vendorId={vendorId}
+                summary={o}
+                defaultOpen={fetched.length === 0}
+                onCreateTicket={raiseTicket}
+              />
+              {/* Only orders the agent ADDED can be removed. The customer's
+                  own recent orders are fact, not a working note, and a remove
+                  control on them would imply the panel had been edited. */}
+              <button
+                type="button"
+                onClick={() => conversationId && removeOrder(conversationId, o.orderId)}
+                aria-label={t('commerce.removeOrder', {
+                  orderId: o.orderId,
+                  defaultValue: 'Remove order {{orderId}}',
+                })}
+                className="h-6 w-full rounded-lg text-2xs font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              >
+                {t('commerce.removeOrderShort', { defaultValue: 'Remove' })}
+              </button>
+            </li>
+          ))}
         </ul>
       ) : (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            {t('commerce.noOrdersHint', {
-              defaultValue: 'No orders found for this contact. Enter an order ID to look it up.',
-            })}
-          </p>
-          <ManualOrderLookup
-            vendorId={vendorId}
-            conversationId={conversationId}
-            onCreateTicket={raiseTicket}
-          />
-        </div>
+        <p className="text-xs text-muted-foreground">
+          {t('commerce.noOrdersHint', {
+            defaultValue: 'No orders found for this contact. Enter an order ID to look it up.',
+          })}
+        </p>
       )}
+
+      {/* Always available, not only when the automatic lookup came back empty:
+          the complaint is often about an older order than the two shown, and
+          hiding the box behind "no orders found" made that case invisible. */}
+      <ManualOrderLookup
+        vendorId={vendorId}
+        conversationId={conversationId}
+        onAdd={conversationId ? (o) => addOrder(conversationId, o) : undefined}
+      />
     </div>
   );
 }

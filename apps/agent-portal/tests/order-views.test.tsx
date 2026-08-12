@@ -18,7 +18,13 @@ const client = vi.hoisted(() => ({
 vi.mock('../src/lib/commerce-client.js', () => ({ commerce: client }));
 
 import { LatestOrder, CustomerOrders } from '../src/features/commerce/OrderViews.js';
-import { getPinnedOrder } from '../src/features/commerce/pinned-order.js';
+import {
+  addOrder,
+  chooseOrder,
+  getAddedOrders,
+  getChosenOrder,
+  removeOrder,
+} from '../src/features/commerce/pinned-order.js';
 
 function renderView(node: ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -145,7 +151,7 @@ describe('LatestOrder (inbox)', () => {
     expect(screen.queryByRole('button', { name: /New complaint/ })).not.toBeInTheDocument();
   });
 
-  it('order id is a button that pins THAT order and asks for a ticket', async () => {
+  it('order id is a button that CHOOSES that order and asks for a ticket', async () => {
     sessionStorage.clear();
     // Two orders: the complaint is about the OLDER one, which is exactly the
     // case the automatic "latest order" lookup gets wrong.
@@ -172,7 +178,7 @@ describe('LatestOrder (inbox)', () => {
     expect(onCreateTicket).toHaveBeenCalledTimes(1);
     expect(onCreateTicket.mock.calls[0]![0]).toMatchObject({ orderId: 'N-2' });
     // Pinned under the conversation, which is how CreateTicketDialog picks it up.
-    expect(getPinnedOrder('conv-7')?.orderId).toBe('N-2');
+    expect(getChosenOrder('conv-7')?.orderId).toBe('N-2');
     // Clicking the id must not also expand the card (it sits above the toggle).
     expect(client.getOrder).not.toHaveBeenCalledWith('v1', 'N-2');
   });
@@ -229,6 +235,156 @@ describe('CustomerOrders (contact panel)', () => {
   it('renders nothing without ids', () => {
     const { container } = renderView(<CustomerOrders vendorId="v1" customerId="" />);
     expect(container).toBeEmptyDOMElement();
+    expect(client.getOrders).not.toHaveBeenCalled();
+  });
+});
+
+describe('LatestOrder — keeping orders the agent looked up', () => {
+  beforeEach(() => sessionStorage.clear());
+
+  const lookup = async (id: string) => {
+    fireEvent.change(screen.getByLabelText('Look up an order by ID'), { target: { value: id } });
+    fireEvent.click(screen.getByRole('button', { name: 'Find' }));
+  };
+
+  it('offers the manual search even when the customer already has orders', async () => {
+    // It used to appear only when the automatic lookup came back empty, which
+    // made "the complaint is about an older order" an invisible case.
+    client.getOrders.mockResolvedValue([summary('N-1', '2026-07-01T10:00:00')]);
+    renderView(<LatestOrder vendorId="v1" customerId="c1" conversationId="conv-1" />);
+    await screen.findByText(/N-1/);
+    expect(screen.getByLabelText('Look up an order by ID')).toBeInTheDocument();
+  });
+
+  it('does not keep a looked-up order until the agent says so', async () => {
+    // A lookup is a question, not a decision: auto-keeping made every mistyped
+    // number permanent.
+    client.getOrders.mockResolvedValue([]);
+    client.getOrder.mockResolvedValue(full('N-9'));
+    renderView(<LatestOrder vendorId="v1" customerId="c1" conversationId="conv-2" />);
+    await lookup('N-9');
+    await screen.findByRole('button', { name: '+ Keep this order' });
+    expect(getAddedOrders('conv-2')).toHaveLength(0);
+  });
+
+  it('keeps it, and clears the search box so it is not shown twice', async () => {
+    client.getOrders.mockResolvedValue([]);
+    client.getOrder.mockResolvedValue(full('N-9'));
+    renderView(<LatestOrder vendorId="v1" customerId="c1" conversationId="conv-3" />);
+    await lookup('N-9');
+    fireEvent.click(await screen.findByRole('button', { name: '+ Keep this order' }));
+    await waitFor(() => expect(getAddedOrders('conv-3').map((o) => o.orderId)).toEqual(['N-9']));
+    expect(screen.getByLabelText('Look up an order by ID')).toHaveValue('');
+  });
+
+  it('shows a kept order alongside the automatic ones', async () => {
+    client.getOrders.mockResolvedValue([summary('N-1', '2026-07-01T10:00:00')]);
+    client.getOrder.mockResolvedValue(full('N-9'));
+    renderView(<LatestOrder vendorId="v1" customerId="c1" conversationId="conv-4" />);
+    await screen.findByText(/N-1/);
+    await lookup('N-9');
+    fireEvent.click(await screen.findByRole('button', { name: '+ Keep this order' }));
+    await waitFor(() => expect(screen.getAllByText(/N-9/).length).toBeGreaterThan(0));
+    expect(screen.getByText(/N-1/)).toBeInTheDocument();
+  });
+
+  it("offers Remove on a kept order only — never on the customer's own", async () => {
+    // A remove control on a fetched order would imply the panel had been
+    // edited; those are fact, not a working note.
+    client.getOrders.mockResolvedValue([summary('N-1', '2026-07-01T10:00:00')]);
+    client.getOrder.mockResolvedValue(full('N-9'));
+    renderView(<LatestOrder vendorId="v1" customerId="c1" conversationId="conv-5" />);
+    await screen.findByText(/N-1/);
+    expect(screen.queryByRole('button', { name: /Remove order/ })).toBeNull();
+
+    await lookup('N-9');
+    fireEvent.click(await screen.findByRole('button', { name: '+ Keep this order' }));
+    // Exactly one Remove — for the kept order, not the customer's own. (The
+    // i18n mock returns the raw defaultValue, so assert on the count and the
+    // row it sits in rather than on interpolated label text.)
+    const removes = await screen.findAllByRole('button', { name: /Remove order/ });
+    expect(removes).toHaveLength(1);
+    expect(removes[0]!.closest('li')!.textContent).toContain('N-9');
+  });
+
+  it('removes a kept order when asked', async () => {
+    client.getOrders.mockResolvedValue([]);
+    client.getOrder.mockResolvedValue(full('N-9'));
+    renderView(<LatestOrder vendorId="v1" customerId="c1" conversationId="conv-6" />);
+    await lookup('N-9');
+    fireEvent.click(await screen.findByRole('button', { name: '+ Keep this order' }));
+    await waitFor(() => expect(getAddedOrders('conv-6')).toHaveLength(1));
+    fireEvent.click(await screen.findByRole('button', { name: /Remove order/ }));
+    await waitFor(() => expect(getAddedOrders('conv-6')).toHaveLength(0));
+  });
+
+  it('adding the same order twice keeps one copy', async () => {
+    client.getOrders.mockResolvedValue([]);
+    client.getOrder.mockResolvedValue(full('N-9'));
+    renderView(<LatestOrder vendorId="v1" customerId="c1" conversationId="conv-7b" />);
+    for (const _ of [1, 2]) {
+      await lookup('N-9');
+      fireEvent.click(await screen.findByRole('button', { name: '+ Keep this order' }));
+      await waitFor(() => expect(getAddedOrders('conv-7b').length).toBeGreaterThan(0));
+    }
+    expect(getAddedOrders('conv-7b')).toHaveLength(1);
+  });
+
+  it('does not duplicate an order that is both kept and automatic', async () => {
+    // If the customer's own list later includes it, show it once — as the
+    // automatic one, so it keeps its "cannot be removed" status.
+    client.getOrders.mockResolvedValue([summary('N-9', '2026-07-01T10:00:00')]);
+    addOrder('conv-8', full('N-9'));
+    renderView(<LatestOrder vendorId="v1" customerId="c1" conversationId="conv-8" />);
+    await screen.findByText(/N-9/);
+    expect(screen.queryByRole('button', { name: /Remove order/ })).toBeNull();
+  });
+
+  it('the ticket follows a KEPT order when that is the one clicked', async () => {
+    // The case the whole feature exists for: the customer's two recent orders
+    // are on screen, the complaint is about an older one the agent looked up,
+    // and clicking it must be what the ticket records.
+    const onCreate = vi.fn();
+    client.getOrders.mockResolvedValue([
+      summary('N-1', '2026-07-02T10:00:00'),
+      summary('N-2', '2026-07-01T10:00:00'),
+    ]);
+    client.getOrder.mockImplementation((_v: string, id: string) => Promise.resolve(full(id)));
+    addOrder('conv-9', full('OLD-7'));
+    renderView(
+      <LatestOrder
+        vendorId="v1"
+        customerId="c1"
+        conversationId="conv-9"
+        onCreateTicket={onCreate}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New complaint for order #OLD-7' }));
+    await waitFor(() => expect(getChosenOrder('conv-9')?.orderId).toBe('OLD-7'));
+    expect(onCreate.mock.calls[0]![0]).toMatchObject({ orderId: 'OLD-7' });
+  });
+
+  it('removing the chosen order forgets the choice', async () => {
+    // Otherwise the ticket would be filed against an order no longer on screen.
+    addOrder('conv-10', full('N-9'));
+    chooseOrder('conv-10', full('N-9'));
+    expect(getChosenOrder('conv-10')?.orderId).toBe('N-9');
+    removeOrder('conv-10', 'N-9');
+    expect(getChosenOrder('conv-10')).toBeNull();
+  });
+});
+
+describe('LatestOrder — a contact with no linked commerce customer', () => {
+  beforeEach(() => sessionStorage.clear());
+
+  it('does not sit on a loading skeleton forever', async () => {
+    // The orders query is disabled without a customer id, so it never
+    // resolves: `isLoading` stays true and the panel pretends to be loading an
+    // order that will never arrive. This is the common phone-enquiry case.
+    renderView(<LatestOrder vendorId="v1" conversationId="conv-nc" />);
+    expect(await screen.findByLabelText('Look up an order by ID')).toBeInTheDocument();
+    expect(screen.getByText(/No orders found for this contact/)).toBeInTheDocument();
     expect(client.getOrders).not.toHaveBeenCalled();
   });
 });
