@@ -35,6 +35,11 @@ export interface ComplaintReportRow {
   id: string;
   /** Local `YYYY-MM-DD` of ticket creation. */
   date: string;
+  /** Calendar parts of `date`, for pivoting. Null when there is no date. */
+  year: number | null;
+  month: number | null;
+  week: number | null;
+  day: number | null;
   /** Local `HH:mm` of ticket creation. */
   time: string;
   /** Chain manager, from the matched store. */
@@ -44,10 +49,19 @@ export interface ComplaintReportRow {
   brand: string;
   city: string;
   restaurantName: string;
+  /** Ops store code ("LCP-041"), for searching. Filled by the store join. */
+  storeCode: string;
+  /** Yiji's restaurant id, for searching. Filled by the store join. */
+  yijiRestaurantId: string;
   /** False when no store row matched — rendered as "Not mapped", never blank. */
   storeMapped: boolean;
   serviceType: string;
   complaintType: string;
+  /**
+   * Not a report column — the ops sheet has never carried one and their
+   * required format omits it. Kept on the row because the agent portal's own
+   * table shows it.
+   */
   customerName: string;
   customerMobile: string;
   complaintDescription: string;
@@ -75,9 +89,23 @@ export interface ComplaintReportRow {
  * The ops team's columns, in their order. `restaurantManagerId` has no source
  * field yet and is carried as a column, always blank, until one exists.
  */
+/**
+ * The report's columns, in the operations team's own order.
+ *
+ * Year / Month / Week / Day are derived from Date rather than stored: they
+ * exist so the sheet can be pivoted by period without writing a formula, and
+ * deriving them means they can never disagree with the date they came from.
+ *
+ * Customer name is deliberately absent — the ops sheet has never carried one
+ * (it was empty on all 1,673 historical rows) and the mobile is the identifier
+ * they actually use.
+ */
 export const COMPLAINT_COLUMN_KEYS = [
   'date',
-  'time',
+  'year',
+  'month',
+  'week',
+  'day',
   'chain',
   'area',
   'brand',
@@ -85,11 +113,11 @@ export const COMPLAINT_COLUMN_KEYS = [
   'restaurantName',
   'serviceType',
   'complaintType',
-  'customerName',
   'customerMobile',
   'complaintDescription',
   'responseDesc',
   'complaintSource',
+  'time',
   'orderAmount',
   'orderNumber',
   'communicationMethod',
@@ -105,6 +133,10 @@ export type ComplaintColumnKey = (typeof COMPLAINT_COLUMN_KEYS)[number];
 
 export const COMPLAINT_COLUMN_LABELS: Record<ComplaintColumnKey, { key: string; def: string }> = {
   date: { key: 'complaintReport.col.date', def: 'Date' },
+  year: { key: 'complaintReport.col.year', def: 'Year' },
+  month: { key: 'complaintReport.col.month', def: 'Month' },
+  week: { key: 'complaintReport.col.week', def: 'Week' },
+  day: { key: 'complaintReport.col.day', def: 'Day' },
   time: { key: 'complaintReport.col.time', def: 'Time' },
   chain: { key: 'complaintReport.col.chain', def: 'Chain' },
   area: { key: 'complaintReport.col.area', def: 'Area' },
@@ -113,7 +145,6 @@ export const COMPLAINT_COLUMN_LABELS: Record<ComplaintColumnKey, { key: string; 
   restaurantName: { key: 'complaintReport.col.restaurantName', def: 'Restaurant name' },
   serviceType: { key: 'complaintReport.col.serviceType', def: 'Service type' },
   complaintType: { key: 'complaintReport.col.complaintType', def: 'Complaint type' },
-  customerName: { key: 'complaintReport.col.customerName', def: 'Customer name' },
   customerMobile: { key: 'complaintReport.col.customerMobile', def: 'Customer mobile' },
   complaintDescription: {
     key: 'complaintReport.col.complaintDescription',
@@ -133,7 +164,7 @@ export const COMPLAINT_COLUMN_LABELS: Record<ComplaintColumnKey, { key: string; 
   complaintStatus: { key: 'complaintReport.col.complaintStatus', def: 'Complaint status' },
   restaurantManagerId: {
     key: 'complaintReport.col.restaurantManagerId',
-    def: 'Restaurant manager ID',
+    def: 'Restaurant manager',
   },
   agent: { key: 'complaintReport.col.agent', def: 'Agent' },
   compensation: { key: 'complaintReport.col.compensation', def: 'Compensation' },
@@ -163,6 +194,10 @@ export function buildComplaintsSheets(
 ): Sheet[] {
   const width: Record<ComplaintColumnKey, number> = {
     date: 12,
+    year: 8,
+    month: 8,
+    week: 8,
+    day: 8,
     time: 8,
     chain: 22,
     area: 22,
@@ -171,7 +206,6 @@ export function buildComplaintsSheets(
     restaurantName: 28,
     serviceType: 14,
     complaintType: 24,
-    customerName: 20,
     customerMobile: 16,
     complaintDescription: 52,
     responseDesc: 44,
@@ -189,6 +223,10 @@ export function buildComplaintsSheets(
   };
   const value: Record<ComplaintColumnKey, (r: ComplaintReportRow) => CellValue> = {
     date: (r) => r.date,
+    year: (r) => r.year ?? '',
+    month: (r) => r.month ?? '',
+    week: (r) => r.week ?? '',
+    day: (r) => r.day ?? '',
     time: (r) => r.time,
     chain: (r) => complaintStoreCell(r, r.chain, t),
     area: (r) => complaintStoreCell(r, r.area, t),
@@ -199,7 +237,6 @@ export function buildComplaintsSheets(
     restaurantName: (r) => r.restaurantName,
     serviceType: (r) => r.serviceType,
     complaintType: (r) => r.complaintType,
-    customerName: (r) => r.customerName,
     // Text, not a number: leading zeros and a leading + are part of a mobile
     // number, and Excel eats both if the cell is numeric.
     customerMobile: (r) => r.customerMobile,
@@ -267,6 +304,10 @@ export function joinComplaintStores(
       // Once matched, report the branch as the OPERATIONS master names it —
       // that is the spelling their sheet uses.
       restaurantName: m.restaurantName || r.restaurantName,
+      // Not shown as columns — carried so a branch can be found by the ids
+      // operations actually quote to each other.
+      storeCode: m.store?.code ?? '',
+      yijiRestaurantId: m.store?.yijiRestaurantId ?? '',
       storeMapped: !isUnmappedStore(m),
     };
   });
@@ -289,13 +330,112 @@ export function reportFilename(base: string, days: number): string {
 export function splitLocalDateTime(iso: string | null | undefined): {
   date: string;
   time: string;
+  year: number | null;
+  month: number | null;
+  week: number | null;
+  day: number | null;
 } {
-  if (!iso) return { date: '', time: '' };
+  const blank = { date: '', time: '', year: null, month: null, week: null, day: null };
+  if (!iso) return blank;
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return { date: '', time: '' };
+  if (Number.isNaN(d.getTime())) return blank;
   const p = (n: number) => String(n).padStart(2, '0');
   return {
     date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
     time: `${p(d.getHours())}:${p(d.getMinutes())}`,
+    // Year / Month / Week / Day are a drill-down hierarchy for pivoting, so
+    // they are NUMBERS: month names sort alphabetically in Excel, which puts
+    // April before January and quietly ruins every month-over-month chart.
+    year: d.getFullYear(),
+    month: d.getMonth() + 1,
+    week: isoWeek(d),
+    day: d.getDate(),
   };
+}
+
+/**
+ * ISO-8601 week number. Weeks start Monday and week 1 is the one containing
+ * the first Thursday, which is what Excel's ISOWEEKNUM gives — so a week
+ * number produced here lines up with one typed into the sheet by hand.
+ */
+export function isoWeek(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  // Shift onto the Thursday of this week, then count weeks from Jan 1.
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
+/* ── Finding a row ─────────────────────────────────────────────────────── */
+
+/** Digits only — so "+966 50 123" and "050123" are the same needle. */
+function digits(v: string): string {
+  return v.replace(/\D+/g, '');
+}
+
+/**
+ * Filter the report by one free-text box.
+ *
+ * Operations look a complaint up by whatever they have to hand: the customer
+ * rang from a number, or someone quoted a branch by name, by its ops code
+ * ("LCP-041") or by the Yiji restaurant id. One box that searches all of them
+ * beats four labelled fields nobody can remember the order of.
+ *
+ * Phone matching compares DIGITS ONLY, because the same number is written
+ * "+966 50 …", "0550…" and "966550…" depending on who typed it, and an exact
+ * string compare finds none of the other two.
+ */
+export function filterComplaintRows(
+  rows: readonly ComplaintReportRow[],
+  query: string,
+): ComplaintReportRow[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [...rows];
+  const qDigits = digits(q);
+  return rows.filter((r) => {
+    if (r.restaurantName.toLowerCase().includes(q)) return true;
+    if (r.storeCode.toLowerCase().includes(q)) return true;
+    if (r.yijiRestaurantId.toLowerCase().includes(q)) return true;
+    // Phone last, and only once the needle is long enough to mean something:
+    // a one- or two-digit search would match almost every number on file.
+    if (qDigits.length >= 3 && digits(r.customerMobile).includes(qDigits)) return true;
+    return false;
+  });
+}
+
+/* ── Column order ──────────────────────────────────────────────────────── */
+
+/**
+ * Move one column to a new position, returning a new order.
+ *
+ * Reordering is per-person preference, not a schema change: someone building a
+ * pivot wants Date last, someone reading on screen wants it first. Both are
+ * right, so the order is data rather than something baked into the report.
+ *
+ * Out-of-range indexes clamp instead of throwing — a drag that ends past the
+ * end of the list is a normal gesture, not an error.
+ */
+export function moveColumn<T>(order: readonly T[], from: number, to: number): T[] {
+  const next = [...order];
+  if (from < 0 || from >= next.length) return next;
+  const clamped = Math.max(0, Math.min(to, next.length - 1));
+  const [moved] = next.splice(from, 1);
+  if (moved === undefined) return next;
+  next.splice(clamped, 0, moved);
+  return next;
+}
+
+/**
+ * Reconcile a saved order with the columns that exist today.
+ *
+ * A saved order goes stale the moment a column is added or removed. Dropping
+ * unknown keys and appending new ones keeps a year-old preference working
+ * instead of silently hiding a column that was added since — which is how a
+ * report quietly loses a field nobody notices is missing.
+ */
+export function reconcileColumnOrder<T>(saved: readonly T[], all: readonly T[]): T[] {
+  const known = new Set(all);
+  const kept = saved.filter((k) => known.has(k));
+  const seen = new Set(kept);
+  return [...kept, ...all.filter((k) => !seen.has(k))];
 }

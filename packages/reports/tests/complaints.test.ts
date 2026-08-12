@@ -7,6 +7,11 @@ import {
   joinComplaintStores,
   reportFilename,
   splitLocalDateTime,
+  isoWeek,
+  filterComplaintRows,
+  moveColumn,
+  reconcileColumnOrder,
+  COMPLAINT_COLUMN_LABELS,
   type ComplaintReportRow,
 } from '../src/index.js';
 
@@ -61,19 +66,20 @@ const stores = buildStoreIndex([
 ]);
 
 describe('the complaint column set', () => {
-  it('is the ops sheet, in their order — 24 columns', () => {
+  it('is the ops sheet, in their order — 27 columns', () => {
     // Pinned deliberately: this format is reconciled against a spreadsheet
     // someone keeps by hand, so a column silently appearing or moving is a
-    // defect, not a detail.
-    expect(COMPLAINT_COLUMN_KEYS).toHaveLength(24);
+    // defect, not a detail. 27 since the date hierarchy (year/month/week/day)
+    // was added and the always-empty customer name dropped.
+    expect(COMPLAINT_COLUMN_KEYS).toHaveLength(27);
     expect(COMPLAINT_COLUMN_KEYS[0]).toBe('date');
-    expect(COMPLAINT_COLUMN_KEYS[1]).toBe('time');
+    expect(COMPLAINT_COLUMN_KEYS[1]).toBe('year');
     expect(COMPLAINT_COLUMN_KEYS.at(-1)).toBe('compensation');
   });
 
   it('emits every column by default, and only the chosen ones otherwise', () => {
     const all = buildComplaintsSheets([row()], t)[0]!;
-    expect(all.columns).toHaveLength(24);
+    expect(all.columns).toHaveLength(27);
 
     const picked = buildComplaintsSheets([row()], t, ['date', 'agent'])[0]!;
     expect(picked.columns.map((c) => c.header)).toEqual(['Date', 'Agent']);
@@ -151,13 +157,164 @@ describe('helpers', () => {
   });
 
   it('is blank rather than "Invalid Date" for a missing timestamp', () => {
-    expect(splitLocalDateTime(null)).toEqual({ date: '', time: '' });
-    expect(splitLocalDateTime('nonsense')).toEqual({ date: '', time: '' });
+    const blank = { date: '', time: '', year: null, month: null, week: null, day: null };
+    expect(splitLocalDateTime(null)).toEqual(blank);
+    expect(splitLocalDateTime('nonsense')).toEqual(blank);
   });
 
   it('names the workbook with its range', () => {
     expect(reportFilename('my-complaints', 30)).toMatch(
       /^my-complaints-30d-\d{4}-\d{2}-\d{2}\.xlsx$/,
     );
+  });
+});
+
+describe('date parts for pivoting', () => {
+  it('derives year, month, week and day from the ticket date', () => {
+    const p = splitLocalDateTime(new Date(2026, 2, 14, 19, 11).toISOString());
+    expect(p).toMatchObject({ date: '2026-03-14', time: '19:11', year: 2026, month: 3, day: 14 });
+  });
+
+  it('emits numbers, so Excel sorts months chronologically not alphabetically', () => {
+    const p = splitLocalDateTime(new Date(2026, 0, 5, 9, 0).toISOString());
+    expect(typeof p.month).toBe('number');
+    expect(p.month).toBe(1);
+  });
+
+  it('matches Excel ISOWEEKNUM on the awkward year boundaries', () => {
+    // 2026-01-01 is a Thursday, so it belongs to week 1 of 2026.
+    expect(isoWeek(new Date(2026, 0, 1))).toBe(1);
+    // 2027-01-01 is a Friday: ISO puts it in week 53 of 2026, not week 1.
+    expect(isoWeek(new Date(2027, 0, 1))).toBe(53);
+    expect(isoWeek(new Date(2026, 11, 31))).toBe(53);
+  });
+
+  it('is all-null for a missing or unparseable date rather than 1970', () => {
+    for (const bad of [null, undefined, 'nonsense']) {
+      expect(splitLocalDateTime(bad)).toEqual({
+        date: '',
+        time: '',
+        year: null,
+        month: null,
+        week: null,
+        day: null,
+      });
+    }
+  });
+});
+
+describe('the required column set', () => {
+  it('is the operations sheet order, starting with the date hierarchy', () => {
+    expect(COMPLAINT_COLUMN_KEYS.slice(0, 5)).toEqual(['date', 'year', 'month', 'week', 'day']);
+  });
+
+  it('puts Time after Complaint Source, where their sheet has it', () => {
+    const k = [...COMPLAINT_COLUMN_KEYS];
+    expect(k.indexOf('time')).toBe(k.indexOf('complaintSource') + 1);
+  });
+
+  it('has no customer-name column', () => {
+    expect(COMPLAINT_COLUMN_KEYS).not.toContain('customerName');
+  });
+
+  it('labels a every column', () => {
+    for (const k of COMPLAINT_COLUMN_KEYS) expect(COMPLAINT_COLUMN_LABELS[k]?.def).toBeTruthy();
+  });
+});
+
+describe('filterComplaintRows', () => {
+  const row = (over: Partial<ComplaintReportRow>): ComplaintReportRow =>
+    ({
+      restaurantName: 'LCP-041 Masief Plaza',
+      storeCode: 'LCP-041',
+      yijiRestaurantId: '312',
+      customerMobile: '0501234567',
+      ...over,
+    }) as ComplaintReportRow;
+
+  const rows = [
+    row({}),
+    row({
+      restaurantName: 'PSK-002 Nakhil Mall',
+      storeCode: 'PSK-002',
+      yijiRestaurantId: '947',
+      customerMobile: '0559876543',
+    }),
+  ];
+
+  it('finds a branch by name', () => {
+    expect(filterComplaintRows(rows, 'nakhil')).toHaveLength(1);
+  });
+
+  it('finds a branch by its ops store code', () => {
+    expect(filterComplaintRows(rows, 'LCP-041')[0]!.storeCode).toBe('LCP-041');
+  });
+
+  it('finds a branch by its Yiji restaurant id', () => {
+    expect(filterComplaintRows(rows, '947')[0]!.storeCode).toBe('PSK-002');
+  });
+
+  it('finds a customer however the number was written', () => {
+    // Same number, three spellings people actually type.
+    for (const q of ['0501234567', '+966 50 123 4567'.replace('966', ''), '501234567']) {
+      expect(filterComplaintRows(rows, q).length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('ignores punctuation and spacing in a phone search', () => {
+    expect(filterComplaintRows(rows, '055-987-6543')).toHaveLength(1);
+  });
+
+  it('will not phone-match on one or two digits', () => {
+    // "5" appears in nearly every number; matching it would return everything
+    // and make the box feel broken.
+    expect(filterComplaintRows(rows, '5')).toHaveLength(0);
+  });
+
+  it('returns everything for an empty query, and a copy not the original', () => {
+    const out = filterComplaintRows(rows, '   ');
+    expect(out).toHaveLength(2);
+    expect(out).not.toBe(rows);
+  });
+});
+
+describe('moveColumn / reconcileColumnOrder', () => {
+  const order = ['date', 'time', 'agent'] as const;
+
+  it('moves a column to the end — the example of wanting Date last', () => {
+    expect(moveColumn(order, 0, 2)).toEqual(['time', 'agent', 'date']);
+  });
+
+  it('moves a column to the front', () => {
+    expect(moveColumn(order, 2, 0)).toEqual(['agent', 'date', 'time']);
+  });
+
+  it('clamps a drag that overshoots instead of throwing', () => {
+    expect(moveColumn(order, 0, 99)).toEqual(['time', 'agent', 'date']);
+    expect(moveColumn(order, 0, -5)).toEqual(['date', 'time', 'agent']);
+  });
+
+  it('leaves the order alone when the source index is nonsense', () => {
+    expect(moveColumn(order, 9, 0)).toEqual(['date', 'time', 'agent']);
+  });
+
+  it('does not mutate the order it was given', () => {
+    const src = [...order];
+    moveColumn(src, 0, 2);
+    expect(src).toEqual(['date', 'time', 'agent']);
+  });
+
+  it('keeps a saved order working after a column is added', () => {
+    // The saved preference predates `week`; it must still apply, with the new
+    // column appended rather than silently missing from the report.
+    expect(reconcileColumnOrder(['agent', 'date'], ['date', 'agent', 'week'])).toEqual([
+      'agent',
+      'date',
+      'week',
+    ]);
+  });
+
+  it('drops a saved column that no longer exists', () => {
+    expect(reconcileColumnOrder(['gone', 'date'], ['date', 'agent'])).toEqual(['date', 'agent']);
   });
 });
