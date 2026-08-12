@@ -410,12 +410,11 @@ export function useAgentReportData(
        * the raw order snapshot values through so the join has something to
        * match on. */
       const complaintRows: ComplaintReportRow[] = tickets.map((t) => {
-        const { date, time } = splitLocalDateTime(t.date_created);
+        const when = splitLocalDateTime(t.date_created);
         const snap = t.order_snapshot ?? null;
         return {
           id: t.id,
-          date,
-          time,
+          ...when,
           // Filled by the store join on the page; blank here rather than
           // guessed, so an unjoined row is visibly unjoined.
           chain: '',
@@ -423,6 +422,9 @@ export function useAgentReportData(
           brand: snap?.brandName?.trim() ?? '',
           city: '',
           restaurantName: snap?.restaurantName?.trim() ?? '',
+          // Filled by the store join; blank until then.
+          storeCode: '',
+          yijiRestaurantId: '',
           storeMapped: false,
           serviceType: t.service_type ?? '',
           complaintType: t.complaint_type ?? '',

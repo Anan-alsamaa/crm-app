@@ -262,11 +262,9 @@ function Shell({ children }: { children: React.ReactNode }) {
           icon: ClockIcon,
         },
         {
-          to: '/report-complaints',
-          label: t('nav.reportComplaints', { defaultValue: 'Complaints' }),
-          icon: DownloadIcon,
-        },
-        {
+          // One report. A complaint IS a ticket here — two entries listing the
+          // same records under different names only raised the question of
+          // which one was authoritative.
           to: '/report-tickets',
           label: t('nav.reportTickets', { defaultValue: 'Tickets' }),
           icon: DownloadIcon,
@@ -545,22 +543,15 @@ export function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/report-complaints"
-            element={
-              <ProtectedRoute>
-                <Shell>
-                  <ReportExportsPage report="complaints" />
-                </Shell>
-              </ProtectedRoute>
-            }
-          />
+          {/* The Complaints report was merged into Tickets — same records,
+              one page. Redirect so existing links and bookmarks still land. */}
+          <Route path="/report-complaints" element={<Navigate to="/report-tickets" replace />} />
           <Route
             path="/report-tickets"
             element={
               <ProtectedRoute>
                 <Shell>
-                  <ReportExportsPage report="tickets" />
+                  <ReportExportsPage report="complaints" />
                 </Shell>
               </ProtectedRoute>
             }

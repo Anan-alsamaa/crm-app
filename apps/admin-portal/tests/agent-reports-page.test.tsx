@@ -195,6 +195,10 @@ const complaints = [
   {
     id: 'k1',
     date: '2026-03-14',
+    year: 2026,
+    month: 3,
+    week: 11,
+    day: 14,
     time: '19:11',
     chain: '',
     area: '',
@@ -203,6 +207,8 @@ const complaints = [
     // The master spells this "LCP-006 Panorama Mall RYD" — only the code tier
     // resolves it. Real case from the operations complaints history.
     restaurantName: 'LCP-006 Panorama Mall',
+    storeCode: '',
+    yijiRestaurantId: '',
     storeMapped: false,
     serviceType: 'Delivery',
     complaintType: 'Missing item',
@@ -224,6 +230,10 @@ const complaints = [
   {
     id: 'k2',
     date: '2026-03-15',
+    year: 2026,
+    month: 3,
+    week: 11,
+    day: 15,
     time: '09:02',
     chain: '',
     area: '',
@@ -231,6 +241,8 @@ const complaints = [
     city: '',
     // No such store in the master — must stay visibly unmapped.
     restaurantName: 'CND-009 Nakhil Mall',
+    storeCode: '',
+    yijiRestaurantId: '',
     storeMapped: false,
     serviceType: 'Pickup',
     complaintType: 'Accuracy',
@@ -277,6 +289,9 @@ const PANORAMA = {
 };
 
 beforeEach(() => {
+  // The column order is persisted, so without this one test's arrangement
+  // leaks into the next and the failures look like product bugs.
+  localStorage.clear();
   api.useAgentReportData.mockReset();
   api.useTicketOrders.mockReset();
   api.useTicketOrders.mockReturnValue({ data: undefined, isFetching: false });
@@ -546,10 +561,12 @@ describe('AgentReportsPage — conversation status report', () => {
 });
 
 describe('AgentReportsPage — complaints report', () => {
-  it("renders the operations manager's report under her own heading", () => {
+  it("renders the operations manager's report under the Tickets heading", () => {
+    // One report, named Tickets: a complaint IS a ticket, and two pages over
+    // the same records only raised the question of which was authoritative.
     api.useAgentReportData.mockReturnValue(ok);
     renderPage('complaints');
-    expect(screen.getAllByText('Complaints').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Tickets').length).toBeGreaterThan(0);
     expect(screen.getByText('2026-03-14')).toBeInTheDocument();
     expect(screen.getByText('19:11')).toBeInTheDocument();
   });
@@ -621,17 +638,92 @@ describe('AgentReportsPage — complaints report', () => {
 
     await userEvent.click(screen.getByText('Export to Excel'));
     expect(dl.blobs).toHaveLength(1);
-    expect(dl.names[0]).toMatch(/^reports-complaints-30d-\d{4}-\d{2}-\d{2}\.xlsx$/);
+    expect(dl.names[0]).toMatch(/^reports-tickets-30d-\d{4}-\d{2}-\d{2}\.xlsx$/);
     dl.restore();
   });
 
-  it('offers all 24 of her columns in the picker', async () => {
+  it('offers all 27 of her columns in the picker', async () => {
     api.useAgentReportData.mockReturnValue(ok);
     renderPage('complaints');
-    expect(screen.getByText('24/24')).toBeInTheDocument();
+    expect(screen.getByText('27/27')).toBeInTheDocument();
     await userEvent.click(screen.getByText('Columns'));
     expect(screen.getByLabelText('Customer mobile')).toBeInTheDocument();
-    expect(screen.getByLabelText('Restaurant manager ID')).toBeInTheDocument();
+    expect(screen.getByLabelText('Restaurant manager')).toBeInTheDocument();
+    // The date hierarchy her sheet pivots on.
+    for (const c of ['Year', 'Month', 'Week', 'Day']) {
+      expect(screen.getByLabelText(c)).toBeInTheDocument();
+    }
+    // Never had a value in her sheet, and her required format omits it.
+    expect(screen.queryByLabelText('Customer name')).toBeNull();
+  });
+
+  it('finds a row by restaurant name, and says how many matched', async () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    const { container } = renderPage('complaints');
+
+    await user.type(screen.getByLabelText(/Search by phone/), 'Panorama');
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
+    expect(screen.getByText('1 of 2')).toBeInTheDocument();
+  });
+
+  it('finds a row by customer phone however it was typed', async () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    const { container } = renderPage('complaints');
+
+    // Stored as 0511111111; searched with spacing and punctuation.
+    await user.type(screen.getByLabelText(/Search by phone/), '051-111 1111');
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
+  });
+
+  it('shows an honest empty result rather than the unfiltered table', async () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    const { container } = renderPage('complaints');
+
+    await user.type(screen.getByLabelText(/Search by phone/), 'zzzznothing');
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(0);
+    expect(screen.getByText('0 of 2')).toBeInTheDocument();
+  });
+
+  it('exports only what the search left on screen', async () => {
+    // The filter is part of the question being asked; exporting everything
+    // would quietly answer a different one.
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    const dl = captureDownloads();
+    renderPage('complaints');
+
+    await user.type(screen.getByLabelText(/Search by phone/), 'Panorama');
+    await user.click(screen.getByText('Export to Excel'));
+    expect(dl.blobs).toHaveLength(1);
+    dl.restore();
+  });
+
+  it('moves a column later — the "put Date last" case', async () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    renderPage('complaints');
+
+    await user.click(screen.getByText('Columns'));
+    // Date starts first; move it one place later and the list reflects it.
+    await user.click(screen.getByLabelText('Move Date later'));
+    const labels = screen
+      .getAllByRole('checkbox')
+      .map((c) => c.closest('label')?.textContent?.trim());
+    expect(labels[0]).toBe('Year');
+    expect(labels[1]).toBe('Date');
+  });
+
+  it('cannot move the first column earlier or the last one later', async () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    renderPage('complaints');
+
+    await user.click(screen.getByText('Columns'));
+    expect(screen.getByLabelText('Move Date earlier')).toBeDisabled();
+    expect(screen.getByLabelText('Move Compensation later')).toBeDisabled();
   });
 
   it('says the schema is missing rather than rendering 24 blank columns', () => {

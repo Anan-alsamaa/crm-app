@@ -103,12 +103,11 @@ const FIELDS = [
  * relational query for a value we already hold.
  */
 export function toComplaintRow(t: TicketRow, agentName: string): AgentComplaintRow {
-  const { date, time } = splitLocalDateTime(t.date_created);
+  const when = splitLocalDateTime(t.date_created);
   const snap = t.order_snapshot ?? null;
   return {
     id: t.id,
-    date,
-    time,
+    ...when,
     // Store-derived columns are filled by joinComplaintStores on the page,
     // which owns the store index. Blank here rather than guessed, so an
     // unjoined row is visibly unjoined.
@@ -117,6 +116,9 @@ export function toComplaintRow(t: TicketRow, agentName: string): AgentComplaintR
     brand: snap?.brandName?.trim() ?? '',
     city: '',
     restaurantName: snap?.restaurantName?.trim() ?? '',
+    // Filled by the store join; blank until then.
+    storeCode: '',
+    yijiRestaurantId: '',
     storeMapped: false,
     serviceType: t.service_type ?? '',
     complaintType: t.complaint_type ?? '',

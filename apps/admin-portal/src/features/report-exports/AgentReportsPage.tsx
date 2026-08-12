@@ -6,6 +6,7 @@ import {
   Button,
   cn,
   EmptyState,
+  Input,
   Pagination,
   Pill,
   SelectMenu,
@@ -47,7 +48,14 @@ import {
   type TicketColumnKey,
   type Translate,
 } from './export.js';
-import { countUnmappedComplaints, downloadWorkbook, joinComplaintStores } from '@yiji/reports';
+import {
+  countUnmappedComplaints,
+  downloadWorkbook,
+  joinComplaintStores,
+  filterComplaintRows,
+  moveColumn,
+  reconcileColumnOrder,
+} from '@yiji/reports';
 
 /** Which of the four exportable reports this page instance renders. */
 export type ReportKind = 'tickets' | 'agents' | 'conversations' | 'complaints';
@@ -543,6 +551,31 @@ function TicketsReport({
  * comes from the ticket and its stored order snapshot, so a row keeps
  * reporting the same values however the upstream order later changes.
  */
+
+/* ── Column order preference ───────────────────────────────────────────── */
+
+const COLUMN_ORDER_KEY = 'yiji.ticketReport.columnOrder';
+
+/** Read the saved order. A corrupt or absent value is simply "no preference". */
+function loadColumnOrder(): ComplaintColumnKey[] {
+  try {
+    const raw = localStorage.getItem(COLUMN_ORDER_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? (parsed as ComplaintColumnKey[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Persist it. Losing a column preference must never break the report. */
+function saveColumnOrder(order: readonly ComplaintColumnKey[]): void {
+  try {
+    localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(order));
+  } catch {
+    /* private mode / quota — the order still applies for this session */
+  }
+}
+
 function ComplaintsReport({
   rows,
   tr,
@@ -555,6 +588,13 @@ function ComplaintsReport({
   const { t } = useTranslation();
   const [cols, setCols] = useState<Set<ComplaintColumnKey>>(() => new Set(COMPLAINT_COLUMN_KEYS));
   const [showCols, setShowCols] = useState(false);
+  const [query, setQuery] = useState('');
+  // The column ORDER, separate from which columns are on. Reconciled against
+  // the current column list on load so a saved preference survives a column
+  // being added or removed instead of silently dropping it.
+  const [order, setOrder] = useState<ComplaintColumnKey[]>(() =>
+    reconcileColumnOrder(loadColumnOrder(), COMPLAINT_COLUMN_KEYS),
+  );
   const { index: storeIndex } = useStoreIndex();
 
   // Shared with the agent portal's own complaints table, so the same complaint
@@ -564,20 +604,34 @@ function ComplaintsReport({
     [rows, storeIndex],
   );
   const unmapped = useMemo(() => countUnmappedComplaints(joined), [joined]);
+  // One box: branch name, ops store code, Yiji restaurant id or phone.
+  const visible = useMemo(() => filterComplaintRows(joined, query), [joined, query]);
+
+  /** Columns that are ON, in the order the user arranged them. */
+  const chosenColumns = useMemo(() => order.filter((k) => cols.has(k)), [order, cols]);
+
+  const moveCol = (key: ComplaintColumnKey, delta: number) =>
+    setOrder((prev) => {
+      const from = prev.indexOf(key);
+      const next = moveColumn(prev, from, from + delta);
+      saveColumnOrder(next);
+      return next;
+    });
 
   const onExport = () => {
-    if (joined.length === 0) {
+    if (visible.length === 0) {
       toast.error(t('agentReports.nothingToExport', { defaultValue: 'Nothing to export.' }));
       return;
     }
-    const chosen = COMPLAINT_COLUMN_KEYS.filter((k) => cols.has(k));
     downloadWorkbook(
-      reportFilename('reports-complaints', days),
-      buildComplaintsSheets(joined, tr, chosen),
+      reportFilename('reports-tickets', days),
+      // Export what is on screen: the filter is part of the question being
+      // asked, so exporting the unfiltered set would answer a different one.
+      buildComplaintsSheets(visible, tr, chosenColumns),
     );
     toast.success(
       t('agentReports.exported', {
-        count: joined.length,
+        count: visible.length,
         defaultValue: 'Exported {{count}} rows.',
       }),
     );
@@ -595,9 +649,9 @@ function ComplaintsReport({
     });
 
   const [page, setPage] = useState(1);
-  const pageCount = Math.max(1, Math.ceil(joined.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const current = Math.min(page, pageCount);
-  const pageRows = joined.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const pageRows = visible.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
   return (
     <div className="space-y-4">
@@ -609,6 +663,31 @@ function ComplaintsReport({
               defaultValue: '{{count}} rows with an unmapped store',
             })}
           </Pill>
+        )}
+        {/* One box rather than four labelled fields: operations look a
+            complaint up by whatever they have to hand. */}
+        <Input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(1);
+          }}
+          className="h-8 w-72"
+          aria-label={t('complaintReport.searchLabel', {
+            defaultValue: 'Search by phone, restaurant name or restaurant id',
+          })}
+          placeholder={t('complaintReport.searchPlaceholder', {
+            defaultValue: 'Phone, restaurant name or ID…',
+          })}
+        />
+        {query && (
+          <span className="text-2xs tabular-nums text-muted-foreground">
+            {t('complaintReport.matches', {
+              count: visible.length,
+              total: joined.length,
+              defaultValue: '{{count}} of {{total}}',
+            })}
+          </span>
         )}
         <div className="relative ms-auto flex items-center gap-2">
           <button
@@ -645,9 +724,12 @@ function ComplaintsReport({
                   </button>
                 </div>
                 <ul className="space-y-0.5">
-                  {COMPLAINT_COLUMN_KEYS.map((k) => (
-                    <li key={k}>
-                      <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-xs text-foreground hover:bg-secondary/60">
+                  {/* Listed in the user's own order, so the list doubles as
+                      the arrangement — moving a row here moves the column in
+                      the table and the export. */}
+                  {order.map((k, i) => (
+                    <li key={k} className="flex items-center gap-1">
+                      <label className="flex flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-xs text-foreground hover:bg-secondary/60">
                         <input
                           type="checkbox"
                           className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary/60"
@@ -658,6 +740,34 @@ function ComplaintsReport({
                           defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
                         })}
                       </label>
+                      <button
+                        type="button"
+                        disabled={i === 0}
+                        onClick={() => moveCol(k, -1)}
+                        aria-label={t('complaintReport.moveUp', {
+                          col: t(COMPLAINT_COLUMN_LABELS[k].key, {
+                            defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
+                          }),
+                          defaultValue: 'Move {{col}} earlier',
+                        })}
+                        className="grid h-5 w-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        disabled={i === order.length - 1}
+                        onClick={() => moveCol(k, 1)}
+                        aria-label={t('complaintReport.moveDown', {
+                          col: t(COMPLAINT_COLUMN_LABELS[k].key, {
+                            defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
+                          }),
+                          defaultValue: 'Move {{col}} later',
+                        })}
+                        className="grid h-5 w-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                      >
+                        ↓
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -993,10 +1103,10 @@ const META: Record<
   },
   complaints: {
     titleKey: 'complaintReport.title',
-    titleDefault: 'Complaints',
+    titleDefault: 'Tickets',
     subKey: 'complaintReport.subtitle',
     subDefault:
-      'The operations complaints report — same columns as the sheet operations keep by hand, joined to the store master. Export to Excel.',
+      'Every ticket in the operations report format. Search by phone, restaurant name or ID; drag columns into the order you want; export to Excel.',
   },
 };
 
