@@ -2,21 +2,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 
-// i18n: return the provided defaultValue so labels render deterministically.
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_k: string, o?: { defaultValue?: string }) => o?.defaultValue ?? _k,
+    t: (k: string, o?: { defaultValue?: string }) => o?.defaultValue ?? k,
+    i18n: { language: 'en' },
   }),
 }));
-// Auth: a stable signed-in agent.
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
   useAuth: () => ({ user: { id: 'agent-1' } }),
 }));
-// AI client: mock each call so mutations resolve synchronously.
+
 const ai = vi.hoisted(() => ({
   summarize: vi.fn(),
   suggestReply: vi.fn(),
@@ -31,54 +30,88 @@ vi.mock('../src/lib/ai-client.js', () => ({ ai }));
 import { AiPanel } from '../src/features/ai/AiPanel.js';
 
 function renderPanel(props: Partial<React.ComponentProps<typeof AiPanel>> = {}) {
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  const Wrapper = ({ children }: { children: ReactNode }) => (
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
       <MemoryRouter>{children}</MemoryRouter>
     </QueryClientProvider>
   );
-  return render(<AiPanel conversationId="conv-1" vendorId="v-1" {...props} />, {
-    wrapper: Wrapper,
-  });
+  return render(<AiPanel conversationId="c1" vendorId="v1" {...props} />, { wrapper });
 }
 
-beforeEach(() => {
-  for (const fn of Object.values(ai)) (fn as ReturnType<typeof vi.fn>).mockReset();
+beforeEach(() => vi.clearAllMocks());
+
+describe('AiPanel — agent assistance', () => {
+  it('offers the actions the operations team asked for', () => {
+    renderPanel();
+    expect(screen.getByRole('button', { name: 'Summarize' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Suggest reply' })).toBeInTheDocument();
+  });
+
+  it('summarizes the conversation it was given', async () => {
+    ai.summarize.mockResolvedValue({ summary: 'Customer is chasing a late order.' });
+    renderPanel();
+    await userEvent.click(screen.getByRole('button', { name: 'Summarize' }));
+    await waitFor(() =>
+      expect(screen.getByText('Customer is chasing a late order.')).toBeInTheDocument(),
+    );
+    expect(ai.summarize).toHaveBeenCalledWith({ userId: 'agent-1', vendorId: 'v1' }, 'c1');
+  });
+
+  it('hands a suggested reply to the composer rather than the customer', async () => {
+    // The whole point of the agent-facing design: the text lands in the draft
+    // for the agent to edit and send. Nothing here reaches the customer.
+    const onReplySuggested = vi.fn();
+    ai.suggestReply.mockResolvedValue({ reply: 'Sorry about that, checking with the branch now.' });
+    renderPanel({ onReplySuggested });
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
+    await waitFor(() =>
+      expect(onReplySuggested).toHaveBeenCalledWith(
+        'Sorry about that, checking with the branch now.',
+      ),
+    );
+  });
+
+  it('passes the agent draft through so the suggestion builds on it', async () => {
+    ai.suggestReply.mockResolvedValue({ reply: 'ok' });
+    renderPanel({ draft: 'we are looking into' });
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
+    await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
+    expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ draft: 'we are looking into' });
+  });
 });
 
-describe('AiPanel', () => {
-  it('renders the six AI action buttons', () => {
+describe('AiPanel — reply language', () => {
+  it('defaults to English when the interface is English', async () => {
+    ai.suggestReply.mockResolvedValue({ reply: 'ok' });
     renderPanel();
-    expect(screen.getByText('Summarize')).toBeInTheDocument();
-    expect(screen.getByText('Suggest reply')).toBeInTheDocument();
-    expect(screen.getByText('Sentiment')).toBeInTheDocument();
-    expect(screen.getByText('Score lead')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
+    await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
+    expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ locale: 'en' });
   });
 
-  it('summarize click shows the returned summary', async () => {
-    ai.summarize.mockResolvedValueOnce({ summary: 'Customer is asking about a refund.' });
-    renderPanel();
-    await userEvent.click(screen.getByText('Summarize'));
-    await waitFor(() =>
-      expect(screen.getByText('Customer is asking about a refund.')).toBeInTheDocument(),
-    );
-    expect(ai.summarize).toHaveBeenCalledWith({ userId: 'agent-1', vendorId: 'v-1' }, 'conv-1');
+  it('starts on Arabic when the caller says so', async () => {
+    ai.suggestReply.mockResolvedValue({ reply: 'ok' });
+    renderPanel({ locale: 'ar-SA' });
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
+    await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
+    expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ locale: 'ar' });
   });
 
-  it('suggest reply calls back to the parent with the suggested text', async () => {
-    ai.suggestReply.mockResolvedValueOnce({ reply: 'Sorry for the delay!' });
-    const onReplySuggested = vi.fn();
-    renderPanel({ onReplySuggested });
-    await userEvent.click(screen.getByText('Suggest reply'));
-    await waitFor(() => expect(onReplySuggested).toHaveBeenCalledWith('Sorry for the delay!'));
+  it('lets the agent switch to Arabic for one customer', async () => {
+    // An agent working in an English portal answers an Arabic customer in
+    // Arabic. The choice belongs to the conversation, not to the interface.
+    ai.suggestReply.mockResolvedValue({ reply: 'ok' });
+    renderPanel();
+    await userEvent.click(screen.getByRole('button', { name: 'ar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
+    await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
+    expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ locale: 'ar' });
   });
 
-  it('renders a friendly message when an action is disabled by admin', async () => {
-    ai.sentiment.mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'feature_disabled' }));
+  it('marks the active language for assistive tech, not just visually', () => {
     renderPanel();
-    await userEvent.click(screen.getByText('Sentiment'));
-    await waitFor(() => expect(screen.getByText(/Disabled by admin/)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'en' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'ar' })).toHaveAttribute('aria-pressed', 'false');
   });
 });

@@ -40,12 +40,18 @@ function fmtErr(err: unknown): string {
 }
 
 export function AiPanel({ conversationId, vendorId, draft, locale, onReplySuggested }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
   const caller = { userId: user?.id ?? '', vendorId };
 
   type ResultKey = 'summary' | 'reply' | 'sentiment' | 'intent' | 'entities' | 'lead' | 'search';
+  // The language of the SUGGESTED REPLY, which is not the language of the
+  // portal: an agent working in English answers an Arabic customer in Arabic.
+  // Seeded from the caller/interface, then owned by the agent.
+  const [replyLocale, setReplyLocale] = useState<'en' | 'ar'>(
+    (locale ?? i18n.language ?? 'en').toLowerCase().startsWith('ar') ? 'ar' : 'en',
+  );
   const [active, setActive] = useState<ResultKey | null>(null);
   const [query, setQuery] = useState('');
 
@@ -54,7 +60,7 @@ export function AiPanel({ conversationId, vendorId, draft, locale, onReplySugges
     onSuccess: () => setActive('summary'),
   });
   const suggestReply = useMutation({
-    mutationFn: () => ai.suggestReply(caller, conversationId, { draft, locale }),
+    mutationFn: () => ai.suggestReply(caller, conversationId, { draft, locale: replyLocale }),
     onSuccess: (data) => {
       setActive('reply');
       onReplySuggested?.(data.reply);
@@ -137,10 +143,36 @@ export function AiPanel({ conversationId, vendorId, draft, locale, onReplySugges
 
   return (
     <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-5 py-4 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {t('ai.title', { defaultValue: 'AI assistance' })}
         </h3>
+        {/* Which language a suggested reply comes back in. Sits by the actions
+            rather than in settings: the answer changes per customer, not per
+            agent, and a reply drafted in the wrong language is not editable
+            into the right one. */}
+        <div
+          role="group"
+          aria-label={t('ai.replyLanguage', { defaultValue: 'Reply language' })}
+          className="flex overflow-hidden rounded-md ring-1 ring-border"
+        >
+          {(['en', 'ar'] as const).map((code) => (
+            <button
+              key={code}
+              type="button"
+              onClick={() => setReplyLocale(code)}
+              aria-pressed={replyLocale === code}
+              className={cn(
+                'px-2 py-0.5 text-2xs font-semibold uppercase tracking-wide transition-colors duration-fast ease-out',
+                replyLocale === code
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-secondary',
+              )}
+            >
+              {code}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-1.5">

@@ -13,6 +13,10 @@ vi.mock('react-i18next', () => ({
 
 const inbox = vi.hoisted(() => ({
   useConversation: vi.fn(),
+  // Not a hook — the sidebar calls it to find the vendor that governs the AI
+  // budget, and mocking the module wholesale would otherwise blank it out.
+  conversationVendorId: (c: { vendor?: { id?: string } | string | null }) =>
+    typeof c?.vendor === 'string' ? c.vendor : (c?.vendor?.id ?? ''),
   useLinkedTickets: vi.fn(),
   // ConversationSidebar now renders <ConversationTags>, which reads these.
   useTags: () => ({ data: [] }),
@@ -45,6 +49,9 @@ function renderSidebar(props = {}) {
 const convo = {
   id: 'c1',
   status: 'open',
+  // The AI panel needs a vendor: that is what the monthly AI budget is
+  // charged against, so no vendor means no panel.
+  vendor: { id: 'v1' },
   priority: 'medium',
   contact: { id: 'k1', name: 'Alice', email: 'alice@example.com', phone: '555-1' },
   tags: [{ id: 'j1', tags_id: { id: 'tg1', name: 'VIP', color: null } }],
@@ -72,8 +79,22 @@ describe('ConversationSidebar', () => {
     expect(screen.getByText('custom-fields')).toBeInTheDocument();
   });
 
-  it('no longer carries the AI assistance panel', () => {
+  it('carries the AI assistance panel for the agent', () => {
+    // Restored deliberately. It is AGENT-facing: a suggestion lands in the
+    // composer for the agent to edit and send, so nothing reaches the customer
+    // unreviewed. That was the constraint in 3588276 and it still holds.
     inbox.useConversation.mockReturnValue({ data: convo, isLoading: false });
+    renderSidebar();
+    expect(screen.getByText('ai-panel')).toBeInTheDocument();
+  });
+
+  it('hides the AI panel when there is no vendor to charge it to', () => {
+    // The vendor governs the monthly AI cap. Without one the gateway would
+    // reject every call, so offering the buttons would only produce errors.
+    inbox.useConversation.mockReturnValue({
+      data: { ...convo, vendor: null },
+      isLoading: false,
+    });
     renderSidebar();
     expect(screen.queryByText('ai-panel')).not.toBeInTheDocument();
   });

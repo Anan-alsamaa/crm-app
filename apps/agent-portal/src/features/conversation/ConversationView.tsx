@@ -1017,6 +1017,10 @@ export function ConversationView({
           onDeleteNote={deleteNote}
           resizable
           onCreateTicketForOrder={openTicketForOrder}
+          composerDraft={draft}
+          // A suggestion goes into the composer, never to the customer: the
+          // agent reads it, edits it, and presses send like any other reply.
+          onReplySuggested={(reply) => setDraft(reply)}
         />
       ) : (
         detailsOpen && (
@@ -1042,6 +1046,10 @@ export function ConversationView({
                 onDeleteNote={deleteNote}
                 className="w-[20rem] max-w-[85vw]"
                 onCreateTicketForOrder={openTicketForOrder}
+                composerDraft={draft}
+                // A suggestion goes into the composer, never to the customer: the
+                // agent reads it, edits it, and presses send like any other reply.
+                onReplySuggested={(reply) => setDraft(reply)}
               />
             </div>
           </div>
