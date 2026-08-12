@@ -41,6 +41,11 @@ const TicketsPage = lazy(() =>
 const NewTicketPage = lazy(() =>
   import('./features/tickets/NewTicketPage.js').then((m) => ({ default: m.NewTicketPage })),
 );
+const AgentPerformancePage = lazy(() =>
+  import('./features/performance/AgentPerformancePage.js').then((m) => ({
+    default: m.AgentPerformancePage,
+  })),
+);
 const PreferencesPage = lazy(() =>
   import('./features/notifications/PreferencesPage.js').then((m) => ({
     default: m.PreferencesPage,
@@ -341,6 +346,11 @@ function Shell({ children }: { children: React.ReactNode }) {
           icon: UsersIcon,
         },
         {
+          to: '/performance',
+          label: t('nav.performance', { defaultValue: 'Performance' }),
+          icon: ClockIcon,
+        },
+        {
           to: '/compensation',
           label: t('nav.compensation', { defaultValue: 'Compensation' }),
           icon: ClockIcon,
@@ -516,6 +526,16 @@ export function App() {
           />
           {/* Top-level, not /tickets/new: it is its own nav entry, and nested
               under /tickets both items would light up at once. */}
+          <Route
+            path="/performance"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <AgentPerformancePage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/new-ticket"
             element={

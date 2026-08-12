@@ -189,7 +189,8 @@
     "compensation": "Compensation",
     "reports": "Reports",
     "addTicket": "Add ticket",
-    "complaints": "My complaints"
+    "complaints": "My complaints",
+    "performance": "Performance"
   },
   "inbox": {
     "title": "Shared Inbox",
@@ -644,5 +645,24 @@
   },
   "agentReports": {
     "notMapped": "Not mapped"
+  },
+  "performance": {
+    "title": "Agent performance",
+    "agent": "Agent",
+    "allAgents": "All agents",
+    "from": "From",
+    "to": "To",
+    "target": "Answer within (min)",
+    "meeting": "Meeting SLA",
+    "notMeeting": "Not meeting SLA",
+    "chats": "Chats",
+    "unanswered": "No reply",
+    "avgFirst": "First response (avg)",
+    "medFirst": "First response (median)",
+    "solved": "Solved",
+    "avgSolve": "Time to solve (avg)",
+    "empty": "No chats match these filters.",
+    "chatsInRange": "{{n}} chats in range",
+    "basis": "First response is measured from the customer’s first message to the first agent reply. Internal notes do not count as a reply. Chats nobody answered are counted under \"No reply\" and left out of the averages."
   }
 }

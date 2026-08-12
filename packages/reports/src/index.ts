@@ -44,3 +44,14 @@ export {
   type TicketCsvRow,
   type ParseTicketsResult,
 } from './import-csv.js';
+
+export {
+  agentPerformance,
+  firstResponseSec,
+  timeToSolveSec,
+  metFirstResponse,
+  splitBySla,
+  formatDuration,
+  type ChatTiming,
+  type AgentPerformanceRow,
+} from './agent-performance.js';

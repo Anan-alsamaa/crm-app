@@ -223,6 +223,9 @@ export class GatewayDirectus {
         const status = rows[0]?.status;
         if (status === 'solved' || status === 'resolved' || status === 'closed') {
           patch.status = 'open';
+          // Clear the solve time with the status. Leaving it would report a
+          // chat that is demonstrably still running as having been finished.
+          patch.solved_at = null;
         }
       } else if (input.senderType === 'agent') {
         patch.unread_count_agent = 0;

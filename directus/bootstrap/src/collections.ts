@@ -160,6 +160,16 @@ export const collections: CollectionSpec[] = [
       },
       { field: 'priority', type: 'string', choices: PRIORITY, defaultValue: 'medium' },
       { field: 'last_message_at', type: 'dateTime', index: true },
+      /**
+       * When the chat was marked solved. Cleared when it is reopened.
+       *
+       * The status alone says WHETHER a chat is finished, never WHEN, so
+       * "how long did this take" is unanswerable without it — and
+       * `date_updated` is not a substitute: it moves on every unrelated edit,
+       * so a tag added a week later would read as a week-long chat.
+       * Indexed because agent performance filters on it by date range.
+       */
+      { field: 'solved_at', type: 'dateTime', index: true },
       { field: 'unread_count_agent', type: 'integer', defaultValue: 0 },
     ],
   },
