@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, createItem, updateItem, deleteItem, uploadFiles } from '@directus/sdk';
-import type { Priority, StoreSnapshot, TicketStatus } from '@yiji/shared-types';
+import {
+  storeNotificationDraft,
+  type Priority,
+  type StoreNotificationSkip,
+  type StoreSnapshot,
+  type TicketStatus,
+} from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { notifyAssignmentBestEffort } from '../../lib/job-producer.js';
 import type { TicketOrderSnapshot } from './OrderSnapshotCard.js';
@@ -273,6 +279,47 @@ export interface CreateTicketFromConversationInput {
   ticket: CreateTicketInput;
   /** File ids from the chat session to copy onto the new ticket (see FR #3). */
   attachmentFileIds?: string[];
+  /**
+   * The complaint types operations has decided the BRANCH should hear about.
+   * Passed in rather than read here so the decision is taken against the rules
+   * the agent's form was actually showing.
+   */
+  storeNotifyTypes?: readonly string[];
+}
+
+/** What happened to the branch notification for a ticket that was just saved. */
+export type StoreNotifyOutcome = 'queued' | 'failed' | StoreNotificationSkip;
+
+/**
+ * The complaint types that notify the branch, as a plain list.
+ *
+ * Read-only for agents: which types are the branch's business is an operations
+ * decision made in the admin console. Fail-soft — if the rules cannot be read,
+ * the list is empty and nothing is queued, which is the safe direction: a
+ * missing notification is recoverable, a wrong one has already been sent.
+ */
+export function useStoreNotifyTypes() {
+  return useQuery({
+    queryKey: ['store-notify-types'],
+    staleTime: 60_000,
+    queryFn: async () => {
+      try {
+        const rows = (await directus.request(
+          readItems(
+            'store_notify_rules' as never,
+            {
+              filter: { enabled: { _eq: true } },
+              fields: ['complaint_type'],
+              limit: -1,
+            } as never,
+          ),
+        )) as unknown as Array<{ complaint_type: string | null }>;
+        return rows.map((r) => r.complaint_type).filter((v): v is string => !!v);
+      } catch {
+        return [] as string[];
+      }
+    },
+  });
 }
 
 /**
@@ -289,7 +336,11 @@ export interface CreateTicketFromConversationInput {
 export function useCreateTicketFromConversation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ ticket, attachmentFileIds }: CreateTicketFromConversationInput) => {
+    mutationFn: async ({
+      ticket,
+      attachmentFileIds,
+      storeNotifyTypes,
+    }: CreateTicketFromConversationInput) => {
       const created = (await directus.request(
         createItem('tickets', { ...ticket, status: 'new' } as never),
       )) as { id: string };
@@ -305,7 +356,31 @@ export function useCreateTicketFromConversation() {
           ),
         );
       }
-      return created;
+
+      // Tell the branch — but only for the complaint types operations chose,
+      // and only what they need: the description and the resolution notes.
+      const decision = storeNotificationDraft(
+        {
+          ticketId: created.id,
+          storeId: ticket.store ?? null,
+          complaintType: ticket.complaint_type ?? null,
+          description: ticket.description ?? null,
+          resolutionNotes: ticket.response_desc ?? null,
+        },
+        storeNotifyTypes ?? [],
+      );
+      let storeNotify: StoreNotifyOutcome = 'skip' in decision ? decision.skip : 'queued';
+      if ('draft' in decision) {
+        try {
+          await directus.request(createItem('store_notifications' as never, decision.draft));
+        } catch {
+          // The ticket is saved and must stay saved. A queue entry that could
+          // not be written is reported back so the agent is told the branch
+          // was NOT informed, rather than left assuming it was.
+          storeNotify = 'failed';
+        }
+      }
+      return { ...created, storeNotify };
     },
     onSuccess: (created) => {
       void qc.invalidateQueries({ queryKey: ['tickets'] });

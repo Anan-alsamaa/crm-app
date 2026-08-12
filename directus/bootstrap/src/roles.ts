@@ -75,6 +75,10 @@ const ALL_BUSINESS = [
   'custom_fields',
   'custom_field_values',
   'csat_responses',
+  // Which complaint types reach the branch, and the queue of what was decided.
+  // Supervisors own the rules; the queue is theirs to inspect and retry.
+  'store_notify_rules',
+  'store_notifications',
 ];
 
 /**
@@ -191,6 +195,15 @@ export const roles: RoleSpec[] = [
       },
       // Append-only: agents add internal notes as 'commented' ticket_events.
       ...appendOnly('ticket_events'),
+      // The branch-notification rules decide whether saving a ticket also
+      // queues a note to the store, so the form has to be able to read them.
+      // Read-only: which complaint types are the branch's business is an
+      // operations decision, made in the admin console.
+      ...readOnly('store_notify_rules'),
+      // Append-only for the same reason ticket_events is: the agent's save
+      // creates the queue entry, and nothing in the portal may go back and
+      // rewrite what a branch was told.
+      ...appendOnly('store_notifications'),
       { collection: 'notifications', action: 'read', permissions: SELF_RECIPIENT },
       {
         collection: 'notifications',

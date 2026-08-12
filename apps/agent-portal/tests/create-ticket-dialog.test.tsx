@@ -21,6 +21,7 @@ vi.mock('../src/lib/auth/AuthContext.js', () => ({
 const hooks = vi.hoisted(() => ({
   useCreateTicketFromConversation: vi.fn(),
   useConversationAttachmentIds: vi.fn(),
+  useStoreNotifyTypes: vi.fn(),
 }));
 vi.mock('../src/features/tickets/api.js', () => hooks);
 
@@ -54,6 +55,8 @@ beforeEach(() => {
   });
   hooks.useConversationAttachmentIds.mockReset();
   hooks.useConversationAttachmentIds.mockReturnValue({ data: [] });
+  hooks.useStoreNotifyTypes.mockReset();
+  hooks.useStoreNotifyTypes.mockReturnValue({ data: ['Missing item'] });
 });
 
 describe('CreateTicketForm', () => {
@@ -122,6 +125,39 @@ describe('CreateTicketForm', () => {
       ),
     );
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it('warns before saving that the branch will see what is being written', async () => {
+    renderDialog();
+    // Silent on an unclassified form: the agent has not yet said anything that
+    // would go anywhere.
+    expect(screen.queryByText(/reported to the branch/)).not.toBeInTheDocument();
+
+    await chooseComplaintType('Missing item');
+    // Said next to the notes it is about, BEFORE saving — the agent is writing
+    // the text that gets forwarded.
+    expect(screen.getByText(/reported to the branch/)).toBeInTheDocument();
+  });
+
+  it('stays silent for a complaint type the branch is not told about', async () => {
+    renderDialog();
+    await chooseComplaintType('Technical issue');
+    expect(screen.queryByText(/reported to the branch/)).not.toBeInTheDocument();
+  });
+
+  it('decides against the rules the form was actually showing', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ id: 'tk1', storeNotify: 'queued' });
+    hooks.useCreateTicketFromConversation.mockReturnValue({ mutateAsync });
+    renderDialog();
+
+    await chooseComplaintType('Missing item');
+    await userEvent.click(screen.getByText('tickets.create'));
+
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ storeNotifyTypes: ['Missing item'] }),
+      ),
+    );
   });
 
   it('shows the name the ticket is about to get', async () => {

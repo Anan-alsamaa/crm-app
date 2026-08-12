@@ -6,13 +6,18 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Button, cn, FormField, Pill, SelectMenu, Textarea, toast } from '@yiji/ui';
 import {
+  isNotifyingType,
   manualStoreMatch,
   toStoreSnapshot,
   type Priority,
   type StoreMatch,
   type YijiOrder,
 } from '@yiji/shared-types';
-import { useConversationAttachmentIds, useCreateTicketFromConversation } from './api.js';
+import {
+  useConversationAttachmentIds,
+  useCreateTicketFromConversation,
+  useStoreNotifyTypes,
+} from './api.js';
 import { orderToSnapshot, type TicketOrderSnapshot } from './OrderSnapshotCard.js';
 import {
   ComplaintClassification,
@@ -272,6 +277,12 @@ export function CreateTicketDialog({
   // thing about the same ticket.
   const subject = complaint.complaint_type.trim();
 
+  // Whether this complaint reaches the branch, known BEFORE saving. The agent
+  // is writing the description and the resolution notes that get forwarded, so
+  // they have to know that is what they are doing while they write them.
+  const notifyTypes = useStoreNotifyTypes();
+  const notifiesStore = isNotifyingType(subject, notifyTypes.data ?? []);
+
   const onSubmit = handleSubmit(async (values) => {
     if (!contactId || !vendorId) return;
     if (complaintHasErrors(complaint) || !subject) return;
@@ -309,14 +320,31 @@ export function CreateTicketDialog({
           ...complaintPatch(complaint),
         },
         attachmentFileIds: includeFiles ? sessionFileIds : [],
+        storeNotifyTypes: notifyTypes.data ?? [],
       });
       // The ticket now holds a snapshot of the order, so the sidebar pin has done
       // its job. Leaving it would show the same order twice — live in the sidebar
       // and frozen on the ticket — with no way to tell which is authoritative.
       if (includeOrder && latestOrder) clearPinnedOrder(conversationId);
-      toast.success(t('tickets.created', { defaultValue: 'Ticket created' }), {
-        description: optionLabel(subject),
-      });
+      // Say what reached the branch, and say it when it did NOT. An agent who
+      // believes the store was told and writes nothing further is the failure
+      // mode a silent queue produces.
+      const branchLine =
+        created?.storeNotify === 'queued'
+          ? t('tickets.branchNotified', { defaultValue: 'The branch will be told.' })
+          : created?.storeNotify === 'failed'
+            ? t('tickets.branchNotifyFailed', {
+                defaultValue: 'The branch could NOT be told — tell a supervisor.',
+              })
+            : created?.storeNotify === 'no-store'
+              ? t('tickets.branchNotifyNoStore', {
+                  defaultValue: 'No branch attached, so nobody was told.',
+                })
+              : '';
+      toast[created?.storeNotify === 'failed' ? 'warning' : 'success'](
+        t('tickets.created', { defaultValue: 'Ticket created' }),
+        { description: [optionLabel(subject), branchLine].filter(Boolean).join(' · ') },
+      );
       // Hand the id back BEFORE closing: a page-hosted form navigates to the new
       // ticket, and closing first would bounce the agent to the inbox on the way.
       if (created?.id) onCreated?.(created.id);
@@ -514,6 +542,25 @@ export function CreateTicketDialog({
               title={t('complaint.resolution', { defaultValue: 'Resolution' })}
               hint={t('complaint.optional', { defaultValue: 'Optional' })}
             >
+              {/* Said BEFORE saving, next to the notes it is about: for these
+                  complaint types the description and the resolution notes are
+                  forwarded to the branch, and the agent is writing them now. */}
+              {notifiesStore && (
+                <p className="flex items-start gap-2 rounded-xl bg-warning/10 px-3 py-2 text-xs leading-relaxed text-foreground">
+                  <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-warning" />
+                  <span>
+                    {chosenMatch?.store
+                      ? t('tickets.branchWillSee', {
+                          defaultValue:
+                            'This complaint type is reported to the branch. Only the description and the resolution notes are sent.',
+                        })
+                      : t('tickets.branchWillSeeNoStore', {
+                          defaultValue:
+                            'This complaint type is reported to the branch — attach one so it can be.',
+                        })}
+                  </span>
+                </p>
+              )}
               <ComplaintResolution
                 values={complaint}
                 onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}

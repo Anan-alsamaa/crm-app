@@ -412,7 +412,12 @@
     "backToTickets": "Back to tickets",
     "backToChat": "Back to the chat",
     "noOrderContext": "No order attached. Pick a branch on the left so the ticket still reports against one.",
-    "pickComplaintType": "Choose a complaint type — it names the ticket"
+    "pickComplaintType": "Choose a complaint type — it names the ticket",
+    "branchNotified": "The branch will be told.",
+    "branchNotifyFailed": "The branch could NOT be told — tell a supervisor.",
+    "branchNotifyNoStore": "No branch attached, so nobody was told.",
+    "branchWillSee": "This complaint type is reported to the branch. Only the description and the resolution notes are sent.",
+    "branchWillSeeNoStore": "This complaint type is reported to the branch — attach one so it can be."
   },
   "notifications": {
     "title": "Notifications",
