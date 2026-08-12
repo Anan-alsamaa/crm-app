@@ -74,6 +74,17 @@ export interface TicketRow extends Partial<TicketComplaintFields> {
   first_responded_at: string | null;
   /** When the ticket was solved. Written by "Mark as solved". */
   resolved_at?: string | null;
+  /**
+   * Directus stamps these on every write, so the ticket carries its own last
+   * edit without us keeping a second history alongside `ticket_events`.
+   */
+  date_updated?: string | null;
+  user_updated?: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+  } | null;
   attachments?: TicketAttachment[];
   date_created: string | null;
 }
@@ -139,9 +150,13 @@ export function useTicket(id: string | null) {
             'first_responded_at',
             'resolved_at',
             'date_created',
+            'date_updated',
             'order_snapshot',
             'store',
             ...COMPLAINT_FIELDS,
+            // Expanded, not the bare id: "changed by 3f2a…" names nobody a
+            // supervisor could follow up with.
+            { user_updated: ['id', 'first_name', 'last_name', 'email'] },
             { contact: ['id', 'name', 'email', 'phone'] },
             {
               attachments: ['id', { directus_files_id: ['id', 'filename_download', 'type'] }],

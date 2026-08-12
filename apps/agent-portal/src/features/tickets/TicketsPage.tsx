@@ -32,7 +32,7 @@ import {
   type TicketRow,
 } from './api.js';
 import { useAgents, useTeamOptions } from '../inbox/api.js';
-import { joinComplaintStores } from '@yiji/reports';
+import { formatDuration, joinComplaintStores } from '@yiji/reports';
 import { useImportTickets } from '../complaints/import-api.js';
 import { useMyComplaints, type AgentComplaintRow } from '../complaints/api.js';
 import { TicketAttachments } from './TicketAttachments.js';
@@ -930,25 +930,25 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
             )}
           </section>
 
-          {/* SLA deadlines — stacked in the rail. */}
+          {/* Timings — how long the ticket took, and who touched it last.
+              First response is deliberately NOT here: on a ticket it is a
+              second clock nobody works to, and two deadlines in a narrow rail
+              made the one that matters harder to find. It is still stamped, and
+              still reported on, in the agent-performance report. */}
           <section className="space-y-2.5">
             <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {t('tickets.slaSection', { defaultValue: 'SLA' })}
+              {t('tickets.timingsSection', { defaultValue: 'Timings' })}
             </h3>
             <div className="space-y-2">
               <SlaCard
-                label={t('tickets.firstResponseDue')}
-                iso={tk.first_response_due_at}
-                metAt={tk.first_responded_at}
-                dueClass={dueClass}
-                metLabel={t('tickets.respondedAt')}
-              />
-              <SlaCard
                 label={t('tickets.resolutionDue')}
                 iso={tk.resolution_due_at}
-                metAt={null}
+                metAt={tk.resolved_at ?? null}
                 dueClass={dueClass}
+                metLabel={t('tickets.resolvedAtLabel', { defaultValue: 'Resolved' })}
               />
+              <ResolutionTimeCard created={tk.date_created} resolved={tk.resolved_at ?? null} />
+              <LastTouchedCard by={tk.user_updated ?? null} at={tk.date_updated ?? null} />
             </div>
           </section>
 
@@ -1338,6 +1338,89 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * How long the ticket actually took, start to finish.
+ *
+ * Deliberately measured from `date_created` rather than from the SLA clock: the
+ * SLA answers "did we beat the promise", this answers "how long did the
+ * customer wait", and on a ticket reopened or re-promised those are different
+ * numbers. Blank while the ticket is open — a running total would be read as a
+ * result, and there is no result yet.
+ */
+function ResolutionTimeCard({
+  created,
+  resolved,
+}: {
+  created: string | null;
+  resolved: string | null;
+}) {
+  const { t } = useTranslation();
+  const secs =
+    created && resolved
+      ? Math.round((new Date(resolved).getTime() - new Date(created).getTime()) / 1000)
+      : null;
+  const text = secs !== null && secs >= 0 ? formatDuration(secs) : null;
+  return (
+    <div className="rounded-2xl bg-card p-4 shadow-soft">
+      <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {t('tickets.resolutionTime', { defaultValue: 'Time to resolve' })}
+      </div>
+      <div className="mt-1.5 text-base font-semibold tabular-nums text-foreground">
+        {text ?? <span className="text-muted-foreground/60">—</span>}
+      </div>
+      {!text && (
+        <div className="mt-2 text-2xs text-muted-foreground">
+          {t('tickets.resolutionTimeOpen', { defaultValue: 'Still open' })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Who changed this ticket last, and when.
+ *
+ * Directus stamps `user_updated` on every write, so this is the whole edit
+ * history's last line without keeping a second one of our own. Names the agent
+ * rather than showing a bare timestamp: "changed at 14:02" tells a supervisor
+ * nothing they can follow up on.
+ */
+function LastTouchedCard({
+  by,
+  at,
+}: {
+  by: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+  } | null;
+  at: string | null;
+}) {
+  const { t } = useTranslation();
+  const name =
+    [by?.first_name, by?.last_name].filter(Boolean).join(' ').trim() || by?.email || null;
+  return (
+    <div className="rounded-2xl bg-card p-4 shadow-soft">
+      <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {t('tickets.lastUpdated', { defaultValue: 'Last updated' })}
+      </div>
+      <div className="mt-1.5 text-sm font-semibold text-foreground">
+        {name ?? (
+          <span className="text-muted-foreground/60">
+            {t('tickets.lastUpdatedNobody', { defaultValue: 'Not changed since it was raised' })}
+          </span>
+        )}
+      </div>
+      {at && (
+        <div className="mt-1 text-2xs tabular-nums text-muted-foreground">
+          {new Date(at).toLocaleString()} · {formatRelative(at)}
+        </div>
+      )}
+    </div>
   );
 }
 

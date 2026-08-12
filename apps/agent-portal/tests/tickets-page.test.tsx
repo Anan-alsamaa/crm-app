@@ -178,7 +178,7 @@ describe('TicketsPage', () => {
     // ticket, which is the whole reason for reverting the table.
     renderPage();
     await userEvent.click(screen.getByText('Refund please'));
-    await waitFor(() => expect(screen.getByText('SLA')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Timings')).toBeInTheDocument());
     expect(currentPath).toBe('/tickets');
   });
 
@@ -187,7 +187,74 @@ describe('TicketsPage', () => {
     // not just the list. Uses the ?id= form because this harness mounts the
     // page directly rather than under a :ticketId route.
     renderPage('/tickets?id=t1');
-    await waitFor(() => expect(screen.getByText('SLA')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Timings')).toBeInTheDocument());
+  });
+});
+
+describe('TicketsPage — how long it took, and who touched it', () => {
+  it('drops the first-response clock from the ticket', async () => {
+    // Two deadlines in a narrow rail made the one anybody works to harder to
+    // find. First response is still stamped and still reported on elsewhere.
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('Timings')).toBeInTheDocument());
+    expect(screen.queryByText('tickets.firstResponseDue')).toBeNull();
+    expect(screen.getByText('tickets.resolutionDue')).toBeInTheDocument();
+  });
+
+  it('says how long the customer waited, not how long is left on a clock', async () => {
+    hooks.useTicket.mockReturnValue({
+      data: {
+        ...ticket,
+        status: 'resolved',
+        date_created: '2026-01-01T00:00:00.000Z',
+        resolved_at: '2026-01-01T02:30:00.000Z',
+      },
+      isLoading: false,
+    });
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('Time to resolve')).toBeInTheDocument());
+    expect(screen.getByText('2h 30m')).toBeInTheDocument();
+  });
+
+  it('shows nothing rather than a running total while the ticket is open', async () => {
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('Time to resolve')).toBeInTheDocument());
+    // A number that keeps climbing reads as a result. There is no result yet.
+    expect(screen.getByText('Still open')).toBeInTheDocument();
+  });
+
+  it('names the agent who changed it last, not just when', async () => {
+    hooks.useTicket.mockReturnValue({
+      data: {
+        ...ticket,
+        date_updated: '2026-01-02T09:15:00.000Z',
+        user_updated: { id: 'a1', first_name: 'Sara', last_name: 'Ali', email: 's@yiji.test' },
+      },
+      isLoading: false,
+    });
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('Last updated')).toBeInTheDocument());
+    // "Changed at 09:15" tells a supervisor nothing they can follow up on.
+    expect(screen.getByText('Sara Ali')).toBeInTheDocument();
+  });
+
+  it('falls back to the email when the agent has no name on file', async () => {
+    hooks.useTicket.mockReturnValue({
+      data: {
+        ...ticket,
+        date_updated: '2026-01-02T09:15:00.000Z',
+        user_updated: { id: 'a1', first_name: null, last_name: null, email: 's@yiji.test' },
+      },
+      isLoading: false,
+    });
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('s@yiji.test')).toBeInTheDocument());
+  });
+
+  it('says a ticket has not been touched rather than showing a blank', async () => {
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('Last updated')).toBeInTheDocument());
+    expect(screen.getByText('Not changed since it was raised')).toBeInTheDocument();
   });
 });
 
