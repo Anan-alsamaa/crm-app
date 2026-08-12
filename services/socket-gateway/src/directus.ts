@@ -115,23 +115,34 @@ export class GatewayDirectus {
   }
 
   /**
-   * Return the contact's open conversation, or create a new one. `created` is
+   * Return the contact's live conversation, or create a new one. `created` is
    * true only when a fresh conversation was inserted — the caller uses it to
    * fire the `conversation_created` automation trigger exactly once.
+   *
+   * "Live" is open OR pending — the two states an unfinished case can be in.
+   * Matching only `open` meant an agent parking a thread as pending split the
+   * customer's next message into a second conversation, which is how the same
+   * case ended up spread over two threads.
+   *
+   * A solved thread (resolved/closed) is deliberately NOT reused: a customer
+   * coming back days later is a new case, usually about a different order, and
+   * it should arrive as its own conversation rather than reviving a finished
+   * one. See the reopen in persistMessage for the other half of this — a reply
+   * that lands on a thread solved mid-session.
    */
   async findOrCreateConversation(
     vendorUuid: string,
     contactId: string,
   ): Promise<{ id: string; created: boolean }> {
-    const open = (await this.client.request(
+    const live = (await this.client.request(
       readItems('conversations', {
-        filter: { contact: { _eq: contactId }, status: { _eq: 'open' } },
+        filter: { contact: { _eq: contactId }, status: { _in: ['open', 'pending'] } },
         fields: ['id'],
         sort: ['-last_message_at'],
         limit: 1,
       }),
     )) as Array<{ id: string }>;
-    if (open[0]) return { id: open[0].id, created: false };
+    if (live[0]) return { id: live[0].id, created: false };
 
     const created = (await this.client.request(
       createItem('conversations', {
@@ -191,11 +202,20 @@ export class GatewayDirectus {
         const rows = (await this.client.request(
           readItems('conversations', {
             filter: { id: { _eq: input.conversationId } },
-            fields: ['unread_count_agent'],
+            fields: ['unread_count_agent', 'status'],
             limit: 1,
           }),
-        )) as Array<{ unread_count_agent: number | null }>;
+        )) as Array<{ unread_count_agent: number | null; status: string | null }>;
         patch.unread_count_agent = (rows[0]?.unread_count_agent ?? 0) + 1;
+        // A customer writing into a solved thread is a NEW case — days later it
+        // is usually a different order entirely. Reopen it so it returns to the
+        // agent's queue and the toolbar offers "Mark as solved" again; leaving
+        // it solved would bury a live question in a closed thread.
+        //
+        // Done here, not in the portal, because the reopen has to happen when
+        // nobody has the conversation open — which is the normal case.
+        const status = rows[0]?.status;
+        if (status === 'resolved' || status === 'closed') patch.status = 'pending';
       } else if (input.senderType === 'agent') {
         patch.unread_count_agent = 0;
       }

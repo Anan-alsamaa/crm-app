@@ -69,8 +69,40 @@ describe('ConversationSidebar', () => {
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('alice@example.com')).toBeInTheDocument();
     expect(screen.getByText('VIP')).toBeInTheDocument();
-    expect(screen.getByText('ai-panel')).toBeInTheDocument();
     expect(screen.getByText('custom-fields')).toBeInTheDocument();
+  });
+
+  it('no longer carries the AI assistance panel', () => {
+    inbox.useConversation.mockReturnValue({ data: convo, isLoading: false });
+    renderSidebar();
+    expect(screen.queryByText('ai-panel')).not.toBeInTheDocument();
+  });
+
+  it('orders the panels the way the operations team reads them', () => {
+    inbox.useConversation.mockReturnValue({ data: convo, isLoading: false });
+    inbox.useLinkedTickets.mockReturnValue({
+      data: [{ id: 't1', subject: 'Refund', status: 'open', priority: 'high' }],
+      isLoading: false,
+    });
+    renderSidebar({
+      media: [{ id: 'f1', filename: 'a.png', type: 'image/png', filesize: 10 }],
+    });
+
+    // Assert on the order of the section HEADINGS, not raw text: the stat tile
+    // at the top of the panel reuses the "linked tickets" label, so a plain
+    // text search matches that instead of the section.
+    const headings = screen.getAllByRole('heading').map((h) => h.textContent ?? '');
+    const at = (label: string) => headings.findIndex((h) => h.includes(label));
+
+    const contact = at('sidebar.contact');
+    const tickets = at('sidebar.linkedTickets');
+    const tags = at('sidebar.tags');
+    const media = at('Shared media');
+
+    expect(contact).toBeGreaterThanOrEqual(0);
+    expect(tickets).toBeGreaterThan(contact);
+    expect(tags).toBeGreaterThan(tickets);
+    expect(media).toBeGreaterThan(tags);
   });
 
   it('renders internal notes and the no-tickets empty state', () => {

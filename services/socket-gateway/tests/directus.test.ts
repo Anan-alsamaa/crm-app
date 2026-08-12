@@ -100,6 +100,25 @@ describe('GatewayDirectus.upsertContact', () => {
   });
 });
 
+/**
+ * Directus SDK commands are thunks resolving to {path, params, body, method},
+ * so a canned `request` mock can be inspected for what would have been sent.
+ */
+async function sentAt(call: number): Promise<{
+  params: Record<string, unknown>;
+  body: Record<string, unknown>;
+}> {
+  const cmd = request.mock.calls[call]![0] as (c: unknown) => Promise<{
+    params?: Record<string, unknown>;
+    body?: string;
+  }>;
+  const out = await cmd({ globals: {} });
+  return {
+    params: out.params ?? {},
+    body: out.body ? (JSON.parse(out.body) as Record<string, unknown>) : {},
+  };
+}
+
 describe('GatewayDirectus.findOrCreateConversation', () => {
   it('resumes the open conversation (created:false) when one exists', async () => {
     request.mockResolvedValueOnce([{ id: 'conv-open' }]);
@@ -113,6 +132,22 @@ describe('GatewayDirectus.findOrCreateConversation', () => {
     const res = await makeGateway().findOrCreateConversation('vendor-uuid', 'contact-1');
     expect(res).toEqual({ id: 'conv-new', created: true });
     expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('counts PENDING as live, so parking a case does not split the thread', async () => {
+    request.mockResolvedValueOnce([{ id: 'conv-pending' }]);
+    await makeGateway().findOrCreateConversation('vendor-uuid', 'contact-1');
+    const { params } = await sentAt(0);
+    expect(params.filter).toMatchObject({ status: { _in: ['open', 'pending'] } });
+  });
+
+  it('does not resume a solved thread — a later message is a new case', async () => {
+    // Only open/pending are matched, so a resolved/closed thread falls through
+    // to the create branch and the customer gets a fresh conversation.
+    request.mockResolvedValueOnce([]).mockResolvedValueOnce({ id: 'conv-fresh' });
+    const res = await makeGateway().findOrCreateConversation('vendor-uuid', 'contact-1');
+    expect(res).toEqual({ id: 'conv-fresh', created: true });
+    expect((await sentAt(1)).body).toMatchObject({ status: 'open' });
   });
 });
 
@@ -130,6 +165,66 @@ describe('GatewayDirectus.persistMessage', () => {
     expect(saved.id).toBe('msg-1');
     expect(typeof saved.createdAt).toBe('string');
     expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('reopens a solved conversation when the customer writes into it', async () => {
+    request
+      .mockResolvedValueOnce({ id: 'msg-9' }) // createItem(messages)
+      .mockResolvedValueOnce([{ unread_count_agent: 2, status: 'resolved' }]) // read
+      .mockResolvedValueOnce(undefined); // updateItem(conversations)
+    await makeGateway().persistMessage({
+      conversationId: 'conv-1',
+      senderType: 'customer',
+      senderContact: 'contact-1',
+      content: 'my order never arrived',
+    });
+    const { body } = await sentAt(2);
+    // Back into the agent's queue, and the unread bookkeeping still runs.
+    expect(body).toMatchObject({ status: 'pending', unread_count_agent: 3 });
+  });
+
+  it('leaves the status alone when the conversation is already live', async () => {
+    request
+      .mockResolvedValueOnce({ id: 'msg-10' })
+      .mockResolvedValueOnce([{ unread_count_agent: 0, status: 'open' }])
+      .mockResolvedValueOnce(undefined);
+    await makeGateway().persistMessage({
+      conversationId: 'conv-1',
+      senderType: 'customer',
+      senderContact: 'contact-1',
+      content: 'still there?',
+    });
+    const { body } = await sentAt(2);
+    expect(body.status).toBeUndefined();
+    expect(body).toMatchObject({ unread_count_agent: 1 });
+  });
+
+  it('never reopens on an agent reply', async () => {
+    request.mockResolvedValueOnce({ id: 'msg-11' }).mockResolvedValueOnce(undefined);
+    await makeGateway().persistMessage({
+      conversationId: 'conv-1',
+      senderType: 'agent',
+      senderUser: 'agent-1',
+      content: 'sorted for you',
+    });
+    // Agent branch does not even read the conversation back.
+    expect(request).toHaveBeenCalledTimes(2);
+    const { body } = await sentAt(1);
+    expect(body.status).toBeUndefined();
+  });
+
+  it('an internal note touches neither status nor unread count', async () => {
+    request.mockResolvedValueOnce({ id: 'msg-12' }).mockResolvedValueOnce(undefined);
+    await makeGateway().persistMessage({
+      conversationId: 'conv-1',
+      senderType: 'agent',
+      senderUser: 'agent-1',
+      content: 'chasing the restaurant',
+      isInternalNote: true,
+    });
+    const { body } = await sentAt(1);
+    expect(body.status).toBeUndefined();
+    expect(body.unread_count_agent).toBeUndefined();
   });
 });
 
