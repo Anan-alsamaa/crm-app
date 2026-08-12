@@ -515,6 +515,12 @@ export function LatestOrder({
     // `enabled` already guards this, but the compiler cannot see that.
     queryFn: () => commerce.getOrders(vendorId, customerId as string, { limit: 2 }),
     staleTime: 60_000,
+    // Fail fast rather than retrying with backoff. The commerce proxy is an
+    // external dependency that can be slow or absent, and three silent retries
+    // leave a loading skeleton sitting there for a minute with no way to tell
+    // "still loading" from "never coming". Saying "unavailable" and showing the
+    // manual box is the useful answer — the agent has the order number anyway.
+    retry: false,
   });
 
   // Orders the agent looked up and kept, alongside the automatic ones.

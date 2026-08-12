@@ -388,3 +388,18 @@ describe('LatestOrder — a contact with no linked commerce customer', () => {
     expect(client.getOrders).not.toHaveBeenCalled();
   });
 });
+
+describe('LatestOrder — when the commerce proxy is unreachable', () => {
+  beforeEach(() => sessionStorage.clear());
+
+  it('says so and still offers the manual box, instead of loading forever', async () => {
+    // An external dependency that hangs must not leave a skeleton that cannot
+    // be told apart from "still loading".
+    client.getOrders.mockRejectedValue(new Error('proxy down'));
+    renderView(<LatestOrder vendorId="v1" customerId="c1" conversationId="conv-down" />);
+    expect(await screen.findByText('Commerce data unavailable.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Look up an order by ID')).toBeInTheDocument();
+    // One attempt, not four.
+    expect(client.getOrders).toHaveBeenCalledTimes(1);
+  });
+});
