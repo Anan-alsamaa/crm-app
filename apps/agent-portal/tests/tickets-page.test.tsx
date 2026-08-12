@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import React from 'react';
 
@@ -53,11 +53,22 @@ vi.mock('../src/features/tickets/useStoreMatch.js', async () => {
 
 import { TicketsPage } from '../src/features/tickets/TicketsPage.js';
 
-function renderPage() {
+/** Where the router currently is, so navigation can be asserted. */
+let currentPath = '/tickets';
+function LocationProbe() {
+  currentPath = useLocation().pathname;
+  return null;
+}
+
+function renderPage(initial = '/tickets') {
+  currentPath = initial;
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/tickets']}>{children}</MemoryRouter>
+      <MemoryRouter initialEntries={[initial]}>
+        {children}
+        <LocationProbe />
+      </MemoryRouter>
     </QueryClientProvider>
   );
   return render(<TicketsPage />, { wrapper: Wrapper });
@@ -133,20 +144,36 @@ describe('TicketsPage', () => {
 
   it('lists tickets in the operations report format, not as bespoke rows', () => {
     renderPage();
-    // The columns the ops team read: the order, who complained, the type.
+    // The columns the ops team read: the order and the complaint type. Every
+    // column of the report is rendered now, including the date hierarchy they
+    // pivot on — the table and the export are the same report.
     expect(screen.getByText('946641')).toBeInTheDocument();
-    expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('Refund')).toBeInTheDocument();
+    for (const header of ['Year', 'Month', 'Week', 'Day', 'Coupon %']) {
+      expect(screen.getByRole('columnheader', { name: header })).toBeInTheDocument();
+    }
     // And the export that makes the table worth having.
     expect(screen.getByRole('button', { name: /Export to Excel/ })).toBeInTheDocument();
   });
 
-  it('opens the ticket detail under the table when a row is chosen', async () => {
+  it('opens the ticket on its own page when a row is chosen', async () => {
+    // Not a panel under the table: a row is 27 columns wide, which leaves no
+    // useful room beneath it, and the ticket page is the layout operations
+    // asked for.
     renderPage();
     await userEvent.click(screen.getByText('946641'));
-    // The detail pane still carries everything an agent works with.
+    await waitFor(() => expect(currentPath).toBe('/tickets/t1'));
+    expect(screen.queryByText('Mark first response')).toBeNull();
+  });
+
+  it('still shows the detail when the ticket page is opened directly', async () => {
+    // Deep links (notifications, the command palette) must still render the
+    // ticket, not just the list. Uses the ?id= form because this harness
+    // mounts the page directly rather than under a :ticketId route.
+    renderPage('/tickets?id=t1');
     await waitFor(() => expect(screen.getByText('Mark first response')).toBeInTheDocument());
-    expect(screen.getByText('I want a refund')).toBeInTheDocument();
+    // The description now appears in the table's own column as well as the
+    // detail pane, so assert on a control only the pane has.
     expect(screen.getByText('SLA')).toBeInTheDocument();
   });
 
@@ -155,6 +182,6 @@ describe('TicketsPage', () => {
     const row = screen.getByText('946641').closest('tr')!;
     row.focus();
     await userEvent.keyboard('{Enter}');
-    await waitFor(() => expect(screen.getByText('I want a refund')).toBeInTheDocument());
+    await waitFor(() => expect(currentPath).toBe('/tickets/t1'));
   });
 });

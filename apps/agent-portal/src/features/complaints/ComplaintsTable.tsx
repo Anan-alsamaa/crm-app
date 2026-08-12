@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, cn, Pill, Skeleton, Table, TableSurface, Td, Th, toast, Tr } from '@yiji/ui';
+import { Button, cn, Skeleton, Table, TableSurface, Td, Th, toast, Tr } from '@yiji/ui';
 import {
   buildComplaintsSheets,
   COMPLAINT_COLUMN_KEYS,
@@ -11,6 +11,12 @@ import {
   type ComplaintColumnKey,
   type ComplaintReportRow,
   type Translate,
+  complaintCell,
+  moveColumn,
+  reconcileColumnOrder,
+  loadColumnOrder,
+  saveColumnOrder,
+  TICKET_REPORT_ORDER_KEY,
 } from '@yiji/reports';
 
 /**
@@ -22,14 +28,6 @@ import {
  * picker chooses what the export contains, not what this table shows, so
  * narrowing the export can never quietly narrow the screen or vice versa.
  */
-
-const STATUS_TONE: Record<string, 'primary' | 'success' | 'warning' | 'muted' | 'neutral'> = {
-  new: 'primary',
-  open: 'success',
-  pending: 'warning',
-  resolved: 'primary',
-  closed: 'muted',
-};
 
 export function ComplaintsTable({
   rows,
@@ -51,6 +49,23 @@ export function ComplaintsTable({
   const tr = t as unknown as Translate;
   const [cols, setCols] = useState<Set<ComplaintColumnKey>>(() => new Set(COMPLAINT_COLUMN_KEYS));
   const [showCols, setShowCols] = useState(false);
+  // Same arrangement, same storage key as the admin portal: one report, so
+  // rearranging it in one place should not fight with the other.
+  const [order, setOrder] = useState<ComplaintColumnKey[]>(() =>
+    reconcileColumnOrder(
+      loadColumnOrder<ComplaintColumnKey>(TICKET_REPORT_ORDER_KEY),
+      COMPLAINT_COLUMN_KEYS,
+    ),
+  );
+  const chosenColumns = order.filter((k) => cols.has(k));
+
+  const moveCol = (key: ComplaintColumnKey, delta: number) =>
+    setOrder((prev) => {
+      const from = prev.indexOf(key);
+      const next = moveColumn(prev, from, from + delta);
+      saveColumnOrder(TICKET_REPORT_ORDER_KEY, next);
+      return next;
+    });
 
   const unmapped = countUnmappedComplaints(rows);
 
@@ -67,10 +82,9 @@ export function ComplaintsTable({
       toast.error(t('complaints.nothingToExport', { defaultValue: 'Nothing to export.' }));
       return;
     }
-    const chosen = COMPLAINT_COLUMN_KEYS.filter((k) => cols.has(k));
     downloadWorkbook(
       reportFilename(filenameBase, days ?? 0),
-      buildComplaintsSheets(rows, tr, chosen),
+      buildComplaintsSheets(rows, tr, chosenColumns),
     );
     toast.success(
       t('complaints.exported', { count: rows.length, defaultValue: 'Exported {{count}} rows.' }),
@@ -130,23 +144,57 @@ export function ComplaintsTable({
             </Button>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {COMPLAINT_COLUMN_KEYS.map((k) => (
-              <button
+            {/* Shown in the user's own order, so this list IS the arrangement:
+                the arrows move the column in the table and the export too. */}
+            {order.map((k, i) => (
+              <span
                 key={k}
-                type="button"
-                onClick={() => toggleCol(k)}
-                aria-pressed={cols.has(k)}
-                className={cn(
-                  'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast',
-                  cols.has(k)
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary/60 text-muted-foreground ring-1 ring-border hover:text-foreground',
-                )}
+                className="inline-flex items-center gap-0.5 rounded-full bg-secondary/40 ps-0.5 pe-0.5"
               >
-                {t(COMPLAINT_COLUMN_LABELS[k].key, {
-                  defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
-                })}
-              </button>
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  onClick={() => moveCol(k, -1)}
+                  aria-label={t('complaintReport.moveUp', {
+                    col: t(COMPLAINT_COLUMN_LABELS[k].key, {
+                      defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
+                    }),
+                    defaultValue: 'Move {{col}} earlier',
+                  })}
+                  className="grid h-5 w-4 place-items-center rounded text-muted-foreground hover:text-foreground disabled:opacity-30"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleCol(k)}
+                  aria-pressed={cols.has(k)}
+                  className={cn(
+                    'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast',
+                    cols.has(k)
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary/60 text-muted-foreground ring-1 ring-border hover:text-foreground',
+                  )}
+                >
+                  {t(COMPLAINT_COLUMN_LABELS[k].key, {
+                    defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
+                  })}
+                </button>
+                <button
+                  type="button"
+                  disabled={i === order.length - 1}
+                  onClick={() => moveCol(k, 1)}
+                  aria-label={t('complaintReport.moveDown', {
+                    col: t(COMPLAINT_COLUMN_LABELS[k].key, {
+                      defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
+                    }),
+                    defaultValue: 'Move {{col}} later',
+                  })}
+                  className="grid h-5 w-4 place-items-center rounded text-muted-foreground hover:text-foreground disabled:opacity-30"
+                >
+                  ›
+                </button>
+              </span>
             ))}
           </div>
         </div>
@@ -156,19 +204,13 @@ export function ComplaintsTable({
         <Table>
           <thead>
             <tr>
-              <Th>{t('complaintReport.col.date', { defaultValue: 'Date' })}</Th>
-              <Th>{t('complaintReport.col.time', { defaultValue: 'Time' })}</Th>
-              <Th>{t('complaintReport.col.orderNumber', { defaultValue: 'Order number' })}</Th>
-              <Th>
-                {t('complaintReport.col.restaurantName', { defaultValue: 'Restaurant name' })}
-              </Th>
-              <Th>{t('complaintReport.col.city', { defaultValue: 'City' })}</Th>
-              <Th>{t('complaintReport.col.complaintType', { defaultValue: 'Complaint type' })}</Th>
-              <Th>{t('complaintReport.col.customerName', { defaultValue: 'Customer name' })}</Th>
-              <Th>{t('complaintReport.col.compensation', { defaultValue: 'Compensation' })}</Th>
-              <Th>
-                {t('complaintReport.col.complaintStatus', { defaultValue: 'Complaint status' })}
-              </Th>
+              {chosenColumns.map((k) => (
+                <Th key={k}>
+                  {t(COMPLAINT_COLUMN_LABELS[k].key, {
+                    defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
+                  })}
+                </Th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -197,38 +239,11 @@ export function ComplaintsTable({
                   selectedId === r.id && 'bg-primary-subtle/70',
                 )}
               >
-                <Td className="tabular-nums">{r.date || '—'}</Td>
-                <Td className="tabular-nums text-muted-foreground">{r.time || '—'}</Td>
-                <Td className="font-mono text-xs">{r.orderNumber || '—'}</Td>
-                <Td className="max-w-[14rem] truncate" title={r.restaurantName}>
-                  {r.restaurantName || '—'}
-                </Td>
-                {/* A branch that did not resolve says so, rather than showing a
-                    blank city that reads as "this complaint had no branch". */}
-                {r.restaurantName || r.brand ? (
-                  r.storeMapped ? (
-                    <Td className="text-muted-foreground">{r.city || '—'}</Td>
-                  ) : (
-                    <Td>
-                      <Pill tone="warning" size="sm">
-                        {t('agentReports.notMapped', { defaultValue: 'Not mapped' })}
-                      </Pill>
-                    </Td>
-                  )
-                ) : (
-                  <Td className="text-muted-foreground">—</Td>
-                )}
-                <Td className="text-muted-foreground">{r.complaintType || '—'}</Td>
-                <Td className="text-muted-foreground">{r.customerName || '—'}</Td>
-                <Td className="text-muted-foreground">{r.compensation || '—'}</Td>
-                <Td>
-                  <Pill tone={STATUS_TONE[r.complaintStatus] ?? 'neutral'} size="sm">
-                    {t(`status.${r.complaintStatus}`, {
-                      ns: 'common',
-                      defaultValue: r.complaintStatus,
-                    })}
-                  </Pill>
-                </Td>
+                {chosenColumns.map((k) => (
+                  <Td key={k} className="whitespace-nowrap">
+                    {String(complaintCell(r, k, tr) ?? '') || '—'}
+                  </Td>
+                ))}
               </Tr>
             ))}
           </tbody>

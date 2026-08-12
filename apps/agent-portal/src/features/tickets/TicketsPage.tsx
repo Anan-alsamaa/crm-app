@@ -207,13 +207,26 @@ export function TicketsPage() {
               rows={filtered}
               loading={complaints.isLoading}
               selectedId={selected}
-              onSelect={(id) => setSelected(id === selected ? null : id)}
+              // Open the record on its own page rather than a panel squeezed
+              // under the table: the ticket page is the layout operations
+              // asked for, and a full row of 27 columns leaves no useful room
+              // below it. Deep links already land here, so the two ways of
+              // reaching a ticket now show the same thing.
+              onSelect={(id) => navigate(`/tickets/${id}`)}
               filenameBase="my-tickets"
               days={null}
             />
-            {selected && (
+            {/* Only a deep link (/tickets/<id>) shows the detail inline now;
+                clicking a row navigates there instead. */}
+            {selected && deepLinkId && (
               <section className="overflow-hidden rounded-2xl bg-card shadow-soft">
-                <TicketDetail ticketId={selected} onBack={() => setSelected(null)} />
+                <TicketDetail
+                  ticketId={selected}
+                  onBack={() => {
+                    setSelected(null);
+                    navigate('/tickets');
+                  }}
+                />
               </section>
             )}
           </div>
