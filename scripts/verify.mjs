@@ -58,7 +58,11 @@ const steps = [
   },
 ];
 if (E2E) {
-  steps.push({ key: 'e2e', label: 'E2E: full-stack (isolated Directus)', cmd: 'pnpm test:e2e:local' });
+  steps.push({
+    key: 'e2e',
+    label: 'E2E: full-stack (isolated Directus)',
+    cmd: 'pnpm test:e2e:local',
+  });
 }
 
 const linePct = (rel) => {

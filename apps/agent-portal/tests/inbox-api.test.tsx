@@ -21,6 +21,7 @@ import {
   useTags,
   useAddTagToConversation,
   useCreateTag,
+  conversationIdsForOrder,
 } from '../src/features/inbox/api.js';
 
 function wrapper() {
@@ -104,5 +105,47 @@ describe('inbox api — mutation hooks', () => {
     const { result } = renderHook(() => useCreateTag(), { wrapper: wrapper() });
     await result.current.mutateAsync({ name: 'VIP' });
     expect(request).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Order-id search. The order lives on the TICKET, not the conversation, and
+ * Directus cannot filter inside the json snapshot at all, so the id is
+ * duplicated into an indexed `order_id` column and looked up separately.
+ */
+describe('conversationIdsForOrder', () => {
+  it('queries tickets by order id and returns their conversations', async () => {
+    request.mockResolvedValueOnce([{ conversation: 'c1' }, { conversation: 'c2' }]);
+    await expect(conversationIdsForOrder('946641')).resolves.toEqual(['c1', 'c2']);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('de-duplicates when several tickets share one conversation', async () => {
+    // Otherwise the id repeats inside the `_in` filter for no benefit.
+    request.mockResolvedValueOnce([
+      { conversation: 'c1' },
+      { conversation: 'c1' },
+      { conversation: 'c3' },
+    ]);
+    await expect(conversationIdsForOrder('1095')).resolves.toEqual(['c1', 'c3']);
+  });
+
+  it('drops tickets that have no conversation', async () => {
+    // Most tickets are raised standalone; they match the order but there is no
+    // chat to open, so returning null would put a dead row in the filter.
+    request.mockResolvedValueOnce([{ conversation: null }, { conversation: 'c2' }]);
+    await expect(conversationIdsForOrder('946641')).resolves.toEqual(['c2']);
+  });
+
+  it('does not query at all for a term with no digits', async () => {
+    // Every keystroke of a customer name would otherwise hit the tickets
+    // collection for something that cannot be an order id.
+    await expect(conversationIdsForOrder('maria')).resolves.toEqual([]);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('ignores surrounding whitespace', async () => {
+    request.mockResolvedValueOnce([{ conversation: 'c9' }]);
+    await expect(conversationIdsForOrder('  946641  ')).resolves.toEqual(['c9']);
   });
 });

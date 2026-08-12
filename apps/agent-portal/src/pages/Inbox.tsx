@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   Avatar,
@@ -21,6 +21,7 @@ import {
 } from '@yiji/ui';
 import { SOCKET_EVENTS, type ConversationStatus, type Priority } from '@yiji/shared-types';
 import {
+  conversationIdsForOrder,
   useConversations,
   useConversationPreviews,
   useUpdateConversation,
@@ -72,7 +73,22 @@ export function Inbox() {
   useEffect(() => {
     setFilters((f) => ({ ...f, assignment: isManager ? 'all' : 'mine' }));
   }, [isManager]);
-  const conversations = useConversations({ ...filters, currentUserId: user?.id });
+  // Order-id search runs as its own query because the order lives on the
+  // ticket, not the conversation. Kept separate from the list query so a slow
+  // or failed ticket lookup degrades to a name/phone search instead of
+  // emptying the inbox.
+  const orderTerm = (filters.search ?? '').trim();
+  const orderMatches = useQuery({
+    enabled: /d/.test(orderTerm),
+    queryKey: ['conversations-by-order', orderTerm],
+    staleTime: 30_000,
+    queryFn: () => conversationIdsForOrder(orderTerm),
+  });
+  const conversations = useConversations({
+    ...filters,
+    orderConversationIds: orderMatches.data ?? [],
+    currentUserId: user?.id,
+  });
   const previews = useConversationPreviews((conversations.data ?? []).map((c) => c.id));
   const tags = useTags();
   const [selected, setSelected] = useState<string | null>(null);

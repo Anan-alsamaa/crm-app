@@ -51,6 +51,12 @@ export interface InboxFilters {
   status?: ConversationStatus | 'all';
   priority?: Priority | 'all';
   search?: string;
+  /**
+   * Conversation ids whose ticket is about an order matching the search term,
+   * resolved by conversationIdsForOrder(). Kept out of `search` because it is
+   * the ANSWER to a second query, not another field to match on.
+   */
+  orderConversationIds?: string[];
   sort?: 'recent' | 'oldest' | 'priority';
   /**
    * Whose conversations to show.
@@ -80,15 +86,51 @@ function buildFilter(f: InboxFilters): Record<string, unknown> | undefined {
   }
   if (f.search?.trim()) {
     const s = f.search.trim();
-    and.push({
-      _or: [
-        { contact: { name: { _icontains: s } } },
-        { contact: { email: { _icontains: s } } },
-        { contact: { phone: { _icontains: s } } },
-      ],
-    });
+    const or: Array<Record<string, unknown>> = [
+      { contact: { name: { _icontains: s } } },
+      { contact: { email: { _icontains: s } } },
+      { contact: { phone: { _icontains: s } } },
+    ];
+    // Order id. A conversation carries no order, so this arrives already
+    // resolved to conversation ids by `conversationIdsForOrder` — see there for
+    // why it cannot be expressed as a filter on this collection.
+    if (f.orderConversationIds && f.orderConversationIds.length > 0) {
+      or.push({ id: { _in: f.orderConversationIds } });
+    }
+    and.push({ _or: or });
   }
   return and.length ? { _and: and } : undefined;
+}
+
+/**
+ * Conversations that have a ticket about an order matching `term`.
+ *
+ * Two queries rather than one, because the order lives on the TICKET and the
+ * inbox lists CONVERSATIONS. Directus cannot reach across that relation from
+ * the conversation side without a defined o2m, and it cannot filter inside
+ * `order_snapshot` at all (a json column rejects `_contains` outright), which
+ * is why tickets carry the id in a real indexed `order_id` column.
+ *
+ * A term with no digits is not an order id, so it skips the round trip
+ * entirely — otherwise every keystroke of a customer's name would query
+ * tickets for nothing.
+ *
+ * KNOWN LIMIT: agents can only read tickets assigned to them (roles.ts scopes
+ * `tickets.read` to `assigned_agent = $CURRENT_USER`). So an agent searching an
+ * order handled by a COLLEAGUE finds nothing, even when the conversation itself
+ * is visible to them. Widening that is a permission decision, not a search fix.
+ */
+export async function conversationIdsForOrder(term: string): Promise<string[]> {
+  const s = term.trim();
+  if (!/\d/.test(s)) return [];
+  const rows = (await directus.request(
+    readItems('tickets', {
+      filter: { order_id: { _contains: s }, conversation: { _nnull: true } },
+      fields: ['conversation'],
+      limit: 200,
+    }),
+  )) as Array<{ conversation: string | null }>;
+  return Array.from(new Set(rows.map((r) => r.conversation).filter((c): c is string => !!c)));
 }
 
 function buildSort(f: InboxFilters): string[] {
