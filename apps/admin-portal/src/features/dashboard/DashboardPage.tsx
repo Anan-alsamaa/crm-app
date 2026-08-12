@@ -570,6 +570,29 @@ function SupportOverview({ days }: { days: number }) {
               unit={t('dashboard.ticketsUnit', { defaultValue: 'tickets' })}
             />
           </Panel>
+
+          {/* Compensation issued — DEFINED ONLY, by request. No query, no
+              numbers, and deliberately not a row of zeros: a zero here would
+              read as "nothing was compensated", which is a claim about the
+              business rather than an admission that nothing is wired up yet.
+              The data exists (tickets.coupon_value / compensation) whenever
+              the reporting rules for it are settled. */}
+          <Panel
+            title={t('dashboard.compensationIssued', { defaultValue: 'Compensation issued' })}
+            className="col-span-2"
+          >
+            <div className="flex h-full min-h-[7rem] flex-col items-center justify-center gap-1.5 text-center">
+              <span className="rounded-full bg-secondary px-2 py-0.5 text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                {t('dashboard.notWiredYet', { defaultValue: 'Not reporting yet' })}
+              </span>
+              <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">
+                {t('dashboard.compensationIssuedHint', {
+                  defaultValue:
+                    'Coupon value and compensation are already recorded on every ticket. This panel starts reporting once the rules for it are agreed.',
+                })}
+              </p>
+            </div>
+          </Panel>
         </div>
       )}
     </div>

@@ -79,6 +79,27 @@ const store = (code: string | null, name: string, extra: Partial<StoreInput> = {
   ...extra,
 });
 
+/**
+ * The same branch as Directus already holds it.
+ *
+ * Mirrors `store()` on purpose: the import now UPDATES a match whose columns
+ * differ, so a fixture that omits the city would make every re-import look
+ * like an edit and the "identical file is a no-op" tests would pass for the
+ * wrong reason.
+ */
+const existingStore = (code: string | null, name: string, extra: Record<string, unknown> = {}) => ({
+  id: `row-${code ?? name}`,
+  code,
+  name,
+  city: 'Riyadh',
+  status: 'active',
+  area_manager: null,
+  chain_manager: null,
+  yiji_restaurant_id: null,
+  brand: null,
+  ...extra,
+});
+
 // Braces matter: an arrow that RETURNS `request.mockReset()` hands Vitest the
 // mock itself, which it then treats as a teardown hook and invokes with no
 // arguments at the end of every test.
@@ -97,16 +118,16 @@ describe('useBulkCreateStores — repeat safety', () => {
       store('LCP-003', 'C'),
     ]);
 
-    expect(outcome).toEqual({ added: 3, alreadyPresent: 0 });
+    expect(outcome).toEqual({ added: 3, updated: 0, alreadyPresent: 0 });
     expect(inserted('stores').map((r) => r.code)).toEqual(['LCP-001', 'LCP-002', 'LCP-003']);
   });
 
   it('re-import of the identical file: adds nothing and writes nothing', async () => {
     stubDirectus({
       stores: [
-        { code: 'LCP-001', name: 'A', brand: null },
-        { code: 'LCP-002', name: 'B', brand: null },
-        { code: 'LCP-003', name: 'C', brand: null },
+        existingStore('LCP-001', 'A'),
+        existingStore('LCP-002', 'B'),
+        existingStore('LCP-003', 'C'),
       ],
     });
     const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
@@ -117,17 +138,14 @@ describe('useBulkCreateStores — repeat safety', () => {
       store('LCP-003', 'C'),
     ]);
 
-    expect(outcome).toEqual({ added: 0, alreadyPresent: 3 });
+    expect(outcome).toEqual({ added: 0, updated: 0, alreadyPresent: 3 });
     // Not "inserted zero rows" — no write request is made at all.
     expect(sent.filter((o) => o.op === 'createItems')).toHaveLength(0);
   });
 
   it('mixed file: inserts only the new rows', async () => {
     stubDirectus({
-      stores: [
-        { code: 'LCP-001', name: 'A', brand: null },
-        { code: 'LCP-002', name: 'B', brand: null },
-      ],
+      stores: [existingStore('LCP-001', 'A'), existingStore('LCP-002', 'B')],
     });
     const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
 
@@ -138,40 +156,102 @@ describe('useBulkCreateStores — repeat safety', () => {
       store('LCP-010', 'New Two'),
     ]);
 
-    expect(outcome).toEqual({ added: 2, alreadyPresent: 2 });
+    expect(outcome).toEqual({ added: 2, updated: 0, alreadyPresent: 2 });
     expect(inserted('stores').map((r) => r.name)).toEqual(['New One', 'New Two']);
   });
 
-  it('never updates or deletes an existing row', async () => {
-    stubDirectus({ stores: [{ code: 'LCP-001', name: 'Old Name', brand: null }] });
+  it('updates a matched branch from the sheet, and never deletes', async () => {
+    // The sheet IS the operations master, so it maintains a branch as well as
+    // onboarding one. Deleting stays off the table entirely: a partial sheet is
+    // a normal way to work, and treating absence as "remove" would let one
+    // upload wipe the master.
+    stubDirectus({ stores: [existingStore('LCP-001', 'Old Name')] });
     const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
 
-    // Same store, different name and city — an import must not overwrite a
-    // correction someone made by hand in the UI.
-    await result.current.mutateAsync([store('LCP-001', 'Renamed In Sheet', { city: 'Jeddah' })]);
+    const outcome = await result.current.mutateAsync([
+      store('LCP-001', 'Renamed In Sheet', { city: 'Jeddah' }),
+    ]);
 
-    expect(sent.some((o) => o.op === 'updateItem' || o.op === 'deleteItem')).toBe(false);
+    expect(outcome).toEqual({ added: 0, updated: 1, alreadyPresent: 0 });
+    expect(sent.some((o) => o.op === 'deleteItem')).toBe(false);
     expect(sent.filter((o) => o.op === 'createItems')).toHaveLength(0);
+    const update = sent.find((o) => o.op === 'updateItem');
+    expect(update?.items).toEqual({ name: 'Renamed In Sheet', city: 'Jeddah' });
+  });
+
+  it('writes only the columns that actually differ', async () => {
+    // A patch that resends unchanged values is noise in the audit trail and
+    // makes a no-op upload look like an edit of the whole master.
+    stubDirectus({ stores: [existingStore('LCP-001', 'A')] });
+    const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
+
+    await result.current.mutateAsync([store('LCP-001', 'A', { city: 'Jeddah' })]);
+
+    expect(sent.find((o) => o.op === 'updateItem')?.items).toEqual({ city: 'Jeddah' });
+  });
+
+  it('treats a blank cell as "not supplied", never as "clear this"', async () => {
+    // Re-uploading a trimmed export would otherwise erase the managers someone
+    // filled in by hand.
+    stubDirectus({
+      stores: [existingStore('LCP-001', 'A', { area_manager: 'Mo’men', chain_manager: 'Hossam' })],
+    });
+    const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
+
+    const outcome = await result.current.mutateAsync([
+      store('LCP-001', 'A', { area_manager: '', chain_manager: null }),
+    ]);
+
+    expect(outcome).toEqual({ added: 0, updated: 0, alreadyPresent: 1 });
+    expect(sent.some((o) => o.op === 'updateItem')).toBe(false);
+  });
+
+  it('does not rename a codeless branch to include its own code', async () => {
+    // The master packs the code into the name for codeless rows
+    // ("LCP058-ARAMCO"), which is how they are MATCHED. Writing that back would
+    // turn the stored "ARAMCO" into "LCP058-ARAMCO".
+    stubDirectus({ stores: [existingStore('LCP-058', 'ARAMCO', { city: 'Jeddah' })] });
+    const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
+
+    await result.current.mutateAsync([store(null, 'LCP058-ARAMCO')]);
+
+    const update = sent.find((o) => o.op === 'updateItem');
+    expect(update?.items).not.toHaveProperty('name');
+  });
+
+  it('freezes exposed tickets before it edits any branch', async () => {
+    // Editing a store rewrites the attribution of every ticket that never froze
+    // one. useUpdateStore already guards that; a sheet that edits 130 branches
+    // owes the same guarantee.
+    stubDirectus({ stores: [existingStore('LCP-001', 'A')] });
+    const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
+
+    await result.current.mutateAsync([store('LCP-001', 'A', { city: 'Jeddah' })]);
+
+    const readTickets = sent.findIndex((o) => o.op === 'readItems' && o.collection === 'tickets');
+    const firstUpdate = sent.findIndex((o) => o.op === 'updateItem' && o.collection === 'stores');
+    expect(readTickets).toBeGreaterThanOrEqual(0);
+    expect(readTickets).toBeLessThan(firstUpdate);
   });
 
   it('matches a stored row even when the sheet packs the code into the name', async () => {
-    stubDirectus({ stores: [{ code: 'LCP-058', name: 'ARAMCO', brand: null }] });
+    stubDirectus({ stores: [existingStore('LCP-058', 'ARAMCO')] });
     const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
 
     const outcome = await result.current.mutateAsync([store(null, 'LCP058-ARAMCO')]);
-    expect(outcome).toEqual({ added: 0, alreadyPresent: 1 });
+    expect(outcome).toEqual({ added: 0, updated: 0, alreadyPresent: 1 });
   });
 
   it('keeps a codeless branch of another brand as genuinely new', async () => {
     stubDirectus({
-      stores: [{ code: null, name: 'Buhairah Plaza', brand: { code: 'LCP' } }],
+      stores: [existingStore(null, 'Buhairah Plaza', { brand: { id: 'b-LCP', code: 'LCP' } })],
     });
     const { result } = renderHook(() => useBulkCreateStores(), { wrapper: wrapper() });
 
     const outcome = await result.current.mutateAsync([
       store(null, 'Buhairah Plaza', { brand_code: 'PSK' }),
     ]);
-    expect(outcome).toEqual({ added: 1, alreadyPresent: 0 });
+    expect(outcome).toEqual({ added: 1, updated: 0, alreadyPresent: 0 });
   });
 
   it('strips the matching-only brand_code before writing to Directus', async () => {
@@ -202,7 +282,7 @@ describe('useBulkCreateStores — repeat safety', () => {
     );
     const outcome = await result.current.mutateAsync(rows);
 
-    expect(outcome).toEqual({ added: 134, alreadyPresent: 0 });
+    expect(outcome).toEqual({ added: 134, updated: 0, alreadyPresent: 0 });
     expect(inserted('stores')).toHaveLength(134);
     expect(sent.filter((o) => o.op === 'createItems').length).toBeGreaterThan(1);
   });
@@ -217,9 +297,9 @@ describe('useBulkCreateStores — repeat safety', () => {
 describe('useBulkCreateStores — onboarding a new branch', () => {
   /** The master as it stands before the new branch opens. */
   const MASTER = [
-    { code: 'LCP-041', name: 'Masief Plaza', brand: { code: 'LCP' } },
-    { code: 'LCP-006', name: 'Panorama Mall RYD', brand: { code: 'LCP' } },
-    { code: 'PSK-002', name: 'Nakhil Mall DMM', brand: { code: 'PSK' } },
+    existingStore('LCP-041', 'Masief Plaza', { brand: { id: 'b-LCP', code: 'LCP' } }),
+    existingStore('LCP-006', 'Panorama Mall RYD', { brand: { id: 'b-LCP', code: 'LCP' } }),
+    existingStore('PSK-002', 'Nakhil Mall DMM', { brand: { id: 'b-PSK', code: 'PSK' } }),
   ];
 
   it('adds a branch listed on its own, against a populated master', async () => {
@@ -229,7 +309,7 @@ describe('useBulkCreateStores — onboarding a new branch', () => {
     // The operator uploads ONE row — just the branch that opened.
     const outcome = await result.current.mutateAsync([store('LCP-090', 'Riyadh Park')]);
 
-    expect(outcome).toEqual({ added: 1, alreadyPresent: 0 });
+    expect(outcome).toEqual({ added: 1, updated: 0, alreadyPresent: 0 });
     expect(inserted('stores').map((r) => r.code)).toEqual(['LCP-090']);
   });
 
@@ -254,7 +334,7 @@ describe('useBulkCreateStores — onboarding a new branch', () => {
       store('PSK-030', 'Granada Mall'),
     ]);
 
-    expect(outcome).toEqual({ added: 2, alreadyPresent: 0 });
+    expect(outcome).toEqual({ added: 2, updated: 0, alreadyPresent: 0 });
     expect(inserted('stores').map((r) => r.code)).toEqual(['LCP-090', 'PSK-030']);
   });
 
@@ -271,7 +351,7 @@ describe('useBulkCreateStores — onboarding a new branch', () => {
       store('LCP-090', 'Riyadh Park'),
     ]);
 
-    expect(outcome).toEqual({ added: 1, alreadyPresent: 3 });
+    expect(outcome).toEqual({ added: 1, updated: 0, alreadyPresent: 3 });
     expect(inserted('stores').map((r) => r.code)).toEqual(['LCP-090']);
   });
 });
@@ -286,7 +366,7 @@ describe('useBulkCreateBrands — repeat safety', () => {
       { code: 'PSK', name: 'PSK', status: 'active' },
     ]);
 
-    expect(outcome).toEqual({ added: 2, alreadyPresent: 0 });
+    expect(outcome).toEqual({ added: 2, updated: 0, alreadyPresent: 0 });
     expect(inserted('brands')).toHaveLength(2);
   });
 
@@ -299,7 +379,7 @@ describe('useBulkCreateBrands — repeat safety', () => {
       { code: 'PSK', name: 'PSK', status: 'active' },
     ]);
 
-    expect(outcome).toEqual({ added: 1, alreadyPresent: 1 });
+    expect(outcome).toEqual({ added: 1, updated: 0, alreadyPresent: 1 });
     expect(inserted('brands').map((b) => (b as { code: string }).code)).toEqual(['PSK']);
   });
 
@@ -319,7 +399,7 @@ describe('useBulkCreateBrands — repeat safety', () => {
     stubDirectus({ brands: [] });
     const { result } = renderHook(() => useBulkCreateBrands(), { wrapper: wrapper() });
     const outcome = await result.current.mutateAsync([]);
-    expect(outcome).toEqual({ added: 0, alreadyPresent: 0 });
+    expect(outcome).toEqual({ added: 0, updated: 0, alreadyPresent: 0 });
     expect(sent).toHaveLength(0);
   });
 });

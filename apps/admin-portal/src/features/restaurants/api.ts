@@ -228,27 +228,56 @@ export function useDeleteStore() {
   });
 }
 
-/** What a repeatable import did: rows inserted vs rows we already had. */
+/** What a repeatable import did, in three separate counts. */
 export interface ImportOutcome {
   added: number;
+  /** Matched an existing branch and changed at least one column. */
+  updated: number;
+  /** Matched an existing branch and had nothing new to say. */
   alreadyPresent: number;
 }
 
+/** Columns the sheet is allowed to write onto an existing branch. */
+const UPDATABLE = [
+  'name',
+  'city',
+  'area_manager',
+  'chain_manager',
+  'brand',
+  'status',
+  // Present only when the Administrator uploaded it — StoresPage omits the
+  // field entirely for anyone else, because it is the join key to the order
+  // feed and a wrong value reports tickets against the wrong branch.
+  'yiji_restaurant_id',
+] as const;
+
 /**
- * Onboard stores from an uploaded sheet.
+ * Onboard AND maintain stores from an uploaded sheet.
  *
- * Adding a branch that has just opened should be an upload, not a hand-typed
- * form — and it has to be safe against a master that is already populated.
- * New rows are inserted, rows we already have are skipped and counted, and
- * nothing is ever updated or deleted (onboarding from a slightly stale export
- * must not revert a correction someone made in the UI).
+ * The sheet is the operations team's own master, so it is the source of truth
+ * for a branch's city, managers and brand. A row that matches an existing
+ * branch now UPDATES it; a row that matches nothing is inserted. Nothing is
+ * ever deleted: a partial sheet is a normal way to work, and treating absence
+ * as "remove" would let one upload wipe the master.
  *
- * The sheet may be just the new branches or the whole master re-exported with
- * a line added; both land the same newcomers exactly once.
+ * The match key is the ops store code, falling back to brand-scoped name when
+ * a row has no code (the master packs the code into the name and spells it four
+ * ways — see splitStoreCode). Same key as the insert path, so a row cannot be
+ * treated as new by one half and existing by the other.
  *
- * The existing rows are re-read HERE rather than taken from the React Query
- * cache: the cache can be minutes old, and deciding "we already have this" from
- * stale data is exactly how a duplicate slips through.
+ * Only columns the sheet actually carries are written. A blank cell means "not
+ * supplied", never "clear this", otherwise re-uploading a trimmed export would
+ * erase the managers someone filled in by hand.
+ *
+ * `yiji_restaurant_id` reaches this function only when the Administrator
+ * uploaded the sheet — StoresPage omits the field entirely for anyone else,
+ * and the field-scoped permission in roles.ts rejects it server-side. It is the
+ * join key to the order feed: a wrong value does not error, it reports tickets
+ * against the wrong branch.
+ *
+ * Existing rows are re-read HERE rather than taken from the React Query cache:
+ * the cache can be minutes old, and deciding "we already have this" from stale
+ * data is exactly how a duplicate slips through.
  *
  * Chunked because Directus rejects very large payloads and a 200-row sheet is
  * the normal case, not the exception.
@@ -258,17 +287,68 @@ export function useBulkCreateStores() {
   return useMutation({
     mutationFn: async (rows: StoreInput[]): Promise<ImportOutcome> => {
       const existing = (await directus.request(
-        readItems('stores', { limit: -1, fields: ['code', 'name', 'brand.code'] as never }),
-      )) as Array<{ code: string | null; name: string; brand: { code: string } | null }>;
+        readItems('stores', {
+          limit: -1,
+          fields: [
+            'id',
+            'code',
+            'name',
+            'city',
+            'area_manager',
+            'chain_manager',
+            'status',
+            'yiji_restaurant_id',
+            'brand.id',
+            'brand.code',
+          ] as never,
+        }),
+      )) as Array<
+        Record<string, unknown> & {
+          id: string;
+          code: string | null;
+          name: string;
+          brand: { id: string; code: string } | null;
+        }
+      >;
 
-      const { fresh, alreadyPresent } = partitionNew(
-        rows,
-        existing.map((s) => storeKey({ code: s.code, name: s.name, brandCode: s.brand?.code })),
+      const byKey = new Map(
+        existing.map((s) => [
+          storeKey({ code: s.code, name: s.name, brandCode: s.brand?.code }),
+          s,
+        ]),
+      );
+
+      const fresh: StoreInput[] = [];
+      const patches: Array<{ id: string; patch: Record<string, unknown> }> = [];
+      let alreadyPresent = 0;
+
+      for (const row of rows) {
         // The incoming row carries `brand` as an id, not a code, so the
         // brand-scoped name fallback reads the separate `brand_code` the
         // importer attaches for exactly this purpose.
-        (r) => storeKey({ code: r.code, name: r.name, brandCode: r.brand_code }),
-      );
+        const match = byKey.get(
+          storeKey({ code: row.code, name: row.name, brandCode: row.brand_code }),
+        );
+        if (!match) {
+          fresh.push(row);
+          continue;
+        }
+        const patch: Record<string, unknown> = {};
+        for (const field of UPDATABLE) {
+          // A row with no code was matched on its NAME, and in the ops master a
+          // codeless row is one that packs the code into the name
+          // ("LCP058-ARAMCO"). Writing that back would rename the branch to
+          // include its own code, so the name is left alone in that case.
+          if (field === 'name' && !row.code) continue;
+          const incoming = (row as unknown as Record<string, unknown>)[field];
+          // Absent or blank means "not supplied by this sheet".
+          if (incoming === undefined || incoming === null || incoming === '') continue;
+          const current = field === 'brand' ? (match.brand?.id ?? null) : match[field];
+          if (String(current ?? '') !== String(incoming)) patch[field] = incoming;
+        }
+        if (Object.keys(patch).length === 0) alreadyPresent++;
+        else patches.push({ id: match.id, patch });
+      }
 
       const CHUNK = 50;
       for (let i = 0; i < fresh.length; i += CHUNK) {
@@ -276,7 +356,16 @@ export function useBulkCreateStores() {
         const slice = fresh.slice(i, i + CHUNK).map(({ brand_code: _ignored, ...row }) => row);
         await directus.request(createItems('stores', slice as never));
       }
-      return { added: fresh.length, alreadyPresent };
+      if (patches.length > 0) {
+        // Same guarantee useUpdateStore makes: preserve what is true NOW before
+        // changing it. A sheet upload that edits 130 branches would otherwise
+        // rewrite the attribution of every ticket that never froze one.
+        await freezeExposedTickets();
+        for (const { id, patch } of patches) {
+          await directus.request(updateItem('stores', id, patch as never));
+        }
+      }
+      return { added: fresh.length, updated: patches.length, alreadyPresent };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['stores'] }),
   });
@@ -290,7 +379,7 @@ export function useBulkCreateBrands() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (rows: BrandInput[]): Promise<ImportOutcome> => {
-      if (rows.length === 0) return { added: 0, alreadyPresent: 0 };
+      if (rows.length === 0) return { added: 0, updated: 0, alreadyPresent: 0 };
 
       const existing = (await directus.request(
         readItems('brands', { limit: -1, fields: ['code', 'name'] as never }),
@@ -303,7 +392,9 @@ export function useBulkCreateBrands() {
       );
 
       if (fresh.length > 0) await directus.request(createItems('brands', fresh as never));
-      return { added: fresh.length, alreadyPresent };
+      // Brands are insert-only: the sheet carries a code and a name, and the
+      // display name is maintained in the UI, not re-imported over.
+      return { added: fresh.length, updated: 0, alreadyPresent };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['brands'] }),
   });
