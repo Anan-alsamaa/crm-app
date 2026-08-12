@@ -16,6 +16,7 @@ import {
   toast,
   Toolbar,
   ToolbarSpacer,
+  useIsDesktop,
 } from '@yiji/ui';
 import type { Priority, TicketStatus } from '@yiji/shared-types';
 import {
@@ -32,7 +33,6 @@ import {
 } from './api.js';
 import { useAgents, useTeamOptions } from '../inbox/api.js';
 import { joinComplaintStores } from '@yiji/reports';
-import { ComplaintsTable } from '../complaints/ComplaintsTable.js';
 import { useImportTickets } from '../complaints/import-api.js';
 import { useMyComplaints, type AgentComplaintRow } from '../complaints/api.js';
 import { TicketAttachments } from './TicketAttachments.js';
@@ -67,10 +67,22 @@ const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 type TicketFilter = 'all' | TicketStatus | 'overdue';
 const FILTERS: TicketFilter[] = ['all', 'new', 'open', 'pending', 'resolved', 'overdue'];
 
+/** Ticket status -> dot colour. Ticket status still has its own five. */
+const STATUS_DOT: Record<string, string> = {
+  new: 'bg-primary',
+  open: 'bg-success',
+  pending: 'bg-warning',
+  resolved: 'bg-primary',
+  closed: 'bg-muted-foreground/40',
+};
+
 export function TicketsPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
+  // Single-column below the desktop breakpoint: the list and the detail swap
+  // places rather than shrinking the rail to something unreadable.
+  const isDesktop = useIsDesktop();
   const agentName =
     [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim() ||
     user?.email ||
@@ -264,56 +276,156 @@ export function TicketsPage() {
         </Button>
       </Toolbar>
 
-      {/* The operations complaints table IS the list now: the same format the
-          ops team reconcile against, holding only this agent's tickets.
-          Selecting a row opens that ticket underneath, so the SLA timeline,
-          notes and the editable complaint fields all still live here. */}
-      <div className="min-h-0 flex-1 overflow-auto p-3">
-        {!complaints.isLoading && list.length === 0 ? (
-          <div className="flex h-full items-center justify-center px-6 text-center">
-            <div className="flex max-w-md flex-col items-center gap-5">
-              <TicketEmptyArt size={200} />
-              <div className="space-y-2">
-                <h2 className="text-2xl font-bold tracking-tight text-display">
-                  {t('tickets.empty')}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {t('tickets.emptyHint', {
-                    defaultValue: 'Tickets are created from conversations that need follow-up.',
-                  })}
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <ComplaintsTable
-              rows={filtered}
-              loading={complaints.isLoading}
-              selectedId={selected}
-              // Open the record on its own page rather than a panel squeezed
-              // under the table: the ticket page is the layout operations
-              // asked for, and a full row of 27 columns leaves no useful room
-              // below it. Deep links already land here, so the two ways of
-              // reaching a ticket now show the same thing.
-              onSelect={(id) => navigate(`/tickets/${id}`)}
-              filenameBase="my-tickets"
-              days={null}
-            />
-            {/* Only a deep link (/tickets/<id>) shows the detail inline now;
-                clicking a row navigates there instead. */}
-            {selected && deepLinkId && (
-              <section className="overflow-hidden rounded-2xl bg-card shadow-soft">
-                <TicketDetail
-                  ticketId={selected}
-                  onBack={() => {
-                    setSelected(null);
-                    navigate('/tickets');
-                  }}
-                />
-              </section>
+      {/* List + detail, not a table. The 27-column operations report belongs to
+          the manager's portal; an agent works one complaint at a time and needs
+          to read the queue at a glance, which a horizontally-scrolling sheet
+          does not give them. The branch join, the import and the deep links
+          from 1dc649d and after all stay — only the presentation goes back.
+          Single-column on mobile: list and detail swap places. */}
+      <div className="flex min-h-0 flex-1 gap-3 p-3">
+        {(isDesktop || selected === null) && (
+          <aside
+            className={cn(
+              'flex shrink-0 flex-col overflow-hidden rounded-2xl bg-card shadow-soft',
+              isDesktop ? 'w-[360px]' : 'w-full',
             )}
-          </div>
+          >
+            <div className="flex-1 overflow-auto pt-2">
+              {complaints.isLoading ? (
+                <ul className="space-y-1 px-2">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <li key={i} className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5">
+                      <Skeleton className="h-7 w-7 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-3 w-3/4" />
+                        <Skeleton className="h-2.5 w-1/2" />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : filtered.length > 0 ? (
+                <ul className="space-y-2 px-3 py-2">
+                  {filtered.map((r) => {
+                    const active = selected === r.id;
+                    const overdue = isOverdue(r);
+                    return (
+                      <li key={r.id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelected(r.id)}
+                          className={cn(
+                            'group flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-start',
+                            'transition-colors duration-fast ease-out',
+                            active ? 'bg-primary-subtle/70' : 'hover:bg-secondary/60',
+                          )}
+                        >
+                          <span className="relative shrink-0">
+                            <Avatar name={r.customerName} phone={r.customerMobile} size="md" />
+                            <span
+                              aria-hidden
+                              title={t(`status.${r.complaintStatus}`, {
+                                ns: 'common',
+                                defaultValue: r.complaintStatus,
+                              })}
+                              className={cn(
+                                'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-background',
+                                STATUS_DOT[r.complaintStatus] ?? 'bg-muted-foreground/40',
+                              )}
+                            />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="truncate text-sm font-semibold text-foreground">
+                                {r.subject}
+                              </span>
+                              <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                                {r.date}
+                              </span>
+                            </div>
+                            <div className="mt-0.5 flex items-center gap-2">
+                              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                                {/* The ops team scan by category the way they
+                                    scan their own sheet, so the complaint type
+                                    leads when there is one. */}
+                                {r.complaintType && (
+                                  <span className="font-medium text-foreground/70">
+                                    {optionLabel(r.complaintType)}
+                                    <span aria-hidden> · </span>
+                                  </span>
+                                )}
+                                {r.customerName ||
+                                  r.customerMobile ||
+                                  t(`status.${r.complaintStatus}`, {
+                                    ns: 'common',
+                                    defaultValue: r.complaintStatus,
+                                  })}
+                              </span>
+                              {overdue && (
+                                <Pill tone="destructive" size="sm">
+                                  {t('tickets.overdue', { defaultValue: 'Overdue' })}
+                                </Pill>
+                              )}
+                            </div>
+                            {/* Which branch this is against. It is the column
+                                the ops team reconcile on, and losing the table
+                                must not lose it. "Not mapped" is shown as
+                                itself so a gap stays visible. */}
+                            <div className="mt-0.5 truncate text-2xs text-muted-foreground">
+                              {r.restaurantName}
+                              {r.city ? ` · ${r.city}` : ''}
+                            </div>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <div className="flex flex-col items-center gap-4 p-6 pt-12 text-center">
+                  <TicketEmptyArt size={160} />
+                  <div className="space-y-1">
+                    <h3 className="text-md font-semibold text-foreground">{t('tickets.empty')}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {t('tickets.emptyHint', {
+                        defaultValue: 'Tickets are created from conversations that need follow-up.',
+                      })}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
+
+        {(isDesktop || selected !== null) && (
+          <section className="min-w-0 flex-1 overflow-auto rounded-2xl bg-card shadow-soft">
+            {selected ? (
+              <TicketDetail
+                ticketId={selected}
+                onBack={() => {
+                  setSelected(null);
+                  if (deepLinkId) navigate('/tickets');
+                }}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center px-6 text-center">
+                <div className="flex max-w-md flex-col items-center gap-5">
+                  <TicketEmptyArt size={200} />
+                  <div className="space-y-2">
+                    <h2 className="text-2xl font-bold tracking-tight text-display">
+                      {t('tickets.selectPrompt', { defaultValue: 'Open a ticket' })}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      {t('tickets.selectHint', {
+                        defaultValue:
+                          'Pick a ticket on the left to see its workflow, SLA timeline, and history.',
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
         )}
       </div>
     </div>
@@ -775,35 +887,44 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 />
               </label>
             </div>
-            {!tk.first_responded_at ? (
-              // #7 — set apart from the status control above with its own label so
-              // it's clear this only stops the SLA timer; it does not resolve or
-              // close the ticket.
+            {tk.status !== 'resolved' && tk.status !== 'closed' ? (
               <div className="space-y-1.5 rounded-xl bg-secondary/40 p-3">
                 <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  {t('tickets.firstResponse', { defaultValue: 'First response' })}
+                  {t('tickets.solve', { defaultValue: 'Resolution' })}
                 </span>
                 <Button
                   type="button"
                   size="sm"
                   fullWidth
-                  onClick={() => patch({ first_responded_at: new Date().toISOString() })}
+                  onClick={() => {
+                    const now = new Date().toISOString();
+                    // A solved ticket that never recorded a first response
+                    // makes the SLA report claim the agent never replied, and
+                    // nothing else stamps that field. Backfilling it here is a
+                    // floor, not a measurement: it says "no later than this",
+                    // which beats a null that reads as "never".
+                    patch({
+                      status: 'resolved',
+                      resolved_at: now,
+                      ...(tk.first_responded_at ? {} : { first_responded_at: now }),
+                    });
+                  }}
                 >
-                  {t('tickets.markResponded', { defaultValue: 'Mark first response' })}
+                  {t('tickets.markSolved', { defaultValue: 'Mark as solved' })}
                 </Button>
                 <p className="text-2xs leading-relaxed text-muted-foreground">
-                  {t('tickets.markRespondedHint', {
+                  {t('tickets.markSolvedHint', {
                     defaultValue:
-                      'Logs your first reply and stops the first-response SLA timer — separate from the ticket status.',
+                      'Closes the work: sets the ticket to resolved and stops both SLA timers.',
                   })}
                 </p>
               </div>
             ) : (
               <div className="flex items-center gap-1.5 text-2xs font-medium text-success">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
-                {t('tickets.firstResponseLogged', {
-                  defaultValue: 'First response logged · {{when}}',
-                  when: formatRelative(tk.first_responded_at),
+                {t('tickets.solvedAt', {
+                  defaultValue: 'Solved · {{when}}',
+                  when: formatRelative(tk.resolved_at ?? tk.first_responded_at),
                 })}
               </div>
             )}
