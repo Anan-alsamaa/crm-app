@@ -286,7 +286,18 @@ export function ConversationToolbar({
             variant={isSolved ? 'outline' : 'success'}
             size="sm"
             iconStart={isSolved ? undefined : <CheckIcon />}
-            onClick={() => void patch({ status: isSolved ? 'open' : 'solved' })}
+            onClick={() =>
+              // solved_at is stamped here rather than derived later: the status
+              // says WHETHER a chat is finished, never WHEN, and agent
+              // performance measures time-to-solve from exactly this moment.
+              // Reopening clears it, so a reopened chat is not still carrying a
+              // solve time that never happened.
+              void patch(
+                isSolved
+                  ? { status: 'open', solved_at: null }
+                  : { status: 'solved', solved_at: new Date().toISOString() },
+              )
+            }
             title={
               isSolved
                 ? t('conversation.solvedHint', {

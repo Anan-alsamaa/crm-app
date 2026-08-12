@@ -57,6 +57,11 @@ const StoresPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import('./features/reports/ReportsPage.js').then((m) => ({ default: m.ReportsPage })),
 );
+const AgentPerformancePage = lazy(() =>
+  import('./features/performance/AgentPerformancePage.js').then((m) => ({
+    default: m.AgentPerformancePage,
+  })),
+);
 const ReportExportsPage = lazy(() =>
   import('./features/report-exports/AgentReportsPage.js').then((m) => ({
     default: m.AgentReportsPage,
@@ -266,6 +271,11 @@ function Shell({ children }: { children: React.ReactNode }) {
           // which one was authoritative.
           to: '/report-tickets',
           label: t('nav.reportTickets', { defaultValue: 'Tickets' }),
+          icon: DownloadIcon,
+        },
+        {
+          to: '/agent-performance',
+          label: t('nav.agentPerformance', { defaultValue: 'Agent performance' }),
           icon: DownloadIcon,
         },
         {
@@ -538,6 +548,16 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <ReportExportsPage report="complaints" />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/agent-performance"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <AgentPerformancePage />
                 </Shell>
               </ProtectedRoute>
             }

@@ -92,7 +92,13 @@ describe('ConversationToolbar', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Mark as solved/ }));
 
-    expect(mutateAsync).toHaveBeenCalledWith({ id: 'c1', patch: { status: 'solved' } });
+    // The stamp goes on WITH the status: `solved_at` is what makes time-to-solve
+    // measurable at all, and a solve recorded without it is invisible to the
+    // performance report.
+    expect(mutateAsync).toHaveBeenCalledWith({
+      id: 'c1',
+      patch: { status: 'solved', solved_at: expect.any(String) },
+    });
   });
 
   it('flips to Reopen once solved, and back again', async () => {
@@ -105,7 +111,12 @@ describe('ConversationToolbar', () => {
     expect(screen.queryByRole('button', { name: /Mark as solved/ })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Reopen/ }));
 
-    expect(mutateAsync).toHaveBeenCalledWith({ id: 'c1', patch: { status: 'open' } });
+    // Reopening clears the stamp rather than leaving a stale one behind, so a
+    // chat cannot report a solve time that predates its own reopening.
+    expect(mutateAsync).toHaveBeenCalledWith({
+      id: 'c1',
+      patch: { status: 'open', solved_at: null },
+    });
   });
 
   it('treats a legacy closed conversation as solved', () => {

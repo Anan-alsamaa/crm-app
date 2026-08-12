@@ -314,6 +314,8 @@ export function useConversation(conversationId: string | null) {
 
 export interface ConversationPatch {
   status?: ConversationStatus;
+  /** Stamped when a chat is marked solved, cleared when it is reopened. */
+  solved_at?: string | null;
   priority?: Priority;
   assigned_agent?: string | null;
   assigned_team?: string | null;
