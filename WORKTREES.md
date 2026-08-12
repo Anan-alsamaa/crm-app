@@ -30,19 +30,17 @@ visible to all of them.** Only one session at a time should touch
 
 ## Current worktrees
 
-| Branch                        | Folder                        | Slot | Scope                                                                        |
-| ----------------------------- | ----------------------------- | ---- | ---------------------------------------------------------------------------- |
-| `feat/inbox-panel-and-status` | `crm-app-wt/inbox-order-link` | 2    | Inbox details-panel order, and conversation status reduced to solved/pending |
-| `feat/top-nav`                | `crm-app-wt/top-nav`          | 3    | Sidebar navigation moved to a top bar                                        |
-| `feat/store-csat`             | `crm-app-wt/store-csat`       | 5    | Branch-level satisfaction from the customer's post-chat rating               |
+**None.** Every branch from the first round is merged into `main` and deleted,
+so a new feature starts from a clean tree. Create the next one with the script
+above.
 
-These were chosen because they barely overlap in the files they touch. Two
-sessions both editing the ticket form would still collide at merge time — the
-worktree prevents clobbering, not conflicting intent.
+When you do open several at once, pick features that barely overlap in the files
+they touch. Two sessions both editing the ticket form still collide at merge
+time: the worktree prevents clobbering, not conflicting intent.
 
-Slot 1 (`feat/new-complaint-form`) is closed: the complaint form and the
-operations manager's dashboard are merged. It also left two fixes worth knowing
-about, because both were silent failures rather than errors:
+## Lessons worth keeping from that round
+
+Two silent failures, neither of which reported an error:
 
 - `docker compose` published Postgres on **5433**, a port this machine's native
   PostgreSQL 15 already owns, so the binding was shadowed — host connections
