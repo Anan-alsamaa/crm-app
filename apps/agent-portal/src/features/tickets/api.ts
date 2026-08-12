@@ -66,6 +66,8 @@ export interface TicketRow extends Partial<TicketComplaintFields> {
   first_response_due_at: string | null;
   resolution_due_at: string | null;
   first_responded_at: string | null;
+  /** When the ticket was solved. Written by "Mark as solved". */
+  resolved_at?: string | null;
   attachments?: TicketAttachment[];
   date_created: string | null;
 }
@@ -129,6 +131,7 @@ export function useTicket(id: string | null) {
             'first_response_due_at',
             'resolution_due_at',
             'first_responded_at',
+            'resolved_at',
             'date_created',
             'order_snapshot',
             'store',

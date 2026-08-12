@@ -38,8 +38,8 @@ vi.mock('../src/features/inbox/api.js', () => ({
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
   useAuth: () => ({ user: { id: 'agent-1', first_name: 'Sara', last_name: null, email: null } }),
 }));
-// The list is now the operations complaints table, fed by the agent's own
-// complaints and joined against the store master.
+// The list is fed by the agent's own complaints, joined against the store
+// master so branch attribution matches the manager's report exactly.
 const complaints = vi.hoisted(() => ({ useMyComplaints: vi.fn() }));
 vi.mock('../src/features/complaints/api.js', () => complaints);
 vi.mock('../src/features/tickets/useStoreMatch.js', async () => {
@@ -90,7 +90,7 @@ const ticket = {
   date_created: '2026-01-01T00:00:00.000Z',
 };
 
-/** What the table actually renders — the ops report row, not the ticket. */
+/** The list renders the ops report row, not the raw ticket. */
 const complaintRow = {
   id: 't1',
   date: '2026-01-01',
@@ -142,46 +142,115 @@ describe('TicketsPage', () => {
     expect(screen.getByText('tickets.empty')).toBeInTheDocument();
   });
 
-  it('lists tickets in the operations report format, not as bespoke rows', () => {
+  it('lists tickets as readable rows, not as a 27-column sheet', () => {
+    // The operations report belongs to the manager's portal. An agent works one
+    // complaint at a time and reads the queue at a glance, which a horizontally
+    // scrolling table does not give them.
     renderPage();
-    // The columns the ops team read: the order and the complaint type. Every
-    // column of the report is rendered now, including the date hierarchy they
-    // pivot on — the table and the export are the same report.
-    expect(screen.getByText('946641')).toBeInTheDocument();
-    expect(screen.getByText('Refund')).toBeInTheDocument();
-    for (const header of ['Year', 'Month', 'Week', 'Day', 'Coupon %']) {
-      expect(screen.getByRole('columnheader', { name: header })).toBeInTheDocument();
-    }
-    // And the export that makes the table worth having.
-    expect(screen.getByRole('button', { name: /Export to Excel/ })).toBeInTheDocument();
+    expect(screen.getByText('Refund please')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Coupon %' })).not.toBeInTheDocument();
   });
 
-  it('opens the ticket on its own page when a row is chosen', async () => {
-    // Not a panel under the table: a row is 27 columns wide, which leaves no
-    // useful room beneath it, and the ticket page is the layout operations
-    // asked for.
+  it('keeps the branch on the row, which is what the ops team reconcile on', () => {
+    // Losing the table must not lose the attribution. "Not mapped" is shown as
+    // itself so a gap stays visible rather than reading as blank.
+    complaints.useMyComplaints.mockReturnValue({
+      data: [{ ...complaintRow, restaurantName: 'LCP-032 Masief Plaza', city: 'Riyadh 1' }],
+      isLoading: false,
+    });
     renderPage();
-    await userEvent.click(screen.getByText('946641'));
-    await waitFor(() => expect(currentPath).toBe('/tickets/t1'));
-    expect(screen.queryByText('Mark first response')).toBeNull();
+    expect(screen.getByText(/LCP-032 Masief Plaza/)).toBeInTheDocument();
+  });
+
+  it('leads the row with the complaint type, the way the ops sheet is scanned', () => {
+    // A distinct type, so it cannot be confused with the subject "Refund please".
+    complaints.useMyComplaints.mockReturnValue({
+      data: [{ ...complaintRow, complaintType: 'Late order' }],
+      isLoading: false,
+    });
+    renderPage();
+    expect(screen.getByText(/Late order/)).toBeInTheDocument();
+  });
+
+  it('opens the ticket beside the list rather than navigating away', async () => {
+    // Master-detail again: the agent keeps the queue in view while working a
+    // ticket, which is the whole reason for reverting the table.
+    renderPage();
+    await userEvent.click(screen.getByText('Refund please'));
+    await waitFor(() => expect(screen.getByText('SLA')).toBeInTheDocument());
+    expect(currentPath).toBe('/tickets');
   });
 
   it('still shows the detail when the ticket page is opened directly', async () => {
-    // Deep links (notifications, the command palette) must still render the
-    // ticket, not just the list. Uses the ?id= form because this harness
-    // mounts the page directly rather than under a :ticketId route.
+    // Deep links (notifications, the command palette) must render the ticket,
+    // not just the list. Uses the ?id= form because this harness mounts the
+    // page directly rather than under a :ticketId route.
     renderPage('/tickets?id=t1');
-    await waitFor(() => expect(screen.getByText('Mark first response')).toBeInTheDocument());
-    // The description now appears in the table's own column as well as the
-    // detail pane, so assert on a control only the pane has.
-    expect(screen.getByText('SLA')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('SLA')).toBeInTheDocument());
+  });
+});
+
+describe('TicketsPage — marking a ticket solved', () => {
+  it('offers "Mark as solved" rather than only logging a first response', async () => {
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('Mark as solved')).toBeInTheDocument());
+    expect(screen.queryByText('Mark first response')).toBeNull();
   });
 
-  it('opens a row from the keyboard, not only by mouse', async () => {
-    renderPage();
-    const row = screen.getByText('946641').closest('tr')!;
-    row.focus();
-    await userEvent.keyboard('{Enter}');
-    await waitFor(() => expect(currentPath).toBe('/tickets/t1'));
+  it('actually resolves the ticket, not just the SLA timer', async () => {
+    // The old control only stamped first_responded_at and said so in its own
+    // hint. Renaming that to "solved" without changing it would have left every
+    // solved ticket sitting in an unresolved state in every report.
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    hooks.useUpdateTicket.mockReturnValue({ mutateAsync });
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('Mark as solved')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('Mark as solved'));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    const patch = mutateAsync.mock.calls[0]![0].patch;
+    expect(patch.status).toBe('resolved');
+    expect(patch.resolved_at).toEqual(expect.any(String));
+  });
+
+  it('backfills a missing first response so the SLA report does not read "never replied"', async () => {
+    // Nothing else stamps first_responded_at. A solved ticket with a null there
+    // claims the agent never answered, which is a worse lie than "no later
+    // than the moment it was solved".
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    hooks.useUpdateTicket.mockReturnValue({ mutateAsync });
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('Mark as solved')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('Mark as solved'));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync.mock.calls[0]![0].patch.first_responded_at).toEqual(expect.any(String));
+  });
+
+  it('leaves an existing first response alone', async () => {
+    // It is a floor for a missing value, never a correction of a real one.
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    hooks.useUpdateTicket.mockReturnValue({ mutateAsync });
+    hooks.useTicket.mockReturnValue({
+      data: { ...ticket, first_responded_at: '2026-01-01T09:00:00.000Z' },
+      isLoading: false,
+    });
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('Mark as solved')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('Mark as solved'));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync.mock.calls[0]![0].patch).not.toHaveProperty('first_responded_at');
+  });
+
+  it('shows when it was solved instead of the button, once resolved', async () => {
+    hooks.useTicket.mockReturnValue({
+      data: { ...ticket, status: 'resolved', resolved_at: '2026-01-02T00:00:00.000Z' },
+      isLoading: false,
+    });
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText(/Solved/)).toBeInTheDocument());
+    expect(screen.queryByText('Mark as solved')).toBeNull();
   });
 });
