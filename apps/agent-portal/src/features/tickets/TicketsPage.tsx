@@ -33,6 +33,7 @@ import {
 import { useAgents, useTeamOptions } from '../inbox/api.js';
 import { joinComplaintStores } from '@yiji/reports';
 import { ComplaintsTable } from '../complaints/ComplaintsTable.js';
+import { useImportTickets } from '../complaints/import-api.js';
 import { useMyComplaints, type AgentComplaintRow } from '../complaints/api.js';
 import { TicketAttachments } from './TicketAttachments.js';
 import {
@@ -80,6 +81,66 @@ export function TicketsPage() {
   const { index: storeIndex } = useStoreIndex();
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<TicketFilter>('all');
+  const [importing, setImporting] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const importTickets = useImportTickets();
+
+  /**
+   * Import a sheet of complaints. Reports what landed AND what it could not
+   * use in the same breath — a silent skip is how a complaint goes missing
+   * from every later report with nobody the wiser.
+   */
+  const onImportFile = async (file: File) => {
+    setImporting(true);
+    try {
+      const result = await importTickets.mutateAsync(await file.text());
+      if (result.imported === 0 && result.skipped.length === 0) {
+        toast.error(
+          t('tickets.importEmpty', {
+            defaultValue: 'No usable rows found — expected a Date and Restaurant column.',
+          }),
+        );
+        return;
+      }
+      const bits = [
+        t('tickets.importOk', { count: result.imported, defaultValue: '{{count}} imported' }),
+      ];
+      if (result.contactsCreated)
+        bits.push(
+          t('tickets.importContacts', {
+            count: result.contactsCreated,
+            defaultValue: '{{count}} new customers',
+          }),
+        );
+      if (result.unmappedStores)
+        bits.push(
+          t('tickets.importUnmapped', {
+            count: result.unmappedStores,
+            defaultValue: '{{count}} with an unmapped branch',
+          }),
+        );
+      if (result.skipped.length)
+        bits.push(
+          t('tickets.importSkipped', {
+            count: result.skipped.length,
+            defaultValue: '{{count}} rows skipped',
+          }),
+        );
+      if (result.unmappedHeaders.length)
+        bits.push(
+          t('tickets.importUnknownCols', {
+            cols: result.unmappedHeaders.join(', '),
+            defaultValue: 'ignored columns: {{cols}}',
+          }),
+        );
+      toast.success(bits.join(' · '));
+    } catch {
+      toast.error(t('tickets.importError', { defaultValue: 'Import failed.' }));
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
 
   // Deep-link support: open a specific ticket from /tickets?id=<id> (command
   // palette, AI search) or /tickets/<id> (notification "View" links).
@@ -175,6 +236,29 @@ export function TicketsPage() {
           })}
         </div>
         <ToolbarSpacer />
+        {/* Same shape as the admin portal's store import: pick a file, it
+            reports what landed and what it could not use. */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,.txt,text/csv,text/plain"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void onImportFile(f);
+          }}
+        />
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={importing}
+          onClick={() => fileRef.current?.click()}
+        >
+          {importing
+            ? t('tickets.importing', { defaultValue: 'Importing…' })
+            : t('tickets.importCsv', { defaultValue: 'Import CSV' })}
+        </Button>
         <Button type="button" size="sm" onClick={() => navigate('/new-ticket')}>
           {t('tickets.newTicket', { defaultValue: '+ New ticket' })}
         </Button>

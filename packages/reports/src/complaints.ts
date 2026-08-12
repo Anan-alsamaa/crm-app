@@ -393,10 +393,10 @@ function digits(v: string): string {
 /**
  * Filter the report by one free-text box.
  *
- * Operations look a complaint up by whatever they have to hand: the customer
- * rang from a number, or someone quoted a branch by name, by its ops code
- * ("LCP-041") or by the Yiji restaurant id. One box that searches all of them
- * beats four labelled fields nobody can remember the order of.
+ * Operations look a complaint up by whatever they have to hand: an order
+ * number, the number the customer rang from, or a branch quoted by name, by
+ * its ops code ("LCP-041") or by its Yiji restaurant id. One box that searches
+ * all of them beats five labelled fields nobody can remember the order of.
  *
  * Phone matching compares DIGITS ONLY, because the same number is written
  * "+966 50 …", "0550…" and "966550…" depending on who typed it, and an exact
@@ -413,6 +413,7 @@ export function filterComplaintRows(
     if (r.restaurantName.toLowerCase().includes(q)) return true;
     if (r.storeCode.toLowerCase().includes(q)) return true;
     if (r.yijiRestaurantId.toLowerCase().includes(q)) return true;
+    if (r.orderNumber.toLowerCase().includes(q)) return true;
     // Phone last, and only once the needle is long enough to mean something:
     // a one- or two-digit search would match almost every number on file.
     if (qDigits.length >= 3 && digits(r.customerMobile).includes(qDigits)) return true;

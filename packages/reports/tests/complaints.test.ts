@@ -229,6 +229,7 @@ describe('filterComplaintRows', () => {
       storeCode: 'LCP-041',
       yijiRestaurantId: '312',
       customerMobile: '0501234567',
+      orderNumber: '946641',
       ...over,
     }) as ComplaintReportRow;
 
@@ -239,8 +240,13 @@ describe('filterComplaintRows', () => {
       storeCode: 'PSK-002',
       yijiRestaurantId: '947',
       customerMobile: '0559876543',
+      orderNumber: '946642',
     }),
   ];
+
+  it('finds a complaint by its order number', () => {
+    expect(filterComplaintRows(rows, '946641')[0]!.storeCode).toBe('LCP-041');
+  });
 
   it('finds a branch by name', () => {
     expect(filterComplaintRows(rows, 'nakhil')).toHaveLength(1);
