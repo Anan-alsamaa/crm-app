@@ -95,12 +95,20 @@ jobs:
           [ -z "${{ vars.VITE_DIRECTUS_URL }}" ] && missing="$missing VITE_DIRECTUS_URL"
           [ -z "${{ vars.VITE_SOCKET_URL }}" ] && missing="$missing VITE_SOCKET_URL"
           [ -z "${{ vars.VITE_AI_GATEWAY_URL }}" ] && missing="$missing VITE_AI_GATEWAY_URL"
-          # Was missing from this guard AND from build-args, so every published
-          # portal image up to v1.6.0 baked the Dockerfile's localhost:3031
-          # default. Assignment notifications then fail silently in prod: the
-          # producer call is best-effort and its caller swallows the error, so
-          # nothing surfaces except notifications that never arrive.
-          [ -z "${{ vars.VITE_JOB_PRODUCER_URL }}" ] && missing="$missing VITE_JOB_PRODUCER_URL"
+          # VITE_JOB_PRODUCER_URL is DELIBERATELY NOT GUARDED (2026-08-12).
+          #
+          # The hosting decision was reopened, so there is no producer URL to
+          # point at yet and the guard was failing every build for a deployment
+          # nobody is doing. Development is local-only until a provider is
+          # picked.
+          #
+          # RESTORE THIS LINE BEFORE THE FIRST REAL DEPLOY, together with the
+          # build-arg below. Without it the image bakes the Dockerfile's
+          # localhost:3031 default and three features fail SILENTLY in prod,
+          # because the producer call is best-effort and its caller swallows the
+          # error: contact import, run-report-now, and assignment notifications
+          # simply never arrive.
+          #   [ -z "${{ vars.VITE_JOB_PRODUCER_URL }}" ] && missing="$missing VITE_JOB_PRODUCER_URL"
           if [ -n "$missing" ]; then
             echo "::error::Refusing to build ${{ matrix.name }}: unset repo Variable(s):$missing"
             echo "::error::These are compiled into the SPA. Unset means the image would ship"
@@ -138,7 +146,12 @@ jobs:
             VITE_DIRECTUS_URL=${{ vars.VITE_DIRECTUS_URL }}
             VITE_SOCKET_URL=${{ vars.VITE_SOCKET_URL }}
             VITE_AI_GATEWAY_URL=${{ vars.VITE_AI_GATEWAY_URL }}
-            VITE_JOB_PRODUCER_URL=${{ vars.VITE_JOB_PRODUCER_URL }}
+            # Omitted on purpose, paired with the guard above. Passing it unset
+            # would be worse than leaving it out: an empty build-arg overrides
+            # the Dockerfile's ARG default with "", and "" is not nullish, so
+            # the `?? 'http://localhost:3031'` fallback in job-producer.ts never
+            # fires and every request goes to a relative path instead.
+            #   VITE_JOB_PRODUCER_URL=${{ vars.VITE_JOB_PRODUCER_URL }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
           provenance: false
