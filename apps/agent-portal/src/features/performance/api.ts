@@ -17,6 +17,19 @@ import { directus } from '../../lib/directus.js';
  * counting one as a reply would report the customer as answered when nobody
  * has said anything to them.
  */
+/**
+ * A `ChatTiming` plus what the agent needs to recognise the chat.
+ *
+ * The timings alone answer "how fast"; these answer "which one" — without them
+ * the per-chat breakdown is a column of uuids and an agent cannot go and look
+ * at the conversation that dragged their average.
+ */
+export interface ChatTimingRow extends ChatTiming {
+  startedAt: string | null;
+  customer: string | null;
+  orderId: string | null;
+}
+
 export interface PerformanceFilters {
   /** Inclusive ISO date, local calendar day. */
   from?: string;
@@ -31,6 +44,8 @@ interface ConversationRow {
   assigned_agent: string | null;
   solved_at: string | null;
   date_created: string | null;
+  contact: { id: string; name: string | null; phone: string | null } | null;
+  last_order_id: string | null;
 }
 
 interface MessageRow {
@@ -42,10 +57,23 @@ interface MessageRow {
 /** End of the chosen day, so a `to` of today includes everything today. */
 const endOfDay = (isoDate: string) => `${isoDate}T23:59:59.999Z`;
 
-export function useChatTimings(filters: PerformanceFilters, agentNames: Map<string, string>) {
+/**
+ * NOTE: this deliberately does NOT resolve agent names.
+ *
+ * It used to take the name map and bake the names into the rows — but the map
+ * arrives from a SEPARATE query, and the cache key was only the filters. So the
+ * first fetch ran with an empty map, cached rows carrying raw uuids, and never
+ * re-ran when the names landed: the page showed
+ * "076e68d6-61ff-4525-a01a-caf18ec0d514" where an agent's name belongs.
+ *
+ * Names are resolved at render instead. Cached data now holds only what this
+ * query actually fetched, which is the property that made the bug possible to
+ * have in the first place.
+ */
+export function useChatTimings(filters: PerformanceFilters) {
   return useQuery({
     queryKey: ['chat-timings', filters],
-    queryFn: async (): Promise<ChatTiming[]> => {
+    queryFn: async (): Promise<ChatTimingRow[]> => {
       const and: Array<Record<string, unknown>> = [];
       if (filters.from) and.push({ date_created: { _gte: filters.from } });
       if (filters.to) and.push({ date_created: { _lte: endOfDay(filters.to) } });
@@ -54,7 +82,17 @@ export function useChatTimings(filters: PerformanceFilters, agentNames: Map<stri
       const conversations = (await directus.request(
         readItems('conversations', {
           limit: -1,
-          fields: ['id', 'status', 'assigned_agent', 'solved_at', 'date_created'],
+          fields: [
+            'id',
+            'status',
+            'assigned_agent',
+            'solved_at',
+            'date_created',
+            // The per-chat breakdown names the customer and the order. A row of
+            // timings against a uuid is a number nobody can act on.
+            'last_order_id',
+            { contact: ['id', 'name', 'phone'] },
+          ],
           ...(and.length ? { filter: { _and: and } } : {}),
         }),
       )) as unknown as ConversationRow[];
@@ -91,14 +129,16 @@ export function useChatTimings(filters: PerformanceFilters, agentNames: Map<stri
       return conversations.map((c) => ({
         conversationId: c.id,
         agentId: c.assigned_agent,
-        agentName: c.assigned_agent
-          ? (agentNames.get(c.assigned_agent) ?? c.assigned_agent)
-          : 'Unassigned',
+        // Placeholder; the page replaces it with the resolved name. See above.
+        agentName: c.assigned_agent ?? 'Unassigned',
         firstCustomerAt: firstCustomer.get(c.id) ?? null,
         firstAgentAt: firstAgent.get(c.id) ?? null,
         // A chat can hold a solve time from before it was reopened only if
         // something failed to clear it; trust the status over the stamp.
         solvedAt: normaliseConversationStatus(c.status) === 'solved' ? c.solved_at : null,
+        startedAt: c.date_created,
+        customer: c.contact?.name ?? c.contact?.phone ?? null,
+        orderId: c.last_order_id,
       }));
     },
   });

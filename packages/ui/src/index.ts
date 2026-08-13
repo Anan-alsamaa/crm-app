@@ -94,6 +94,8 @@ export { TableSurface, Table, Th, Tr, Td, SortTh, useTableSort } from './Table.j
 export type { SortDir } from './Table.js';
 export { Pagination } from './Pagination.js';
 export type { PaginationProps } from './Pagination.js';
+export { HBarChart, TrendChart, SplitBar } from './Chart.js';
+export type { ChartSeries, ChartTone, HBarRow, TrendPoint } from './Chart.js';
 export { StatStrip } from './StatStrip.js';
 export type { StatStripItem, StatStripTone } from './StatStrip.js';
 export { YijiLogo } from './YijiLogo.js';

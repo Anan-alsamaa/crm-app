@@ -35,7 +35,13 @@ function useAgentList() {
   });
 }
 
-function useChatTimings(filters: Filters, agentNames: Map<string, string>) {
+/**
+ * Deliberately does NOT resolve agent names — see the user portal's copy of
+ * this hook. The names come from a separate query, and a cache keyed only on
+ * the filters will hold rows resolved against an empty map forever, rendering
+ * uuids where names belong. Names are attached at render.
+ */
+function useChatTimings(filters: Filters) {
   return useQuery({
     queryKey: ['admin-chat-timings', filters],
     queryFn: async (): Promise<ChatTiming[]> => {
@@ -99,9 +105,8 @@ function useChatTimings(filters: Filters, agentNames: Map<string, string>) {
       return conversations.map((c) => ({
         conversationId: c.id,
         agentId: c.assigned_agent,
-        agentName: c.assigned_agent
-          ? (agentNames.get(c.assigned_agent) ?? c.assigned_agent)
-          : 'Unassigned',
+        // Placeholder; the page replaces it with the resolved name.
+        agentName: c.assigned_agent ?? 'Unassigned',
         firstCustomerAt: firstCustomer.get(c.id) ?? null,
         firstAgentAt: firstAgent.get(c.id) ?? null,
         solvedAt: normaliseConversationStatus(c.status) === 'solved' ? c.solved_at : null,
@@ -123,8 +128,18 @@ export function AgentPerformancePage() {
   const [targetMin, setTargetMin] = useState(DEFAULT_TARGET_MIN);
   const [view, setView] = useState<'met' | 'missed'>('missed');
 
-  const timings = useChatTimings(filters, agentNames);
-  const chats = useMemo<ChatTiming[]>(() => timings.data ?? [], [timings.data]);
+  const timings = useChatTimings(filters);
+  // Names attached here, not in the query — see the note on useChatTimings.
+  const chats = useMemo<ChatTiming[]>(
+    () =>
+      (timings.data ?? []).map((c) => ({
+        ...c,
+        agentName: c.agentId
+          ? (agentNames.get(c.agentId) ?? c.agentId)
+          : t('performance.unassigned', { defaultValue: 'Unassigned' }),
+      })),
+    [timings.data, agentNames, t],
+  );
   const { met, missed } = useMemo(() => splitBySla(chats, targetMin * 60), [chats, targetMin]);
   const rows = useMemo(() => agentPerformance(view === 'met' ? met : missed), [view, met, missed]);
 
