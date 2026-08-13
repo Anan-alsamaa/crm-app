@@ -134,11 +134,19 @@ export function OptionListsPage() {
 
   const move = (row: OptionRow, delta: number) => {
     const idx = current.findIndex((r) => r.id === row.id);
-    const other = current[idx + delta];
-    if (!other) return;
-    // Swap the two sort values; ties resolved by the fetch order.
-    patch.mutate({ id: row.id, body: { sort: other.sort ?? 0 } });
-    patch.mutate({ id: other.id, body: { sort: row.sort ?? 0 } });
+    if (idx < 0 || !current[idx + delta]) return;
+    /**
+     * Rewrite the WHOLE list's sorts from the new visual order, not a
+     * two-row swap: after a retire/delete two rows can share a sort value,
+     * and swapping equal numbers moves nothing while looking like it worked.
+     * Renumbering 0..n makes every move land and self-heals old collisions.
+     */
+    const next = [...current];
+    const [moved] = next.splice(idx, 1);
+    next.splice(idx + delta, 0, moved!);
+    next.forEach((r, i) => {
+      if (r.sort !== i) patch.mutate({ id: r.id, body: { sort: i } });
+    });
   };
 
   return (

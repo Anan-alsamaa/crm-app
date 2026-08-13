@@ -64,7 +64,13 @@ export function BackupPage() {
     setProgress({});
     const data: Record<string, unknown[]> = {};
     const counts: Record<string, number> = {};
-    let failed = 0;
+    /**
+     * Tracked locally, NOT read back from React state: `progress` in this
+     * closure is the render-time snapshot, so a manifest built from it would
+     * have listed zero failures no matter what failed — a backup that lies
+     * about its own gaps is worse than one with gaps.
+     */
+    const failedCollections: string[] = [];
     for (const collection of COLLECTIONS) {
       try {
         const rows = (await directus.request(
@@ -76,7 +82,7 @@ export function BackupPage() {
       } catch {
         // Say which collection failed instead of aborting the lot — a backup
         // missing one collection and SAYING so beats no backup.
-        failed += 1;
+        failedCollections.push(collection);
         setProgress((p) => ({ ...p, [collection]: 'error' }));
       }
     }
@@ -85,9 +91,7 @@ export function BackupPage() {
         version: BACKUP_VERSION,
         exportedAt: new Date().toISOString(),
         counts,
-        failedCollections: Object.entries(progress)
-          .filter(([, v]) => v === 'error')
-          .map(([k]) => k),
+        failedCollections,
       },
       data,
     };
@@ -98,10 +102,10 @@ export function BackupPage() {
     a.click();
     URL.revokeObjectURL(a.href);
     setRunning(false);
-    if (failed > 0) {
+    if (failedCollections.length > 0) {
       toast.error(
         t('backup.partial', {
-          n: failed,
+          n: failedCollections.length,
           defaultValue: 'Backup saved, but {{n}} collection(s) could not be read — see the list.',
         }),
       );

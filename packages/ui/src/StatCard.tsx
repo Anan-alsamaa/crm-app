@@ -47,9 +47,9 @@ export function StatCard({
       <div
         className={cn(
           'text-4xl font-extrabold tabular-nums tracking-[-0.03em] leading-none',
-          accent
-            ? 'bg-gradient-to-r from-primary to-violet bg-clip-text text-transparent'
-            : 'text-foreground',
+          // OBSIDIAN + JADE: the accent numeral is solid jade — the gradient
+          // clip-text was the last survivor of the aurora look.
+          accent ? 'text-primary' : 'text-foreground',
         )}
       >
         {value}

@@ -174,28 +174,30 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
   const isWide = (f) => !f || Object.keys(f).length === 0;
 
   /**
-   * Union two grants on the same collection+action. A wide filter beats any
-   * scope; two different scopes OR together. All-fields beats a list; two
-   * lists union. This is what makes ticking view_tickets AND view_all_tickets
-   * come out as "all", not as whichever block happened to run last.
+   * Grants are emitted as SEPARATE permission rows, never merged.
+   *
+   * Directus permissions are additive: an action on an item is allowed by the
+   * union of the rows whose filters match it, and the writable fields are the
+   * union of THOSE rows' fields. That is exactly the semantics the privilege
+   * matrix promises — and it is not reproducible in one row. The first version
+   * of this file merged rows (widest filter + union of fields), which turned
+   * edit_tickets (own tickets, most fields) + approve_coupons (any ticket,
+   * coupon fields) into "any ticket, most fields": a silent over-grant the
+   * moment two privileges touched the same action. Rows stay separate so a
+   * scope can never widen a neighbouring grant's fields.
+   *
+   * Only EXACT duplicates are dropped (several privileges legitimately repeat
+   * the same read), purely to keep the permission table readable.
    */
-  function mergeGrant(a, b) {
-    const filter = isWide(a.filter) || isWide(b.filter)
-      ? {}
-      : JSON.stringify(a.filter) === JSON.stringify(b.filter)
-        ? a.filter
-        : { _or: [a.filter, b.filter] };
-    const fields = a.fields === null || b.fields === null
-      ? null
-      : [...new Set([...a.fields, ...b.fields])];
-    return { ...a, filter, fields };
-  }
-
   function buildGrants(privileges, brandIds) {
-    const merged = new Map();
+    const grants = [];
+    const seen = new Set();
     const add = (grant) => {
-      const key = `${grant.collection}|${grant.action}`;
-      merged.set(key, merged.has(key) ? mergeGrant(merged.get(key), grant) : grant);
+      const sig = JSON.stringify([grant.collection, grant.action, grant.filter, grant.fields]);
+      if (seen.has(sig)) return;
+      seen.add(sig);
+      // Clone so the brand wrap below never mutates the shared CATALOG blocks.
+      grants.push({ ...grant, filter: grant.filter });
     };
     BASELINE.forEach(add);
     for (const [priv, on] of Object.entries(privileges ?? {})) {
@@ -217,8 +219,8 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       const brandWrap = {
         _or: [{ store: { brand: { _in: brandIds } } }, { store: { _null: true } }],
       };
-      for (const [key, grant] of merged) {
-        const [collection] = key.split('|');
+      for (const grant of grants) {
+        const collection = grant.collection;
         if (collection === 'tickets') {
           grant.filter = isWide(grant.filter) ? brandWrap : { _and: [grant.filter, brandWrap] };
         } else if (collection === 'stores' && grant.action === 'read') {
@@ -228,7 +230,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
         }
       }
     }
-    return [...merged.values()];
+    return grants;
   }
 
   /* ── row plumbing ─────────────────────────────────────────────────────── */
