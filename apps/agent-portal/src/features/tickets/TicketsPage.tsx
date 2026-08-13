@@ -8,6 +8,7 @@ import {
   CloseIcon,
   cn,
   formatRelative,
+  Input,
   Pill,
   SelectMenu,
   Skeleton,
@@ -32,7 +33,14 @@ import {
   type TicketRow,
 } from './api.js';
 import { useAgents, useTeamOptions } from '../inbox/api.js';
-import { formatDuration, joinComplaintStores } from '@yiji/reports';
+import {
+  distinctValues,
+  filterTickets,
+  formatDuration,
+  isEmptyFilter,
+  joinComplaintStores,
+  type TicketFilterCriteria,
+} from '@yiji/reports';
 import { useImportTickets } from '../complaints/import-api.js';
 import { useMyComplaints, type AgentComplaintRow } from '../complaints/api.js';
 import { TicketAttachments } from './TicketAttachments.js';
@@ -93,6 +101,7 @@ export function TicketsPage() {
   const { index: storeIndex } = useStoreIndex();
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<TicketFilter>('all');
+  const [criteria, setCriteria] = useState<TicketFilterCriteria>({});
   const [importing, setImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const importTickets = useImportTickets();
@@ -189,11 +198,16 @@ export function TicketsPage() {
     return { open, pending, overdue, today };
   }, [list]);
 
+  // The search runs over the SAME filter the manager's report uses, so "find
+  // order 946641" behaves identically on both sides of the product.
+  const searched = useMemo(() => filterTickets(list, criteria), [list, criteria]);
+  const typesInRange = useMemo(() => distinctValues(list, 'complaintType'), [list]);
+
   const filtered = useMemo(() => {
-    if (filter === 'all') return list;
-    if (filter === 'overdue') return list.filter(isOverdue);
-    return list.filter((r) => r.complaintStatus === filter);
-  }, [list, filter]);
+    if (filter === 'all') return searched;
+    if (filter === 'overdue') return searched.filter(isOverdue);
+    return searched.filter((r) => r.complaintStatus === filter);
+  }, [searched, filter]);
 
   const filterCount = (f: TicketFilter) => {
     if (f === 'all') return list.length;
@@ -290,6 +304,74 @@ export function TicketsPage() {
               isDesktop ? 'w-[360px]' : 'w-full',
             )}
           >
+            {/* Search over the queue. One text box for anything with a value
+                in it — order number, phone, branch, or a word from what was
+                written — because an agent holding a number should not first
+                have to decide which kind of number it is. The type and the
+                dates are separate because they are chosen, not typed. */}
+            <div className="space-y-2 border-b border-border px-3 py-2.5">
+              <Input
+                value={criteria.query ?? ''}
+                onChange={(e) => setCriteria((c) => ({ ...c, query: e.target.value }))}
+                placeholder={t('tickets.searchPlaceholder', {
+                  defaultValue: 'Order number, phone, branch…',
+                })}
+                aria-label={t('tickets.searchLabel', { defaultValue: 'Search tickets' })}
+                className="h-9"
+              />
+              <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-1.5">
+                <SelectMenu
+                  size="sm"
+                  className="col-span-3 w-full"
+                  value={criteria.complaintType ?? ''}
+                  onChange={(v) => setCriteria((c) => ({ ...c, complaintType: v }))}
+                  aria-label={t('complaint.type', { defaultValue: 'Complaint type' })}
+                  options={[
+                    {
+                      value: '',
+                      label: t('tickets.anyType', { defaultValue: 'Any complaint type' }),
+                    },
+                    // From the data in range, not the full vocabulary: a menu of
+                    // types this agent has never handled is a list to read past.
+                    ...typesInRange.map((v) => ({ value: v, label: optionLabel(v) })),
+                  ]}
+                />
+                <Input
+                  type="date"
+                  value={criteria.from ?? ''}
+                  onChange={(e) => setCriteria((c) => ({ ...c, from: e.target.value }))}
+                  aria-label={t('performance.from', { defaultValue: 'From' })}
+                  className="h-8 w-[8.5rem] text-xs"
+                />
+                <Input
+                  type="date"
+                  value={criteria.to ?? ''}
+                  onChange={(e) => setCriteria((c) => ({ ...c, to: e.target.value }))}
+                  aria-label={t('performance.to', { defaultValue: 'To' })}
+                  className="h-8 w-[8.5rem] text-xs"
+                />
+                {!isEmptyFilter(criteria) && (
+                  <button
+                    type="button"
+                    onClick={() => setCriteria({})}
+                    className="h-8 rounded-lg px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  >
+                    {t('tickets.clearSearch', { defaultValue: 'Clear' })}
+                  </button>
+                )}
+              </div>
+              {!isEmptyFilter(criteria) && (
+                // Says what the queue is showing. Without it a filtered list
+                // that happens to be short reads as "I have no tickets".
+                <p className="text-2xs text-muted-foreground">
+                  {t('tickets.searchCount', {
+                    defaultValue: '{{shown}} of {{total}} tickets',
+                    shown: searched.length,
+                    total: list.length,
+                  })}
+                </p>
+              )}
+            </div>
             <div className="flex-1 overflow-auto pt-2">
               {complaints.isLoading ? (
                 <ul className="space-y-1 px-2">
@@ -790,13 +872,19 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
             <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               {t('tickets.orderSnapshotTitle', { defaultValue: 'Order from this chat' })}
             </h3>
+            {/* Foldable, and folded is the useful default here: the header
+                already says which order and for how much, and the agent came to
+                this page for the notes and the history that the full card
+                pushes off screen. */}
             {refetchOrderId ? (
               <LegacyOrderSnapshotCard
                 vendorId={orderVendorId as string}
                 orderId={refetchOrderId}
+                collapsible
+                defaultOpen={false}
               />
             ) : (
-              <OrderSnapshotCard order={tk.order_snapshot!} />
+              <OrderSnapshotCard order={tk.order_snapshot!} collapsible defaultOpen={false} />
             )}
           </section>
         )}

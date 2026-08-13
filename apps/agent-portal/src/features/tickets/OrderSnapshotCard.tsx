@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { cn, Pill, Skeleton } from '@yiji/ui';
@@ -107,10 +108,14 @@ export function LegacyOrderSnapshotCard({
   vendorId,
   orderId,
   className,
+  collapsible,
+  defaultOpen,
 }: {
   vendorId: string;
   orderId: string;
   className?: string;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 }) {
   const q = useQuery({
     queryKey: ['ticket-legacy-order', vendorId, orderId],
@@ -119,7 +124,14 @@ export function LegacyOrderSnapshotCard({
   });
   if (q.isLoading) return <Skeleton className={cn('h-40 w-full rounded-2xl', className)} />;
   if (q.isError || !q.data) return null;
-  return <OrderSnapshotCard order={orderToSnapshot(q.data)} className={className} />;
+  return (
+    <OrderSnapshotCard
+      order={orderToSnapshot(q.data)}
+      className={className}
+      {...(collapsible === undefined ? {} : { collapsible })}
+      {...(defaultOpen === undefined ? {} : { defaultOpen })}
+    />
+  );
 }
 
 /** Tone per Yiji order status, mirroring the commerce order views. */
@@ -194,11 +206,25 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
 export function OrderSnapshotCard({
   order,
   className,
+  collapsible = false,
+  defaultOpen = true,
 }: {
   order: TicketOrderSnapshot;
   className?: string;
+  /**
+   * Let the agent fold the card down to its header.
+   *
+   * The header alone — id, status, fulfilment, total — is what an agent
+   * scanning a ticket actually needs; the line items and payment detail are for
+   * the one moment they are in dispute. Folding it puts the notes and history
+   * back on screen without scrolling past an order nobody is questioning.
+   */
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 }) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(defaultOpen);
+  const expanded = !collapsible || open;
   // Resolve against the operations store list so the agent sees the branch as
   // operations name it, plus the city and who owns it. Falls back to Yiji's
   // wording when the branch is not in the list.
@@ -224,118 +250,198 @@ export function OrderSnapshotCard({
         className,
       )}
     >
-      {/* Header — brand-tinted band carrying identity + the headline number. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-primary/[0.06] px-4 py-3">
-        <span className="font-mono text-xs font-medium text-foreground">#{order.orderId}</span>
-        <Pill tone={STATUS_TONE[order.status] ?? 'neutral'} size="sm" dot>
-          {t(`commerce.orderStatuses.${order.status}`, { defaultValue: titleize(order.status) })}
+      {/* Header — brand-tinted band carrying identity + the headline number.
+          When collapsible it IS the control: the whole band toggles, because a
+          small chevron in the corner of a card this wide is a target nobody
+          finds. */}
+      {collapsible ? (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          aria-label={t('tickets.orderToggle', {
+            orderId: order.orderId,
+            defaultValue: 'Order {{orderId}} details',
+          })}
+          className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 bg-primary/[0.06] px-4 py-3 text-start transition-colors duration-fast ease-out hover:bg-primary/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
+        >
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+            className={cn(
+              'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-fast ease-out',
+              open ? 'rotate-90' : 'rtl:-scale-x-100',
+            )}
+          >
+            <path d="M6 3l5 5-5 5" />
+          </svg>
+          <HeaderContents order={order} t={t} />
+        </button>
+      ) : (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-primary/[0.06] px-4 py-3">
+          <HeaderContents order={order} t={t} />
+        </div>
+      )}
+      {expanded && (
+        <HeaderlessBody
+          order={order}
+          t={t}
+          restaurant={restaurant}
+          subline={subline}
+          owners={owners}
+          itemsSubtotal={itemsSubtotal}
+          showSubtotal={showSubtotal}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Identity + headline number. Shared so the two header shells stay identical. */
+function HeaderContents({
+  order,
+  t,
+}: {
+  order: TicketOrderSnapshot;
+  t: ReturnType<typeof useTranslation>['t'];
+}) {
+  return (
+    <>
+      <span className="font-mono text-xs font-medium text-foreground">#{order.orderId}</span>
+      <Pill tone={STATUS_TONE[order.status] ?? 'neutral'} size="sm" dot>
+        {t(`commerce.orderStatuses.${order.status}`, { defaultValue: titleize(order.status) })}
+      </Pill>
+      {order.deliveryType && (
+        <Pill tone="neutral" size="sm">
+          {t(`commerce.deliveryTypes.${order.deliveryType}`, {
+            defaultValue: titleize(order.deliveryType),
+          })}
         </Pill>
-        {order.deliveryType && (
-          <Pill tone="neutral" size="sm">
-            {t(`commerce.deliveryTypes.${order.deliveryType}`, {
-              defaultValue: titleize(order.deliveryType),
-            })}
-          </Pill>
-        )}
-        <span className="ms-auto text-base font-bold tabular-nums tracking-tight text-foreground">
-          {money(order.total, order.currency)}
-        </span>
-      </div>
+      )}
+      <span className="ms-auto text-base font-bold tabular-nums tracking-tight text-foreground">
+        {money(order.total, order.currency)}
+      </span>
+    </>
+  );
+}
 
-      <div className="px-4 py-3">
-        {restaurant && (
-          <div className="mb-2.5">
-            <div className="text-sm font-semibold tracking-tight text-foreground">{restaurant}</div>
-            {subline && <div className="mt-0.5 text-xs text-muted-foreground">{subline}</div>}
-            {owners && <div className="mt-0.5 text-2xs text-muted-foreground">{owners}</div>}
-          </div>
-        )}
+/** Everything below the header — the part that folds away. */
+function HeaderlessBody({
+  order,
+  t,
+  restaurant,
+  subline,
+  owners,
+  itemsSubtotal,
+  showSubtotal,
+}: {
+  order: TicketOrderSnapshot;
+  t: ReturnType<typeof useTranslation>['t'];
+  restaurant: string;
+  subline: string;
+  owners: string;
+  itemsSubtotal: number;
+  showSubtotal: boolean;
+}) {
+  return (
+    <div className="px-4 py-3">
+      {restaurant && (
+        <div className="mb-2.5">
+          <div className="text-sm font-semibold tracking-tight text-foreground">{restaurant}</div>
+          {subline && <div className="mt-0.5 text-xs text-muted-foreground">{subline}</div>}
+          {owners && <div className="mt-0.5 text-2xs text-muted-foreground">{owners}</div>}
+        </div>
+      )}
 
-        {order.items.length > 0 ? (
-          <ul className="space-y-1.5">
-            {order.items.map((it, i) => (
-              <li key={`${it.name}-${i}`} className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0 text-xs">
-                  <span className="inline-flex min-w-[1.75rem] tabular-nums font-medium text-foreground">
-                    {it.qty}×
-                  </span>
-                  <span className="text-foreground">{it.name}</span>
-                  {it.category && (
-                    <span className="ms-1.5 text-2xs text-muted-foreground">· {it.category}</span>
-                  )}
+      {order.items.length > 0 ? (
+        <ul className="space-y-1.5">
+          {order.items.map((it, i) => (
+            <li key={`${it.name}-${i}`} className="flex items-baseline justify-between gap-3">
+              <span className="min-w-0 text-xs">
+                <span className="inline-flex min-w-[1.75rem] tabular-nums font-medium text-foreground">
+                  {it.qty}×
                 </span>
-                <span className="shrink-0 text-xs tabular-nums text-foreground">
-                  {money(it.price * it.qty, order.currency)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-2xs text-muted-foreground">
-            {t('tickets.orderNoItems', { defaultValue: 'No line items on this order.' })}
-          </p>
+                <span className="text-foreground">{it.name}</span>
+                {it.category && (
+                  <span className="ms-1.5 text-2xs text-muted-foreground">· {it.category}</span>
+                )}
+              </span>
+              <span className="shrink-0 text-xs tabular-nums text-foreground">
+                {money(it.price * it.qty, order.currency)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-2xs text-muted-foreground">
+          {t('tickets.orderNoItems', { defaultValue: 'No line items on this order.' })}
+        </p>
+      )}
+
+      {/* Totals + fulfilment detail. */}
+      <dl className="mt-3 divide-y divide-foreground/[0.06] border-t border-foreground/[0.06] pt-1">
+        {showSubtotal && (
+          <MetaRow
+            label={t('commerce.subtotal', { defaultValue: 'Items subtotal' })}
+            value={<span className="tabular-nums">{money(itemsSubtotal, order.currency)}</span>}
+          />
         )}
-
-        {/* Totals + fulfilment detail. */}
-        <dl className="mt-3 divide-y divide-foreground/[0.06] border-t border-foreground/[0.06] pt-1">
-          {showSubtotal && (
-            <MetaRow
-              label={t('commerce.subtotal', { defaultValue: 'Items subtotal' })}
-              value={<span className="tabular-nums">{money(itemsSubtotal, order.currency)}</span>}
-            />
-          )}
-          {order.paymentStatus && (
-            <MetaRow
-              label={t('commerce.paymentStatus', { defaultValue: 'Payment status' })}
-              value={
-                <Pill
-                  tone={
-                    order.paymentStatus === 'paid'
-                      ? 'success'
-                      : order.paymentStatus === 'not_paid'
-                        ? 'warning'
-                        : 'neutral'
-                  }
-                  size="sm"
-                >
-                  {t(`commerce.paymentStatuses.${order.paymentStatus}`, {
-                    defaultValue: titleize(order.paymentStatus),
-                  })}
-                </Pill>
-              }
-            />
-          )}
-          {order.paymentMode && (
-            <MetaRow
-              label={t('commerce.paymentType', { defaultValue: 'Payment type' })}
-              value={t(`commerce.paymentModes.${order.paymentMode}`, {
-                defaultValue: titleize(order.paymentMode),
-              })}
-            />
-          )}
-          {order.deliveryAddress && (
-            <MetaRow
-              label={t('commerce.deliverTo', { defaultValue: 'Deliver to' })}
-              value={order.deliveryAddress}
-            />
-          )}
-          {order.placedAt && (
-            <MetaRow
-              label={t('commerce.placedAt', { defaultValue: 'Placed' })}
-              value={<span className="tabular-nums">{fmtDateTime(order.placedAt)}</span>}
-            />
-          )}
-        </dl>
-
-        {order.capturedAt && (
-          <p className="mt-2.5 text-2xs text-muted-foreground">
-            {t('tickets.orderCapturedAt', {
-              at: fmtDateTime(order.capturedAt),
-              defaultValue: 'Snapshot taken {{at}}',
+        {order.paymentStatus && (
+          <MetaRow
+            label={t('commerce.paymentStatus', { defaultValue: 'Payment status' })}
+            value={
+              <Pill
+                tone={
+                  order.paymentStatus === 'paid'
+                    ? 'success'
+                    : order.paymentStatus === 'not_paid'
+                      ? 'warning'
+                      : 'neutral'
+                }
+                size="sm"
+              >
+                {t(`commerce.paymentStatuses.${order.paymentStatus}`, {
+                  defaultValue: titleize(order.paymentStatus),
+                })}
+              </Pill>
+            }
+          />
+        )}
+        {order.paymentMode && (
+          <MetaRow
+            label={t('commerce.paymentType', { defaultValue: 'Payment type' })}
+            value={t(`commerce.paymentModes.${order.paymentMode}`, {
+              defaultValue: titleize(order.paymentMode),
             })}
-          </p>
+          />
         )}
-      </div>
+        {order.deliveryAddress && (
+          <MetaRow
+            label={t('commerce.deliverTo', { defaultValue: 'Deliver to' })}
+            value={order.deliveryAddress}
+          />
+        )}
+        {order.placedAt && (
+          <MetaRow
+            label={t('commerce.placedAt', { defaultValue: 'Placed' })}
+            value={<span className="tabular-nums">{fmtDateTime(order.placedAt)}</span>}
+          />
+        )}
+      </dl>
+
+      {order.capturedAt && (
+        <p className="mt-2.5 text-2xs text-muted-foreground">
+          {t('tickets.orderCapturedAt', {
+            at: fmtDateTime(order.capturedAt),
+            defaultValue: 'Snapshot taken {{at}}',
+          })}
+        </p>
+      )}
     </div>
   );
 }

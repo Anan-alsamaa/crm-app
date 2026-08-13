@@ -284,11 +284,6 @@ function Shell({ children }: { children: React.ReactNode }) {
           icon: DownloadIcon,
         },
         {
-          to: '/agent-performance',
-          label: t('nav.agentPerformance', { defaultValue: 'Agent performance' }),
-          icon: DownloadIcon,
-        },
-        {
           to: '/report-agents',
           label: t('nav.reportAgents', { defaultValue: 'Agent KPI' }),
           icon: DownloadIcon,
@@ -302,6 +297,26 @@ function Shell({ children }: { children: React.ReactNode }) {
           to: '/reports',
           label: t('nav.reports', { defaultValue: 'Scheduled reports' }),
           icon: CalendarIcon,
+        },
+      ],
+    },
+    {
+      heading: t('nav.agentPerformanceGroup', { defaultValue: 'Agent performance' }),
+      items: [
+        {
+          to: '/agent-performance',
+          label: t('nav.agentPerformance', { defaultValue: 'Agent performance' }),
+          icon: ClockIcon,
+        },
+      ],
+    },
+    {
+      heading: t('nav.couponApprovalsGroup', { defaultValue: 'Coupon approvals' }),
+      items: [
+        {
+          to: '/coupon-approvals',
+          label: t('nav.couponApprovals', { defaultValue: 'Coupon approvals' }),
+          icon: ShieldIcon,
         },
       ],
     },
@@ -332,14 +347,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     },
     {
       heading: t('nav.policies', { defaultValue: 'Policies' }),
-      items: [
-        {
-          to: '/coupon-approvals',
-          label: t('nav.couponApprovals', { defaultValue: 'Coupon approvals' }),
-          icon: ShieldIcon,
-        },
-        { to: '/sla', label: t('nav.sla'), icon: ShieldIcon },
-      ],
+      items: [{ to: '/sla', label: t('nav.sla'), icon: ShieldIcon }],
     },
     {
       heading: t('nav.intelligence', { defaultValue: 'Intelligence' }),

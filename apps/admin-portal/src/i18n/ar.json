@@ -56,7 +56,9 @@
     "stores": "الفروع",
     "agentPerformance": "أداء الوكلاء",
     "storeNotifications": "إشعارات الفروع",
-    "couponApprovals": "موافقات القسائم"
+    "couponApprovals": "موافقات القسائم",
+    "agentPerformanceGroup": "أداء الوكلاء",
+    "couponApprovalsGroup": "موافقات القسائم"
   },
   "dashboard": {
     "title": "نظرة عامة",
