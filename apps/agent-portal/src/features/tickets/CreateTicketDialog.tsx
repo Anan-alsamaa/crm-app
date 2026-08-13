@@ -6,8 +6,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Button, cn, FormField, Pill, SelectMenu, Textarea, toast } from '@yiji/ui';
 import {
+  isCouponRequested,
   isNotifyingType,
   manualStoreMatch,
+  splitCouponForApproval,
   toStoreSnapshot,
   type Priority,
   type StoreMatch,
@@ -33,6 +35,7 @@ import {
   type ComplaintValues,
 } from './ComplaintFields.js';
 import { useOrderStore, useStores, toStoreRecord } from './useStoreMatch.js';
+import { useRequestCouponApproval } from '../coupons/api.js';
 import { useContact } from '../contacts/api.js';
 import { commerce } from '../../lib/commerce-client.js';
 import { clearPinnedOrder, getPinnedOrder } from '../commerce/pinned-order.js';
@@ -283,6 +286,12 @@ export function CreateTicketDialog({
   const notifyTypes = useStoreNotifyTypes();
   const notifiesStore = isNotifyingType(subject, notifyTypes.data ?? []);
 
+  // A coupon does not go onto the ticket here — it goes to a supervisor. Known
+  // while the agent is still typing, so the form can say so before they promise
+  // the customer anything.
+  const requestCoupon = useRequestCouponApproval();
+  const needsApproval = isCouponRequested(complaint);
+
   const onSubmit = handleSubmit(async (values) => {
     if (!contactId || !vendorId) return;
     if (complaintHasErrors(complaint) || !subject) return;
@@ -291,6 +300,11 @@ export function CreateTicketDialog({
       // structured JSON so the ticket can render it as a real order card
       // instead of a wall of pasted text.
       const description = values.description?.trim() || undefined;
+
+      // The coupon is withheld from the ticket and sent for approval instead.
+      // Writing it now and asking after would make the supervisor's decision a
+      // formality applied to money the customer has already been promised.
+      const coupon = splitCouponForApproval(complaint);
 
       const created = await createFromChat.mutateAsync({
         ticket: {
@@ -318,10 +332,36 @@ export function CreateTicketDialog({
             ? toStoreSnapshot(chosenMatch, new Date().toISOString())
             : null,
           ...complaintPatch(complaint),
+          // Overrides the coupon fields complaintPatch just wrote — they are
+          // the supervisor's to release, not this form's.
+          ...coupon.ticket,
         },
         attachmentFileIds: includeFiles ? sessionFileIds : [],
         storeNotifyTypes: notifyTypes.data ?? [],
       });
+
+      // Raised AFTER the ticket, because the request has to point at one. If it
+      // fails the ticket still stands and the agent is told the coupon did not
+      // go anywhere — the alternative is a promise nobody is holding.
+      let couponAsked = false;
+      if (coupon.request && created?.id) {
+        try {
+          await requestCoupon.mutateAsync({
+            ...coupon.request,
+            ticket: created.id,
+            contact: contactId,
+            requested_by: user?.id ?? null,
+            reason: complaint.response_desc.trim() || null,
+          });
+          couponAsked = true;
+        } catch {
+          toast.error(
+            t('coupons.requestFailed', {
+              defaultValue: 'The coupon was NOT sent for approval — raise it from the ticket.',
+            }),
+          );
+        }
+      }
       // The ticket now holds a snapshot of the order, so the sidebar pin has done
       // its job. Leaving it would show the same order twice — live in the sidebar
       // and frozen on the ticket — with no way to tell which is authoritative.
@@ -341,9 +381,14 @@ export function CreateTicketDialog({
                   defaultValue: 'No branch attached, so nobody was told.',
                 })
               : '';
+      const couponLine = couponAsked
+        ? t('coupons.sentForApproval', { defaultValue: 'Coupon sent for approval.' })
+        : '';
       toast[created?.storeNotify === 'failed' ? 'warning' : 'success'](
         t('tickets.created', { defaultValue: 'Ticket created' }),
-        { description: [optionLabel(subject), branchLine].filter(Boolean).join(' · ') },
+        {
+          description: [optionLabel(subject), branchLine, couponLine].filter(Boolean).join(' · '),
+        },
       );
       // Hand the id back BEFORE closing: a page-hosted form navigates to the new
       // ticket, and closing first would bounce the agent to the inbox on the way.
@@ -565,6 +610,19 @@ export function CreateTicketDialog({
                 values={complaint}
                 onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
               />
+              {/* Said while the agent is still typing the coupon, not after
+                  they have told the customer about it. */}
+              {needsApproval && (
+                <p className="flex items-start gap-2 rounded-xl bg-primary/[0.08] px-3 py-2 text-xs leading-relaxed text-foreground">
+                  <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary" />
+                  <span>
+                    {t('coupons.needsApproval', {
+                      defaultValue:
+                        'A supervisor has to approve this coupon. It is not on the ticket until they do — do not promise it to the customer yet.',
+                    })}
+                  </span>
+                </p>
+              )}
             </ComplaintSection>
           </div>
         </div>

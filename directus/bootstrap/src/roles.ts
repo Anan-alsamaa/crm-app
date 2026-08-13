@@ -79,6 +79,9 @@ const ALL_BUSINESS = [
   // Supervisors own the rules; the queue is theirs to inspect and retry.
   'store_notify_rules',
   'store_notifications',
+  // The supervisor IS the admin role here: approving a coupon is the one thing
+  // an agent must not be able to do for themselves.
+  'coupon_approvals',
 ];
 
 /**
@@ -204,6 +207,19 @@ export const roles: RoleSpec[] = [
       // creates the queue entry, and nothing in the portal may go back and
       // rewrite what a branch was told.
       ...appendOnly('store_notifications'),
+      /**
+       * Coupon approvals: an agent may ASK, and may see what became of their
+       * own asks. They may not update a row at all — not their own, not
+       * anybody's. Deciding is the supervisor's act, and an agent who could
+       * patch `status` would be approving their own coupon, which is the one
+       * thing this whole collection exists to prevent.
+       */
+      { collection: 'coupon_approvals', action: 'create' },
+      {
+        collection: 'coupon_approvals',
+        action: 'read',
+        permissions: { requested_by: { _eq: '$CURRENT_USER' } },
+      },
       { collection: 'notifications', action: 'read', permissions: SELF_RECIPIENT },
       {
         collection: 'notifications',

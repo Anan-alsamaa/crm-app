@@ -190,7 +190,8 @@
     "reports": "Reports",
     "addTicket": "Add ticket",
     "complaints": "My complaints",
-    "performance": "Performance"
+    "performance": "Performance",
+    "coupons": "My coupons"
   },
   "inbox": {
     "title": "Shared Inbox",
@@ -677,5 +678,22 @@
     "empty": "No chats match these filters.",
     "chatsInRange": "{{n}} chats in range",
     "basis": "First response is measured from the customer’s first message to the first agent reply. Internal notes do not count as a reply. Chats nobody answered are counted under \"No reply\" and left out of the averages."
+  },
+  "coupons": {
+    "title": "My coupons",
+    "waiting": "{{n}} waiting on a supervisor",
+    "noneWaiting": "Nothing waiting on a supervisor.",
+    "none": "No coupon requests here.",
+    "noCode": "no code",
+    "noReason": "No reason was given.",
+    "needsApproval": "A supervisor has to approve this coupon. It is not on the ticket until they do — do not promise it to the customer yet.",
+    "sentForApproval": "Coupon sent for approval.",
+    "requestFailed": "The coupon was NOT sent for approval — raise it from the ticket.",
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "all": "All"
+    }
   }
 }

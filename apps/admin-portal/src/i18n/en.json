@@ -55,7 +55,8 @@
     "brands": "Brands",
     "stores": "Stores",
     "agentPerformance": "Agent performance",
-    "storeNotifications": "Branch notifications"
+    "storeNotifications": "Branch notifications",
+    "couponApprovals": "Coupon approvals"
   },
   "dashboard": {
     "title": "Overview",
@@ -857,5 +858,28 @@
     "description": "Description",
     "resolution": "Resolution notes",
     "notWritten": "not written"
+  },
+  "couponApprovals": {
+    "noCode": "no code",
+    "agent": "Asked by",
+    "customer": "Customer",
+    "ticket": "Ticket",
+    "approve": "Approve",
+    "reject": "Reject",
+    "confirmReject": "Reject",
+    "approveHint": "Approving puts the coupon on the ticket.",
+    "reasonPlaceholder": "Why not? The agent has to tell the customer something.",
+    "decidedBy": "Decided by {{who}}: {{note}}",
+    "approved": "Approved — the coupon is on the ticket",
+    "rejected": "Rejected",
+    "decideError": "Could not record that decision",
+    "clear": "Nothing waiting. The queue is clear.",
+    "none": "Nothing here.",
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "all": "All"
+    }
   }
 }
