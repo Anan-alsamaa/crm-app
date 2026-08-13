@@ -191,7 +191,18 @@
     "heroSubtitle": "Saved report definitions that run automatically on a schedule and email a CSV to their recipients — set once, delivered on time.",
     "savedCount": "{{count}} saved",
     "vendorPlaceholder": "vendor-uuid",
-    "recipientsPlaceholder": "ops@example.com, manager@example.com"
+    "recipientsPlaceholder": "ops@example.com, manager@example.com",
+    "frequency": "How often",
+    "freqManual": "Manual only",
+    "freqManualHint": "Nothing is sent automatically — only \"Run now\".",
+    "freqDaily": "Every day at 07:00",
+    "freqWeekly": "Every Monday at 07:00",
+    "freqMonthly": "The 1st of every month at 07:00",
+    "freqCustom": "Custom (cron)",
+    "cron": "Cron expression",
+    "cronHint": "Five fields: minute hour day-of-month month day-of-week.",
+    "scheduleSummary": "Sent to {{who}} — {{when}}.",
+    "scheduleNoRecipients": "It will run on schedule, but with no recipients nobody receives it."
   },
   "customFields": {
     "title": "Custom fields",
@@ -469,8 +480,9 @@
     "met": "Met",
     "pending": "Pending",
     "range": "Date range",
-    "subtitle": "First-response & resolution SLA — drill from agent into tickets",
-    "title": "SLA performance"
+    "subtitle": "Which TICKETS met the deadline they were promised",
+    "title": "SLA performance",
+    "scopeNote": "One row per TICKET, judged against the deadline its SLA policy promised. Use it to find the breaches and who held them. For a per-agent rollup with CSAT see Agent KPI; for chat response times see Agent performance — those measure conversations, not tickets, so their numbers are not these ones."
   },
   "app": {
     "console": "Admin console"
@@ -567,7 +579,10 @@
     "selectAll": "All",
     "prev": "Previous",
     "next": "Next",
-    "notMapped": "Not mapped"
+    "notMapped": "Not mapped",
+    "exportExcelCount": "Export {{count}} rows",
+    "noContact": "no contact on file",
+    "noName": "—"
   },
   "ticketOps": {
     "title": "Ticket report",
@@ -842,7 +857,21 @@
     "avgSolve": "Time to solve (avg)",
     "empty": "No chats match these filters.",
     "chatsInRange": "{{n}} chats in range",
-    "basis": "First response is measured from the customer’s first message to the first agent reply. Internal notes do not count as a reply. Chats nobody answered are counted under \"No reply\" and left out of the averages."
+    "basis": "First response is measured from the customer’s first message to the first agent reply. Internal notes do not count as a reply. Chats nobody answered are counted under \"No reply\" and left out of the averages.",
+    "chatsCount": "{{n}} chats",
+    "againstTarget": "Against a {{n}}-minute first response",
+    "compareTitle": "Agent by agent",
+    "compareHelp": "Averages across every chat in range, answered ones only. Shorter is better.",
+    "trendTitle": "Day by day",
+    "breakdownTitle": "Chat by chat",
+    "breakdownHelp": "Slowest first. Click one to open it.",
+    "customer": "Customer",
+    "started": "Started",
+    "firstResponse": "First response",
+    "totalTime": "Total chat time",
+    "noReply": "No reply",
+    "stillOpen": "Still open",
+    "unassigned": "Unassigned"
   },
   "storeNotify": {
     "rulesTitle": "Complaints the branch is told about",
@@ -883,5 +912,17 @@
       "rejected": "Rejected",
       "all": "All"
     }
+  },
+  "complaintReport": {
+    "any": "Any",
+    "clearFilters": "Clear filters",
+    "rowCount": "{{count}} rows",
+    "rowsPerPage": "Rows per page",
+    "showingRange": "Showing {{from}}–{{to}} of {{total}}",
+    "resetOrder": "Reset order",
+    "findColumn": "Find a column…",
+    "columnsHelp": "The order here is the order in the table and the export.",
+    "moveFirst": "Move {{col}} to the front",
+    "searchPlaceholder": "Order number, phone, branch, or a word from the complaint…"
   }
 }

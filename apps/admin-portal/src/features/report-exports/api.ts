@@ -73,7 +73,8 @@ interface RawConversation {
   assigned_agent: string | null;
   date_created: string | null;
   last_message_at: string | null;
-  contact: string | null;
+  contact: { id: string; name: string | null; phone: string | null; email: string | null } | null;
+  last_order_id: string | null;
 }
 
 interface RawCsat {
@@ -191,6 +192,16 @@ export interface ConversationRow {
   agentName: string;
   createdAt: string | null;
   lastMessageAt: string | null;
+  /**
+   * Who the conversation is WITH. A status report that counts twenty open
+   * chats without saying whose they are is a number; with the phone numbers it
+   * is a list somebody can work through.
+   */
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  /** The order the chat was last seen to be about, when there is one. */
+  orderId: string;
 }
 
 export interface ConversationStatusReport {
@@ -337,7 +348,11 @@ export function useAgentReportData(
               'assigned_agent',
               'date_created',
               'last_message_at',
-              'contact',
+              // Expanded, not a bare id: the status report names and PHONES the
+              // customers behind each count. "20 open" is a number; twenty
+              // phone numbers is a morning's work.
+              { contact: ['id', 'name', 'phone', 'email'] },
+              'last_order_id',
             ],
             limit: -1,
             sort: ['-date_created'],
@@ -584,6 +599,10 @@ export function useAgentReportData(
           agentName: agentOf(c.assigned_agent),
           createdAt: c.date_created,
           lastMessageAt: c.last_message_at,
+          customerName: c.contact?.name ?? '',
+          customerPhone: c.contact?.phone ?? '',
+          customerEmail: c.contact?.email ?? '',
+          orderId: c.last_order_id ?? '',
         };
       });
 

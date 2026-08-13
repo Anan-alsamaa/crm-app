@@ -157,11 +157,12 @@ describe('SlaReportsPage', () => {
     expect(screen.getByText('No tickets in this window')).toBeInTheDocument();
   });
 
-  it('switches to the ticket view via the toolbar toggle', async () => {
+  it('shows every ticket with its SLA outcome, with no view to switch', async () => {
+    // The by-agent / by-ticket toggle is gone: its per-agent half was retired
+    // when Agent KPI took that job, leaving a control with one working
+    // position that switched nothing.
     api.useSlaReports.mockReturnValue({ isLoading: false, data: fullReport });
     renderPage();
-
-    await userEvent.click(screen.getByText('By ticket'));
 
     // All tickets shown (no agent filter).
     expect(screen.getByText('Broken login flow')).toBeInTheDocument();
@@ -208,7 +209,6 @@ describe('SlaReportsPage', () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
     renderPage();
-    await userEvent.click(screen.getByText('By ticket'));
     await userEvent.click(screen.getByText('Export CSV'));
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);

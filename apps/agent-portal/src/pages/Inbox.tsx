@@ -89,6 +89,9 @@ export function Inbox() {
     ...filters,
     orderConversationIds: orderMatches.data ?? [],
     currentUserId: user?.id,
+    // So a chat handed to this agent's SHIFT shows up in "mine", not only in
+    // "all conversations" where nobody working a queue is looking.
+    currentTeamId: user?.team ?? null,
   });
   const previews = useConversationPreviews((conversations.data ?? []).map((c) => c.id));
   const tags = useTags();

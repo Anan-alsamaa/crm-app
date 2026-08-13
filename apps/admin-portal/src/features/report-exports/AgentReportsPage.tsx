@@ -56,9 +56,12 @@ import {
   TICKET_REPORT_ORDER_KEY,
   downloadWorkbook,
   joinComplaintStores,
-  filterComplaintRows,
+  distinctValues,
+  filterTickets,
+  isEmptyFilter,
   moveColumn,
   reconcileColumnOrder,
+  type TicketFilterCriteria,
 } from '@yiji/reports';
 
 /** Which of the four exportable reports this page instance renders. */
@@ -93,6 +96,13 @@ const fmtScore = (n: number | null) => (n == null ? '—' : n.toFixed(2));
 const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 const STATUS_RANK: Record<string, number> = { new: 0, open: 1, pending: 2, resolved: 3, closed: 4 };
 const PAGE_SIZE = 10;
+/**
+ * Page sizes for the tickets report.
+ *
+ * The right one genuinely differs by task: 25 to read a queue, 1000 to scan for
+ * a pattern before exporting. One fixed size served neither.
+ */
+const PAGE_SIZES = [25, 50, 100, 200, 1000] as const;
 
 const TICKET_SORT: Record<string, (r: TicketReportRow) => string | number | null | undefined> = {
   subject: (r) => r.subject.toLowerCase(),
@@ -568,7 +578,20 @@ function ComplaintsReport({
   const { t } = useTranslation();
   const [cols, setCols] = useState<Set<ComplaintColumnKey>>(() => new Set(COMPLAINT_COLUMN_KEYS));
   const [showCols, setShowCols] = useState(false);
-  const [query, setQuery] = useState('');
+  const [colQuery, setColQuery] = useState('');
+  /**
+   * The filter, shared with the agent portal's own ticket queue so "find order
+   * 946641" behaves identically wherever it is asked. See @yiji/reports.
+   */
+  const [criteria, setCriteria] = useState<TicketFilterCriteria>({});
+  /**
+   * How many rows to show at once.
+   *
+   * This table is the whole operations history — thousands of rows — and the
+   * right page size genuinely differs by task: 25 to read, 1000 to scan for a
+   * pattern before exporting. Ten was neither.
+   */
+  const [pageSize, setPageSize] = useState(25);
   // The column ORDER, separate from which columns are on. Reconciled against
   // the current column list on load so a saved preference survives a column
   // being added or removed instead of silently dropping it.
@@ -584,8 +607,33 @@ function ComplaintsReport({
     [rows, storeIndex],
   );
   const unmapped = useMemo(() => countUnmappedComplaints(joined), [joined]);
-  // One box: branch name, ops store code, Yiji restaurant id or phone.
-  const visible = useMemo(() => filterComplaintRows(joined, query), [joined, query]);
+  const visible = useMemo(() => filterTickets(joined, criteria), [joined, criteria]);
+
+  /**
+   * Dropdown options built from the ROWS IN RANGE rather than from the enums.
+   *
+   * A city list of every city the company has ever operated in, on a report
+   * covering last week, is a menu to read past — and choosing one of the absent
+   * values returns an empty table that looks like a bug rather than an answer.
+   */
+  const options = useMemo(
+    () => ({
+      complaintType: distinctValues(joined, 'complaintType'),
+      complaintStatus: distinctValues(joined, 'complaintStatus'),
+      brand: distinctValues(joined, 'brand'),
+      city: distinctValues(joined, 'city'),
+      agent: distinctValues(joined, 'agent'),
+      serviceType: distinctValues(joined, 'serviceType'),
+      complaintSource: distinctValues(joined, 'complaintSource'),
+      compensation: distinctValues(joined, 'compensation'),
+    }),
+    [joined],
+  );
+
+  const setCriterion = (patch: Partial<TicketFilterCriteria>) => {
+    setCriteria((c) => ({ ...c, ...patch }));
+    setPage(1); // a filtered set is a different set; page 7 of it means nothing
+  };
 
   /** Columns that are ON, in the order the user arranged them. */
   const chosenColumns = useMemo(() => order.filter((k) => cols.has(k)), [order, cols]);
@@ -629,12 +677,154 @@ function ComplaintsReport({
     });
 
   const [page, setPage] = useState(1);
-  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+
+  const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const current = Math.min(page, pageCount);
-  const pageRows = visible.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const pageRows = visible.slice((current - 1) * pageSize, current * pageSize);
+
+  /** A labelled dropdown built from the values actually present. */
+  const FilterSelect = ({
+    label,
+    field,
+    values,
+    value,
+  }: {
+    label: string;
+    field: keyof TicketFilterCriteria;
+    values: string[];
+    value: string | undefined;
+  }) =>
+    values.length === 0 ? null : (
+      <label className="flex flex-col gap-1">
+        <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+          {label}
+        </span>
+        <SelectMenu
+          size="sm"
+          className="w-[10rem]"
+          aria-label={label}
+          value={value ?? ''}
+          onChange={(v) => setCriterion({ [field]: v } as Partial<TicketFilterCriteria>)}
+          options={[
+            { value: '', label: t('complaintReport.any', { defaultValue: 'Any' }) },
+            ...values.map((v) => ({ value: v, label: v })),
+          ]}
+        />
+      </label>
+    );
 
   return (
     <div className="space-y-4">
+      {/* The filter bar. Free text first because it answers most questions on
+          its own; the dropdowns are for slicing rather than finding. */}
+      <div className="space-y-3 rounded-2xl bg-card p-3 shadow-soft ring-1 ring-foreground/[0.06]">
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-1 flex-col gap-1" style={{ minWidth: '18rem' }}>
+            <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              {t('complaintReport.searchLabel', {
+                defaultValue: 'Search by phone, restaurant name or restaurant id',
+              })}
+            </span>
+            {/* One box rather than five labelled fields: operations look a
+                complaint up by whatever they have to hand, and deciding which
+                field a number belongs to is work the computer can do. */}
+            <Input
+              value={criteria.query ?? ''}
+              onChange={(e) => setCriterion({ query: e.target.value })}
+              className="h-8"
+              placeholder={t('complaintReport.searchPlaceholder', {
+                defaultValue: 'Order number, phone, branch, or a word from the complaint…',
+              })}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              {t('performance.from', { defaultValue: 'From' })}
+            </span>
+            <Input
+              type="date"
+              className="h-8 w-[9rem]"
+              value={criteria.from ?? ''}
+              onChange={(e) => setCriterion({ from: e.target.value })}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              {t('performance.to', { defaultValue: 'To' })}
+            </span>
+            <Input
+              type="date"
+              className="h-8 w-[9rem]"
+              value={criteria.to ?? ''}
+              onChange={(e) => setCriterion({ to: e.target.value })}
+            />
+          </label>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <FilterSelect
+            label={t('complaintReport.col.complaintType', { defaultValue: 'Complaint type' })}
+            field="complaintType"
+            values={options.complaintType}
+            value={criteria.complaintType}
+          />
+          <FilterSelect
+            label={t('complaintReport.col.complaintStatus', { defaultValue: 'Status' })}
+            field="status"
+            values={options.complaintStatus}
+            value={criteria.status}
+          />
+          <FilterSelect
+            label={t('complaintReport.col.brand', { defaultValue: 'Brand' })}
+            field="brand"
+            values={options.brand}
+            value={criteria.brand}
+          />
+          <FilterSelect
+            label={t('complaintReport.col.city', { defaultValue: 'City' })}
+            field="city"
+            values={options.city}
+            value={criteria.city}
+          />
+          <FilterSelect
+            label={t('complaintReport.col.agent', { defaultValue: 'Agent' })}
+            field="agent"
+            values={options.agent}
+            value={criteria.agent}
+          />
+          <FilterSelect
+            label={t('complaintReport.col.serviceType', { defaultValue: 'Service type' })}
+            field="serviceType"
+            values={options.serviceType}
+            value={criteria.serviceType}
+          />
+          <FilterSelect
+            label={t('complaintReport.col.complaintSource', { defaultValue: 'Source' })}
+            field="source"
+            values={options.complaintSource}
+            value={criteria.source}
+          />
+          <FilterSelect
+            label={t('complaintReport.col.compensation', { defaultValue: 'Compensation' })}
+            field="compensation"
+            values={options.compensation}
+            value={criteria.compensation}
+          />
+          {!isEmptyFilter(criteria) && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8"
+              onClick={() => {
+                setCriteria({});
+                setPage(1);
+              }}
+            >
+              {t('complaintReport.clearFilters', { defaultValue: 'Clear filters' })}
+            </Button>
+          )}
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center gap-3">
         {unmapped > 0 && (
           <Pill tone="warning" size="sm">
@@ -644,31 +834,18 @@ function ComplaintsReport({
             })}
           </Pill>
         )}
-        {/* One box rather than four labelled fields: operations look a
-            complaint up by whatever they have to hand. */}
-        <Input
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(1);
-          }}
-          className="h-8 w-72"
-          aria-label={t('complaintReport.searchLabel', {
-            defaultValue: 'Search by phone, restaurant name or restaurant id',
-          })}
-          placeholder={t('complaintReport.searchPlaceholder', {
-            defaultValue: 'Phone, restaurant name or ID…',
-          })}
-        />
-        {query && (
-          <span className="text-2xs tabular-nums text-muted-foreground">
-            {t('complaintReport.matches', {
-              count: visible.length,
-              total: joined.length,
-              defaultValue: '{{count}} of {{total}}',
-            })}
-          </span>
-        )}
+        <span className="text-2xs tabular-nums text-muted-foreground">
+          {isEmptyFilter(criteria)
+            ? t('complaintReport.rowCount', {
+                count: joined.length,
+                defaultValue: '{{count}} rows',
+              })
+            : t('complaintReport.matches', {
+                count: visible.length,
+                total: joined.length,
+                defaultValue: '{{count}} of {{total}}',
+              })}
+        </span>
         <div className="relative ms-auto flex items-center gap-2">
           <button
             type="button"
@@ -690,72 +867,132 @@ function ComplaintsReport({
                 className="fixed inset-0 z-30 cursor-default"
                 onClick={() => setShowCols(false)}
               />
-              <div className="absolute end-0 top-9 z-40 max-h-80 w-64 overflow-auto rounded-xl bg-card p-2 shadow-float ring-1 ring-foreground/10">
-                <div className="flex items-center justify-between px-1.5 pb-1.5">
-                  <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                    {t('agentReports.exportColumns', { defaultValue: 'Export columns' })}
-                  </span>
-                  <button
-                    type="button"
-                    className="text-2xs font-medium text-primary hover:underline"
-                    onClick={() => setCols(new Set(COMPLAINT_COLUMN_KEYS))}
-                  >
-                    {t('agentReports.selectAll', { defaultValue: 'All' })}
-                  </button>
+              {/* Wider and taller than before, with a search: arranging 27
+                  columns through a 64-wide list scrolled two rows at a time was
+                  the actual complaint. The list IS the arrangement — its order
+                  is the table's order and the export's order. */}
+              <div className="absolute end-0 top-9 z-40 flex max-h-[32rem] w-80 flex-col rounded-xl bg-card shadow-float ring-1 ring-foreground/10">
+                <div className="space-y-2 border-b border-border p-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                      {t('agentReports.exportColumns', { defaultValue: 'Columns' })}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="text-2xs font-medium text-primary hover:underline"
+                        onClick={() => setCols(new Set(COMPLAINT_COLUMN_KEYS))}
+                      >
+                        {t('agentReports.selectAll', { defaultValue: 'All' })}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-2xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+                        onClick={() => {
+                          const next = [...COMPLAINT_COLUMN_KEYS];
+                          setOrder(next);
+                          saveColumnOrder(TICKET_REPORT_ORDER_KEY, next);
+                        }}
+                      >
+                        {t('complaintReport.resetOrder', { defaultValue: 'Reset order' })}
+                      </button>
+                    </div>
+                  </div>
+                  <Input
+                    value={colQuery}
+                    onChange={(e) => setColQuery(e.target.value)}
+                    className="h-7 text-xs"
+                    aria-label={t('complaintReport.findColumn', { defaultValue: 'Find a column' })}
+                    placeholder={t('complaintReport.findColumn', {
+                      defaultValue: 'Find a column…',
+                    })}
+                  />
+                  <p className="text-2xs text-muted-foreground">
+                    {t('complaintReport.columnsHelp', {
+                      defaultValue: 'The order here is the order in the table and the export.',
+                    })}
+                  </p>
                 </div>
-                <ul className="space-y-0.5">
-                  {/* Listed in the user's own order, so the list doubles as
-                      the arrangement — moving a row here moves the column in
-                      the table and the export. */}
-                  {order.map((k, i) => (
-                    <li key={k} className="flex items-center gap-1">
-                      <label className="flex flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-xs text-foreground hover:bg-secondary/60">
-                        <input
-                          type="checkbox"
-                          className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary/60"
-                          checked={cols.has(k)}
-                          onChange={() => toggleCol(k)}
-                        />
-                        {t(COMPLAINT_COLUMN_LABELS[k].key, {
-                          defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
-                        })}
-                      </label>
-                      <button
-                        type="button"
-                        disabled={i === 0}
-                        onClick={() => moveCol(k, -1)}
-                        aria-label={t('complaintReport.moveUp', {
-                          col: t(COMPLAINT_COLUMN_LABELS[k].key, {
-                            defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
-                          }),
-                          defaultValue: 'Move {{col}} earlier',
-                        })}
-                        className="grid h-5 w-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        disabled={i === order.length - 1}
-                        onClick={() => moveCol(k, 1)}
-                        aria-label={t('complaintReport.moveDown', {
-                          col: t(COMPLAINT_COLUMN_LABELS[k].key, {
-                            defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
-                          }),
-                          defaultValue: 'Move {{col}} later',
-                        })}
-                        className="grid h-5 w-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
-                      >
-                        ↓
-                      </button>
-                    </li>
-                  ))}
+                <ul className="flex-1 space-y-0.5 overflow-auto p-1.5">
+                  {order.map((k, i) => {
+                    const label = t(COMPLAINT_COLUMN_LABELS[k].key, {
+                      defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
+                    });
+                    // Filtering hides rows but never renumbers them: the
+                    // position shown is the real position in the report.
+                    if (colQuery.trim() && !label.toLowerCase().includes(colQuery.toLowerCase())) {
+                      return null;
+                    }
+                    return (
+                      <li key={k} className="flex items-center gap-1">
+                        <span className="w-5 shrink-0 text-end text-2xs tabular-nums text-muted-foreground/70">
+                          {i + 1}
+                        </span>
+                        <label className="flex flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-xs text-foreground hover:bg-secondary/60">
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary/60"
+                            checked={cols.has(k)}
+                            onChange={() => toggleCol(k)}
+                          />
+                          {label}
+                        </label>
+                        <button
+                          type="button"
+                          disabled={i === 0}
+                          onClick={() => moveCol(k, -1)}
+                          aria-label={t('complaintReport.moveUp', {
+                            col: label,
+                            defaultValue: 'Move {{col}} earlier',
+                          })}
+                          className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          disabled={i === order.length - 1}
+                          onClick={() => moveCol(k, 1)}
+                          aria-label={t('complaintReport.moveDown', {
+                            col: label,
+                            defaultValue: 'Move {{col}} later',
+                          })}
+                          className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          disabled={i === 0}
+                          onClick={() => moveCol(k, -i)}
+                          aria-label={t('complaintReport.moveFirst', {
+                            col: label,
+                            defaultValue: 'Move {{col}} to the front',
+                          })}
+                          title={t('complaintReport.moveFirst', {
+                            col: label,
+                            defaultValue: 'Move {{col}} to the front',
+                          })}
+                          className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                        >
+                          ⤒
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             </>
           )}
+          {/* Says the COUNT, so nobody has to wonder whether "export" means the
+              page in front of them. It never has — it has always exported the
+              whole filtered set — but a promise that has to be trusted is one
+              that gets re-tested by hand every single time. */}
           <Button size="sm" onClick={onExport}>
-            {t('agentReports.exportExcel', { defaultValue: 'Export to Excel' })}
+            {t('agentReports.exportExcelCount', {
+              count: visible.length,
+              defaultValue: 'Export {{count}} rows',
+            })}
           </Button>
         </div>
       </div>
@@ -805,14 +1042,42 @@ function ComplaintsReport({
         </Table>
       </TableSurface>
 
-      <PreviewNote shown={pageRows.length} total={joined.length} />
-      <Pagination
-        page={current}
-        pageCount={pageCount}
-        onPage={setPage}
-        prevLabel={t('agentReports.prev', { defaultValue: 'Previous' })}
-        nextLabel={t('agentReports.next', { defaultValue: 'Next' })}
-      />
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-2xs text-muted-foreground">
+          {t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' })}
+          <SelectMenu
+            size="sm"
+            className="w-[6rem]"
+            aria-label={t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' })}
+            value={String(pageSize)}
+            onChange={(v) => {
+              setPageSize(Number(v));
+              // Row 3,000 is on a different page at 25 than at 1000, so the
+              // page number cannot survive the change. Going back to the start
+              // is the only honest answer.
+              setPage(1);
+            }}
+            options={PAGE_SIZES.map((n) => ({ value: String(n), label: String(n) }))}
+          />
+        </label>
+        <span className="text-2xs tabular-nums text-muted-foreground">
+          {t('complaintReport.showingRange', {
+            defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
+            from: visible.length === 0 ? 0 : (current - 1) * pageSize + 1,
+            to: Math.min(current * pageSize, visible.length),
+            total: visible.length,
+          })}
+        </span>
+        <div className="ms-auto">
+          <Pagination
+            page={current}
+            pageCount={pageCount}
+            onPage={setPage}
+            prevLabel={t('agentReports.prev', { defaultValue: 'Previous' })}
+            nextLabel={t('agentReports.next', { defaultValue: 'Next' })}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -933,6 +1198,8 @@ function ConversationReport({
   days: number;
 }) {
   const { t } = useTranslation();
+  /** Which status box is expanded, showing the customers behind its count. */
+  const [drill, setDrill] = useState<string | null>(null);
 
   const onExport = () => {
     if (report.total === 0) {
@@ -966,12 +1233,60 @@ function ConversationReport({
             {t('agentReports.byStatus', { defaultValue: 'By status' })}
           </h3>
           <ul className="space-y-2">
-            {report.byStatus.map((s) => (
-              <li key={s.key} className="flex items-center justify-between gap-2 text-sm">
-                <StatusPill value={s.key} />
-                <span className="tabular-nums font-semibold text-foreground">{s.count}</span>
-              </li>
-            ))}
+            {report.byStatus.map((s) => {
+              const open = drill === s.key;
+              return (
+                <li key={s.key}>
+                  {/* Clicking a count opens the customers behind it. "20 open"
+                      is a number; twenty phone numbers is a morning's work, and
+                      the whole reason somebody looks at this box. */}
+                  <button
+                    type="button"
+                    onClick={() => setDrill(open ? null : s.key)}
+                    aria-expanded={open}
+                    className="flex w-full items-center justify-between gap-2 rounded-lg px-1.5 py-1 text-sm transition-colors duration-fast hover:bg-secondary/60"
+                  >
+                    <StatusPill value={s.key} />
+                    <span className="ms-auto tabular-nums font-semibold text-foreground">
+                      {s.count}
+                    </span>
+                    <span aria-hidden className="text-2xs text-muted-foreground">
+                      {open ? '▴' : '▾'}
+                    </span>
+                  </button>
+                  {open && (
+                    <ul className="mt-1.5 max-h-64 space-y-1 overflow-auto rounded-xl bg-secondary/40 p-2">
+                      {report.rows
+                        .filter((r) => r.status === s.key)
+                        .map((r) => (
+                          <li
+                            key={r.id}
+                            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs"
+                          >
+                            <span className="font-mono tabular-nums text-foreground">
+                              {r.customerPhone ||
+                                r.customerName ||
+                                r.customerEmail ||
+                                t('agentReports.noContact', { defaultValue: 'no contact on file' })}
+                            </span>
+                            {r.customerPhone && r.customerName && (
+                              <span className="text-muted-foreground">{r.customerName}</span>
+                            )}
+                            {r.orderId && (
+                              <span className="font-mono text-2xs text-muted-foreground">
+                                #{r.orderId}
+                              </span>
+                            )}
+                            <span className="ms-auto text-2xs text-muted-foreground">
+                              {r.agentName}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
         <div className="rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.05] shadow-soft">
@@ -988,6 +1303,49 @@ function ConversationReport({
           </ul>
         </div>
       </div>
+
+      {/* The conversations themselves, with who they are with. The day matrix
+          below answers "how many"; this answers "which", which is what somebody
+          reading a status report is about to go and do something about. */}
+      <TableSurface className="overflow-x-auto">
+        <Table>
+          <thead>
+            <tr>
+              <Th>{tr('agentReports.col.customer', { defaultValue: 'Customer' })}</Th>
+              <Th>{tr('agentReports.col.phone', { defaultValue: 'Phone' })}</Th>
+              <Th>{tr('agentReports.col.status', { defaultValue: 'Status' })}</Th>
+              <Th>{tr('agentReports.col.priority', { defaultValue: 'Priority' })}</Th>
+              <Th>{tr('agentReports.col.agent', { defaultValue: 'Agent' })}</Th>
+              <Th>{tr('agentReports.col.orderNumber', { defaultValue: 'Order' })}</Th>
+              <Th>{tr('agentReports.col.lastMessage', { defaultValue: 'Last message' })}</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.rows.slice(0, 50).map((r) => (
+              <Tr key={r.id}>
+                <Td className="font-medium">
+                  {r.customerName || t('agentReports.noName', { defaultValue: '—' })}
+                </Td>
+                <Td className="font-mono tabular-nums text-muted-foreground">
+                  {r.customerPhone || '—'}
+                </Td>
+                <Td>
+                  <StatusPill value={r.status} />
+                </Td>
+                <Td>
+                  <PriorityPill value={r.priority} />
+                </Td>
+                <Td className="text-muted-foreground">{r.agentName}</Td>
+                <Td className="font-mono tabular-nums text-muted-foreground">{r.orderId || '—'}</Td>
+                <Td className="tabular-nums text-muted-foreground">
+                  {r.lastMessageAt ? fmtDateTime(r.lastMessageAt) : '—'}
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </Table>
+      </TableSurface>
+      <PreviewNote shown={Math.min(report.rows.length, 50)} total={report.rows.length} />
 
       <TableSurface>
         <Table>
@@ -1060,7 +1418,12 @@ const META: Record<
     titleKey: 'agentReports.agentsTitle',
     titleDefault: 'Agent KPI',
     subKey: 'agentReports.agentsSubtitle',
-    subDefault: 'Per-agent first-response time, SLA compliance and CSAT — export to Excel.',
+    // Names the object it counts. Three surfaces report response times now and
+    // their numbers will never agree, because tickets and chats are different
+    // things — saying which is which is cheaper than explaining the gap every
+    // time somebody spots it.
+    subDefault:
+      'One row per agent, over TICKETS: how many they held, how fast the first reply went out, how many breached, and what customers scored them. For the individual breaches see SLA performance; for chat response times see Agent performance.',
   },
   conversations: {
     titleKey: 'agentReports.conversationsTitle',
@@ -1123,7 +1486,13 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-4">
-        <div className="mx-auto max-w-5xl space-y-5">
+        {/* The tickets report is a 27-column operations sheet and gets the whole
+            monitor; the other three are read-and-move-on summaries and stay
+            narrow, because a KPI strip stretched across 1920px is four numbers
+            with a metre of white between them. */}
+        <div
+          className={cn('mx-auto space-y-5', which === 'complaints' ? 'max-w-none' : 'max-w-5xl')}
+        >
           {/* Clean editorial header — no gradient banner. */}
           <div className="border-b border-foreground/10 pb-5">
             <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">

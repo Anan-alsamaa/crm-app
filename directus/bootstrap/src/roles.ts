@@ -105,9 +105,27 @@ const STORE_FIELDS_NO_YIJI_ID = [
   'status',
 ];
 
-// Agent row-level scoping filters.
+/**
+ * Agent row-level scoping for conversations.
+ *
+ * Three ways a chat is yours to work:
+ *
+ *  - it is assigned to you;
+ *  - nobody owns it (the pool — where the escalation ladder drops a chat
+ *    nobody picked up, and an agent who could not see those would never
+ *    rescue one);
+ *  - it is assigned to YOUR TEAM. This is the handover case: the night shift
+ *    passes a chat to the day shift by assigning the Day shift team, and every
+ *    agent on that team has to be able to see and answer it. Without this
+ *    clause a team assignment is decoration — the chat would remain invisible
+ *    to exactly the people it was handed to.
+ */
 const ASSIGNED_OR_UNASSIGNED = {
-  _or: [{ assigned_agent: { _eq: '$CURRENT_USER' } }, { assigned_agent: { _null: true } }],
+  _or: [
+    { assigned_agent: { _eq: '$CURRENT_USER' } },
+    { assigned_agent: { _null: true } },
+    { assigned_team: { _eq: '$CURRENT_USER.team' } },
+  ],
 };
 const SELF_RECIPIENT = { recipient: { _eq: '$CURRENT_USER' } };
 

@@ -34,6 +34,15 @@ export interface AuthUser {
    * not the role name — so this is the authoritative signal for admin gating.
    */
   admin_access: boolean;
+  /**
+   * The team this user belongs to, or null.
+   *
+   * Read with the identity rather than fetched separately because it scopes
+   * what the inbox shows: a chat handed to somebody's SHIFT has to appear in
+   * their working view, and that view is built before anything else knows who
+   * they are.
+   */
+  team: string | null;
 }
 
 /** Shape of a policy junction row as returned by readMe (role + direct). */
@@ -47,6 +56,7 @@ interface RawMe {
   last_name: string | null;
   status: string;
   role: { id: string; name: string; policies?: PolicyLink[] } | null;
+  team?: string | null;
   policies?: PolicyLink[];
 }
 
@@ -83,7 +93,15 @@ export function createAuthClient({ url, storage }: AuthClientOptions) {
     try {
       raw = (await client.request(
         readMe({
-          fields: ['id', 'email', 'first_name', 'last_name', 'status', { role: ['id', 'name'] }],
+          fields: [
+            'id',
+            'email',
+            'first_name',
+            'last_name',
+            'status',
+            'team',
+            { role: ['id', 'name'] },
+          ],
         }),
       )) as RawMe;
     } catch {
@@ -115,6 +133,7 @@ export function createAuthClient({ url, storage }: AuthClientOptions) {
       status: raw.status,
       role: raw.role ? { id: raw.role.id, name: raw.role.name } : null,
       admin_access,
+      team: raw.team ?? null,
     };
   }
 

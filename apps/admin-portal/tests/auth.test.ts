@@ -11,6 +11,7 @@ const base: Omit<AuthUser, 'role'> = {
   last_name: null,
   status: 'active',
   admin_access: false,
+  team: null,
 };
 
 describe('isAdmin (admin portal admin guard)', () => {

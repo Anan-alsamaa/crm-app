@@ -121,47 +121,24 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
 export function SlaReportsPage() {
   const { t } = useTranslation();
   const [days, setDays] = useState(30);
-  const [view, setView] = useState<'agent' | 'ticket'>('agent');
   const [agentFilter, setAgentFilter] = useState<{ id: string | null; name: string } | null>(null);
   const report = useSlaReports(days);
 
   const ticketsShown = useMemo(() => {
     const all = report.data?.tickets ?? [];
-    if (view === 'ticket' && agentFilter) return all.filter((tk) => tk.agentId === agentFilter.id);
+    if (agentFilter) return all.filter((tk) => tk.agentId === agentFilter.id);
     return all;
-  }, [report.data, view, agentFilter]);
+  }, [report.data, agentFilter]);
 
+  /**
+   * Exports the TICKETS, always — the same rows on screen, filtered the same
+   * way. There used to be a second, per-agent shape behind the view toggle;
+   * with the toggle gone it could only ever have been reached by accident, and
+   * a per-agent rollup is what Agent KPI exports.
+   */
   const exportCsv = () => {
     if (!report.data) return;
-    if (view === 'agent') {
-      const rows: (string | number)[][] = [
-        [
-          'agent',
-          'tickets',
-          'first_response_pct',
-          'fr_met',
-          'fr_breached',
-          'resolution_pct',
-          'res_met',
-          'res_breached',
-          'avg_first_response_min',
-          'breaches',
-        ],
-        ...report.data.agents.map((a) => [
-          a.agentName,
-          a.tickets,
-          a.frPct == null ? '' : Math.round(a.frPct),
-          a.frMet,
-          a.frBreached,
-          a.resPct == null ? '' : Math.round(a.resPct),
-          a.resMet,
-          a.resBreached,
-          a.avgResponseMin == null ? '' : Math.round(a.avgResponseMin),
-          a.breaches,
-        ]),
-      ];
-      downloadCsv(`sla-by-agent-${days}d.csv`, rows);
-    } else {
+    {
       const rows: (string | number)[][] = [
         [
           'ticket_id',
@@ -198,33 +175,15 @@ export function SlaReportsPage() {
         </h1>
         <span className="hidden text-xs text-muted-foreground sm:inline">
           {t('slaReports.subtitle', {
-            defaultValue: 'First-response & resolution SLA — drill from agent into tickets',
+            defaultValue: 'Which TICKETS met the deadline they were promised',
           })}
         </span>
         <ToolbarSpacer />
-        {/* View toggle */}
-        <div className="inline-flex rounded-lg bg-secondary/60 p-0.5 text-xs">
-          {(['agent', 'ticket'] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => {
-                setView(v);
-                if (v === 'agent') setAgentFilter(null);
-              }}
-              className={cn(
-                'rounded-md px-2.5 py-1 font-medium transition-colors duration-fast',
-                view === v
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {v === 'agent'
-                ? t('slaReports.byAgent', { defaultValue: 'By agent' })
-                : t('slaReports.byTicket', { defaultValue: 'By ticket' })}
-            </button>
-          ))}
-        </div>
+        {/* The by-agent / by-ticket toggle that used to sit here is gone. The
+            per-agent half was retired when Agent KPI took that job, so the
+            toggle had one working position and switched nothing — a control
+            that does nothing is worse than no control, because somebody keeps
+            clicking it expecting a different answer. */}
         <div className="w-32">
           <SelectMenu
             fullWidth
@@ -284,6 +243,18 @@ export function SlaReportsPage() {
               />
             </div>
 
+            {/* Says which question this report answers and which it does not.
+                Three surfaces now report response times — this one, Agent KPI,
+                and Agent performance — and the numbers will never match,
+                because they measure different things over different objects.
+                An unlabelled discrepancy reads as a bug in whichever one the
+                reader trusts least. */}
+            <p className="rounded-xl bg-secondary/50 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+              {t('slaReports.scopeNote', {
+                defaultValue:
+                  'One row per TICKET, judged against the deadline its SLA policy promised. Use it to find the breaches and who held them. For a per-agent rollup with CSAT see Agent KPI; for chat response times see Agent performance — those measure conversations, not tickets, so their numbers are not these ones.',
+              })}
+            </p>
             {/* ONE table. This page used to toggle between a per-agent view and a
                 per-ticket view, and the per-agent one duplicated the Agent KPI
                 report. SLA performance is about which TICKETS met their promise,

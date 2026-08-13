@@ -10,6 +10,7 @@ import {
 } from '@yiji/shared-types';
 import {
   conversationVendorId,
+  leastLoadedAgentInTeam,
   useAgents,
   useLinkedTickets,
   useTeamOptions,
@@ -125,6 +126,44 @@ export function ConversationToolbar({
   ) : (
     (contact?.email ?? contact?.phone ?? null)
   );
+
+  /**
+   * Hand the chat to a team — the shift handover.
+   *
+   * Setting the team alone would leave the chat owned by whoever has it now,
+   * which for a night-to-day handover is precisely the person going home. So
+   * the chat also moves to the least-loaded agent ON that team, and the whole
+   * team can see it (Directus scopes conversation reads by
+   * `assigned_team = $CURRENT_USER.team`).
+   *
+   * Picking here rather than leaving it to the routing ladder is deliberate:
+   * the agent doing the handover watches the assignee change in front of them,
+   * so "I passed it to days" and "days has it" are the same moment.
+   *
+   * Clearing the team leaves the assignee alone. The chat still has an owner —
+   * removing a label is not a reason to take work away from somebody.
+   */
+  const handoverToTeam = async (teamId: string | null) => {
+    if (!teamId) {
+      await patch({ assigned_team: null });
+      return;
+    }
+    const member = await leastLoadedAgentInTeam(teamId);
+    await patch({
+      assigned_team: teamId,
+      // No member found means the team has nobody in it yet. Record the team
+      // anyway — the label is still true — but say so, because a handover to
+      // an empty team is a chat nobody is going to answer.
+      ...(member ? { assigned_agent: member } : {}),
+    });
+    if (!member) {
+      toast.warning(
+        t('conversation.teamEmpty', {
+          defaultValue: 'That team has no agents — the chat stays with its current owner.',
+        }),
+      );
+    }
+  };
 
   // Read-only at-a-glance tag strip; full management lives in the details sidebar.
   const tagChips = conversation.tags?.filter((j) => j.tags_id) ?? [];
@@ -260,7 +299,7 @@ export function ConversationToolbar({
               aria-label={t('conversation.team')}
               value={conversation.assigned_team ?? ''}
               display={teamLabel}
-              onChange={(v) => void patch({ assigned_team: v || null })}
+              onChange={(v) => void handoverToTeam(v || null)}
               options={[
                 { value: '', label: t('conversation.noTeam') },
                 ...(teams.data ?? []).map((tm) => ({ value: tm.id, label: tm.name })),

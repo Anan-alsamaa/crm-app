@@ -266,6 +266,10 @@ describe('buildConversationSheets', () => {
         agentName: 'Ann Lee',
         createdAt: localIso(2026, 7, 22, 9, 5),
         lastMessageAt: null,
+        customerName: 'Saad Al-Harbi',
+        customerPhone: '+966500000001',
+        customerEmail: 'saad@example.com',
+        orderId: '946641',
       },
       {
         id: 'c2',
@@ -274,6 +278,12 @@ describe('buildConversationSheets', () => {
         agentName: 'Unassigned',
         createdAt: null,
         lastMessageAt: localIso(2026, 7, 22, 14, 30),
+        // A contact with nothing on file — the sheet must show blanks, not
+        // "undefined", and the customer column must not become the id.
+        customerName: '',
+        customerPhone: '',
+        customerEmail: '',
+        orderId: '',
       },
     ],
     byStatus: [
@@ -322,19 +332,39 @@ describe('buildConversationSheets', () => {
     ]);
   });
 
-  it('renders one detail row per conversation with formatted timestamps', () => {
+  it('leads with the customer, not the conversation uuid', () => {
+    // The point of exporting a status report is to have a list somebody can
+    // work through. A sheet whose first column is a uuid is not that list; the
+    // id stays, at the end, for matching rows back against the system.
     const detail = buildConversationSheets(report, makeT())[2]!;
     expect(headers(detail.columns)).toEqual([
-      'Conversation ID',
+      'Customer',
+      'Phone',
+      'Email',
+      'Order',
       'Status',
       'Priority',
       'Agent',
       'Created',
       'Last message',
+      'Conversation ID',
     ]);
     expect(detail.rows).toEqual([
-      ['c1', 'Open', 'Urgent', 'Ann Lee', '2026-07-22 09:05', ''],
-      ['c2', 'Closed', 'Low', 'Unassigned', '', '2026-07-22 14:30'],
+      [
+        'Saad Al-Harbi',
+        '+966500000001',
+        'saad@example.com',
+        '946641',
+        'Open',
+        'Urgent',
+        'Ann Lee',
+        '2026-07-22 09:05',
+        '',
+        'c1',
+      ],
+      // Nothing on file: blanks, never "undefined", and the customer column
+      // does not quietly become the id.
+      ['', '', '', '', 'Closed', 'Low', 'Unassigned', '', '2026-07-22 14:30', 'c2'],
     ]);
   });
 

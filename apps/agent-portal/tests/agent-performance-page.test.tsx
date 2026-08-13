@@ -28,6 +28,12 @@ vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
 const inbox = vi.hoisted(() => ({ useAgents: vi.fn() }));
 vi.mock('../src/features/inbox/api.js', () => inbox);
 
+// The comparison chart marks the viewer's own row, so the page reads the
+// signed-in user.
+vi.mock('../src/lib/auth/AuthContext.js', () => ({
+  useAuth: () => ({ user: { id: 'a1', first_name: 'Sara' } }),
+}));
+
 const perf = vi.hoisted(() => ({ useChatTimings: vi.fn() }));
 vi.mock('../src/features/performance/api.js', () => perf);
 
@@ -59,7 +65,11 @@ const timings: ChatTiming[] = [
   chat({ conversationId: 'never', firstAgentAt: null, solvedAt: null }),
 ];
 
-const row = (name: string) => screen.getByRole('row', { name: new RegExp(name) });
+/** A row of the per-agent TOTALS table, not the chat-by-chat one below it. */
+const row = (name: string) =>
+  within(screen.getByRole('table', { name: 'Totals per agent' })).getByRole('row', {
+    name: new RegExp(name),
+  });
 
 beforeEach(() => {
   navigate.mockReset();
@@ -116,11 +126,22 @@ describe('AgentPerformancePage', () => {
     expect(screen.getByRole('button', { name: /Meeting SLA/ })).toHaveTextContent('2');
   });
 
-  it('opens a chat from the population currently on screen', async () => {
+  it('lists the chats behind the numbers, slowest first', () => {
+    renderPage();
+    const breakdown = screen.getByRole('table', { name: 'Chat by chat' });
+    const rows = within(breakdown).getAllByRole('row').slice(1); // drop the header
+    // Viewing "missed": the unanswered chat leads, because no reply at all
+    // outranks a slow one.
+    expect(within(rows[0]!).getByText('No reply')).toBeInTheDocument();
+    expect(rows).toHaveLength(2);
+  });
+
+  it('opens the exact chat that was clicked, not the agent’s first', async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.click(row('Sara'));
-    // Viewing "missed", so it must not open the fast chat.
+    const breakdown = screen.getByRole('table', { name: 'Chat by chat' });
+    // The 20-minute one — a specific conversation, chosen by the reader.
+    await user.click(within(breakdown).getByText('20m 0s'));
     expect(navigate).toHaveBeenCalledWith('/?conv=slow');
   });
 

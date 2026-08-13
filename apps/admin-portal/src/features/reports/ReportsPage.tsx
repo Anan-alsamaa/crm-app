@@ -74,6 +74,46 @@ interface Draft {
   agent: string;
   team: string;
   emailRecipients: string;
+  /** A preset key, or 'custom' when the cron was typed by hand. */
+  frequency: FrequencyKey;
+  cron: string;
+}
+
+/**
+ * How often a report runs, as presets over cron.
+ *
+ * Recipients used to be the only schedule field on this form, so `schedule.cron`
+ * was never written and no saved report ever fired — a report with an email
+ * address on it and no way to trigger looks configured and is not. The presets
+ * cover what operations actually ask for; the raw expression stays available
+ * for anything else, because a picker that cannot express "every other Tuesday"
+ * must not be the only way in.
+ *
+ * 07:00 rather than midnight: a report generated at 00:00 on the 1st covers a
+ * month that ended sixty seconds ago and lands in an inbox nobody opens until
+ * morning anyway.
+ */
+const FREQUENCIES = {
+  manual: { cron: '', labelKey: 'reports.freqManual', label: 'Manual only' },
+  daily: { cron: '0 7 * * *', labelKey: 'reports.freqDaily', label: 'Every day at 07:00' },
+  weekly: { cron: '0 7 * * 1', labelKey: 'reports.freqWeekly', label: 'Every Monday at 07:00' },
+  monthly: {
+    cron: '0 7 1 * *',
+    labelKey: 'reports.freqMonthly',
+    label: 'The 1st of every month at 07:00',
+  },
+  custom: { cron: '', labelKey: 'reports.freqCustom', label: 'Custom (cron)' },
+} as const;
+type FrequencyKey = keyof typeof FREQUENCIES;
+
+/** The preset a stored cron came from, or 'custom' when it matches none. */
+function frequencyOf(cron: string | undefined): FrequencyKey {
+  const c = (cron ?? '').trim();
+  if (!c) return 'manual';
+  const hit = (Object.keys(FREQUENCIES) as FrequencyKey[]).find(
+    (k) => k !== 'custom' && k !== 'manual' && FREQUENCIES[k].cron === c,
+  );
+  return hit ?? 'custom';
 }
 
 const blank = (): Draft => ({
@@ -86,6 +126,8 @@ const blank = (): Draft => ({
   agent: '',
   team: '',
   emailRecipients: '',
+  frequency: 'manual',
+  cron: '',
 });
 
 export function ReportsPage() {
@@ -147,6 +189,8 @@ export function ReportsPage() {
           agent: existing.filters?.agent ?? '',
           team: existing.filters?.team ?? '',
           emailRecipients: (existing.schedule?.email ?? []).join(', '),
+          frequency: frequencyOf(existing.schedule?.cron),
+          cron: existing.schedule?.cron ?? '',
         });
       }
     } else {
@@ -175,6 +219,9 @@ export function ReportsPage() {
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean),
+        // Written at last: without a cron the workers' scheduler has nothing to
+        // register, and the report only ever runs when somebody clicks Run now.
+        cron: draft.frequency === 'custom' ? draft.cron.trim() : FREQUENCIES[draft.frequency].cron,
       },
     };
     try {
@@ -446,6 +493,60 @@ export function ReportsPage() {
                 })}
               />
             </FormField>
+            <FormField
+              label={t('reports.frequency', { defaultValue: 'How often' })}
+              hint={
+                draft.frequency === 'manual'
+                  ? t('reports.freqManualHint', {
+                      defaultValue: 'Nothing is sent automatically — only "Run now".',
+                    })
+                  : undefined
+              }
+            >
+              <SelectMenu
+                fullWidth
+                value={draft.frequency}
+                onChange={(v) => setDraft({ ...draft, frequency: v as FrequencyKey })}
+                aria-label={t('reports.frequency', { defaultValue: 'How often' })}
+                options={(Object.keys(FREQUENCIES) as FrequencyKey[]).map((k) => ({
+                  value: k,
+                  label: t(FREQUENCIES[k].labelKey, { defaultValue: FREQUENCIES[k].label }),
+                }))}
+              />
+            </FormField>
+            {draft.frequency === 'custom' && (
+              <FormField
+                label={t('reports.cron', { defaultValue: 'Cron expression' })}
+                hint={t('reports.cronHint', {
+                  defaultValue: 'Five fields: minute hour day-of-month month day-of-week.',
+                })}
+              >
+                <Input
+                  value={draft.cron}
+                  onChange={(e) => setDraft({ ...draft, cron: e.target.value })}
+                  placeholder="0 7 1 * *"
+                />
+              </FormField>
+            )}
+            {/* Says what will happen, in words. A cron expression is not a
+                sentence most people can read back, and "did I schedule this
+                correctly" is the question this form has to answer. */}
+            {draft.frequency !== 'manual' && (
+              <p className="rounded-xl bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-foreground">
+                {draft.emailRecipients.trim()
+                  ? t('reports.scheduleSummary', {
+                      defaultValue: 'Sent to {{who}} — {{when}}.',
+                      who: draft.emailRecipients.trim(),
+                      when: t(FREQUENCIES[draft.frequency].labelKey, {
+                        defaultValue: FREQUENCIES[draft.frequency].label,
+                      }).toLowerCase(),
+                    })
+                  : t('reports.scheduleNoRecipients', {
+                      defaultValue:
+                        'It will run on schedule, but with no recipients nobody receives it.',
+                    })}
+              </p>
+            )}
           </DrawerSection>
         </div>
       </Drawer>
