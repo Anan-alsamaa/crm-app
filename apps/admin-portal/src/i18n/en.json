@@ -795,8 +795,6 @@
     "bySource": "How complaints reach us",
     "area": "Area",
     "allAreas": "All areas",
-    "mobile": "Customer mobile",
-    "mobileHint": "e.g. 41059",
     "health": "Service health",
     "healthHint": "Where every complaint in this range currently stands.",
     "healthGauge": "of rated complaints ended satisfied",
