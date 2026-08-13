@@ -304,24 +304,37 @@ export function buildConversationSheets(report: ConversationStatusReport, t: Tra
   };
 
   // Sheet C — conversation detail (row per conversation).
+  //
+  // Customer, phone and order lead: a sheet of conversation UUIDs is something
+  // nobody can act on, and the point of exporting a status report is to have a
+  // list to work through. The id stays, at the end, for anyone matching rows
+  // back against the system.
   const detailColumns = [
-    {
-      header: t('agentReports.col.conversationId', { defaultValue: 'Conversation ID' }),
-      width: 26,
-    },
+    { header: t('agentReports.col.customer', { defaultValue: 'Customer' }), width: 22 },
+    { header: t('agentReports.col.phone', { defaultValue: 'Phone' }), width: 18 },
+    { header: t('agentReports.col.email', { defaultValue: 'Email' }), width: 24 },
+    { header: t('agentReports.col.orderNumber', { defaultValue: 'Order' }), width: 14 },
     { header: t('agentReports.col.status', { defaultValue: 'Status' }), width: 12 },
     { header: t('agentReports.col.priority', { defaultValue: 'Priority' }), width: 12 },
     { header: t('agentReports.col.agent', { defaultValue: 'Agent' }), width: 20 },
     { header: t('agentReports.col.created', { defaultValue: 'Created' }), width: 18 },
     { header: t('agentReports.col.lastMessage', { defaultValue: 'Last message' }), width: 18 },
+    {
+      header: t('agentReports.col.conversationId', { defaultValue: 'Conversation ID' }),
+      width: 26,
+    },
   ];
   const detailRows: CellValue[][] = report.rows.map((c) => [
-    c.id,
+    c.customerName,
+    c.customerPhone,
+    c.customerEmail,
+    c.orderId,
     common(`status.${c.status}`, c.status, t),
     common(`priority.${c.priority}`, c.priority, t),
     c.agentName,
     fmtDateTime(c.createdAt),
     fmtDateTime(c.lastMessageAt),
+    c.id,
   ]);
   const detailSheet: Sheet = {
     name: t('agentReports.tab.conversations', { defaultValue: 'Conversations' }),

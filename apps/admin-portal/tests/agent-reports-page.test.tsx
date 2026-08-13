@@ -311,9 +311,11 @@ describe('AgentReportsPage — shell', () => {
     api.useAgentReportData.mockReturnValue(ok);
     renderPage('agents');
     expect(screen.getAllByText('Agent KPI').length).toBeGreaterThanOrEqual(1);
-    expect(
-      screen.getByText('Per-agent first-response time, SLA compliance and CSAT — export to Excel.'),
-    ).toBeInTheDocument();
+    // The subtitle names the OBJECT it counts. Three surfaces report response
+    // times and their numbers cannot agree — tickets and chats are different
+    // things — so each says which it measures and where the others live.
+    expect(screen.getByText(/One row per agent, over TICKETS/)).toBeInTheDocument();
+    expect(screen.getByText(/Agent performance/)).toBeInTheDocument();
   });
 
   it('renders skeletons while the report loads', () => {
@@ -527,16 +529,41 @@ describe('AgentReportsPage — conversation status report', () => {
     expect(screen.getByText('20')).toBeInTheDocument(); // open conversations
     expect(screen.getByText('13')).toBeInTheDocument(); // low priority
 
+    // Two tables now: the conversations themselves, then the day matrix. The
+    // matrix answers "how many"; the list answers "which", which is what
+    // somebody reading a status report is about to act on.
+    const tables = container.querySelectorAll('table');
+    expect(tables).toHaveLength(2);
+    const headersOf = (tbl: Element) =>
+      Array.from(tbl.querySelectorAll('thead th')).map((th) => th.textContent?.trim());
+    expect(headersOf(tables[0]!)).toEqual([
+      'Customer',
+      'Phone',
+      'Status',
+      'Priority',
+      'Agent',
+      'Order',
+      'Last message',
+    ]);
     // One column per status, plus Date + Total.
-    const headers = Array.from(container.querySelectorAll('thead th')).map((th) =>
-      th.textContent?.trim(),
-    );
-    expect(headers).toEqual(['Date', 'Total', 'closed', 'open']);
+    expect(headersOf(tables[1]!)).toEqual(['Date', 'Total', 'closed', 'open']);
     // 16 days of data, only the last 14 previewed.
-    expect(container.querySelectorAll('tbody tr')).toHaveLength(14);
+    expect(tables[1]!.querySelectorAll('tbody tr')).toHaveLength(14);
     expect(
       screen.getByText('Showing the last 14 of 16 days — the export covers all.'),
     ).toBeInTheDocument();
+  });
+
+  it('opens the customers behind a status count', async () => {
+    // "20 open" is a number; twenty phone numbers is a morning's work, and the
+    // reason somebody clicks the box at all.
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    renderPage('conversations');
+
+    const openBox = screen.getAllByRole('button').find((b) => /open/i.test(b.textContent ?? ''))!;
+    await user.click(openBox);
+    expect(openBox).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('exports the three-sheet conversation workbook', async () => {

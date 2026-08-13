@@ -469,8 +469,9 @@
     "met": "Met",
     "pending": "Pending",
     "range": "Date range",
-    "subtitle": "First-response & resolution SLA — drill from agent into tickets",
-    "title": "SLA performance"
+    "subtitle": "Which TICKETS met the deadline they were promised",
+    "title": "SLA performance",
+    "scopeNote": "One row per TICKET, judged against the deadline its SLA policy promised. Use it to find the breaches and who held them. For a per-agent rollup with CSAT see Agent KPI; for chat response times see Agent performance — those measure conversations, not tickets, so their numbers are not these ones."
   },
   "app": {
     "console": "Admin console"
@@ -568,7 +569,9 @@
     "prev": "Previous",
     "next": "Next",
     "notMapped": "Not mapped",
-    "exportExcelCount": "Export {{count}} rows"
+    "exportExcelCount": "Export {{count}} rows",
+    "noContact": "no contact on file",
+    "noName": "—"
   },
   "ticketOps": {
     "title": "Ticket report",

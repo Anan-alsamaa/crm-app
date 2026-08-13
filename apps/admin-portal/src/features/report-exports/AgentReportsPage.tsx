@@ -1198,6 +1198,8 @@ function ConversationReport({
   days: number;
 }) {
   const { t } = useTranslation();
+  /** Which status box is expanded, showing the customers behind its count. */
+  const [drill, setDrill] = useState<string | null>(null);
 
   const onExport = () => {
     if (report.total === 0) {
@@ -1231,12 +1233,60 @@ function ConversationReport({
             {t('agentReports.byStatus', { defaultValue: 'By status' })}
           </h3>
           <ul className="space-y-2">
-            {report.byStatus.map((s) => (
-              <li key={s.key} className="flex items-center justify-between gap-2 text-sm">
-                <StatusPill value={s.key} />
-                <span className="tabular-nums font-semibold text-foreground">{s.count}</span>
-              </li>
-            ))}
+            {report.byStatus.map((s) => {
+              const open = drill === s.key;
+              return (
+                <li key={s.key}>
+                  {/* Clicking a count opens the customers behind it. "20 open"
+                      is a number; twenty phone numbers is a morning's work, and
+                      the whole reason somebody looks at this box. */}
+                  <button
+                    type="button"
+                    onClick={() => setDrill(open ? null : s.key)}
+                    aria-expanded={open}
+                    className="flex w-full items-center justify-between gap-2 rounded-lg px-1.5 py-1 text-sm transition-colors duration-fast hover:bg-secondary/60"
+                  >
+                    <StatusPill value={s.key} />
+                    <span className="ms-auto tabular-nums font-semibold text-foreground">
+                      {s.count}
+                    </span>
+                    <span aria-hidden className="text-2xs text-muted-foreground">
+                      {open ? '▴' : '▾'}
+                    </span>
+                  </button>
+                  {open && (
+                    <ul className="mt-1.5 max-h-64 space-y-1 overflow-auto rounded-xl bg-secondary/40 p-2">
+                      {report.rows
+                        .filter((r) => r.status === s.key)
+                        .map((r) => (
+                          <li
+                            key={r.id}
+                            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs"
+                          >
+                            <span className="font-mono tabular-nums text-foreground">
+                              {r.customerPhone ||
+                                r.customerName ||
+                                r.customerEmail ||
+                                t('agentReports.noContact', { defaultValue: 'no contact on file' })}
+                            </span>
+                            {r.customerPhone && r.customerName && (
+                              <span className="text-muted-foreground">{r.customerName}</span>
+                            )}
+                            {r.orderId && (
+                              <span className="font-mono text-2xs text-muted-foreground">
+                                #{r.orderId}
+                              </span>
+                            )}
+                            <span className="ms-auto text-2xs text-muted-foreground">
+                              {r.agentName}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
         <div className="rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.05] shadow-soft">
@@ -1253,6 +1303,49 @@ function ConversationReport({
           </ul>
         </div>
       </div>
+
+      {/* The conversations themselves, with who they are with. The day matrix
+          below answers "how many"; this answers "which", which is what somebody
+          reading a status report is about to go and do something about. */}
+      <TableSurface className="overflow-x-auto">
+        <Table>
+          <thead>
+            <tr>
+              <Th>{tr('agentReports.col.customer', { defaultValue: 'Customer' })}</Th>
+              <Th>{tr('agentReports.col.phone', { defaultValue: 'Phone' })}</Th>
+              <Th>{tr('agentReports.col.status', { defaultValue: 'Status' })}</Th>
+              <Th>{tr('agentReports.col.priority', { defaultValue: 'Priority' })}</Th>
+              <Th>{tr('agentReports.col.agent', { defaultValue: 'Agent' })}</Th>
+              <Th>{tr('agentReports.col.orderNumber', { defaultValue: 'Order' })}</Th>
+              <Th>{tr('agentReports.col.lastMessage', { defaultValue: 'Last message' })}</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.rows.slice(0, 50).map((r) => (
+              <Tr key={r.id}>
+                <Td className="font-medium">
+                  {r.customerName || t('agentReports.noName', { defaultValue: '—' })}
+                </Td>
+                <Td className="font-mono tabular-nums text-muted-foreground">
+                  {r.customerPhone || '—'}
+                </Td>
+                <Td>
+                  <StatusPill value={r.status} />
+                </Td>
+                <Td>
+                  <PriorityPill value={r.priority} />
+                </Td>
+                <Td className="text-muted-foreground">{r.agentName}</Td>
+                <Td className="font-mono tabular-nums text-muted-foreground">{r.orderId || '—'}</Td>
+                <Td className="tabular-nums text-muted-foreground">
+                  {r.lastMessageAt ? fmtDateTime(r.lastMessageAt) : '—'}
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </Table>
+      </TableSurface>
+      <PreviewNote shown={Math.min(report.rows.length, 50)} total={report.rows.length} />
 
       <TableSurface>
         <Table>
@@ -1325,7 +1418,12 @@ const META: Record<
     titleKey: 'agentReports.agentsTitle',
     titleDefault: 'Agent KPI',
     subKey: 'agentReports.agentsSubtitle',
-    subDefault: 'Per-agent first-response time, SLA compliance and CSAT — export to Excel.',
+    // Names the object it counts. Three surfaces report response times now and
+    // their numbers will never agree, because tickets and chats are different
+    // things — saying which is which is cheaper than explaining the gap every
+    // time somebody spots it.
+    subDefault:
+      'One row per agent, over TICKETS: how many they held, how fast the first reply went out, how many breached, and what customers scored them. For the individual breaches see SLA performance; for chat response times see Agent performance.',
   },
   conversations: {
     titleKey: 'agentReports.conversationsTitle',
