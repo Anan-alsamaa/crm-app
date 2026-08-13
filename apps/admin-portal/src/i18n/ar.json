@@ -191,7 +191,18 @@
     "heroSubtitle": "تعريفات تقارير محفوظة تعمل تلقائيًا وفق جدول وتُرسل ملف CSV إلى مستلميها — تُضبط مرة وتصل في وقتها.",
     "savedCount": "{{count}} محفوظ",
     "vendorPlaceholder": "معرّف البائع (UUID)",
-    "recipientsPlaceholder": "ops@example.com، manager@example.com"
+    "recipientsPlaceholder": "ops@example.com، manager@example.com",
+    "frequency": "كم مرة",
+    "freqManual": "يدوي فقط",
+    "freqManualHint": "لا يُرسل شيء تلقائيًا — فقط «تشغيل الآن».",
+    "freqDaily": "كل يوم الساعة 07:00",
+    "freqWeekly": "كل اثنين الساعة 07:00",
+    "freqMonthly": "في الأول من كل شهر الساعة 07:00",
+    "freqCustom": "مخصص (cron)",
+    "cron": "تعبير cron",
+    "cronHint": "خمسة حقول: الدقيقة، الساعة، اليوم، الشهر، يوم الأسبوع.",
+    "scheduleSummary": "يُرسل إلى {{who}} — {{when}}.",
+    "scheduleNoRecipients": "سيعمل وفق الجدول، لكن بلا مستلمين لن يصل أحدًا."
   },
   "customFields": {
     "title": "حقول مخصّصة",

@@ -191,7 +191,18 @@
     "heroSubtitle": "Saved report definitions that run automatically on a schedule and email a CSV to their recipients — set once, delivered on time.",
     "savedCount": "{{count}} saved",
     "vendorPlaceholder": "vendor-uuid",
-    "recipientsPlaceholder": "ops@example.com, manager@example.com"
+    "recipientsPlaceholder": "ops@example.com, manager@example.com",
+    "frequency": "How often",
+    "freqManual": "Manual only",
+    "freqManualHint": "Nothing is sent automatically — only \"Run now\".",
+    "freqDaily": "Every day at 07:00",
+    "freqWeekly": "Every Monday at 07:00",
+    "freqMonthly": "The 1st of every month at 07:00",
+    "freqCustom": "Custom (cron)",
+    "cron": "Cron expression",
+    "cronHint": "Five fields: minute hour day-of-month month day-of-week.",
+    "scheduleSummary": "Sent to {{who}} — {{when}}.",
+    "scheduleNoRecipients": "It will run on schedule, but with no recipients nobody receives it."
   },
   "customFields": {
     "title": "Custom fields",
