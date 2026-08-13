@@ -567,7 +567,8 @@
     "selectAll": "الكل",
     "prev": "السابق",
     "next": "التالي",
-    "notMapped": "غير مرتبط"
+    "notMapped": "غير مرتبط",
+    "exportExcelCount": "تصدير {{count}} صف"
   },
   "ticketOps": {
     "title": "تقرير التذاكر",
@@ -897,5 +898,17 @@
       "rejected": "مرفوضة",
       "all": "الكل"
     }
+  },
+  "complaintReport": {
+    "any": "الكل",
+    "clearFilters": "مسح المرشحات",
+    "rowCount": "{{count}} صف",
+    "rowsPerPage": "صفوف في الصفحة",
+    "showingRange": "عرض {{from}}–{{to}} من {{total}}",
+    "resetOrder": "إعادة الترتيب",
+    "findColumn": "ابحث عن عمود…",
+    "columnsHelp": "الترتيب هنا هو الترتيب في الجدول والتصدير.",
+    "moveFirst": "نقل {{col}} إلى المقدمة",
+    "searchPlaceholder": "رقم الطلب، الجوال، الفرع، أو كلمة من الشكوى…"
   }
 }

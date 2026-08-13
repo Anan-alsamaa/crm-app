@@ -638,7 +638,9 @@ describe('AgentReportsPage — complaints report', () => {
     const dl = captureDownloads();
     renderPage('complaints');
 
-    await userEvent.click(screen.getByText('Export to Excel'));
+    // The button carries the COUNT now, so the promise it makes is visible
+    // before it is clicked rather than checked by hand afterwards.
+    await userEvent.click(screen.getByText('Export 2 rows'));
     expect(dl.blobs).toHaveLength(1);
     expect(dl.names[0]).toMatch(/^reports-tickets-30d-\d{4}-\d{2}-\d{2}\.xlsx$/);
     dl.restore();
@@ -698,7 +700,9 @@ describe('AgentReportsPage — complaints report', () => {
     renderPage('complaints');
 
     await user.type(screen.getByLabelText(/Search by phone/), 'Panorama');
-    await user.click(screen.getByText('Export to Excel'));
+    // One row left after the filter, and the button says so — which is how a
+    // reader knows it will not quietly export all 2.
+    await user.click(screen.getByText('Export 1 rows'));
     expect(dl.blobs).toHaveLength(1);
     dl.restore();
   });
@@ -728,6 +732,92 @@ describe('AgentReportsPage — complaints report', () => {
     expect(screen.getByLabelText('Move Compensation later')).toBeDisabled();
   });
 
+  it('offers page sizes worth having, and starts at 25 rather than 10', async () => {
+    // The right size differs by task — 25 to read, 1000 to scan for a pattern
+    // before exporting. Ten served neither.
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    renderPage('complaints');
+
+    const combo = screen.getByRole('combobox', { name: 'Rows per page' });
+    expect(combo).toHaveTextContent('25');
+    await user.click(combo);
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      '25',
+      '50',
+      '100',
+      '200',
+      '1000',
+    ]);
+  });
+
+  it('says which rows are on screen out of how many', () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    renderPage('complaints');
+    expect(screen.getByText('Showing 1–2 of 2')).toBeInTheDocument();
+  });
+
+  it('filters by complaint type exactly, from the values actually present', async () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    const { container } = renderPage('complaints');
+
+    await user.click(screen.getByRole('combobox', { name: 'Complaint type' }));
+    // Built from the rows in range — a menu of every type the company has ever
+    // used is a list to read past, and picking an absent one looks like a bug.
+    const options = screen.getAllByRole('option').map((o) => o.textContent ?? '');
+    expect(options[0]).toBe('Any');
+    expect(options.length).toBeGreaterThan(1);
+
+    await user.click(screen.getByRole('option', { name: options[1]! }));
+    const shown = container.querySelectorAll('tbody tr').length;
+    expect(shown).toBeGreaterThan(0);
+    expect(shown).toBeLessThanOrEqual(2);
+  });
+
+  it('clears every filter at once', async () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    const { container } = renderPage('complaints');
+
+    await user.type(screen.getByLabelText(/Search by phone/), 'zzzznothing');
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(0);
+
+    await user.click(screen.getByText('Clear filters'));
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+  });
+
+  it('hides the clear button when nothing is filtered', () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    renderPage('complaints');
+    expect(screen.queryByText('Clear filters')).toBeNull();
+  });
+
+  it('can send a column to the front in one action', async () => {
+    // Twenty-seven ↑ clicks to move Compensation to the front was the actual
+    // complaint about this panel.
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    renderPage('complaints');
+
+    await user.click(screen.getByText('Columns'));
+    await user.click(screen.getByLabelText('Move Compensation to the front'));
+    const first = screen.getAllByRole('checkbox')[0]!.closest('label')!;
+    expect(first).toHaveTextContent('Compensation');
+  });
+
+  it('finds a column by name instead of scrolling a list of 27', async () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    renderPage('complaints');
+
+    await user.click(screen.getByText('Columns'));
+    await user.type(screen.getByPlaceholderText('Find a column…'), 'coupon');
+    const labels = screen.getAllByRole('checkbox').map((c) => c.closest('label')!.textContent);
+    expect(labels.every((l) => /coupon/i.test(l ?? ''))).toBe(true);
+    expect(labels.length).toBe(3); // code, value, %
+  });
+
   it('says the schema is missing rather than rendering 24 blank columns', () => {
     api.useAgentReportData.mockReturnValue({
       ...ok,
@@ -735,6 +825,6 @@ describe('AgentReportsPage — complaints report', () => {
     });
     renderPage('complaints');
     expect(screen.getByText('Complaint fields are not available here')).toBeInTheDocument();
-    expect(screen.queryByText('Export to Excel')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Export \d+ rows$/)).not.toBeInTheDocument();
   });
 });

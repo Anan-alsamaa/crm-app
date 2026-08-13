@@ -567,7 +567,8 @@
     "selectAll": "All",
     "prev": "Previous",
     "next": "Next",
-    "notMapped": "Not mapped"
+    "notMapped": "Not mapped",
+    "exportExcelCount": "Export {{count}} rows"
   },
   "ticketOps": {
     "title": "Ticket report",
@@ -897,5 +898,17 @@
       "rejected": "Rejected",
       "all": "All"
     }
+  },
+  "complaintReport": {
+    "any": "Any",
+    "clearFilters": "Clear filters",
+    "rowCount": "{{count}} rows",
+    "rowsPerPage": "Rows per page",
+    "showingRange": "Showing {{from}}–{{to}} of {{total}}",
+    "resetOrder": "Reset order",
+    "findColumn": "Find a column…",
+    "columnsHelp": "The order here is the order in the table and the export.",
+    "moveFirst": "Move {{col}} to the front",
+    "searchPlaceholder": "Order number, phone, branch, or a word from the complaint…"
   }
 }
