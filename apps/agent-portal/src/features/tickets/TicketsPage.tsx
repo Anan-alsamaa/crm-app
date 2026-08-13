@@ -19,7 +19,12 @@ import {
   ToolbarSpacer,
   useIsDesktop,
 } from '@yiji/ui';
-import type { Priority, TicketStatus } from '@yiji/shared-types';
+import {
+  isCouponRequested,
+  splitCouponForApproval,
+  type Priority,
+  type TicketStatus,
+} from '@yiji/shared-types';
 import {
   useTicket,
   useTicketEvents,
@@ -64,6 +69,7 @@ import {
 import { useContact } from '../contacts/api.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 import { resolveMentions } from '../conversation/mentions.js';
+import { useRequestCouponApproval } from '../coupons/api.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { formatBytes, isImage, isUnknownType } from '../../lib/files.js';
 import { FileGlyph } from '../../components/FileGlyph.js';
@@ -1257,6 +1263,8 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
 function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
   const { t } = useTranslation();
   const update = useUpdateTicket();
+  const requestCoupon = useRequestCouponApproval();
+  const { user } = useAuth();
   const stores = useStores();
   const [editing, setEditing] = useState(false);
   const [storeId, setStoreId] = useState(ticket.store ?? '');
@@ -1328,12 +1336,71 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
   const save = async () => {
     if (complaintHasErrors(draft)) return;
     try {
+      /**
+       * The coupon goes to a supervisor, exactly as it does on the create
+       * dialog — this path used to PATCH coupon_code / coupon_value /
+       * coupon_percent straight onto the ticket, so an agent could grant
+       * themselves any coupon by opening their own ticket and clicking Edit.
+       * The approval queue was advisory: it only ever saw coupons raised from
+       * the one screen that asked politely.
+       *
+       * `coupon.ticket` deliberately overrides whatever complaintPatch put in
+       * those fields, so there is one place that decides and it is this one.
+       */
+      const coupon = splitCouponForApproval(draft);
+      /**
+       * The coupon columns are ABSENT from the patch, not set to null: they are
+       * outside the Agent policy's write scope now (TICKET_FIELDS_AGENT_WRITABLE
+       * in roles.ts), and Directus rejects an entire PATCH that so much as names
+       * a field the policy does not allow. `compensation` still follows the
+       * split — withheld while a coupon is waiting, so the ticket never reads
+       * "Compensated" for money nobody has approved.
+       */
+      const {
+        coupon_code: _c,
+        coupon_value: _v,
+        coupon_percent: _p,
+        ...fields
+      } = complaintPatch(draft);
       await update.mutateAsync({
         id: ticket.id,
-        patch: { ...complaintPatch(draft), store: storeId || null },
+        patch: {
+          ...fields,
+          compensation: coupon.ticket.compensation,
+          store: storeId || null,
+        },
       });
+
+      // Raised only after the ticket write lands: a request pointing at an edit
+      // that failed is a promise nobody is holding.
+      let couponAsked = false;
+      if (coupon.request) {
+        try {
+          await requestCoupon.mutateAsync({
+            ...coupon.request,
+            ticket: ticket.id,
+            contact: ticket.contact?.id ?? null,
+            requested_by: user?.id ?? null,
+            reason: draft.response_desc.trim() || null,
+          });
+          couponAsked = true;
+        } catch {
+          toast.error(
+            t('coupons.requestFailed', {
+              defaultValue: 'The coupon was NOT sent for approval — raise it from the ticket.',
+            }),
+          );
+        }
+      }
+
       setEditing(false);
-      toast.success(t('complaint.saved', { defaultValue: 'Complaint details saved' }));
+      toast.success(
+        couponAsked
+          ? t('complaint.savedCouponPending', {
+              defaultValue: 'Saved. The coupon is waiting for a supervisor.',
+            })
+          : t('complaint.saved', { defaultValue: 'Complaint details saved' }),
+      );
     } catch {
       toast.error(t('errors.updateFailed', { ns: 'common' }));
     }
@@ -1373,6 +1440,20 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
             values={draft}
             onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
           />
+          {/* Said while the agent is still typing the coupon, not after they
+              have told the customer about it — the same warning the create
+              dialog carries, because this path raises the same request. */}
+          {isCouponRequested(draft) && (
+            <p className="flex items-start gap-2 rounded-xl bg-primary/[0.08] px-3 py-2 text-xs leading-relaxed text-foreground">
+              <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary" />
+              <span>
+                {t('coupons.needsApproval', {
+                  defaultValue:
+                    'A supervisor has to approve this coupon. It is not on the ticket until they do — do not promise it to the customer yet.',
+                })}
+              </span>
+            </p>
+          )}
           <div className="flex justify-end gap-2">
             <Button
               type="button"

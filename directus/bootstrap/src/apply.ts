@@ -21,6 +21,7 @@ import {
   updateRole,
   createPolicy,
   createPermission,
+  deletePermission,
   updatePermission,
   createUser,
   updateUser,
@@ -349,6 +350,15 @@ async function applyRoles(client: AnyClient): Promise<void> {
   // read-before-create by name rather than relying on create() to reject dupes.
   console.log('Roles, policies & permissions:');
 
+  /**
+   * Every collection any role here declares — the set this file is responsible
+   * for. Used to decide what the revoke pass below is allowed to touch, so
+   * grants made by other provisioning tools on the same policies survive.
+   */
+  const managedCollections = new Set(
+    roles.flatMap((r) => (r.permissions ?? []).map((p) => p.collection)),
+  );
+
   for (const role of roles) {
     if (role.name === 'Administrator') {
       console.log('  = Administrator (built-in)');
@@ -468,6 +478,37 @@ async function applyRoles(client: AnyClient): Promise<void> {
             validation: {},
           } as never),
         ),
+      );
+    }
+
+    /**
+     * REVOKE what roles.ts no longer declares — but only on collections this
+     * file actually governs.
+     *
+     * Without any revocation the file is half a source of truth: it can grant,
+     * and it can tighten an existing grant, but a permission DELETED from it
+     * lives on in the database forever. Not a tidiness problem — the Agent role
+     * kept an unfiltered `messages.update` long after the code stopped
+     * declaring it and grew a comment (H-3) explaining that agents must never
+     * be able to edit the chat record. roles.ts said the grant was gone; the
+     * database disagreed, and the database is what answers the request.
+     *
+     * The scope matters as much as the sweep. Other provisioning tools grant on
+     * this same Agent policy for collections this bootstrap does not own — the
+     * compensation clone (`directus/compensation-clone/grant-agent-perms.mjs`)
+     * is the live example, and an unscoped prune deletes its work on every run,
+     * breaking /compensation until somebody re-runs it. So a permission is only
+     * revoked when SOME role here declares that collection: that is the test for
+     * "this file is responsible for this collection's access".
+     *
+     * Every removal is printed. Quietly dropping access is its own surprise.
+     */
+    const declared = new Set(role.permissions.map((p) => `${p.collection}|${p.action}`));
+    for (const stale of existingPerms) {
+      if (!managedCollections.has(stale.collection)) continue;
+      if (declared.has(`${stale.collection}|${stale.action}`)) continue;
+      await idempotent(`perm ${role.name} ${stale.action} ${stale.collection} (REVOKED)`, () =>
+        client.request(deletePermission(stale.id)),
       );
     }
   }

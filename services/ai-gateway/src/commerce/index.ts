@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { isYijiUnavailable } from '@yiji/shared-types';
 import type { createYijiClient } from '@yiji/shared-types';
 import { verifyCaller, AuthError, type CallerVerifierDeps } from '../auth/index.js';
 import { COMMERCE_TTL, type CommerceCache } from './cache.js';
@@ -68,6 +69,26 @@ export async function registerCommerceRoutes(
     }
   }
 
+  /**
+   * Reply 504 when the upstream could not be asked, rather than letting the
+   * rejection become a bare 500 — or worse, an empty success. Every commerce
+   * route goes through this: "we could not reach the order system" must never
+   * reach an agent looking like "this customer has no orders".
+   */
+  const answering = async (
+    reply: FastifyReply,
+    what: Record<string, unknown>,
+    fn: () => Promise<unknown>,
+  ) => {
+    try {
+      return reply.send({ data: await fn() });
+    } catch (err) {
+      if (!isYijiUnavailable(err)) throw err;
+      app.log.warn({ ...what, err }, 'commerce upstream unavailable');
+      return reply.code(504).send({ error: 'commerce_unavailable' });
+    }
+  };
+
   /** Through the cache when there is one; straight upstream when there is not. */
   const cached = <T>(parts: readonly string[], ttl: number, fn: () => Promise<T>): Promise<T> =>
     deps.cache ? deps.cache.wrap(parts, ttl, fn) : fn();
@@ -88,10 +109,11 @@ export async function registerCommerceRoutes(
     const vendorId = str(q.vendorId);
     const customerId = str(q.customerId);
     if (!vendorId || !customerId) return reply.code(400).send({ error: 'missing_params' });
-    const data = await cached(['activity', vendorId, customerId], COMMERCE_TTL.activity, () =>
-      deps.yiji.getPurchaseActivity(vendorId, customerId),
+    return answering(reply, { route: 'activity', vendorId, customerId }, () =>
+      cached(['activity', vendorId, customerId], COMMERCE_TTL.activity, () =>
+        deps.yiji.getPurchaseActivity(vendorId, customerId),
+      ),
     );
-    return reply.send({ data });
   });
 
   app.get('/commerce/orders', async (req, reply) => {
@@ -102,7 +124,9 @@ export async function registerCommerceRoutes(
     if (!vendorId || !customerId) return reply.code(400).send({ error: 'missing_params' });
     const parsed = Number.parseInt(str(q.limit) || '6', 10);
     const limit = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 6, 1), 50);
-    return reply.send({ data: await listOrders(vendorId, customerId, limit) });
+    return answering(reply, { route: 'orders', vendorId, customerId }, () =>
+      listOrders(vendorId, customerId, limit),
+    );
   });
 
   app.get('/commerce/order', async (req, reply) => {
@@ -111,7 +135,9 @@ export async function registerCommerceRoutes(
     const vendorId = str(q.vendorId);
     const orderId = str(q.orderId);
     if (!vendorId || !orderId) return reply.code(400).send({ error: 'missing_params' });
-    return reply.send({ data: await orderDetail(vendorId, orderId) });
+    return answering(reply, { route: 'order', vendorId, orderId }, () =>
+      orderDetail(vendorId, orderId),
+    );
   });
 
   /**
@@ -139,10 +165,28 @@ export async function registerCommerceRoutes(
     const limit = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 2, 1), 10);
 
     const TIMED_OUT = Symbol('timed-out');
-    const orders = await Promise.race([
-      listOrders(vendorId, customerId, limit),
-      new Promise<typeof TIMED_OUT>((r) => setTimeout(() => r(TIMED_OUT), INBOX_BUDGET_MS)),
-    ]);
+    let orders: Awaited<ReturnType<typeof listOrders>> | typeof TIMED_OUT;
+    try {
+      orders = await Promise.race([
+        listOrders(vendorId, customerId, limit),
+        new Promise<typeof TIMED_OUT>((r) => setTimeout(() => r(TIMED_OUT), INBOX_BUDGET_MS)),
+      ]);
+    } catch (err) {
+      /**
+       * The client REJECTS when it could not ask — a 5xx, a network error, its
+       * own abort. That has to arrive here as a 504 for the same reason the
+       * timeout above does: `orders: []` is a positive claim that the customer
+       * has never ordered, and the panel would print it beside the agent's
+       * chat while the truth is that nobody knows.
+       *
+       * The client's own abort fires before INBOX_BUDGET_MS, so in practice
+       * this branch is what handles a hanging upstream and the race below it
+       * only covers a stalled cache.
+       */
+      if (!isYijiUnavailable(err)) throw err;
+      app.log.warn({ vendorId, customerId, err }, 'commerce inbox upstream unavailable');
+      return reply.code(504).send({ error: 'commerce_unavailable' });
+    }
     if (orders === TIMED_OUT) {
       app.log.warn({ vendorId, customerId }, 'commerce inbox timed out upstream');
       return reply.code(504).send({ error: 'commerce_timeout' });
@@ -179,7 +223,9 @@ export async function registerCommerceRoutes(
     const vendorId = str(q.vendorId);
     const orderId = str(q.orderId);
     if (!vendorId || !orderId) return reply.code(400).send({ error: 'missing_params' });
-    return reply.send({ data: await deps.yiji.getPaymentStatus(vendorId, orderId) });
+    return answering(reply, { route: 'payment', vendorId, orderId }, () =>
+      deps.yiji.getPaymentStatus(vendorId, orderId),
+    );
   });
 
   app.get('/commerce/shipment', async (req, reply) => {

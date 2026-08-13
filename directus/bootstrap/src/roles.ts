@@ -79,6 +79,9 @@ const ALL_BUSINESS = [
   // Supervisors own the rules; the queue is theirs to inspect and retry.
   'store_notify_rules',
   'store_notifications',
+  // The ready-reply library agents pick from. Operations wording, so operations
+  // maintain it.
+  'quick_replies',
   // The supervisor IS the admin role here: approving a coupon is the one thing
   // an agent must not be able to do for themselves.
   'coupon_approvals',
@@ -119,14 +122,79 @@ const STORE_FIELDS_NO_YIJI_ID = [
  *    agent on that team has to be able to see and answer it. Without this
  *    clause a team assignment is decoration — the chat would remain invisible
  *    to exactly the people it was handed to.
+ *
+ * The `_nnull` guard on the team clause is NOT redundant. For an agent whose
+ * own `team` is null, `$CURRENT_USER.team` resolves to null and Directus
+ * renders `assigned_team _eq null` as an IS NULL predicate that MATCHES — so
+ * the clause silently degenerates into "every chat that has no team", which is
+ * most of them. A team-less agent could therefore read and, through the same
+ * filter on update, reassign any colleague's conversation. Requiring the row's
+ * team to be non-null makes the clause vacuous for a team-less viewer instead
+ * of universal, which is the direction an access rule must fail in.
  */
 const ASSIGNED_OR_UNASSIGNED = {
   _or: [
     { assigned_agent: { _eq: '$CURRENT_USER' } },
     { assigned_agent: { _null: true } },
-    { assigned_team: { _eq: '$CURRENT_USER.team' } },
+    {
+      _and: [{ assigned_team: { _nnull: true } }, { assigned_team: { _eq: '$CURRENT_USER.team' } }],
+    },
   ],
 };
+
+/**
+ * The same scoping, reached through a message's parent conversation.
+ *
+ * `messages.read` used to carry no filter at all, so an agent who could not
+ * LIST a conversation could still read every word in it by id. A chat log is
+ * the most sensitive thing in the product; scoping the container and leaving
+ * its contents open is not a smaller version of the same rule.
+ */
+const MESSAGE_OF_VISIBLE_CONVERSATION = { conversation: ASSIGNED_OR_UNASSIGNED };
+/**
+ * What an agent may change on their own ticket.
+ *
+ * An allow-list, and the omissions are the point:
+ *
+ *   coupon_code / coupon_value / coupon_percent — money. These are written by
+ *     the supervisor's approval flow and by nothing else. The portal routes a
+ *     requested coupon into `coupon_approvals`, but a UI that asks politely is
+ *     not a control while the same token can PATCH the column directly: an
+ *     agent could grant themselves any coupon with one API call, and the
+ *     approval queue would never hear about it.
+ *
+ *   sla_policy / first_response_due_at / resolution_due_at — the deadlines an
+ *     agent is measured against. Writable by the SLA worker's service token.
+ *
+ *   order_snapshot / order_id / store_snapshot — frozen evidence of what was
+ *     ordered and from where. Stamped at creation; rewriting them later would
+ *     silently rewrite every past report.
+ *
+ * `compensation` stays writable: with no coupon attached it is a statement of
+ * fact about how a complaint was settled, not a payment. splitCouponForApproval
+ * already withholds it while a coupon is pending, so it cannot be used to claim
+ * a coupon exists before one is approved.
+ */
+const TICKET_FIELDS_AGENT_WRITABLE = [
+  'subject',
+  'description',
+  'status',
+  'priority',
+  'first_responded_at',
+  'resolved_at',
+  'closed_at',
+  'assigned_agent',
+  'assigned_team',
+  'store',
+  'complaint_date',
+  'complaint_type',
+  'service_type',
+  'complaint_source',
+  'communication_method',
+  'response_desc',
+  'compensation',
+];
+
 const SELF_RECIPIENT = { recipient: { _eq: '$CURRENT_USER' } };
 
 export const roles: RoleSpec[] = [
@@ -192,16 +260,23 @@ export const roles: RoleSpec[] = [
       { collection: 'conversations', action: 'create' },
       { collection: 'conversations', action: 'update', permissions: ASSIGNED_OR_UNASSIGNED },
       { collection: 'messages', action: 'create' },
-      { collection: 'messages', action: 'read' },
+      // Scoped through the parent conversation — see
+      // MESSAGE_OF_VISIBLE_CONVERSATION. An unfiltered read here let any agent
+      // fetch any chat's contents by id even once the conversation list itself
+      // was scoped.
+      {
+        collection: 'messages',
+        action: 'read',
+        permissions: MESSAGE_OF_VISIBLE_CONVERSATION,
+      },
       // NOTE (H-3): `messages.update` is intentionally NOT granted to agents.
       // Messages are an immutable chat record; agents must not edit historical
       // content (tampering), and the app never PATCHes a message via the agent
       // token — the gateway is the sole writer (service token).
       //
-      // FOLLOW-UP (tenant isolation): `messages.read` + `contacts.read` are still
-      // unfiltered (all-vendor), matching the current shared-inbox design.
-      // Scoping them per vendor/team is a product decision + a core read-path
-      // change that must be integration-tested before rollout.
+      // FOLLOW-UP (tenant isolation): `contacts.read` is still unfiltered
+      // (all-vendor), matching the current shared-inbox design. Scoping it per
+      // vendor is a product decision that must be integration-tested first.
       // tickets: scoped to assigned agent
       {
         collection: 'tickets',
@@ -212,10 +287,14 @@ export const roles: RoleSpec[] = [
       {
         collection: 'tickets',
         action: 'update',
+        fields: TICKET_FIELDS_AGENT_WRITABLE,
         permissions: { assigned_agent: { _eq: '$CURRENT_USER' } },
       },
       // Append-only: agents add internal notes as 'commented' ticket_events.
       ...appendOnly('ticket_events'),
+      // Ready-made replies. Read-only: the wording customers receive is the
+      // operations team's to standardise, not something to be edited mid-chat.
+      ...readOnly('quick_replies'),
       // The branch-notification rules decide whether saving a ticket also
       // queues a note to the store, so the form has to be able to read them.
       // Read-only: which complaint types are the branch's business is an

@@ -10,6 +10,7 @@ export {
   buildComplaintsSheets,
   COMPLAINT_COLUMN_KEYS,
   COMPLAINT_COLUMN_LABELS,
+  COMPLAINT_COLUMN_LAYOUT,
   complaintCell,
   countUnmappedComplaints,
   filterComplaintRows,
@@ -23,6 +24,7 @@ export {
   reportFilename,
   splitLocalDateTime,
   type ComplaintColumnKey,
+  type ComplaintColumnLayout,
   type ComplaintReportRow,
   type Translate,
 } from './complaints.js';
@@ -57,6 +59,15 @@ export {
 } from './agent-performance.js';
 
 export {
+  comparisonRows,
+  dailyTrend,
+  performanceSummary,
+  type ComparisonRow,
+  type DailyPoint,
+  type PerformanceSummary,
+} from './agent-performance-view.js';
+
+export {
   distinctValues,
   filterTickets,
   isEmptyFilter,
@@ -64,3 +75,9 @@ export {
   type FilterableTicketRow,
   type TicketFilterCriteria,
 } from './ticket-filter.js';
+
+export {
+  conversationTimestamps,
+  type ConversationTimestamps,
+  type TimingMessage,
+} from './chat-timings.js';

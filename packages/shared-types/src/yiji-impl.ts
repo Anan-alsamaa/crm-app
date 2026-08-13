@@ -352,6 +352,30 @@ function byNewest(a: YijiOrder, b: YijiOrder): number {
   return a.placedAt < b.placedAt ? 1 : a.placedAt > b.placedAt ? -1 : 0;
 }
 
+/**
+ * The upstream could not be asked — as distinct from it answering "nothing".
+ *
+ * Callers must never render this as an empty result. "This customer has no
+ * orders" is a claim about the customer; "we could not reach the order system"
+ * is a claim about us, and an agent needs to know which one they are reading
+ * before they say it out loud to somebody.
+ */
+export class YijiUnavailableError extends Error {
+  readonly isYijiUnavailable = true;
+  constructor(message: string, opts?: { cause?: unknown }) {
+    super(message, opts as ErrorOptions);
+    this.name = 'YijiUnavailableError';
+  }
+}
+
+/** True for an error meaning "we could not ask", from any realm. */
+export function isYijiUnavailable(err: unknown): boolean {
+  return (
+    err instanceof YijiUnavailableError ||
+    (typeof err === 'object' && err !== null && 'isYijiUnavailable' in err)
+  );
+}
+
 export class HttpYijiClient implements YijiClient {
   private readonly baseUrl: string;
   private readonly token?: string;
@@ -364,6 +388,23 @@ export class HttpYijiClient implements YijiClient {
     this.timeoutMs = opts.timeoutMs ?? 6_000;
   }
 
+  /**
+   * `null` means the upstream ANSWERED and there is nothing there (404).
+   * Anything else throws.
+   *
+   * This used to swallow aborts, network errors and every non-ok status into
+   * the same `null`, which `getOrders` then mapped to `[]` — so a timeout, a
+   * 503 and a DNS failure all reached the agent as "No orders found for this
+   * contact". A positive claim about the customer, made from no information,
+   * and cached for 45 seconds because a resolved empty array looks exactly like
+   * a real answer to the cache. Measured: a hanging upstream returned 200
+   * {"orders":[]} at 6.4s; a 503 returned the same body at 0.32s.
+   *
+   * Distinguishing the two at this boundary is what makes everything above it
+   * work: the cache already declines to store a rejected fetcher, the inbox
+   * route can turn a rejection into its 504, and the portal can say "we could
+   * not ask" instead of "they never ordered".
+   */
   private async fetch<T>(path: string): Promise<T | null> {
     const url = `${this.baseUrl}${path}`;
     const controller = new AbortController();
@@ -375,12 +416,17 @@ export class HttpYijiClient implements YijiClient {
           : { accept: 'application/json' },
         signal: controller.signal,
       });
+      // The one honest "nothing there": the upstream looked and found none.
       if (res.status === 404) return null;
-      if (!res.ok) return null;
+      if (!res.ok) throw new YijiUnavailableError(`upstream ${res.status} for ${path}`);
       return (await res.json()) as T;
-    } catch {
-      // Network error / abort — never throw, surface as "unavailable" via null.
-      return null;
+    } catch (err) {
+      if (err instanceof YijiUnavailableError) throw err;
+      const reason =
+        err instanceof Error && err.name === 'AbortError'
+          ? `timed out after ${this.timeoutMs}ms`
+          : `network error: ${err instanceof Error ? err.message : String(err)}`;
+      throw new YijiUnavailableError(`${reason} for ${path}`, { cause: err });
     } finally {
       clearTimeout(timer);
     }

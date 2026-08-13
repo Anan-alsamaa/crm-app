@@ -80,7 +80,11 @@ export function Inbox() {
   // emptying the inbox.
   const orderTerm = (filters.search ?? '').trim();
   const orderMatches = useQuery({
-    enabled: /d/.test(orderTerm),
+    // `\d`, a DIGIT — this was `/d/`, the letter, so the lookup only ran for a
+    // search containing the letter "d" and no order id in the system has one.
+    // Every numeric search silently skipped the fallback and the agent was told
+    // the chat did not exist.
+    enabled: /\d/.test(orderTerm),
     queryKey: ['conversations-by-order', orderTerm],
     staleTime: 30_000,
     queryFn: () => conversationIdsForOrder(orderTerm),

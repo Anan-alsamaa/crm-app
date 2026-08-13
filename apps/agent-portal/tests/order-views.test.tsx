@@ -148,7 +148,7 @@ describe('LatestOrder (inbox)', () => {
   it('shows "unavailable" when the commerce proxy errors', async () => {
     client.getOrders.mockRejectedValue(new Error('commerce 500'));
     renderView(<LatestOrder vendorId="v1" customerId="cust-guid" />);
-    await waitFor(() => expect(screen.getByText('Commerce data unavailable.')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Commerce data unavailable/)).toBeInTheDocument());
   });
 
   it('renders nothing (and runs no query) without ids', () => {
@@ -246,7 +246,7 @@ describe('CustomerOrders (contact panel)', () => {
   it('shows "unavailable" when the list query errors', async () => {
     client.getOrders.mockRejectedValue(new Error('commerce 401'));
     renderView(<CustomerOrders vendorId="v1" customerId="cust-guid" />);
-    await waitFor(() => expect(screen.getByText('Commerce data unavailable.')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Commerce data unavailable/)).toBeInTheDocument());
   });
 
   it('renders nothing without ids', () => {
@@ -409,12 +409,48 @@ describe('LatestOrder — a contact with no linked commerce customer', () => {
 describe('LatestOrder — when the commerce proxy is unreachable', () => {
   beforeEach(() => sessionStorage.clear());
 
+  it('keeps the stamped order on screen instead of replacing it with a denial', async () => {
+    /**
+     * The stamp exists for exactly this moment, and the panel used to throw it
+     * away in it: the error branch was evaluated before the "do we have
+     * anything to show" branch, so a failed lookup wiped a correct, fully
+     * painted order card and printed "unavailable" over the top of it.
+     */
+    client.getOrders.mockRejectedValue(new Error('proxy down'));
+    renderView(
+      <LatestOrder
+        vendorId="v1"
+        customerId="c1"
+        conversationId="conv-stamped"
+        stamped={summary('946641', '2026-06-25T12:00:00')}
+      />,
+    );
+    expect(await screen.findByText(/946641/)).toBeInTheDocument();
+    expect(screen.queryByText(/Commerce data unavailable/)).not.toBeInTheDocument();
+  });
+
+  it('does not read an empty list as "this customer never ordered" when a stamp exists', async () => {
+    // An empty array used to count as a real answer, so a customer with a known
+    // order was reported as having none — for 45 seconds, across every agent.
+    client.getOrders.mockResolvedValue([]);
+    renderView(
+      <LatestOrder
+        vendorId="v1"
+        customerId="c1"
+        conversationId="conv-empty"
+        stamped={summary('946641', '2026-06-25T12:00:00')}
+      />,
+    );
+    expect(await screen.findByText(/946641/)).toBeInTheDocument();
+    expect(screen.queryByText(/No orders found for this contact/)).not.toBeInTheDocument();
+  });
+
   it('says so and still offers the manual box, instead of loading forever', async () => {
     // An external dependency that hangs must not leave a skeleton that cannot
     // be told apart from "still loading".
     client.getOrders.mockRejectedValue(new Error('proxy down'));
     renderView(<LatestOrder vendorId="v1" customerId="c1" conversationId="conv-down" />);
-    expect(await screen.findByText('Commerce data unavailable.')).toBeInTheDocument();
+    expect(await screen.findByText(/Commerce data unavailable/)).toBeInTheDocument();
     expect(screen.getByLabelText('Look up an order by ID')).toBeInTheDocument();
     // One attempt, not four.
     expect(client.getOrders).toHaveBeenCalledTimes(1);

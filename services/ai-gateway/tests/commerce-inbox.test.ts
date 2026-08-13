@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { registerCommerceRoutes } from '../src/commerce/index.js';
 import { CommerceCache } from '../src/commerce/cache.js';
+import { YijiUnavailableError } from '@yiji/shared-types';
 import type { CallerVerifierDeps } from '../src/auth/index.js';
 
 const AGENT_TOKEN = 'agent-session-token';
@@ -161,6 +162,45 @@ describe('/commerce/inbox', () => {
     vi.useRealTimers();
     expect(res.statusCode).toBe(504);
     expect(res.json()).toEqual({ error: 'commerce_timeout' });
+  });
+
+  it('says commerce is not responding when the client reports it cannot ask', async () => {
+    /**
+     * The realistic failure, which the never-settling promise above cannot
+     * reproduce: the real client aborts at its OWN timeout (6s, below this
+     * endpoint's 8s budget) and now rejects, and it rejects the same way for a
+     * 503 or a DNS failure. Before, all of those resolved to `[]` and the agent
+     * was told the customer had never ordered — a 200 the portal could not even
+     * detect as a failure.
+     */
+    const down = {
+      ...yiji.client,
+      getOrders: () => Promise.reject(new YijiUnavailableError('upstream 503')),
+    };
+    const app2 = await build(down);
+    const res = await app2.inject({
+      method: 'GET',
+      url: '/commerce/inbox?vendorId=v1&customerId=c1',
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(504);
+    expect(res.json()).toEqual({ error: 'commerce_unavailable' });
+    // And emphatically NOT a success carrying an empty list.
+    expect(res.json().data).toBeUndefined();
+  });
+
+  it('still reports a genuinely order-less customer as an empty list', async () => {
+    // The distinction the whole change exists for: "they have none" is a 200,
+    // "we could not ask" is a 504.
+    const none = { ...yiji.client, getOrders: () => Promise.resolve([]) };
+    const app2 = await build(none);
+    const res = await app2.inject({
+      method: 'GET',
+      url: '/commerce/inbox?vendorId=v1&customerId=c1',
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data).toEqual({ orders: [], detail: null });
   });
 
   it('rejects a request missing the ids it cannot guess', async () => {

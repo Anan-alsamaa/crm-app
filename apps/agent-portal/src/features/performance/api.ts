@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
 import { normaliseConversationStatus } from '@yiji/shared-types';
-import type { ChatTiming } from '@yiji/reports';
+import { conversationTimestamps, type ChatTiming } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -111,28 +111,22 @@ export function useChatTimings(filters: PerformanceFilters) {
         }),
       )) as unknown as MessageRow[];
 
-      // Sorted ascending, so the FIRST hit per conversation per side wins.
-      const firstCustomer = new Map<string, string>();
-      const firstAgent = new Map<string, string>();
-      for (const m of messages) {
-        if (!m.date_created) continue;
-        const bucket =
-          m.sender_type === 'customer'
-            ? firstCustomer
-            : m.sender_type === 'agent'
-              ? firstAgent
-              : null;
-        if (!bucket || bucket.has(m.conversation)) continue;
-        bucket.set(m.conversation, m.date_created);
-      }
+      /**
+       * Shared with the admin console — see conversationTimestamps in
+       * @yiji/reports. It also enforces the rule this code used to miss: the
+       * first response is the first agent message AT OR AFTER the customer's,
+       * so an agent who greeted before the customer wrote is not reported as
+       * having never replied.
+       */
+      const times = conversationTimestamps(messages);
 
       return conversations.map((c) => ({
         conversationId: c.id,
         agentId: c.assigned_agent,
         // Placeholder; the page replaces it with the resolved name. See above.
         agentName: c.assigned_agent ?? 'Unassigned',
-        firstCustomerAt: firstCustomer.get(c.id) ?? null,
-        firstAgentAt: firstAgent.get(c.id) ?? null,
+        firstCustomerAt: times.get(c.id)?.firstCustomerAt ?? null,
+        firstAgentAt: times.get(c.id)?.firstAgentAt ?? null,
         // A chat can hold a solve time from before it was reopened only if
         // something failed to clear it; trust the status over the stamp.
         solvedAt: normaliseConversationStatus(c.status) === 'solved' ? c.solved_at : null,

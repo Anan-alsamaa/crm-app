@@ -585,7 +585,22 @@ export function LatestOrder({
   // the conversation the last time anybody worked it. That is the difference
   // between a skeleton and an order: the panel is populated the instant the
   // chat opens, and the fresh copy replaces it when it lands.
-  const live = orders.data?.orders ?? null;
+  /**
+   * An EMPTY live list counts as "nothing came back", not as an answer.
+   *
+   * `orders.data?.orders ?? null` treated `[]` as a real result — and `[]` is
+   * exactly what a failed upstream used to produce — so a correct, fully
+   * painted order card was replaced by "No orders found for this contact" on a
+   * chat whose stamp held the order the agent was reading about. The app had
+   * the right answer in memory and chose to print a denial.
+   *
+   * The upstream now fails loudly (see YijiUnavailableError), so `[]` here
+   * should mean a genuinely order-less customer. Preferring the stamp anyway
+   * costs nothing in that case — a customer with no orders has no stamp — and
+   * keeps the panel honest if any other path ever produces an empty list.
+   */
+  const liveOrders = orders.data?.orders;
+  const live = liveOrders && liveOrders.length > 0 ? liveOrders : null;
   const fetched = (live ?? (stamped ? [stamped] : [])).slice(0, 2);
 
   // A DISABLED query never resolves, so `isLoading` stays true forever and the
@@ -635,11 +650,12 @@ export function LatestOrder({
 
       {loadingOrders ? (
         <Skeleton className="h-20 w-full rounded-2xl" />
-      ) : customerId && orders.isError ? (
-        <p className="text-xs text-muted-foreground">
-          {t('commerce.unavailable', { defaultValue: 'Commerce data unavailable.' })}
-        </p>
-      ) : total > 0 ? (
+      ) : /* The stamped card wins over the error notice. This branch used to be
+             evaluated FIRST, so an honest 504 wiped a perfectly good last-known
+             order off the screen and replaced it with "unavailable" — throwing
+             away the exact thing the stamp exists to provide. The error only
+             speaks when there is nothing to show. */
+      total > 0 ? (
         <ul className="space-y-2">
           {fetched.map((o, i) => (
             <li key={o.orderId}>
@@ -677,6 +693,15 @@ export function LatestOrder({
             </li>
           ))}
         </ul>
+      ) : customerId && orders.isError ? (
+        /* Nothing to show AND the lookup failed — so say we could not ask.
+           "No orders found" here would be a claim about the customer made from
+           no information, which is what an agent then repeats to them. */
+        <p className="text-xs text-muted-foreground">
+          {t('commerce.unavailable', {
+            defaultValue: 'Commerce data unavailable. Enter an order ID to look it up.',
+          })}
+        </p>
       ) : (
         <p className="text-xs text-muted-foreground">
           {t('commerce.noOrdersHint', {

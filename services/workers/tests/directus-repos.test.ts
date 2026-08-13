@@ -3,6 +3,7 @@ import type { YijiDirectusClient } from '@yiji/shared-config';
 import {
   createTicketRepo,
   createNotificationsRepo,
+  createRoutingRepo,
   createTeamRepo,
 } from '../src/processors/directus-repos.js';
 
@@ -110,5 +111,59 @@ describe('createNotificationsRepo', () => {
       body: 'see thread',
     });
     expect(out).toEqual({ id: 'n-1' });
+  });
+});
+
+describe('createRoutingRepo.agentsByLoad', () => {
+  const repo = createRoutingRepo(client);
+
+  /** Resolve the SDK builder closure to the query that reaches Directus. */
+  const userFilter = () => {
+    const [builder] = request.mock.calls[0] as [
+      (c: unknown) => { params: { filter?: Record<string, unknown> } },
+    ];
+    return builder({}).params.filter;
+  };
+
+  it('only offers customer-facing roles, never a service account', async () => {
+    request.mockResolvedValueOnce([]); // users
+    await repo.agentsByLoad(null);
+    // svc-socket-gateway, svc-workers, svc-ai-gateway and Administrator are all
+    // active and hold zero chats forever, so without this clause they sort to
+    // the FRONT of the least-loaded list and win every out-of-hours assignment.
+    // The chat then has an owner who is not a person: not null, so the
+    // unassigned net skips it, and hidden from the portal's agent list, so the
+    // toolbar shows nobody.
+    expect(userFilter()).toEqual({
+      status: { _eq: 'active' },
+      role: { name: { _in: ['Agent'] } },
+    });
+  });
+
+  it('still narrows to a team when one is given', async () => {
+    request.mockResolvedValueOnce([]);
+    await repo.agentsByLoad('day-shift');
+    expect(userFilter()).toMatchObject({
+      team: { _eq: 'day-shift' },
+      role: { name: { _in: ['Agent'] } },
+    });
+  });
+
+  it('returns the least loaded first, ties broken stably', async () => {
+    request.mockResolvedValueOnce([{ id: 'b' }, { id: 'a' }, { id: 'c' }]);
+    request.mockResolvedValueOnce([
+      { assigned_agent: 'a' },
+      { assigned_agent: 'a' },
+      { assigned_agent: 'c' },
+    ]);
+    // b has 0, c has 1, a has 2.
+    expect(await repo.agentsByLoad(null)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('asks for no conversations at all when nobody is eligible', async () => {
+    request.mockResolvedValueOnce([]);
+    expect(await repo.agentsByLoad(null)).toEqual([]);
+    // A second call would be an unfiltered `_in: []` load query.
+    expect(request).toHaveBeenCalledTimes(1);
   });
 });

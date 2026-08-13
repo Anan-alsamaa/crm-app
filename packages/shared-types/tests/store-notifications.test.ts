@@ -13,6 +13,11 @@ const input = (over: Partial<StoreNotificationInput> = {}): StoreNotificationInp
   complaintType: 'Missing item',
   description: 'Two of the four burgers were missing.',
   resolutionNotes: 'Refunded and apologised.',
+  orderId: '946641',
+  orderItems: [
+    { name: 'Cheeseburger', qty: 4, price: 25 },
+    { name: 'Fries', qty: 1, price: 10 },
+  ],
   ...over,
 });
 
@@ -43,7 +48,7 @@ describe('isNotifyingType', () => {
 });
 
 describe('storeNotificationDraft', () => {
-  it('carries the description and the resolution notes, and nothing else', () => {
+  it('carries the order, the description and the resolution notes, and nothing else', () => {
     const out = storeNotificationDraft(input(), ENABLED);
     expect(out).toEqual({
       draft: {
@@ -52,6 +57,14 @@ describe('storeNotificationDraft', () => {
         complaint_type: 'Missing item',
         description: 'Two of the four burgers were missing.',
         resolution_notes: 'Refunded and apologised.',
+        // A branch told "an item was missing" with no order number cannot look
+        // anything up, and the line items are what a missing-item complaint is
+        // checked against.
+        order_id: '946641',
+        order_items: [
+          { name: 'Cheeseburger', qty: 4, price: 25 },
+          { name: 'Fries', qty: 1, price: 10 },
+        ],
         status: 'queued',
       },
     });
@@ -82,6 +95,20 @@ describe('storeNotificationDraft', () => {
     expect(storeNotificationDraft(input({ complaintType: null }), ENABLED)).toEqual({
       skip: 'no-complaint-type',
     });
+  });
+
+  it('distinguishes "no items on file" from "an order with no items"', () => {
+    // An empty basket is impossible; not having the items is not. Storing []
+    // would claim the customer ordered nothing.
+    const out = storeNotificationDraft(input({ orderItems: [] }), ENABLED);
+    expect(out).toMatchObject({ draft: { order_items: null } });
+  });
+
+  it('still queues a complaint with no order attached', () => {
+    // Phone complaints arrive without one. The branch gets less, but it still
+    // gets told.
+    const out = storeNotificationDraft(input({ orderId: null, orderItems: null }), ENABLED);
+    expect(out).toMatchObject({ draft: { order_id: null, order_items: null } });
   });
 
   it('keeps "not written" as null rather than an empty string', () => {

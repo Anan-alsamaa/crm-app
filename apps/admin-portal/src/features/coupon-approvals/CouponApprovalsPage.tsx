@@ -144,7 +144,16 @@ function Row({
             </>
           ) : (
             <>
-              <Button type="button" size="sm" disabled={busy} onClick={() => onDecide(true, note)}>
+              {/* No ticket, nowhere to put the coupon. Approving used to
+                  succeed silently and write nothing, so the supervisor believed
+                  they had issued money that did not exist. Rejecting stays
+                  available — turning something down needs no destination. */}
+              <Button
+                type="button"
+                size="sm"
+                disabled={busy || !row.ticket?.id}
+                onClick={() => onDecide(true, note)}
+              >
                 {t('couponApprovals.approve', { defaultValue: 'Approve' })}
               </Button>
               <Button
@@ -157,9 +166,14 @@ function Row({
                 {t('couponApprovals.reject', { defaultValue: 'Reject' })}
               </Button>
               <span className="text-2xs text-muted-foreground">
-                {t('couponApprovals.approveHint', {
-                  defaultValue: 'Approving puts the coupon on the ticket.',
-                })}
+                {row.ticket?.id
+                  ? t('couponApprovals.approveHint', {
+                      defaultValue: 'Approving puts the coupon on the ticket.',
+                    })
+                  : t('couponApprovals.noTicketHint', {
+                      defaultValue:
+                        'No ticket on this request — there is nowhere to put the coupon.',
+                    })}
               </span>
             </>
           )}
@@ -190,9 +204,18 @@ export function CouponApprovalsPage() {
                 })
               : t('couponApprovals.rejected', { defaultValue: 'Rejected' }),
           ),
-        onError: () =>
+        onError: (err) =>
           toast.error(
-            t('couponApprovals.decideError', { defaultValue: 'Could not record that decision' }),
+            // Named, because "could not record that decision" would leave a
+            // supervisor retrying a click that can never work.
+            err instanceof Error && err.message === 'COUPON_APPROVAL_NO_TICKET'
+              ? t('couponApprovals.noTicket', {
+                  defaultValue:
+                    'This request has no ticket, so there is nowhere to put the coupon. Ask the agent to raise it from the ticket.',
+                })
+              : t('couponApprovals.decideError', {
+                  defaultValue: 'Could not record that decision',
+                }),
           ),
       },
     );

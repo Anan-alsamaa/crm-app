@@ -40,6 +40,7 @@ import {
   buildTicketsSheets,
   COMPLAINT_COLUMN_KEYS,
   COMPLAINT_COLUMN_LABELS,
+  COMPLAINT_COLUMN_LAYOUT,
   fmtDateTime,
   reportFilename,
   TICKET_COLUMN_KEYS,
@@ -1006,7 +1007,7 @@ function ComplaintsReport({
           <thead>
             <tr>
               {chosenColumns.map((k) => (
-                <Th key={k}>
+                <Th key={k} className={cn(COMPLAINT_COLUMN_LAYOUT[k] === 'number' && 'text-end')}>
                   {tr(COMPLAINT_COLUMN_LABELS[k].key, {
                     defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
                   })}
@@ -1024,14 +1025,31 @@ function ComplaintsReport({
                     !r.storeMapped &&
                     (r.restaurantName || r.brand) &&
                     (['chain', 'area', 'brand', 'city'] as ComplaintColumnKey[]).includes(k);
+                  const layout = COMPLAINT_COLUMN_LAYOUT[k];
+                  const text = String(complaintCell(r, k, tr) ?? '');
                   return (
-                    <Td key={k} className="whitespace-nowrap">
+                    <Td
+                      key={k}
+                      className={cn(
+                        layout === 'text' ? 'align-top' : 'whitespace-nowrap',
+                        layout === 'number' && 'text-end tabular-nums',
+                      )}
+                    >
                       {unmapped ? (
                         <Pill tone="warning" size="sm">
                           {t('agentReports.notMapped', { defaultValue: 'Not mapped' })}
                         </Pill>
+                      ) : layout === 'text' ? (
+                        /* Fixed width on an inner block, not a max-width on the
+                           cell: the table is `min-w-max`, under which a td's
+                           max-width is ignored and the prose sets the column
+                           width anyway. Two lines, with the whole value on
+                           hover and all of it in the export. */
+                        <span className="line-clamp-2 block w-[20rem] leading-snug" title={text}>
+                          {text}
+                        </span>
                       ) : (
-                        String(complaintCell(r, k, tr) ?? '')
+                        text
                       )}
                     </Td>
                   );
@@ -1436,7 +1454,7 @@ const META: Record<
     titleDefault: 'Tickets',
     subKey: 'complaintReport.subtitle',
     subDefault:
-      'Every ticket in the operations report format. Search by phone, restaurant name or ID; drag columns into the order you want; export to Excel.',
+      'Every ticket in the operations report format. Search by phone, restaurant name or ID; rearrange the columns under the Columns button; export to Excel.',
   },
 };
 

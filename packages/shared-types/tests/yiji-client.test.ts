@@ -1,5 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { createYijiClient, HttpYijiClient, MockYijiClient } from '../src/index.js';
+import {
+  createYijiClient,
+  HttpYijiClient,
+  isYijiUnavailable,
+  MockYijiClient,
+} from '../src/index.js';
 
 describe('createYijiClient factory', () => {
   it('returns MockYijiClient when no apiUrl is set', () => {
@@ -111,14 +116,28 @@ describe('HttpYijiClient', () => {
     expect(await client.getCustomer('v1', 'gone')).toBeNull();
   });
 
-  it('returns null on 500 instead of throwing', async () => {
+  /**
+   * These three used to assert `null` — "never throw, surface as unavailable
+   * via null". That looked defensive and was the opposite: getOrders maps null
+   * to [], so a 500, a DNS failure and a timeout all reached the agent as "No
+   * orders found for this contact", a positive claim about the customer made
+   * from no information, cached for 45 seconds. `null` now means one thing
+   * only: the upstream answered, and there is nothing there.
+   */
+  it('THROWS on 500 rather than reporting the customer has nothing', async () => {
     fetchMock.mockResolvedValueOnce(new Response('boom', { status: 500 }));
     const client = new HttpYijiClient({ baseUrl: 'https://api.example.com' });
-    expect(await client.getCustomer('v1', 'c1')).toBeNull();
+    await expect(client.getCustomer('v1', 'c1')).rejects.toSatisfy(isYijiUnavailable);
   });
 
-  it('returns null on network error instead of throwing', async () => {
+  it('THROWS on a network error rather than reporting the customer has nothing', async () => {
     fetchMock.mockRejectedValueOnce(new Error('ENOTFOUND'));
+    const client = new HttpYijiClient({ baseUrl: 'https://api.example.com' });
+    await expect(client.getOrders('v1', 'c1')).rejects.toSatisfy(isYijiUnavailable);
+  });
+
+  it('still returns null for a 404 — the one honest "nothing there"', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 404 }));
     const client = new HttpYijiClient({ baseUrl: 'https://api.example.com' });
     expect(await client.getCustomer('v1', 'c1')).toBeNull();
   });
@@ -157,8 +176,8 @@ describe('HttpYijiClient', () => {
         }),
     );
     const client = new HttpYijiClient({ baseUrl: 'https://api.example.com', timeoutMs: 30 });
-    const result = await client.getCustomer('v1', 'c1');
-    expect(result).toBeNull();
+    // A timeout is "we could not ask", not "there is nothing".
+    await expect(client.getCustomer('v1', 'c1')).rejects.toSatisfy(isYijiUnavailable);
   });
 
   it('maps the raw Yiji order array (id, status code, items)', async () => {

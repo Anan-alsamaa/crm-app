@@ -313,6 +313,33 @@ export const collections: CollectionSpec[] = [
     ],
   },
   {
+    collection: 'quick_replies',
+    note: 'Ready-made replies offered above the composer. Modelled on the operations portal’s own canned-reply row, which agents already work from: the point is that the common answer is one click rather than one paragraph retyped forty times a day, and typed the same way every time.',
+    fields: [
+      {
+        field: 'label',
+        type: 'string',
+        required: true,
+        note: 'What the chip says. Short — it has to read at a glance in a scrolling row.',
+      },
+      {
+        field: 'text',
+        type: 'text',
+        required: true,
+        note: 'The reply itself. Supports {order}, {name}, {brand} and {restaurant}, filled from the conversation at click time.',
+      },
+      {
+        field: 'lang',
+        type: 'string',
+        choices: ['en', 'ar'],
+        defaultValue: 'en',
+        note: 'Used to rank: replies in the language the CUSTOMER is writing come first.',
+      },
+      { field: 'sort', type: 'integer', defaultValue: 0 },
+      { field: 'active', type: 'boolean', defaultValue: true },
+    ],
+  },
+  {
     collection: 'coupon_approvals',
     note: 'A coupon an agent wants to give a customer, waiting on a supervisor. The coupon does NOT reach the ticket until it is approved — that is the whole point, so approval cannot be a rubber stamp applied after the money is already promised. Rejected rows are kept: a rejection is a decision somebody made and has to stay answerable for.',
     fields: [
@@ -362,6 +389,17 @@ export const collections: CollectionSpec[] = [
       { field: 'complaint_type', type: 'string', index: true },
       { field: 'description', type: 'text' },
       { field: 'resolution_notes', type: 'text' },
+      /**
+       * WHICH order. A branch told "an item was missing" with no order number
+       * cannot look anything up — they would have to ask us back, which is the
+       * round trip this notification exists to remove.
+       */
+      { field: 'order_id', type: 'string', index: true },
+      {
+        field: 'order_items',
+        type: 'json',
+        note: 'What was ordered, as it stood on the ticket. The branch needs the line items to check a missing-item or wrong-item complaint against what they packed.',
+      },
       {
         field: 'status',
         type: 'string',

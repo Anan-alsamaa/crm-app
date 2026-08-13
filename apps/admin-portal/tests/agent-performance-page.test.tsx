@@ -31,13 +31,26 @@ vi.mock('@directus/sdk', () => ({
 
 import { AgentPerformancePage } from '../src/features/performance/AgentPerformancePage.js';
 
+const day = { date_created: '2026-08-13T09:59:00.000Z' };
 const conversations = [
   // Answered in 1 minute.
-  { id: 'fast', status: 'solved', assigned_agent: 'a1', solved_at: '2026-08-13T10:30:00.000Z' },
+  {
+    id: 'fast',
+    status: 'solved',
+    assigned_agent: 'a1',
+    solved_at: '2026-08-13T10:30:00.000Z',
+    ...day,
+  },
   // Answered in 20 minutes.
-  { id: 'slow', status: 'solved', assigned_agent: 'a1', solved_at: '2026-08-13T10:40:00.000Z' },
+  {
+    id: 'slow',
+    status: 'solved',
+    assigned_agent: 'a1',
+    solved_at: '2026-08-13T10:40:00.000Z',
+    ...day,
+  },
   // Nobody answered, and nobody picked it up either.
-  { id: 'never', status: 'open', assigned_agent: null, solved_at: null },
+  { id: 'never', status: 'open', assigned_agent: null, solved_at: null, ...day },
 ];
 
 const messages = [
@@ -56,7 +69,20 @@ function renderPage() {
   return render(<AgentPerformancePage />, { wrapper: Wrapper });
 }
 
-const row = (name: string) => screen.getByRole('row', { name: new RegExp(name) });
+const row = (name: string) =>
+  within(screen.getByRole('table', { name: 'Totals per agent' })).getByRole('row', {
+    name: new RegExp(name),
+  });
+
+/** The headline number under a given tile label, read from the named landmark. */
+function tile(label: string): string {
+  const summary = screen.getByRole('region', { name: 'Summary' });
+  const labelEl = within(summary)
+    .getAllByText((_, el) => el?.textContent?.startsWith(label) === true)
+    .filter((el) => el.tagName === 'DIV' && el.querySelector('div') === null)
+    .at(-1)!;
+  return labelEl.parentElement!.firstElementChild!.textContent!;
+}
 
 beforeEach(() => {
   sdk.request.mockReset();
@@ -70,17 +96,36 @@ beforeEach(() => {
 });
 
 describe('admin AgentPerformancePage', () => {
-  it('computes the same two populations a supervisor sees in the user portal', async () => {
+  it('reports the same headline numbers an agent sees in the user portal', async () => {
     renderPage();
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Not meeting SLA/ })).toHaveTextContent('2'),
+      expect(screen.getByRole('region', { name: 'Summary' })).toBeInTheDocument(),
     );
-    expect(screen.getByRole('button', { name: /Meeting SLA/ })).toHaveTextContent('1');
+    expect(tile('Chats')).toBe('3');
+    expect(tile('No reply yet')).toBe('1');
+    // 1m and 20m over the two ANSWERED chats — the unanswered one is not a 0.
+    expect(tile('First response')).toBe('10m 30s');
+    // One of THREE met the 5-minute target; a chat nobody answered missed it.
+    expect(tile('Answered in time')).toBe('33%');
+  });
+
+  it('charts the work by volume and by speed, never on one shared axis', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Who handled the chats')).toBeInTheDocument());
+    // A count and an average in seconds sharing a scale would draw "3 chats"
+    // as an invisible sliver next to "10m 30s".
+    const volume = screen.getByText('Who handled the chats').closest('section')!;
+    expect(within(volume).getByText('Sara')).toBeInTheDocument();
+    expect(screen.getByText('How fast they replied')).toBeInTheDocument();
+    expect(screen.getByText('Chats per day')).toBeInTheDocument();
+    expect(screen.getByText('Response times per day')).toBeInTheDocument();
   });
 
   it('gives work nobody picked up its own row rather than dropping it', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('table', { name: 'Totals per agent' })).toBeInTheDocument(),
+    );
     const unassigned = within(row('Unassigned')).getAllByRole('cell');
     expect(unassigned[1]).toHaveTextContent('1');
     expect(unassigned[2]).toHaveTextContent('1');
@@ -94,7 +139,9 @@ describe('admin AgentPerformancePage', () => {
       return Promise.resolve([]);
     });
     renderPage();
-    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('table', { name: 'Totals per agent' })).toBeInTheDocument(),
+    );
     const call = sdk.request.mock.calls.find(
       (c) => (c[0] as { collection?: string }).collection === 'messages',
     )!;
@@ -107,7 +154,9 @@ describe('admin AgentPerformancePage', () => {
 
   it('is read only: no row navigates anywhere', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('table', { name: 'Totals per agent' })).toBeInTheDocument(),
+    );
     for (const r of screen.getAllByRole('row')) {
       expect(r).not.toHaveAttribute('href');
       expect(r.className).not.toContain('cursor-pointer');
@@ -116,7 +165,9 @@ describe('admin AgentPerformancePage', () => {
 
   it('re-reads rather than re-filters when the date range changes', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('table', { name: 'Totals per agent' })).toBeInTheDocument(),
+    );
     const before = sdk.request.mock.calls.length;
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-08-01' } });
     await waitFor(() => expect(sdk.request.mock.calls.length).toBeGreaterThan(before));
@@ -126,7 +177,7 @@ describe('admin AgentPerformancePage', () => {
     expect(JSON.stringify((call[0] as { query: unknown }).query)).toContain('2026-08-01');
   });
 
-  it('says nothing matched instead of drawing an empty table', async () => {
+  it('says nothing matched instead of drawing empty charts', async () => {
     sdk.request.mockImplementation((req: { kind: string }) =>
       Promise.resolve(req.kind === 'users' ? [{ id: 'a1', first_name: 'Sara' }] : []),
     );

@@ -157,9 +157,13 @@ export function ConversationToolbar({
       ...(member ? { assigned_agent: member } : {}),
     });
     if (!member) {
+      // Covers both "the team is empty" and "we could not measure who is
+      // free" — in either case nobody was chosen, and the agent needs to know
+      // the handover did not pick an owner rather than assume it balanced.
       toast.warning(
-        t('conversation.teamEmpty', {
-          defaultValue: 'That team has no agents — the chat stays with its current owner.',
+        t('conversation.teamNoPick', {
+          defaultValue:
+            'No agent was picked for that team — the chat stays with its current owner. Assign someone directly if it needs an owner now.',
         }),
       );
     }

@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React from 'react';
@@ -11,13 +10,8 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-const api = vi.hoisted(() => ({
-  useDashboardMetrics: vi.fn(),
-}));
-vi.mock('../src/features/dashboard/api.js', () => api);
-
-// The page now opens on the COMPLAINTS tab; these tests are about the support
-// view, so its data layer is stubbed out and every test switches tabs first.
+// The Overview is now the complaints dashboard and nothing else; its data layer
+// is covered by complaint-dashboard-*.test.tsx, so it is stubbed here.
 const complaintsApi = vi.hoisted(() => ({
   useComplaintMetrics: vi.fn(() => ({ isLoading: true, isError: false, data: undefined })),
   emptyComplaintFilters: { from: '', to: '', brand: '', city: '', store: '' },
@@ -31,180 +25,26 @@ function renderPage() {
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  const rendered = render(<DashboardPage />, { wrapper: Wrapper });
-  // Complaints is the default tab; these assertions are all about the support
-  // overview, so switch to it. fireEvent keeps renderPage synchronous.
-  fireEvent.click(screen.getByText('Support activity'));
-  return rendered;
+  return render(<DashboardPage />, { wrapper: Wrapper });
 }
 
-const fullMetrics = {
-  conversationVolume: 128,
-  conversationsByStatus: { open: 40, pending: 12, resolved: 60, closed: 16 },
-  volumeSeries: [
-    { day: '2026-06-01', count: 5 },
-    { day: '2026-06-02', count: 9 },
-    { day: '2026-06-03', count: 0 },
-  ],
-  avgResponseMinutes: 42,
-  slaCompliancePct: 87,
-  ticketResolutionPct: 73,
-  ticketTotal: 90,
-  csatAvg: 4.2,
-  csatCount: 33,
-  topAgents: [
-    { id: 'a1', name: 'Alice', resolved: 30 },
-    { id: 'a2', name: 'Bob', resolved: 18 },
-  ],
-  topVendors: [
-    { id: 'v1', name: 'Acme', conversations: 55 },
-    { id: 'v2', name: 'Globex', conversations: 22 },
-  ],
-};
-
-// jsdom doesn't implement Element.scrollIntoView, which the SelectMenu listbox
-// calls when it opens. Stub it so the dropdown-interaction test can run.
-beforeEach(() => {
-  api.useDashboardMetrics.mockReset();
-  if (!Element.prototype.scrollIntoView) {
-    Element.prototype.scrollIntoView = vi.fn();
-  }
-});
-
 describe('DashboardPage', () => {
-  it('renders the loading skeleton while metrics load', () => {
-    api.useDashboardMetrics.mockReturnValue({ isLoading: true, isError: false, data: undefined });
-    const { container } = renderPage();
-    // Title toolbar always renders.
-    expect(screen.getByText('Overview')).toBeInTheDocument();
-    // Bento skeleton renders placeholder tiles; no stat values present.
-    expect(screen.queryByText('Conversations')).not.toBeInTheDocument();
-    expect(container.querySelectorAll('.rounded-3xl').length).toBeGreaterThanOrEqual(5);
+  it('keeps the name Overview, because that is where people navigate by habit', () => {
+    renderPage();
+    expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument();
   });
 
-  it('renders the loading skeleton when data is missing but not loading', () => {
-    api.useDashboardMetrics.mockReturnValue({ isLoading: false, isError: false, data: undefined });
+  it('shows the complaints dashboard with no tab to choose first', () => {
     renderPage();
-    expect(screen.queryByText('Answered on time')).not.toBeInTheDocument();
-    expect(screen.getByText('Overview')).toBeInTheDocument();
+    // The support-activity view is gone: an admin opening the console gets an
+    // answer, not a tab decision.
+    expect(screen.queryByText('Support activity')).not.toBeInTheDocument();
+    expect(screen.queryByText('Complaints')).not.toBeInTheDocument();
+    expect(complaintsApi.useComplaintMetrics).toHaveBeenCalled();
   });
 
-  it('renders populated metrics, labels and formatted values', () => {
-    api.useDashboardMetrics.mockReturnValue({
-      isLoading: false,
-      isError: false,
-      data: fullMetrics,
-    });
+  it('carries no range picker of its own to disagree with the complaint filters', () => {
     renderPage();
-
-    // Stat labels. "Conversations" appears twice (hero banner + KPI card).
-    expect(screen.getAllByText('Conversations').length).toBeGreaterThan(0);
-    expect(screen.getByText('First reply time')).toBeInTheDocument();
-    expect(screen.getByText('Answered on time')).toBeInTheDocument();
-    expect(screen.getByText('Tickets solved')).toBeInTheDocument();
-    expect(screen.getByText('Customer rating')).toBeInTheDocument();
-
-    // Formatted values.
-    expect(screen.getAllByText('128').length).toBeGreaterThan(0); // conversationVolume (hero + KPI)
-    expect(screen.getByText('42m')).toBeInTheDocument(); // fmtMinutes < 60
-    expect(screen.getByText('87%')).toBeInTheDocument(); // fmtPct SLA
-    expect(screen.getByText('73%')).toBeInTheDocument(); // fmtPct resolution
-    expect(screen.getByText('4.2')).toBeInTheDocument(); // csatAvg
-
-    // Card titles.
-    expect(screen.getByText('Conversations per day')).toBeInTheDocument();
-    expect(screen.getByText('Where conversations stand')).toBeInTheDocument();
-    expect(screen.getByText('Busiest agents')).toBeInTheDocument();
-    expect(screen.getByText('Busiest vendors')).toBeInTheDocument();
-
-    // Status breakdown (sorted desc: resolved 60 first). "resolved" also
-    // appears as the agent-productivity unit, so match at least one.
-    expect(screen.getAllByText('resolved').length).toBeGreaterThan(0);
-    expect(screen.getByText('60')).toBeInTheDocument();
-
-    // Rank lists.
-    expect(screen.getByText('Alice')).toBeInTheDocument();
-    expect(screen.getByText('Bob')).toBeInTheDocument();
-    expect(screen.getByText('Acme')).toBeInTheDocument();
-    expect(screen.getByText('Globex')).toBeInTheDocument();
-  });
-
-  it('formats hours and days and null metrics with an em dash', () => {
-    api.useDashboardMetrics.mockReturnValue({
-      isLoading: false,
-      isError: false,
-      data: {
-        ...fullMetrics,
-        avgResponseMinutes: 120, // -> 2.0h
-        slaCompliancePct: null, // -> —
-        ticketResolutionPct: null, // -> —
-        csatAvg: null, // -> —
-      },
-    });
-    renderPage();
-    expect(screen.getByText('2.0h')).toBeInTheDocument();
-    // Two Stat values and CSAT all render an em dash placeholder.
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
-  });
-
-  it('formats multi-day average response time', () => {
-    api.useDashboardMetrics.mockReturnValue({
-      isLoading: false,
-      isError: false,
-      data: { ...fullMetrics, avgResponseMinutes: 2880 }, // -> 2d
-    });
-    renderPage();
-    expect(screen.getByText('2d')).toBeInTheDocument();
-  });
-
-  it('renders empty placeholders when series and lists are empty', () => {
-    api.useDashboardMetrics.mockReturnValue({
-      isLoading: false,
-      isError: false,
-      data: {
-        ...fullMetrics,
-        volumeSeries: [],
-        conversationsByStatus: {},
-        topAgents: [],
-        topVendors: [],
-      },
-    });
-    renderPage();
-    expect(screen.getByText('No activity in range.')).toBeInTheDocument();
-    expect(screen.getByText('No conversations in range.')).toBeInTheDocument();
-    // Four rank lists now: agents, vendors, stores, brands. The store/brand
-    // panels render empty here because this fixture predates those fields,
-    // which also exercises the `?? []` guard against a stale cached shape.
-    expect(screen.getAllByText('No data yet.').length).toBe(4);
-  });
-
-  it('renders the error state and retries on click', async () => {
-    const refetch = vi.fn();
-    api.useDashboardMetrics.mockReturnValue({
-      isLoading: false,
-      isError: true,
-      data: undefined,
-      refetch,
-    });
-    renderPage();
-    expect(screen.getByText('Could not load metrics')).toBeInTheDocument();
-    await userEvent.click(screen.getByText('Retry'));
-    expect(refetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('changes the date range via the select menu', async () => {
-    api.useDashboardMetrics.mockReturnValue({
-      isLoading: false,
-      isError: false,
-      data: fullMetrics,
-    });
-    renderPage();
-    // Default range is 30 days.
-    expect(api.useDashboardMetrics).toHaveBeenCalledWith(30);
-
-    // SelectMenu is a custom combobox: open the trigger, then pick an option.
-    await userEvent.click(screen.getByRole('combobox', { name: 'Date range' }));
-    await userEvent.click(screen.getByText('Last 7 days'));
-    expect(api.useDashboardMetrics).toHaveBeenLastCalledWith(7);
+    expect(screen.queryByRole('combobox', { name: 'Date range' })).not.toBeInTheDocument();
   });
 });
