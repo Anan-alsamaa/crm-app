@@ -37,7 +37,9 @@ export {
 } from './xlsx.js';
 
 export {
+  parseTicketsCells,
   parseTicketsCsv,
+  parseTicketsXlsx,
   toComplaintDate,
   toNumberCell,
   isBlankCell,
@@ -83,3 +85,12 @@ export {
 } from './chat-timings.js';
 
 export { chatHandoffs, missedOffers, type ChatHandoff, type RoutingEvent } from './handoffs.js';
+
+export {
+  excelSerialToIsoDate,
+  excelSerialToTime,
+  readXlsxRows,
+  type XlsxCell,
+} from './xlsx-read.js';
+
+export { buildComplaintsTemplate, type ComplaintsTemplateInput } from './complaints-template.js';

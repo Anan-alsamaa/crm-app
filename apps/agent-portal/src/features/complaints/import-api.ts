@@ -1,7 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createItem, createItems, readItems } from '@directus/sdk';
 import { buildStoreIndex, matchStore, type StoreRecord } from '@yiji/shared-types';
-import { parseTicketsCsv, ticketPayloadFromCsvRow, toComplaintDate } from '@yiji/reports';
+import {
+  parseTicketsCsv,
+  ticketPayloadFromCsvRow,
+  toComplaintDate,
+  type ParseTicketsResult,
+} from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -53,8 +58,10 @@ const CHUNK = 50;
 export function useImportTickets() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (csvText: string): Promise<TicketImportOutcome> => {
-      const parsed = parseTicketsCsv(csvText);
+    mutationFn: async (input: string | ParseTicketsResult): Promise<TicketImportOutcome> => {
+      // A string is CSV text; anything else already went through the shared
+      // parser (the .xlsx path) — same rows, same aliases, same skip reasons.
+      const parsed = typeof input === 'string' ? parseTicketsCsv(input) : input;
       const outcome: TicketImportOutcome = {
         imported: 0,
         skipped: [...parsed.skipped],

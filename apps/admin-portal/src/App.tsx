@@ -11,6 +11,7 @@ import {
   cn,
   DownloadIcon,
   ErrorBoundary,
+  SettingsIcon,
   ShieldIcon,
   SignOutIcon,
   SparkleIcon,
@@ -79,6 +80,15 @@ const ReportExportsPage = lazy(() =>
 );
 const SlaReportsPage = lazy(() =>
   import('./features/sla-reports/SlaReportsPage.js').then((m) => ({ default: m.SlaReportsPage })),
+);
+const OptionListsPage = lazy(() =>
+  import('./features/lists/OptionListsPage.js').then((m) => ({ default: m.OptionListsPage })),
+);
+const RolesPage = lazy(() =>
+  import('./features/app-roles/RolesPage.js').then((m) => ({ default: m.RolesPage })),
+);
+const BackupPage = lazy(() =>
+  import('./features/backup/BackupPage.js').then((m) => ({ default: m.BackupPage })),
 );
 const ImportsPage = lazy(() =>
   import('./features/imports/ImportsPage.js').then((m) => ({ default: m.ImportsPage })),
@@ -324,12 +334,27 @@ function Shell({ children }: { children: React.ReactNode }) {
       heading: t('nav.workspace', { defaultValue: 'Workspace' }),
       items: [
         { to: '/users', label: t('nav.users'), icon: UsersIcon },
+        {
+          to: '/roles',
+          label: t('nav.roles', { defaultValue: 'Roles & privileges' }),
+          icon: ShieldIcon,
+        },
         { to: '/teams', label: t('nav.teams'), icon: TeamIcon },
         { to: '/vendors', label: t('nav.vendors', { defaultValue: 'Vendors' }), icon: StoreIcon },
+        {
+          to: '/lists',
+          label: t('nav.lists', { defaultValue: 'Dropdown lists' }),
+          icon: SettingsIcon,
+        },
         {
           to: '/imports',
           label: t('nav.imports', { defaultValue: 'Import contacts' }),
           icon: UploadIcon,
+        },
+        {
+          to: '/backup',
+          label: t('nav.backup', { defaultValue: 'Backup' }),
+          icon: DownloadIcon,
         },
       ],
     },
@@ -647,6 +672,36 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <SlaReportsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/lists"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <OptionListsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/roles"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <RolesPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/backup"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <BackupPage />
                 </Shell>
               </ProtectedRoute>
             }

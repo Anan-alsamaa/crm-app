@@ -20,6 +20,8 @@ const hooks = vi.hoisted(() => ({
   useUpdateTicket: vi.fn(),
   // Ticket detail now supports notes + attachments.
   useAddTicketNote: () => ({ mutateAsync: () => Promise.resolve({}), isPending: false }),
+  // WhatsApp contact stamp — fire-and-forget from the reply button.
+  useStampContacted: () => ({ mutate: vi.fn(), mutateAsync: () => Promise.resolve({}) }),
   useAddTicketAttachment: () => ({ mutateAsync: () => Promise.resolve({}) }),
   useRemoveTicketAttachment: () => ({ mutateAsync: () => Promise.resolve({}) }),
   // Detail can pull files already shared in the linked chat.

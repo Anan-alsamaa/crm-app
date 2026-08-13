@@ -131,6 +131,9 @@ export const TicketEventType = z.enum([
   'closed',
   'reopened',
   'automation_triggered',
+  // The agent opened WhatsApp for this customer from the ticket — the stamp
+  // WhatsApp itself cannot give us (it never records WHICH employee replied).
+  'contacted',
 ]);
 export type TicketEventType = z.infer<typeof TicketEventType>;
 

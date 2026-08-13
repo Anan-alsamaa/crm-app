@@ -313,6 +313,65 @@ export const collections: CollectionSpec[] = [
     ],
   },
   {
+    collection: 'option_lists',
+    note: 'Editable dropdown values (complaint type, service type, source, communication method, compensation). The operations team maintains these themselves — adding a complaint type must never require a code deploy.',
+    fields: [
+      {
+        field: 'list',
+        type: 'string',
+        required: true,
+        index: true,
+        note: 'Which dropdown this value belongs to, e.g. complaint_type.',
+      },
+      { field: 'value', type: 'string', required: true },
+      { field: 'sort', type: 'integer', defaultValue: 0 },
+      {
+        field: 'active',
+        type: 'boolean',
+        defaultValue: true,
+        note: 'Deactivated rather than deleted: an old ticket keeps displaying a value that has since been retired.',
+      },
+    ],
+  },
+  {
+    collection: 'app_roles',
+    note: 'Declarative app roles. A row here is the SOURCE OF TRUTH; the app-roles-sync Directus extension materializes it into a real Directus role + policy + permissions. Editing permissions by hand in Directus for these roles is futile — the next sync replaces them.',
+    fields: [
+      { field: 'name', type: 'string', required: true },
+      { field: 'description', type: 'text' },
+      {
+        field: 'privileges',
+        type: 'json',
+        note: 'Map of privilege key -> boolean, from the fixed catalog in the app-roles-sync extension. Unknown keys are ignored, never invented into permissions.',
+      },
+      {
+        field: 'brands',
+        type: 'json',
+        note: 'Array of brand ids this role may see. Empty/null = all brands. Baked into the materialized ticket/store permissions as literal filters.',
+      },
+      {
+        field: 'directus_role',
+        type: 'string',
+        note: 'Written back by the extension once materialized. Read-only in spirit.',
+      },
+      { field: 'directus_policy', type: 'string' },
+      {
+        field: 'builtin',
+        type: 'boolean',
+        defaultValue: false,
+        note: 'True for the display-only rows mirroring the code-defined roles (Admin, Agent). The extension refuses to touch these.',
+      },
+    ],
+  },
+  {
+    collection: 'app_settings',
+    note: 'Small key/value settings the operations team may edit (e.g. the WhatsApp message template). One row per key.',
+    fields: [
+      { field: 'key', type: 'string', required: true, index: true },
+      { field: 'value', type: 'text' },
+    ],
+  },
+  {
     collection: 'quick_replies',
     note: 'Ready-made replies offered above the composer. Modelled on the operations portal’s own canned-reply row, which agents already work from: the point is that the common answer is one click rather than one paragraph retyped forty times a day, and typed the same way every time.',
     fields: [
@@ -427,6 +486,7 @@ export const collections: CollectionSpec[] = [
           'sla_breached',
           'sla_escalated',
           'resolved',
+          'contacted',
           'closed',
           'reopened',
           'automation_triggered',

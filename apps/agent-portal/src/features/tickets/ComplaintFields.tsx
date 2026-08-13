@@ -1,14 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn, FormField, Input, Spinner, Textarea } from '@yiji/ui';
-import {
-  CommunicationMethod,
-  Compensation,
-  ComplaintSource,
-  ComplaintType,
-  DEFAULT_COMMUNICATION_METHOD,
-  ServiceType,
-} from '@yiji/shared-types';
+import { DEFAULT_COMMUNICATION_METHOD } from '@yiji/shared-types';
+import { optionsFor, useOptionLists } from './option-lists.js';
 import type { TicketOrderSnapshot } from './OrderSnapshotCard.js';
 import { useStores, type StoreRow } from './useStoreMatch.js';
 
@@ -625,6 +619,7 @@ export function ComplaintClassification({
   typeRequired?: boolean;
 }) {
   const { t } = useTranslation();
+  const lists = useOptionLists();
   return (
     <div className="grid gap-3.5 sm:grid-cols-2">
       {/* First field in the section: every ops report groups and filters by
@@ -652,7 +647,7 @@ export function ComplaintClassification({
         <Combobox
           value={values.complaint_type}
           onChange={(v) => onChange({ complaint_type: v })}
-          options={ComplaintType.options}
+          options={optionsFor(lists.data, 'complaint_type', values.complaint_type)}
           placeholder={t('complaint.search', { defaultValue: 'Type to search…' })}
         />
       </FormField>
@@ -660,7 +655,7 @@ export function ComplaintClassification({
         <Combobox
           value={values.service_type}
           onChange={(v) => onChange({ service_type: v })}
-          options={ServiceType.options}
+          options={optionsFor(lists.data, 'service_type', values.service_type)}
           placeholder={t('complaint.search', { defaultValue: 'Type to search…' })}
         />
       </FormField>
@@ -671,7 +666,7 @@ export function ComplaintClassification({
         <Combobox
           value={values.complaint_source}
           onChange={(v) => onChange({ complaint_source: v })}
-          options={ComplaintSource.options}
+          options={optionsFor(lists.data, 'complaint_source', values.complaint_source)}
           placeholder={t('complaint.search', { defaultValue: 'Type to search…' })}
         />
       </FormField>
@@ -682,7 +677,7 @@ export function ComplaintClassification({
         <Combobox
           value={values.communication_method}
           onChange={(v) => onChange({ communication_method: v })}
-          options={CommunicationMethod.options}
+          options={optionsFor(lists.data, 'communication_method', values.communication_method)}
           placeholder={t('complaint.search', { defaultValue: 'Type to search…' })}
         />
       </FormField>
@@ -704,6 +699,7 @@ export function ComplaintResolution({
   onChange: (patch: Partial<ComplaintValues>) => void;
 }) {
   const { t } = useTranslation();
+  const lists = useOptionLists();
   // Only a real digit-entry mistake is worth interrupting for; blank is fine.
   const percent = Number(values.coupon_percent);
   const badPercent =
@@ -730,7 +726,7 @@ export function ComplaintResolution({
           <Combobox
             value={values.compensation}
             onChange={(v) => onChange({ compensation: v })}
-            options={Compensation.options}
+            options={optionsFor(lists.data, 'compensation', values.compensation)}
             placeholder={t('complaint.search', { defaultValue: 'Type to search…' })}
           />
         </FormField>

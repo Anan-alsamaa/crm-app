@@ -1,0 +1,12 @@
+{
+  "name": "directus-extension-app-roles-sync",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Materializes app_roles rows (privilege ticks + brand restrictions) into real Directus roles, policies and permissions. The portal edits a declarative row; this turns it into enforcement.",
+  "directus:extension": {
+    "type": "hook",
+    "path": "index.js",
+    "source": "index.js",
+    "host": "^11.0.0"
+  }
+}

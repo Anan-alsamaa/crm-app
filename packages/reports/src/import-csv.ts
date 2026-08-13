@@ -1,3 +1,4 @@
+import { excelSerialToIsoDate, excelSerialToTime, readXlsxRows } from './xlsx-read.js';
 import { toStoreSnapshot, type StoreMatch } from '@yiji/shared-types';
 import { COMPLAINT_COLUMN_KEYS, type ComplaintColumnKey } from './complaints.js';
 
@@ -139,25 +140,50 @@ export function isBlankCell(v: string): boolean {
 
 export function parseTicketsCsv(text: string): ParseTicketsResult {
   const records = splitRecords(text).filter((r) => r.trim() !== '');
+  if (records.length === 0) return { rows: [], skipped: [], unmappedHeaders: [] };
+  return parseTicketsCells([
+    splitCsvLine(records[0]!),
+    ...records.slice(1).map((rec) => splitCsvLine(rec)),
+  ]);
+}
+
+/**
+ * The shared core: a header row plus body rows, whatever container they came
+ * out of. CSV hands in strings; the xlsx reader hands in strings AND numbers —
+ * and a NUMBER in a date or time column is an Excel serial, which only this
+ * layer can know, because knowing takes the header.
+ */
+export function parseTicketsCells(
+  table: ReadonlyArray<ReadonlyArray<string | number | null | undefined>>,
+): ParseTicketsResult {
   const skipped: ParseTicketsResult['skipped'] = [];
   const unmappedHeaders: string[] = [];
-  if (records.length === 0) return { rows: [], skipped, unmappedHeaders };
+  if (table.length === 0) return { rows: [], skipped, unmappedHeaders };
 
-  const header = splitCsvLine(records[0]!);
+  const header = (table[0] ?? []).map((h) => String(h ?? ''));
   const colOf = header.map((h) => {
     const key = HEADER_ALIASES[foldHeader(h)];
     if (!key && h.trim()) unmappedHeaders.push(h.trim());
     return key ?? null;
   });
 
+  const cellText = (key: ComplaintColumnKey, cell: string | number | null | undefined): string => {
+    if (cell === null || cell === undefined) return '';
+    if (typeof cell === 'number') {
+      if (key === 'date') return excelSerialToIsoDate(cell) ?? '';
+      if (key === 'time') return excelSerialToTime(cell) ?? '';
+      return String(cell);
+    }
+    return cell.trim();
+  };
+
   const rows: TicketCsvRow[] = [];
-  records.slice(1).forEach((rec, i) => {
+  table.slice(1).forEach((cells, i) => {
     const line = i + 2; // 1-based, header is line 1
-    const cells = splitCsvLine(rec);
     const row: TicketCsvRow = {};
     colOf.forEach((key, c) => {
       if (!key) return;
-      const raw = (cells[c] ?? '').trim();
+      const raw = cellText(key, cells[c]);
       if (isBlankCell(raw)) return;
       row[key] = raw;
     });
@@ -170,6 +196,11 @@ export function parseTicketsCsv(text: string): ParseTicketsResult {
   });
 
   return { rows, skipped, unmappedHeaders };
+}
+
+/** An .xlsx file straight from disk → the same result the CSV path produces. */
+export async function parseTicketsXlsx(buffer: ArrayBuffer): Promise<ParseTicketsResult> {
+  return parseTicketsCells(await readXlsxRows(buffer));
 }
 
 /** `2026-03-14` + `19:11` → an ISO instant, or null if the date is unusable. */
