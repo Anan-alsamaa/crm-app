@@ -20,6 +20,7 @@ import {
   useIsDesktop,
 } from '@yiji/ui';
 import {
+  couponDiffers,
   isCouponRequested,
   splitCouponForApproval,
   type Priority,
@@ -33,6 +34,7 @@ import {
   useAddTicketAttachment,
   useRemoveTicketAttachment,
   useConversationAttachments,
+  useCanReadConversation,
   useAttachExistingFileToTicket,
   type ChatAttachment,
   type TicketRow,
@@ -593,6 +595,7 @@ function ChatMediaRow({
 function ChatMediaDialog({
   items,
   loading,
+  visible,
   attachedFileIds,
   pending,
   onAdd,
@@ -600,6 +603,8 @@ function ChatMediaDialog({
 }: {
   items: ChatAttachment[];
   loading: boolean;
+  /** False when the chat is not this agent's to read — see useCanReadConversation. */
+  visible: boolean;
   attachedFileIds: Set<string>;
   pending: boolean;
   onAdd: (fileId: string) => void;
@@ -652,8 +657,20 @@ function ChatMediaDialog({
               <Spinner size={16} />
             </div>
           ) : items.length === 0 ? (
+            /* "None" and "not yours to read" both arrive here as an empty list,
+               because Directus answers a filtered read with 200 and no rows.
+               Saying "no files shared" for a chat that was handed to another
+               shift is a claim about the conversation made from no knowledge of
+               it. */
             <p className="py-6 text-center text-sm text-muted-foreground">
-              {t('tickets.noChatMedia', { defaultValue: 'No files shared in this conversation.' })}
+              {visible
+                ? t('tickets.noChatMedia', {
+                    defaultValue: 'No files shared in this conversation.',
+                  })
+                : t('tickets.chatNotVisible', {
+                    defaultValue:
+                      'This chat is assigned to another agent, so its files are not shown here.',
+                  })}
             </p>
           ) : (
             <ul className="flex flex-col gap-1.5">
@@ -693,6 +710,9 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
   const removeAttachment = useRemoveTicketAttachment();
   const attachExisting = useAttachExistingFileToTicket();
   const chatMedia = useConversationAttachments(ticket.data?.conversation ?? null);
+  // Whether this agent may read that chat at all — a ticket and its conversation
+  // are scoped separately, so a handover can leave the two disagreeing.
+  const chatVisible = useCanReadConversation(ticket.data?.conversation ?? null);
   // Legacy tickets (created before `order_snapshot`) carry the order as prose in
   // the description; recover the id so it can be re-fetched and rendered as a
   // proper card, and drop that block from the description we display.
@@ -847,13 +867,26 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
               {tk.conversation && (
                 <>
                   {' · '}
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/?conv=${tk.conversation}`)}
-                    className="font-medium text-primary transition-colors duration-fast ease-out hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded"
-                  >
-                    {t('tickets.viewConversation', { defaultValue: 'View conversation →' })}
-                  </button>
+                  {/* Only offered when the chat is actually this agent's to
+                      open. A ticket and its conversation are scoped separately,
+                      so a handover can leave the ticket owner without access —
+                      and a link that lands on an empty inbox reads as a broken
+                      app rather than as a permission boundary. */}
+                  {chatVisible.data === false ? (
+                    <span className="text-muted-foreground">
+                      {t('tickets.conversationNotVisible', {
+                        defaultValue: 'chat assigned to another agent',
+                      })}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/?conv=${tk.conversation}`)}
+                      className="font-medium text-primary transition-colors duration-fast ease-out hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded"
+                    >
+                      {t('tickets.viewConversation', { defaultValue: 'View conversation →' })}
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -1113,7 +1146,8 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
             {showChatMedia && tk.conversation && (
               <ChatMediaDialog
                 items={chatItems}
-                loading={chatMedia.isLoading}
+                loading={chatMedia.isLoading || chatVisible.isLoading}
+                visible={chatVisible.data !== false}
                 attachedFileIds={attachedFileIds}
                 pending={attachExisting.isPending}
                 onAdd={addFromChat}
@@ -1333,6 +1367,25 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
     ],
   ].filter((r): r is [string, string] => !!r[1]);
 
+  /**
+   * Is the agent proposing a coupon that is not already on the ticket?
+   *
+   * Both the warning below and the save path key off this. The form is seeded
+   * from the ticket, so "is a coupon present" (isCouponRequested) is true on
+   * every visit to a ticket that already has one — it answers the wrong
+   * question here.
+   */
+  const couponChanged = useMemo(
+    () =>
+      couponDiffers(draft, {
+        coupon_code: ticket.coupon_code ?? null,
+        coupon_value: ticket.coupon_value ?? null,
+        coupon_percent: ticket.coupon_percent ?? null,
+        compensation: ticket.compensation ?? null,
+      }) && isCouponRequested(draft),
+    [draft, ticket],
+  );
+
   const save = async () => {
     if (complaintHasErrors(draft)) return;
     try {
@@ -1344,17 +1397,21 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
        * The approval queue was advisory: it only ever saw coupons raised from
        * the one screen that asked politely.
        *
-       * `coupon.ticket` deliberately overrides whatever complaintPatch put in
-       * those fields, so there is one place that decides and it is this one.
+       * Only a CHANGED coupon needs a supervisor. This form is seeded from the
+       * ticket, so an already-approved coupon sits in these inputs on every
+       * visit — sending it for approval again because somebody fixed a typo in
+       * the resolution notes would hand the supervisor a queue of duplicates.
        */
-      const coupon = splitCouponForApproval(draft);
+      const request = couponChanged ? splitCouponForApproval(draft).request : null;
       /**
        * The coupon columns are ABSENT from the patch, not set to null: they are
        * outside the Agent policy's write scope now (TICKET_FIELDS_AGENT_WRITABLE
        * in roles.ts), and Directus rejects an entire PATCH that so much as names
-       * a field the policy does not allow. `compensation` still follows the
-       * split — withheld while a coupon is waiting, so the ticket never reads
-       * "Compensated" for money nobody has approved.
+       * a field the policy does not allow.
+       *
+       * `compensation` is withheld only while a NEW coupon is waiting, so the
+       * ticket never reads "Compensated" for money nobody has approved — and
+       * never loses that word over an edit that did not touch the coupon.
        */
       const {
         coupon_code: _c,
@@ -1366,7 +1423,10 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
         id: ticket.id,
         patch: {
           ...fields,
-          compensation: coupon.ticket.compensation,
+          // Read from the draft, not from `fields`: complaintPatch is typed as
+          // `string | number | null` across every column, and compensation is
+          // text. Withheld only while a NEW coupon is pending.
+          compensation: request ? null : draft.compensation.trim() || null,
           store: storeId || null,
         },
       });
@@ -1374,10 +1434,10 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
       // Raised only after the ticket write lands: a request pointing at an edit
       // that failed is a promise nobody is holding.
       let couponAsked = false;
-      if (coupon.request) {
+      if (request) {
         try {
           await requestCoupon.mutateAsync({
-            ...coupon.request,
+            ...request,
             ticket: ticket.id,
             contact: ticket.contact?.id ?? null,
             requested_by: user?.id ?? null,
@@ -1443,7 +1503,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           {/* Said while the agent is still typing the coupon, not after they
               have told the customer about it — the same warning the create
               dialog carries, because this path raises the same request. */}
-          {isCouponRequested(draft) && (
+          {couponChanged && (
             <p className="flex items-start gap-2 rounded-xl bg-primary/[0.08] px-3 py-2 text-xs leading-relaxed text-foreground">
               <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary" />
               <span>

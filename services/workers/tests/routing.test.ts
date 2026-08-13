@@ -103,6 +103,21 @@ describe('auto-assignment ladder', () => {
       expect(schedule).not.toHaveBeenCalled();
     });
 
+    it('will not hand a chat to somebody online who is not eligible', async () => {
+      /**
+       * The roster is empty (no Agent-role account is active) but an
+       * Administrator is holding a socket. An empty eligible list used to be
+       * read as "no restriction", so presence alone decided and the chat landed
+       * on the admin — the same failure as routing to a service account,
+       * reached by a different door. Nobody eligible must mean nobody.
+       */
+      const { d, assign, schedule } = deps({ online: ['administrator'], roster: [] });
+      await handleRouting(job(), d);
+      expect(assign).not.toHaveBeenCalled();
+      // Left in the unassigned pool, where any agent can see and rescue it.
+      expect(schedule).not.toHaveBeenCalled();
+    });
+
     it('stands down if a human already assigned it', async () => {
       const { d, assign } = deps({
         online: ['a1'],

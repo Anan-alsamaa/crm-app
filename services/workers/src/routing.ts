@@ -98,11 +98,22 @@ async function nextAgent(
   eligible: string[],
 ): Promise<string | null> {
   const skip = new Set(attempted);
-  const allowed = eligible.length > 0 ? new Set(eligible) : null;
+  /**
+   * An EMPTY eligible list means nobody is eligible — not everybody.
+   *
+   * This used to fall back to `null` ("no restriction"), so a deployment with
+   * no Agent-role users would hand the chat to whoever happened to be online:
+   * an Administrator, or any account holding a socket. That is the same failure
+   * as routing to a service account, reached by a different door. With nobody
+   * eligible the honest outcome is nobody — the caller then leaves the chat in
+   * the unassigned pool, where every agent can see and rescue it, and logs that
+   * the roster is misconfigured.
+   */
+  const allowed = new Set(eligible);
 
   await redis.zremrangebyscore(PRESENCE_KEY, '-inf', Date.now() - PRESENCE_TTL_MS);
   const online = await redis.zrange(PRESENCE_KEY, 0, -1);
-  const onlineHit = online.find((id) => !skip.has(id) && (!allowed || allowed.has(id)));
+  const onlineHit = online.find((id) => !skip.has(id) && allowed.has(id));
   if (onlineHit) return onlineHit;
 
   // Nobody online (or nobody online on this team). `eligible` is already

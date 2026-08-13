@@ -192,6 +192,12 @@ export function AgentPerformancePage() {
 
   const dash = <span className="text-muted-foreground/50">—</span>;
   const durFmt = (v: number) => formatDuration(v) ?? '—';
+  // The volume charts can only be empty if no chat carries a usable date at
+  // all — unreachable today, but a hardcoded English string is not something to
+  // leave lying in an Arabic interface on the strength of "unreachable".
+  const nothingToChart = t('performance.nothingToChart', {
+    defaultValue: 'Nothing to chart yet.',
+  });
   const nothingMeasured = t('performance.nothingMeasured', {
     defaultValue: 'No chat in this range has been answered yet, so there is nothing to plot.',
   });
@@ -305,6 +311,7 @@ export function AgentPerformancePage() {
                   rows={compare.map((r) => ({ label: r.label, values: r.values }))}
                   series={volumeSeries}
                   format={countFmt}
+                  emptyLabel={nothingToChart}
                 />
               </Card>
               <Card
@@ -328,7 +335,12 @@ export function AgentPerformancePage() {
               title={t('performance.perDayTitle', { defaultValue: 'Chats per day' })}
               help={t('performance.perDayHelp', { defaultValue: 'How busy each day was' })}
             >
-              <TrendChart points={trend} series={volumeSeries} format={countFmt} />
+              <TrendChart
+                points={trend}
+                series={volumeSeries}
+                format={countFmt}
+                emptyLabel={nothingToChart}
+              />
             </Card>
             <Card
               title={t('performance.speedPerDayTitle', { defaultValue: 'Response times per day' })}
