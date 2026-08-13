@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -24,6 +24,9 @@ const hooks = vi.hoisted(() => ({
   useStoreNotifyTypes: vi.fn(),
 }));
 vi.mock('../src/features/tickets/api.js', () => hooks);
+
+const coupons = vi.hoisted(() => ({ useRequestCouponApproval: vi.fn() }));
+vi.mock('../src/features/coupons/api.js', () => coupons);
 
 import { CreateTicketDialog } from '../src/features/tickets/CreateTicketDialog.js';
 
@@ -57,7 +60,17 @@ beforeEach(() => {
   hooks.useConversationAttachmentIds.mockReturnValue({ data: [] });
   hooks.useStoreNotifyTypes.mockReset();
   hooks.useStoreNotifyTypes.mockReturnValue({ data: ['Missing item'] });
+  coupons.useRequestCouponApproval.mockReset();
+  coupons.useRequestCouponApproval.mockReturnValue({
+    mutateAsync: vi.fn().mockResolvedValue({ id: 'ca1' }),
+  });
 });
+
+/** Type a value into a labelled field on the form. */
+function fill(label: string, value: string) {
+  const el = screen.getByText(label).parentElement!.querySelector('input, textarea')!;
+  fireEvent.change(el, { target: { value } });
+}
 
 describe('CreateTicketForm', () => {
   it('renders as a page with its fields, not a modal', () => {
@@ -158,6 +171,56 @@ describe('CreateTicketForm', () => {
         expect.objectContaining({ storeNotifyTypes: ['Missing item'] }),
       ),
     );
+  });
+
+  it('keeps a coupon OFF the ticket and sends it for approval instead', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ id: 'tk1', storeNotify: 'no-store' });
+    hooks.useCreateTicketFromConversation.mockReturnValue({ mutateAsync });
+    const requestCoupon = vi.fn().mockResolvedValue({ id: 'ca1' });
+    coupons.useRequestCouponApproval.mockReturnValue({ mutateAsync: requestCoupon });
+
+    renderDialog();
+    await chooseComplaintType('Missing item');
+    fill('Coupon code', 'SORRY10');
+    fill('Coupon value (SAR)', '25');
+    await userEvent.click(screen.getByText('tickets.create'));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    // Writing it now and asking after would make approval a formality applied
+    // to money the customer has already been promised.
+    const ticket = mutateAsync.mock.calls[0]![0].ticket;
+    expect(ticket.coupon_code).toBeNull();
+    expect(ticket.coupon_value).toBeNull();
+    expect(ticket.compensation).toBeNull();
+
+    await waitFor(() => expect(requestCoupon).toHaveBeenCalled());
+    expect(requestCoupon.mock.calls[0]![0]).toMatchObject({
+      ticket: 'tk1',
+      coupon_code: 'SORRY10',
+      coupon_value: 25,
+      requested_by: 'agent-1',
+    });
+  });
+
+  it('warns the agent not to promise a coupon that is not approved yet', async () => {
+    renderDialog();
+    expect(screen.queryByText(/supervisor has to approve/)).not.toBeInTheDocument();
+    fill('Coupon code', 'SORRY10');
+    expect(screen.getByText(/supervisor has to approve/)).toBeInTheDocument();
+  });
+
+  it('does not queue an approval when no coupon was given', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ id: 'tk1' });
+    hooks.useCreateTicketFromConversation.mockReturnValue({ mutateAsync });
+    const requestCoupon = vi.fn();
+    coupons.useRequestCouponApproval.mockReturnValue({ mutateAsync: requestCoupon });
+
+    renderDialog();
+    await chooseComplaintType('Missing item');
+    await userEvent.click(screen.getByText('tickets.create'));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(requestCoupon).not.toHaveBeenCalled();
   });
 
   it('shows the name the ticket is about to get', async () => {

@@ -313,6 +313,35 @@ export const collections: CollectionSpec[] = [
     ],
   },
   {
+    collection: 'coupon_approvals',
+    note: 'A coupon an agent wants to give a customer, waiting on a supervisor. The coupon does NOT reach the ticket until it is approved — that is the whole point, so approval cannot be a rubber stamp applied after the money is already promised. Rejected rows are kept: a rejection is a decision somebody made and has to stay answerable for.',
+    fields: [
+      { field: 'coupon_code', type: 'string' },
+      { field: 'coupon_value', type: 'float', note: 'Face value in SAR.' },
+      { field: 'coupon_percent', type: 'float', note: 'Discount as a percentage (0–100).' },
+      {
+        field: 'compensation',
+        type: 'string',
+        choices: [...Compensation.options],
+        note: 'What the agent intends to record on the ticket once this is approved.',
+      },
+      { field: 'reason', type: 'text', note: 'Why the agent is asking. Read by the supervisor.' },
+      {
+        field: 'status',
+        type: 'string',
+        choices: ['pending', 'approved', 'rejected'],
+        defaultValue: 'pending',
+        index: true,
+      },
+      { field: 'decided_at', type: 'dateTime' },
+      {
+        field: 'decision_note',
+        type: 'text',
+        note: 'The supervisor’s reason, required on a rejection — an agent told only "no" cannot answer the customer.',
+      },
+    ],
+  },
+  {
     collection: 'store_notify_rules',
     note: 'Which complaint types are the BRANCH’s business. A ticket notifies its store only when its complaint_type has an enabled row here. Data, not a constant, because operations change the list without a deploy — and an empty table means "not set up yet", which notifies nobody rather than everybody.',
     fields: [
@@ -586,6 +615,22 @@ export const relations: RelationSpec[] = [
   // deleted has nobody left to tell.
   { collection: 'store_notifications', field: 'ticket', related: 'tickets', onDelete: 'CASCADE' },
   { collection: 'store_notifications', field: 'store', related: 'stores', onDelete: 'CASCADE' },
+  { collection: 'coupon_approvals', field: 'ticket', related: 'tickets', onDelete: 'CASCADE' },
+  { collection: 'coupon_approvals', field: 'contact', related: 'contacts', onDelete: 'SET NULL' },
+  // Who asked and who decided. SET NULL rather than CASCADE: an agent leaving
+  // must not erase the record of a coupon that was actually issued.
+  {
+    collection: 'coupon_approvals',
+    field: 'requested_by',
+    related: 'directus_users',
+    onDelete: 'SET NULL',
+  },
+  {
+    collection: 'coupon_approvals',
+    field: 'decided_by',
+    related: 'directus_users',
+    onDelete: 'SET NULL',
+  },
   {
     collection: 'routing_events',
     field: 'conversation',

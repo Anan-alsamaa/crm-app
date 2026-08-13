@@ -55,7 +55,8 @@
     "brands": "العلامات التجارية",
     "stores": "الفروع",
     "agentPerformance": "أداء الوكلاء",
-    "storeNotifications": "إشعارات الفروع"
+    "storeNotifications": "إشعارات الفروع",
+    "couponApprovals": "موافقات القسائم"
   },
   "dashboard": {
     "title": "نظرة عامة",
@@ -857,5 +858,28 @@
     "description": "الوصف",
     "resolution": "ملاحظات المعالجة",
     "notWritten": "غير مكتوب"
+  },
+  "couponApprovals": {
+    "noCode": "بلا رمز",
+    "agent": "طلبها",
+    "customer": "العميل",
+    "ticket": "التذكرة",
+    "approve": "اعتماد",
+    "reject": "رفض",
+    "confirmReject": "رفض",
+    "approveHint": "الاعتماد يضيف القسيمة إلى التذكرة.",
+    "reasonPlaceholder": "ما السبب؟ على الوكيل أن يخبر العميل بشيء.",
+    "decidedBy": "قرار {{who}}: {{note}}",
+    "approved": "تم الاعتماد — القسيمة على التذكرة",
+    "rejected": "تم الرفض",
+    "decideError": "تعذّر تسجيل القرار",
+    "clear": "لا شيء بالانتظار. القائمة فارغة.",
+    "none": "لا شيء هنا.",
+    "status": {
+      "pending": "قيد الانتظار",
+      "approved": "مُعتمدة",
+      "rejected": "مرفوضة",
+      "all": "الكل"
+    }
   }
 }
