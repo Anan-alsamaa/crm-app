@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
 import { normaliseConversationStatus } from '@yiji/shared-types';
-import { conversationTimestamps, type ChatTiming } from '@yiji/reports';
+import { chatHandoffs, conversationTimestamps, type ChatTiming } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -120,6 +120,36 @@ export function useChatTimings(filters: PerformanceFilters) {
        */
       const times = conversationTimestamps(messages);
 
+      /**
+       * Which of these chats the auto-assignment ladder had to pass on.
+       *
+       * A chat that went round the ladder carries the seconds the earlier
+       * agents spent not answering it, so it leaves the personal first-response
+       * population and is counted as a COMMON chat for whoever picked it up.
+       * See chatHandoffs in @yiji/reports.
+       *
+       * Fail-soft: an older permission set without `routing_events` read should
+       * cost the common-chat column, not the whole page.
+       */
+      let handoffs = new Map<string, { passedOn: boolean; takenBy: string | null }>();
+      try {
+        const events = (await directus.request(
+          readItems('routing_events', {
+            limit: -1,
+            filter: { conversation: { _in: conversations.map((c) => c.id) } },
+            fields: ['conversation', 'agent', 'outcome', 'stage'],
+          }),
+        )) as unknown as Array<{
+          conversation: string;
+          agent: string | null;
+          outcome: string;
+          stage: string;
+        }>;
+        handoffs = chatHandoffs(events);
+      } catch {
+        /* no routing history readable — every chat counts as cleanly assigned */
+      }
+
       return conversations.map((c) => ({
         conversationId: c.id,
         agentId: c.assigned_agent,
@@ -133,6 +163,8 @@ export function useChatTimings(filters: PerformanceFilters) {
         startedAt: c.date_created,
         customer: c.contact?.name ?? c.contact?.phone ?? null,
         orderId: c.last_order_id,
+        passedOn: handoffs.get(c.id)?.passedOn ?? false,
+        takenBy: handoffs.get(c.id)?.takenBy ?? null,
       }));
     },
   });

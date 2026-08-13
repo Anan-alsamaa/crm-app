@@ -292,6 +292,17 @@ export const roles: RoleSpec[] = [
       },
       // Append-only: agents add internal notes as 'commented' ticket_events.
       ...appendOnly('ticket_events'),
+      /**
+       * Who was offered which chat, and whether they answered.
+       *
+       * Read-only and unfiltered. It carries no customer content — a
+       * conversation id, an agent id, an outcome and a duration — and both
+       * portals already show agents how they compare with each other on
+       * response time, so scoping this to the viewer's own rows would only
+       * break the common-chats comparison while hiding nothing that is not
+       * already on the page.
+       */
+      { collection: 'routing_events', action: 'read' },
       // Ready-made replies. Read-only: the wording customers receive is the
       // operations team's to standardise, not something to be edited mid-chat.
       ...readOnly('quick_replies'),

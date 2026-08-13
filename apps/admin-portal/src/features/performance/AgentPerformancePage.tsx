@@ -6,6 +6,7 @@ import { HBarChart, Input, SelectMenu, Skeleton, TrendChart, cn, type ChartSerie
 import { normaliseConversationStatus } from '@yiji/shared-types';
 import {
   agentPerformance,
+  chatHandoffs,
   comparisonRows,
   conversationTimestamps,
   dailyTrend,
@@ -116,6 +117,34 @@ function useChatTimings(filters: Filters) {
       // they came to agree on a wrong "No reply".
       const times = conversationTimestamps(messages);
 
+      /**
+       * Which chats the ladder had to pass on — see chatHandoffs in
+       * @yiji/reports. Those leave the personal first-response population and
+       * become COMMON chats for whoever picked them up, because the wait they
+       * carry was created by the agents who did not answer first.
+       */
+      let handoffs = new Map<string, { passedOn: boolean; takenBy: string | null }>();
+      try {
+        const events = (await directus.request(
+          readItems(
+            'routing_events' as never,
+            {
+              limit: -1,
+              filter: { conversation: { _in: conversations.map((c) => c.id) } },
+              fields: ['conversation', 'agent', 'outcome', 'stage'],
+            } as never,
+          ),
+        )) as unknown as Array<{
+          conversation: string;
+          agent: string | null;
+          outcome: string;
+          stage: string;
+        }>;
+        handoffs = chatHandoffs(events);
+      } catch {
+        /* no routing history readable — every chat counts as cleanly assigned */
+      }
+
       return conversations.map((c) => ({
         conversationId: c.id,
         agentId: c.assigned_agent,
@@ -127,6 +156,8 @@ function useChatTimings(filters: Filters) {
         // Carried so a chat nobody ever wrote in still lands on a day in the
         // trend instead of vanishing from it.
         startedAt: c.date_created,
+        passedOn: handoffs.get(c.id)?.passedOn ?? false,
+        takenBy: handoffs.get(c.id)?.takenBy ?? null,
       }));
     },
   });
@@ -165,6 +196,13 @@ export function AgentPerformancePage() {
 
   const volumeSeries: ChartSeries[] = [
     { key: 'chats', label: t('performance.chats', { defaultValue: 'Chats' }), tone: 'sky' },
+  ];
+  const commonSeries: ChartSeries[] = [
+    {
+      key: 'common',
+      label: t('performance.commonChats', { defaultValue: 'Common chats taken' }),
+      tone: 'success',
+    },
   ];
   const timeSeries: ChartSeries[] = [
     {
@@ -273,7 +311,7 @@ export function AgentPerformancePage() {
         <>
           <section
             aria-label={t('performance.summary', { defaultValue: 'Summary' })}
-            className="grid grid-cols-2 gap-3 md:grid-cols-5"
+            className="grid grid-cols-2 gap-3 md:grid-cols-6"
           >
             <Tile
               label={t('performance.chats', { defaultValue: 'Chats' })}
@@ -299,6 +337,11 @@ export function AgentPerformancePage() {
               value={formatDuration(summary.avgTimeToSolveSec) ?? '—'}
               hint={t('performance.average', { defaultValue: 'average' })}
             />
+            <Tile
+              label={t('performance.commonChats', { defaultValue: 'Common chats taken' })}
+              value={String(summary.commonChats)}
+              tone={summary.commonChats > 0 ? 'good' : 'plain'}
+            />
           </section>
 
           {!filters.agentId && (
@@ -310,6 +353,21 @@ export function AgentPerformancePage() {
                 <HBarChart
                   rows={compare.map((r) => ({ label: r.label, values: r.values }))}
                   series={volumeSeries}
+                  format={countFmt}
+                  emptyLabel={nothingToChart}
+                />
+              </Card>
+              <Card
+                title={t('performance.commonTitle', {
+                  defaultValue: 'Chats picked up for the team',
+                })}
+                help={t('performance.commonHelp', {
+                  defaultValue: 'Chats answered after somebody else let them go',
+                })}
+              >
+                <HBarChart
+                  rows={compare.map((r) => ({ label: r.label, values: r.values }))}
+                  series={commonSeries}
                   format={countFmt}
                   emptyLabel={nothingToChart}
                 />
@@ -382,6 +440,9 @@ export function AgentPerformancePage() {
                       {t('performance.noReplyYet', { defaultValue: 'No reply yet' })}
                     </th>
                     <th className="px-4 py-2.5 text-end font-semibold">
+                      {t('performance.commonChats', { defaultValue: 'Common chats taken' })}
+                    </th>
+                    <th className="px-4 py-2.5 text-end font-semibold">
                       {t('performance.avgFirstCol', { defaultValue: 'First response (avg)' })}
                     </th>
                     <th className="px-4 py-2.5 text-end font-semibold">
@@ -408,6 +469,14 @@ export function AgentPerformancePage() {
                       >
                         {r.unanswered}
                       </td>
+                      <td
+                        className={cn(
+                          'px-4 py-2.5 text-end tabular-nums',
+                          r.commonChats > 0 ? 'font-semibold text-success' : '',
+                        )}
+                      >
+                        {r.commonChats}
+                      </td>
                       <td className="px-4 py-2.5 text-end tabular-nums">
                         {formatDuration(r.avgFirstResponseSec) ?? dash}
                       </td>
@@ -428,6 +497,10 @@ export function AgentPerformancePage() {
       )}
 
       <p className="px-1 pb-2 text-2xs leading-relaxed text-muted-foreground">
+        {t('performance.commonBasis', {
+          defaultValue:
+            'A chat the system had to pass on is left out of the response-time figures — it carries the wait the earlier agents caused — and counted here instead, for whoever picked it up.',
+        })}{' '}
         {t('performance.basis', {
           defaultValue:
             'First response is measured from the customer’s first message to the first agent reply; internal notes do not count as a reply. Chats nobody has answered are counted under “No reply yet” and left out of the averages, but they still count against “Answered in time”.',

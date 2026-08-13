@@ -34,6 +34,15 @@ export interface ChatTiming {
   firstAgentAt: string | null;
   /** ISO time the chat was marked solved. Null while it is still open. */
   solvedAt: string | null;
+  /**
+   * True when the auto-assignment ladder passed this chat on before anybody
+   * answered it. Such a chat leaves the personal first-response population —
+   * see the note on `ownChats`. Absent is treated as false, so a caller that
+   * does not read routing events gets exactly the old behaviour.
+   */
+  passedOn?: boolean;
+  /** The agent who picked it up AFTER it had been passed on, if any. */
+  takenBy?: string | null;
 }
 
 export interface AgentPerformanceRow {
@@ -44,10 +53,29 @@ export interface AgentPerformanceRow {
   /** Chats where an agent replied at all. */
   answered: number;
   /**
-   * Chats with no agent reply. Reported, never averaged in — see rule 1.
-   * A non-zero here means the averages describe only part of this agent's work.
+   * Chats with no agent reply AT ALL — passed on or not. Reported, never
+   * averaged in. Whether a customer has been answered is a fact rather than a
+   * judgement about speed, so unlike the timings it is not scoped to `ownChats`.
    */
   unanswered: number;
+  /**
+   * Chats this agent was given cleanly and nobody had to chase — the ONLY
+   * population the first-response figures below describe.
+   *
+   * A chat the ladder passed on carries the seconds the previous agents spent
+   * not answering it, because first response is measured from the customer's
+   * message and the customer does not care how many people it went through.
+   * Charging that to whoever happened to be third measures the ladder rather
+   * than the agent, so those chats are counted under `commonChats` instead.
+   */
+  ownChats: number;
+  /**
+   * Chats this agent picked up after somebody else had let them go.
+   *
+   * The number worth competing over: it is invisible in a response-time
+   * average, and it rewards exactly the behaviour a shared queue needs.
+   */
+  commonChats: number;
   /** Chats marked solved in range. */
   solved: number;
   /** Mean seconds to first reply, over `answered` chats. Null when none. */
@@ -118,14 +146,24 @@ export function agentPerformance(chats: readonly ChatTiming[]): AgentPerformance
 
   const rows: AgentPerformanceRow[] = [];
   for (const [key, group] of groups) {
-    const responses = group.map(firstResponseSec).filter((n): n is number => n !== null);
+    const agentId = key === '' ? null : key;
+    // The response-time figures describe chats this agent got cleanly. See
+    // `ownChats` for why a passed-on chat cannot fairly sit in this population.
+    const own = group.filter((c) => !c.passedOn);
+    const responses = own.map(firstResponseSec).filter((n): n is number => n !== null);
     const solves = group.map(timeToSolveSec).filter((n): n is number => n !== null);
     rows.push({
-      agentId: key === '' ? null : key,
+      agentId,
       agentName: group[0]!.agentName,
       chats: group.length,
       answered: responses.length,
-      unanswered: group.length - responses.length,
+      // Every chat with no reply, passed on or not — see the note in
+      // performanceSummary. Only the timings below are scoped to `own`.
+      unanswered: group.filter((c) => firstResponseSec(c) === null).length,
+      ownChats: own.length,
+      // Credited from the routing history, not from who currently holds the
+      // chat: the ladder may hand it on again afterwards.
+      commonChats: agentId ? chats.filter((c) => c.takenBy === agentId).length : 0,
       solved: group.filter((c) => !!c.solvedAt).length,
       avgFirstResponseSec: mean(responses),
       medianFirstResponseSec: median(responses),
