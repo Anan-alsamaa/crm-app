@@ -417,7 +417,13 @@
     "branchNotifyFailed": "The branch could NOT be told — tell a supervisor.",
     "branchNotifyNoStore": "No branch attached, so nobody was told.",
     "branchWillSee": "This complaint type is reported to the branch. Only the description and the resolution notes are sent.",
-    "branchWillSeeNoStore": "This complaint type is reported to the branch — attach one so it can be."
+    "branchWillSeeNoStore": "This complaint type is reported to the branch — attach one so it can be.",
+    "timingsSection": "Timings",
+    "resolvedAtLabel": "Resolved",
+    "resolutionTime": "Time to resolve",
+    "resolutionTimeOpen": "Still open",
+    "lastUpdated": "Last updated",
+    "lastUpdatedNobody": "Not changed since it was raised"
   },
   "notifications": {
     "title": "Notifications",
