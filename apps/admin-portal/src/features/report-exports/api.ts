@@ -25,7 +25,17 @@ export type { ComplaintReportRow };
 
 /* ── Shared raw shapes ────────────────────────────────────────────────── */
 
+/** `2026-08-13T19:11:04Z` → `2026-08-13 19:11`, local time — a report stamp, not an ISO blob. */
+const fmtStamp = (iso: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
 interface RawTicket {
+  user_updated?: string | null;
+  date_updated?: string | null;
   id: string;
   subject: string | null;
   status: string;
@@ -266,6 +276,10 @@ const BASE_TICKET_FIELDS = [
   'first_responded_at',
   'resolution_due_at',
   'resolved_at',
+  // The audit stamp: who touched the ticket last, and when. System columns, so
+  // they cover imports and raw API writes, not just portal edits.
+  'user_updated',
+  'date_updated',
   { contact: ['id', 'name', 'email', 'phone'] },
 ] as const;
 
@@ -477,6 +491,10 @@ export function useAgentReportData(
           complaintStatus: t.status,
           agent: agentOf(t.assigned_agent),
           compensation: t.compensation ?? '',
+          // Blank until the first edit — a creation is not a modification, and
+          // a column of creation timestamps would drown the real signal.
+          lastModifiedBy: t.date_updated ? agentOf(t.user_updated ?? null) : '',
+          lastModifiedAt: t.date_updated ? fmtStamp(t.date_updated) : '',
           storeSnapshot: t.store_snapshot ?? null,
         };
       });

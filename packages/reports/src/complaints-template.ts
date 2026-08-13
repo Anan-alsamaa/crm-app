@@ -20,7 +20,9 @@ import type { Sheet, SheetValidation } from './xlsx.js';
  * derived from.
  */
 const TEMPLATE_KEYS: ComplaintColumnKey[] = COMPLAINT_COLUMN_KEYS.filter(
-  (k) => !['year', 'month', 'week', 'day'].includes(k),
+  // year/month/week/day are derived from the date; the last-modified pair is
+  // an audit stamp the system writes — none of them belong on an upload sheet.
+  (k) => !['year', 'month', 'week', 'day', 'lastModifiedBy', 'lastModifiedAt'].includes(k),
 );
 
 /** How many data rows the dropdowns cover. Generous, not infinite. */

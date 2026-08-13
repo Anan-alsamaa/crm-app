@@ -457,7 +457,8 @@
     "systemUser": "النظام",
     "template": "قالب إكسل",
     "templateHint": "ملف ‎.xlsx يحمل قوائم اليوم المنسدلة — عبّئه ثم استورده.",
-    "importCsv": "استيراد CSV / إكسل"
+    "importCsv": "استيراد CSV / إكسل",
+    "exportTicket": "تصدير إلى إكسل"
   },
   "notifications": {
     "title": "التنبيهات",

@@ -41,20 +41,16 @@ import {
 } from './api.js';
 import { useAgents, useTeamOptions } from '../inbox/api.js';
 import { WhatsAppReply } from './WhatsAppReply.js';
-import { useOptionLists } from './option-lists.js';
 import { ChangeHistory } from './ChangeHistory.js';
+import { exportTicketWorkbook } from './export-ticket.js';
 import {
-  buildComplaintsTemplate,
   distinctValues,
-  downloadWorkbook,
   filterTickets,
   formatDuration,
   isEmptyFilter,
   joinComplaintStores,
-  parseTicketsXlsx,
   type TicketFilterCriteria,
 } from '@yiji/reports';
-import { useImportTickets } from '../complaints/import-api.js';
 import { useMyComplaints, type AgentComplaintRow } from '../complaints/api.js';
 import { TicketAttachments } from './TicketAttachments.js';
 import {
@@ -116,95 +112,6 @@ export function TicketsPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<TicketFilter>('all');
   const [criteria, setCriteria] = useState<TicketFilterCriteria>({});
-  const [importing, setImporting] = useState(false);
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const importTickets = useImportTickets();
-  const optionLists = useOptionLists();
-  const storesQ = useStores();
-  const agentsQ = useAgents();
-
-  /**
-   * The upload template, generated from TODAY's data: the live dropdown
-   * lists, the current store roster, the current agents. A static file goes
-   * stale the day someone adds a complaint type; this one cannot.
-   */
-  const downloadTemplate = () => {
-    const stores = storesQ.data ?? [];
-    downloadWorkbook(
-      'Complaints_Upload_Template.xlsx',
-      buildComplaintsTemplate({
-        lists: optionLists.data ?? {},
-        restaurants: stores.map((st) => [st.code, st.name].filter(Boolean).join(' ')),
-        brands: [...new Set(stores.map((st) => st.brand?.name).filter((b): b is string => !!b))],
-        cities: [...new Set(stores.map((st) => st.city).filter((c): c is string => !!c))],
-        agents: (agentsQ.data ?? []).map((a) => a.first_name ?? a.email ?? a.id),
-        statuses: ['new', 'open', 'pending', 'resolved', 'closed'],
-      }),
-    );
-  };
-
-  /**
-   * Import a sheet of complaints. Reports what landed AND what it could not
-   * use in the same breath — a silent skip is how a complaint goes missing
-   * from every later report with nobody the wiser.
-   */
-  const onImportFile = async (file: File) => {
-    setImporting(true);
-    try {
-      // .xlsx goes through the zip/SpreadsheetML reader; everything else is
-      // CSV text. Both feed the SAME parser, so a filled template round-trips.
-      const result = await importTickets.mutateAsync(
-        /\.xlsx$/i.test(file.name)
-          ? await parseTicketsXlsx(await file.arrayBuffer())
-          : await file.text(),
-      );
-      if (result.imported === 0 && result.skipped.length === 0) {
-        toast.error(
-          t('tickets.importEmpty', {
-            defaultValue: 'No usable rows found — expected a Date and Restaurant column.',
-          }),
-        );
-        return;
-      }
-      const bits = [
-        t('tickets.importOk', { count: result.imported, defaultValue: '{{count}} imported' }),
-      ];
-      if (result.contactsCreated)
-        bits.push(
-          t('tickets.importContacts', {
-            count: result.contactsCreated,
-            defaultValue: '{{count}} new customers',
-          }),
-        );
-      if (result.unmappedStores)
-        bits.push(
-          t('tickets.importUnmapped', {
-            count: result.unmappedStores,
-            defaultValue: '{{count}} with an unmapped branch',
-          }),
-        );
-      if (result.skipped.length)
-        bits.push(
-          t('tickets.importSkipped', {
-            count: result.skipped.length,
-            defaultValue: '{{count}} rows skipped',
-          }),
-        );
-      if (result.unmappedHeaders.length)
-        bits.push(
-          t('tickets.importUnknownCols', {
-            cols: result.unmappedHeaders.join(', '),
-            defaultValue: 'ignored columns: {{cols}}',
-          }),
-        );
-      toast.success(bits.join(' · '));
-    } catch {
-      toast.error(t('tickets.importError', { defaultValue: 'Import failed.' }));
-    } finally {
-      setImporting(false);
-      if (fileRef.current) fileRef.current.value = '';
-    }
-  };
 
   // Deep-link support: open a specific ticket from /tickets?id=<id> (command
   // palette, AI search) or /tickets/<id> (notification "View" links).
@@ -305,41 +212,6 @@ export function TicketsPage() {
           })}
         </div>
         <ToolbarSpacer />
-        {/* Same shape as the admin portal's store import: pick a file, it
-            reports what landed and what it could not use. */}
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void onImportFile(f);
-          }}
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={downloadTemplate}
-          title={t('tickets.templateHint', {
-            defaultValue:
-              'An .xlsx with today’s dropdown lists baked in — fill it and import it back.',
-          })}
-        >
-          {t('tickets.template', { defaultValue: 'Excel template' })}
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          disabled={importing}
-          onClick={() => fileRef.current?.click()}
-        >
-          {importing
-            ? t('tickets.importing', { defaultValue: 'Importing…' })
-            : t('tickets.importCsv', { defaultValue: 'Import CSV / Excel' })}
-        </Button>
         <Button type="button" size="sm" onClick={() => navigate('/new-ticket')}>
           {t('tickets.newTicket', { defaultValue: '+ New ticket' })}
         </Button>
@@ -747,6 +619,10 @@ function ChatMediaDialog({
 function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => void }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { user: me } = useAuth();
+  // Excel export of one ticket is an administrator action, by request — the
+  // file is operations paperwork, not part of an agent's queue work.
+  const isAdmin = ['administrator', 'admin'].includes(me?.role?.name?.toLowerCase() ?? '');
   const ticket = useTicket(ticketId);
   const events = useTicketEvents(ticketId);
   const update = useUpdateTicket();
@@ -909,6 +785,27 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                   <span className="tabular-nums">
                     opened {new Date(tk.date_created).toLocaleDateString()}
                   </span>
+                </>
+              )}
+              {isAdmin && (
+                <>
+                  {' · '}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      exportTicketWorkbook(
+                        tk,
+                        (() => {
+                          const a = agents.data?.find((x) => x.id === tk.assigned_agent);
+                          return a?.first_name ?? a?.email ?? '';
+                        })(),
+                        {},
+                      )
+                    }
+                    className="font-medium text-primary transition-colors duration-fast ease-out hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded"
+                  >
+                    {t('tickets.exportTicket', { defaultValue: 'Export to Excel' })}
+                  </button>
                 </>
               )}
               {tk.conversation && (

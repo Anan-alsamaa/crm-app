@@ -60,7 +60,7 @@
     "agentPerformanceGroup": "أداء الوكلاء",
     "couponApprovalsGroup": "موافقات القسائم",
     "roles": "الأدوار والصلاحيات",
-    "lists": "القوائم المنسدلة",
+    "lists": "خيارات نموذج الشكوى",
     "backup": "النسخ الاحتياطي"
   },
   "dashboard": {
@@ -961,7 +961,9 @@
       "complaintStatus": "حالة الشكوى",
       "restaurantManagerId": "مدير المطعم",
       "agent": "الموظف",
-      "compensation": "التعويض"
+      "compensation": "التعويض",
+      "lastModifiedBy": "آخر تعديل بواسطة",
+      "lastModifiedAt": "وقت آخر تعديل"
     },
     "tab": {
       "complaints": "الشكاوى"
@@ -973,10 +975,24 @@
     "deleted": "حُذفت الشكوى.",
     "deleteFailed": "تعذّر حذف الشكوى.",
     "deleteConfirm": "حذف «{{label}}»؟ يُزال السجل، ويبقى من حذفه في سجلّ التغييرات.",
-    "deleteRow": "حذف {{label}}"
+    "deleteRow": "حذف {{label}}",
+    "historyBtn": "السجل",
+    "deleteBtn": "حذف",
+    "importBtn": "استيراد ملف",
+    "importing": "جارٍ الاستيراد…",
+    "importOk": "تم استيراد {{count}}",
+    "importEmpty": "لا صفوف صالحة — يتوقع عمود تاريخ ومطعم.",
+    "importFailed": "فشل الاستيراد.",
+    "historyTitle": "سجلّ التغييرات — {{label}}",
+    "noHistory": "لا تغييرات مسجّلة منذ إنشاء الشكوى.",
+    "historyCreated": "أنشأ الشكوى",
+    "historyEdited": "عدّل",
+    "unknownUser": "مستخدم غير معروف",
+    "systemUser": "النظام",
+    "selectHint": "اختر صفًا ثم استخدم السجل أو حذف."
   },
   "lists": {
-    "title": "القوائم المنسدلة",
+    "title": "خيارات نموذج الشكوى",
     "pickList": "القائمة",
     "help": "تغذّي هذه القيم نموذج الشكوى مباشرة — دون نشر جديد. أوقف قيمة لتتوقف عن الظهور؛ والتذاكر التي تحملها تبقى تعرضها. التقارير تجمع على التهجئة الحرفية، لذا تصحيح التهجئة قيمة جديدة لا تعديل.",
     "addPlaceholder": "قيمة جديدة لهذه القائمة…",

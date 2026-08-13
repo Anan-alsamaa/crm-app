@@ -446,7 +446,8 @@
     "systemUser": "System",
     "template": "Excel template",
     "templateHint": "An .xlsx with today’s dropdown lists baked in — fill it and import it back.",
-    "importCsv": "Import CSV / Excel"
+    "importCsv": "Import CSV / Excel",
+    "exportTicket": "Export to Excel"
   },
   "notifications": {
     "title": "Notifications",
