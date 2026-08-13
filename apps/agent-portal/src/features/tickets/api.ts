@@ -526,6 +526,37 @@ export interface ChatAttachment {
  * useConversationAttachmentIds, which copies files at create time). Fails soft
  * (returns []) if the junction read is denied by an older permission set.
  */
+/**
+ * Can the signed-in agent actually read this conversation?
+ *
+ * A ticket is scoped to the agent it is assigned to; a conversation is scoped
+ * separately (own / unassigned / own team). Those can disagree — the usual way
+ * is a chat handed to another shift while the ticket stays with whoever raised
+ * it. Directus answers a filtered read with 200 and an empty list, not a 403,
+ * so anything reading the chat's messages gets `[]` and cannot tell "there is
+ * nothing" from "this is not yours to see".
+ *
+ * One cheap id lookup gives the caller that distinction, so a panel can say
+ * which of the two it is instead of quietly asserting the friendlier one.
+ */
+export function useCanReadConversation(conversationId: string | null) {
+  return useQuery({
+    enabled: !!conversationId,
+    queryKey: ['can-read-conversation', conversationId],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const rows = (await directus.request(
+        readItems('conversations', {
+          filter: { id: { _eq: conversationId } },
+          fields: ['id'],
+          limit: 1,
+        }),
+      )) as Array<{ id: string }>;
+      return rows.length > 0;
+    },
+  });
+}
+
 export function useConversationAttachments(conversationId: string | null) {
   return useQuery({
     enabled: !!conversationId,

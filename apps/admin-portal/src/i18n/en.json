@@ -872,7 +872,8 @@
     "empty": "No chats match these filters.",
     "nothingMeasured": "No chat in this range has been answered yet, so there is nothing to plot.",
     "basis": "First response is measured from the customer’s first message to the first agent reply; internal notes do not count as a reply. Chats nobody has answered are counted under “No reply yet” and left out of the averages, but they still count against “Answered in time”.",
-    "unknownAgent": "Unknown agent"
+    "unknownAgent": "Unknown agent",
+    "nothingToChart": "Nothing to chart yet."
   },
   "storeNotify": {
     "rulesTitle": "Complaints the branch is told about",
@@ -925,6 +926,42 @@
     "columnsHelp": "The order here is the order in the table and the export.",
     "moveFirst": "Move {{col}} to the front",
     "searchPlaceholder": "Order number, phone, branch, or a word from the complaint…",
-    "subtitle": "Every ticket in the operations report format. Search by phone, restaurant name or ID; rearrange the columns under the Columns button; export to Excel."
+    "subtitle": "Every ticket in the operations report format. Search by phone, restaurant name or ID; rearrange the columns under the Columns button; export to Excel.",
+    "title": "Tickets",
+    "col": {
+      "date": "Date",
+      "year": "Year",
+      "month": "Month",
+      "week": "Week",
+      "day": "Day",
+      "time": "Time",
+      "chain": "Chain",
+      "area": "Area",
+      "brand": "Brand",
+      "city": "City",
+      "restaurantName": "Restaurant name",
+      "serviceType": "Service type",
+      "complaintType": "Complaint type",
+      "customerMobile": "Customer mobile",
+      "complaintDescription": "Complaint description",
+      "responseDesc": "Response",
+      "complaintSource": "Complaint source",
+      "orderAmount": "Order amount",
+      "orderNumber": "Order number",
+      "communicationMethod": "Communication method",
+      "couponCode": "Coupon code",
+      "couponValue": "Coupon value",
+      "couponPercent": "Coupon %",
+      "complaintStatus": "Complaint status",
+      "restaurantManagerId": "Restaurant manager",
+      "agent": "Agent",
+      "compensation": "Compensation"
+    },
+    "tab": {
+      "complaints": "Complaints"
+    },
+    "searchLabel": "Search by phone, restaurant name or restaurant id",
+    "moveUp": "Move {{col}} earlier",
+    "moveDown": "Move {{col}} later"
   }
 }

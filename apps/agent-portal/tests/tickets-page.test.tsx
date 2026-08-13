@@ -24,6 +24,10 @@ const hooks = vi.hoisted(() => ({
   useRemoveTicketAttachment: () => ({ mutateAsync: () => Promise.resolve({}) }),
   // Detail can pull files already shared in the linked chat.
   useConversationAttachments: () => ({ data: [], isLoading: false }),
+  // True: the ticket's chat is this agent's to read. The false branch is what
+  // keeps the panel from claiming "no files shared" for a chat handed to
+  // somebody else — see useCanReadConversation.
+  useCanReadConversation: vi.fn(() => ({ data: true, isLoading: false })),
   useAttachExistingFileToTicket: () => ({
     mutateAsync: () => Promise.resolve({}),
     isPending: false,
@@ -130,6 +134,8 @@ beforeEach(() => {
   hooks.useTicket.mockReset();
   hooks.useTicketEvents.mockReset();
   hooks.useUpdateTicket.mockReset();
+  hooks.useCanReadConversation.mockReset();
+  hooks.useCanReadConversation.mockReturnValue({ data: true, isLoading: false });
   hooks.useTicket.mockReturnValue({ data: ticket, isLoading: false });
   hooks.useTicketEvents.mockReturnValue({ data: [], isLoading: false });
   hooks.useUpdateTicket.mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({}) });
@@ -188,6 +194,38 @@ describe('TicketsPage', () => {
     // page directly rather than under a :ticketId route.
     renderPage('/tickets?id=t1');
     await waitFor(() => expect(screen.getByText('Timings')).toBeInTheDocument());
+  });
+});
+
+describe('TicketsPage — a chat the ticket owner cannot read', () => {
+  /**
+   * A ticket is scoped to its assigned agent; its conversation is scoped
+   * separately. A shift handover leaves the two disagreeing, and Directus
+   * answers a filtered read with 200 and no rows — so the panel gets `[]` and
+   * cannot tell "no files" from "not yours". It must not guess the friendlier
+   * one.
+   */
+  it('does not offer to open a chat that is not this agent’s', async () => {
+    hooks.useTicket.mockReturnValue({
+      data: { ...ticket, conversation: 'conv-9' },
+      isLoading: false,
+    });
+    hooks.useCanReadConversation.mockReturnValue({ data: false, isLoading: false });
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('Timings')).toBeInTheDocument());
+    expect(screen.queryByText(/View conversation/)).toBeNull();
+    expect(screen.getByText(/chat assigned to another agent/)).toBeInTheDocument();
+  });
+
+  it('still offers it when the chat IS readable', async () => {
+    hooks.useTicket.mockReturnValue({
+      data: { ...ticket, conversation: 'conv-9' },
+      isLoading: false,
+    });
+    hooks.useCanReadConversation.mockReturnValue({ data: true, isLoading: false });
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('Timings')).toBeInTheDocument());
+    expect(screen.getByText(/View conversation/)).toBeInTheDocument();
   });
 });
 

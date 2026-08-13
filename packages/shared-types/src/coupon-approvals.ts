@@ -55,6 +55,28 @@ export function isCouponRequested(v: CouponInput): boolean {
 }
 
 /**
+ * Is what the agent typed a DIFFERENT coupon from the one already on the ticket?
+ *
+ * The edit form is seeded from the ticket, so an approved coupon is sitting in
+ * those inputs every time somebody opens Edit to fix a typo in the resolution
+ * notes. Without this check, saving that form raises a fresh approval request
+ * for a coupon the supervisor already approved — and withholds `compensation`
+ * as though something were pending, wiping a legitimate value off the ticket.
+ * The supervisor gets a queue of duplicates and the ticket loses data, for an
+ * edit that never touched the coupon.
+ *
+ * Compared field by field on the parsed values, so "5" and "5.0" are the same
+ * coupon and a whitespace change is not a new request.
+ */
+export function couponDiffers(draft: CouponInput, current: CouponFields): boolean {
+  return (
+    text(draft.coupon_code) !== (text(current.coupon_code) ?? null) ||
+    num(draft.coupon_value) !== current.coupon_value ||
+    num(draft.coupon_percent) !== current.coupon_percent
+  );
+}
+
+/**
  * Split what the agent typed into what the ticket may keep now and what has to
  * wait for a supervisor.
  *

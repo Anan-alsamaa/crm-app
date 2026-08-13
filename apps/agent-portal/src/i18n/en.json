@@ -430,7 +430,9 @@
     "anyType": "Any complaint type",
     "clearSearch": "Clear",
     "searchCount": "{{shown}} of {{total}} tickets",
-    "orderToggle": "Order {{orderId}} details"
+    "orderToggle": "Order {{orderId}} details",
+    "chatNotVisible": "This chat is assigned to another agent, so its files are not shown here.",
+    "conversationNotVisible": "chat assigned to another agent"
   },
   "notifications": {
     "title": "Notifications",
@@ -703,7 +705,8 @@
     "nothingMeasured": "No chat in this range has been answered yet, so there is nothing to plot.",
     "basis": "First response is measured from the customer’s first message to the first agent reply; internal notes do not count as a reply. Chats nobody has answered are counted under “No reply yet” and left out of the averages, but they still count against “Answered in time”.",
     "summary": "Summary",
-    "unknownAgent": "Unknown agent"
+    "unknownAgent": "Unknown agent",
+    "nothingToChart": "Nothing to chart yet."
   },
   "coupons": {
     "title": "My coupons",

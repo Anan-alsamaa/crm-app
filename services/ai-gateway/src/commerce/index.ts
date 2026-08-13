@@ -234,6 +234,8 @@ export async function registerCommerceRoutes(
     const vendorId = str(q.vendorId);
     const orderId = str(q.orderId);
     if (!vendorId || !orderId) return reply.code(400).send({ error: 'missing_params' });
-    return reply.send({ data: await deps.yiji.getShipmentTracking(vendorId, orderId) });
+    return answering(reply, { route: 'shipment', vendorId, orderId }, () =>
+      deps.yiji.getShipmentTracking(vendorId, orderId),
+    );
   });
 }

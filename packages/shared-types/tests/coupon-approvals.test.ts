@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   approvedCouponPatch,
+  couponDiffers,
   couponRequestProblem,
   isCouponRequested,
   splitCouponForApproval,
@@ -129,5 +130,62 @@ describe('couponRequestProblem', () => {
   it('accepts a well-formed request', () => {
     expect(couponRequestProblem(input({ coupon_code: 'SORRY10', coupon_value: '25' }))).toBeNull();
     expect(couponRequestProblem(input({ coupon_percent: '100' }))).toBeNull();
+  });
+});
+
+describe('couponDiffers', () => {
+  const onTicket = {
+    coupon_code: 'OPS-47217',
+    coupon_value: 5,
+    coupon_percent: null,
+    compensation: 'Compensated',
+  };
+  const inForm = {
+    coupon_code: 'OPS-47217',
+    coupon_value: '5',
+    coupon_percent: '',
+    compensation: 'Compensated',
+  };
+
+  it('says NO when the form is just showing the coupon already on the ticket', () => {
+    // The edit form is seeded from the ticket, so this is what every visit to a
+    // ticket with an approved coupon looks like. Treating it as a new request
+    // would queue a duplicate for the supervisor on every typo fix — and
+    // withhold `compensation`, wiping a legitimate value.
+    expect(couponDiffers(inForm, onTicket)).toBe(false);
+  });
+
+  it('ignores formatting that does not change the coupon', () => {
+    expect(couponDiffers({ ...inForm, coupon_value: '5.0' }, onTicket)).toBe(false);
+    expect(couponDiffers({ ...inForm, coupon_code: '  OPS-47217  ' }, onTicket)).toBe(false);
+  });
+
+  it('says YES to a different code, amount or percentage', () => {
+    expect(couponDiffers({ ...inForm, coupon_code: 'OPS-99999' }, onTicket)).toBe(true);
+    expect(couponDiffers({ ...inForm, coupon_value: '500' }, onTicket)).toBe(true);
+    expect(couponDiffers({ ...inForm, coupon_percent: '100' }, onTicket)).toBe(true);
+  });
+
+  it('says YES to the first coupon on a ticket that had none', () => {
+    const bare = {
+      coupon_code: null,
+      coupon_value: null,
+      coupon_percent: null,
+      compensation: null,
+    };
+    expect(couponDiffers({ ...inForm, coupon_code: 'NEW-1' }, bare)).toBe(true);
+    // ...and NO when the form is as empty as the ticket.
+    expect(
+      couponDiffers(
+        { coupon_code: '', coupon_value: '', coupon_percent: '', compensation: '' },
+        bare,
+      ),
+    ).toBe(false);
+  });
+
+  it('ignores compensation, which is not a coupon', () => {
+    // Changing "Not compensated" to "Compensated" is a statement of fact and
+    // needs no supervisor; only money does.
+    expect(couponDiffers({ ...inForm, compensation: 'Not compensated' }, onTicket)).toBe(false);
   });
 });
