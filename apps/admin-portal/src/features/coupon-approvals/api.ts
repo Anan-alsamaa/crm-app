@@ -77,7 +77,21 @@ export function useDecideCoupon() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ row, approve, note, supervisorId }: DecideInput) => {
-      if (approve && row.ticket?.id) {
+      if (approve) {
+        /**
+         * Approving with no ticket used to skip the write and mark the request
+         * approved anyway, and the page then said "the coupon is on the
+         * ticket". It was not on anything. The supervisor believed they had
+         * issued it, the agent told the customer it was done, and nothing
+         * existed. Refusing is the only honest outcome: there is nowhere to put
+         * the coupon, so the decision cannot be carried out.
+         *
+         * A rejection is still allowed without a ticket — turning something
+         * down needs no destination.
+         */
+        if (!row.ticket?.id) {
+          throw new Error('COUPON_APPROVAL_NO_TICKET');
+        }
         // The coupon reaches the ticket FIRST — see the note at the top.
         await directus.request(
           updateItem('tickets' as never, row.ticket.id, approvedCouponPatch(row) as never),

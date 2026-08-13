@@ -171,6 +171,54 @@ export const COMPLAINT_COLUMN_LABELS: Record<ComplaintColumnKey, { key: string; 
 };
 
 /**
+ * How each column behaves in a table on screen.
+ *
+ * The whole sheet used to be `whitespace-nowrap`, which is right for a date or
+ * a branch code and catastrophic for free text: the description column measured
+ * 1081px and the response column 677px, so two of twenty-seven columns owned a
+ * third of a 5085px-wide table and every other value was pushed off-screen.
+ * Bounding those two brings the table back to roughly a screen and a half.
+ *
+ *   narrow — one line, natural width (dates, codes, names, statuses)
+ *   text   — free prose: fixed width, clamped to two lines, full value on hover
+ *   number — end-aligned and tabular, so magnitudes line up down the column
+ *
+ * This lives beside the column list rather than in the page so a column added
+ * here cannot arrive on screen without a width policy.
+ */
+export type ComplaintColumnLayout = 'narrow' | 'text' | 'number';
+
+export const COMPLAINT_COLUMN_LAYOUT: Record<ComplaintColumnKey, ComplaintColumnLayout> = {
+  date: 'narrow',
+  year: 'number',
+  month: 'narrow',
+  week: 'number',
+  day: 'narrow',
+  chain: 'narrow',
+  area: 'narrow',
+  brand: 'narrow',
+  city: 'narrow',
+  restaurantName: 'narrow',
+  serviceType: 'narrow',
+  complaintType: 'narrow',
+  customerMobile: 'narrow',
+  complaintDescription: 'text',
+  responseDesc: 'text',
+  complaintSource: 'narrow',
+  time: 'narrow',
+  orderAmount: 'number',
+  orderNumber: 'narrow',
+  communicationMethod: 'narrow',
+  couponCode: 'narrow',
+  couponValue: 'number',
+  couponPercent: 'number',
+  complaintStatus: 'narrow',
+  restaurantManagerId: 'narrow',
+  agent: 'narrow',
+  compensation: 'narrow',
+};
+
+/**
  * A store-derived cell on a complaint row. Three states, and they must stay
  * distinguishable:
  *   no restaurant at all → blank

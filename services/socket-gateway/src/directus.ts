@@ -5,6 +5,7 @@ import {
   updateItem,
   deleteItem,
   uploadFiles,
+  readUsers,
 } from '@directus/sdk';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
 import type { SenderType } from '@yiji/shared-types';
@@ -418,6 +419,54 @@ export class GatewayDirectus {
    * access to it — the caller's token could not tell us who the new assignee is.
    * The endpoint never echoes this row back to the caller.
    */
+  /**
+   * The agent on `teamId` holding the fewest OPEN conversations.
+   *
+   * Server-side, with the SERVICE token, for the same reason
+   * getAssignmentTarget is: the Agent role cannot read other people's
+   * conversations. The portal used to count these through the handing-over
+   * agent's own session, so the load query came back empty, every agent
+   * measured as zero, and the tie-break handed the whole night's backlog to
+   * whichever teammate had the lowest uuid — reproduced live twice, picking an
+   * agent already holding 2 and then 3 chats over one holding none. That is the
+   * exact opposite of what a bulk end-of-shift handover needs.
+   *
+   * Widening the Agent read policy would have "fixed" it by showing every agent
+   * every team's chat content to solve a counting problem. This is the counting
+   * problem solved instead.
+   *
+   * Returns null for a team with nobody active in it — a real state the caller
+   * reports rather than papering over.
+   */
+  async leastLoadedAgentInTeam(teamId: string): Promise<string | null> {
+    const users = (await this.client.request(
+      readUsers({
+        filter: { team: { _eq: teamId }, status: { _eq: 'active' } },
+        fields: ['id'],
+        limit: -1,
+      }) as never,
+    )) as Array<{ id: string }>;
+    const ids = users.map((u) => u.id);
+    if (ids.length === 0) return null;
+
+    const open = (await this.client.request(
+      readItems('conversations', {
+        filter: { status: { _eq: 'open' }, assigned_agent: { _in: ids } },
+        fields: ['assigned_agent'],
+        limit: -1,
+      }),
+    )) as Array<{ assigned_agent: string | null }>;
+
+    const load = new Map<string, number>(ids.map((id) => [id, 0]));
+    for (const c of open) {
+      if (c.assigned_agent) load.set(c.assigned_agent, (load.get(c.assigned_agent) ?? 0) + 1);
+    }
+    // Ties broken by id so two handovers running at once agree.
+    return [...ids].sort(
+      (a, b) => (load.get(a) ?? 0) - (load.get(b) ?? 0) || a.localeCompare(b),
+    )[0]!;
+  }
+
   async getAssignmentTarget(
     entityType: AssignmentEntityType,
     entityId: string,

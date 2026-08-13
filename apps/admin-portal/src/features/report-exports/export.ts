@@ -10,6 +10,7 @@ export {
   buildComplaintsSheets,
   COMPLAINT_COLUMN_KEYS,
   COMPLAINT_COLUMN_LABELS,
+  COMPLAINT_COLUMN_LAYOUT,
   reportFilename,
   type ComplaintColumnKey,
   type Translate,

@@ -10,6 +10,15 @@ import type {
   TicketRow,
 } from './repos.js';
 
+/**
+ * Roles a customer chat may be routed to.
+ *
+ * Everything else — the three svc-* accounts and Administrator — is active,
+ * holds zero conversations forever, and would otherwise sort to the front of
+ * every least-loaded list. See agentsByLoad.
+ */
+const ROUTABLE_ROLES = ['Agent'] as const;
+
 /** Real (Directus-backed) implementations of the processor repos. */
 
 export function createTicketRepo(client: YijiDirectusClient): TicketRepo {
@@ -204,19 +213,35 @@ export function createRoutingRepo(client: YijiDirectusClient) {
      * solve and reopen is a counter that drifts, and the ladder runs rarely
      * enough that one aggregate query is cheaper than that risk.
      *
-     * Only active users with an app role are candidates — a suspended account
-     * is not somebody to hand a customer to.
+     * Only active users in a CUSTOMER-FACING role are candidates. A suspended
+     * account is not somebody to hand a customer to — and neither is a service
+     * account or the Administrator.
+     *
+     * That last part was the whole bug. This filtered on `status` alone, and
+     * svc-socket-gateway, svc-workers, svc-ai-gateway and Administrator are all
+     * active and permanently hold zero conversations, so they sorted to the
+     * FRONT of a least-loaded list and won every out-of-hours assignment. The
+     * chat was then worse than unowned: `assigned_agent` is not null, so the
+     * unassigned safety net skips it, and the portal filters service accounts
+     * out of its agent list, so the toolbar renders "Agent —". The record says
+     * somebody owns it and the screen says nobody does.
+     *
+     * An ALLOW-list of roles, not a deny-list of emails: a new service account
+     * must not be able to join the customer rotation by being named something
+     * the deny-list did not anticipate. The portal's own display filter
+     * (apps/agent-portal/src/features/inbox/api.ts) is the mirror of this.
      */
     async agentsByLoad(teamId: string | null) {
+      // Cast: the SDK types model `role` as a scalar on directus_users, so a
+      // relational clause on it does not typecheck even though Directus serves
+      // `filter[role][name][_in]` perfectly well.
+      const filter = {
+        status: { _eq: 'active' },
+        role: { name: { _in: [...ROUTABLE_ROLES] } },
+        ...(teamId ? { team: { _eq: teamId } } : {}),
+      } as never;
       const users = (await client.request(
-        readUsers({
-          filter: {
-            status: { _eq: 'active' },
-            ...(teamId ? { team: { _eq: teamId } } : {}),
-          },
-          fields: ['id'],
-          limit: -1,
-        }) as never,
+        readUsers({ filter, fields: ['id'], limit: -1 }) as never,
       )) as Array<{ id: string }>;
       const ids = users.map((u) => u.id);
       if (ids.length === 0) return [];

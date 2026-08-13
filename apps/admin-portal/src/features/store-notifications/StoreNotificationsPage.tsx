@@ -67,6 +67,19 @@ function Preview({ row }: { row: StoreNotificationRow }) {
   );
   return (
     <div className="space-y-1 text-xs leading-relaxed">
+      {/* The order leads: a branch reads "which order" before it reads
+          "what went wrong", because the first is what they look up. */}
+      <p>
+        <span className="text-muted-foreground">
+          {t('storeNotify.order', { defaultValue: 'Order' })}:{' '}
+        </span>
+        {row.order_id ? <span className="font-mono">#{row.order_id}</span> : none}
+      </p>
+      {row.order_items && row.order_items.length > 0 && (
+        <p className="line-clamp-2 text-muted-foreground">
+          {row.order_items.map((i) => `${i.qty}× ${i.name}`).join(', ')}
+        </p>
+      )}
       <p className="line-clamp-2">
         <span className="text-muted-foreground">
           {t('storeNotify.description', { defaultValue: 'Description' })}:{' '}
@@ -129,7 +142,7 @@ export function StoreNotificationsPage() {
         <p className="mb-4 max-w-3xl text-xs leading-relaxed text-muted-foreground">
           {t('storeNotify.rulesHelp', {
             defaultValue:
-              'A ticket is reported to its branch only when its complaint type is selected here. The branch receives the description and the resolution notes — nothing else about the customer.',
+              'A ticket is reported to its branch only when its complaint type is selected here. The branch receives the order number and its items, the description and the resolution notes — nothing else about the customer.',
           })}
         </p>
         {rules.isLoading ? (

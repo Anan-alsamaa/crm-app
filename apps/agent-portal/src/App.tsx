@@ -355,7 +355,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         },
         {
           to: '/performance',
-          label: t('nav.performance', { defaultValue: 'Performance' }),
+          label: t('nav.performance', { defaultValue: 'Agent performance' }),
           icon: ClockIcon,
         },
         {

@@ -381,6 +381,16 @@ export function useCreateTicketFromConversation() {
           complaintType: ticket.complaint_type ?? null,
           description: ticket.description ?? null,
           resolutionNotes: ticket.response_desc ?? null,
+          // WHICH order, and what was on it. A branch told "an item was
+          // missing" with no order number has to ask us back, which is the
+          // round trip this notification exists to remove.
+          orderId: ticket.order_id ?? null,
+          orderItems:
+            ticket.order_snapshot?.items?.map((i) => ({
+              name: i.name,
+              qty: i.qty,
+              price: i.price,
+            })) ?? null,
         },
         storeNotifyTypes ?? [],
       );

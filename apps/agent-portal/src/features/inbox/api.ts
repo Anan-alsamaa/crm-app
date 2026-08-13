@@ -4,7 +4,7 @@ import { readItems, readUsers, updateItem, createItem, deleteItem } from '@direc
 import type { ConversationStatus, Priority, YijiOrder } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
-import { notifyAssignmentBestEffort } from '../../lib/job-producer.js';
+import { jobProducer, notifyAssignmentBestEffort } from '../../lib/job-producer.js';
 
 export interface InboxConversation {
   id: string;
@@ -193,6 +193,24 @@ export function inboxOrdersKey(vendorId: string, customerId: string | undefined)
  * doing nothing.
  */
 export async function leastLoadedAgentInTeam(teamId: string): Promise<string | null> {
+  /**
+   * Ask the GATEWAY first — it holds a service token and can actually see the
+   * loads. This client-side count runs through the agent's own session, and the
+   * Agent role cannot read a colleague's conversations, so it measures every
+   * teammate as zero and the tie-break hands the whole backlog to the lowest
+   * uuid. Reproduced twice against the live system: it picked an agent already
+   * holding 2 (then 3) open chats over one holding none.
+   *
+   * The local path below survives only as a fallback for a gateway outage, and
+   * it now refuses to pretend: an all-zero map over a non-empty roster means
+   * "not measurable", not "everyone is idle".
+   */
+  try {
+    return await jobProducer.leastLoadedAgentInTeam(teamId);
+  } catch {
+    /* fall through to the local estimate */
+  }
+
   const users = (await directus.request(
     readUsers({
       filter: { team: { _eq: teamId }, status: { _eq: 'active' } },
@@ -215,6 +233,15 @@ export async function leastLoadedAgentInTeam(teamId: string): Promise<string | n
   for (const c of open) {
     if (c.assigned_agent) load.set(c.assigned_agent, (load.get(c.assigned_agent) ?? 0) + 1);
   }
+  /**
+   * Every teammate at zero, over a team that has people in it, is what a
+   * permission-blinded read looks like — not a genuinely idle shift. Returning
+   * a pick from that data is worse than returning nothing: the caller believes
+   * it balanced the work. Null makes the toolbar say the team could not be
+   * measured instead.
+   */
+  if ([...load.values()].every((n) => n === 0) && open.length === 0) return null;
+
   // Ties broken by id so two agents doing the same handover at once do not
   // both pick "whoever the sort happened to put first this time".
   return [...ids].sort((a, b) => (load.get(a) ?? 0) - (load.get(b) ?? 0) || a.localeCompare(b))[0]!;

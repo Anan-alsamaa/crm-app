@@ -372,6 +372,31 @@ async function main(): Promise<void> {
     return reply.send({ ok: true, enqueued: true, jobId: outcome.jobId });
   });
 
+  /**
+   * "Who on this team should take a handed-over chat?"
+   *
+   * Answered here rather than in the portal because the answer needs to see
+   * other agents' open conversations, which the Agent role deliberately cannot.
+   * The portal's own version silently measured everyone as zero and handed the
+   * backlog to the lowest uuid. See DirectusGateway.leastLoadedAgentInTeam.
+   *
+   * Only the chosen id is returned — never the conversations it was counted
+   * from — so this leaks nothing the caller could not already ask for.
+   */
+  app.get('/teams/:teamId/least-loaded', async (req, reply) => {
+    const identity = await requireRole(req, reply, STAFF_ROLES, 'agent role required');
+    if (!identity) return reply;
+    const { teamId } = req.params as { teamId?: string };
+    if (!teamId) return reply.code(400).send({ ok: false, error: 'teamId required' });
+    try {
+      const agentId = await directus.leastLoadedAgentInTeam(teamId);
+      return reply.send({ ok: true, agentId });
+    } catch (err) {
+      logger.warn({ err, teamId }, 'least-loaded lookup failed');
+      return reply.code(503).send({ ok: false, error: 'lookup failed' });
+    }
+  });
+
   // Diagnostic: inspect which agents the gateway thinks are currently
   // online (and how many sockets each is holding). Useful for chasing the
   // "host page shows online after logout" class of bugs — if this returns

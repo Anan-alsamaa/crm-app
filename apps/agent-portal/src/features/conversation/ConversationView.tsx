@@ -22,6 +22,7 @@ import { useAgents, useConversation, useMessages, type ConversationMessage } fro
 import { AttachmentChips } from './AttachmentChips.js';
 import { ConversationToolbar } from './ConversationToolbar.js';
 import { ConversationSidebar } from './ConversationSidebar.js';
+import { QuickReplies } from './QuickReplies.js';
 import { resolveMentions } from './mentions.js';
 
 let seq = 0;
@@ -490,6 +491,56 @@ export function ConversationView({
     }
   };
 
+  /**
+   * The live "/…" filter for the ready replies.
+   *
+   * Only when the slash STARTS the draft: mid-sentence a slash is a slash, and
+   * an agent typing "9/10" should not watch the reply row start hunting.
+   */
+  const replyFilter = /^\/(.*)$/.exec(draft)?.[1] ?? '';
+
+  /**
+   * What the CUSTOMER has written, for language ranking.
+   *
+   * Deliberately not the whole transcript: an Arabic template we sent earlier
+   * would otherwise make an English conversation rank Arabic first, and the
+   * agent would fight the row every time.
+   */
+  const customerText = useMemo(
+    () =>
+      all
+        .filter((m) => m.sender_type === 'customer' && !m.is_internal_note)
+        .map((m) => m.content)
+        .join(' '),
+    [all],
+  );
+
+  /**
+   * Put a ready reply in the box.
+   *
+   * INSERTS rather than replaces — the ops portal overwrites whatever is there,
+   * and one mis-click costing a half-written reply is all it takes for an agent
+   * to stop trusting the row. A "/query" is consumed (it was the search, not the
+   * message); anything else is appended to what is already written.
+   */
+  const insertQuickReply = (text: string) => {
+    setDraft((prev) => {
+      if (/^\/.*/.test(prev)) return text;
+      const base = prev.trimEnd();
+      return base
+        ? `${base}
+${text}`
+        : text;
+    });
+    requestAnimationFrame(() => {
+      draftRef.current?.focus();
+      if (draftRef.current) {
+        draftRef.current.style.height = 'auto';
+        draftRef.current.style.height = `${Math.min(draftRef.current.scrollHeight, 160)}px`;
+      }
+    });
+  };
+
   const insertMention = (email: string) => {
     if (!mentionMenu) return;
     const local = email.split('@')[0] ?? '';
@@ -782,6 +833,25 @@ export function ConversationView({
         {/* Reply composer — floating card lit by focus. */}
         <div>
           <div className="mx-auto max-w-4xl px-5 pb-5 pt-3">
+            {/* Ready-made replies, directly above the box — the operations portal
+                puts them here and agents already reach for them there. Hidden on
+                an internal note: a canned customer reply is never the right
+                thing to say to the team. */}
+            {!internalNote && (
+              <QuickReplies
+                className="mb-1"
+                customerText={customerText}
+                query={replyFilter}
+                vars={{
+                  order: c?.last_order_id ?? null,
+                  name: c?.contact?.name ?? null,
+                  brand: c?.last_order_snapshot?.brandName ?? null,
+                  restaurant: c?.last_order_snapshot?.restaurantName ?? null,
+                }}
+                onPick={insertQuickReply}
+              />
+            )}
+
             {/* Tabs: reply / internal note (text-button style, no chip chrome) */}
             <div className="mb-1 flex items-center gap-4 text-xs">
               <button

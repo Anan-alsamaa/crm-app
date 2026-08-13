@@ -109,13 +109,48 @@ describe('StoreNotificationsPage', () => {
     expect(screen.getByText('0 of 14 selected')).toBeInTheDocument();
   });
 
-  it('shows the queue carrying only the description and the resolution notes', () => {
+  it('shows the queue carrying the order, its items, the description and the notes', () => {
     api.useStoreNotifications.mockReturnValue({
       isLoading: false,
       data: [
         {
           id: 'n1',
           complaint_type: 'Missing item',
+          order_id: '946641',
+          order_items: [
+            { name: 'Double burger', qty: 2 },
+            { name: 'Fries', qty: 1 },
+          ],
+          description: 'Two burgers missing.',
+          resolution_notes: 'Refunded in full.',
+          status: 'queued',
+          sent_at: null,
+          date_created: '2026-08-13T10:00:00.000Z',
+          ticket: { id: 't1', subject: 'Missing item' },
+          store: { id: 's1', code: 'LCP-002', name: 'Marina Mall 2' },
+        },
+      ],
+    });
+    renderPage();
+    const row = screen.getByRole('row', { name: /LCP-002/ });
+    // The order leads: a branch looks the complaint up by order number before
+    // it reads what went wrong.
+    expect(within(row).getByText('#946641')).toBeInTheDocument();
+    expect(within(row).getByText(/2× Double burger, 1× Fries/)).toBeInTheDocument();
+    expect(within(row).getByText(/Two burgers missing/)).toBeInTheDocument();
+    expect(within(row).getByText(/Refunded in full/)).toBeInTheDocument();
+    expect(within(row).getByText('queued')).toBeInTheDocument();
+  });
+
+  it('states an absent field rather than leaving a blank cell', () => {
+    api.useStoreNotifications.mockReturnValue({
+      isLoading: false,
+      data: [
+        {
+          id: 'n1',
+          complaint_type: 'Missing item',
+          order_id: null,
+          order_items: null,
           description: 'Two burgers missing.',
           resolution_notes: null,
           status: 'queued',
@@ -128,10 +163,10 @@ describe('StoreNotificationsPage', () => {
     });
     renderPage();
     const row = screen.getByRole('row', { name: /LCP-002/ });
-    expect(within(row).getByText(/Two burgers missing/)).toBeInTheDocument();
-    // Absence is stated, not blank — a blank cell reads as a rendering bug.
-    expect(within(row).getByText('not written')).toBeInTheDocument();
-    expect(within(row).getByText('queued')).toBeInTheDocument();
+    // A blank cell reads as a rendering bug; "not written" is a fact about the
+    // ticket. Two here: the order that was never attached, and the notes
+    // nobody typed.
+    expect(within(row).getAllByText('not written')).toHaveLength(2);
   });
 
   it('does not let a queued row read as delivered', async () => {

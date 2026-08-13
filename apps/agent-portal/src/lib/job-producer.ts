@@ -12,7 +12,7 @@
  * The gateway verifies it resolves to Agent/Admin/Administrator; the dev host
  * producer verifies the same via Directus /users/me.
  *
- * Only ONE route lives here today: notify-assignment. It deliberately takes just
+ * notify-assignment deliberately takes just
  * `{ entityType, entityId }` — the recipient and the notification copy are
  * derived SERVER-SIDE from the entity's current `assigned_agent`, so an agent
  * cannot use this to push arbitrary in-app/email messages to a colleague.
@@ -44,10 +44,13 @@ async function buildHeaders(): Promise<HeadersInit> {
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
+  return call<T>(path, { method: 'POST', body: JSON.stringify(body) });
+}
+
+async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${PRODUCER_URL}${path}`, {
-    method: 'POST',
+    ...init,
     headers: await buildHeaders(),
-    body: JSON.stringify(body),
   });
   let payload: EnqueueResult | null = null;
   try {
@@ -75,6 +78,21 @@ export const jobProducer = {
     entityId: string,
   ): Promise<EnqueueResult> {
     return post<EnqueueResult>('/jobs/notify-assignment', { entityType, entityId });
+  },
+
+  /**
+   * Who on `teamId` should take a handed-over chat.
+   *
+   * Server-side because the answer requires counting other agents' open
+   * conversations, which the Agent role cannot read — the portal's own version
+   * measured everyone as zero and picked the lowest uuid, piling a whole
+   * night's backlog onto one person.
+   */
+  async leastLoadedAgentInTeam(teamId: string): Promise<string | null> {
+    const r = await call<{ ok: boolean; agentId: string | null }>(
+      `/teams/${encodeURIComponent(teamId)}/least-loaded`,
+    );
+    return r.agentId;
   },
 };
 

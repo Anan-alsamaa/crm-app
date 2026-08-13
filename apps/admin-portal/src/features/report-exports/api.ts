@@ -428,7 +428,21 @@ export function useAgentReportData(
        * are filled in by the page, which owns the store index; here we carry
        * the raw order snapshot values through so the join has something to
        * match on. */
-      const complaintRows: ComplaintReportRow[] = tickets.map((t) => {
+      /**
+       * Ordered by WHEN THE COMPLAINT HAPPENED — the date this report shows.
+       *
+       * Directus sorts by date_created, and an imported batch shares one
+       * creation stamp: 51 tickets landed with the same date_created, so the
+       * three genuinely newest complaints sat at rows 51-53 while page 1 showed
+       * July. Sorting on a field the table does not display is a sort nobody
+       * can see is wrong. The export inherits this order too.
+       */
+      const byWhen = [...tickets].sort((a, b) =>
+        String(b.complaint_date ?? b.date_created ?? '').localeCompare(
+          String(a.complaint_date ?? a.date_created ?? ''),
+        ),
+      );
+      const complaintRows: ComplaintReportRow[] = byWhen.map((t) => {
         // When it HAPPENED, not when it was typed in. Older tickets have no
         // complaint_date and keep dating from creation.
         const when = splitLocalDateTime(t.complaint_date ?? t.date_created);

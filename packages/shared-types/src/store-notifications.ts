@@ -8,15 +8,27 @@
  * is an operations decision, kept as data (`store_notify_rules`) rather than a
  * constant here, because it will change without a deploy.
  *
- * What the branch receives is deliberately narrow: the description and the
- * resolution notes, and nothing else. Not the customer's name or phone, not the
- * coupon, not the agent. A branch needs to know what went wrong and what was
- * promised on their behalf; the rest is the customer's business with us.
+ * What the branch receives is deliberately narrow: WHICH ORDER (its number and
+ * what was in it), what went wrong, and what was promised on their behalf. Not
+ * the customer's name or phone, not the coupon, not the agent.
+ *
+ * The order is not optional detail. A branch told "an item was missing" with no
+ * order number cannot look anything up, and would have to ask us back — which
+ * is exactly the round trip this notification exists to remove. The line items
+ * go with it because checking a missing- or wrong-item complaint means
+ * comparing what was ordered against what they packed.
  *
  * This module is pure. It decides and shapes; it does not send. Delivery waits
  * on the POS integration — see `store_notifications`, which is the outbox those
  * decisions are recorded in.
  */
+
+/** One line of an order, as the branch needs to read it. */
+export interface StoreNotificationItem {
+  name: string;
+  qty: number;
+  price?: number;
+}
 
 /** The ticket's side of the decision, as the form knows it at save time. */
 export interface StoreNotificationInput {
@@ -27,6 +39,10 @@ export interface StoreNotificationInput {
   description: string | null;
   /** The agent's `response_desc` — what was done about it. */
   resolutionNotes: string | null;
+  /** Which order the complaint is about. */
+  orderId?: string | null;
+  /** What was on it. */
+  orderItems?: readonly StoreNotificationItem[] | null;
 }
 
 /** A row destined for `store_notifications`, ready to insert. */
@@ -36,6 +52,8 @@ export interface StoreNotificationDraft {
   complaint_type: string;
   description: string | null;
   resolution_notes: string | null;
+  order_id: string | null;
+  order_items: StoreNotificationItem[] | null;
   status: 'queued';
 }
 
@@ -87,11 +105,22 @@ export function storeNotificationDraft(
       ticket: input.ticketId,
       store: input.storeId,
       complaint_type: complaintType,
-      // Only these two, by request. Empty stays null rather than becoming an
-      // empty string, so "nothing was written" cannot be read as "they wrote
-      // nothing of substance".
+      // Empty stays null rather than becoming an empty string, so "nothing was
+      // written" cannot be read as "they wrote nothing of substance".
       description: text(input.description),
       resolution_notes: text(input.resolutionNotes),
+      order_id: text(input.orderId),
+      // An empty basket is stored as null, not as []: "we do not have the
+      // items" and "the order had no items" are different things, and only one
+      // of them is possible.
+      order_items:
+        input.orderItems && input.orderItems.length > 0
+          ? input.orderItems.map((i) => ({
+              name: i.name,
+              qty: i.qty,
+              ...(i.price === undefined ? {} : { price: i.price }),
+            }))
+          : null,
       status: 'queued',
     },
   };

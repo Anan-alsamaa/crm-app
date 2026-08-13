@@ -78,6 +78,8 @@ export interface StoreNotificationRow {
   complaint_type: string | null;
   description: string | null;
   resolution_notes: string | null;
+  order_id: string | null;
+  order_items: Array<{ name: string; qty: number; price?: number }> | null;
   status: 'queued' | 'sent' | 'failed';
   sent_at: string | null;
   date_created: string | null;

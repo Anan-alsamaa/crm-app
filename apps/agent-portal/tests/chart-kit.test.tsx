@@ -59,6 +59,21 @@ describe('HBarChart', () => {
     expect(screen.getByText('No chats')).toBeInTheDocument();
   });
 
+  it('says so when there are rows but nothing in them was ever measured', () => {
+    // A column of empty tracks and em dashes has the SHAPE of a chart and none
+    // of the information, so it reads as broken rather than as "not measured".
+    render(
+      <HBarChart
+        rows={[{ label: 'Sara', values: { first: null, solve: null } }]}
+        series={series}
+        format={secs}
+        emptyLabel="Nothing answered yet"
+      />,
+    );
+    expect(screen.getByText('Nothing answered yet')).toBeInTheDocument();
+    expect(screen.queryByText('Sara')).not.toBeInTheDocument();
+  });
+
   it('carries the per-row note, so an average is never read without its count', () => {
     render(
       <HBarChart

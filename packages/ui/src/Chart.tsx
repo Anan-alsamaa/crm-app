@@ -79,7 +79,11 @@ export function HBarChart({
   // A zero scale would divide by zero and draw every bar full-width.
   const safeMax = scaleMax > 0 ? scaleMax : 1;
 
-  if (rows.length === 0) {
+  // Nothing to draw covers TWO cases: no rows at all, and rows whose every
+  // charted value is missing. The second used to render as a column of empty
+  // tracks and em dashes — the shape of a chart, carrying no information, which
+  // reads as a rendering failure rather than as "this was never measured".
+  if (rows.length === 0 || values.length === 0) {
     return (
       <p className={cn('py-8 text-center text-sm text-muted-foreground', className)}>
         {emptyLabel ?? 'Nothing to chart yet.'}
