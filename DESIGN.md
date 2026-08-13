@@ -17,7 +17,19 @@ from house `#0F8D8F` by raising chroma at the same lightness, so contrast
 math is unchanged). This is the tenant default referenced as `--primary`
 everywhere. Per-tenant override via `--brand-primary` on `<html>`.
 
-**Color strategy (revised 2026-07-29): MULTI-HUE VIVID.** Colour now carries
+**Color strategy (revised 2026-08-13, owner's direction): OBSIDIAN + JADE.**
+A flagship register: ONE refined accent (jade, `oklch(0.50 0.115 190)` — the
+brand teal deepened until it reads expensive rather than default-SaaS), ink
+CTAs (`--display` solid; the cyan→violet gradient button is gone and must not
+return), a deeper obsidian rail (`0.21 0.03 200`), and semantic hues
+desaturated to sophistication (they still mean things; they no longer shout).
+Display type is Outfit Variable on `h1/h2` and `font-display`; body stays
+Inter for dense data. A fixed 1.4% grain overlay breaks digital flatness.
+Contrast still solved numerically — every accent carrying white text clears
+4.5:1. This supersedes MULTI-HUE VIVID below at the owner's explicit request
+("complete transformation… billion-dollar app"; not the ops portal's look).
+
+_Superseded:_ **Color strategy (revised 2026-07-29): MULTI-HUE VIVID.** Colour now carries
 meaning across the whole product, not just the inbox. Teal remains the brand and
 the only _identity_ colour, but status, priority and category each own a hue —
 violet, coral, amber, emerald and the new `--sky` — and chroma is raised on every

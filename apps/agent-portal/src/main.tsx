@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@fontsource-variable/inter';
+import '@fontsource-variable/outfit';
 import './i18n/index.js';
 import './index.css';
 import { App } from './App.js';

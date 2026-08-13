@@ -32,10 +32,15 @@ const base =
   'active:enabled:scale-[0.97]';
 
 const variants: Record<Variant, string> = {
-  // Default CTA = aurora gradient (cyan -> violet) with a colored glow.
+  /**
+   * Default CTA = solid display ink with a jade-tinted shadow. The previous
+   * cyan→violet gradient was the single loudest "AI default" in the product —
+   * a flagship CTA states its case in one confident color and lets the
+   * tinted shadow carry the depth.
+   */
   default:
-    'bg-gradient-to-r from-primary to-violet text-primary-foreground border border-transparent ' +
-    'shadow-md shadow-primary/25 hover:brightness-110 hover:shadow-lg hover:shadow-violet/30',
+    'bg-display text-background border border-transparent ' +
+    'shadow-md shadow-primary/20 hover:bg-foreground hover:shadow-lg hover:shadow-primary/25',
   // Solid brand fill for secondary brand moments.
   brand:
     'bg-primary text-primary-foreground border border-transparent ' +
