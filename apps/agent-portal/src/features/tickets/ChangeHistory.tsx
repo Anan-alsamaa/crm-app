@@ -50,8 +50,9 @@ export interface HistoryEntry {
 
 const show = (v: unknown): string => {
   if (v === null || v === undefined || v === '') return '—';
-  if (typeof v === 'object') return JSON.stringify(v);
-  return String(v);
+  const text = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  // A paragraph-long description still reads; a wall of it does not.
+  return text.length > 140 ? `${text.slice(0, 140)}…` : text;
 };
 
 /** Revisions (oldest first) → one entry per edit, with old→new per field. */

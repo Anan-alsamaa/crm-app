@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { deleteItem } from '@directus/sdk';
+import { useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { deleteItem, readUsers } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
 // Moved here when the Ticket report page was retired: the register belongs with
 // the Tickets report, the workload table with Agent KPI.
@@ -36,6 +36,9 @@ import {
 } from './api.js';
 import { useStoreIndex } from '../restaurants/api.js';
 import { directus } from '../../lib/directus.js';
+import { parseTicketsXlsx } from '@yiji/reports';
+import { TicketHistoryDrawer } from './TicketHistoryDrawer.js';
+import { useImportTickets } from './import-api.js';
 import {
   buildAgentKpiSheets,
   buildComplaintsSheets,
@@ -584,6 +587,74 @@ function ComplaintsReport({
   const [showCols, setShowCols] = useState(false);
   const [colQuery, setColQuery] = useState('');
   /**
+   * Row selection, ops-portal style: click a row, then the bar's Delete /
+   * History buttons act on it. Actions moved OUT of the rows at the owner's
+   * request — a 29-column sheet with a button in every row reads as clutter,
+   * and selection is how their team already works.
+   */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [historyOf, setHistoryOf] = useState<{ id: string; label: string } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const importFileRef = useRef<HTMLInputElement | null>(null);
+  const importTickets = useImportTickets();
+  const qc = useQueryClient();
+  const del = useMutation({
+    mutationFn: (id: string) => directus.request(deleteItem('tickets' as never, id)),
+    onSuccess: () => {
+      setSelectedId(null);
+      void qc.invalidateQueries({ queryKey: ['agent-reports'] });
+      toast.success(t('complaintReport.deleted', { defaultValue: 'Complaint deleted.' }));
+    },
+    onError: () =>
+      toast.error(
+        t('complaintReport.deleteFailed', { defaultValue: 'Could not delete that complaint.' }),
+      ),
+  });
+  /** Actor names for the history drawer — ids alone accuse nobody legibly. */
+  const users = useQuery({
+    queryKey: ['report-user-names'],
+    staleTime: 5 * 60_000,
+    queryFn: async () =>
+      (await directus.request(
+        readUsers({ limit: -1, fields: ['id', 'first_name', 'last_name', 'email'] }),
+      )) as unknown as Array<{ id: string; first_name: string | null; email: string | null }>,
+  });
+  const userNames = useMemo(
+    () => new Map((users.data ?? []).map((u) => [u.id, u.first_name ?? u.email ?? u.id])),
+    [users.data],
+  );
+
+  /** Bulk import, moved here from the agent portal — an operations job. */
+  const onImportFile = async (file: File) => {
+    setImporting(true);
+    try {
+      const result = await importTickets.mutateAsync(
+        /\.xlsx$/i.test(file.name)
+          ? await parseTicketsXlsx(await file.arrayBuffer())
+          : await file.text(),
+      );
+      if (result.imported === 0 && result.skipped.length === 0) {
+        toast.error(
+          t('complaintReport.importEmpty', {
+            defaultValue: 'No usable rows found — expected a Date and Restaurant column.',
+          }),
+        );
+      } else {
+        toast.success(
+          t('complaintReport.importOk', {
+            count: result.imported,
+            defaultValue: '{{count}} imported',
+          }) + (result.skipped.length ? ` · ${result.skipped.length} skipped` : ''),
+        );
+        void qc.invalidateQueries({ queryKey: ['agent-reports'] });
+      }
+    } catch {
+      toast.error(t('complaintReport.importFailed', { defaultValue: 'Import failed.' }));
+    } finally {
+      setImporting(false);
+    }
+  };
+  /**
    * The filter, shared with the agent portal's own ticket queue so "find order
    * 946641" behaves identically wherever it is asked. See @yiji/reports.
    */
@@ -998,8 +1069,80 @@ function ComplaintsReport({
               defaultValue: 'Export {{count}} rows',
             })}
           </Button>
+          {/* Selection-driven actions, ops-portal style: pick a row, then act
+              from here. Disabled — not hidden — without a selection, so the
+              affordance teaches its own precondition. */}
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!selectedId}
+            onClick={() => {
+              const row = visible.find((v) => v.id === selectedId);
+              if (row)
+                setHistoryOf({
+                  id: row.id,
+                  label: [row.complaintType, row.orderNumber].filter(Boolean).join(' · ') || row.id,
+                });
+            }}
+          >
+            {t('complaintReport.historyBtn', { defaultValue: 'History' })}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!selectedId || del.isPending}
+            className="text-destructive hover:bg-destructive/10"
+            onClick={() => {
+              const row = visible.find((v) => v.id === selectedId);
+              if (!row) return;
+              const label =
+                [row.complaintType, row.orderNumber].filter(Boolean).join(' · ') || row.id;
+              if (
+                window.confirm(
+                  t('complaintReport.deleteConfirm', {
+                    label,
+                    defaultValue:
+                      'Delete “{{label}}”? The record is removed; who deleted it stays in the change history.',
+                  }),
+                )
+              )
+                del.mutate(row.id);
+            }}
+          >
+            {t('complaintReport.deleteBtn', { defaultValue: 'Delete' })}
+          </Button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".csv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onImportFile(f);
+              e.target.value = '';
+            }}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={importing}
+            onClick={() => importFileRef.current?.click()}
+          >
+            {importing
+              ? t('complaintReport.importing', { defaultValue: 'Importing…' })
+              : t('complaintReport.importBtn', { defaultValue: 'Import file' })}
+          </Button>
         </div>
       </div>
+
+      {historyOf && (
+        <TicketHistoryDrawer
+          ticketId={historyOf.id}
+          label={historyOf.label}
+          userNames={userNames}
+          onClose={() => setHistoryOf(null)}
+        />
+      )}
 
       {/* Every chosen column, in the chosen order — the table and the export
           are the same report, so showing a curated subset here just meant the
@@ -1016,14 +1159,19 @@ function ComplaintsReport({
                   })}
                 </Th>
               ))}
-              <Th className="text-end">
-                {t('complaintReport.colActions', { defaultValue: 'Actions' })}
-              </Th>
             </tr>
           </thead>
           <tbody>
             {pageRows.map((r) => (
-              <Tr key={r.id}>
+              <Tr
+                key={r.id}
+                onClick={() => setSelectedId((cur) => (cur === r.id ? null : r.id))}
+                aria-selected={selectedId === r.id}
+                className={cn(
+                  'cursor-pointer',
+                  selectedId === r.id && 'bg-primary/10 hover:bg-primary/10',
+                )}
+              >
                 {chosenColumns.map((k) => {
                   // An unresolved store says so instead of showing a blank
                   // cell, exactly as the export does.
@@ -1060,12 +1208,6 @@ function ComplaintsReport({
                     </Td>
                   );
                 })}
-                <Td className="text-end">
-                  <DeleteTicketButton
-                    id={r.id}
-                    label={[r.complaintType, r.orderNumber].filter(Boolean).join(' · ') || r.id}
-                  />
-                </Td>
               </Tr>
             ))}
           </tbody>
@@ -1109,55 +1251,6 @@ function ComplaintsReport({
         </div>
       </div>
     </div>
-  );
-}
-
-/**
- * Delete one complaint, with its name in the confirmation.
- *
- * The record disappears; the ACCOUNT of it does not — Directus's activity row
- * (who deleted it, when) and every revision leading up to it survive the
- * delete, which is what makes this safe to offer at all. Ops-portal parity:
- * their delete keeps an audit entry too.
- */
-function DeleteTicketButton({ id, label }: { id: string; label: string }) {
-  const { t } = useTranslation();
-  const qc = useQueryClient();
-  const del = useMutation({
-    mutationFn: () => directus.request(deleteItem('tickets' as never, id)),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['agent-reports'] });
-      toast.success(t('complaintReport.deleted', { defaultValue: 'Complaint deleted.' }));
-    },
-    onError: () =>
-      toast.error(
-        t('complaintReport.deleteFailed', { defaultValue: 'Could not delete that complaint.' }),
-      ),
-  });
-  return (
-    <button
-      type="button"
-      disabled={del.isPending}
-      onClick={() => {
-        if (
-          window.confirm(
-            t('complaintReport.deleteConfirm', {
-              label,
-              defaultValue:
-                'Delete “{{label}}”? The record is removed; who deleted it stays in the change history.',
-            }),
-          )
-        )
-          del.mutate();
-      }}
-      aria-label={t('complaintReport.deleteRow', {
-        label,
-        defaultValue: 'Delete {{label}}',
-      })}
-      className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
-    >
-      ✕
-    </button>
   );
 }
 

@@ -60,7 +60,7 @@
     "agentPerformanceGroup": "Agent performance",
     "couponApprovalsGroup": "Coupon approvals",
     "roles": "Roles & privileges",
-    "lists": "Dropdown lists",
+    "lists": "Complaint form options",
     "backup": "Backup"
   },
   "dashboard": {
@@ -961,7 +961,9 @@
       "complaintStatus": "Complaint status",
       "restaurantManagerId": "Restaurant manager",
       "agent": "Agent",
-      "compensation": "Compensation"
+      "compensation": "Compensation",
+      "lastModifiedBy": "Last modified by",
+      "lastModifiedAt": "Last modified at"
     },
     "tab": {
       "complaints": "Complaints"
@@ -973,10 +975,24 @@
     "deleted": "Complaint deleted.",
     "deleteFailed": "Could not delete that complaint.",
     "deleteConfirm": "Delete “{{label}}”? The record is removed; who deleted it stays in the change history.",
-    "deleteRow": "Delete {{label}}"
+    "deleteRow": "Delete {{label}}",
+    "historyBtn": "History",
+    "deleteBtn": "Delete",
+    "importBtn": "Import file",
+    "importing": "Importing…",
+    "importOk": "{{count}} imported",
+    "importEmpty": "No usable rows found — expected a Date and Restaurant column.",
+    "importFailed": "Import failed.",
+    "historyTitle": "Change history — {{label}}",
+    "noHistory": "No changes recorded since this complaint was created.",
+    "historyCreated": "created the complaint",
+    "historyEdited": "edited",
+    "unknownUser": "Unknown user",
+    "systemUser": "System",
+    "selectHint": "Click a row, then use History or Delete."
   },
   "lists": {
-    "title": "Dropdown lists",
+    "title": "Complaint form options",
     "pickList": "List",
     "help": "These values feed the complaint form live — no deploy needed. Retire a value to stop offering it; tickets that already carry it keep displaying it. The exact spellings are what reports group by, so a corrected spelling is a new value, not an edit.",
     "addPlaceholder": "New value for this list…",

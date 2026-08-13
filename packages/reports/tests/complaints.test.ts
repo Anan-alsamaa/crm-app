@@ -66,20 +66,24 @@ const stores = buildStoreIndex([
 ]);
 
 describe('the complaint column set', () => {
-  it('is the ops sheet, in their order — 27 columns', () => {
+  it('is the ops sheet, in their order — 29 columns', () => {
     // Pinned deliberately: this format is reconciled against a spreadsheet
     // someone keeps by hand, so a column silently appearing or moving is a
     // defect, not a detail. 27 since the date hierarchy (year/month/week/day)
     // was added and the always-empty customer name dropped.
-    expect(COMPLAINT_COLUMN_KEYS).toHaveLength(27);
+    // 29 = the ops sheet's 27 plus the audit pair added at the owner's
+    // request: who last modified the complaint, and when.
+    expect(COMPLAINT_COLUMN_KEYS).toHaveLength(29);
+    expect(COMPLAINT_COLUMN_KEYS).toContain('lastModifiedBy');
+    expect(COMPLAINT_COLUMN_KEYS).toContain('lastModifiedAt');
     expect(COMPLAINT_COLUMN_KEYS[0]).toBe('date');
     expect(COMPLAINT_COLUMN_KEYS[1]).toBe('year');
-    expect(COMPLAINT_COLUMN_KEYS.at(-1)).toBe('compensation');
+    expect(COMPLAINT_COLUMN_KEYS.at(-1)).toBe('lastModifiedAt');
   });
 
   it('emits every column by default, and only the chosen ones otherwise', () => {
     const all = buildComplaintsSheets([row()], t)[0]!;
-    expect(all.columns).toHaveLength(27);
+    expect(all.columns).toHaveLength(29);
 
     const picked = buildComplaintsSheets([row()], t, ['date', 'agent'])[0]!;
     expect(picked.columns.map((c) => c.header)).toEqual(['Date', 'Agent']);

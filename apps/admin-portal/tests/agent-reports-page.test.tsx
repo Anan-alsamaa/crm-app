@@ -673,10 +673,10 @@ describe('AgentReportsPage — complaints report', () => {
     dl.restore();
   });
 
-  it('offers all 27 of her columns in the picker', async () => {
+  it('offers all 29 of her columns in the picker', async () => {
     api.useAgentReportData.mockReturnValue(ok);
     renderPage('complaints');
-    expect(screen.getByText('27/27')).toBeInTheDocument();
+    expect(screen.getByText('29/29')).toBeInTheDocument();
     await userEvent.click(screen.getByText('Columns'));
     expect(screen.getByLabelText('Customer mobile')).toBeInTheDocument();
     expect(screen.getByLabelText('Restaurant manager')).toBeInTheDocument();
@@ -756,7 +756,8 @@ describe('AgentReportsPage — complaints report', () => {
 
     await user.click(screen.getByText('Columns'));
     expect(screen.getByLabelText('Move Date earlier')).toBeDisabled();
-    expect(screen.getByLabelText('Move Compensation later')).toBeDisabled();
+    // The last column is now the audit stamp, not Compensation.
+    expect(screen.getByLabelText('Move Last modified at later')).toBeDisabled();
   });
 
   it('offers page sizes worth having, and starts at 25 rather than 10', async () => {

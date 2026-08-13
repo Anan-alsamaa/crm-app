@@ -78,6 +78,14 @@ export interface ComplaintReportRow {
   agent: string;
   compensation: string;
   /**
+   * Who touched the ticket last and when — blank until somebody edits it, the
+   * way the ops team's own sheet behaved. Sourced from Directus's system
+   * columns (user_updated / date_updated), so it covers portal edits, imports
+   * and raw API writes alike.
+   */
+  lastModifiedBy: string;
+  lastModifiedAt: string;
+  /**
    * The branch attribution frozen onto the ticket when it was raised. Null
    * for tickets raised before snapshots existed, which fall back to a live
    * lookup and therefore DO move if a store is edited.
@@ -128,6 +136,8 @@ export const COMPLAINT_COLUMN_KEYS = [
   'restaurantManagerId',
   'agent',
   'compensation',
+  'lastModifiedBy',
+  'lastModifiedAt',
 ] as const;
 export type ComplaintColumnKey = (typeof COMPLAINT_COLUMN_KEYS)[number];
 
@@ -168,6 +178,8 @@ export const COMPLAINT_COLUMN_LABELS: Record<ComplaintColumnKey, { key: string; 
   },
   agent: { key: 'complaintReport.col.agent', def: 'Agent' },
   compensation: { key: 'complaintReport.col.compensation', def: 'Compensation' },
+  lastModifiedBy: { key: 'complaintReport.col.lastModifiedBy', def: 'Last modified by' },
+  lastModifiedAt: { key: 'complaintReport.col.lastModifiedAt', def: 'Last modified at' },
 };
 
 /**
@@ -216,6 +228,8 @@ export const COMPLAINT_COLUMN_LAYOUT: Record<ComplaintColumnKey, ComplaintColumn
   restaurantManagerId: 'narrow',
   agent: 'narrow',
   compensation: 'narrow',
+  lastModifiedBy: 'narrow',
+  lastModifiedAt: 'narrow',
 };
 
 /**
@@ -280,6 +294,8 @@ export function complaintCell(
     restaurantManagerId: () => '',
     agent: (r) => r.agent,
     compensation: (r) => r.compensation,
+    lastModifiedBy: (r) => r.lastModifiedBy,
+    lastModifiedAt: (r) => r.lastModifiedAt,
   };
   return value[key](row);
 }
@@ -317,6 +333,8 @@ export function buildComplaintsSheets(
     restaurantManagerId: 20,
     agent: 16,
     compensation: 16,
+    lastModifiedBy: 18,
+    lastModifiedAt: 18,
   };
   const value = (r: ComplaintReportRow, k: ComplaintColumnKey) => complaintCell(r, k, t);
 

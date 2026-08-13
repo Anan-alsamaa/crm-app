@@ -140,6 +140,9 @@ export function toComplaintRow(t: TicketRow, agentName: string): AgentComplaintR
     complaintStatus: t.status,
     agent: agentName,
     compensation: t.compensation ?? '',
+    // The agent queue never shows the audit stamp; the admin report does.
+    lastModifiedBy: '',
+    lastModifiedAt: '',
     storeSnapshot: t.store_snapshot ?? null,
     subject: t.subject ?? '',
     firstRespondedAt: t.first_responded_at ?? null,
