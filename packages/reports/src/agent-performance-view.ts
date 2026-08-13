@@ -23,13 +23,27 @@ import {
 export interface PerformanceSummary {
   chats: number;
   answered: number;
-  unanswered: number;
   solved: number;
   avgFirstResponseSec: number | null;
   medianFirstResponseSec: number | null;
   avgTimeToSolveSec: number | null;
   /** Percentage of chats answered inside the target. Null when none are decided. */
   metPct: number | null;
+  /**
+   * Chats with no agent reply at all — passed on or not. A fact, not a
+   * judgement, so nothing is scoped out of it.
+   */
+  unanswered: number;
+  /**
+   * Chats nobody answered first time, that somebody then picked up.
+   *
+   * Kept out of the response-time figures above: a chat that has been passed
+   * along carries the seconds the earlier agents spent not answering it, so
+   * scoring whoever took it against the same target measures the ladder rather
+   * than the person. Counted here instead, where picking one up reads as the
+   * good deed it is.
+   */
+  commonChats: number;
 }
 
 const mean = (xs: number[]): number | null =>
@@ -52,16 +66,33 @@ export function performanceSummary(
   let unanswered = 0;
   let solved = 0;
   let met = 0;
+  let ownChats = 0;
+  let commonChats = 0;
 
   for (const c of chats) {
-    const fr = firstResponseSec(c);
-    if (fr == null) unanswered += 1;
-    else firsts.push(fr);
+    if (c.takenBy) commonChats += 1;
     const ts = timeToSolveSec(c);
     if (ts != null) {
       solves.push(ts);
       solved += 1;
     }
+    /**
+     * "Nobody has answered this" counts EVERY chat, passed on or not.
+     *
+     * Only the response-time figures and the met-rate are scoped to chats the
+     * agent got cleanly — those are judgements about how fast somebody was, and
+     * a chat carrying two other agents' delay cannot fairly be one. Whether a
+     * customer has been answered at all is not a judgement, it is a fact, and
+     * it is the single most important thing on the page. Scoping it the same
+     * way made a chat that went round the whole ladder unanswered disappear
+     * from both this count and the common-chat count — the worst outcome in the
+     * system, invisible.
+     */
+    if (firstResponseSec(c) == null) unanswered += 1;
+    if (c.passedOn) continue;
+    ownChats += 1;
+    const fr = firstResponseSec(c);
+    if (fr != null) firsts.push(fr);
     if (metFirstResponse(c, targetSec)) met += 1;
   }
 
@@ -70,13 +101,14 @@ export function performanceSummary(
     answered: firsts.length,
     unanswered,
     solved,
+    commonChats,
     avgFirstResponseSec: mean(firsts),
     medianFirstResponseSec: median(firsts),
     avgTimeToSolveSec: mean(solves),
-    // Over EVERY chat, not only the answered ones: a chat nobody replied to
-    // missed the target as surely as a slow one, and excluding it would let the
-    // worst outcomes quietly improve the percentage.
-    metPct: chats.length === 0 ? null : Math.round((met / chats.length) * 100),
+    // Over every chat the agent got CLEANLY, not only the answered ones: a chat
+    // nobody replied to missed the target as surely as a slow one, and
+    // excluding it would let the worst outcomes quietly improve the percentage.
+    metPct: ownChats === 0 ? null : Math.round((met / ownChats) * 100),
   };
 }
 
@@ -84,7 +116,13 @@ export interface ComparisonRow {
   label: string;
   agentId: string | null;
   note: string;
-  values: { chats: number; first: number | null; solve: number | null };
+  values: {
+    chats: number;
+    /** Chats picked up after somebody else let them go — the competitive one. */
+    common: number;
+    first: number | null;
+    solve: number | null;
+  };
 }
 
 /**
@@ -104,6 +142,7 @@ export function comparisonRows(
     note: noteFor(r.chats),
     values: {
       chats: r.chats,
+      common: r.commonChats,
       first: r.avgFirstResponseSec,
       solve: r.avgTimeToSolveSec,
     },

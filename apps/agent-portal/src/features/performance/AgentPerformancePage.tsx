@@ -98,6 +98,13 @@ export function AgentPerformancePage() {
   const volumeSeries: ChartSeries[] = [
     { key: 'chats', label: t('performance.chats', { defaultValue: 'Chats' }), tone: 'sky' },
   ];
+  const commonSeries: ChartSeries[] = [
+    {
+      key: 'common',
+      label: t('performance.commonChats', { defaultValue: 'Common chats taken' }),
+      tone: 'success',
+    },
+  ];
   const timeSeries: ChartSeries[] = [
     {
       key: 'first',
@@ -225,7 +232,7 @@ export function AgentPerformancePage() {
                   rather than five loose numbers before the charts. */}
               <section
                 aria-label={t('performance.summary', { defaultValue: 'Summary' })}
-                className="grid grid-cols-2 gap-3 md:grid-cols-5"
+                className="grid grid-cols-2 gap-3 md:grid-cols-6"
               >
                 <Tile
                   label={t('performance.chats', { defaultValue: 'Chats' })}
@@ -251,6 +258,15 @@ export function AgentPerformancePage() {
                   value={formatDuration(summary.avgTimeToSolveSec) ?? '—'}
                   hint={t('performance.average', { defaultValue: 'average' })}
                 />
+                {/* Picking up a chat nobody else answered is worth its own
+                    number: it never shows in a response-time average, and it is
+                    the one thing on this page a person can decide to do more
+                    of. */}
+                <Tile
+                  label={t('performance.commonChats', { defaultValue: 'Common chats taken' })}
+                  value={String(summary.commonChats)}
+                  tone={summary.commonChats > 0 ? 'good' : 'plain'}
+                />
               </section>
 
               {/* 2 — agent by agent. Hidden for a single agent: a bar chart of
@@ -270,6 +286,25 @@ export function AgentPerformancePage() {
                         values: r.values,
                       }))}
                       series={volumeSeries}
+                      format={countFmt}
+                      emptyLabel={nothingToChart}
+                    />
+                  </Card>
+                  <Card
+                    title={t('performance.commonTitle', {
+                      defaultValue: 'Chats picked up for the team',
+                    })}
+                    help={t('performance.commonHelp', {
+                      defaultValue: 'Chats answered after somebody else let them go',
+                    })}
+                  >
+                    <HBarChart
+                      rows={compare.map((r) => ({
+                        label: r.label,
+                        highlight: r.agentId === user?.id,
+                        values: r.values,
+                      }))}
+                      series={commonSeries}
                       format={countFmt}
                       emptyLabel={nothingToChart}
                     />
@@ -398,12 +433,24 @@ export function AgentPerformancePage() {
                           <td
                             className={cn(
                               'px-4 py-2.5 text-end tabular-nums',
-                              first == null ? 'font-semibold text-destructive' : 'text-foreground',
+                              chat.passedOn
+                                ? 'text-muted-foreground'
+                                : first == null
+                                  ? 'font-semibold text-destructive'
+                                  : 'text-foreground',
                             )}
                           >
                             {first == null
                               ? t('performance.noReplyYet', { defaultValue: 'No reply yet' })
                               : formatDuration(first)}
+                            {/* Says WHY this row is not counted against the
+                                target, rather than leaving a slow-looking
+                                number with no explanation beside it. */}
+                            {chat.passedOn && (
+                              <span className="ms-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                {t('performance.commonChat', { defaultValue: 'common' })}
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-2.5 text-end tabular-nums text-foreground">
                             {solve == null ? (
@@ -424,6 +471,10 @@ export function AgentPerformancePage() {
           )}
 
           <p className="px-1 pb-2 text-2xs leading-relaxed text-muted-foreground">
+            {t('performance.commonBasis', {
+              defaultValue:
+                'A chat the system had to pass on is left out of the response-time figures — it carries the wait the earlier agents caused — and counted here instead, for whoever picked it up.',
+            })}{' '}
             {t('performance.basis', {
               defaultValue:
                 'First response is measured from the customer’s first message to the first agent reply; internal notes do not count as a reply. Chats nobody has answered are counted under “No reply yet” and left out of the averages, but they still count against “Answered in time”.',

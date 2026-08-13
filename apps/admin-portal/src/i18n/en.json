@@ -871,7 +871,12 @@
     "nothingMeasured": "No chat in this range has been answered yet, so there is nothing to plot.",
     "basis": "First response is measured from the customer’s first message to the first agent reply; internal notes do not count as a reply. Chats nobody has answered are counted under “No reply yet” and left out of the averages, but they still count against “Answered in time”.",
     "unknownAgent": "Unknown agent",
-    "nothingToChart": "Nothing to chart yet."
+    "nothingToChart": "Nothing to chart yet.",
+    "commonChats": "Common chats taken",
+    "commonChat": "common",
+    "commonTitle": "Chats picked up for the team",
+    "commonHelp": "Chats answered after somebody else let them go",
+    "commonBasis": "A chat the system had to pass on is left out of the response-time figures — it carries the wait the earlier agents caused — and counted here instead, for whoever picked it up."
   },
   "storeNotify": {
     "rulesTitle": "Complaints the branch is told about",
