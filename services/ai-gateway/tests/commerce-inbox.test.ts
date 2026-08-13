@@ -121,6 +121,48 @@ describe('/commerce/inbox', () => {
     expect(res.json().data).toEqual({ orders: [], detail: null });
   });
 
+  it('returns the summaries rather than waiting out a slow detail call', async () => {
+    // The detail is a bonus that saves the caller a round trip; it must never
+    // cost more time than that round trip would have. Upstream cold latency has
+    // been measured from 300ms to 30 SECONDS on this API.
+    const slow = {
+      ...yiji.client,
+      getOrder: () => new Promise(() => {}), // never settles
+    };
+    const app2 = await build(slow);
+    const started = Date.now();
+    const res = await app2.inject({
+      method: 'GET',
+      url: '/commerce/inbox?vendorId=v1&customerId=c1&limit=2',
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.orders).toHaveLength(2);
+    // Null, not an error: the caller falls back to fetching it lazily on
+    // expand, exactly as it did before this endpoint existed.
+    expect(res.json().data.detail).toBeNull();
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it('says commerce is not responding rather than "no orders"', async () => {
+    // `orders: []` would read as "this customer has never ordered", which is a
+    // different and much worse claim than "we could not ask". The portal turns
+    // a non-200 into "unavailable" beside the manual order box.
+    vi.useFakeTimers();
+    const stuck = { ...yiji.client, getOrders: () => new Promise(() => {}) };
+    const app2 = await build(stuck);
+    const pending = app2.inject({
+      method: 'GET',
+      url: '/commerce/inbox?vendorId=v1&customerId=c1',
+      headers: auth,
+    });
+    await vi.advanceTimersByTimeAsync(9_000);
+    const res = await pending;
+    vi.useRealTimers();
+    expect(res.statusCode).toBe(504);
+    expect(res.json()).toEqual({ error: 'commerce_timeout' });
+  });
+
   it('rejects a request missing the ids it cannot guess', async () => {
     const res = await app.inject({
       method: 'GET',

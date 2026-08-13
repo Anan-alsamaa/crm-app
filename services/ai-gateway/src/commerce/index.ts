@@ -25,6 +25,30 @@ export interface CommerceDeps {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 
+/**
+ * How long `/commerce/inbox` will wait for the bonus order detail.
+ *
+ * Chosen against what it replaces: the caller used to fetch the detail itself
+ * in a second round trip. Anything longer than that is a regression dressed as
+ * an optimisation.
+ */
+const DETAIL_BUDGET_MS = 1_500;
+
+/**
+ * The whole endpoint's budget.
+ *
+ * Upstream is an external API with its own timeouts, and a bad day there has
+ * been measured at 30 seconds — long enough that an agent opens a chat, sees a
+ * spinner, and goes to look somewhere else. Past this point the useful answer
+ * is "commerce is not responding", which the panel already renders as
+ * "unavailable" beside the manual order box the agent can type into.
+ *
+ * A timeout is reported as 504, NOT as an empty list: `orders: []` would read
+ * as "this customer has never ordered", which is a different and much worse
+ * claim than "we could not ask".
+ */
+const INBOX_BUDGET_MS = 8_000;
+
 export async function registerCommerceRoutes(
   app: FastifyInstance,
   deps: CommerceDeps,
@@ -114,12 +138,37 @@ export async function registerCommerceRoutes(
     const parsed = Number.parseInt(str(q.limit) || '2', 10);
     const limit = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 2, 1), 10);
 
-    const orders = await listOrders(vendorId, customerId, limit);
+    const TIMED_OUT = Symbol('timed-out');
+    const orders = await Promise.race([
+      listOrders(vendorId, customerId, limit),
+      new Promise<typeof TIMED_OUT>((r) => setTimeout(() => r(TIMED_OUT), INBOX_BUDGET_MS)),
+    ]);
+    if (orders === TIMED_OUT) {
+      app.log.warn({ vendorId, customerId }, 'commerce inbox timed out upstream');
+      return reply.code(504).send({ error: 'commerce_timeout' });
+    }
     const newest = orders[0] ?? null;
-    // The detail REPLACES the summary in the response rather than riding
-    // alongside it: two objects for the same order is how a caller ends up
-    // rendering the thinner one.
-    const detail = newest ? await orderDetail(vendorId, newest.orderId) : null;
+
+    /**
+     * The detail is a BONUS, on a deadline.
+     *
+     * It exists to save the caller a second round trip, so it must never cost
+     * more time than that round trip would have. Upstream is an external API
+     * whose cold latency has been measured anywhere from 300ms to 30 SECONDS;
+     * without a budget here, a slow day upstream becomes an order panel that
+     * hangs, which is worse than the two-call version this replaced.
+     *
+     * Losing the race is not an error and not cached as one: the caller gets
+     * the summaries immediately and fetches the detail lazily when the agent
+     * expands the order, exactly as it did before. The in-flight promise keeps
+     * running and still populates the cache, so the next open is instant.
+     */
+    const detail = newest
+      ? await Promise.race([
+          orderDetail(vendorId, newest.orderId),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), DETAIL_BUDGET_MS)),
+        ]).catch(() => null)
+      : null;
 
     return reply.send({ data: { orders, detail } });
   });
