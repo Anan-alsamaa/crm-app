@@ -111,6 +111,8 @@ module.exports = {
         },
       },
       fontFamily: {
+        // Geometric display face for headings/heroes; body stays Inter.
+        display: ['"Outfit Variable"', '"Inter Variable"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         // Inter (self-hosted variable, bundled in each portal entry) as the
         // designed UI face, falling back to the system stack.
         sans: [
@@ -150,6 +152,8 @@ module.exports = {
         '2xl': ['1.375rem', { lineHeight: '1.875rem', letterSpacing: '-0.01em' }],
         '3xl': ['1.625rem', { lineHeight: '2.125rem', letterSpacing: '-0.015em' }],
         '4xl': ['1.9375rem', { lineHeight: '2.375rem', letterSpacing: '-0.02em' }],
+        '5xl': ['2.4375rem', { lineHeight: '2.75rem', letterSpacing: '-0.025em' }],
+        '6xl': ['3.0625rem', { lineHeight: '3.375rem', letterSpacing: '-0.03em' }],
       },
       borderRadius: {
         // Small radii per impeccable.

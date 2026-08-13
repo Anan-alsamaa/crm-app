@@ -1,5 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+/**
+ * ComplaintFields fetches the live dropdown lists via react-query now. The
+ * query errors in jsdom (no Directus) and the component falls back to the code
+ * enums — which is exactly the population these tests were written against.
+ */
+function render(ui: React.ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return rtlRender(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+}
 import userEvent from '@testing-library/user-event';
 import React, { useState } from 'react';
 

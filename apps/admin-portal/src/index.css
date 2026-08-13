@@ -46,8 +46,8 @@
    * Hairlines went 0.10 → 0.14 (and 0.18 → 0.24 for fields/dividers) so edges
    * are visible without becoming boxes. Dark theme already had separation and
    * is untouched. */
-  --background: 0.95 0.006 230;
-  --canvas: 0.938 0.008 230;
+  --background: 0.965 0.005 250;
+  --canvas: 0.945 0.006 250;
   --foreground: 0.155 0.006 250;
   --card: 1 0 0;
   --card-foreground: 0.155 0.006 250;
@@ -65,32 +65,32 @@
    * white text; `--warning` deliberately stays light because its foreground is
    * dark ink (6.74:1). `--sky` is new, for
    * informational surfaces that were borrowing the brand teal and blurring it. */
-  --primary: 0.536 0.132 194;
+  --primary: 0.5 0.115 190;
   /* Readable green ink for green-on-green: `primary` on a primary/10
    * tint is 3.99:1, under AA for small text. Solved to the LIGHTEST
    * value that still clears 4.5:1 (4.52:1), so it stays the brand
    * colour rather than drifting to near-black. */
-  --primary-strong: 0.505 0.132 194;
+  --primary-strong: 0.46 0.115 190;
   --primary-foreground: 1 0 0;
-  --primary-subtle: 0.581 0.132 194 / 0.22;
-  --brand: 0.581 0.132 194;
+  --primary-subtle: 0.5 0.115 190 / 0.14;
+  --brand: 0.5 0.115 190;
   --bubble: 0.955 0.006 230;
-  --secondary: 0.915 0.008 230;
+  --secondary: 0.925 0.006 250;
   --secondary-foreground: 0.155 0.006 250;
-  --muted: 0.915 0.008 230;
-  --muted-foreground: 0.4 0.014 250;
-  --accent: 0.55 0.097 196;
+  --muted: 0.925 0.006 250;
+  --muted-foreground: 0.42 0.012 250;
+  --accent: 0.5 0.115 190;
   --accent-foreground: 1 0 0;
-  --destructive: 0.56 0.245 25;
+  --destructive: 0.53 0.19 27;
   --destructive-foreground: 1 0 0;
-  --success: 0.529 0.185 158;
+  --success: 0.5 0.14 160;
   --success-foreground: 1 0 0;
-  --warning: 0.72 0.195 68;
+  --warning: 0.72 0.16 70;
   --warning-foreground: 0.22 0.005 250;
   --border: 0.22 0.005 250 / 0.2;
   --border-strong: 0.22 0.005 250 / 0.32;
-  --input: 0.915 0.008 230;
-  --ring: 0.55 0.097 196;
+  --input: 0.93 0.006 250;
+  --ring: 0.5 0.115 190;
   --shadow-color: 0.22 0.02 200;
 
   /* Rail — deep BRAND teal ink; the brand teal lights the active item. */
@@ -100,19 +100,19 @@
    * higher lightness so it is unmistakably teal while still anchoring the page.
    * Labels lifted 0.90 -> 0.965 and the active pill is the vivid brand teal.
    * Ratios: labels 12.9:1 on the rail, white on the active pill 4.54:1. */
-  --rail: 0.288 0.068 196;
+  --rail: 0.21 0.03 200;
   /* Deeper stop for the rail gradient — same hue, lower lightness, slightly
    * more chroma so the fade reads as brand depth rather than as grime. */
-  --rail-deep: 0.208 0.072 202;
-  --rail-foreground: 0.965 0.014 196;
-  --rail-active: 0.535 0.135 193;
+  --rail-deep: 0.17 0.028 202;
+  --rail-foreground: 0.94 0.01 196;
+  --rail-active: 0.5 0.115 190;
   --rail-active-foreground: 1 0 0;
-  --rail-border: 0.31 0.04 196;
-  --secondary-brand: 0.58 0.235 16;
+  --rail-border: 0.27 0.03 198;
+  --secondary-brand: 0.55 0.19 20;
   --secondary-brand-foreground: 1 0 0;
-  --display: 0.16 0.01 250;
-  --violet: 0.5 0.205 285;
-  --sky: 0.55 0.19 242;
+  --display: 0.15 0.012 255;
+  --violet: 0.48 0.16 285;
+  --sky: 0.52 0.14 245;
 
   /* TINT RAMP — light, SATURATED fills for coloured surfaces (stat tiles, pills,
    * callouts). Deliberately separate tokens rather than an alpha of the accent:
@@ -121,13 +121,13 @@
    * while staying quiet enough for dark text on top. Pair as:
    *   fill  bg-<hue>-tint   ring  ring-<hue>/35   text  text-<hue>
    * That is what makes a tile colourful AND clean instead of merely pale. */
-  --primary-tint: 0.935 0.062 194;
-  --success-tint: 0.928 0.078 158;
-  --destructive-tint: 0.935 0.062 25;
-  --warning-tint: 0.945 0.085 75;
-  --sky-tint: 0.935 0.058 242;
-  --violet-tint: 0.935 0.062 285;
-  --magenta: 0.55 0.2 20;
+  --primary-tint: 0.94 0.045 190;
+  --success-tint: 0.94 0.055 160;
+  --destructive-tint: 0.945 0.045 27;
+  --warning-tint: 0.95 0.06 75;
+  --sky-tint: 0.94 0.045 245;
+  --violet-tint: 0.94 0.045 285;
+  --magenta: 0.52 0.17 20;
 }
 
 /* DEFAULT THEME — "midnight ink" (mirrors agent portal). Light via
@@ -144,11 +144,11 @@
   --popover: 0.245 0.014 262;
   --popover-foreground: 0.96 0.005 250;
   /* Brand teal, lifted for dark ink. */
-  --primary: 0.7 0.145 194;
-  --primary-strong: 0.78 0.145 194;
+  --primary: 0.72 0.12 190;
+  --primary-strong: 0.78 0.12 190;
   --primary-foreground: 0.16 0.02 200;
   --primary-subtle: 0.68 0.11 196 / 0.18;
-  --brand: 0.7 0.145 194;
+  --brand: 0.72 0.12 190;
   --bubble: 0.3 0.02 260;
   --secondary: 0.25 0.012 262;
   --secondary-foreground: 0.96 0.005 250;
@@ -271,4 +271,27 @@ body {
   .input {
     @apply block w-full rounded-md border border-border-strong bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-ring text-start;
   }
+}
+
+/*
+ * OBSIDIAN + JADE (2026-08-13) — flagship register.
+ *
+ * Display type is Outfit (geometric, confident); body stays Inter for dense
+ * data. A whisper of grain breaks digital flatness without reading as noise.
+ * Headings carry the display face globally so every page gets the upgrade
+ * without per-page edits.
+ */
+h1,
+h2 {
+  font-family: 'Outfit Variable', 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  text-wrap: balance;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.014;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }

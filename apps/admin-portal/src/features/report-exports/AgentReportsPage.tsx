@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { deleteItem } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
 // Moved here when the Ticket report page was retired: the register belongs with
 // the Tickets report, the workload table with Agent KPI.
@@ -33,6 +35,7 @@ import {
   type TicketReportRow,
 } from './api.js';
 import { useStoreIndex } from '../restaurants/api.js';
+import { directus } from '../../lib/directus.js';
 import {
   buildAgentKpiSheets,
   buildComplaintsSheets,
@@ -1013,6 +1016,9 @@ function ComplaintsReport({
                   })}
                 </Th>
               ))}
+              <Th className="text-end">
+                {t('complaintReport.colActions', { defaultValue: 'Actions' })}
+              </Th>
             </tr>
           </thead>
           <tbody>
@@ -1054,6 +1060,12 @@ function ComplaintsReport({
                     </Td>
                   );
                 })}
+                <Td className="text-end">
+                  <DeleteTicketButton
+                    id={r.id}
+                    label={[r.complaintType, r.orderNumber].filter(Boolean).join(' · ') || r.id}
+                  />
+                </Td>
               </Tr>
             ))}
           </tbody>
@@ -1097,6 +1109,55 @@ function ComplaintsReport({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Delete one complaint, with its name in the confirmation.
+ *
+ * The record disappears; the ACCOUNT of it does not — Directus's activity row
+ * (who deleted it, when) and every revision leading up to it survive the
+ * delete, which is what makes this safe to offer at all. Ops-portal parity:
+ * their delete keeps an audit entry too.
+ */
+function DeleteTicketButton({ id, label }: { id: string; label: string }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const del = useMutation({
+    mutationFn: () => directus.request(deleteItem('tickets' as never, id)),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['agent-reports'] });
+      toast.success(t('complaintReport.deleted', { defaultValue: 'Complaint deleted.' }));
+    },
+    onError: () =>
+      toast.error(
+        t('complaintReport.deleteFailed', { defaultValue: 'Could not delete that complaint.' }),
+      ),
+  });
+  return (
+    <button
+      type="button"
+      disabled={del.isPending}
+      onClick={() => {
+        if (
+          window.confirm(
+            t('complaintReport.deleteConfirm', {
+              label,
+              defaultValue:
+                'Delete “{{label}}”? The record is removed; who deleted it stays in the change history.',
+            }),
+          )
+        )
+          del.mutate();
+      }}
+      aria-label={t('complaintReport.deleteRow', {
+        label,
+        defaultValue: 'Delete {{label}}',
+      })}
+      className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+    >
+      ✕
+    </button>
   );
 }
 

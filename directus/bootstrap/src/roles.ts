@@ -75,6 +75,11 @@ const ALL_BUSINESS = [
   'custom_fields',
   'custom_field_values',
   'csat_responses',
+  // Editable dropdown values, declarative app roles, and small settings —
+  // the operations team maintains all three from the portal.
+  'option_lists',
+  'app_roles',
+  'app_settings',
   // Which complaint types reach the branch, and the queue of what was decided.
   // Supervisors own the rules; the queue is theirs to inspect and retry.
   'store_notify_rules',
@@ -213,6 +218,18 @@ export const roles: RoleSpec[] = [
     permissions: [
       ...ALL_BUSINESS.flatMap(crud),
       ...crud('directus_users'),
+      // Ticket change history = Directus's own activity + revisions. The Admin
+      // role has no admin_access, so the system tables need explicit grants.
+      {
+        collection: 'directus_activity',
+        action: 'read',
+        permissions: { collection: { _eq: 'tickets' } },
+      },
+      {
+        collection: 'directus_revisions',
+        action: 'read',
+        permissions: { collection: { _eq: 'tickets' } },
+      },
       ...appendOnly('ticket_events'),
       // Stores: full read/delete, but create and update are field-scoped so the
       // Yiji restaurant id stays Administrator-only (see STORE_FIELDS_NO_YIJI_ID).
@@ -303,6 +320,25 @@ export const roles: RoleSpec[] = [
        * already on the page.
        */
       { collection: 'routing_events', action: 'read' },
+      // Dropdown values + the WhatsApp template: the form reads these live.
+      ...readOnly('option_lists'),
+      ...readOnly('app_settings'),
+      /**
+       * The ticket change history is Directus's OWN audit trail — activity and
+       * revisions — not a custom log. Every write path (portal, import, raw
+       * API) lands in it with the actor attached, which a client-side diff
+       * could never promise. Scoped to tickets: chat content history stays out.
+       */
+      {
+        collection: 'directus_activity',
+        action: 'read',
+        permissions: { collection: { _eq: 'tickets' } },
+      },
+      {
+        collection: 'directus_revisions',
+        action: 'read',
+        permissions: { collection: { _eq: 'tickets' } },
+      },
       // Ready-made replies. Read-only: the wording customers receive is the
       // operations team's to standardise, not something to be edited mid-chat.
       ...readOnly('quick_replies'),

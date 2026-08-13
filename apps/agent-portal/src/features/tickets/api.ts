@@ -451,6 +451,38 @@ export function useUpdateTicket() {
  * Add an internal note to a ticket as an append-only 'commented' event. Mentions
  * (resolved agent ids) ride along in the payload for downstream notification.
  */
+/**
+ * Stamp "this agent opened WhatsApp for this customer" onto the ticket.
+ *
+ * The stamp IS the feature: wa.me opens a chat but records nobody. Written as
+ * a `contacted` ticket event so it lands in the same history panel as every
+ * other touch, with the actor attached.
+ */
+export function useStampContacted() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ticketId,
+      actorId,
+      phone,
+    }: {
+      ticketId: string;
+      actorId: string;
+      phone: string;
+    }) =>
+      directus.request(
+        createItem('ticket_events', {
+          ticket: ticketId,
+          event_type: 'contacted',
+          actor: actorId,
+          payload: { channel: 'whatsapp', phone },
+        } as never),
+      ),
+    onSuccess: (_d, vars) =>
+      void qc.invalidateQueries({ queryKey: ['ticket-events', vars.ticketId] }),
+  });
+}
+
 export function useAddTicketNote() {
   const qc = useQueryClient();
   return useMutation({

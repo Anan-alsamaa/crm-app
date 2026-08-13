@@ -23,11 +23,28 @@ export interface SheetColumn {
 /** A single cell value. `null`/`undefined` render as an empty cell. */
 export type CellValue = string | number | null | undefined;
 
+/** One dropdown constraint: a column restricted to a list of allowed values. */
+export interface SheetValidation {
+  /** 0-based column index in THIS sheet. */
+  col: number;
+  /** 1-based worksheet rows the dropdown covers (2 = first row under the header). */
+  fromRow: number;
+  toRow: number;
+  /** An Excel range formula, e.g. `Lists!$A$2:$A$15`. */
+  formula: string;
+}
+
 export interface Sheet {
   /** Tab name. Excel caps at 31 chars and forbids `[]:*?/\` — sanitised below. */
   name: string;
   columns: SheetColumn[];
   rows: CellValue[][];
+  /**
+   * Hidden tabs hold the pick-lists a template's dropdowns reference — the
+   * data has to live in the workbook, but showing it invites editing it.
+   */
+  hidden?: boolean;
+  validations?: SheetValidation[];
 }
 
 /* ── CRC-32 (needed by the ZIP container) ─────────────────────────────── */
@@ -139,8 +156,28 @@ function sheetXml(sheet: Sheet): string {
     `<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` +
     (colCount ? `<cols>${cols}</cols>` : '') +
     `<sheetData>${headerRow}${dataRows}</sheetData>` +
+    validationsXml(sheet.validations) +
     `</worksheet>`
   );
+}
+
+/**
+ * `type="list"` dropdowns. allowBlank keeps optional columns optional;
+ * showErrorMessage makes Excel actually REFUSE a typed value that is not on
+ * the list — which is the whole point of shipping a template.
+ */
+function validationsXml(validations: SheetValidation[] | undefined): string {
+  if (!validations || validations.length === 0) return '';
+  const items = validations
+    .map((v) => {
+      const c = colLetter(v.col);
+      return (
+        `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" ` +
+        `sqref="${c}${v.fromRow}:${c}${v.toRow}"><formula1>${xmlEscape(v.formula)}</formula1></dataValidation>`
+      );
+    })
+    .join('');
+  return `<dataValidations count="${validations.length}">${items}</dataValidations>`;
 }
 
 const STYLES_XML =
@@ -185,9 +222,12 @@ const ROOT_RELS_XML =
   `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
   `</Relationships>`;
 
-function workbookXml(names: string[]): string {
-  const sheets = names
-    .map((n, i) => `<sheet name="${xmlEscape(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
+function workbookXml(tabs: Array<{ name: string; hidden?: boolean }>): string {
+  const sheets = tabs
+    .map(
+      (t, i) =>
+        `<sheet name="${xmlEscape(t.name)}" sheetId="${i + 1}"${t.hidden ? ' state="hidden"' : ''} r:id="rId${i + 1}"/>`,
+    )
     .join('');
   return (
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -317,7 +357,6 @@ function zip(parts: { path: string; content: string }[]): Blob {
 /** Build an `.xlsx` workbook Blob from one or more sheets. */
 export function buildWorkbook(sheets: Sheet[]): Blob {
   const safe = sheets.length ? sheets : [{ name: 'Sheet1', columns: [], rows: [] }];
-  const names: string[] = [];
   const seen = new Set<string>();
   const normalized = safe.map((s, i) => {
     let name = sanitizeSheetName(s.name, `Sheet${i + 1}`);
@@ -330,14 +369,16 @@ export function buildWorkbook(sheets: Sheet[]): Blob {
     }
     name = candidate;
     seen.add(name.toLowerCase());
-    names.push(name);
     return { ...s, name };
   });
 
   const parts: { path: string; content: string }[] = [
     { path: '[Content_Types].xml', content: contentTypesXml(normalized.length) },
     { path: '_rels/.rels', content: ROOT_RELS_XML },
-    { path: 'xl/workbook.xml', content: workbookXml(names) },
+    {
+      path: 'xl/workbook.xml',
+      content: workbookXml(normalized.map((s) => ({ name: s.name, hidden: s.hidden }))),
+    },
     { path: 'xl/_rels/workbook.xml.rels', content: workbookRelsXml(normalized.length) },
     { path: 'xl/styles.xml', content: STYLES_XML },
     ...normalized.map((s, i) => ({

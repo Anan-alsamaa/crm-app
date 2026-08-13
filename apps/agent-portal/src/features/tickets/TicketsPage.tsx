@@ -40,12 +40,18 @@ import {
   type TicketRow,
 } from './api.js';
 import { useAgents, useTeamOptions } from '../inbox/api.js';
+import { WhatsAppReply } from './WhatsAppReply.js';
+import { useOptionLists } from './option-lists.js';
+import { ChangeHistory } from './ChangeHistory.js';
 import {
+  buildComplaintsTemplate,
   distinctValues,
+  downloadWorkbook,
   filterTickets,
   formatDuration,
   isEmptyFilter,
   joinComplaintStores,
+  parseTicketsXlsx,
   type TicketFilterCriteria,
 } from '@yiji/reports';
 import { useImportTickets } from '../complaints/import-api.js';
@@ -113,6 +119,29 @@ export function TicketsPage() {
   const [importing, setImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const importTickets = useImportTickets();
+  const optionLists = useOptionLists();
+  const storesQ = useStores();
+  const agentsQ = useAgents();
+
+  /**
+   * The upload template, generated from TODAY's data: the live dropdown
+   * lists, the current store roster, the current agents. A static file goes
+   * stale the day someone adds a complaint type; this one cannot.
+   */
+  const downloadTemplate = () => {
+    const stores = storesQ.data ?? [];
+    downloadWorkbook(
+      'Complaints_Upload_Template.xlsx',
+      buildComplaintsTemplate({
+        lists: optionLists.data ?? {},
+        restaurants: stores.map((st) => [st.code, st.name].filter(Boolean).join(' ')),
+        brands: [...new Set(stores.map((st) => st.brand?.name).filter((b): b is string => !!b))],
+        cities: [...new Set(stores.map((st) => st.city).filter((c): c is string => !!c))],
+        agents: (agentsQ.data ?? []).map((a) => a.first_name ?? a.email ?? a.id),
+        statuses: ['new', 'open', 'pending', 'resolved', 'closed'],
+      }),
+    );
+  };
 
   /**
    * Import a sheet of complaints. Reports what landed AND what it could not
@@ -122,7 +151,13 @@ export function TicketsPage() {
   const onImportFile = async (file: File) => {
     setImporting(true);
     try {
-      const result = await importTickets.mutateAsync(await file.text());
+      // .xlsx goes through the zip/SpreadsheetML reader; everything else is
+      // CSV text. Both feed the SAME parser, so a filled template round-trips.
+      const result = await importTickets.mutateAsync(
+        /\.xlsx$/i.test(file.name)
+          ? await parseTicketsXlsx(await file.arrayBuffer())
+          : await file.text(),
+      );
       if (result.imported === 0 && result.skipped.length === 0) {
         toast.error(
           t('tickets.importEmpty', {
@@ -275,13 +310,25 @@ export function TicketsPage() {
         <input
           ref={fileRef}
           type="file"
-          accept=".csv,.txt,text/csv,text/plain"
+          accept=".csv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) void onImportFile(f);
           }}
         />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={downloadTemplate}
+          title={t('tickets.templateHint', {
+            defaultValue:
+              'An .xlsx with today’s dropdown lists baked in — fill it and import it back.',
+          })}
+        >
+          {t('tickets.template', { defaultValue: 'Excel template' })}
+        </Button>
         <Button
           type="button"
           variant="secondary"
@@ -291,7 +338,7 @@ export function TicketsPage() {
         >
           {importing
             ? t('tickets.importing', { defaultValue: 'Importing…' })
-            : t('tickets.importCsv', { defaultValue: 'Import CSV' })}
+            : t('tickets.importCsv', { defaultValue: 'Import CSV / Excel' })}
         </Button>
         <Button type="button" size="sm" onClick={() => navigate('/new-ticket')}>
           {t('tickets.newTicket', { defaultValue: '+ New ticket' })}
@@ -1045,6 +1092,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                       'Closes the work: sets the ticket to resolved and stops both SLA timers.',
                   })}
                 </p>
+                <WhatsAppReply ticket={tk} />
               </div>
             ) : (
               <div className="flex items-center gap-1.5 text-2xs font-medium text-success">
@@ -1206,6 +1254,15 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 </Button>
               </div>
             </div>
+          </section>
+
+          {/* Field changes — Directus's own revisions, so imports and raw API
+              edits show here too, with the actor attached. */}
+          <section className="space-y-3">
+            <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('tickets.fieldHistory', { defaultValue: 'Change history' })}
+            </h3>
+            <ChangeHistory ticketId={tk.id} />
           </section>
 
           {/* History timeline — actual timeline with connector line */}
