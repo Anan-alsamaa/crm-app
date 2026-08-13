@@ -107,7 +107,6 @@ function ticket(over: Record<string, unknown> = {}) {
     complaint_source: 'Comp. WhatsApp',
     compensation: 'Compensated',
     coupon_value: 10,
-    contact: { phone: '0551141059' },
     order_snapshot: null,
     ...over,
   };
@@ -395,19 +394,17 @@ describe('complaint dashboard — the dimensions his dashboard slices by', () =>
     expect((await run({ ...emptyComplaintFilters, area: 'Aly' })).total).toBe(1);
   });
 
-  it('matches a partial customer mobile the way his filter does', async () => {
-    const tickets = [
-      ticket({ contact: { phone: '0551141059' } }),
-      ticket({ contact: { phone: '0509876543' } }),
-      ticket({ contact: null }),
-    ];
-    mockData({ tickets, stores: STORES, users: USERS });
-    // "41059" is a fragment in the middle of the first number.
-    expect((await run({ ...emptyComplaintFilters, phone: '41059' })).total).toBe(1);
-
-    mockData({ tickets, stores: STORES, users: USERS });
-    // Formatting must not defeat the match — digits are compared, not strings.
-    expect((await run({ ...emptyComplaintFilters, phone: '055 114' })).total).toBe(1);
+  it('never asks Directus for a customer phone number', async () => {
+    // The dashboard reports on where complaints come from, not on who made
+    // them. It displayed no number and now filters on none, so pulling one into
+    // an aggregate payload would be collecting data for nothing.
+    mockData({ tickets: [ticket({})], stores: STORES, users: USERS });
+    await run();
+    // `request` receives the built query, so this checks what actually goes to
+    // Directus rather than what the component thinks it asked for.
+    const asked = JSON.stringify(request.mock.calls);
+    expect(asked).toContain('tickets');
+    expect(asked).not.toContain('contact.phone');
   });
 
   it('offers area options from the store master', async () => {

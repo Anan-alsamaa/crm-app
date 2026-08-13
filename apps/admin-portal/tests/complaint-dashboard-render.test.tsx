@@ -17,7 +17,7 @@ vi.mock('react-i18next', () => ({
 
 const api = vi.hoisted(() => ({
   useComplaintMetrics: vi.fn(),
-  emptyComplaintFilters: { from: '', to: '', brand: '', area: '', city: '', store: '', phone: '' },
+  emptyComplaintFilters: { from: '', to: '', brand: '', area: '', city: '', store: '' },
 }));
 vi.mock('../src/features/dashboard/complaints-api.js', () => api);
 
@@ -173,9 +173,17 @@ describe('ComplaintDashboard — every section his page has', () => {
 
   it('offers his whole filter bar', () => {
     render(<ComplaintDashboard />);
-    for (const label of ['From', 'To', 'Brand', 'Area', 'City', 'Restaurant', 'Customer mobile']) {
+    for (const label of ['From', 'To', 'Brand', 'Area', 'City', 'Restaurant']) {
       expect(screen.getByText(label), `missing filter: ${label}`).toBeInTheDocument();
     }
+  });
+
+  it('does not offer to look a customer up by mobile number', () => {
+    // Removed by request. This is a where-and-what dashboard; finding one
+    // caller's history belongs on the pages that work individual cases.
+    render(<ComplaintDashboard />);
+    expect(screen.queryByText('Customer mobile')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/41059/)).not.toBeInTheDocument();
   });
 });
 

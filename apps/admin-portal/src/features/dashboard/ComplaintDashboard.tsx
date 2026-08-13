@@ -724,24 +724,6 @@ export function ComplaintDashboard() {
             options={storeChoices}
           />
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-            {t('complaintDash.mobile', { defaultValue: 'Customer mobile' })}
-          </span>
-          {/* Partial match, like his: typing 41059 finds any number containing
-              those digits, which is how the team pull up one caller's history. */}
-          <Input
-            className="h-9 w-[10rem]"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder={t('complaintDash.mobileHint', { defaultValue: 'e.g. 41059' })}
-            value={draft.phone}
-            onChange={(e) => setDraft((f) => ({ ...f, phone: e.target.value }))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') setApplied(draft);
-            }}
-          />
-        </label>
         <div className="flex items-center gap-2 pb-px">
           <Button type="button" size="sm" disabled={!dirty} onClick={() => setApplied(draft)}>
             {t('complaintDash.apply', { defaultValue: 'Apply' })}

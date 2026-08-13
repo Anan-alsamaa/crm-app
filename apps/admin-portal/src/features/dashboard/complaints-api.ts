@@ -30,8 +30,6 @@ export interface ComplaintFilters {
   area: string;
   city: string;
   store: string;
-  /** Partial customer mobile — "41059" matches any number containing it. */
-  phone: string;
 }
 
 export const emptyComplaintFilters: ComplaintFilters = {
@@ -41,7 +39,6 @@ export const emptyComplaintFilters: ComplaintFilters = {
   area: '',
   city: '',
   store: '',
-  phone: '',
 };
 
 /** One row of a "By X" breakdown, already sorted and capped. */
@@ -239,7 +236,6 @@ interface TicketRecord {
   complaint_source: string | null;
   compensation: string | null;
   coupon_value: number | null;
-  contact: { phone: string | null } | null;
   order_snapshot: {
     brandName?: string | null;
     restaurantName?: string | null;
@@ -272,9 +268,6 @@ const bump = (m: Map<string, number>, key: string | null | undefined) => {
   const k = (key ?? '').trim();
   if (k) m.set(k, (m.get(k) ?? 0) + 1);
 };
-
-/** Digits only, so "05 51 23" and "0551 23" match the same customer. */
-const digits = (s: string | null | undefined) => (s ?? '').replace(/\D/g, '');
 
 export function useComplaintMetrics(filters: ComplaintFilters) {
   return useQuery({
@@ -312,9 +305,12 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
                 'coupon_value',
                 'order_snapshot',
                 'store_snapshot',
-                // Powers the customer-mobile filter, which is how the ops team
-                // pull up "everything this caller has ever complained about".
-                'contact.phone',
+                // Deliberately NOT `contact.phone`. This dashboard is about
+                // where complaints come from, not about who made them; it never
+                // displayed a number, and fetching one only to filter on it put
+                // every customer's mobile into an aggregate payload that had no
+                // use for it. Looking a caller up by number belongs on the
+                // pages that work individual cases.
               ],
               limit: -1,
             }),
@@ -438,7 +434,6 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       };
       const rows: Row[] = [];
       let unattributed = 0;
-      const phoneNeedle = digits(filters.phone);
 
       for (const tk of tickets) {
         let storeId: string | null = null;
@@ -495,7 +490,6 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         if (filters.area && area !== filters.area) continue;
         if (filters.city && city !== filters.city) continue;
         if (filters.store && storeId !== filters.store) continue;
-        if (phoneNeedle && !digits(tk.contact?.phone).includes(phoneNeedle)) continue;
 
         rows.push({ ...tk, storeId, restaurantName, brandId, brandName, area, city });
       }
