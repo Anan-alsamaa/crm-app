@@ -365,6 +365,9 @@ export function ConversationSidebar({
             vendorId={contact.data.vendor.yiji_vendor_id}
             customerId={contact.data.external_customer_id ?? undefined}
             conversationId={c.id}
+            // Already on screen with the conversation, so the panel has an
+            // order to show from the first frame instead of a skeleton.
+            stamped={c.last_order_snapshot ?? null}
             onCreateTicket={onCreateTicketForOrder}
           />
         </section>

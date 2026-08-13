@@ -1,7 +1,9 @@
+import { useCallback, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, readUsers, updateItem, createItem, deleteItem } from '@directus/sdk';
-import type { ConversationStatus, Priority } from '@yiji/shared-types';
+import type { ConversationStatus, Priority, YijiOrder } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { commerce } from '../../lib/commerce-client.js';
 import { notifyAssignmentBestEffort } from '../../lib/job-producer.js';
 
 export interface InboxConversation {
@@ -12,7 +14,15 @@ export interface InboxConversation {
   unread_count_agent: number;
   assigned_agent: string | null;
   assigned_team: string | null;
-  contact: { id: string; name: string | null; email: string | null; phone: string | null } | null;
+  contact: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    /** Present on the LIST read only, so a row can prefetch its orders on hover. */
+    external_customer_id?: string | null;
+    vendor?: { id: string; yiji_vendor_id: string | null } | null;
+  } | null;
   /**
    * Expanded by `useConversation`, absent from the list query. Directus returns
    * a bare id string when the relation is not expanded, hence the union — read
@@ -20,6 +30,14 @@ export interface InboxConversation {
    */
   vendor?: { id: string; name?: string | null } | string | null;
   tags?: Array<{ id: string; tags_id: { id: string; name: string; color: string | null } | null }>;
+  /**
+   * The order this chat was last seen to be about. Stamped by the order panel;
+   * used to paint that panel instantly on the next open, and — the reason it is
+   * a column rather than a cache — to make the inbox searchable by order id.
+   */
+  last_order_id?: string | null;
+  last_order_snapshot?: YijiOrder | null;
+  last_order_at?: string | null;
 }
 
 /** The vendor id, whether the relation came back expanded or as a bare id. */
@@ -91,9 +109,15 @@ function buildFilter(f: InboxFilters): Record<string, unknown> | undefined {
       { contact: { email: { _icontains: s } } },
       { contact: { phone: { _icontains: s } } },
     ];
-    // Order id. A conversation carries no order, so this arrives already
-    // resolved to conversation ids by `conversationIdsForOrder` — see there for
-    // why it cannot be expressed as a filter on this collection.
+    // THE order-id search. `last_order_id` is stamped on the conversation the
+    // first time its order panel resolves, which is what makes this one indexed
+    // column match instead of a join nobody can express — and unlike the ticket
+    // route below it works before any ticket exists, which is the common case:
+    // the agent is searching for the chat in order to raise one.
+    if (/\d/.test(s)) or.push({ last_order_id: { _contains: s } });
+    // Also match via a TICKET raised about that order — see
+    // `conversationIdsForOrder`. Kept alongside rather than replaced: it finds
+    // chats worked before stamping existed, and complaints logged by phone.
     if (f.orderConversationIds && f.orderConversationIds.length > 0) {
       or.push({ id: { _in: f.orderConversationIds } });
     }
@@ -133,6 +157,76 @@ export async function conversationIdsForOrder(term: string): Promise<string[]> {
   return Array.from(new Set(rows.map((r) => r.conversation).filter((c): c is string => !!c)));
 }
 
+/**
+ * React Query key for the inbox order panel, shared so the inbox list can
+ * PREFETCH a conversation's orders under the exact key the panel will read.
+ */
+export function inboxOrdersKey(vendorId: string, customerId: string | undefined) {
+  return ['yiji-inbox-orders', vendorId, customerId] as const;
+}
+
+/**
+ * Warm a conversation's order panel before the agent opens it.
+ *
+ * An agent moves the pointer to a row a beat before clicking it, and that beat
+ * is longer than the whole commerce call once the gateway's cache is warm. By
+ * the time the panel mounts the answer is already in the query cache, so it
+ * paints on the first frame rather than after a round trip.
+ *
+ * Safe to fire on every hover: `prefetchQuery` is a no-op for data that is
+ * still fresh, so sweeping the pointer down the list does not fan out.
+ */
+export function usePrefetchInboxOrders() {
+  const qc = useQueryClient();
+  return useCallback(
+    (c: InboxConversation) => {
+      const vendorId = c.contact?.vendor?.yiji_vendor_id ?? '';
+      const customerId = c.contact?.external_customer_id ?? '';
+      if (!vendorId || !customerId) return;
+      void qc.prefetchQuery({
+        queryKey: inboxOrdersKey(vendorId, customerId),
+        queryFn: () => commerce.getInboxOrders(vendorId, customerId, { limit: 2 }),
+        staleTime: 60_000,
+      });
+    },
+    [qc],
+  );
+}
+
+/**
+ * Record the order this chat is about onto the conversation itself.
+ *
+ * Called once per conversation per session, after the commerce panel resolves.
+ * Best-effort in every direction: a failure is swallowed (the agent is working
+ * a chat, not maintaining an index), and it is skipped entirely when the stored
+ * id already matches, so opening the same chat repeatedly is not a write.
+ *
+ * The gateway deliberately does NOT do this — Directus stays the sole writer,
+ * and using the agent's own token means a chat can only be stamped by someone
+ * who can already see it.
+ */
+export function useStampConversationOrder() {
+  const stamped = useRef(new Map<string, string>());
+  return useCallback((conversationId: string, order: YijiOrder) => {
+    const orderId = String(order.orderId);
+    if (!conversationId || !orderId) return;
+    if (stamped.current.get(conversationId) === orderId) return;
+    stamped.current.set(conversationId, orderId);
+    void directus
+      .request(
+        updateItem('conversations', conversationId, {
+          last_order_id: orderId,
+          last_order_snapshot: order,
+          last_order_at: new Date().toISOString(),
+        } as never),
+      )
+      .catch(() => {
+        // Let it be retried on the next open rather than leaving a lie behind.
+        stamped.current.delete(conversationId);
+      });
+  }, []);
+}
+
 function buildSort(f: InboxFilters): string[] {
   if (f.sort === 'oldest') return ['last_message_at'];
   if (f.sort === 'priority') return ['priority', '-last_message_at'];
@@ -156,7 +250,19 @@ export function useConversations(filters: InboxFilters = {}) {
             'unread_count_agent',
             'assigned_agent',
             'assigned_team',
-            { contact: ['id', 'name', 'email', 'phone'] },
+            // The two ids a row needs to PREFETCH its orders on hover. Fetched
+            // with the list because asking for them per row would be the
+            // request storm the prefetch exists to avoid.
+            {
+              contact: [
+                'id',
+                'name',
+                'email',
+                'phone',
+                'external_customer_id',
+                { vendor: ['id', 'yiji_vendor_id'] },
+              ],
+            },
             { tags: ['id', { tags_id: ['id', 'name', 'color'] }] },
           ],
           sort,
@@ -301,6 +407,10 @@ export function useConversation(conversationId: string | null) {
               'priority',
               'assigned_agent',
               'assigned_team',
+              // Paints the order panel before the commerce call has started.
+              'last_order_id',
+              'last_order_snapshot',
+              'last_order_at',
               { contact: ['id', 'name', 'email', 'phone'] },
               { vendor: ['id', 'name'] },
               { tags: ['id', { tags_id: ['id', 'name', 'color'] }] },

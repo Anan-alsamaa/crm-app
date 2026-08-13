@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { createYijiClient } from '@yiji/shared-types';
 import { verifyCaller, AuthError, type CallerVerifierDeps } from '../auth/index.js';
+import { COMMERCE_TTL, type CommerceCache } from './cache.js';
 
 /**
  * Commerce proxy (C-2).
@@ -18,6 +19,8 @@ type Yiji = ReturnType<typeof createYijiClient>;
 export interface CommerceDeps {
   directus: CallerVerifierDeps;
   yiji: Yiji;
+  /** Read-through cache. Optional so existing tests construct deps unchanged. */
+  cache?: CommerceCache;
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
@@ -41,13 +44,30 @@ export async function registerCommerceRoutes(
     }
   }
 
+  /** Through the cache when there is one; straight upstream when there is not. */
+  const cached = <T>(parts: readonly string[], ttl: number, fn: () => Promise<T>): Promise<T> =>
+    deps.cache ? deps.cache.wrap(parts, ttl, fn) : fn();
+
+  const listOrders = (vendorId: string, customerId: string, limit: number) =>
+    cached(['orders', vendorId, customerId, String(limit)], COMMERCE_TTL.orders, () =>
+      deps.yiji.getOrders(vendorId, customerId, { limit }),
+    );
+
+  const orderDetail = (vendorId: string, orderId: string) =>
+    cached(['order', vendorId, orderId], COMMERCE_TTL.order, () =>
+      deps.yiji.getOrder(vendorId, orderId),
+    );
+
   app.get('/commerce/activity', async (req, reply) => {
     if (!(await requireAgent(req, reply))) return;
     const q = req.query as Record<string, string | undefined>;
     const vendorId = str(q.vendorId);
     const customerId = str(q.customerId);
     if (!vendorId || !customerId) return reply.code(400).send({ error: 'missing_params' });
-    return reply.send({ data: await deps.yiji.getPurchaseActivity(vendorId, customerId) });
+    const data = await cached(['activity', vendorId, customerId], COMMERCE_TTL.activity, () =>
+      deps.yiji.getPurchaseActivity(vendorId, customerId),
+    );
+    return reply.send({ data });
   });
 
   app.get('/commerce/orders', async (req, reply) => {
@@ -58,7 +78,7 @@ export async function registerCommerceRoutes(
     if (!vendorId || !customerId) return reply.code(400).send({ error: 'missing_params' });
     const parsed = Number.parseInt(str(q.limit) || '6', 10);
     const limit = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 6, 1), 50);
-    return reply.send({ data: await deps.yiji.getOrders(vendorId, customerId, { limit }) });
+    return reply.send({ data: await listOrders(vendorId, customerId, limit) });
   });
 
   app.get('/commerce/order', async (req, reply) => {
@@ -67,7 +87,41 @@ export async function registerCommerceRoutes(
     const vendorId = str(q.vendorId);
     const orderId = str(q.orderId);
     if (!vendorId || !orderId) return reply.code(400).send({ error: 'missing_params' });
-    return reply.send({ data: await deps.yiji.getOrder(vendorId, orderId) });
+    return reply.send({ data: await orderDetail(vendorId, orderId) });
+  });
+
+  /**
+   * Everything the inbox sidebar needs, in ONE request.
+   *
+   * The panel used to make two calls in sequence — list the orders, then fetch
+   * the newest one's detail because the list carries no line items — with a
+   * React Query mount between them. Two client round trips, two auth checks and
+   * two cold upstream calls is how a 500ms answer becomes a second and a half.
+   *
+   * Here the second call is made server-side the moment the first returns, and
+   * both sides of it are cached, so a warm open costs one local round trip.
+   *
+   * The gateway does not write: recording the resolved order back onto the
+   * conversation is the caller's job (Directus stays the sole writer, and the
+   * agent's own token is what scopes which chats may be stamped at all).
+   */
+  app.get('/commerce/inbox', async (req, reply) => {
+    if (!(await requireAgent(req, reply))) return;
+    const q = req.query as Record<string, string | undefined>;
+    const vendorId = str(q.vendorId);
+    const customerId = str(q.customerId);
+    if (!vendorId || !customerId) return reply.code(400).send({ error: 'missing_params' });
+    const parsed = Number.parseInt(str(q.limit) || '2', 10);
+    const limit = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 2, 1), 10);
+
+    const orders = await listOrders(vendorId, customerId, limit);
+    const newest = orders[0] ?? null;
+    // The detail REPLACES the summary in the response rather than riding
+    // alongside it: two objects for the same order is how a caller ends up
+    // rendering the thinner one.
+    const detail = newest ? await orderDetail(vendorId, newest.orderId) : null;
+
+    return reply.send({ data: { orders, detail } });
   });
 
   app.get('/commerce/payment', async (req, reply) => {

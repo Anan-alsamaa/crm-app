@@ -28,9 +28,30 @@ async function get<T>(path: string, params: Record<string, string>): Promise<T> 
   return body.data;
 }
 
+/**
+ * What the inbox sidebar needs, in one answer: the newest orders as summaries,
+ * plus the FULL detail of the first one (line items, restaurant, delivery) —
+ * which the list endpoint does not carry and which the panel shows expanded.
+ */
+export interface InboxOrders {
+  orders: YijiOrder[];
+  detail: YijiOrder | null;
+}
+
 export const commerce = {
   getPurchaseActivity: (vendorId: string, customerId: string) =>
     get<YijiPurchaseActivity | null>('/commerce/activity', { vendorId, customerId }),
+  /**
+   * One request instead of list-then-detail. The two calls were sequential with
+   * a component mount between them, so the panel cost two client round trips
+   * and two cold upstream calls before it could show anything.
+   */
+  getInboxOrders: (vendorId: string, customerId: string, opts: { limit?: number } = {}) =>
+    get<InboxOrders>('/commerce/inbox', {
+      vendorId,
+      customerId,
+      ...(opts.limit ? { limit: String(opts.limit) } : {}),
+    }),
   getOrders: (vendorId: string, customerId: string, opts: { limit?: number } = {}) =>
     get<YijiOrder[]>('/commerce/orders', {
       vendorId,

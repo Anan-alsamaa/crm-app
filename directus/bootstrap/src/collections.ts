@@ -171,6 +171,32 @@ export const collections: CollectionSpec[] = [
        */
       { field: 'solved_at', type: 'dateTime', index: true },
       { field: 'unread_count_agent', type: 'integer', defaultValue: 0 },
+      /**
+       * The customer's newest order AT THE TIME THIS CHAT WAS WORKED, stamped
+       * by the commerce proxy the first time the sidebar resolves it.
+       *
+       * Two jobs, and the second is why it is a column and not a cache:
+       *
+       *  1. The inbox can paint the order panel from its own data instantly,
+       *     instead of waiting on two round trips to an external API.
+       *  2. "Find the chat about order 946641" becomes answerable. Directus
+       *     cannot filter inside a `json` column at all, so an id that lives
+       *     only in a snapshot is unsearchable — same reasoning as
+       *     tickets.order_id and stores.yiji_restaurant_id.
+       *
+       * Indexed: the inbox search box hits it on every keystroke.
+       */
+      { field: 'last_order_id', type: 'string', index: true },
+      {
+        field: 'last_order_snapshot',
+        type: 'json',
+        note: 'The order as it stood when this chat was worked. Rendered while the live copy revalidates, so the panel is never blank.',
+      },
+      {
+        field: 'last_order_at',
+        type: 'dateTime',
+        note: 'When the snapshot was taken — NOT when the order was placed. Says how stale the painted panel may be.',
+      },
     ],
   },
   {
