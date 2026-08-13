@@ -39,6 +39,7 @@ const base: Omit<AuthUser, 'role'> = {
   last_name: null,
   status: 'active',
   admin_access: false,
+  team: null,
 };
 
 const agent: AuthUser = { ...base, role: { id: 'r1', name: 'Agent' } };

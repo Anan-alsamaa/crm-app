@@ -182,11 +182,60 @@ export function createRoutingRepo(client: YijiDirectusClient) {
       const rows = (await client.request(
         readItems('conversations' as never, {
           filter: { id: { _eq: id } },
-          fields: ['id', 'assigned_agent', 'status'],
+          // The team scopes who may be offered the chat, so the ladder has to
+          // read it with the assignee, not separately.
+          fields: ['id', 'assigned_agent', 'assigned_team', 'status'],
           limit: 1,
         }) as never,
-      )) as Array<{ id: string; assigned_agent: string | null; status: string }>;
+      )) as Array<{
+        id: string;
+        assigned_agent: string | null;
+        assigned_team: string | null;
+        status: string;
+      }>;
       return rows[0] ?? null;
+    },
+
+    /**
+     * Eligible agents, least busy first.
+     *
+     * "Busy" is their count of OPEN conversations, counted here rather than
+     * kept as a column: a counter that has to be maintained on every assign,
+     * solve and reopen is a counter that drifts, and the ladder runs rarely
+     * enough that one aggregate query is cheaper than that risk.
+     *
+     * Only active users with an app role are candidates — a suspended account
+     * is not somebody to hand a customer to.
+     */
+    async agentsByLoad(teamId: string | null) {
+      const users = (await client.request(
+        readUsers({
+          filter: {
+            status: { _eq: 'active' },
+            ...(teamId ? { team: { _eq: teamId } } : {}),
+          },
+          fields: ['id'],
+          limit: -1,
+        }) as never,
+      )) as Array<{ id: string }>;
+      const ids = users.map((u) => u.id);
+      if (ids.length === 0) return [];
+
+      const open = (await client.request(
+        readItems('conversations' as never, {
+          filter: { status: { _eq: 'open' }, assigned_agent: { _in: ids } },
+          fields: ['assigned_agent'],
+          limit: -1,
+        }) as never,
+      )) as Array<{ assigned_agent: string | null }>;
+
+      const load = new Map<string, number>(ids.map((id) => [id, 0]));
+      for (const c of open) {
+        if (c.assigned_agent) load.set(c.assigned_agent, (load.get(c.assigned_agent) ?? 0) + 1);
+      }
+      // Ties broken by id so the order is stable: an unstable order makes the
+      // fallback non-deterministic and the tests flaky for no benefit.
+      return ids.sort((a, b) => (load.get(a) ?? 0) - (load.get(b) ?? 0) || a.localeCompare(b));
     },
 
     /**
@@ -228,7 +277,7 @@ export function createRoutingRepo(client: YijiDirectusClient) {
       );
     },
 
-    async assign(conversationId: string, agentId: string | null) {
+    async assign(conversationId: string, agentId: string) {
       await client.request(
         updateItem(
           'conversations' as never,

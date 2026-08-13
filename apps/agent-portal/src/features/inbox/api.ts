@@ -88,6 +88,8 @@ export interface InboxFilters {
   assignment?: 'mine' | 'all';
   /** Required when assignment === 'mine'. */
   currentUserId?: string;
+  /** The viewer's team, so a shift handover lands in their working view too. */
+  currentTeamId?: string | null;
 }
 
 function buildFilter(f: InboxFilters): Record<string, unknown> | undefined {
@@ -95,12 +97,21 @@ function buildFilter(f: InboxFilters): Record<string, unknown> | undefined {
   if (f.status && f.status !== 'all') and.push({ status: { _eq: f.status } });
   if (f.priority && f.priority !== 'all') and.push({ priority: { _eq: f.priority } });
   if (f.assignment === 'mine' && f.currentUserId) {
-    // Mine OR nobody's. The unassigned half matters: it is where the escalation
-    // ladder drops a conversation nobody picked up, and an agent who could not
-    // see those would never rescue one.
-    and.push({
-      _or: [{ assigned_agent: { _eq: f.currentUserId } }, { assigned_agent: { _null: true } }],
-    });
+    // Mine, nobody's, or MY TEAM's.
+    //
+    // The unassigned half is a safety net rather than a workflow now — routing
+    // always leaves an owner — but it stays so a chat that somehow lost one is
+    // still rescuable rather than invisible.
+    //
+    // The team half is the shift handover: a chat passed to my team has to
+    // appear in my working view, not only in "all conversations", or the
+    // handover has moved a label and nothing else.
+    const or: Array<Record<string, unknown>> = [
+      { assigned_agent: { _eq: f.currentUserId } },
+      { assigned_agent: { _null: true } },
+    ];
+    if (f.currentTeamId) or.push({ assigned_team: { _eq: f.currentTeamId } });
+    and.push({ _or: or });
   }
   if (f.search?.trim()) {
     const s = f.search.trim();
@@ -163,6 +174,50 @@ export async function conversationIdsForOrder(term: string): Promise<string[]> {
  */
 export function inboxOrdersKey(vendorId: string, customerId: string | undefined) {
   return ['yiji-inbox-orders', vendorId, customerId] as const;
+}
+
+/**
+ * The agent on `teamId` currently holding the fewest OPEN conversations.
+ *
+ * Used by the shift handover: assigning a team without also giving the chat an
+ * owner leaves it with whoever has it now, which for a night-to-day handover is
+ * exactly the person logging off.
+ *
+ * Least-loaded rather than random because a handover happens in bulk at the end
+ * of a shift — a random pick would land a whole night's backlog on whichever
+ * agent the shuffle favoured. Counted live: a maintained counter is a counter
+ * that drifts, and this runs once per handover.
+ *
+ * Returns null when the team has nobody in it. That is a real state (a team
+ * created but not staffed yet), and the caller says so rather than silently
+ * doing nothing.
+ */
+export async function leastLoadedAgentInTeam(teamId: string): Promise<string | null> {
+  const users = (await directus.request(
+    readUsers({
+      filter: { team: { _eq: teamId }, status: { _eq: 'active' } },
+      fields: ['id'],
+      limit: -1,
+    }),
+  )) as unknown as Array<{ id: string }>;
+  const ids = users.map((u) => u.id);
+  if (ids.length === 0) return null;
+
+  const open = (await directus.request(
+    readItems('conversations', {
+      filter: { status: { _eq: 'open' }, assigned_agent: { _in: ids } },
+      fields: ['assigned_agent'],
+      limit: -1,
+    }),
+  )) as unknown as Array<{ assigned_agent: string | null }>;
+
+  const load = new Map<string, number>(ids.map((id) => [id, 0]));
+  for (const c of open) {
+    if (c.assigned_agent) load.set(c.assigned_agent, (load.get(c.assigned_agent) ?? 0) + 1);
+  }
+  // Ties broken by id so two agents doing the same handover at once do not
+  // both pick "whoever the sort happened to put first this time".
+  return [...ids].sort((a, b) => (load.get(a) ?? 0) - (load.get(b) ?? 0) || a.localeCompare(b))[0]!;
 }
 
 /**

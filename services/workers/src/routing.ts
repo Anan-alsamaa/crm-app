@@ -9,7 +9,19 @@
  *
  *   assign     pick the idlest ONLINE agent, hand it over
  *   escalate   no reply in 60s → hand to the next idlest, skipping whoever failed
- *   broadcast  no reply in a further 30s → release to the whole pool
+ *   broadcast  no reply in a further 30s → hand to the least-loaded agent
+ *
+ * EVERY conversation ends up owned. The ladder used to fall back to "release to
+ * the whole pool" — writing a null assignee — in two places: when nobody was
+ * online, and at the end of the ladder. Both recreate the exact failure the
+ * feature exists to prevent, so both are gone. When no agent is online the chat
+ * goes to whoever currently holds the fewest open ones; they find it waiting
+ * when they log in, which is strictly better than nobody finding it at all.
+ *
+ * TEAMS scope the candidates. A chat assigned to a team is a handover — the
+ * night shift passing work to the day shift — so the ladder only ever offers it
+ * to agents on that team; picking the idlest agent across the whole company
+ * would hand it straight back to the shift that just handed it over.
  *
  * "Replied" is detected by comparing the OUTBOUND message count against the count
  * captured when the timer was scheduled. Timestamps would need the gateway and
@@ -32,10 +44,23 @@ export interface RoutingDeps {
     getConversation(id: string): Promise<{
       id: string;
       assigned_agent: string | null;
+      assigned_team: string | null;
       status: string;
     } | null>;
     countOutboundMessages(conversationId: string): Promise<number>;
-    assign(conversationId: string, agentId: string | null): Promise<void>;
+    assign(conversationId: string, agentId: string): Promise<void>;
+    /**
+     * Agent ids eligible for this conversation, LEAST BUSY FIRST, where "busy"
+     * is their count of open conversations. Scoped to `teamId` when the chat
+     * carries one.
+     *
+     * This is the offline fallback: presence answers "who is here", this
+     * answers "who should have it anyway". Ordering by load rather than at
+     * random matters because the fallback fires exactly when the team is
+     * thinnest — out of hours — and a random pick concentrates a night's
+     * backlog on whoever the shuffle favours.
+     */
+    agentsByLoad(teamId: string | null): Promise<string[]>;
     /**
      * Append the outcome of one offer. This is the ONLY place the system learns
      * that an agent was given a conversation and did not answer it — the ladder
@@ -55,12 +80,34 @@ export interface RoutingDeps {
   log: (msg: string, extra?: Record<string, unknown>) => void;
 }
 
-/** Online agents, idlest first, minus anyone already tried. */
-async function nextAgent(redis: Redis | Cluster, attempted: string[]): Promise<string | null> {
+/**
+ * Who should get this conversation next.
+ *
+ * Online agents first, idlest first — someone at their desk answers sooner than
+ * someone who is not. Then, only if that comes up empty, the least-loaded agent
+ * whether or not they are online, because a chat with an owner who is currently
+ * away still gets found; a chat with no owner gets found by nobody.
+ *
+ * `eligible` is the team roster when the chat has a team, and everyone
+ * otherwise. Passing it in (rather than filtering afterwards) is what stops a
+ * team handover being answered by the shift that handed it over.
+ */
+async function nextAgent(
+  redis: Redis | Cluster,
+  attempted: string[],
+  eligible: string[],
+): Promise<string | null> {
+  const skip = new Set(attempted);
+  const allowed = eligible.length > 0 ? new Set(eligible) : null;
+
   await redis.zremrangebyscore(PRESENCE_KEY, '-inf', Date.now() - PRESENCE_TTL_MS);
   const online = await redis.zrange(PRESENCE_KEY, 0, -1);
-  const skip = new Set(attempted);
-  return online.find((id) => !skip.has(id)) ?? null;
+  const onlineHit = online.find((id) => !skip.has(id) && (!allowed || allowed.has(id)));
+  if (onlineHit) return onlineHit;
+
+  // Nobody online (or nobody online on this team). `eligible` is already
+  // ordered least-loaded first.
+  return eligible.find((id) => !skip.has(id)) ?? null;
 }
 
 export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise<void> {
@@ -73,18 +120,24 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
     return;
   }
 
+  // The pool this chat may be offered to: its team's roster, or everyone.
+  const eligible = await directus.agentsByLoad(convo.assigned_team);
+
   if (job.stage === 'assign') {
     // Someone already owns it (manual assignment, or a human grabbed it first).
     if (convo.assigned_agent) {
       log('routing: already assigned, standing down', { id: convo.id });
       return;
     }
-    const agent = await nextAgent(redis, job.attemptedAgentIds);
+    const agent = await nextAgent(redis, job.attemptedAgentIds, eligible);
     if (!agent) {
-      // Nobody online. Leaving it unassigned is correct: it stays visible to
-      // everyone, which is better than assigning to an offline agent where it
-      // would sit unseen until they happen to log in.
-      log('routing: no agents online, leaving open to all', { id: convo.id });
+      // No agents exist at all (or none on the team). Nothing to assign to —
+      // this is a configuration problem, not a routing decision, so say so
+      // rather than silently leaving a chat nobody owns.
+      log('routing: NO ELIGIBLE AGENTS — conversation left unowned', {
+        id: convo.id,
+        team: convo.assigned_team,
+      });
       return;
     }
     await directus.assign(convo.id, agent);
@@ -140,12 +193,12 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
   }
 
   if (job.stage === 'escalate') {
-    const agent = await nextAgent(redis, job.attemptedAgentIds);
+    const agent = await nextAgent(redis, job.attemptedAgentIds, eligible);
     if (!agent) {
-      // No one else to try — go straight to the pool rather than waiting out a
-      // second timer that cannot change the outcome.
-      await directus.assign(convo.id, null);
-      log('routing: no other agent, released to all', { id: convo.id });
+      // Everyone eligible has already been offered it. Waiting out a second
+      // timer cannot change that, and there is nobody new to hand it to — so
+      // it stays where it is, owned, and the ladder stops.
+      log('routing: everyone tried, leaving it with the current owner', { id: convo.id });
       return;
     }
     await directus.assign(convo.id, agent);
@@ -162,7 +215,15 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
     return;
   }
 
-  // stage === 'broadcast'
-  await directus.assign(convo.id, null);
-  log('routing: released to all agents', { id: convo.id });
+  // stage === 'broadcast' — the last rung. It used to release the chat to the
+  // pool by nulling the assignee, which is the diffusion-of-responsibility
+  // failure this whole ladder exists to prevent. Hand it on instead; if there
+  // is nobody left to hand it to, it stays with whoever holds it.
+  const agent = await nextAgent(redis, job.attemptedAgentIds, eligible);
+  if (!agent) {
+    log('routing: nobody left to try, leaving it with the current owner', { id: convo.id });
+    return;
+  }
+  await directus.assign(convo.id, agent);
+  log('routing: handed on at the end of the ladder', { id: convo.id, agent });
 }
