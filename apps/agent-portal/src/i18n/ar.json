@@ -435,7 +435,13 @@
     "resolutionTime": "زمن الحل",
     "resolutionTimeOpen": "لا تزال مفتوحة",
     "lastUpdated": "آخر تحديث",
-    "lastUpdatedNobody": "لم تتغير منذ إنشائها"
+    "lastUpdatedNobody": "لم تتغير منذ إنشائها",
+    "searchPlaceholder": "رقم الطلب، الجوال، الفرع…",
+    "searchLabel": "بحث في التذاكر",
+    "anyType": "أي نوع شكوى",
+    "clearSearch": "مسح",
+    "searchCount": "{{shown}} من {{total}} تذكرة",
+    "orderToggle": "تفاصيل الطلب {{orderId}}"
   },
   "notifications": {
     "title": "التنبيهات",

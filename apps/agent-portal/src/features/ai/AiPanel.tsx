@@ -46,12 +46,23 @@ export function AiPanel({ conversationId, vendorId, draft, locale, onReplySugges
   const caller = { userId: user?.id ?? '', vendorId };
 
   type ResultKey = 'summary' | 'reply' | 'sentiment' | 'intent' | 'entities' | 'lead' | 'search';
-  // The language of the SUGGESTED REPLY, which is not the language of the
-  // portal: an agent working in English answers an Arabic customer in Arabic.
-  // Seeded from the caller/interface, then owned by the agent.
-  const [replyLocale, setReplyLocale] = useState<'en' | 'ar'>(
-    (locale ?? i18n.language ?? 'en').toLowerCase().startsWith('ar') ? 'ar' : 'en',
-  );
+  /**
+   * The language of the SUGGESTED REPLY, which is not automatically the
+   * language of the portal: an agent working in English still answers an Arabic
+   * customer in Arabic, so the toggle has to stay.
+   *
+   * But it FOLLOWS the portal language until the agent touches it. Switching the
+   * whole app to Arabic and then getting English suggestions reads as the
+   * feature ignoring you — and an agent who has switched the interface is
+   * overwhelmingly about to write Arabic. Once they pick a side here, that
+   * choice is theirs and the page language stops overriding it.
+   */
+  const pageLocale: 'en' | 'ar' = (locale ?? i18n.language ?? 'en').toLowerCase().startsWith('ar')
+    ? 'ar'
+    : 'en';
+  const [chosenLocale, setChosenLocale] = useState<'en' | 'ar' | null>(null);
+  const replyLocale = chosenLocale ?? pageLocale;
+  const setReplyLocale = setChosenLocale;
   const [active, setActive] = useState<ResultKey | null>(null);
   const [query, setQuery] = useState('');
 

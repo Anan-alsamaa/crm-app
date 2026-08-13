@@ -56,7 +56,9 @@
     "stores": "Stores",
     "agentPerformance": "Agent performance",
     "storeNotifications": "Branch notifications",
-    "couponApprovals": "Coupon approvals"
+    "couponApprovals": "Coupon approvals",
+    "agentPerformanceGroup": "Agent performance",
+    "couponApprovalsGroup": "Coupon approvals"
   },
   "dashboard": {
     "title": "Overview",

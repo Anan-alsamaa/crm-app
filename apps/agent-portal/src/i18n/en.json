@@ -424,7 +424,13 @@
     "resolutionTime": "Time to resolve",
     "resolutionTimeOpen": "Still open",
     "lastUpdated": "Last updated",
-    "lastUpdatedNobody": "Not changed since it was raised"
+    "lastUpdatedNobody": "Not changed since it was raised",
+    "searchPlaceholder": "Order number, phone, branch…",
+    "searchLabel": "Search tickets",
+    "anyType": "Any complaint type",
+    "clearSearch": "Clear",
+    "searchCount": "{{shown}} of {{total}} tickets",
+    "orderToggle": "Order {{orderId}} details"
   },
   "notifications": {
     "title": "Notifications",

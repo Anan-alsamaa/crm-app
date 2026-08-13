@@ -55,3 +55,12 @@ export {
   type ChatTiming,
   type AgentPerformanceRow,
 } from './agent-performance.js';
+
+export {
+  distinctValues,
+  filterTickets,
+  isEmptyFilter,
+  matchesTicketFilter,
+  type FilterableTicketRow,
+  type TicketFilterCriteria,
+} from './ticket-filter.js';

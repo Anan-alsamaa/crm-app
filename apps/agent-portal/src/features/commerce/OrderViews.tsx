@@ -413,10 +413,20 @@ function ExpandableOrder({
 function ManualOrderLookup({
   vendorId,
   conversationId,
+  heading,
   onAdd,
 }: {
   vendorId: string;
   conversationId?: string;
+  /**
+   * Rendered on the SAME row as the search box, to its start side.
+   *
+   * The lookup used to sit at the foot of the panel, below however many orders
+   * were listed — so on the one call where the customer is reading a number
+   * down the line, the agent had to scroll past the orders that were not it.
+   * Pairing it with the section heading puts it where the eye already is.
+   */
+  heading?: React.ReactNode;
   /** Called when the agent keeps a found order. Absent = nowhere to keep it. */
   onAdd?: (order: YijiOrder) => void;
 }) {
@@ -447,6 +457,7 @@ function ManualOrderLookup({
         }}
         className="flex items-center gap-2"
       >
+        {heading}
         <input
           value={input}
           onChange={(e) => setInput(e.currentTarget.value)}
@@ -606,11 +617,21 @@ export function LatestOrder({
 
   return (
     <div className="space-y-2">
-      <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {total > 1
-          ? t('commerce.latestOrders', { defaultValue: 'Latest orders' })
-          : t('commerce.latestOrder', { defaultValue: 'Latest order' })}
-      </h3>
+      {/* The heading and the manual lookup share a row, and the lookup's result
+          lands directly under them — above the automatic orders, because an
+          order the agent just typed in is the one they are looking at. */}
+      <ManualOrderLookup
+        vendorId={vendorId}
+        conversationId={conversationId}
+        onAdd={conversationId ? (o) => addOrder(conversationId, o) : undefined}
+        heading={
+          <h3 className="shrink-0 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            {total > 1
+              ? t('commerce.latestOrders', { defaultValue: 'Latest orders' })
+              : t('commerce.latestOrder', { defaultValue: 'Latest order' })}
+          </h3>
+        }
+      />
 
       {loadingOrders ? (
         <Skeleton className="h-20 w-full rounded-2xl" />
@@ -663,15 +684,6 @@ export function LatestOrder({
           })}
         </p>
       )}
-
-      {/* Always available, not only when the automatic lookup came back empty:
-          the complaint is often about an older order than the two shown, and
-          hiding the box behind "no orders found" made that case invisible. */}
-      <ManualOrderLookup
-        vendorId={vendorId}
-        conversationId={conversationId}
-        onAdd={conversationId ? (o) => addOrder(conversationId, o) : undefined}
-      />
     </div>
   );
 }
