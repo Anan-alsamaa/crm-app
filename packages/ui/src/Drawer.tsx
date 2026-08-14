@@ -84,14 +84,14 @@ export function Drawer({
       <div
         aria-hidden
         onClick={onClose}
-        className="absolute inset-0 bg-black/55 backdrop-blur-md motion-safe:animate-fade-in"
+        className="absolute inset-0 bg-black/55 backdrop-blur-sm motion-safe:animate-fade-in"
       />
 
       {/* Panel — anchored to the end edge, floats with soft shadow */}
       <div
         ref={panelRef}
         className={cn(
-          'absolute inset-y-3 end-3 flex max-w-[100vw] flex-col rounded-2xl bg-card shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06]',
+          'absolute inset-y-3 end-3 flex max-w-[100vw] flex-col rounded-2xl bg-card shadow-xl shadow-black/30 ring-1 ring-border',
           widthClass[width],
           'motion-safe:animate-slide-in-drawer',
         )}
@@ -120,7 +120,9 @@ export function Drawer({
         <div className="shrink-0 px-8 pt-10 pb-6">
           <div className="min-w-0">
             {typeof title === 'string' ? (
-              <h2 className="text-2xl font-semibold tracking-[-0.02em] text-foreground">{title}</h2>
+              <h2 className="font-display text-2xl font-bold tracking-tight text-foreground">
+                {title}
+              </h2>
             ) : (
               title
             )}

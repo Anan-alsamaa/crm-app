@@ -213,13 +213,15 @@ export function BrandsPage() {
             }
           />
         ) : (
-          <ul className="mx-auto max-w-5xl space-y-1 rounded-2xl bg-card p-2 ring-1 ring-foreground/[0.06] shadow-soft">
+          /* Board list rows — hairline separators edge to edge, the accent
+             hover wash, numbers right-aligned in the end column. */
+          <ul className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             {list.map((b) => (
-              <li key={b.id}>
+              <li key={b.id} className="border-b border-border/60 last:border-b-0">
                 <div
                   className={cn(
-                    'group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-start',
-                    'transition-colors duration-fast ease-out hover:bg-secondary/60',
+                    'group flex w-full items-center gap-3 px-4 py-3 text-start',
+                    'transition-colors duration-fast ease-out hover:bg-primary/[0.05]',
                   )}
                 >
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-subtle text-2xs font-bold uppercase text-primary">
@@ -245,7 +247,11 @@ export function BrandsPage() {
                     <Pill tone="muted">{t('brands.inactive', { defaultValue: 'Inactive' })}</Pill>
                   )}
                   <span className="w-24 shrink-0 text-end text-xs text-muted-foreground tabular-nums">
-                    {storeCountFor(b.id)} {t('brands.storesUnit', { defaultValue: 'stores' })}
+                    {/* Number leads in foreground weight; the unit stays quiet. */}
+                    <span className="font-semibold text-foreground">
+                      {storeCountFor(b.id)}
+                    </span>{' '}
+                    {t('brands.storesUnit', { defaultValue: 'stores' })}
                   </span>
                   <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(b)}>
                     {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}

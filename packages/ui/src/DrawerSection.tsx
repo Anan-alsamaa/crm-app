@@ -22,7 +22,7 @@ export function DrawerSection({
   return (
     <section className={cn('space-y-4 pt-2 first:pt-0', className)}>
       <div className="space-y-1">
-        <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           {title}
         </h3>
         {description && <p className="text-sm leading-relaxed text-foreground/80">{description}</p>}

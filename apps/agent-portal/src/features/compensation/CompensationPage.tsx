@@ -89,7 +89,7 @@ function RequestQueue() {
   return (
     <div className="mx-auto h-full w-full max-w-4xl overflow-y-auto px-4 py-6 sm:px-6">
       <header className="mb-4">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
           {t('compensation.title', { defaultValue: 'Compensation' })}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -156,30 +156,34 @@ function QueueCard({ row, onOpen }: { row: CompensationRow; onOpen: () => void }
       // Each request is a CARD, not a bare row. On the tinted canvas the old
       // transparent rows had no edges, so four requests read as one run-on block
       // with no sense of where one ended and the next began.
-      className="flex w-full items-center gap-4 rounded-2xl bg-card px-4 py-3.5 text-start shadow-soft ring-1 ring-border transition-[box-shadow,transform] duration-fast ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5"
+      className="w-full rounded-2xl bg-card px-4 py-3.5 text-start shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,transform] duration-fast ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5"
     >
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-muted-foreground">
-            {row.request_code ?? row.id.slice(0, 8)}
-          </span>
-          <StatusPill status={row.status} />
+      <div className="flex items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-muted-foreground">
+              {row.request_code ?? row.id.slice(0, 8)}
+            </span>
+            <StatusPill status={row.status} />
+          </div>
+          <div className="mt-1 truncate text-sm font-semibold text-foreground">
+            {row.customer_name ?? row.customer_mobile ?? '—'}
+          </div>
         </div>
-        <div className="mt-1 truncate text-sm font-medium text-foreground">
-          {row.customer_name ?? row.customer_mobile ?? '—'}
-        </div>
-        <div className="mt-0.5 truncate text-2xs text-muted-foreground">
-          {[row.brand_name, row.restaurant_name].filter(Boolean).join(' · ') || '—'}
-          {row.order_id ? ` · #${row.order_id}` : ''}
-        </div>
-      </div>
-      <div className="shrink-0 text-end">
-        <div className="text-sm font-semibold tabular-nums text-foreground">
+        {/* The money is the card's headline numeral — board-style emphasis. */}
+        <div className="shrink-0 text-end text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
           {money(row.final_compensation_value ?? row.user_complaint_amount)}
         </div>
-        <div className="mt-0.5 text-2xs text-muted-foreground tabular-nums">
+      </div>
+      {/* Hairline meta row: where the order came from, and when. */}
+      <div className="mt-2.5 flex items-baseline gap-3 border-t border-foreground/[0.06] pt-2 text-2xs text-muted-foreground">
+        <span className="min-w-0 truncate">
+          {[row.brand_name, row.restaurant_name].filter(Boolean).join(' · ') || '—'}
+          {row.order_id ? ` · #${row.order_id}` : ''}
+        </span>
+        <span className="ms-auto shrink-0 tabular-nums">
           {fmtDate(row.date_created).split(',')[0]}
-        </div>
+        </span>
       </div>
     </button>
   );
@@ -198,7 +202,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl bg-card p-4 shadow-soft">
+    <div className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
       <h3 className="mb-2 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         {title}
       </h3>
@@ -627,7 +631,7 @@ function ActionPanel({ request }: { request: CompensationRow }) {
   const openAction = COMPENSATION_ACTIONS.find((a) => a.key === formKey) ?? null;
 
   return (
-    <div className="rounded-2xl bg-card p-4 shadow-soft">
+    <div className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
       <h3 className="mb-3 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         {t('compensation.actions', { defaultValue: 'Actions' })}
       </h3>

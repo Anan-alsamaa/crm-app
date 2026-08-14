@@ -13,12 +13,16 @@ import {
   ErrorState,
   FormField,
   Input,
+  ProgressRing,
   Skeleton,
-  StatStrip,
+  StatCard,
+  TeamIcon,
   Textarea,
   toast,
   Toolbar,
   ToolbarSpacer,
+  UsersIcon,
+  ZapIcon,
 } from '@yiji/ui';
 import { useTeams, useCreateTeam } from './api.js';
 import { useUsers } from '../users/api.js';
@@ -70,6 +74,7 @@ export function TeamsPage() {
   const userCount = users.data?.length ?? 0;
   const assignedCount = (users.data ?? []).filter((u) => u.team).length;
   const unassignedCount = userCount - assignedCount;
+  const assignedPct = userCount > 0 ? Math.round((assignedCount / userCount) * 100) : 0;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -78,17 +83,22 @@ export function TeamsPage() {
         <span className="hidden text-xs text-muted-foreground sm:inline-flex items-center gap-2.5">
           <span className="opacity-50">·</span>
           <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{teamCount}</strong> teams
+            <strong className="font-semibold text-foreground">{teamCount}</strong>{' '}
+            {t('teams.statTeamsCap', { defaultValue: 'teams' })}
           </span>
           <span className="opacity-30">·</span>
           <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{assignedCount}</strong> assigned
+            <strong className="font-semibold text-foreground">{assignedCount}</strong>{' '}
+            {t('teams.statAssignedCap', { defaultValue: 'assigned' })}
           </span>
           {unassignedCount > 0 && (
             <>
               <span className="opacity-30">·</span>
-              <span className="tabular-nums text-warning-foreground">
-                <strong className="font-semibold">{unassignedCount}</strong> unassigned
+              {/* Bare warning ink is near-invisible on the dark canvas — the
+                  tinted chip treatment stays readable on both themes. */}
+              <span className="rounded-full bg-warning/20 px-2 py-0.5 tabular-nums text-warning-foreground">
+                <strong className="font-semibold">{unassignedCount}</strong>{' '}
+                {t('teams.statUnassignedCap', { defaultValue: 'unassigned' })}
               </span>
             </>
           )}
@@ -103,7 +113,7 @@ export function TeamsPage() {
         {!teams.isLoading && !teams.isError && teamCount > 0 && (
           <div className="mx-auto mb-5 max-w-5xl space-y-5">
             <div className="border-b border-foreground/10 pb-5">
-              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">
                 {t('teams.title')}
               </h2>
               <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
@@ -113,30 +123,45 @@ export function TeamsPage() {
                 })}
               </p>
             </div>
-            <StatStrip
-              items={[
-                {
-                  label: t('teams.total', { defaultValue: 'teams' }),
-                  value: teamCount,
-                  tone: 'blue',
-                },
-                {
-                  label: t('teams.members', { defaultValue: 'members' }),
-                  value: userCount,
-                  tone: 'violet',
-                },
-                {
-                  label: t('teams.assigned', { defaultValue: 'assigned' }),
-                  value: assignedCount,
-                  tone: 'green',
-                },
-                {
-                  label: t('teams.unassigned', { defaultValue: 'unassigned' }),
-                  value: userCount - assignedCount,
-                  tone: userCount - assignedCount > 0 ? 'amber' : 'neutral',
-                },
-              ]}
-            />
+            {/* Boxed board tiles — tinted icon chips, hero numerals; tone lives
+                in the chip / dot, never in a colored outline. */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard
+                icon={<TeamIcon />}
+                tone="primary"
+                label={t('teams.total', { defaultValue: 'teams' })}
+                value={teamCount}
+              />
+              <StatCard
+                icon={<UsersIcon />}
+                tone="pink"
+                label={t('teams.members', { defaultValue: 'members' })}
+                value={userCount}
+              />
+              <StatCard
+                icon={<ZapIcon />}
+                tone="success"
+                label={t('teams.assigned', { defaultValue: 'assigned' })}
+                value={assignedCount}
+                visual={
+                  <span className="hidden sm:block">
+                    <ProgressRing
+                      value={assignedPct}
+                      tone="success"
+                      size={40}
+                      label={`${assignedPct}%`}
+                    />
+                  </span>
+                }
+              />
+              {/* No icon here on purpose: the warning hue may not tint a chip
+                  (light-token contrast), so the label dot carries it. */}
+              <StatCard
+                tone={unassignedCount > 0 ? 'warning' : 'default'}
+                label={t('teams.unassigned', { defaultValue: 'unassigned' })}
+                value={unassignedCount}
+              />
+            </div>
           </div>
         )}
         {teams.isError ? (
@@ -149,10 +174,10 @@ export function TeamsPage() {
             onRetry={() => void teams.refetch()}
           />
         ) : teams.isLoading ? (
-          <div className="space-y-2">
+          <div className="mx-auto max-w-5xl divide-y divide-foreground/[0.06] rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-lg px-2 py-3">
-                <Skeleton className="h-8 w-8 rounded-md" />
+              <div key={i} className="flex min-h-14 items-center gap-3 px-4 py-3">
+                <Skeleton className="h-9 w-9 rounded-lg" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-3 w-1/3" />
                   <Skeleton className="h-2.5 w-2/3" />
@@ -173,59 +198,84 @@ export function TeamsPage() {
             }
           />
         ) : (
-          /* Dense list — one row per team. Members shown as a small avatar
-             stack with an overflow count; rows sit on a soft floating card. */
-          <ul className="mx-auto max-w-5xl space-y-1 rounded-2xl bg-card p-2 ring-1 ring-foreground/[0.06] shadow-soft">
-            {teams.data.map((tm) => {
-              const members = (users.data ?? []).filter((u) => u.team?.id === tm.id);
-              const memberCount = members.length;
-              return (
-                <li key={tm.id}>
-                  <button
-                    type="button"
-                    className={cn(
-                      'group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-start',
-                      'transition-colors duration-fast ease-out hover:bg-secondary/60',
-                      'focus-visible:outline-none focus-visible:bg-secondary/60',
-                    )}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-foreground">{tm.name}</div>
-                      {tm.description && (
-                        <div className="truncate text-xs text-muted-foreground">
-                          {tm.description}
-                        </div>
+          /* Dense list — one row per team, flush inside one board card:
+             hairline separators, quiet hover, a footer aggregate band.
+             Members shown as a small avatar stack with an overflow count. */
+          <div className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
+            <ul className="divide-y divide-foreground/[0.06]">
+              {teams.data.map((tm) => {
+                const members = (users.data ?? []).filter((u) => u.team?.id === tm.id);
+                const memberCount = members.length;
+                return (
+                  <li key={tm.id}>
+                    <button
+                      type="button"
+                      className={cn(
+                        'group flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-start',
+                        'transition-colors duration-fast ease-out hover:bg-foreground/[0.03]',
+                        'focus-visible:outline-none focus-visible:bg-foreground/[0.05]',
                       )}
-                    </div>
-                    {memberCount > 0 ? (
-                      <div className="flex shrink-0 items-center -space-x-1.5">
-                        {members.slice(0, 4).map((m) => {
-                          const fn = [m.first_name, m.last_name].filter(Boolean).join(' ');
-                          return (
-                            <span key={m.id} className="rounded-full ring-2 ring-card">
-                              <Avatar name={fn} email={m.email} size="xs" />
-                            </span>
-                          );
-                        })}
-                        {memberCount > 4 && (
-                          <span className="ms-2.5 text-2xs text-muted-foreground tabular-nums">
-                            +{memberCount - 4}
-                          </span>
+                    >
+                      {/* Tinted initial chip — the boards' icon-chip anatomy. */}
+                      <span
+                        aria-hidden
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary-tint text-sm font-semibold text-primary"
+                      >
+                        {tm.name.slice(0, 1).toUpperCase()}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold text-foreground">
+                          {tm.name}
+                        </div>
+                        {tm.description && (
+                          <div className="truncate text-xs text-muted-foreground">
+                            {tm.description}
+                          </div>
                         )}
                       </div>
-                    ) : (
-                      <span className="shrink-0 text-2xs italic text-muted-foreground/70">
-                        no members
+                      {memberCount > 0 ? (
+                        <div className="flex shrink-0 items-center -space-x-1.5">
+                          {members.slice(0, 4).map((m) => {
+                            const fn = [m.first_name, m.last_name].filter(Boolean).join(' ');
+                            return (
+                              <span key={m.id} className="rounded-full ring-2 ring-card">
+                                <Avatar name={fn} email={m.email} size="xs" />
+                              </span>
+                            );
+                          })}
+                          {memberCount > 4 && (
+                            <span className="ms-2.5 text-2xs text-muted-foreground tabular-nums">
+                              +{memberCount - 4}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="shrink-0 text-2xs italic text-muted-foreground/70">
+                          {t('teams.noMembers', { defaultValue: 'no members' })}
+                        </span>
+                      )}
+                      {/* Right-aligned tabular numbers — the boards' table idiom. */}
+                      <span className="w-20 shrink-0 text-end text-xs text-muted-foreground tabular-nums">
+                        <span className="font-semibold text-foreground">{memberCount}</span>{' '}
+                        {memberCount === 1
+                          ? t('teams.memberOne', { defaultValue: 'member' })
+                          : t('teams.memberOther', { defaultValue: 'members' })}
                       </span>
-                    )}
-                    <span className="w-20 shrink-0 text-end text-xs text-muted-foreground tabular-nums">
-                      {memberCount} {memberCount === 1 ? 'member' : 'members'}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {/* Footer aggregate band — the boards' table anatomy. */}
+            <div className="flex items-center justify-between gap-3 border-t border-foreground/[0.06] bg-secondary/30 px-4 py-2.5">
+              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('teams.total', { defaultValue: 'teams' })}
+              </span>
+              <span className="text-sm font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
+                {teamCount}
+              </span>
+            </div>
+          </div>
         )}
       </div>
 

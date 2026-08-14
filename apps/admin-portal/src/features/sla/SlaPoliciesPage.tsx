@@ -263,86 +263,88 @@ export function SlaPoliciesPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {/* Board list rows — one policy per hairline-separated row, its
+                  deadlines as right-aligned tabular numerals. */}
+              <ul className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
                 {policies.data.map((p) => (
-                  <div
+                  <li
                     key={p.id}
-                    className="group relative flex flex-col gap-4 rounded-2xl bg-card/70 px-5 py-5 shadow-soft ring-1 ring-foreground/[0.04] transition-[box-shadow,transform,background-color] duration-fast ease-out hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px"
+                    className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-border/60 px-5 py-4 transition-colors duration-fast ease-out last:border-b-0 hover:bg-primary/[0.04]"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                            {p.name}
-                          </h3>
-                          <Pill tone={p.active ? 'success' : 'muted'} size="sm" dot>
-                            {p.active
-                              ? t('sla.active')
-                              : t('sla.inactive', { defaultValue: 'Inactive' })}
-                          </Pill>
-                        </div>
-                        {p.description && (
-                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                            {p.description}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-3">
-                        <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(p)}>
-                          {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
-                        </Button>
-                        <label className="inline-flex cursor-pointer items-center gap-1.5 text-2xs text-muted-foreground">
-                          <input
-                            type="checkbox"
-                            checked={p.active}
-                            onChange={(e) =>
-                              void toggleActive.mutateAsync({ id: p.id, active: e.target.checked })
-                            }
-                            className="h-3.5 w-3.5 rounded-sm border-border-strong bg-input accent-primary"
-                            aria-label={t('sla.active')}
-                          />
-                          <span>{t('sla.active')}</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1.5">
-                      {p.applies_to_priority?.map((pr) => (
-                        <Pill key={pr} tone="primary" size="sm">
-                          {t(`priority.${pr}`, { ns: 'common' })}
+                    <div className="min-w-0 flex-1 basis-56">
+                      <div className="flex items-center gap-2">
+                        <h3 className="truncate text-sm font-semibold tracking-tight text-foreground">
+                          {p.name}
+                        </h3>
+                        <Pill tone={p.active ? 'success' : 'muted'} size="sm" dot>
+                          {p.active
+                            ? t('sla.active')
+                            : t('sla.inactive', { defaultValue: 'Inactive' })}
                         </Pill>
-                      ))}
+                      </div>
+                      {p.description && (
+                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                          {p.description}
+                        </p>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {p.applies_to_priority?.map((pr) => (
+                          <Pill key={pr} tone="primary" size="sm">
+                            {t(`priority.${pr}`, { ns: 'common' })}
+                          </Pill>
+                        ))}
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4 pt-1">
-                      <div>
-                        <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
-                          first reply
-                        </div>
-                        <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
+                    {/* The deadline trio — big numeral, micro-label under, the
+                        board's stat anatomy at row scale. */}
+                    <div className="flex shrink-0 items-center gap-5 sm:gap-6">
+                      <div className="min-w-[4.5rem] text-end">
+                        <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
                           {p.first_response_minutes}m
                         </div>
-                      </div>
-                      <div>
-                        <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
-                          resolution
+                        <div className="mt-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          {t('sla.rowFirstReply', { defaultValue: 'first reply' })}
                         </div>
-                        <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
+                      </div>
+                      <div className="min-w-[4.5rem] text-end">
+                        <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
                           {p.resolution_minutes}m
                         </div>
-                      </div>
-                      <div>
-                        <div className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">
-                          warn at
+                        <div className="mt-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          {t('sla.rowResolution', { defaultValue: 'resolution' })}
                         </div>
-                        <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
+                      </div>
+                      <div className="min-w-[4.5rem] text-end">
+                        <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
                           {p.warning_threshold_percent}%
+                        </div>
+                        <div className="mt-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          {t('sla.rowWarnAt', { defaultValue: 'warn at' })}
                         </div>
                       </div>
                     </div>
-                  </div>
+
+                    <div className="flex shrink-0 items-center gap-3">
+                      <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(p)}>
+                        {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
+                      </Button>
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 text-2xs text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={p.active}
+                          onChange={(e) =>
+                            void toggleActive.mutateAsync({ id: p.id, active: e.target.checked })
+                          }
+                          className="h-3.5 w-3.5 rounded-sm border-border-strong bg-input accent-primary"
+                          aria-label={t('sla.active')}
+                        />
+                        <span>{t('sla.active')}</span>
+                      </label>
+                    </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </>
           )}
         </div>
@@ -457,25 +459,40 @@ function PlusIcon() {
   );
 }
 
-/* Flat KPI tile — neutral number, semantic tint on the label only (ONE accent). */
+/* Board KPI tile — hue numeral + dot micro-label, the stat-tile anatomy of the
+   reference dashboards. */
 type KpiTone = 'blue' | 'violet' | 'green' | 'amber';
-const LABEL_TONE: Record<KpiTone, string> = {
-  blue: 'text-primary',
-  violet: 'text-primary',
+const NUM_TONE: Record<KpiTone, string> = {
+  blue: 'text-sky',
+  violet: 'text-violet',
   green: 'text-success',
-  amber: 'text-warning-foreground',
+  // Warning is a light token — its ink flips per theme — so the amber numeral
+  // stays in foreground ink and the dot alone carries the hue.
+  amber: 'text-foreground',
+};
+const DOT_TONE: Record<KpiTone, string> = {
+  blue: 'bg-sky',
+  violet: 'bg-violet',
+  green: 'bg-success',
+  amber: 'bg-warning',
 };
 
 function KpiTile({ label, value, tone }: { label: string; value: string | number; tone: KpiTone }) {
   return (
-    <div className="rounded-2xl bg-card px-4 py-3.5 ring-1 ring-foreground/[0.08]">
-      <div className="text-3xl font-black tabular-nums leading-none tracking-[-0.04em] text-foreground">
+    <div className="rounded-2xl bg-card px-4 py-3.5 shadow-soft ring-1 ring-foreground/[0.06]">
+      <div
+        className={cn(
+          'text-3xl font-extrabold tabular-nums leading-none tracking-[-0.03em]',
+          NUM_TONE[tone],
+        )}
+      >
         {value}
       </div>
-      <div
-        className={cn('mt-2 text-2xs font-semibold uppercase tracking-[0.12em]', LABEL_TONE[tone])}
-      >
-        {label}
+      <div className="mt-2 flex items-center gap-1.5">
+        <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT_TONE[tone])} />
+        <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          {label}
+        </span>
       </div>
     </div>
   );

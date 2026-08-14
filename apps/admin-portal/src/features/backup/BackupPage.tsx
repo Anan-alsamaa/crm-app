@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { readItems } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
-import { Button, Toolbar, cn, toast } from '@yiji/ui';
+import { Button, DownloadIcon, Toolbar, cn, toast } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -123,36 +123,47 @@ export function BackupPage() {
       </Toolbar>
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <div className="mx-auto max-w-2xl space-y-4">
+          {/* The action card — tinted icon chip at the start, per the board
+              language for operations a page offers. */}
           <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
-            <h2 className="text-sm font-semibold text-foreground">
-              {t('backup.exportTitle', { defaultValue: 'Download a full backup' })}
-            </h2>
-            <p className="mt-1.5 max-w-xl text-xs leading-relaxed text-muted-foreground">
-              {t('backup.exportHelp', {
-                defaultValue:
-                  'Every business collection — tickets, chats, contacts, lists, settings — as one JSON file on your machine. Restoring is an operator action: hand the file to whoever runs the system, with scripts/restore-backup.mjs.',
-              })}
-            </p>
-            <div className="mt-4">
-              <Button onClick={run} disabled={running}>
-                {running
-                  ? t('backup.running', { defaultValue: 'Exporting…' })
-                  : t('backup.run', { defaultValue: 'Download backup' })}
-              </Button>
+            <div className="flex items-start gap-3.5">
+              <span
+                aria-hidden
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-tint text-primary"
+              >
+                <DownloadIcon size={18} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                  {t('backup.exportTitle', { defaultValue: 'Download a full backup' })}
+                </h2>
+                <p className="mt-1.5 max-w-xl text-xs leading-relaxed text-muted-foreground">
+                  {t('backup.exportHelp', {
+                    defaultValue:
+                      'Every business collection — tickets, chats, contacts, lists, settings — as one JSON file on your machine. Restoring is an operator action: hand the file to whoever runs the system, with scripts/restore-backup.mjs.',
+                  })}
+                </p>
+                <div className="mt-4">
+                  <Button onClick={run} disabled={running}>
+                    {running
+                      ? t('backup.running', { defaultValue: 'Exporting…' })
+                      : t('backup.run', { defaultValue: 'Download backup' })}
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
 
           {Object.keys(progress).length > 0 && (
-            <ul className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-2xl bg-card p-4 text-xs shadow-soft ring-1 ring-foreground/[0.06] sm:grid-cols-3">
+            <ul className="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-2xl bg-card p-5 text-xs shadow-soft ring-1 ring-foreground/[0.06] sm:grid-cols-3">
               {COLLECTIONS.filter((c) => c in progress).map((c) => (
                 <li key={c} className="flex items-baseline justify-between gap-2">
-                  <span className="truncate text-muted-foreground">{c}</span>
+                  {/* Collection ids are code, so they read in mono. */}
+                  <span className="truncate font-mono text-2xs text-muted-foreground">{c}</span>
                   <span
                     className={cn(
-                      'tabular-nums',
-                      progress[c] === 'error'
-                        ? 'font-semibold text-destructive'
-                        : 'text-foreground',
+                      'font-semibold tabular-nums',
+                      progress[c] === 'error' ? 'text-destructive' : 'text-foreground',
                     )}
                   >
                     {progress[c] === 'error'

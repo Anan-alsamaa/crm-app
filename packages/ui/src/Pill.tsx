@@ -24,21 +24,24 @@ export interface PillProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 const tones: Record<Tone, string> = {
-  neutral: 'bg-secondary text-foreground',
-  // A small-text pill on `bg-primary-subtle` (oklch ~0.92) with the default
-  // primary (oklch 0.58) only hits 3.96:1 — under WCAG AA. Darken the
-  // foreground for inside-pill contrast without touching the global token.
-  primary: 'bg-primary-subtle text-[oklch(0.42_0.10_196)]',
+  // Neutral/muted fills sit close to the card surface, so a hairline inset
+  // ring gives them an edge on both themes without adding a border color.
+  neutral: 'bg-secondary text-foreground ring-1 ring-inset ring-foreground/[0.06]',
+  // Tint + hue token pairs: the tint tracks the theme, so pills stay dim
+  // chips on dark and soft pastels on light — no hardcoded lightness.
+  primary: 'bg-primary-tint text-primary',
   success: 'bg-success/15 text-success',
+  // Warning is a light token — `text-warning` on a tint fails contrast on the
+  // light theme, so warning pills use the darkened warning-foreground.
   warning: 'bg-warning/20 text-warning-foreground',
   destructive: 'bg-destructive/15 text-destructive',
-  muted: 'bg-muted text-muted-foreground',
-  // Vivid category fills — soft tint + saturated label.
-  pink: 'bg-[oklch(0.93_0.07_0)] text-[oklch(0.50_0.20_0)]',
-  orange: 'bg-[oklch(0.94_0.07_55)] text-[oklch(0.52_0.17_45)]',
-  blue: 'bg-[oklch(0.94_0.05_240)] text-[oklch(0.48_0.18_245)]',
-  purple: 'bg-[oklch(0.94_0.06_300)] text-[oklch(0.48_0.20_295)]',
-  cyan: 'bg-[oklch(0.94_0.05_200)] text-[oklch(0.46_0.13_205)]',
+  muted: 'bg-muted text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]',
+  // Vivid category fills — token tint + saturated hue label per tone.
+  pink: 'bg-magenta/15 text-magenta',
+  orange: 'bg-warning/20 text-warning-foreground',
+  blue: 'bg-sky-tint text-sky',
+  purple: 'bg-violet-tint text-violet',
+  cyan: 'bg-primary-tint text-primary',
 };
 
 const dotColors: Record<Tone, string> = {
@@ -48,11 +51,11 @@ const dotColors: Record<Tone, string> = {
   warning: 'bg-warning',
   destructive: 'bg-destructive',
   muted: 'bg-muted-foreground',
-  pink: 'bg-[oklch(0.65_0.22_0)]',
-  orange: 'bg-[oklch(0.65_0.18_50)]',
-  blue: 'bg-[oklch(0.58_0.20_245)]',
-  purple: 'bg-[oklch(0.58_0.22_295)]',
-  cyan: 'bg-[oklch(0.58_0.15_205)]',
+  pink: 'bg-magenta',
+  orange: 'bg-warning',
+  blue: 'bg-sky',
+  purple: 'bg-violet',
+  cyan: 'bg-primary',
 };
 
 const sizes: Record<Size, string> = {

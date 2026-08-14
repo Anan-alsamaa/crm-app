@@ -146,12 +146,12 @@ export function CommandPalette({
     >
       <div
         aria-hidden
-        className="absolute inset-0 bg-black/55 backdrop-blur-md"
+        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
         onClick={onClose}
       />
       <div
         ref={panelRef}
-        className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-popover/95 backdrop-blur-md text-popover-foreground shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in origin-top"
+        className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-popover/95 backdrop-blur-md text-popover-foreground shadow-xl shadow-black/30 ring-1 ring-border animate-scale-in origin-top"
       >
         {/* Search input */}
         <div className="flex items-center gap-3 px-5">
@@ -176,7 +176,7 @@ export function CommandPalette({
             placeholder={placeholder}
             className="h-12 flex-1 border-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0 text-start"
           />
-          <kbd className="hidden shrink-0 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-2xs text-muted-foreground sm:inline">
+          <kbd className="hidden shrink-0 rounded-md bg-secondary ring-1 ring-foreground/[0.06] px-1.5 py-0.5 font-mono text-2xs text-muted-foreground sm:inline">
             Esc
           </kbd>
         </div>
@@ -215,9 +215,9 @@ export function CommandPalette({
                             {it.icon && (
                               <span
                                 className={cn(
-                                  'grid h-7 w-7 shrink-0 place-items-center rounded-md',
+                                  'grid h-7 w-7 shrink-0 place-items-center rounded-lg',
                                   active
-                                    ? 'bg-primary-subtle text-primary'
+                                    ? 'bg-primary-tint text-primary'
                                     : 'bg-secondary/70 text-muted-foreground',
                                 )}
                               >
@@ -233,7 +233,7 @@ export function CommandPalette({
                               )}
                             </span>
                             {it.shortcut && (
-                              <kbd className="hidden shrink-0 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-2xs text-muted-foreground sm:inline">
+                              <kbd className="hidden shrink-0 rounded-md bg-secondary ring-1 ring-foreground/[0.06] px-1.5 py-0.5 font-mono text-2xs text-muted-foreground sm:inline">
                                 {it.shortcut}
                               </kbd>
                             )}
@@ -252,12 +252,18 @@ export function CommandPalette({
         <div className="flex items-center justify-between gap-3 bg-secondary/30 px-5 py-2.5 text-2xs text-muted-foreground">
           <span className="flex items-center gap-3">
             <span className="flex items-center gap-1">
-              <kbd className="rounded border border-border bg-card px-1.5 py-0.5 font-mono">↑</kbd>
-              <kbd className="rounded border border-border bg-card px-1.5 py-0.5 font-mono">↓</kbd>
+              <kbd className="rounded-md bg-secondary ring-1 ring-foreground/[0.06] px-1.5 py-0.5 font-mono">
+                ↑
+              </kbd>
+              <kbd className="rounded-md bg-secondary ring-1 ring-foreground/[0.06] px-1.5 py-0.5 font-mono">
+                ↓
+              </kbd>
               <span>navigate</span>
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="rounded border border-border bg-card px-1.5 py-0.5 font-mono">↵</kbd>
+              <kbd className="rounded-md bg-secondary ring-1 ring-foreground/[0.06] px-1.5 py-0.5 font-mono">
+                ↵
+              </kbd>
               <span>select</span>
             </span>
           </span>

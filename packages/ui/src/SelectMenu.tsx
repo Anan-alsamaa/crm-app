@@ -163,11 +163,12 @@ export function SelectMenu({
           size === 'sm' ? 'h-7 px-2.5' : 'h-8 px-3',
         )
       : cn(
-          'inline-flex items-center justify-between gap-2 rounded-xl border bg-card/60 text-start text-foreground',
-          'transition-[box-shadow,border-color,background-color] duration-fast ease-out',
-          'hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+          // Same inset-well language as Input: `--input` fill + inset hairline.
+          'inline-flex items-center justify-between gap-2 rounded-xl bg-input text-start text-foreground',
+          'ring-1 ring-inset transition-[box-shadow,background-color] duration-fast ease-out',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
           size === 'sm' ? 'h-8 ps-3 pe-2 text-xs' : 'h-10 ps-3.5 pe-2.5 text-sm',
-          invalid ? 'border-destructive' : 'border-border',
+          invalid ? 'ring-destructive/60' : 'ring-foreground/[0.08] hover:ring-foreground/[0.14]',
         );
 
   return (
@@ -235,7 +236,7 @@ export function SelectMenu({
             role="listbox"
             tabIndex={-1}
             className={cn(
-              'fixed z-[60] max-h-72 overflow-auto rounded-xl bg-popover p-1 text-sm shadow-xl shadow-foreground/15 ring-1 ring-foreground/[0.08] animate-scale-in',
+              'fixed z-[60] max-h-72 overflow-auto rounded-xl bg-popover/95 backdrop-blur p-1 text-sm shadow-xl shadow-black/30 ring-1 ring-border animate-scale-in',
               coords.up ? 'origin-bottom' : 'origin-top',
             )}
             style={{

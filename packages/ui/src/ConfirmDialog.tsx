@@ -8,7 +8,7 @@ import { Button } from './Button.js';
  * un-trappable window.confirm(). Used for destructive actions (delete a user,
  * a rule, a field, a report) where we want a clear, reversible-feeling prompt.
  *
- * Mirrors CreateTicketDialog's overlay (bg-black/55 backdrop-blur-md,
+ * Mirrors CreateTicketDialog's overlay (bg-black/55 backdrop-blur-sm,
  * animate-fade-in / animate-scale-in) so it sits naturally alongside the rest
  * of the app's modals. Accessibility:
  *   - role="alertdialog" + aria-modal, labelled by the title (+ described by
@@ -109,7 +109,7 @@ export function ConfirmDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -121,10 +121,13 @@ export function ConfirmDialog({
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
         onKeyDown={onPanelKey}
-        className="w-full max-w-sm rounded-3xl bg-card p-7 shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in"
+        className="w-full max-w-sm rounded-2xl bg-card p-7 shadow-xl shadow-black/30 ring-1 ring-border animate-scale-in"
       >
         <div className="mb-6 space-y-1.5">
-          <h3 id={titleId} className="text-xl font-semibold tracking-[-0.02em] text-foreground">
+          <h3
+            id={titleId}
+            className="font-display text-xl font-bold tracking-tight text-foreground"
+          >
             {title}
           </h3>
           {description && (

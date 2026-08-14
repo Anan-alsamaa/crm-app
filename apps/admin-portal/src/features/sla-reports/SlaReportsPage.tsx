@@ -1,13 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Avatar,
   Button,
   cn,
   EmptyState,
+  type MetricTone,
   Pill,
+  ProgressRing,
   SelectMenu,
   Spinner,
   Table,
+  TableFooterBar,
   TableSurface,
   Td,
   Th,
@@ -25,12 +29,18 @@ const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructi
   high: 'warning',
   urgent: 'destructive',
 };
-const STATUS_TONE: Record<string, 'primary' | 'success' | 'warning' | 'muted' | 'neutral'> = {
+/* Board mapping, same as the export reports: open reads sky, resolved jade,
+ * closed neutral. 'warning' keeps the darkened-treatment pill (warning is a
+ * light token on its own). */
+const STATUS_TONE: Record<
+  string,
+  'primary' | 'success' | 'warning' | 'muted' | 'neutral' | 'blue'
+> = {
   new: 'primary',
-  open: 'success',
+  open: 'blue',
   pending: 'warning',
-  resolved: 'primary',
-  closed: 'muted',
+  resolved: 'success',
+  closed: 'neutral',
 };
 
 const fmtPct = (n: number | null) => (n == null ? '—' : `${Math.round(n)}%`);
@@ -84,21 +94,43 @@ const KPI_DOT: Record<KpiTone, string> = {
 /** Green ≥90, amber ≥75, red below (no data → blue). */
 const pctKpiTone = (n: number | null): KpiTone =>
   n == null ? 'blue' : n >= 90 ? 'green' : n >= 75 ? 'amber' : 'crimson';
+/* Ring accents for the % tiles. MetricTone deliberately has no warning/amber
+ * (a light token), so the amber band falls back to jade. */
+const RING_TONE: Record<KpiTone, MetricTone> = {
+  blue: 'sky',
+  green: 'success',
+  amber: 'primary',
+  crimson: 'destructive',
+};
 
-function Kpi({ label, value, tone = 'blue' }: { label: string; value: string; tone?: KpiTone }) {
+function Kpi({
+  label,
+  value,
+  tone = 'blue',
+  visual,
+}: {
+  label: string;
+  value: string;
+  tone?: KpiTone;
+  /** End-aligned data accent — a `<ProgressRing>` for the % tiles. */
+  visual?: ReactNode;
+}) {
   return (
     <div
       className={cn(
-        'rounded-2xl bg-card px-4 py-4 shadow-soft ring-1 ring-border transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
+        'flex items-center gap-3 rounded-2xl bg-card px-4 py-4 shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
       )}
     >
-      <div className="text-4xl font-bold tracking-[-0.03em] tabular-nums leading-none text-foreground">
-        {value}
+      <div className="min-w-0 flex-1">
+        <div className="text-4xl font-extrabold tracking-[-0.03em] tabular-nums leading-none text-foreground">
+          {value}
+        </div>
+        <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', KPI_DOT[tone])} />
+          {label}
+        </div>
       </div>
-      <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', KPI_DOT[tone])} />
-        {label}
-      </div>
+      {visual && <div className="shrink-0">{visual}</div>}
     </div>
   );
 }
@@ -219,7 +251,21 @@ export function SlaReportsPage() {
           />
         ) : (
           <div className="mx-auto max-w-5xl space-y-5">
-            {/* KPI strip */}
+            {/* Clean editorial header — same anatomy as the export reports. */}
+            <div className="border-b border-foreground/10 pb-5">
+              <h2 className="text-3xl font-bold tracking-tight text-foreground">
+                {t('slaReports.title', { defaultValue: 'SLA reports' })}
+              </h2>
+              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                {t('slaReports.subtitle', {
+                  defaultValue: 'Which TICKETS met the deadline they were promised',
+                })}
+              </p>
+            </div>
+
+            {/* KPI strip — the % tiles carry a progress ring, boards-style: the
+                numeral stays the reading, the arc makes the shortfall visible
+                at a glance. */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Kpi
                 label={t('slaReports.kpiTickets', { defaultValue: 'Tickets' })}
@@ -230,11 +276,24 @@ export function SlaReportsPage() {
                 label={t('slaReports.kpiFirstResponse', { defaultValue: 'First-response SLA' })}
                 value={fmtPct(totals?.frPct ?? null)}
                 tone={pctKpiTone(totals?.frPct ?? null)}
+                visual={
+                  totals?.frPct != null ? (
+                    <ProgressRing value={totals.frPct} tone={RING_TONE[pctKpiTone(totals.frPct)]} />
+                  ) : undefined
+                }
               />
               <Kpi
                 label={t('slaReports.kpiResolution', { defaultValue: 'Resolution SLA' })}
                 value={fmtPct(totals?.resPct ?? null)}
                 tone={pctKpiTone(totals?.resPct ?? null)}
+                visual={
+                  totals?.resPct != null ? (
+                    <ProgressRing
+                      value={totals.resPct}
+                      tone={RING_TONE[pctKpiTone(totals.resPct)]}
+                    />
+                  ) : undefined
+                }
               />
               <Kpi
                 label={t('slaReports.kpiBreaches', { defaultValue: 'Breaches' })}
@@ -331,7 +390,16 @@ function TicketTable({
                     {t(`status.${tk.status}`, { ns: 'common', defaultValue: tk.status })}
                   </Pill>
                 </Td>
-                {!agentFilter && <Td className="text-muted-foreground">{tk.agentName}</Td>}
+                {!agentFilter && (
+                  <Td className="text-muted-foreground">
+                    {/* Avatar chip, boards-style — same anatomy as the export
+                        reports' contact cells. */}
+                    <span className="flex items-center gap-2">
+                      <Avatar size="xs" name={tk.agentName} />
+                      <span className="min-w-0 truncate">{tk.agentName}</span>
+                    </span>
+                  </Td>
+                )}
                 <Td>
                   <SlaPill cell={tk.firstResponse} />
                 </Td>
@@ -345,6 +413,17 @@ function TicketTable({
             ))}
           </tbody>
         </Table>
+        {/* Footer aggregate band — the count reads as part of the table it
+            describes, boards-style. Reuses the KPI tile's label so the band
+            adds no new strings. */}
+        <TableFooterBar>
+          <span className="flex items-baseline gap-1.5">
+            <span className="font-semibold tabular-nums text-foreground">{tickets.length}</span>
+            <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
+              {t('slaReports.kpiTickets', { defaultValue: 'Tickets' })}
+            </span>
+          </span>
+        </TableFooterBar>
       </TableSurface>
     </div>
   );

@@ -26,9 +26,9 @@ export function Card({
   return (
     <div
       className={cn(
-        'rounded-2xl bg-card text-card-foreground ring-1 ring-foreground/[0.05] shadow-soft',
+        'rounded-2xl bg-card text-card-foreground ring-1 ring-foreground/[0.06] shadow-soft',
         interactive &&
-          'transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
+          'transition-[box-shadow,transform] duration-base ease-out hover:shadow-float hover:ring-foreground/[0.1] motion-safe:hover:-translate-y-0.5',
         paddings[padding],
         className,
       )}
@@ -52,9 +52,9 @@ export function CardHeader({
 }
 
 export function CardTitle({ children }: { children: ReactNode }): JSX.Element {
-  return <h3 className="text-md font-semibold text-foreground">{children}</h3>;
+  return <h3 className="text-sm font-semibold tracking-tight text-foreground">{children}</h3>;
 }
 
 export function CardSubtitle({ children }: { children: ReactNode }): JSX.Element {
-  return <p className="mt-1 text-sm text-muted-foreground">{children}</p>;
+  return <p className="mt-1 text-2xs text-muted-foreground">{children}</p>;
 }

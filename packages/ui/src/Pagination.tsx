@@ -31,8 +31,9 @@ function windowed(page: number, count: number): (number | 'gap')[] {
   return out;
 }
 
+// Ghost chevron buttons — no ring, just a quiet hover fill.
 const edgeBtn =
-  'inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-40';
+  'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-40';
 
 export function Pagination({
   page,
@@ -68,9 +69,9 @@ export function Pagination({
               onClick={() => onPage(it)}
               aria-current={it === page ? 'page' : undefined}
               className={cn(
-                'grid h-8 min-w-[2rem] place-items-center rounded-lg px-2 text-xs font-semibold tabular-nums transition-colors duration-fast ease-out',
+                'grid h-8 min-w-[2rem] place-items-center rounded-full px-2 text-xs font-semibold tabular-nums transition-colors duration-fast ease-out',
                 it === page
-                  ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
+                  ? 'bg-primary/15 text-primary ring-1 ring-inset ring-primary/25'
                   : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
               )}
             >

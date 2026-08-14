@@ -4,8 +4,12 @@ import { createItem, deleteItem, readItems, updateItem } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
+  ChevronDownIcon,
+  CloseIcon,
+  IconButton,
   Input,
   Pill,
+  SectionCard,
   SelectMenu,
   Skeleton,
   Toolbar,
@@ -168,29 +172,37 @@ export function OptionListsPage() {
 
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <div className="mx-auto max-w-3xl space-y-4">
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {t('lists.help', {
+          {/* The board card header carries the list's name and the one rule an
+              operator must know before touching it. */}
+          <SectionCard
+            title={LIST_LABELS[listKey]}
+            hint={t('lists.help', {
               defaultValue:
                 'These values feed the complaint form live — no deploy needed. Retire a value to stop offering it; tickets that already carry it keep displaying it. The exact spellings are what reports group by, so a corrected spelling is a new value, not an edit.',
             })}
-          </p>
-
-          <div className="flex gap-2 rounded-2xl bg-card p-3 shadow-soft ring-1 ring-foreground/[0.06]">
-            <Input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') submit();
-              }}
-              placeholder={t('lists.addPlaceholder', {
-                defaultValue: 'New value for this list…',
-              })}
-              aria-label={t('lists.addLabel', { defaultValue: 'New value' })}
-            />
-            <Button onClick={submit} disabled={!draft.trim() || add.isPending}>
-              {t('lists.add', { defaultValue: 'Add' })}
-            </Button>
-          </div>
+            aside={
+              <span className="font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
+                {current.length}
+              </span>
+            }
+          >
+            <div className="flex gap-2">
+              <Input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') submit();
+                }}
+                placeholder={t('lists.addPlaceholder', {
+                  defaultValue: 'New value for this list…',
+                })}
+                aria-label={t('lists.addLabel', { defaultValue: 'New value' })}
+              />
+              <Button onClick={submit} disabled={!draft.trim() || add.isPending}>
+                {t('lists.add', { defaultValue: 'Add' })}
+              </Button>
+            </div>
+          </SectionCard>
 
           {rows.isLoading ? (
             <div className="space-y-2">
@@ -208,10 +220,11 @@ export function OptionListsPage() {
                     !row.active && 'opacity-60',
                   )}
                 >
-                  <span className="w-6 shrink-0 text-end text-2xs tabular-nums text-muted-foreground/70">
+                  {/* Numbered chip — the row's rank in the dropdown, as a tile. */}
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-secondary text-2xs font-semibold tabular-nums text-muted-foreground">
                     {i + 1}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                     {row.value}
                   </span>
                   {!row.active && (
@@ -219,30 +232,30 @@ export function OptionListsPage() {
                       {t('lists.retired', { defaultValue: 'Retired' })}
                     </Pill>
                   )}
-                  <button
-                    type="button"
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
                     disabled={i === 0}
                     onClick={() => move(row, -1)}
                     aria-label={t('lists.moveUp', {
                       value: row.value,
                       defaultValue: 'Move {{value}} up',
                     })}
-                    className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors duration-fast hover:bg-secondary hover:text-foreground disabled:opacity-30"
                   >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
+                    <ChevronDownIcon size={14} className="rotate-180" />
+                  </IconButton>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
                     disabled={i === current.length - 1}
                     onClick={() => move(row, 1)}
                     aria-label={t('lists.moveDown', {
                       value: row.value,
                       defaultValue: 'Move {{value}} down',
                     })}
-                    className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors duration-fast hover:bg-secondary hover:text-foreground disabled:opacity-30"
                   >
-                    ↓
-                  </button>
+                    <ChevronDownIcon size={14} />
+                  </IconButton>
                   <Button
                     size="sm"
                     variant="ghost"
@@ -272,9 +285,9 @@ export function OptionListsPage() {
                       value: row.value,
                       defaultValue: 'Delete {{value}}',
                     })}
-                    className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive"
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
                   >
-                    ✕
+                    <CloseIcon size={14} />
                   </button>
                 </li>
               ))}

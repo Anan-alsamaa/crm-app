@@ -140,9 +140,11 @@ export function ChangeHistory({ ticketId }: { ticketId: string }) {
     );
 
   return (
+    // Timeline cards in the board idiom: a jade start-hairline carries the
+    // thread, the actor leads in bold, and the old→new diff stays intact.
     <ol className="space-y-3">
       {entries.map((e) => (
-        <li key={e.id} className="rounded-xl bg-secondary/40 p-3">
+        <li key={e.id} className="rounded-xl border-s-2 border-primary/40 bg-secondary/40 p-3">
           <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 text-2xs text-muted-foreground">
             <span className="font-semibold text-foreground">
               {e.userId
@@ -162,8 +164,12 @@ export function ChangeHistory({ ticketId }: { ticketId: string }) {
           {e.action === 'update' && (
             <ul className="space-y-1">
               {e.changes.map((c) => (
-                <li key={c.field} className="grid grid-cols-[auto_1fr] gap-x-2 text-xs">
-                  <span className="font-medium capitalize text-foreground">
+                <li
+                  key={c.field}
+                  className="grid grid-cols-[auto_1fr] items-baseline gap-x-2 text-xs"
+                >
+                  {/* Micro-label, same as the board tables' column heads. */}
+                  <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     {fieldLabel(c.field)}
                   </span>
                   <span className="min-w-0 break-words text-muted-foreground">

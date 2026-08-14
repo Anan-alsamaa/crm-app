@@ -9,7 +9,9 @@ import {
   cn,
   formatRelative,
   Input,
+  MeterBar,
   Pill,
+  SectionCard,
   SelectMenu,
   Skeleton,
   Spinner,
@@ -85,12 +87,12 @@ const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 type TicketFilter = 'all' | TicketStatus | 'overdue';
 const FILTERS: TicketFilter[] = ['all', 'new', 'open', 'pending', 'resolved', 'overdue'];
 
-/** Ticket status -> dot colour. Ticket status still has its own five. */
+/** Ticket status -> dot colour. Same hue ladder as the detail's status pill. */
 const STATUS_DOT: Record<string, string> = {
-  new: 'bg-primary',
-  open: 'bg-success',
+  new: 'bg-sky',
+  open: 'bg-primary',
   pending: 'bg-warning',
-  resolved: 'bg-primary',
+  resolved: 'bg-success',
   closed: 'bg-muted-foreground/40',
 };
 
@@ -227,7 +229,7 @@ export function TicketsPage() {
         {(isDesktop || selected === null) && (
           <aside
             className={cn(
-              'flex shrink-0 flex-col overflow-hidden rounded-2xl bg-card shadow-soft',
+              'flex shrink-0 flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft',
               isDesktop ? 'w-[360px]' : 'w-full',
             )}
           >
@@ -299,12 +301,15 @@ export function TicketsPage() {
                 </p>
               )}
             </div>
-            <div className="flex-1 overflow-auto pt-2">
+            <div className="flex-1 overflow-auto">
               {complaints.isLoading ? (
-                <ul className="space-y-1 px-2">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <li key={i} className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5">
-                      <Skeleton className="h-7 w-7 rounded-full" />
+                <ul>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <li
+                      key={i}
+                      className="flex h-14 w-full items-center gap-3 border-b border-border/60 px-3.5"
+                    >
+                      <Skeleton className="h-9 w-9 rounded-full" />
                       <div className="flex-1 space-y-2">
                         <Skeleton className="h-3 w-3/4" />
                         <Skeleton className="h-2.5 w-1/2" />
@@ -313,19 +318,24 @@ export function TicketsPage() {
                   ))}
                 </ul>
               ) : filtered.length > 0 ? (
-                <ul className="space-y-2 px-3 py-2">
+                <ul>
                   {filtered.map((r) => {
                     const active = selected === r.id;
                     const overdue = isOverdue(r);
                     return (
-                      <li key={r.id}>
+                      <li key={r.id} className="border-b border-border/60 last:border-b-0">
+                        {/* Board row: h-14, hairline separators, and the active
+                            row carries a jade start-accent instead of a filled
+                            rounded chip. */}
                         <button
                           type="button"
                           onClick={() => setSelected(r.id)}
                           className={cn(
-                            'group flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-start',
+                            'group flex h-14 w-full items-center gap-3 border-s-2 px-3.5 text-start',
                             'transition-colors duration-fast ease-out',
-                            active ? 'bg-primary-subtle/70' : 'hover:bg-secondary/60',
+                            active
+                              ? 'border-primary bg-primary/10'
+                              : 'border-transparent hover:bg-secondary/60',
                           )}
                         >
                           <span className="relative shrink-0">
@@ -337,7 +347,7 @@ export function TicketsPage() {
                                 defaultValue: r.complaintStatus,
                               })}
                               className={cn(
-                                'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-background',
+                                'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-card',
                                 STATUS_DOT[r.complaintStatus] ?? 'bg-muted-foreground/40',
                               )}
                             />
@@ -352,7 +362,7 @@ export function TicketsPage() {
                               </span>
                             </div>
                             <div className="mt-0.5 flex items-center gap-2">
-                              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                              <span className="min-w-0 flex-1 truncate text-2xs text-muted-foreground">
                                 {/* The ops team scan by category the way they
                                     scan their own sheet, so the complaint type
                                     leads when there is one. */}
@@ -368,20 +378,23 @@ export function TicketsPage() {
                                     ns: 'common',
                                     defaultValue: r.complaintStatus,
                                   })}
+                                {/* Which branch this is against. It is the
+                                    column the ops team reconcile on, and the
+                                    denser row must not lose it. "Not mapped"
+                                    is shown as itself so a gap stays visible. */}
+                                {r.restaurantName && (
+                                  <span className="text-muted-foreground/80">
+                                    <span aria-hidden> · </span>
+                                    {r.restaurantName}
+                                    {r.city ? ` · ${r.city}` : ''}
+                                  </span>
+                                )}
                               </span>
                               {overdue && (
                                 <Pill tone="destructive" size="sm">
                                   {t('tickets.overdue', { defaultValue: 'Overdue' })}
                                 </Pill>
                               )}
-                            </div>
-                            {/* Which branch this is against. It is the column
-                                the ops team reconcile on, and losing the table
-                                must not lose it. "Not mapped" is shown as
-                                itself so a gap stays visible. */}
-                            <div className="mt-0.5 truncate text-2xs text-muted-foreground">
-                              {r.restaurantName}
-                              {r.city ? ` · ${r.city}` : ''}
                             </div>
                           </div>
                         </button>
@@ -407,7 +420,7 @@ export function TicketsPage() {
         )}
 
         {(isDesktop || selected !== null) && (
-          <section className="min-w-0 flex-1 overflow-auto rounded-2xl bg-card shadow-soft">
+          <section className="min-w-0 flex-1 overflow-auto rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             {selected ? (
               <TicketDetail
                 ticketId={selected}
@@ -715,22 +728,25 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         toast.error(t('conversation.attachFailed', { defaultValue: 'Could not attach the file.' })),
       );
 
+  // Color only — SlaCard owns the weight. warning-foreground, not warning:
+  // the warning hue is a light token and unreadable as text on light.
   const dueClass = (iso: string | null) => {
     if (!iso) return 'text-muted-foreground';
     const ms = new Date(iso).getTime() - Date.now();
-    if (ms < 0) return 'text-destructive font-medium';
-    if (ms < 30 * 60_000) return 'text-warning font-medium';
+    if (ms < 0) return 'text-destructive';
+    if (ms < 30 * 60_000) return 'text-warning-foreground';
     return 'text-foreground';
   };
 
-  const statusTone: Record<TicketStatus, 'success' | 'warning' | 'muted' | 'primary' | 'neutral'> =
-    {
-      new: 'primary',
-      open: 'success',
-      pending: 'warning',
-      resolved: 'primary',
-      closed: 'muted',
-    };
+  // Board pill hues: arrivals sky, live work jade, waiting warning-treated,
+  // finished success, closed neutral — one ladder shared with the list dots.
+  const statusTone: Record<TicketStatus, 'blue' | 'primary' | 'warning' | 'success' | 'neutral'> = {
+    new: 'blue',
+    open: 'primary',
+    pending: 'warning',
+    resolved: 'success',
+    closed: 'neutral',
+  };
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6 sm:p-8">
@@ -765,7 +781,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 {t(`status.${tk.status}`, { ns: 'common' })}
               </Pill>
               {tk.priority !== 'medium' && tk.priority !== 'low' && (
-                <Pill tone={tk.priority === 'urgent' ? 'pink' : 'orange'}>
+                <Pill tone={tk.priority === 'urgent' ? 'destructive' : 'orange'}>
                   {t(`priority.${tk.priority}`, { ns: 'common' })}
                 </Pill>
               )}
@@ -773,51 +789,57 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
             <h2 className="text-2xl font-bold text-display tracking-[-0.02em] text-balance">
               {tk.subject}
             </h2>
-            <div className="text-xs text-muted-foreground">
-              {tk.contact?.name ??
-                tk.contact?.phone ??
-                tk.contact?.email ??
-                t('inbox.unknownContact')}
+            {/* Meta row in the board idiom: micro-labelled groups rather than a
+                run-on sentence, with the two actions kept at the end. */}
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+              <div className="min-w-0">
+                <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {t('tickets.metaCustomer', { defaultValue: 'Customer' })}
+                </div>
+                <div className="mt-0.5 truncate text-xs font-medium text-foreground">
+                  {tk.contact?.name ??
+                    tk.contact?.phone ??
+                    tk.contact?.email ??
+                    t('inbox.unknownContact')}
+                </div>
+              </div>
               {tk.date_created && (
-                <>
-                  {' '}
-                  ·{' '}
-                  <span className="tabular-nums">
-                    opened {new Date(tk.date_created).toLocaleDateString()}
-                  </span>
-                </>
+                <div>
+                  <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {t('tickets.metaOpened', { defaultValue: 'Opened' })}
+                  </div>
+                  <div className="mt-0.5 text-xs font-semibold tabular-nums text-foreground">
+                    {new Date(tk.date_created).toLocaleDateString()}
+                  </div>
+                </div>
               )}
               {isAdmin && (
-                <>
-                  {' · '}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      exportTicketWorkbook(
-                        tk,
-                        (() => {
-                          const a = agents.data?.find((x) => x.id === tk.assigned_agent);
-                          return a?.first_name ?? a?.email ?? '';
-                        })(),
-                        {},
-                      )
-                    }
-                    className="font-medium text-primary transition-colors duration-fast ease-out hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded"
-                  >
-                    {t('tickets.exportTicket', { defaultValue: 'Export to Excel' })}
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={() =>
+                    exportTicketWorkbook(
+                      tk,
+                      (() => {
+                        const a = agents.data?.find((x) => x.id === tk.assigned_agent);
+                        return a?.first_name ?? a?.email ?? '';
+                      })(),
+                      {},
+                    )
+                  }
+                  className="pb-px text-xs font-medium text-primary transition-colors duration-fast ease-out hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded"
+                >
+                  {t('tickets.exportTicket', { defaultValue: 'Export to Excel' })}
+                </button>
               )}
               {tk.conversation && (
                 <>
-                  {' · '}
                   {/* Only offered when the chat is actually this agent's to
                       open. A ticket and its conversation are scoped separately,
                       so a handover can leave the ticket owner without access —
                       and a link that lands on an empty inbox reads as a broken
                       app rather than as a permission boundary. */}
                   {chatVisible.data === false ? (
-                    <span className="text-muted-foreground">
+                    <span className="pb-px text-xs text-muted-foreground">
                       {t('tickets.conversationNotVisible', {
                         defaultValue: 'chat assigned to another agent',
                       })}
@@ -826,7 +848,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                     <button
                       type="button"
                       onClick={() => navigate(`/?conv=${tk.conversation}`)}
-                      className="font-medium text-primary transition-colors duration-fast ease-out hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded"
+                      className="pb-px text-xs font-medium text-primary transition-colors duration-fast ease-out hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded"
                     >
                       {t('tickets.viewConversation', { defaultValue: 'View conversation →' })}
                     </button>
@@ -879,14 +901,14 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* Rail — properties, SLA, attachments. */}
         <aside className="space-y-5 lg:order-2">
-          {/* Properties — stacked selects + the mark-responded CTA. */}
-          <section className="space-y-3 rounded-2xl bg-card p-4 shadow-soft">
-            <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {t('tickets.properties', { defaultValue: 'Properties' })}
-            </h3>
+          {/* Properties — stacked selects + the mark-responded CTA, on the
+              shared SectionCard surface. */}
+          <SectionCard title={t('tickets.properties', { defaultValue: 'Properties' })}>
             <div className="space-y-2.5">
               <label className="block space-y-1">
-                <span className="text-2xs text-muted-foreground">{t('conversation.status')}</span>
+                <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {t('conversation.status')}
+                </span>
                 <SelectMenu
                   size="sm"
                   fullWidth
@@ -913,7 +935,9 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 </p>
               </label>
               <label className="block space-y-1">
-                <span className="text-2xs text-muted-foreground">{t('conversation.priority')}</span>
+                <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {t('conversation.priority')}
+                </span>
                 <SelectMenu
                   size="sm"
                   fullWidth
@@ -927,7 +951,9 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-2xs text-muted-foreground">{t('conversation.agent')}</span>
+                <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {t('conversation.agent')}
+                </span>
                 <SelectMenu
                   size="sm"
                   fullWidth
@@ -944,7 +970,9 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-2xs text-muted-foreground">{t('conversation.team')}</span>
+                <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {t('conversation.team')}
+                </span>
                 <SelectMenu
                   size="sm"
                   fullWidth
@@ -959,7 +987,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
               </label>
             </div>
             {tk.status !== 'resolved' && tk.status !== 'closed' ? (
-              <div className="space-y-1.5 rounded-xl bg-secondary/40 p-3">
+              <div className="mt-3 space-y-1.5 rounded-xl bg-secondary/40 p-3">
                 <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   {t('tickets.solve', { defaultValue: 'Resolution' })}
                 </span>
@@ -992,7 +1020,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 <WhatsAppReply ticket={tk} />
               </div>
             ) : (
-              <div className="flex items-center gap-1.5 text-2xs font-medium text-success">
+              <div className="mt-3 flex items-center gap-1.5 text-2xs font-medium text-success">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
                 {t('tickets.solvedAt', {
                   defaultValue: 'Solved · {{when}}',
@@ -1000,7 +1028,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 })}
               </div>
             )}
-          </section>
+          </SectionCard>
 
           {/* Timings — how long the ticket took, and who touched it last.
               First response is deliberately NOT here: on a ticket it is a
@@ -1016,6 +1044,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 label={t('tickets.resolutionDue')}
                 iso={tk.resolution_due_at}
                 metAt={tk.resolved_at ?? null}
+                created={tk.date_created}
                 dueClass={dueClass}
                 metLabel={t('tickets.resolvedAtLabel', { defaultValue: 'Resolved' })}
               />
@@ -1421,12 +1450,10 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
   };
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('complaint.section', { defaultValue: 'Complaint details' })}
-        </h3>
-        {!editing && (
+    <SectionCard
+      title={t('complaint.section', { defaultValue: 'Complaint details' })}
+      aside={
+        !editing && (
           <button
             type="button"
             onClick={() => {
@@ -1440,11 +1467,11 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
               ? t('actions.edit', { ns: 'common', defaultValue: 'Edit' })
               : t('complaint.add', { defaultValue: 'Add complaint details' })}
           </button>
-        )}
-      </div>
-
+        )
+      }
+    >
       {editing ? (
-        <div className="space-y-4 rounded-2xl bg-card p-4 shadow-soft">
+        <div className="space-y-4">
           <StorePicker value={storeId} onChange={setStoreId} />
           <ComplaintClassification
             values={draft}
@@ -1499,14 +1526,21 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           })}
         </p>
       ) : (
-        <>
-          <dl className="grid gap-x-6 gap-y-2 rounded-2xl bg-card p-4 shadow-soft sm:grid-cols-2">
+        <div className="space-y-3">
+          {/* Board-table rows: micro-label heads, hairline separators, values
+              end-aligned with tabular numerals for the coupon columns. */}
+          <dl className="grid gap-x-8 sm:grid-cols-2">
             {rows.map(([label, value]) => (
-              <div key={label} className="flex items-baseline justify-between gap-3">
-                <dt className="shrink-0 text-2xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+              <div
+                key={label}
+                className="flex items-baseline justify-between gap-3 border-b border-border/50 py-2"
+              >
+                <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   {label}
                 </dt>
-                <dd className="min-w-0 text-end text-xs text-foreground">{optionLabel(value)}</dd>
+                <dd className="min-w-0 text-end text-xs font-medium tabular-nums text-foreground">
+                  {optionLabel(value)}
+                </dd>
               </div>
             ))}
           </dl>
@@ -1518,9 +1552,9 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
               {stored.response_desc}
             </p>
           )}
-        </>
+        </div>
       )}
-    </section>
+    </SectionCard>
   );
 }
 
@@ -1547,11 +1581,11 @@ function ResolutionTimeCard({
       : null;
   const text = secs !== null && secs >= 0 ? formatDuration(secs) : null;
   return (
-    <div className="rounded-2xl bg-card p-4 shadow-soft">
+    <div className="rounded-2xl bg-card p-4 ring-1 ring-foreground/[0.06] shadow-soft">
       <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {t('tickets.resolutionTime', { defaultValue: 'Time to resolve' })}
       </div>
-      <div className="mt-1.5 text-base font-semibold tabular-nums text-foreground">
+      <div className="mt-1.5 text-lg font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
         {text ?? <span className="text-muted-foreground/60">—</span>}
       </div>
       {!text && (
@@ -1587,7 +1621,7 @@ function LastTouchedCard({
   const name =
     [by?.first_name, by?.last_name].filter(Boolean).join(' ').trim() || by?.email || null;
   return (
-    <div className="rounded-2xl bg-card p-4 shadow-soft">
+    <div className="rounded-2xl bg-card p-4 ring-1 ring-foreground/[0.06] shadow-soft">
       <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {t('tickets.lastUpdated', { defaultValue: 'Last updated' })}
       </div>
@@ -1611,23 +1645,44 @@ function SlaCard({
   label,
   iso,
   metAt,
+  created,
   dueClass,
   metLabel,
 }: {
   label: string;
   iso: string | null;
   metAt: string | null;
+  /** When the clock started — lets the meter say how much promise is spent. */
+  created: string | null;
   dueClass: (iso: string | null) => string;
   metLabel?: string;
 }) {
+  // How much of the window is gone, 0–100 — the board's meter idiom instead of
+  // a second sentence about the clock. Met freezes the fill where the work
+  // stopped (green); overdue pins it full (red); a ticket with no due date or
+  // no start renders no meter rather than a bar measuring nothing.
+  const start = created ? new Date(created).getTime() : NaN;
+  const due = iso ? new Date(iso).getTime() : NaN;
+  const at = metAt ? new Date(metAt).getTime() : Date.now();
+  const spent =
+    Number.isFinite(start) && Number.isFinite(due) && due > start
+      ? Math.min(100, Math.max(0, ((at - start) / (due - start)) * 100))
+      : null;
+  const meterTone = metAt ? 'success' : at >= due ? 'destructive' : 'primary';
   return (
-    <div className="rounded-2xl bg-card p-4 shadow-soft">
+    <div className="rounded-2xl bg-card p-4 ring-1 ring-foreground/[0.06] shadow-soft">
       <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </div>
-      <div className={cn('mt-1.5 text-base font-semibold tabular-nums', dueClass(iso))}>
+      <div
+        className={cn(
+          'mt-1.5 text-base font-extrabold tabular-nums tracking-[-0.03em]',
+          dueClass(iso),
+        )}
+      >
         {iso ? new Date(iso).toLocaleString() : '—'}
       </div>
+      {spent !== null && <MeterBar value={spent} tone={meterTone} className="mt-2.5" />}
       {metAt && (
         <div className="mt-2 inline-flex items-center gap-1.5 text-2xs font-medium text-success">
           <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />

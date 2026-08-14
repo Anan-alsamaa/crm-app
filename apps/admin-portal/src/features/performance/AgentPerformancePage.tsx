@@ -2,7 +2,17 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { readItems, readUsers } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
-import { HBarChart, Input, SelectMenu, Skeleton, TrendChart, cn, type ChartSeries } from '@yiji/ui';
+import {
+  HBarChart,
+  Input,
+  ProgressRing,
+  SectionCard,
+  SelectMenu,
+  Skeleton,
+  TrendChart,
+  cn,
+  type ChartSeries,
+} from '@yiji/ui';
 import { normaliseConversationStatus } from '@yiji/shared-types';
 import {
   agentPerformance,
@@ -308,7 +318,7 @@ export function AgentPerformancePage() {
             <Skeleton className="h-56 w-full rounded-2xl" />
           </div>
         ) : chats.length === 0 ? (
-          <p className="rounded-2xl bg-card p-10 text-center text-sm text-muted-foreground shadow-soft">
+          <p className="rounded-2xl bg-card p-10 text-center text-sm text-muted-foreground shadow-soft ring-1 ring-foreground/[0.06]">
             {t('performance.empty', { defaultValue: 'No chats match these filters.' })}
           </p>
         ) : (
@@ -330,6 +340,16 @@ export function AgentPerformancePage() {
                 label={t('performance.metPct', { defaultValue: 'Answered in time' })}
                 value={summary.metPct == null ? '—' : `${summary.metPct}%`}
                 tone={summary.metPct == null ? 'plain' : summary.metPct >= 80 ? 'good' : 'bad'}
+                visual={
+                  summary.metPct == null ? undefined : (
+                    // The board's ring accent — the same figure drawn as an arc.
+                    <ProgressRing
+                      value={summary.metPct}
+                      size={36}
+                      tone={summary.metPct >= 80 ? 'success' : 'destructive'}
+                    />
+                  )
+                }
               />
               <Tile
                 label={t('performance.avgFirst', { defaultValue: 'First response' })}
@@ -425,7 +445,7 @@ export function AgentPerformancePage() {
               reviews the team, it does not work the queue. */}
             <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
               <header className="border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">
                   {t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
                 </h2>
               </header>
@@ -435,7 +455,7 @@ export function AgentPerformancePage() {
                   aria-label={t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
                 >
                   <thead>
-                    <tr className="border-b border-border text-2xs uppercase tracking-wide text-muted-foreground">
+                    <tr className="border-b border-border text-2xs uppercase tracking-[0.08em] text-muted-foreground">
                       <th className="px-4 py-2.5 text-start font-semibold">
                         {t('performance.agent', { defaultValue: 'Agent' })}
                       </th>
@@ -529,47 +549,63 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** One headline number. */
+/** One headline number — board anatomy: hue numeral, dot + micro-label, optional data accent. */
 function Tile({
   label,
   value,
   hint,
   tone = 'plain',
+  visual,
 }: {
   label: string;
   value: string;
   hint?: string;
   tone?: 'plain' | 'good' | 'bad';
+  visual?: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl bg-card px-4 py-3.5 shadow-soft ring-1 ring-foreground/[0.06]">
-      <div
-        className={cn(
-          'text-2xl font-bold leading-none tracking-[-0.02em] tabular-nums',
-          tone === 'bad'
-            ? 'text-destructive'
-            : tone === 'good'
-              ? 'text-success'
-              : 'text-foreground',
-        )}
-      >
-        {value}
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-card px-4 py-3.5 shadow-soft ring-1 ring-foreground/[0.06]">
+      <div className="min-w-0">
+        <div
+          className={cn(
+            'text-2xl font-extrabold leading-none tracking-[-0.03em] tabular-nums',
+            tone === 'bad'
+              ? 'text-destructive'
+              : tone === 'good'
+                ? 'text-success'
+                : 'text-foreground',
+          )}
+        >
+          {value}
+        </div>
+        <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          {tone !== 'plain' && (
+            <span
+              aria-hidden
+              className={cn(
+                'h-1.5 w-1.5 shrink-0 rounded-full',
+                tone === 'bad' ? 'bg-destructive' : 'bg-success',
+              )}
+            />
+          )}
+          <span className="truncate">
+            {label}
+            {hint && <span className="ms-1 font-normal normal-case tracking-normal">({hint})</span>}
+          </span>
+        </div>
       </div>
-      <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-        {label}
-        {hint && <span className="ms-1 font-normal normal-case tracking-normal">({hint})</span>}
-      </div>
+      {visual && <div className="shrink-0">{visual}</div>}
     </div>
   );
 }
 
 /** A chart in a card, with the question it answers written above it. */
 function Card({ title, help, children }: { title: string; help: string; children: ReactNode }) {
+  // Delegates to the shared board surface so every section carries the same
+  // header anatomy as the rest of the console.
   return (
-    <section className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
-      <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">{title}</h2>
-      <p className="mb-3 text-2xs text-muted-foreground">{help}</p>
+    <SectionCard title={title} hint={help}>
       {children}
-    </section>
+    </SectionCard>
   );
 }

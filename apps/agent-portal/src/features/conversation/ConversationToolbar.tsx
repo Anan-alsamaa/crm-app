@@ -201,8 +201,9 @@ export function ConversationToolbar({
 
   return (
     <>
-      {/* Line-free floating header: white strip elevated off the canvas. */}
-      <div className="flex min-h-16 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 bg-card px-3 py-2.5 shadow-soft sm:px-5">
+      {/* Board header strip: card surface closed off by a hairline rule, the
+          same separator grammar as the list rows below it. */}
+      <div className="flex min-h-16 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-foreground/[0.06] bg-card px-3 py-2.5 sm:px-5">
         {/* Back to inbox list — mobile single-column only. */}
         {onBack && (
           <button
@@ -269,7 +270,7 @@ export function ConversationToolbar({
           the thread below). Selects are grouped into one subtle cluster so they
           read as conversation properties rather than scattered controls. */}
         <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <div className="flex flex-wrap items-center gap-0.5 rounded-full bg-secondary/60 px-1.5 py-1">
+          <div className="flex flex-wrap items-center gap-0.5 rounded-xl bg-secondary/40 p-1 ring-1 ring-inset ring-foreground/[0.06]">
             <GhostSelect
               size="sm"
               label={t('conversation.priority')}

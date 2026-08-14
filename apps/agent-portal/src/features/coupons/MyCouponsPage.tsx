@@ -109,29 +109,38 @@ export function MyCouponsPage() {
                 <button
                   type="button"
                   onClick={() => r.ticket && navigate(`/tickets/${r.ticket.id}`)}
-                  className="w-full rounded-2xl bg-card p-4 text-start shadow-soft transition-colors duration-fast hover:bg-secondary/40"
+                  // Board card anatomy: code + status pill leading, the amount as
+                  // the bold end-aligned numeral, meta underneath — hairline ring
+                  // so the card holds its edge on the dark canvas.
+                  className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 rounded-2xl bg-card p-4 text-start shadow-soft ring-1 ring-foreground/[0.06] transition-colors duration-fast hover:bg-secondary/40"
                 >
-                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <span className="font-mono text-sm font-semibold text-foreground">
-                      {r.coupon_code ?? t('coupons.noCode', { defaultValue: 'no code' })}
-                    </span>
-                    <span className="text-sm tabular-nums text-foreground">{amount(r, 'SAR')}</span>
-                    <Pill tone={TONE[r.status]} size="sm">
-                      {t(`coupons.status.${r.status}`, { defaultValue: r.status })}
-                    </Pill>
-                    <span className="ms-auto text-2xs text-muted-foreground">
-                      {formatRelative(r.decided_at ?? r.date_created)}
-                    </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-sm font-semibold text-foreground">
+                        {r.coupon_code ?? t('coupons.noCode', { defaultValue: 'no code' })}
+                      </span>
+                      <Pill tone={TONE[r.status]} size="sm">
+                        {t(`coupons.status.${r.status}`, { defaultValue: r.status })}
+                      </Pill>
+                    </div>
+                    <div className="mt-1 truncate text-xs text-muted-foreground">
+                      {[r.contact?.name ?? r.contact?.phone, r.ticket?.subject]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </div>
                   </div>
-                  <div className="mt-1 truncate text-xs text-muted-foreground">
-                    {[r.contact?.name ?? r.contact?.phone, r.ticket?.subject]
-                      .filter(Boolean)
-                      .join(' · ')}
+                  <div className="shrink-0 text-end">
+                    <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
+                      {amount(r, 'SAR') || '—'}
+                    </div>
+                    <div className="mt-1 text-2xs tabular-nums text-muted-foreground">
+                      {formatRelative(r.decided_at ?? r.date_created)}
+                    </div>
                   </div>
                   {r.status === 'rejected' && (
                     // On the row, not behind a click: this is what the agent
                     // has to tell the customer.
-                    <p className="mt-2 rounded-lg bg-destructive/10 px-3 py-1.5 text-xs leading-relaxed text-foreground">
+                    <p className="col-span-full mt-1 rounded-lg bg-destructive/10 px-3 py-1.5 text-xs leading-relaxed text-foreground">
                       {r.decision_note ??
                         t('coupons.noReason', { defaultValue: 'No reason was given.' })}
                     </p>

@@ -14,6 +14,7 @@ import { cn } from './cn.js';
  *       <thead><tr><Th>…</Th></tr></thead>
  *       <tbody><Tr><Td>…</Td></Tr></tbody>
  *     </Table>
+ *     <TableFooterBar>…aggregate stats…</TableFooterBar>
  *   </TableSurface>
  */
 
@@ -29,7 +30,7 @@ export function TableSurface({
         // used to be CLIPPED, so the right-hand columns were unreachable rather
         // than merely cramped. Wide registers (ticket ops, agent reports) now
         // scroll horizontally inside the card instead of losing data.
-        'overflow-x-auto rounded-2xl bg-card ring-1 ring-foreground/[0.08] shadow-soft',
+        'overflow-x-auto rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-float',
         className,
       )}
       {...rest}
@@ -71,8 +72,8 @@ export function Th({
     <th
       className={cn(
         // Slightly raised header band with a crisp hairline underline.
-        'sticky top-0 z-10 h-11 whitespace-nowrap bg-foreground/[0.035] px-4 text-start align-middle',
-        'text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground',
+        'sticky top-0 z-10 h-11 whitespace-nowrap bg-foreground/[0.03] px-4 text-start align-middle',
+        'text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground',
         'border-b border-foreground/10',
         className,
       )}
@@ -91,9 +92,12 @@ export function Tr({
   return (
     <tr
       className={cn(
-        // Crisp faint hairline dividers + an accent-tinted hover wash.
+        // Crisp faint hairline dividers + an accent-tinted hover wash. Rows
+        // marked aria-selected="true" hold a deeper jade wash so a checked
+        // selection stays visible without any per-page styling.
         'border-b border-foreground/[0.06] last:border-b-0',
         'group/row transition-colors duration-fast ease-out hover:bg-primary/[0.07]',
+        '[&[aria-selected=true]]:bg-primary/10',
         className,
       )}
       {...rest}
@@ -109,9 +113,31 @@ export function Td({
   ...rest
 }: TdHTMLAttributes<HTMLTableCellElement>): JSX.Element {
   return (
-    <td className={cn('h-[52px] px-4 align-middle text-foreground', className)} {...rest}>
+    <td className={cn('h-12 px-4 align-middle text-foreground', className)} {...rest}>
       {children}
     </td>
+  );
+}
+
+/**
+ * Footer aggregate band — render as a sibling of `<Table>` inside
+ * `<TableSurface>`. Children are typically "N rows · aggregate stats".
+ */
+export function TableFooterBar({
+  className,
+  children,
+  ...rest
+}: HTMLAttributes<HTMLDivElement>): JSX.Element {
+  return (
+    <div
+      className={cn(
+        'flex h-11 items-center gap-6 border-t border-foreground/[0.08] bg-foreground/[0.02] px-4 text-xs text-muted-foreground',
+        className,
+      )}
+      {...rest}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -169,7 +195,7 @@ export function SortTh({
         type="button"
         onClick={onSort}
         className={cn(
-          'flex h-12 w-full items-center gap-1 px-4 text-2xs font-semibold uppercase tracking-[0.09em] transition-colors duration-fast ease-out',
+          'flex h-12 w-full items-center gap-1 px-4 text-2xs font-semibold uppercase tracking-[0.12em] transition-colors duration-fast ease-out',
           align === 'end' ? 'justify-end' : 'justify-start',
           active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
         )}

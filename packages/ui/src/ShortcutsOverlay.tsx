@@ -69,9 +69,9 @@ export function ShortcutsOverlay({
         onClick={onClose}
         className="absolute inset-0 bg-black/55 backdrop-blur-sm motion-safe:animate-fade-in"
       />
-      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-2xl shadow-foreground/20 ring-1 ring-foreground/[0.06] motion-safe:animate-scale-in">
+      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-xl shadow-black/30 ring-1 ring-border motion-safe:animate-scale-in">
         <div className="flex items-center justify-between px-6 pt-5 pb-3">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
+          <h2 className="font-display text-lg font-bold tracking-tight text-foreground">{title}</h2>
           <button
             type="button"
             onClick={onClose}

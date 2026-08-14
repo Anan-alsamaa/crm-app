@@ -13,12 +13,15 @@ import {
   FormField,
   Input,
   Pill,
+  ProgressRing,
   Skeleton,
   Spinner,
-  StatStrip,
+  StatCard,
+  StoreIcon,
   toast,
   Toolbar,
   ToolbarSpacer,
+  ZapIcon,
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { useVendors, useCreateVendor, useUpdateVendor, type VendorRow } from './api.js';
@@ -150,6 +153,7 @@ export function VendorsPage() {
 
   const total = vendors.data?.length ?? 0;
   const activeCount = (vendors.data ?? []).filter((v) => v.status === 'active').length;
+  const activePct = total > 0 ? Math.round((activeCount / total) * 100) : 0;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -187,7 +191,7 @@ export function VendorsPage() {
         {!vendors.isLoading && total > 0 && (
           <div className="mx-auto mb-5 max-w-5xl space-y-5">
             <div className="border-b border-foreground/10 pb-5">
-              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">
                 {t('vendors.title', { defaultValue: 'Vendors' })}
               </h2>
               <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
@@ -197,31 +201,45 @@ export function VendorsPage() {
                 })}
               </p>
             </div>
-            <StatStrip
-              items={[
-                {
-                  label: t('vendors.total', { defaultValue: 'vendors' }),
-                  value: total,
-                  tone: 'blue',
-                },
-                {
-                  label: t('vendors.active', { defaultValue: 'active' }),
-                  value: activeCount,
-                  tone: 'green',
-                },
-                {
-                  label: t('vendors.inactive', { defaultValue: 'inactive' }),
-                  value: total - activeCount,
-                  tone: total - activeCount > 0 ? 'amber' : 'neutral',
-                },
-              ]}
-            />
+            {/* Boxed board tiles — tinted icon chips, hero numerals; tone lives
+                in the chip / dot, never in a colored outline. */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <StatCard
+                icon={<StoreIcon />}
+                tone="primary"
+                label={t('vendors.total', { defaultValue: 'vendors' })}
+                value={total}
+              />
+              <StatCard
+                icon={<ZapIcon />}
+                tone="success"
+                label={t('vendors.active', { defaultValue: 'active' })}
+                value={activeCount}
+                visual={
+                  <span className="hidden sm:block">
+                    <ProgressRing
+                      value={activePct}
+                      tone="success"
+                      size={40}
+                      label={`${activePct}%`}
+                    />
+                  </span>
+                }
+              />
+              {/* No icon here on purpose: the warning hue may not tint a chip
+                  (light-token contrast), so the label dot carries it. */}
+              <StatCard
+                tone={total - activeCount > 0 ? 'warning' : 'default'}
+                label={t('vendors.inactive', { defaultValue: 'inactive' })}
+                value={total - activeCount}
+              />
+            </div>
           </div>
         )}
         {vendors.isLoading ? (
-          <div className="mx-auto max-w-5xl space-y-1">
+          <div className="mx-auto max-w-5xl divide-y divide-foreground/[0.06] rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3">
+              <div key={i} className="flex min-h-14 items-center gap-3 px-4 py-3">
                 <Skeleton className="h-8 w-8 rounded-lg" />
                 <div className="flex-1 space-y-1.5">
                   <Skeleton className="h-3 w-1/4" />
@@ -250,19 +268,32 @@ export function VendorsPage() {
             }
           />
         ) : (
-          <ul className="mx-auto max-w-5xl space-y-1 rounded-2xl bg-card p-2 ring-1 ring-foreground/[0.06] shadow-soft">
-            {vendors.data.map((v) => (
-              <li key={v.id}>
-                <VendorCard
-                  v={v}
-                  onEdit={() => {
-                    setEditing(v);
-                    setDrawerOpen(true);
-                  }}
-                />
-              </li>
-            ))}
-          </ul>
+          /* Rows flush inside one board card — hairline separators, quiet
+             hover, a footer aggregate band. */
+          <div className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
+            <ul className="divide-y divide-foreground/[0.06]">
+              {vendors.data.map((v) => (
+                <li key={v.id}>
+                  <VendorCard
+                    v={v}
+                    onEdit={() => {
+                      setEditing(v);
+                      setDrawerOpen(true);
+                    }}
+                  />
+                </li>
+              ))}
+            </ul>
+            {/* Footer aggregate band — the boards' table anatomy. */}
+            <div className="flex items-center justify-between gap-3 border-t border-foreground/[0.06] bg-secondary/30 px-4 py-2.5">
+              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('vendors.total', { defaultValue: 'vendors' })}
+              </span>
+              <span className="text-sm font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
+                {total}
+              </span>
+            </div>
+          </div>
         )}
       </div>
 
@@ -442,23 +473,24 @@ function VendorCard({ v, onEdit }: { v: VendorRow; onEdit: () => void }) {
       type="button"
       onClick={onEdit}
       className={cn(
-        'group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-start',
-        'transition-colors duration-fast ease-out hover:bg-secondary/60',
-        'focus-visible:outline-none focus-visible:bg-secondary/60',
+        'group flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-start',
+        'transition-colors duration-fast ease-out hover:bg-foreground/[0.03]',
+        'focus-visible:outline-none focus-visible:bg-foreground/[0.05]',
       )}
     >
-      {/* Two-tone brand chip — the vendor's primary + secondary at a glance. */}
+      {/* Two-tone brand chip — the vendor's primary + secondary at a glance.
+          Real brand colors, not theme tokens, on purpose. */}
       <span
         aria-hidden
         title={`${primary} · ${secondary}`}
-        className="flex h-8 w-8 shrink-0 overflow-hidden rounded-lg ring-1 ring-foreground/10"
+        className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg ring-1 ring-foreground/10"
       >
         <span className="h-full w-1/2" style={{ background: primary }} />
         <span className="h-full w-1/2" style={{ background: secondary }} />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-foreground">{v.name}</span>
+          <span className="truncate text-sm font-semibold text-foreground">{v.name}</span>
           {v.status === 'inactive' && (
             <Pill tone="warning" size="sm" dot className="shrink-0">
               {t('vendors.inactive', { defaultValue: 'inactive' })}

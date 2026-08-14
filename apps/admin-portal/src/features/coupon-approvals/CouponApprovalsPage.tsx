@@ -55,13 +55,17 @@ function Row({
     .join(' · ');
 
   return (
-    <li className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
+    <li className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
-        <span className="font-mono text-sm font-semibold text-foreground">
+        {/* The code as a chip, the worth as the hero numeral — a supervisor
+            scans the money first, the code second. */}
+        <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-xs font-semibold text-foreground ring-1 ring-inset ring-foreground/[0.06]">
           {row.coupon_code ?? t('couponApprovals.noCode', { defaultValue: 'no code' })}
         </span>
         {worth && (
-          <span className="text-sm font-semibold tabular-nums text-foreground">{worth}</span>
+          <span className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
+            {worth}
+          </span>
         )}
         <Pill tone={TONE[row.status]} size="sm">
           {t(`couponApprovals.status.${row.status}`, { defaultValue: row.status })}
@@ -71,25 +75,25 @@ function Row({
         </span>
       </div>
 
-      <dl className="mt-2 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
-        <div className="flex gap-2">
-          <dt className="text-muted-foreground">
+      <dl className="mt-2.5 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+        <div className="flex items-baseline gap-2">
+          <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('couponApprovals.agent', { defaultValue: 'Asked by' })}
           </dt>
           <dd className="min-w-0 truncate font-medium text-foreground">
             {row.requested_by?.first_name ?? row.requested_by?.email ?? '—'}
           </dd>
         </div>
-        <div className="flex gap-2">
-          <dt className="text-muted-foreground">
+        <div className="flex items-baseline gap-2">
+          <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('couponApprovals.customer', { defaultValue: 'Customer' })}
           </dt>
           <dd className="min-w-0 truncate font-medium text-foreground">
             {row.contact?.name ?? row.contact?.phone ?? '—'}
           </dd>
         </div>
-        <div className="flex gap-2 sm:col-span-2">
-          <dt className="text-muted-foreground">
+        <div className="flex items-baseline gap-2 sm:col-span-2">
+          <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('couponApprovals.ticket', { defaultValue: 'Ticket' })}
           </dt>
           <dd className="min-w-0 truncate font-medium text-foreground">
@@ -101,7 +105,7 @@ function Row({
       {row.reason && (
         // The agent's own words about why. A supervisor deciding without this
         // is guessing, and guessing quickly is worse than deciding slowly.
-        <p className="mt-2 rounded-lg bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-foreground">
+        <p className="mt-2.5 rounded-lg bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-foreground/[0.04]">
           {row.reason}
         </p>
       )}
@@ -235,8 +239,9 @@ export function CouponApprovalsPage() {
             className={cn(
               'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast ease-out',
               view === s
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-card text-muted-foreground hover:text-foreground',
+                ? // The selected filter is a jade wash, the board's pill idiom.
+                  'bg-primary/15 text-primary ring-1 ring-inset ring-primary/25'
+                : 'bg-secondary/60 text-muted-foreground hover:text-foreground',
             )}
           >
             {t(`couponApprovals.status.${s}`, { defaultValue: s })}
@@ -251,7 +256,7 @@ export function CouponApprovalsPage() {
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <p className="rounded-2xl bg-card p-8 text-center text-sm text-muted-foreground shadow-soft">
+        <p className="rounded-2xl bg-card p-8 text-center text-sm text-muted-foreground shadow-soft ring-1 ring-foreground/[0.06]">
           {view === 'pending'
             ? t('couponApprovals.clear', { defaultValue: 'Nothing waiting. The queue is clear.' })
             : t('couponApprovals.none', { defaultValue: 'Nothing here.' })}

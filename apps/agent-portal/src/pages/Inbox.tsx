@@ -13,8 +13,10 @@ import {
   InboxEmptyArt,
   Pill,
   ResizeHandle,
+  SectionCard,
   SelectMenu,
   Skeleton,
+  StatCard,
   toast,
   useIsDesktop,
   useResizable,
@@ -196,15 +198,17 @@ export function Inbox() {
       {showList && (
         <aside
           className={cn(
-            'relative flex shrink-0 flex-col overflow-hidden rounded-2xl bg-card shadow-soft',
+            'relative flex shrink-0 flex-col overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]',
             !isDesktop && 'w-full',
           )}
           style={isDesktop ? { width: list.width } : undefined}
         >
           {/* Header */}
           <div className="flex shrink-0 items-baseline gap-2 px-5 pt-5">
-            <h2 className="text-xl font-bold tracking-tight text-foreground">{t('inbox.title')}</h2>
-            <span className="text-xs tabular-nums text-muted-foreground">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">
+              {t('inbox.title')}
+            </h2>
+            <span className="rounded-md bg-secondary px-1.5 py-0.5 text-2xs font-semibold tabular-nums text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
               {conversations.data?.length ?? 0}
             </span>
           </div>
@@ -239,7 +243,7 @@ export function Inbox() {
               >
                 <span
                   className={cn(
-                    'text-lg font-bold tabular-nums',
+                    'text-lg font-extrabold tabular-nums tracking-[-0.03em]',
                     tone === 'pink' && 'text-magenta',
                     tone === 'primary' && 'text-primary',
                     tone === 'default' && 'text-foreground',
@@ -247,7 +251,7 @@ export function Inbox() {
                 >
                   {value}
                 </span>
-                <span className="flex items-center gap-1.5 text-2xs uppercase tracking-wide text-muted-foreground">
+                <span className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   <span
                     aria-hidden
                     className={cn(
@@ -309,7 +313,9 @@ export function Inbox() {
                 onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
               />
             </div>
-            <div className="flex flex-wrap items-center gap-0.5">
+            {/* One quiet cluster, same anatomy as the conversation toolbar's
+                property group, so the selects read as one filter control. */}
+            <div className="flex flex-wrap items-center gap-0.5 rounded-xl bg-secondary/40 p-1 ring-1 ring-inset ring-foreground/[0.06]">
               {/* Whose queue. Shown to everyone: a manager needs to narrow to
                   their own work, and an agent needs to reach the wider inbox to
                   pick up something the ladder released. */}
@@ -430,9 +436,12 @@ export function Inbox() {
                 onRetry={() => void conversations.refetch()}
               />
             ) : conversations.isLoading ? (
-              <ul className="px-2 pt-2 space-y-1">
+              <ul className="pt-1">
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <li key={i} className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5">
+                  <li
+                    key={i}
+                    className="flex min-h-14 w-full items-center gap-3 border-b border-b-foreground/[0.06] px-4 last:border-b-0"
+                  >
                     <Skeleton className="h-7 w-7 rounded-full" />
                     <div className="flex-1 space-y-2">
                       <Skeleton className="h-3 w-2/3" />
@@ -443,7 +452,7 @@ export function Inbox() {
               </ul>
             ) : conversations.data && conversations.data.length > 0 ? (
               <>
-                <label className="flex h-7 items-center gap-2 px-5 text-2xs text-muted-foreground">
+                <label className="flex h-8 items-center gap-2 border-b border-b-foreground/[0.06] px-5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={allChecked}
@@ -455,7 +464,7 @@ export function Inbox() {
                   />
                   {t('inbox.selectAll')}
                 </label>
-                <ul className="space-y-1.5 px-2 pb-2">
+                <ul className="pb-2">
                   {conversations.data.map((c) => {
                     const active = selected === c.id;
                     const unread = c.unread_count_agent > 0;
@@ -481,22 +490,19 @@ export function Inbox() {
                     return (
                       <li
                         key={c.id}
+                        // Board table row: full-bleed, hairline bottom rule, a
+                        // 2px start accent when active. Side-scoped border
+                        // colors (border-b-* / border-s-*) so the two edges
+                        // never fight — cn() is a plain joiner, not a merger.
                         className={cn(
-                          'group relative flex items-stretch rounded-2xl transition-colors duration-fast ease-out',
+                          'group relative flex min-h-14 items-stretch border-s-2 border-b border-b-foreground/[0.06] last:border-b-0 transition-colors duration-fast ease-out',
                           active
-                            ? 'bg-primary/[0.1] ring-1 ring-primary/25'
+                            ? 'border-s-primary bg-primary/10'
                             : unread
-                              ? 'bg-foreground/[0.04] hover:bg-foreground/[0.07]'
-                              : 'hover:bg-foreground/[0.05]',
+                              ? 'border-s-transparent bg-foreground/[0.03] hover:bg-foreground/[0.06]'
+                              : 'border-s-transparent hover:bg-foreground/[0.04]',
                         )}
                       >
-                        {/* Active accent bar — solid, single accent. */}
-                        {active && (
-                          <span
-                            aria-hidden
-                            className="absolute inset-y-2.5 start-0 w-[3px] rounded-full bg-primary"
-                          />
-                        )}
                         <input
                           type="checkbox"
                           className="ms-3 mt-4 h-3.5 w-3.5 rounded-sm border-border-strong bg-card accent-primary opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity duration-fast"
@@ -515,11 +521,11 @@ export function Inbox() {
                           onFocus={() => prefetchOrders(c)}
                           className="flex flex-1 items-center gap-3 px-3 py-3 text-start"
                         >
-                          {/* Messenger row: ringed avatar, name + last-message
-                              line, accent time and a gradient unread bubble. */}
+                          {/* Messenger row: hairline-ringed avatar, name + last
+                              message line, accent time and an unread bubble. */}
                           <span
                             className={cn(
-                              'shrink-0 rounded-full ring-2',
+                              'shrink-0 rounded-full ring-1',
                               unread ? 'ring-primary/40' : 'ring-foreground/10',
                             )}
                           >
@@ -531,16 +537,25 @@ export function Inbox() {
                             />
                           </span>
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline justify-between gap-2">
-                              <span
-                                className={cn(
-                                  'truncate text-sm',
-                                  unread
-                                    ? 'font-bold text-foreground'
-                                    : 'font-semibold text-foreground/90',
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                                <span
+                                  className={cn(
+                                    'truncate text-sm',
+                                    unread
+                                      ? 'font-semibold text-foreground'
+                                      : 'font-medium text-foreground/90',
+                                  )}
+                                >
+                                  {displayName}
+                                </span>
+                                {/* Jade unread dot — glows on the dark canvas. */}
+                                {unread && (
+                                  <span
+                                    aria-hidden
+                                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary shadow-[0_0_8px] shadow-primary/60"
+                                  />
                                 )}
-                              >
-                                {displayName}
                               </span>
                               <span
                                 className={cn(
@@ -664,57 +679,33 @@ export function Inbox() {
                     </p>
                   </div>
 
-                  {/* Colored stat tiles. */}
-                  <div className="grid grid-cols-3 gap-4">
-                    {(
-                      [
-                        {
-                          key: 'open',
-                          label: t('inbox.stats.open', { defaultValue: 'open' }),
-                          value: openCount,
-                          dot: 'bg-success',
-                        },
-                        {
-                          key: 'urgent',
-                          label: t('inbox.stats.urgent', { defaultValue: 'urgent' }),
-                          value: urgentCount,
-                          dot: 'bg-destructive',
-                        },
-                        {
-                          key: 'unread',
-                          label: t('inbox.stats.unread', { defaultValue: 'unread' }),
-                          value: unreadCount,
-                          dot: 'bg-sky',
-                        },
-                      ] as const
-                    ).map((s) => (
-                      <div
-                        key={s.key}
-                        // Colour as accent, not surface: white card, ink numeral,
-                        // state dot. Solid fills here read as a toy dashboard.
-                        className="rounded-3xl bg-card p-5 shadow-soft ring-1 ring-border"
-                      >
-                        <div className="text-4xl font-bold leading-none tabular-nums tracking-[-0.03em] text-foreground">
-                          {s.value}
-                        </div>
-                        <div className="mt-1.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                          <span
-                            aria-hidden
-                            className={cn('h-1.5 w-1.5 shrink-0 rounded-full', s.dot)}
-                          />
-                          {s.label}
-                        </div>
-                      </div>
-                    ))}
+                  {/* Board KPI tiles — the shared StatCard anatomy: hero numeral,
+                      tone dot, uppercase micro-label. Unread is jade to match
+                      the list's unread dot; colour stays an accent, never a
+                      surface fill. */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <StatCard
+                      label={t('inbox.stats.open', { defaultValue: 'open' })}
+                      value={openCount}
+                      tone="success"
+                    />
+                    <StatCard
+                      label={t('inbox.stats.urgent', { defaultValue: 'urgent' })}
+                      value={urgentCount}
+                      tone="destructive"
+                    />
+                    <StatCard
+                      label={t('inbox.stats.unread', { defaultValue: 'unread' })}
+                      value={unreadCount}
+                      tone="primary"
+                    />
                   </div>
 
-                  {/* Recent activity panel. */}
+                  {/* Recent activity — a board section card: built-in title row,
+                      hairline row separators, status pills, tabular times. */}
                   {recent.length > 0 ? (
-                    <div className="rounded-3xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.04]">
-                      <p className="mb-3 text-sm font-semibold tracking-tight text-foreground">
-                        {t('inbox.welcome.recent')}
-                      </p>
-                      <ul className="space-y-1">
+                    <SectionCard title={t('inbox.welcome.recent')}>
+                      <ul className="divide-y divide-foreground/[0.06]">
                         {recent.map((c) => {
                           const name =
                             c.contact?.name ||
@@ -726,7 +717,7 @@ export function Inbox() {
                               <button
                                 type="button"
                                 onClick={() => setSelected(c.id)}
-                                className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-start transition-colors duration-fast ease-out hover:bg-secondary/60"
+                                className="group flex w-full items-center gap-3 rounded-lg px-1 py-2.5 text-start transition-colors duration-fast ease-out hover:bg-foreground/[0.04]"
                               >
                                 <Avatar
                                   name={c.contact?.name}
@@ -748,9 +739,9 @@ export function Inbox() {
                           );
                         })}
                       </ul>
-                    </div>
+                    </SectionCard>
                   ) : (
-                    <div className="flex items-center gap-4 rounded-3xl bg-card p-6 shadow-soft ring-1 ring-foreground/[0.04]">
+                    <div className="flex items-center gap-4 rounded-2xl bg-card p-6 shadow-soft ring-1 ring-foreground/[0.06]">
                       <ConversationPlaceholderArt size={96} />
                       <p className="max-w-xs text-sm text-muted-foreground">
                         {t('inbox.welcome.zeroArt')}

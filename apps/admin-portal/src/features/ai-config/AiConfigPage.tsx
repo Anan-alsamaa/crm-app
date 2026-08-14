@@ -8,6 +8,7 @@ import {
   cn,
   FormField,
   Input,
+  MeterBar,
   Skeleton,
   toast,
   Toolbar,
@@ -230,16 +231,31 @@ export function AiConfigPage() {
           {usageQuery.isLoading ? (
             <Skeleton className="mt-3 h-8 w-32" />
           ) : (
-            <div className="mt-2 flex items-baseline gap-3 tabular-nums">
-              <span className="text-3xl font-semibold tracking-tight text-foreground">
-                {usageQuery.data?.used ?? 0}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {usageQuery.data?.cap
-                  ? `/ ${usageQuery.data.cap.toLocaleString()} ${t('aiConfig.calls', { defaultValue: 'calls' })}`
-                  : t('aiConfig.unlimited', { defaultValue: 'unlimited' })}
-              </span>
-            </div>
+            <>
+              <div className="mt-2 flex items-baseline gap-3 tabular-nums">
+                {/* Board numeral — extrabold, tight-tracked, the cap raised
+                    beside it as the quiet unit. */}
+                <span className="text-3xl font-extrabold leading-none tracking-[-0.03em] text-foreground">
+                  {usageQuery.data?.used ?? 0}
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  {usageQuery.data?.cap
+                    ? `/ ${usageQuery.data.cap.toLocaleString()} ${t('aiConfig.calls', { defaultValue: 'calls' })}`
+                    : t('aiConfig.unlimited', { defaultValue: 'unlimited' })}
+                </span>
+              </div>
+              {!!usageQuery.data?.cap && (
+                // The board's thin meter — how much of the month's budget is
+                // spent; flips to the alarm hue when the cap is nearly gone.
+                <MeterBar
+                  className="mt-3"
+                  value={(usageQuery.data.used / usageQuery.data.cap) * 100}
+                  tone={
+                    usageQuery.data.used / usageQuery.data.cap >= 0.9 ? 'destructive' : 'primary'
+                  }
+                />
+              )}
+            </>
           )}
         </section>
 
@@ -426,7 +442,9 @@ function Toggle({
       <span
         aria-hidden
         className={cn(
-          'inline-block h-5 w-5 transform rounded-full bg-white shadow ring-1 ring-foreground/10 transition-transform duration-fast ease-out',
+          // Foreground ink, not raw white: the knob stays high-contrast against
+          // both track fills on BOTH themes (white on dark, near-black on light).
+          'inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-1 ring-foreground/10 transition-transform duration-fast ease-out',
           checked ? 'translate-x-5' : 'translate-x-0.5',
         )}
       />

@@ -125,7 +125,17 @@ export function TicketHistoryDrawer({
         ) : (
           <ol className="space-y-3">
             {entries.map((e) => (
-              <li key={e.id} className="rounded-xl bg-secondary/40 p-3">
+              /* Timeline cards: every entry keeps the soft surface; edits carry
+                 a jade start hairline so the eye finds the mutations between
+                 the create/system entries without reading each one. The
+                 transparent border on the rest keeps the text edges aligned. */
+              <li
+                key={e.id}
+                className={cn(
+                  'rounded-xl border-s-2 bg-secondary/40 p-3',
+                  e.action === 'update' ? 'border-primary/40' : 'border-transparent',
+                )}
+              >
                 <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 text-2xs text-muted-foreground">
                   <span className="font-semibold text-foreground">
                     {e.userId

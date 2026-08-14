@@ -9,6 +9,7 @@ import {
   Pill,
   ResizeHandle,
   Spinner,
+  StatCard,
   toast,
   formatRelative,
   useResizable,
@@ -85,11 +86,13 @@ function MediaThumb({ a, onOpen }: { a: MessageAttachment; onOpen: (url: string)
 }
 
 function SectionLabel({ children, count }: { children: React.ReactNode; count?: number }) {
+  // Board micro-label: uppercase, tracked-out, quiet — matching the tags
+  // section header so every sidebar section carries one heading grammar.
   return (
-    <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
+    <h3 className="mb-3 flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
       <span>{children}</span>
       {count !== undefined && count > 0 && (
-        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary-subtle px-1.5 text-xs font-semibold tabular-nums text-primary">
+        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary-subtle px-1.5 text-xs font-semibold tabular-nums tracking-normal text-primary">
           {count}
         </span>
       )}
@@ -251,29 +254,26 @@ export function ConversationSidebar({
         </div>
       </div>
 
-      {/* Stat tiles — the reference profile-panel move (Age/Blood, Files/Links). */}
+      {/* Stat tiles — the shared boxed StatCard, two up (the reference
+          profile-panel move: Age/Blood, Files/Links). Tickets carries the jade
+          accent; media stays neutral. */}
       <div className="grid grid-cols-2 gap-2 px-5 pb-2">
-        <div className="rounded-xl bg-secondary/60 px-3 py-2.5 text-center">
-          <div className="text-lg font-bold tabular-nums text-foreground">
-            {tickets.data?.length ?? 0}
-          </div>
-          <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t('sidebar.linkedTickets')}
-          </div>
-        </div>
-        <div className="rounded-xl bg-secondary/60 px-3 py-2.5 text-center">
-          <div className="text-lg font-bold tabular-nums text-foreground">{media?.length ?? 0}</div>
-          <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t('sidebar.sharedMedia', { defaultValue: 'Shared media' })}
-          </div>
-        </div>
+        <StatCard
+          label={t('sidebar.linkedTickets')}
+          value={tickets.data?.length ?? 0}
+          tone="primary"
+        />
+        <StatCard
+          label={t('sidebar.sharedMedia', { defaultValue: 'Shared media' })}
+          value={media?.length ?? 0}
+        />
       </div>
 
       {/* Contact details — editable: agents can correct the customer's name,
           email or phone; saving persists to Directus and updates everywhere. */}
       <section className="px-5 py-4">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
+          <h3 className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('sidebar.contact')}
           </h3>
           {c.contact?.id && !editing && (
@@ -337,15 +337,16 @@ export function ConversationSidebar({
             </div>
           </div>
         ) : (
-          <dl className="space-y-2.5 text-xs">
+          /* Hairline-ruled detail rows — the board's table grammar. */
+          <dl className="divide-y divide-foreground/[0.06] text-xs">
             {c.contact?.email && (
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
                 <dt className="text-muted-foreground">{t('sidebar.email')}</dt>
                 <dd className="truncate font-medium text-foreground">{c.contact.email}</dd>
               </div>
             )}
             {c.contact?.phone && (
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
                 <dt className="text-muted-foreground">{t('sidebar.phone')}</dt>
                 <dd className="tabular-nums font-medium text-foreground">{c.contact.phone}</dd>
               </div>
@@ -373,20 +374,20 @@ export function ConversationSidebar({
         </section>
       )}
 
-      {/* Linked tickets — borderless rows with hover lift, not stacked cards. */}
+      {/* Linked tickets — hairline-ruled rows with hover lift, not stacked cards. */}
       <section className="px-5 py-4">
         <SectionLabel count={tickets.data?.length}>{t('sidebar.linkedTickets')}</SectionLabel>
         {tickets.isLoading ? (
           <Spinner />
         ) : tickets.data && tickets.data.length > 0 ? (
-          <ul className="-mx-2 space-y-0.5">
+          <ul className="divide-y divide-foreground/[0.06]">
             {tickets.data.map((tk) => (
               <li key={tk.id}>
                 <button
                   type="button"
                   onClick={() => navigate(`/tickets/${tk.id}`)}
                   title={t('sidebar.openTicket', { defaultValue: 'Open ticket' })}
-                  className="block w-full rounded-md px-2 py-2 text-start transition-colors duration-fast ease-out hover:bg-secondary/70"
+                  className="block w-full rounded-lg px-1 py-2.5 text-start transition-colors duration-fast ease-out hover:bg-foreground/[0.04]"
                 >
                   <div className="truncate text-sm font-medium text-foreground">{tk.subject}</div>
                   <div className="mt-1 flex items-center gap-1.5">
@@ -486,7 +487,7 @@ export function ConversationSidebar({
                       type="button"
                       onClick={() => onDeleteNote(n.id)}
                       aria-label={t('sidebar.removeNote', { defaultValue: 'Remove note' })}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity duration-fast hover:bg-warning/20 hover:text-warning focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-warning/50 group-hover:opacity-100"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity duration-fast hover:bg-destructive/10 hover:text-destructive focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-destructive/40 group-hover:opacity-100"
                     >
                       <svg
                         viewBox="0 0 16 16"

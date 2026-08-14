@@ -6,6 +6,7 @@ import {
   ClockIcon,
   cn,
   InboxIcon,
+  SectionCard,
   SelectMenu,
   SettingsIcon,
   SoundOffIcon,
@@ -72,52 +73,55 @@ const GROUPS: PrefGroup[] = [
   },
 ];
 
+// Tones are tint+hue TOKEN pairs so both themes hold — the warning hue is
+// deliberately absent from icon chips (it is a light token and fails contrast
+// as chip ink on light).
 const META: Record<string, RowMeta> = {
   sla_warning: {
     icon: ClockIcon,
-    tone: 'bg-warning/15 text-warning-foreground',
+    tone: 'bg-secondary text-muted-foreground',
     descriptionKey: 'preferences.desc.sla_warning',
     fallbackDescription: 'Heads-up before an SLA deadline arrives.',
   },
   sla_breach: {
     icon: ClockIcon,
-    tone: 'bg-destructive/15 text-destructive',
+    tone: 'bg-destructive-tint text-destructive',
     descriptionKey: 'preferences.desc.sla_breach',
     fallbackDescription: 'An SLA deadline was missed — act fast.',
   },
   assignment: {
     icon: UsersIcon,
-    tone: 'bg-primary-subtle text-primary',
+    tone: 'bg-primary-tint text-primary',
     descriptionKey: 'preferences.desc.assignment',
     fallbackDescription: 'A conversation or ticket was assigned to you.',
   },
   mention: {
     icon: BellIcon,
-    tone: 'bg-[oklch(0.93_0.07_0)] text-[oklch(0.50_0.20_0)]',
+    tone: 'bg-magenta/15 text-magenta',
     descriptionKey: 'preferences.desc.mention',
     fallbackDescription: 'A teammate @mentioned you in an internal note.',
   },
   ticket_update: {
     icon: TicketIcon,
-    tone: 'bg-[oklch(0.94_0.05_240)] text-[oklch(0.48_0.18_245)]',
+    tone: 'bg-sky-tint text-sky',
     descriptionKey: 'preferences.desc.ticket_update',
     fallbackDescription: 'A ticket you own changed status or priority.',
   },
   reminder: {
     icon: ClockIcon,
-    tone: 'bg-[oklch(0.94_0.06_300)] text-[oklch(0.48_0.20_295)]',
+    tone: 'bg-violet-tint text-violet',
     descriptionKey: 'preferences.desc.reminder',
     fallbackDescription: 'Scheduled reminders for follow-ups.',
   },
   escalation: {
     icon: InboxIcon,
-    tone: 'bg-[oklch(0.94_0.07_55)] text-[oklch(0.52_0.17_45)]',
+    tone: 'bg-destructive-tint text-destructive',
     descriptionKey: 'preferences.desc.escalation',
     fallbackDescription: 'Something was escalated to you for review.',
   },
   automation: {
     icon: SettingsIcon,
-    tone: 'bg-[oklch(0.94_0.05_200)] text-[oklch(0.46_0.13_205)]',
+    tone: 'bg-primary-tint text-primary',
     descriptionKey: 'preferences.desc.automation',
     fallbackDescription: 'An automation rule ran on your behalf.',
   },
@@ -182,84 +186,76 @@ export function PreferencesPage() {
         </div>
       ) : (
         <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="mx-auto w-full max-w-4xl space-y-8 px-5 py-8 sm:px-8">
+          <div className="mx-auto w-full max-w-4xl space-y-5 px-5 py-8 sm:px-8">
             {/* New-message sound — a per-browser toggle, kept visually distinct
-              from the server-saved channel rows below. */}
-            <section className="space-y-3">
-              <div className="space-y-1 px-1">
-                <h2 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  {t('preferences.group.sound', { defaultValue: 'Sound' })}
-                </h2>
-                <p className="text-sm text-foreground/80">{t('sound.prefHint')}</p>
-              </div>
-              <ul className="rounded-2xl bg-card px-5 shadow-soft ring-1 ring-foreground/[0.06]">
-                <li className="flex flex-col gap-2.5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <span
-                      className={cn(
-                        'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors',
-                        soundOn
-                          ? 'bg-primary-subtle text-primary'
-                          : 'bg-secondary text-muted-foreground',
-                      )}
-                    >
-                      {soundOn ? <SoundOnIcon size={18} /> : <SoundOffIcon size={18} />}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-foreground">
-                        {t('sound.prefTitle')}
-                      </div>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {soundOn ? t('sound.statusOn') : t('sound.statusMuted')}
-                      </p>
-                    </div>
-                  </div>
-                  <div
-                    role="group"
-                    aria-label={t('sound.prefTitle')}
-                    className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5 text-xs"
+              from the server-saved channel rows below. Same SectionCard surface
+              as the groups so the page reads as one board. */}
+            <SectionCard
+              title={t('preferences.group.sound', { defaultValue: 'Sound' })}
+              hint={t('sound.prefHint')}
+            >
+              <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <span
+                    className={cn(
+                      'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors',
+                      soundOn
+                        ? 'bg-primary-tint text-primary'
+                        : 'bg-secondary text-muted-foreground',
+                    )}
                   >
-                    <button
-                      type="button"
-                      aria-pressed={soundOn}
-                      onClick={() => setSound(true)}
-                      className={cn(
-                        'rounded-md px-3.5 py-1.5 font-medium transition-colors duration-fast ease-out',
-                        soundOn
-                          ? 'bg-card text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      {t('sound.on')}
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={!soundOn}
-                      onClick={() => setSound(false)}
-                      className={cn(
-                        'rounded-md px-3.5 py-1.5 font-medium transition-colors duration-fast ease-out',
-                        !soundOn
-                          ? 'bg-card text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      {t('sound.off')}
-                    </button>
+                    {soundOn ? <SoundOnIcon size={18} /> : <SoundOffIcon size={18} />}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-foreground">
+                      {t('sound.prefTitle')}
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {soundOn ? t('sound.statusOn') : t('sound.statusMuted')}
+                    </p>
                   </div>
-                </li>
-              </ul>
-            </section>
+                </div>
+                <div
+                  role="group"
+                  aria-label={t('sound.prefTitle')}
+                  className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5 text-xs"
+                >
+                  <button
+                    type="button"
+                    aria-pressed={soundOn}
+                    onClick={() => setSound(true)}
+                    className={cn(
+                      'rounded-md px-3.5 py-1.5 font-medium transition-colors duration-fast ease-out',
+                      soundOn
+                        ? 'bg-card text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {t('sound.on')}
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={!soundOn}
+                    onClick={() => setSound(false)}
+                    className={cn(
+                      'rounded-md px-3.5 py-1.5 font-medium transition-colors duration-fast ease-out',
+                      !soundOn
+                        ? 'bg-card text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {t('sound.off')}
+                  </button>
+                </div>
+              </div>
+            </SectionCard>
 
             {GROUPS.map((g) => (
-              <section key={g.key} className="space-y-3">
-                <div className="space-y-1 px-1">
-                  <h2 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    {t(g.titleKey, { defaultValue: g.titleFallback })}
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    {t(g.descriptionKey, { defaultValue: g.descriptionFallback })}
-                  </p>
-                </div>
+              <SectionCard
+                key={g.key}
+                title={t(g.titleKey, { defaultValue: g.titleFallback })}
+                hint={t(g.descriptionKey, { defaultValue: g.descriptionFallback })}
+              >
                 {/* Two-column card grid, matching the AI assistance page: each
                   notification type is its OWN card rather than a row in a shared
                   list. A divided list reads as settings-you-scan; discrete cards
@@ -277,9 +273,11 @@ export function PreferencesPage() {
                           // Same active/inactive treatment as the AI assistance
                           // cards: a live setting is tinted and ringed, a disabled
                           // one recedes, so the grid is readable without reading.
+                          // Tints sit ON the SectionCard surface now, so the
+                          // muted state uses the secondary wash for its edge.
                           muted
-                            ? 'bg-card/60 ring-1 ring-foreground/[0.04]'
-                            : 'bg-primary-subtle/50 shadow-soft ring-1 ring-primary/25',
+                            ? 'bg-secondary/40 ring-1 ring-foreground/[0.04]'
+                            : 'bg-primary/10 shadow-soft ring-1 ring-primary/25',
                         )}
                       >
                         {Icon && (
@@ -336,7 +334,7 @@ export function PreferencesPage() {
                     );
                   })}
                 </ul>
-              </section>
+              </SectionCard>
             ))}
           </div>
         </div>

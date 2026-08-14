@@ -6,6 +6,7 @@ import {
   Button,
   Input,
   Pill,
+  SectionCard,
   Skeleton,
   Textarea,
   Toolbar,
@@ -213,7 +214,20 @@ export function RolesPage() {
         </Button>
       </Toolbar>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto p-4 lg:grid-cols-[18rem_1fr]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto px-5 py-4 lg:grid-cols-[18rem_1fr]">
+        {/* ── page hero — the boards' header anatomy ── */}
+        <div className="border-b border-foreground/10 pb-5 lg:col-span-2">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+            {t('roles.title', { defaultValue: 'Roles & privileges' })}
+          </h2>
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            {t('roles.heroSubtitle', {
+              defaultValue:
+                'Named sets of ticked privileges, optionally fenced to specific brands. Pick a role to see or change what it can do.',
+            })}
+          </p>
+        </div>
+
         {/* ── the roles ── */}
         <div className="space-y-2">
           {roles.isLoading ? (
@@ -221,21 +235,24 @@ export function RolesPage() {
               <Skeleton key={i} className="h-12 rounded-xl" />
             ))
           ) : (
-            <ul className="space-y-1.5">
+            /* Clean board list — rows flush inside one card, hairline
+               separators, quiet hover; the selected row is jade-tinted. */
+            <ul className="divide-y divide-foreground/[0.06] overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
               {(roles.data ?? []).map((r) => (
                 <li key={r.id}>
                   <button
                     type="button"
                     onClick={() => setDraft((d) => ({ ...d, id: r.id }))}
                     className={cn(
-                      'w-full rounded-xl px-3 py-2.5 text-start transition-colors duration-fast',
+                      'min-h-12 w-full px-3.5 py-2.5 text-start transition-colors duration-fast',
+                      'focus-visible:outline-none focus-visible:bg-foreground/[0.05]',
                       draft.id === r.id
-                        ? 'bg-primary/10 ring-1 ring-primary/30'
-                        : 'bg-card shadow-soft ring-1 ring-foreground/[0.06] hover:bg-secondary/50',
+                        ? 'bg-primary/10 ring-1 ring-inset ring-primary/30'
+                        : 'hover:bg-foreground/[0.03]',
                     )}
                   >
                     <span className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
                         {r.name}
                       </span>
                       {r.builtin ? (
@@ -271,7 +288,9 @@ export function RolesPage() {
         <div className="space-y-4">
           {locked ? (
             <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
-              <h2 className="text-sm font-semibold text-foreground">{selected?.name}</h2>
+              <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                {selected?.name}
+              </h2>
               <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted-foreground">
                 {selected?.description}
               </p>
@@ -284,9 +303,9 @@ export function RolesPage() {
             </div>
           ) : (
             <>
-              <div className="grid gap-3 rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06] sm:grid-cols-2">
-                <label className="flex flex-col gap-1">
-                  <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+              <div className="grid gap-3 rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] sm:grid-cols-2">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     {t('roles.name', { defaultValue: 'Role name' })}
                   </span>
                   <Input
@@ -297,8 +316,8 @@ export function RolesPage() {
                     })}
                   />
                 </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     {t('roles.description', { defaultValue: 'Description' })}
                   </span>
                   <Textarea
@@ -309,24 +328,25 @@ export function RolesPage() {
                 </label>
               </div>
 
-              {/* privilege matrix */}
+              {/* privilege matrix — SectionCard-like group cards: compact
+                  title header, hairline-separated tick rows, jade ticks */}
               <div className="grid gap-4 sm:grid-cols-2">
                 {Object.entries(GROUPS).map(([group, label]) => (
                   <fieldset
                     key={group}
-                    className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]"
+                    className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]"
                   >
                     <legend className="sr-only">{label}</legend>
-                    <h3 className="mb-2 text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                    <h3 className="text-sm font-semibold tracking-tight text-foreground">
                       {label}
                     </h3>
-                    <ul className="space-y-1.5">
+                    <ul className="mt-4 divide-y divide-foreground/[0.06]">
                       {PRIVS.filter((p) => p.group === group).map((p) => (
                         <li key={p.key}>
-                          <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1.5 py-1 text-sm text-foreground hover:bg-secondary/50">
+                          <label className="flex min-h-9 cursor-pointer items-center gap-2.5 rounded-md px-1.5 py-1.5 text-sm text-foreground transition-colors duration-fast hover:bg-foreground/[0.03]">
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-border text-primary focus:ring-primary/60"
+                              className="h-4 w-4 rounded-sm border-border-strong bg-input accent-primary"
                               checked={!!draft.privileges[p.key]}
                               onChange={(e) =>
                                 setDraft((d) => ({
@@ -344,17 +364,14 @@ export function RolesPage() {
                 ))}
               </div>
 
-              {/* brand restriction */}
-              <div className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
-                <h3 className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                  {t('roles.brands', { defaultValue: 'Brand access' })}
-                </h3>
-                <p className="mb-3 mt-1 max-w-2xl text-2xs leading-relaxed text-muted-foreground">
-                  {t('roles.brandsHelp', {
-                    defaultValue:
-                      'Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a conversation has no brand until a ticket gives it one.',
-                  })}
-                </p>
+              {/* brand restriction — the shared SectionCard surface */}
+              <SectionCard
+                title={t('roles.brands', { defaultValue: 'Brand access' })}
+                hint={t('roles.brandsHelp', {
+                  defaultValue:
+                    'Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a conversation has no brand until a ticket gives it one.',
+                })}
+              >
                 <div className="flex flex-wrap gap-2">
                   {(brands.data ?? []).map((b) => {
                     const on = draft.brands.includes(b.id);
@@ -371,8 +388,11 @@ export function RolesPage() {
                         }
                         className={cn(
                           'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast',
+                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                          // Tinted chip with hue text — the boards' tag-pill
+                          // treatment for the ticked state.
                           on
-                            ? 'bg-primary text-primary-foreground'
+                            ? 'bg-primary-tint text-primary ring-1 ring-inset ring-primary/30'
                             : 'bg-secondary text-muted-foreground hover:text-foreground',
                         )}
                       >
@@ -381,7 +401,7 @@ export function RolesPage() {
                     );
                   })}
                 </div>
-              </div>
+              </SectionCard>
 
               <div className="flex items-center gap-2">
                 <Button
