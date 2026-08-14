@@ -1,6 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, cn, Drawer, ErrorState, Input, SelectMenu, Skeleton } from '@yiji/ui';
+import {
+  Button,
+  ChartIcon,
+  ClockIcon,
+  cn,
+  Drawer,
+  ErrorState,
+  InboxIcon,
+  Input,
+  SelectMenu,
+  Skeleton,
+  SparkleIcon,
+  TicketIcon,
+  UsersIcon,
+} from '@yiji/ui';
 import {
   emptyComplaintFilters,
   useComplaintMetrics,
@@ -45,34 +59,54 @@ function monthLabel(ym: string): string {
 }
 
 /* ── KPI ──────────────────────────────────────────────────────────────────
- * His KPI card: one big number, a label, and a small line of context. The
- * accent is a left rule rather than a filled tile, so six of them in a row
- * stay readable instead of competing.
+ * The reference boards' KPI card: an icon in a tinted square chip, one big
+ * number, a label, and a small line of context. Chips use the `--<hue>-tint`
+ * fills (three-token rule); `--warning` is excluded — its glyph contrast on
+ * the tint fails 3:1 in the light theme — so Compensation carries the brand
+ * hue instead.
  */
+const KPI_CHIPS = {
+  neutral: 'bg-secondary text-foreground',
+  sky: 'bg-sky-tint text-sky',
+  violet: 'bg-violet-tint text-violet',
+  success: 'bg-success-tint text-success',
+  primary: 'bg-primary-tint text-primary',
+  destructive: 'bg-destructive-tint text-destructive',
+} as const;
+
 function Kpi({
   value,
   label,
   sub,
-  accent,
+  tone,
+  icon,
 }: {
   value: string;
   label: string;
   sub?: string;
-  accent: string;
+  tone: keyof typeof KPI_CHIPS;
+  icon: React.ReactNode;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
-      <span aria-hidden className={cn('absolute inset-y-0 start-0 w-1', accent)} />
-      <div className="ps-2">
-        <div className="text-3xl font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
-          {value}
+    <div className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl', KPI_CHIPS[tone])}
+        >
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <div className="text-3xl font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
+            {value}
+          </div>
+          <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+            {label}
+          </div>
+          {/* Fixed height so a card with no context line does not sit shorter
+              than its neighbours and break the row. */}
+          <div className="mt-1 min-h-[1rem] text-2xs text-muted-foreground">{sub ?? ''}</div>
         </div>
-        <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-          {label}
-        </div>
-        {/* Fixed height so a card with no context line does not sit shorter
-            than its neighbours and break the row. */}
-        <div className="mt-1 min-h-[1rem] text-2xs text-muted-foreground">{sub ?? ''}</div>
       </div>
     </div>
   );
@@ -786,7 +820,8 @@ export function ComplaintDashboard() {
           {/* ── Six KPIs ─────────────────────────────────────────────────── */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
             <Kpi
-              accent="bg-foreground"
+              tone="neutral"
+              icon={<TicketIcon size={17} />}
               value={d.total.toLocaleString()}
               label={t('complaintDash.kpiTotal', { defaultValue: 'Complaints' })}
               sub={
@@ -799,7 +834,8 @@ export function ComplaintDashboard() {
               }
             />
             <Kpi
-              accent="bg-sky"
+              tone="sky"
+              icon={<InboxIcon size={17} />}
               value={String(d.open)}
               label={t('complaintDash.kpiOpen', { defaultValue: 'Open / in progress' })}
               sub={
@@ -812,7 +848,8 @@ export function ComplaintDashboard() {
               }
             />
             <Kpi
-              accent="bg-violet"
+              tone="violet"
+              icon={<ClockIcon size={17} />}
               value={String(d.overdue)}
               label={t('complaintDash.kpiOverdue', { defaultValue: 'Overdue' })}
               // His "Escalated" has no equivalent status here, so this counts
@@ -820,7 +857,8 @@ export function ComplaintDashboard() {
               sub={t('complaintDash.overdueHint', { defaultValue: 'past first-reply SLA' })}
             />
             <Kpi
-              accent="bg-success"
+              tone="success"
+              icon={<SparkleIcon size={17} />}
               value={d.satisfiedPct === null ? '—' : `${Math.round(d.satisfiedPct)}%`}
               label={t('complaintDash.kpiSatisfied', { defaultValue: 'Rated satisfied' })}
               sub={t('complaintDash.ratedOf', {
@@ -830,7 +868,8 @@ export function ComplaintDashboard() {
               })}
             />
             <Kpi
-              accent="bg-warning"
+              tone="primary"
+              icon={<ChartIcon size={17} />}
               value={d.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               label={t('complaintDash.kpiCompensation', { defaultValue: 'Compensation SAR' })}
               sub={
@@ -844,7 +883,8 @@ export function ComplaintDashboard() {
               }
             />
             <Kpi
-              accent="bg-destructive"
+              tone="destructive"
+              icon={<UsersIcon size={17} />}
               value={String(d.chatsWaiting)}
               label={t('complaintDash.kpiChats', { defaultValue: 'Chats waiting' })}
               sub={t('complaintDash.ofChats', {
