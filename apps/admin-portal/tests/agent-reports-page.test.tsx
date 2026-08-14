@@ -841,8 +841,13 @@ describe('AgentReportsPage — complaints report', () => {
 
     await user.click(screen.getByText('Columns'));
     await user.type(screen.getByPlaceholderText('Find a column…'), 'coupon');
-    const labels = screen.getAllByRole('checkbox').map((c) => c.closest('label')!.textContent);
-    expect(labels.every((l) => /coupon/i.test(l ?? ''))).toBe(true);
+    // Row-select checkboxes live in table cells, not labels — only the
+    // column-picker entries wrap theirs in a label.
+    const labels = screen
+      .getAllByRole('checkbox')
+      .map((c) => c.closest('label')?.textContent)
+      .filter((l): l is string => l != null);
+    expect(labels.every((l) => /coupon/i.test(l))).toBe(true);
     expect(labels.length).toBe(3); // code, value, %
   });
 

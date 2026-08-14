@@ -98,7 +98,6 @@ const AiConfigPage = lazy(() =>
 );
 
 import type { NavSection } from './nav.js';
-import { TopNav } from './components/TopNav.js';
 
 /* Colorful nav: each item's icon sits in its own vivid tinted tile that pops
  * against the dark navy rail. */
@@ -400,24 +399,10 @@ function Shell({ children }: { children: React.ReactNode }) {
         }
         topBar={
           <div className="flex w-full items-center gap-4">
-            {/* Start: brand lockup, back from the top of the rail. */}
-            <div className="flex min-w-0 flex-1 items-center gap-2.5">
-              <YijiLogo variant="tile" size={30} className="shrink-0 bg-background/95 shadow-sm" />
-              <div className="hidden min-w-0 leading-tight md:block">
-                {/* dir=ltr: the product name is a brand lockup, not prose. Left
-                    to mirror it renders "CRM Yiji" in Arabic. */}
-                <div
-                  dir="ltr"
-                  className="flex items-baseline gap-1.5 text-[15px] font-semibold tracking-[-0.015em] text-rail-active-foreground"
-                >
-                  <span>Yiji</span>
-                  <span className="font-normal text-rail-foreground/70">CRM</span>
-                </div>
-                <div className="mt-0.5 text-2xs text-rail-foreground/75">
-                  {t('app.console', { defaultValue: 'Admin console' })}
-                </div>
-              </div>
-            </div>
+            {/* Identity lives in the rail now — repeating it here read as a
+                rendering bug the moment the sidebar landed. A spacer keeps the
+                actions pinned to the end. */}
+            <div className="min-w-0 flex-1" />
             {/* No search field here by request. The command palette is still
                 bound to Cmd/Ctrl+K, so nothing is unreachable — only the
                 permanent chrome for it is gone. */}
@@ -462,7 +447,6 @@ function Shell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         }
-        navBar={<TopNav sections={sections} />}
         resizeStorageKey="yiji.admin.sidebarWidth"
         navLabel={t('nav.primary', { defaultValue: 'Primary navigation' })}
         menuLabel={t('nav.openMenu', { defaultValue: 'Open menu' })}
