@@ -121,8 +121,21 @@ export function BackupPage() {
           {t('backup.title', { defaultValue: 'Backup' })}
         </h1>
       </Toolbar>
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        <div className="mx-auto max-w-2xl space-y-4">
+      <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+        <div className="mx-auto max-w-2xl space-y-5">
+          {/* Page hero — the boards' header anatomy, same as every sibling
+              page, so the suite reads as one product. */}
+          <div className="border-b border-foreground/10 pb-5">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">
+              {t('backup.title', { defaultValue: 'Backup' })}
+            </h2>
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {t('backup.heroSubtitle', {
+                defaultValue:
+                  'A portable JSON export of the business data — the file an operator reaches for when a ticket was mangled or a list was emptied by mistake.',
+              })}
+            </p>
+          </div>
           {/* The action card — tinted icon chip at the start, per the board
               language for operations a page offers. */}
           <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
@@ -154,26 +167,43 @@ export function BackupPage() {
             </div>
           </div>
 
-          {Object.keys(progress).length > 0 && (
-            <ul className="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-2xl bg-card p-5 text-xs shadow-soft ring-1 ring-foreground/[0.06] sm:grid-cols-3">
-              {COLLECTIONS.filter((c) => c in progress).map((c) => (
+          {/* Coverage card — every collection the file will carry, always
+              visible so the page answers "what's in it?" before a run; the
+              row counts fill in live as the export walks the list. */}
+          <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
+            <div className="flex items-baseline justify-between gap-2 border-b border-foreground/[0.06] pb-3">
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                {t('backup.collectionsTitle', { defaultValue: 'What the file contains' })}
+              </h3>
+              {/* Collection total, right-aligned tabular — the boards' quiet
+                  aggregate idiom. */}
+              <span className="text-2xs font-semibold tabular-nums text-muted-foreground">
+                {COLLECTIONS.length}
+              </span>
+            </div>
+            <ul className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3">
+              {COLLECTIONS.map((c) => (
                 <li key={c} className="flex items-baseline justify-between gap-2">
                   {/* Collection ids are code, so they read in mono. */}
                   <span className="truncate font-mono text-2xs text-muted-foreground">{c}</span>
                   <span
                     className={cn(
                       'font-semibold tabular-nums',
-                      progress[c] === 'error' ? 'text-destructive' : 'text-foreground',
+                      progress[c] === 'error'
+                        ? 'text-destructive'
+                        : progress[c] === undefined
+                          ? 'text-muted-foreground/60'
+                          : 'text-foreground',
                     )}
                   >
                     {progress[c] === 'error'
                       ? t('backup.failed', { defaultValue: 'failed' })
-                      : progress[c]}
+                      : (progress[c] ?? '—')}
                   </span>
                 </li>
               ))}
             </ul>
-          )}
+          </div>
         </div>
       </div>
     </div>

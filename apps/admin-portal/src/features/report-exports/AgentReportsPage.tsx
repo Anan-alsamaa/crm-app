@@ -1123,6 +1123,7 @@ function ComplaintsReport({
           <Button
             size="sm"
             variant="ghost"
+            className="ring-1 ring-border"
             disabled={!selectedId}
             onClick={() => {
               const row = visible.find((v) => v.id === selectedId);
@@ -1139,7 +1140,7 @@ function ComplaintsReport({
             size="sm"
             variant="ghost"
             disabled={!selectedId || del.isPending}
-            className="text-destructive hover:bg-destructive/10"
+            className="text-destructive ring-1 ring-border hover:bg-destructive/10"
             onClick={() => {
               const row = visible.find((v) => v.id === selectedId);
               if (!row) return;
@@ -1173,6 +1174,7 @@ function ComplaintsReport({
           <Button
             size="sm"
             variant="ghost"
+            className="ring-1 ring-border"
             disabled={importing}
             onClick={() => importFileRef.current?.click()}
           >
@@ -1466,6 +1468,16 @@ function AgentKpiReport({
             ))}
           </tbody>
         </Table>
+        {/* Footer aggregate band, boards-style — reuses the KPI tile's label so
+            the band adds no new strings. */}
+        <TableFooterBar>
+          <span className="flex items-baseline gap-1.5">
+            <span className="font-semibold tabular-nums text-foreground">{agents.length}</span>
+            <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
+              {t('agentReports.kpiAgents', { defaultValue: 'Agents' })}
+            </span>
+          </span>
+        </TableFooterBar>
       </TableSurface>
     </div>
   );
@@ -1644,8 +1656,14 @@ function ConversationReport({
             ))}
           </tbody>
         </Table>
+        {/* The truncation note reads as part of the table it truncates —
+            a bare caption floating on the canvas read as dead space. */}
+        {report.rows.length > 50 && (
+          <TableFooterBar>
+            <PreviewNote shown={Math.min(report.rows.length, 50)} total={report.rows.length} />
+          </TableFooterBar>
+        )}
       </TableSurface>
-      <PreviewNote shown={Math.min(report.rows.length, 50)} total={report.rows.length} />
 
       <TableSurface>
         <Table>
@@ -1676,8 +1694,12 @@ function ConversationReport({
             ))}
           </tbody>
         </Table>
+        {report.byDay.length > preview.length && (
+          <TableFooterBar>
+            <PreviewNote shown={preview.length} total={report.byDay.length} unit="days" />
+          </TableFooterBar>
+        )}
       </TableSurface>
-      <PreviewNote shown={preview.length} total={report.byDay.length} unit="days" />
     </div>
   );
 }
@@ -1789,9 +1811,14 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
         {/* The tickets report is a 27-column operations sheet and gets the whole
             monitor; the other three are read-and-move-on summaries and stay
             narrow, because a KPI strip stretched across 1920px is four numbers
-            with a metre of white between them. */}
+            with a metre of white between them. Agent KPI gets one step more
+            room: its seven columns overflowed a 5xl card and clipped the CSAT
+            columns behind a scroll nobody notices on a 1920px monitor. */}
         <div
-          className={cn('mx-auto space-y-5', which === 'complaints' ? 'max-w-none' : 'max-w-5xl')}
+          className={cn(
+            'mx-auto space-y-5',
+            which === 'complaints' ? 'max-w-none' : which === 'agents' ? 'max-w-6xl' : 'max-w-5xl',
+          )}
         >
           {/* Clean editorial header — no gradient banner. */}
           <div className="border-b border-foreground/10 pb-5">
@@ -1829,8 +1856,16 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
             />
           ) : (
             <>
-              {/* KPI strip — boxed board tiles: tinted icon chips, hero numerals. */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {/* KPI strip — boxed board tiles: tinted icon chips, hero numerals.
+                  On the full-bleed complaints sheet the strip stays capped: four
+                  tiles stretched across 1920px are four small numbers separated
+                  by dead width. */}
+              <div
+                className={cn(
+                  'grid grid-cols-2 gap-3 sm:grid-cols-4',
+                  which === 'complaints' && 'max-w-4xl',
+                )}
+              >
                 <KpiTile
                   label={t('agentReports.kpiTickets', { defaultValue: 'Tickets' })}
                   value={String(data.tickets.length)}

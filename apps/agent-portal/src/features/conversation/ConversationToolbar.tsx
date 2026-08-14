@@ -252,10 +252,12 @@ export function ConversationToolbar({
                     key={j.id}
                     className="inline-flex items-center gap-1 rounded-full bg-secondary px-1.5 py-px text-[10px] font-medium text-foreground/75"
                   >
+                    {/* Tag colours are user data (inline style); the colourless
+                        fallback is a token, not a hardcoded slate hex. */}
                     <span
                       aria-hidden
-                      className="h-1 w-1 shrink-0 rounded-full"
-                      style={{ background: j.tags_id!.color ?? '#94a3b8' }}
+                      className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/50"
+                      style={j.tags_id!.color ? { background: j.tags_id!.color } : undefined}
                     />
                     <span className="max-w-[8rem] truncate">{j.tags_id!.name}</span>
                   </span>
@@ -392,8 +394,11 @@ export function ConversationToolbar({
       {/* #6 — every chat should end as a ticket. When the conversation is
           resolved/closed with no ticket yet, surface a one-tap prompt to spin
           one out (carrying this chat's order + files, see CreateTicketDialog). */}
+      {/* bg-primary/10, not bg-primary-subtle/60 — the subtle token embeds
+          its own alpha, so any expansion of it is invalid CSS and the strip's
+          wash silently painted nothing (design-law token-alpha trap). */}
       {showTicketPrompt && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-primary/20 bg-primary-subtle/60 px-3 py-2.5 sm:px-5 motion-safe:animate-fade-in">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-primary/20 bg-primary/10 px-3 py-2.5 sm:px-5 motion-safe:animate-fade-in">
           <p className="min-w-0 flex-1 text-xs leading-relaxed text-foreground">
             <span className="font-medium">
               {t('tickets.chatEndedPromptTitle', { defaultValue: 'This chat is wrapped up.' })}

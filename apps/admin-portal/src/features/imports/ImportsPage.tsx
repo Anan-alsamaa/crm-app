@@ -306,7 +306,10 @@ export function ImportsPage() {
         )}
 
         {!preview && !upload.isPending && (
+          /* Composed empty state — icon chip + title, never bare text lines
+             floating in the dead space under the cards. */
           <EmptyState
+            icon={<UploadIcon size={20} />}
             title={t('imports.empty', { defaultValue: 'Upload a CSV to begin' })}
             description={t('imports.emptyHint', {
               defaultValue:

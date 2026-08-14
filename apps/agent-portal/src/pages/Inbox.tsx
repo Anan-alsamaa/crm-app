@@ -100,6 +100,23 @@ export function Inbox() {
     currentTeamId: user?.team ?? null,
   });
   const previews = useConversationPreviews((conversations.data ?? []).map((c) => c.id));
+  // WhatsApp-style second line: the last real message, not a repeat of the
+  // name/phone/email. "You:" prefixes agent replies; an image/file-only message
+  // shows an attachment label. Shared by the list rows and the welcome pane's
+  // Recent activity so both read the same.
+  const previewFor = (id: string): string => {
+    const pv = previews.data?.[id];
+    if (!pv)
+      return previews.isLoading
+        ? ''
+        : t('inbox.noMessagesYet', { defaultValue: 'No messages yet' });
+    const body = pv.hasAttachment
+      ? t('inbox.attachmentPreview', { defaultValue: 'Attachment' })
+      : (pv.content ?? '');
+    return pv.sender_type === 'agent'
+      ? `${t('inbox.youPrefix', { defaultValue: 'You:' })} ${body}`
+      : body;
+  };
   const tags = useTags();
   const prefetchOrders = usePrefetchInboxOrders();
   const [selected, setSelected] = useState<string | null>(null);
@@ -266,7 +283,9 @@ export function Inbox() {
               </button>
             );
             return (
-              <div className="mt-2 flex gap-1.5 px-3">
+              // px-4 so the tile rings share a start edge with the search field
+              // below — three different left edges read as clutter in a 340px rail.
+              <div className="mt-3 flex gap-1.5 px-4">
                 <Stat
                   label={t('inbox.stats.open', { defaultValue: 'open' })}
                   value={openCount}
@@ -288,8 +307,9 @@ export function Inbox() {
             );
           })()}
 
-          {/* Search + ghost filter row */}
-          <div className="space-y-2 px-4 pb-3">
+          {/* Search + ghost filter row — mt-3 keeps the same breath between the
+              stat tiles above and the search field as between title and tiles. */}
+          <div className="mt-3 space-y-2 px-4 pb-3">
             <div className="relative">
               <svg
                 aria-hidden
@@ -382,9 +402,12 @@ export function Inbox() {
             </div>
           </div>
 
-          {/* Bulk toolbar — pill-shaped, floats, no border bands. */}
+          {/* Bulk toolbar — pill-shaped, floats, no border bands. bg-primary/10,
+              not bg-primary-subtle: that token embeds its own alpha, so the
+              <alpha-value> expansion is invalid CSS and the fill paints NOTHING
+              (the design-law token-alpha trap). Jade wash + jade hairline. */}
           {someChecked && (
-            <div className="mx-4 mb-2 flex flex-wrap items-center gap-1.5 rounded-xl bg-primary-subtle px-3 py-2 text-xs animate-fade-in">
+            <div className="mx-4 mb-2 flex flex-wrap items-center gap-1.5 rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20 px-3 py-2 text-xs animate-fade-in">
               <span className="font-semibold text-primary">
                 {t('inbox.bulkSelected', { count: checked.size })}
               </span>
@@ -452,7 +475,9 @@ export function Inbox() {
               </ul>
             ) : conversations.data && conversations.data.length > 0 ? (
               <>
-                <label className="flex h-8 items-center gap-2 border-b border-b-foreground/[0.06] px-5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {/* px-4 puts this checkbox on the same column as the row
+                    checkboxes below (ms-4) — one aligned select rail. */}
+                <label className="flex h-8 items-center gap-2 border-b border-b-foreground/[0.06] px-4 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={allChecked}
@@ -473,20 +498,7 @@ export function Inbox() {
                       c.contact?.phone ||
                       c.contact?.email ||
                       t('inbox.unknownContact');
-                    // WhatsApp-style second line: the last real message, not a
-                    // repeat of the name/phone/email. "You:" prefixes agent
-                    // replies; an image/file-only message shows an attachment label.
-                    const pv = previews.data?.[c.id];
-                    const pvBody = pv?.hasAttachment
-                      ? t('inbox.attachmentPreview', { defaultValue: 'Attachment' })
-                      : (pv?.content ?? '');
-                    const previewText = pv
-                      ? pv.sender_type === 'agent'
-                        ? `${t('inbox.youPrefix', { defaultValue: 'You:' })} ${pvBody}`
-                        : pvBody
-                      : previews.isLoading
-                        ? ''
-                        : t('inbox.noMessagesYet', { defaultValue: 'No messages yet' });
+                    const previewText = previewFor(c.id);
                     return (
                       <li
                         key={c.id}
@@ -505,7 +517,7 @@ export function Inbox() {
                       >
                         <input
                           type="checkbox"
-                          className="ms-3 mt-4 h-3.5 w-3.5 rounded-sm border-border-strong bg-card accent-primary opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity duration-fast"
+                          className="ms-4 mt-4 h-3.5 w-3.5 rounded-sm border-border-strong bg-card accent-primary opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity duration-fast"
                           checked={checked.has(c.id)}
                           onChange={() => toggleOne(c.id)}
                           aria-label={displayName}
@@ -659,7 +671,7 @@ export function Inbox() {
                 .sort((a, b) => (b.last_message_at ?? '').localeCompare(a.last_message_at ?? ''))
                 .slice(0, 5);
               return (
-                <div className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-4 p-6">
+                <div className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-5 p-6">
                   {/* The agent's morning glance — clean, no gradient. */}
                   <div>
                     <h2 className="text-3xl font-extrabold leading-[1.05] tracking-[-0.035em] text-balance text-foreground">
@@ -680,24 +692,68 @@ export function Inbox() {
                   </div>
 
                   {/* Board KPI tiles — the shared StatCard anatomy: hero numeral,
-                      tone dot, uppercase micro-label. Unread is jade to match
-                      the list's unread dot; colour stays an accent, never a
-                      surface fill. */}
+                      tinted icon chip, uppercase micro-label. Urgent is magenta
+                      to match the list strip's urgent numeral (one number, one
+                      hue everywhere); unread is jade to match the list's unread
+                      dot. Colour stays an accent, never a surface fill. */}
                   <div className="grid grid-cols-3 gap-3">
                     <StatCard
                       label={t('inbox.stats.open', { defaultValue: 'open' })}
                       value={openCount}
                       tone="success"
+                      icon={
+                        <svg
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="h-4 w-4"
+                          aria-hidden
+                        >
+                          <path d="M13.5 7.5a5.5 5.5 0 0 1-8.03 4.9L2.5 13.5l1.03-3A5.5 5.5 0 1 1 13.5 7.5Z" />
+                        </svg>
+                      }
                     />
                     <StatCard
                       label={t('inbox.stats.urgent', { defaultValue: 'urgent' })}
                       value={urgentCount}
-                      tone="destructive"
+                      tone="pink"
+                      icon={
+                        <svg
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="h-4 w-4"
+                          aria-hidden
+                        >
+                          <path d="M8.9 1.8 3.8 9h3.1l-.8 5.2L11.2 7H8.1l.8-5.2Z" />
+                        </svg>
+                      }
                     />
                     <StatCard
                       label={t('inbox.stats.unread', { defaultValue: 'unread' })}
                       value={unreadCount}
                       tone="primary"
+                      icon={
+                        <svg
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="h-4 w-4"
+                          aria-hidden
+                        >
+                          <path d="M12.6 11.2H3.4c.9-1 1.35-2.5 1.35-4.45a3.25 3.25 0 0 1 6.5 0c0 1.95.45 3.45 1.35 4.45Z" />
+                          <path d="M6.7 13.2a1.45 1.45 0 0 0 2.6 0" />
+                        </svg>
+                      }
                     />
                   </div>
 
@@ -712,6 +768,9 @@ export function Inbox() {
                             c.contact?.phone ||
                             c.contact?.email ||
                             t('inbox.unknownContact');
+                          // Same last-message line as the inbox list — without
+                          // it each row is a name and a void of unused width.
+                          const preview = previewFor(c.id);
                           return (
                             <li key={c.id}>
                               <button
@@ -725,8 +784,15 @@ export function Inbox() {
                                   phone={c.contact?.phone}
                                   size="md"
                                 />
-                                <span className="flex-1 truncate text-sm font-semibold text-foreground">
-                                  {name}
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-semibold text-foreground">
+                                    {name}
+                                  </span>
+                                  {preview && (
+                                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                      {preview}
+                                    </span>
+                                  )}
                                 </span>
                                 <Pill tone={STATUS_TONE[c.status]} size="sm">
                                   {t(`status.${c.status}`, { ns: 'common' })}

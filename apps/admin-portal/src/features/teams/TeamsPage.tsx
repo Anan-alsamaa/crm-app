@@ -233,7 +233,10 @@ export function TeamsPage() {
                           </div>
                         )}
                       </div>
-                      {memberCount > 0 ? (
+                      {/* The count cell already says "0 members" — repeating it
+                          as an italic "no members" read as a stutter, so an
+                          empty team simply shows no avatar stack. */}
+                      {memberCount > 0 && (
                         <div className="flex shrink-0 items-center -space-x-1.5">
                           {members.slice(0, 4).map((m) => {
                             const fn = [m.first_name, m.last_name].filter(Boolean).join(' ');
@@ -249,14 +252,22 @@ export function TeamsPage() {
                             </span>
                           )}
                         </div>
-                      ) : (
-                        <span className="shrink-0 text-2xs italic text-muted-foreground/70">
-                          {t('teams.noMembers', { defaultValue: 'no members' })}
-                        </span>
                       )}
                       {/* Right-aligned tabular numbers — the boards' table idiom. */}
-                      <span className="w-20 shrink-0 text-end text-xs text-muted-foreground tabular-nums">
-                        <span className="font-semibold text-foreground">{memberCount}</span>{' '}
+                      <span
+                        className={cn(
+                          'w-20 shrink-0 text-end text-xs tabular-nums text-muted-foreground',
+                          memberCount === 0 && 'text-muted-foreground/70',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'font-semibold',
+                            memberCount > 0 ? 'text-foreground' : 'text-muted-foreground',
+                          )}
+                        >
+                          {memberCount}
+                        </span>{' '}
                         {memberCount === 1
                           ? t('teams.memberOne', { defaultValue: 'member' })
                           : t('teams.memberOther', { defaultValue: 'members' })}
@@ -324,7 +335,10 @@ export function TeamsPage() {
               defaultValue: 'Assign members from the Users page after creating the team.',
             })}
           >
-            <p className="text-xs text-muted-foreground">
+            {/* Composed note panel — the same quiet-surface treatment the
+                roles page uses for its built-in explainer, so this reads as a
+                deliberate aside instead of a stray text line. */}
+            <p className="rounded-xl bg-secondary/50 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
               {t('teams.membersHelper', {
                 defaultValue:
                   'You can assign agents to this team from the Users page once the team is created.',

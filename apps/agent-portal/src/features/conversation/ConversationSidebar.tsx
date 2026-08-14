@@ -91,8 +91,11 @@ function SectionLabel({ children, count }: { children: React.ReactNode; count?: 
   return (
     <h3 className="mb-3 flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
       <span>{children}</span>
+      {/* bg-primary/15, not bg-primary-subtle — that token embeds its own
+          alpha so the <alpha-value> expansion is invalid CSS and paints
+          nothing (design-law token-alpha trap). Jade-wash pill grammar. */}
       {count !== undefined && count > 0 && (
-        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary-subtle px-1.5 text-xs font-semibold tabular-nums tracking-normal text-primary">
+        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary/15 px-1.5 text-xs font-semibold tabular-nums tracking-normal text-primary">
           {count}
         </span>
       )}
@@ -222,8 +225,11 @@ export function ConversationSidebar({
     <aside
       className={cn(
         // One floating profile panel (reference composition): sections are
-        // separated by spacing inside a single rounded surface.
+        // separated by spacing inside a single rounded surface, with a hairline
+        // top rule per <section> so the boundaries hold when several quiet
+        // sections stack (spacing alone let CONTACT/ORDER/TICKETS blur together).
         'relative shrink-0 overflow-auto rounded-2xl bg-card pb-6 text-foreground shadow-soft ring-1 ring-foreground/[0.06]',
+        '[&>section]:border-t [&>section]:border-foreground/[0.06]',
         widthClass,
         className,
       )}
@@ -256,15 +262,24 @@ export function ConversationSidebar({
 
       {/* Stat tiles — the shared boxed StatCard, two up (the reference
           profile-panel move: Age/Blood, Files/Links). Tickets carries the jade
-          accent; media stays neutral. */}
+          accent; media stays neutral. The labels are wrapped in a
+          whitespace-normal span: StatCard truncates its label, and at the rail's
+          half-width "LINKED TICKETS" became "LINKED TIC…" — wrapping to a second
+          line beats amputating the word. */}
       <div className="grid grid-cols-2 gap-2 px-5 pb-2">
         <StatCard
-          label={t('sidebar.linkedTickets')}
+          label={
+            <span className="whitespace-normal leading-normal">{t('sidebar.linkedTickets')}</span>
+          }
           value={tickets.data?.length ?? 0}
           tone="primary"
         />
         <StatCard
-          label={t('sidebar.sharedMedia', { defaultValue: 'Shared media' })}
+          label={
+            <span className="whitespace-normal leading-normal">
+              {t('sidebar.sharedMedia', { defaultValue: 'Shared media' })}
+            </span>
+          }
           value={media?.length ?? 0}
         />
       </div>
@@ -403,7 +418,11 @@ export function ConversationSidebar({
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-muted-foreground">{t('sidebar.noTickets')}</p>
+          /* Composed mini-empty: a dashed placeholder slot, not a bare line
+             floating in dead space. */
+          <p className="rounded-xl border border-dashed border-border px-3 py-3.5 text-center text-xs text-muted-foreground">
+            {t('sidebar.noTickets')}
+          </p>
         )}
       </section>
 
@@ -508,7 +527,8 @@ export function ConversationSidebar({
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-muted-foreground">
+          /* Same dashed placeholder-slot grammar as the tickets empty above. */
+          <p className="rounded-xl border border-dashed border-border px-3 py-3.5 text-center text-xs text-muted-foreground">
             {t('sidebar.noNotes', { defaultValue: 'No internal notes yet.' })}
           </p>
         )}

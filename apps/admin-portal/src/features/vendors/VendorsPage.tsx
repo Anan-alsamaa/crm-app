@@ -499,7 +499,14 @@ function VendorCard({ v, onEdit }: { v: VendorRow; onEdit: () => void }) {
         </div>
         <div className="truncate font-mono text-2xs text-muted-foreground">{v.yiji_vendor_id}</div>
       </div>
-      <span className="hidden shrink-0 font-mono text-2xs text-muted-foreground sm:block">
+      {/* Swatch chip — a live dot of the actual brand color beside its hex,
+          instead of a bare mono string floating at the row's edge. */}
+      <span className="hidden shrink-0 items-center gap-1.5 rounded-full bg-secondary/60 px-2.5 py-1 font-mono text-2xs text-muted-foreground sm:inline-flex">
+        <span
+          aria-hidden
+          className="h-2.5 w-2.5 rounded-full ring-1 ring-foreground/10"
+          style={{ background: primary }}
+        />
         {primary}
       </span>
     </button>

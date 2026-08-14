@@ -521,8 +521,10 @@ export function CreateTicketDialog({
         {/* Columns sized to the fields rather than to the monitor, and centred
             in whatever is left. Two 50% columns on a 1920 screen put 640px of
             inputs against a 300px empty gutter each, which reads as a layout
-            that failed rather than one that chose. */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 justify-center gap-4 overflow-y-auto p-4 sm:p-5 lg:grid-cols-[minmax(0,44rem)_minmax(0,44rem)] lg:overflow-hidden">
+            that failed rather than one that chose. 42.5rem exactly: the
+            sections cap their fields at 40rem and pad 1.25rem a side, so a
+            wider column just re-opens a ragged gutter inside the card. */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 justify-center gap-5 overflow-y-auto p-5 sm:p-6 lg:grid-cols-[minmax(0,42.5rem)_minmax(0,42.5rem)] lg:overflow-hidden">
           <div className="min-h-0 lg:overflow-y-auto">
             <ComplaintSection
               tone="violet"
@@ -696,10 +698,16 @@ function OrderRail({
 
   return (
     <aside className="w-full shrink-0 overflow-y-auto border-t border-border bg-background px-6 py-5 lg:w-[20rem] lg:border-s lg:border-t-0">
-      {/* Same head as the form sections, in the fourth hue, so the rail reads as
-          a peer of the columns rather than a stray panel. */}
-      <header className="mb-4 flex items-baseline gap-2">
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky" aria-hidden />
+      {/* Same head as the form sections, in the fourth hue — the tinted chip
+          with the sky dot — so the rail reads as a peer of the columns rather
+          than a stray panel. */}
+      <header className="mb-4 flex items-center gap-2.5">
+        <span
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-sky-tint"
+          aria-hidden
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-sky" />
+        </span>
         <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
           {t('complaint.context', { defaultValue: 'Context' })}
         </h2>

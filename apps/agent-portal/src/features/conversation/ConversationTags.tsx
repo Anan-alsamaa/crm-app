@@ -153,10 +153,12 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
               key={j.id}
               className="group/chip inline-flex items-center gap-1.5 rounded-full bg-secondary py-1 ps-2 pe-1 text-xs font-medium text-foreground"
             >
+              {/* Tag colours are user data (inline style); the colourless
+                  fallback is a token, not a hardcoded slate hex. */}
               <span
                 aria-hidden
-                className="h-1.5 w-1.5 shrink-0 rounded-full"
-                style={{ background: j.tags_id!.color ?? '#94a3b8' }}
+                className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50"
+                style={j.tags_id!.color ? { background: j.tags_id!.color } : undefined}
               />
               <span className="max-w-[10rem] truncate">{j.tags_id!.name}</span>
               <button
@@ -175,7 +177,9 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
         </div>
       ) : (
         !adding && (
-          <p className="text-xs text-muted-foreground">
+          /* Composed mini-empty — the sidebar's dashed placeholder-slot grammar,
+             not a bare line floating over the card. */
+          <p className="rounded-xl border border-dashed border-border px-3 py-3.5 text-center text-xs text-muted-foreground">
             {t('conversation.noTagsYet', { defaultValue: 'No tags yet.' })}
           </p>
         )
@@ -242,8 +246,8 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
                     >
                       <span
                         aria-hidden
-                        className="h-1.5 w-1.5 shrink-0 rounded-full"
-                        style={{ background: tg.color ?? '#94a3b8' }}
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50"
+                        style={tg.color ? { background: tg.color } : undefined}
                       />
                       <span className="flex-1 truncate">{tg.name}</span>
                       {isAdded && (

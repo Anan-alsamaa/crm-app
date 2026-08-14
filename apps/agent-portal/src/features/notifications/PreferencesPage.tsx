@@ -261,15 +261,19 @@ export function PreferencesPage() {
                   list. A divided list reads as settings-you-scan; discrete cards
                   read as features-you-choose, which is what these are. */}
                 <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {g.types.map((type) => {
+                  {g.types.map((type, i) => {
                     const meta = META[type];
                     const Icon = meta?.icon;
                     const muted = draft[type] === 'none';
+                    // An odd count strands the last card beside a dead cell at
+                    // two-up; letting it span keeps the group a solid block.
+                    const spans = i === g.types.length - 1 && g.types.length % 2 === 1;
                     return (
                       <li
                         key={type}
                         className={cn(
                           'group flex items-start gap-3.5 rounded-2xl px-4 py-4 transition-colors duration-fast ease-out',
+                          spans && 'sm:col-span-2',
                           // Same active/inactive treatment as the AI assistance
                           // cards: a live setting is tinted and ringed, a disabled
                           // one recedes, so the grid is readable without reading.

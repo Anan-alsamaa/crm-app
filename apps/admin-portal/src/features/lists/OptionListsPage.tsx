@@ -6,11 +6,13 @@ import {
   Button,
   ChevronDownIcon,
   CloseIcon,
+  EmptyState,
   IconButton,
   Input,
   Pill,
   SectionCard,
   SelectMenu,
+  SettingsIcon,
   Skeleton,
   Toolbar,
   ToolbarSpacer,
@@ -172,19 +174,29 @@ export function OptionListsPage() {
 
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <div className="mx-auto max-w-3xl space-y-4">
+          {/* Page hero — the boards' header anatomy, same as every sibling
+              page, so the suite reads as one product. */}
+          <div className="border-b border-foreground/10 pb-5">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">
+              {t('lists.title', { defaultValue: 'Dropdown lists' })}
+            </h2>
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {t('lists.heroSubtitle', {
+                defaultValue:
+                  'Every dropdown the ticket form offers, editable live. Pick a list, then add, reorder, retire, or restore its values.',
+              })}
+            </p>
+          </div>
           {/* The board card header carries the list's name and the one rule an
               operator must know before touching it. */}
+          {/* The count lives in the board card's footer band below — a bare
+              numeral floating beside the header read as debris. */}
           <SectionCard
             title={LIST_LABELS[listKey]}
             hint={t('lists.help', {
               defaultValue:
                 'These values feed the complaint form live — no deploy needed. Retire a value to stop offering it; tickets that already carry it keep displaying it. The exact spellings are what reports group by, so a corrected spelling is a new value, not an edit.',
             })}
-            aside={
-              <span className="font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
-                {current.length}
-              </span>
-            }
           >
             <div className="flex gap-2">
               <Input
@@ -211,92 +223,115 @@ export function OptionListsPage() {
               ))}
             </div>
           ) : (
-            <ul className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-              {current.map((row, i) => (
-                <li
-                  key={row.id}
-                  className={cn(
-                    'flex items-center gap-2 border-b border-border/60 px-4 py-2.5 last:border-b-0',
-                    !row.active && 'opacity-60',
-                  )}
-                >
-                  {/* Numbered chip — the row's rank in the dropdown, as a tile. */}
-                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-secondary text-2xs font-semibold tabular-nums text-muted-foreground">
-                    {i + 1}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                    {row.value}
-                  </span>
-                  {!row.active && (
-                    <Pill tone="neutral" size="sm">
-                      {t('lists.retired', { defaultValue: 'Retired' })}
-                    </Pill>
-                  )}
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    disabled={i === 0}
-                    onClick={() => move(row, -1)}
-                    aria-label={t('lists.moveUp', {
-                      value: row.value,
-                      defaultValue: 'Move {{value}} up',
-                    })}
+            /* Rows flush inside one board card — hairline separators, then a
+               footer aggregate band, per the boards' table anatomy. */
+            <div className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+              <ul className="divide-y divide-foreground/[0.06]">
+                {current.map((row, i) => (
+                  <li
+                    key={row.id}
+                    className={cn(
+                      'flex items-center gap-2 px-4 py-2.5',
+                      !row.active && 'opacity-60',
+                    )}
                   >
-                    <ChevronDownIcon size={14} className="rotate-180" />
-                  </IconButton>
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    disabled={i === current.length - 1}
-                    onClick={() => move(row, 1)}
-                    aria-label={t('lists.moveDown', {
-                      value: row.value,
-                      defaultValue: 'Move {{value}} down',
-                    })}
-                  >
-                    <ChevronDownIcon size={14} />
-                  </IconButton>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => patch.mutate({ id: row.id, body: { active: !row.active } })}
-                  >
-                    {row.active
-                      ? t('lists.retire', { defaultValue: 'Retire' })
-                      : t('lists.restore', { defaultValue: 'Restore' })}
-                  </Button>
-                  {/* Hard delete is for typos caught immediately — quiet on
-                      purpose, since Retire is almost always the right call. */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          t('lists.deleteConfirm', {
-                            value: row.value,
-                            defaultValue:
-                              'Delete “{{value}}” outright? Retiring is safer — tickets already carrying it keep displaying it either way.',
-                          }),
+                    {/* Numbered chip — the row's rank in the dropdown, as a tile. */}
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-secondary text-2xs font-semibold tabular-nums text-muted-foreground">
+                      {i + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                      {row.value}
+                    </span>
+                    {!row.active && (
+                      <Pill tone="neutral" size="sm">
+                        {t('lists.retired', { defaultValue: 'Retired' })}
+                      </Pill>
+                    )}
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      disabled={i === 0}
+                      onClick={() => move(row, -1)}
+                      aria-label={t('lists.moveUp', {
+                        value: row.value,
+                        defaultValue: 'Move {{value}} up',
+                      })}
+                    >
+                      <ChevronDownIcon size={14} className="rotate-180" />
+                    </IconButton>
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      disabled={i === current.length - 1}
+                      onClick={() => move(row, 1)}
+                      aria-label={t('lists.moveDown', {
+                        value: row.value,
+                        defaultValue: 'Move {{value}} down',
+                      })}
+                    >
+                      <ChevronDownIcon size={14} />
+                    </IconButton>
+                    {/* Hairline divider groups the reorder pair apart from the
+                        lifecycle actions, so the cluster reads as two verbs. */}
+                    <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-foreground/[0.08]" />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => patch.mutate({ id: row.id, body: { active: !row.active } })}
+                    >
+                      {row.active
+                        ? t('lists.retire', { defaultValue: 'Retire' })
+                        : t('lists.restore', { defaultValue: 'Restore' })}
+                    </Button>
+                    {/* Hard delete is for typos caught immediately — quiet on
+                        purpose, since Retire is almost always the right call. */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            t('lists.deleteConfirm', {
+                              value: row.value,
+                              defaultValue:
+                                'Delete “{{value}}” outright? Retiring is safer — tickets already carrying it keep displaying it either way.',
+                            }),
+                          )
                         )
-                      )
-                        remove.mutate(row.id);
-                    }}
-                    aria-label={t('lists.delete', {
-                      value: row.value,
-                      defaultValue: 'Delete {{value}}',
-                    })}
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                  >
-                    <CloseIcon size={14} />
-                  </button>
-                </li>
-              ))}
+                          remove.mutate(row.id);
+                      }}
+                      aria-label={t('lists.delete', {
+                        value: row.value,
+                        defaultValue: 'Delete {{value}}',
+                      })}
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                    >
+                      <CloseIcon size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
               {current.length === 0 && (
-                <li className="p-8 text-center text-sm text-muted-foreground">
-                  {t('lists.empty', { defaultValue: 'This list has no values yet.' })}
-                </li>
+                /* Composed empty state — an icon chip and a real title, never
+                   a bare text line floating in dead space. */
+                <EmptyState
+                  icon={<SettingsIcon size={20} />}
+                  title={t('lists.empty', { defaultValue: 'This list has no values yet.' })}
+                  description={t('lists.emptyHint', {
+                    defaultValue:
+                      'Add the first value above — the form offers it as soon as it saves.',
+                  })}
+                />
               )}
-            </ul>
+              {/* Footer aggregate band — the boards' table anatomy. */}
+              <div className="flex items-center justify-between gap-3 border-t border-foreground/[0.06] bg-secondary/30 px-4 py-2.5">
+                <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {t('lists.valuesCap', { defaultValue: 'values' })}
+                </span>
+                <span className="text-sm font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
+                  {current.length}
+                </span>
+              </div>
+            </div>
           )}
         </div>
       </div>

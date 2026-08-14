@@ -5,7 +5,9 @@ import {
   Avatar,
   Button,
   cn,
+  EmptyState,
   formatRelative,
+  InboxIcon,
   Input,
   Pill,
   Skeleton,
@@ -197,7 +199,7 @@ export function ContactProfilePage() {
   function IdentityCard() {
     if (contact.isLoading || !contact.data) {
       return (
-        <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft p-6 space-y-3">
+        <div className="rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft p-6 space-y-3">
           <Skeleton className="h-10 w-10 rounded-full" />
           <Skeleton className="h-5 w-40" />
           <Skeleton className="h-3 w-56" />
@@ -207,7 +209,7 @@ export function ContactProfilePage() {
     const c = contact.data;
     const metaTier = (c.metadata?.tier as string | undefined) ?? null;
     return (
-      <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft p-6">
+      <div className="rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft p-6">
         <div className="flex items-start gap-4">
           <Avatar name={c.name} email={c.email} phone={c.phone} size="lg" />
           <div className="min-w-0 flex-1 space-y-1.5">
@@ -274,7 +276,10 @@ export function ContactProfilePage() {
                   </h2>
                   {metaTier && <Pill tone="primary">{metaTier}</Pill>}
                 </div>
-                <dl className="grid grid-cols-1 gap-x-6 gap-y-0.5 text-xs sm:grid-cols-2">
+                {/* Label column hugs its widest label so values sit beside it,
+                    not half a card away — the old 50/50 split floated "Yiji"
+                    in the middle of an otherwise empty card. */}
+                <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 pt-1 text-xs">
                   {c.email && (
                     <Row label={t('contacts.email', { defaultValue: 'Email' })} value={c.email} />
                   )}
@@ -325,9 +330,14 @@ export function ContactProfilePage() {
             <Skeleton className="h-14 w-full rounded-2xl" />
           </div>
         ) : items.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground/80">
-            {t('contacts.noHistory', { defaultValue: 'No conversations or tickets yet.' })}
-          </p>
+          // A composed quiet state on a dashed panel — a bare centered line in
+          // this much canvas read as a rendering gap, not as an empty history.
+          <div className="rounded-2xl border border-dashed border-foreground/[0.08] bg-card/40">
+            <EmptyState
+              icon={<InboxIcon size={24} />}
+              title={t('contacts.noHistory', { defaultValue: 'No conversations or tickets yet.' })}
+            />
+          </div>
         ) : (
           <ul className="space-y-2">
             {items.map((it) => (
@@ -350,7 +360,7 @@ export function ContactProfilePage() {
       <Link
         to={`/?conversation=${conv.id}`}
         className={cn(
-          'group block rounded-2xl bg-card/60 ring-1 ring-foreground/[0.04] shadow-soft px-4 py-3',
+          'group block rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft px-4 py-3',
           'transition-[box-shadow,transform,background-color] duration-fast ease-out',
           'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px',
         )}
@@ -377,7 +387,7 @@ export function ContactProfilePage() {
       <Link
         to="/tickets"
         className={cn(
-          'group block rounded-2xl bg-card/60 ring-1 ring-foreground/[0.04] shadow-soft px-4 py-3',
+          'group block rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft px-4 py-3',
           'transition-[box-shadow,transform,background-color] duration-fast ease-out',
           'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.08] hover:-translate-y-px',
         )}
@@ -408,8 +418,10 @@ export function ContactProfilePage() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <>
-      <dt className="text-muted-foreground truncate">{label}</dt>
-      <dd className="text-foreground font-medium truncate">{value}</dd>
+      <dt className="self-baseline text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="self-baseline min-w-0 truncate font-medium text-foreground">{value}</dd>
     </>
   );
 }

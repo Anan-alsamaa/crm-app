@@ -1,6 +1,18 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Input, Pill, Skeleton, cn, formatRelative, toast } from '@yiji/ui';
+import {
+  Button,
+  EmptyState,
+  InboxIcon,
+  Input,
+  Pill,
+  Skeleton,
+  SparkleIcon,
+  Toolbar,
+  cn,
+  formatRelative,
+  toast,
+} from '@yiji/ui';
 import { COUPON_APPROVAL_STATUSES, type CouponApprovalStatus } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useCouponApprovals, useDecideCoupon, type CouponApprovalRow } from './api.js';
@@ -63,7 +75,7 @@ function Row({
           {row.coupon_code ?? t('couponApprovals.noCode', { defaultValue: 'no code' })}
         </span>
         {worth && (
-          <span className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
+          <span className="text-xl font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
             {worth}
           </span>
         )}
@@ -75,7 +87,11 @@ function Row({
         </span>
       </div>
 
-      <dl className="mt-2.5 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+      {/* Meta pairs flow from the start edge rather than sitting on a rigid
+          half-width grid — a short "Asked by" used to strand "Customer" in the
+          middle of the card. The ticket line keeps a row to itself because
+          subjects run long. */}
+      <dl className="mt-3 flex flex-wrap items-baseline gap-x-8 gap-y-1.5 text-xs">
         <div className="flex items-baseline gap-2">
           <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('couponApprovals.agent', { defaultValue: 'Asked by' })}
@@ -84,7 +100,7 @@ function Row({
             {row.requested_by?.first_name ?? row.requested_by?.email ?? '—'}
           </dd>
         </div>
-        <div className="flex items-baseline gap-2">
+        <div className="flex min-w-0 items-baseline gap-2">
           <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('couponApprovals.customer', { defaultValue: 'Customer' })}
           </dt>
@@ -92,7 +108,7 @@ function Row({
             {row.contact?.name ?? row.contact?.phone ?? '—'}
           </dd>
         </div>
-        <div className="flex items-baseline gap-2 sm:col-span-2">
+        <div className="flex w-full min-w-0 items-baseline gap-2">
           <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('couponApprovals.ticket', { defaultValue: 'Ticket' })}
           </dt>
@@ -121,7 +137,9 @@ function Row({
       )}
 
       {pending && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        // The decision strip sits on its own hairline band — the card's footer,
+        // so the actions read as one place rather than a loose button cluster.
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
           {rejecting ? (
             <>
               <Input
@@ -226,53 +244,89 @@ export function CouponApprovalsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
-      <div className="flex flex-wrap gap-1.5">
-        {(
-          ['pending', ...COUPON_APPROVAL_STATUSES.filter((s) => s !== 'pending'), 'all'] as const
-        ).map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setView(s)}
-            aria-pressed={view === s}
-            className={cn(
-              'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast ease-out',
-              view === s
-                ? // The selected filter is a jade wash, the board's pill idiom.
-                  'bg-primary/15 text-primary ring-1 ring-inset ring-primary/25'
-                : 'bg-secondary/60 text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {t(`couponApprovals.status.${s}`, { defaultValue: s })}
-          </button>
-        ))}
-      </div>
+    // The shell's <main> is overflow-hidden by design — every page owns its
+    // scroll. This one didn't, so a queue longer than a screen was unreachable,
+    // and with no header band the filter pills sat jammed under the navbar.
+    <div className="flex h-full flex-col overflow-hidden">
+      <Toolbar>
+        <h1 className="text-sm font-semibold tracking-tight text-foreground">
+          {t('nav.couponApprovals', { defaultValue: 'Coupon approvals' })}
+        </h1>
+      </Toolbar>
 
-      {approvals.isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-32 w-full rounded-2xl" />
-          ))}
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+        <div className="mx-auto max-w-4xl space-y-4">
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              [
+                'pending',
+                ...COUPON_APPROVAL_STATUSES.filter((s) => s !== 'pending'),
+                'all',
+              ] as const
+            ).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setView(s)}
+                aria-pressed={view === s}
+                className={cn(
+                  'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast ease-out',
+                  view === s
+                    ? // The selected filter is a jade wash, the board's pill idiom.
+                      'bg-primary/15 text-primary ring-1 ring-inset ring-primary/25'
+                    : 'bg-secondary/60 text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {t(`couponApprovals.status.${s}`, { defaultValue: s })}
+              </button>
+            ))}
+          </div>
+
+          {approvals.isLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-32 w-full rounded-2xl" />
+              ))}
+            </div>
+          ) : rows.length === 0 ? (
+            // Composed, not a bare sentence adrift in a card: a cleared queue is
+            // the good ending of this page and should look like one.
+            <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+              <EmptyState
+                icon={view === 'pending' ? <SparkleIcon size={22} /> : <InboxIcon size={22} />}
+                title={
+                  view === 'pending'
+                    ? t('couponApprovals.clear', {
+                        defaultValue: 'Nothing waiting. The queue is clear.',
+                      })
+                    : t('couponApprovals.none', { defaultValue: 'Nothing here.' })
+                }
+                description={
+                  // Only the good ending gets a second line — it tells the
+                  // supervisor where the decided requests went, which is the
+                  // question a suddenly empty queue raises.
+                  view === 'pending'
+                    ? t('couponApprovals.clearHint', {
+                        defaultValue: 'Decided requests move to the Approved and Rejected tabs.',
+                      })
+                    : undefined
+                }
+              />
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {rows.map((row) => (
+                <Row
+                  key={row.id}
+                  row={row}
+                  busy={decide.isPending}
+                  onDecide={(approve, note) => onDecide(row, approve, note)}
+                />
+              ))}
+            </ul>
+          )}
         </div>
-      ) : rows.length === 0 ? (
-        <p className="rounded-2xl bg-card p-8 text-center text-sm text-muted-foreground shadow-soft ring-1 ring-foreground/[0.06]">
-          {view === 'pending'
-            ? t('couponApprovals.clear', { defaultValue: 'Nothing waiting. The queue is clear.' })
-            : t('couponApprovals.none', { defaultValue: 'Nothing here.' })}
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {rows.map((row) => (
-            <Row
-              key={row.id}
-              row={row}
-              busy={decide.isPending}
-              onDecide={(approve, note) => onDecide(row, approve, note)}
-            />
-          ))}
-        </ul>
-      )}
+      </div>
     </div>
   );
 }
