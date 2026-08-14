@@ -107,13 +107,6 @@ const NAV_TILES = [
  * rail's two sections into one bar would otherwise lose the Work/Account
  * boundary, and the muted tile plus the divider carry it instead.
  */
-const TOP_NAV_TILES: Record<string, string> = {
-  '/': 'bg-sky-tint text-sky',
-  '/tickets': 'bg-violet-tint text-violet',
-  '/contacts': 'bg-success-tint text-success',
-  '/compensation': 'bg-primary-tint text-primary',
-  '/preferences': 'bg-secondary text-muted-foreground',
-};
 
 function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSection[] }) {
   const { user, logout } = useAuth();
@@ -261,55 +254,6 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
  * Selection is a filled pill, not a side stripe or an underline — DESIGN.md
  * bans the stripe, and white on `--primary` measures 4.55:1.
  */
-function TopNav({ sections }: { sections: NavSection[] }) {
-  // Flatten, but remember where a section ended so the Work/Account boundary
-  // can still be drawn as a divider.
-  const items = sections.flatMap((sec, sIdx) =>
-    sec.items.map((it, iIdx) => ({
-      ...it,
-      startsSection: sIdx > 0 && iIdx === 0,
-    })),
-  );
-
-  return (
-    <ul className="flex min-w-0 items-center gap-1">
-      {items.map((it) => (
-        <li key={it.to} className="flex min-w-0 items-center">
-          {it.startsSection && <span aria-hidden className="mx-1.5 h-5 w-px shrink-0 bg-border" />}
-          <NavLink
-            to={it.to}
-            end={it.end}
-            className={({ isActive }) =>
-              cn(
-                'group flex h-9 items-center gap-2 rounded-md px-2.5 text-sm',
-                'transition-[background-color,color] duration-fast ease-out',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                'motion-safe:active:scale-[0.97]',
-                isActive
-                  ? 'bg-primary font-semibold text-primary-foreground'
-                  : 'font-medium text-foreground hover:bg-secondary',
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <span
-                  className={cn(
-                    'grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors duration-fast ease-out',
-                    isActive ? 'bg-white/20 text-primary-foreground' : TOP_NAV_TILES[it.to],
-                  )}
-                >
-                  <it.icon size={14} />
-                </span>
-                <span className="truncate">{it.label}</span>
-              </>
-            )}
-          </NavLink>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 /** Compact brand lockup for the mobile top bar. */
 function MobileBrand() {
@@ -396,24 +340,10 @@ function Shell({ children }: { children: React.ReactNode }) {
         }
         topBar={
           <div className="flex w-full items-center gap-4">
-            {/* Start: brand lockup, back from the top of the rail. */}
-            <div className="flex min-w-0 flex-1 items-center gap-2.5">
-              <YijiLogo variant="tile" size={30} className="shrink-0 bg-background/95 shadow-sm" />
-              <div className="hidden min-w-0 leading-tight md:block">
-                {/* dir=ltr: the product name is a brand lockup, not prose. Left
-                    to mirror it renders "CRM Yiji" in Arabic. */}
-                <div
-                  dir="ltr"
-                  className="flex items-baseline gap-1.5 text-[15px] font-semibold tracking-[-0.015em] text-rail-active-foreground"
-                >
-                  <span>Yiji</span>
-                  <span className="font-normal text-rail-foreground/70">CRM</span>
-                </div>
-                <div className="mt-0.5 text-2xs text-rail-foreground/75">
-                  {t('app.workspace', { defaultValue: 'User workspace' })}
-                </div>
-              </div>
-            </div>
+            {/* Identity lives in the rail now — repeating it here read as a
+                rendering bug the moment the sidebar landed. A spacer keeps the
+                actions pinned to the end. */}
+            <div className="min-w-0 flex-1" />
             {/* Center: the search field */}
             <div className="flex w-full max-w-sm justify-center">
               <SearchTrigger
@@ -469,7 +399,6 @@ function Shell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         }
-        navBar={<TopNav sections={sections} />}
         resizeStorageKey="yiji.agent.sidebarWidth"
         navLabel={t('nav.primary', { defaultValue: 'Primary navigation' })}
         menuLabel={t('nav.openMenu', { defaultValue: 'Open menu' })}

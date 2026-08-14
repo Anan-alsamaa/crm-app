@@ -37,7 +37,6 @@
  * patterns. Values are OKLCH per impeccable.
  */
 
-:root,
 :root[data-theme='light'],
 .theme-light {
   --radius: 0.875rem;
@@ -167,29 +166,44 @@
  * cyan-teal primary, coral second brand. Light stays available via
  * <html data-theme="light">.
  */
+/*
+ * FLUID DARK (2026-08-14, owner-directed from reference designs): the DEFAULT
+ * theme. Near-black canvas, elevated charcoal cards, hairlines as low-alpha
+ * white, the jade accent lifted to glow. Light remains available via
+ * [data-theme='light'].
+ */
+:root,
 :root[data-theme='dark'] {
+  /* Hue washes for dark surfaces — the light theme's pastels would blind here. */
+  --primary-tint: 0.28 0.045 190;
+  --success-tint: 0.27 0.05 160;
+  --destructive-tint: 0.27 0.05 27;
+  --warning-tint: 0.3 0.055 75;
+  --sky-tint: 0.27 0.045 245;
+  --violet-tint: 0.27 0.045 285;
+
   --radius: 0.875rem;
   /* Elevation ladder with real separation so surfaces read as distinct layers,
      not one flat wall of dark: base < card < secondary/popover. */
-  --background: 0.135 0.014 265;
-  --canvas: 0.115 0.014 265;
-  --foreground: 0.96 0.005 250;
-  --card: 0.205 0.014 262;
-  --card-foreground: 0.96 0.005 250;
-  --popover: 0.245 0.014 262;
-  --popover-foreground: 0.96 0.005 250;
+  --background: 0.155 0.012 260;
+  --canvas: 0.13 0.012 260;
+  --foreground: 0.955 0.005 250;
+  --card: 0.19 0.012 258;
+  --card-foreground: 0.955 0.005 250;
+  --popover: 0.225 0.012 258;
+  --popover-foreground: 0.955 0.005 250;
   /* Bright cyan-teal — the Yiji brand at full luminance for dark ink. */
   /* Brand teal, lifted for dark ink. */
-  --primary: 0.72 0.12 190;
-  --primary-strong: 0.78 0.12 190;
-  --primary-foreground: 0.16 0.02 200;
+  --primary: 0.75 0.115 185;
+  --primary-strong: 0.8 0.115 185;
+  --primary-foreground: 0.15 0.02 200;
   --primary-subtle: 0.68 0.11 196 / 0.18;
-  --brand: 0.72 0.12 190;
-  --bubble: 0.3 0.02 260;
-  --secondary: 0.25 0.012 262;
+  --brand: 0.75 0.115 185;
+  --bubble: 0.26 0.014 258;
+  --secondary: 0.24 0.012 258;
   --secondary-foreground: 0.96 0.005 250;
-  --muted: 0.25 0.012 262;
-  --muted-foreground: 0.72 0.015 255;
+  --muted: 0.24 0.012 258;
+  --muted-foreground: 0.68 0.01 250;
   --accent: 0.68 0.11 196;
   --accent-foreground: 0.16 0.02 200;
   --destructive: 0.66 0.225 22;
@@ -198,21 +212,21 @@
   --success-foreground: 0.15 0.01 250;
   --warning: 0.82 0.18 72;
   --warning-foreground: 0.18 0.01 250;
-  --border: 0.96 0.01 250 / 0.13;
-  --border-strong: 0.96 0.01 250 / 0.22;
-  --input: 0.24 0.012 262;
-  --ring: 0.68 0.11 196;
-  --shadow-color: 0 0 0;
+  --border: 1 0 0 / 0.08;
+  --border-strong: 1 0 0 / 0.14;
+  --input: 0.235 0.012 258;
+  --ring: 0.75 0.115 185;
+  --shadow-color: 0.05 0.02 220;
   /* Flat full-height sidebar, one step darker than the canvas. */
-  --rail-deep: 0.13 0.045 202;
-  --rail: 0.17 0.035 196;
-  --rail-foreground: 0.82 0.02 250;
-  --rail-active: 0.3 0.07 196;
+  --rail-deep: 0.105 0.014 264;
+  --rail: 0.125 0.014 262;
+  --rail-foreground: 0.9 0.008 250;
+  --rail-active: 0.75 0.115 185;
   --rail-active-foreground: 0.98 0.005 250;
-  --rail-border: 0.26 0.025 196;
+  --rail-border: 1 0 0 / 0.08;
   --secondary-brand: 0.66 0.22 16;
   --secondary-brand-foreground: 1 0 0;
-  --display: 0.98 0.005 250;
+  --display: 0.97 0.005 250;
   /* Aurora companions to the cyan primary — violet + magenta carry the
    * gradient system (CTAs, hero numbers, glows). */
   --violet: 0.62 0.2 285;

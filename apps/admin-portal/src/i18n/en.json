@@ -60,7 +60,7 @@
     "agentPerformanceGroup": "Agent performance",
     "couponApprovalsGroup": "Coupon approvals",
     "roles": "Roles & privileges",
-    "lists": "Complaint form options",
+    "lists": "Complaint types",
     "backup": "Backup"
   },
   "dashboard": {
@@ -992,7 +992,7 @@
     "selectHint": "Click a row, then use History or Delete."
   },
   "lists": {
-    "title": "Complaint form options",
+    "title": "Complaint types",
     "pickList": "List",
     "help": "These values feed the complaint form live — no deploy needed. Retire a value to stop offering it; tickets that already carry it keep displaying it. The exact spellings are what reports group by, so a corrected spelling is a new value, not an edit.",
     "addPlaceholder": "New value for this list…",

@@ -1152,6 +1152,11 @@ function ComplaintsReport({
         <Table>
           <thead>
             <tr>
+              <Th className="w-10">
+                <span className="sr-only">
+                  {t('complaintReport.selectCol', { defaultValue: 'Select' })}
+                </span>
+              </Th>
               {chosenColumns.map((k) => (
                 <Th key={k} className={cn(COMPLAINT_COLUMN_LAYOUT[k] === 'number' && 'text-end')}>
                   {tr(COMPLAINT_COLUMN_LABELS[k].key, {
@@ -1172,6 +1177,21 @@ function ComplaintsReport({
                   selectedId === r.id && 'bg-primary/10 hover:bg-primary/10',
                 )}
               >
+                <Td className="w-10">
+                  {/* The visible affordance the owner asked for — a highlighted
+                      row alone did not read as "selected". */}
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 cursor-pointer rounded border-border text-primary focus:ring-primary/60"
+                    checked={selectedId === r.id}
+                    onChange={() => setSelectedId((cur) => (cur === r.id ? null : r.id))}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={t('complaintReport.selectRow', {
+                      label: [r.complaintType, r.orderNumber].filter(Boolean).join(' · ') || r.id,
+                      defaultValue: 'Select {{label}}',
+                    })}
+                  />
+                </Td>
                 {chosenColumns.map((k) => {
                   // An unresolved store says so instead of showing a blank
                   // cell, exactly as the export does.

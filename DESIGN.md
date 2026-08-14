@@ -2,7 +2,14 @@
 
 ## Theme
 
-Light by default. The physical scene is an agent at a desk in an office under
+**FLUID DARK by default (2026-08-14, owner-directed from reference designs).**
+Near-black canvas (`--canvas 0.13`), elevated charcoal cards (`0.19`),
+hairlines as low-alpha white, the jade accent lifted to glow (`0.75 0.115
+185`), sidebar-rail navigation in BOTH portals (the top-nav band is retired).
+Light remains available via `[data-theme='light']` and keeps the palette
+below.
+
+_Superseded default:_ Light by default. The physical scene is an agent at a desk in an office under
 overhead fluorescent or daylight, the browser tab open all day. Light surfaces
 match that ambient light; dark mode is available via `[data-theme='dark']` on
 `<html>` for the minority of agents who prefer it.
