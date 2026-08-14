@@ -18,12 +18,21 @@ const complaintsApi = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/dashboard/complaints-api.js', () => complaintsApi);
 
+// The hero band greets the signed-in admin and links into the reports, so the
+// page needs an auth identity and a router.
+vi.mock('../src/lib/auth/AuthContext.js', () => ({
+  useAuth: () => ({ user: { first_name: 'Test', email: 'test@example.com' } }),
+}));
+
+import { MemoryRouter } from 'react-router-dom';
 import { DashboardPage } from '../src/features/dashboard/DashboardPage.js';
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
   );
   return render(<DashboardPage />, { wrapper: Wrapper });
 }

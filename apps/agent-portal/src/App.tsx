@@ -291,6 +291,11 @@ function MobileBrand() {
       <span dir="ltr" className="text-[15px] font-semibold tracking-[-0.015em] text-foreground">
         Yiji <span className="font-normal text-muted-foreground">CRM</span>
       </span>
+      {/* Build marker: if this tag is not on screen, the browser is NOT on the
+          current build — the one diagnostic nobody can argue with. */}
+      <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-2xs font-bold tracking-wide text-primary ring-1 ring-inset ring-primary/25">
+        v2
+      </span>
     </div>
   );
 }

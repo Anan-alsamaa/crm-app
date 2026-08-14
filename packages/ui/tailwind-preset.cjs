@@ -239,6 +239,16 @@ module.exports = {
           '0%': { opacity: '0', transform: 'translateY(8px)' },
           '100%': { opacity: '1', transform: 'none' },
         },
+        // Data-draw entrances: meters grow along their axis on mount so the
+        // dashboard reads as live instrumentation, not a static poster.
+        'grow-x': {
+          '0%': { transform: 'scaleX(0)' },
+          '100%': { transform: 'scaleX(1)' },
+        },
+        'grow-y': {
+          '0%': { transform: 'scaleY(0)' },
+          '100%': { transform: 'scaleY(1)' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both',
@@ -251,6 +261,8 @@ module.exports = {
         'slide-in-drawer': 'slide-in-drawer 240ms cubic-bezier(0.32, 0.72, 0, 1) both',
         'message-in': 'message-in 260ms cubic-bezier(0.23, 1, 0.32, 1) both',
         'rise-in': 'rise-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both',
+        'grow-x': 'grow-x 700ms cubic-bezier(0.23, 1, 0.32, 1) both',
+        'grow-y': 'grow-y 700ms cubic-bezier(0.23, 1, 0.32, 1) both',
       },
       boxShadow: {
         // Elevation ramp for floating surfaces (soft, layered ambient+key).
