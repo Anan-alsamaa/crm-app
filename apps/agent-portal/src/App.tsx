@@ -370,13 +370,14 @@ function Shell({ children }: { children: React.ReactNode }) {
           <>
             {/* The bar is a card surface now, so the utility triggers read
                 correctly with their own tokens — no rebinding needed. The
-                search chrome yields first when the row gets tight; the
+                search chrome and the user's name yield below 1600px — at
+                1440 they crowded the row and clipped the last nav pill; the
                 palette stays reachable via Cmd/Ctrl+K regardless. */}
             <SearchTrigger
               label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
               aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
               onClick={() => setPaletteOpen(true)}
-              className="hidden xl:inline-flex"
+              className="hidden min-[1600px]:inline-flex"
             />
             <div className="flex items-center gap-0.5 rounded-full bg-secondary/50 p-1 ring-1 ring-border">
               <NotificationBell />
@@ -386,7 +387,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             </div>
             <span className="hidden items-center gap-2 rounded-full bg-secondary/50 py-1 pe-1 ps-1 ring-1 ring-border sm:flex">
               <Avatar name={displayName} email={user?.email} size="sm" />
-              <span className="hidden max-w-[8rem] truncate text-xs font-semibold text-foreground xl:inline">
+              <span className="hidden max-w-[8rem] truncate text-xs font-semibold text-foreground min-[1600px]:inline">
                 {displayName}
               </span>
               {/* Sign out lived in the rail footer, which desktop no longer
