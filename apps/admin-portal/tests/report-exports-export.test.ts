@@ -216,6 +216,12 @@ describe('buildAgentKpiSheets', () => {
       csatAvg: 4.26,
       missed: 1,
       offered: 6,
+      chats: 9,
+      noReply: 2,
+      commonTaken: 3,
+      avgFirstResponseSec: 125,
+      avgTimeToSolveSec: 7300,
+      inTimePct: 85.4,
     },
     {
       agentId: null,
@@ -228,31 +234,39 @@ describe('buildAgentKpiSheets', () => {
       csatAvg: null,
       missed: 0,
       offered: 0,
+      chats: 0,
+      noReply: 0,
+      commonTaken: 0,
+      avgFirstResponseSec: null,
+      avgTimeToSolveSec: null,
+      inTimePct: null,
     },
   ];
 
-  it('builds one sheet with the seven KPI columns', () => {
+  it('builds one sheet with the operational chat columns first', () => {
     const [sheet] = buildAgentKpiSheets(agents, makeT());
     expect(sheet!.name).toBe('Agent KPI');
     expect(headers(sheet!.columns)).toEqual([
       'Agent',
+      'Chats',
+      'No reply yet',
+      'Answered in time',
+      'First response (avg)',
+      'Time to solve (avg)',
+      'Common chats taken',
       'Tickets',
-      'Responded',
-      'Avg first response (min)',
-      'First response SLA %',
-      'CSAT responses',
       'CSAT avg (1–5)',
     ]);
   });
 
-  it('rounds minutes/percent to whole numbers and CSAT to one decimal', () => {
+  it('formats durations, rounds the percent, and keeps CSAT to one decimal', () => {
     const [sheet] = buildAgentKpiSheets(agents, makeT());
-    expect(sheet!.rows[0]).toEqual(['Ann Lee', 5, 4, 12, 67, 3, 4.3]);
+    expect(sheet!.rows[0]).toEqual(['Ann Lee', 9, 2, '85%', '2m 5s', '2h 1m', 3, 5, 4.3]);
   });
 
   it('blanks the derived cells for an agent with nothing measured', () => {
     const [sheet] = buildAgentKpiSheets(agents, makeT());
-    expect(sheet!.rows[1]).toEqual(['Unassigned', 1, 0, '', '', 0, '']);
+    expect(sheet!.rows[1]).toEqual(['Unassigned', 0, 0, '', '', '', 0, 1, '']);
   });
 });
 

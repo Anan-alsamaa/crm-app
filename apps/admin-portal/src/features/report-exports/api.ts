@@ -4,7 +4,17 @@ import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
 import type { StoreSnapshot } from '@yiji/shared-types';
 // The complaints row shape is shared with the agent portal — see @yiji/reports.
-import { splitLocalDateTime, type ComplaintReportRow } from '@yiji/reports';
+// The chat arithmetic (timestamps, handoffs, per-agent rollup) is the SAME
+// shared code the two Agent-performance pages use, so this report can never
+// disagree with them about an agent's numbers.
+import {
+  agentPerformance,
+  chatHandoffs,
+  conversationTimestamps,
+  splitLocalDateTime,
+  type ComplaintReportRow,
+} from '@yiji/reports';
+import { normaliseConversationStatus } from '@yiji/shared-types';
 
 export type { ComplaintReportRow };
 
@@ -82,6 +92,7 @@ interface RawConversation {
   priority: string;
   assigned_agent: string | null;
   date_created: string | null;
+  solved_at: string | null;
   last_message_at: string | null;
   contact: { id: string; name: string | null; phone: string | null; email: string | null } | null;
   last_order_id: string | null;
@@ -184,6 +195,21 @@ export interface AgentKpiRow {
   missed: number;
   /** Auto-assignment offers made to them — the denominator for `missed`. */
   offered: number;
+  /* Chat metrics — the SAME measures (and the same shared arithmetic) as the
+   * two Agent-performance pages, so this report evaluates agents by the
+   * numbers a supervisor already watches. */
+  /** Chats assigned in range. */
+  chats: number;
+  /** Chats with no agent reply at all. */
+  noReply: number;
+  /** Chats picked up after somebody else let them go. */
+  commonTaken: number;
+  /** Mean seconds to first reply over the agent's own answered chats. */
+  avgFirstResponseSec: number | null;
+  /** Mean seconds from first message to solved. */
+  avgTimeToSolveSec: number | null;
+  /** % of own answered chats answered within the 5-minute target. */
+  inTimePct: number | null;
 }
 
 export interface StatusCount {
@@ -361,6 +387,7 @@ export function useAgentReportData(
               'priority',
               'assigned_agent',
               'date_created',
+              'solved_at',
               'last_message_at',
               // Expanded, not a bare id: the status report names and PHONES the
               // customers behind each count. "20 open" is a number; twenty
@@ -564,32 +591,98 @@ export function useAgentReportData(
         a.csatCount += 1;
       }
 
-      // Auto-assignment outcomes. Read separately because they live on their own
-      // append-only table: a "miss" is not visible anywhere in tickets or
-      // messages — the ladder just moves on — so it has to be counted here.
+      // Auto-assignment outcomes + handoffs. One read serves both: the
+      // missed/offered tallies, and chatHandoffs' "who really carried the
+      // wait" verdict that the performance pages use.
       const missedBy = new Map<string, number>();
       const offeredBy = new Map<string, number>();
+      let handoffs = new Map<string, { passedOn: boolean; takenBy: string | null }>();
       try {
         const events = (await directus.request(
           readItems('routing_events' as never, {
             filter: { date_created: { _gte: since } },
-            fields: ['agent', 'outcome'],
+            fields: ['conversation', 'agent', 'outcome', 'stage'],
             limit: -1,
           }) as never,
-        )) as Array<{ agent: string | null; outcome: string }>;
+        )) as Array<{ conversation: string; agent: string | null; outcome: string; stage: string }>;
         for (const e of events) {
           if (!e.agent) continue;
           offeredBy.set(e.agent, (offeredBy.get(e.agent) ?? 0) + 1);
           if (e.outcome === 'missed') missedBy.set(e.agent, (missedBy.get(e.agent) ?? 0) + 1);
         }
+        handoffs = chatHandoffs(events);
       } catch {
         // Collection not provisioned yet (bootstrap not re-run) — report zeroes
         // rather than failing the whole KPI query over one optional metric.
       }
 
+      // The operational half the owner evaluates agents BY — chats handled,
+      // no-reply, in-time %, first response, time to solve, common chats —
+      // computed with the exact shared arithmetic of the performance pages.
+      const chatMsgs =
+        conversations.length === 0
+          ? []
+          : ((await directus.request(
+              readItems(
+                'messages' as never,
+                {
+                  limit: -1,
+                  filter: {
+                    conversation: { _in: conversations.map((c) => c.id) },
+                    is_internal_note: { _eq: false },
+                  },
+                  fields: ['conversation', 'sender_type', 'date_created'],
+                  sort: ['date_created'],
+                } as never,
+              ) as never,
+            )) as Array<{
+              conversation: string;
+              sender_type: string;
+              date_created: string | null;
+            }>);
+      const chatTimes = conversationTimestamps(chatMsgs);
+      const timings = conversations.map((c) => {
+        const agentId = realAgentId(c.assigned_agent);
+        return {
+          conversationId: c.id,
+          agentId,
+          agentName: agentOf(agentId),
+          firstCustomerAt: chatTimes.get(c.id)?.firstCustomerAt ?? null,
+          firstAgentAt: chatTimes.get(c.id)?.firstAgentAt ?? null,
+          solvedAt: normaliseConversationStatus(c.status) === 'solved' ? c.solved_at : null,
+          passedOn: handoffs.get(c.id)?.passedOn ?? false,
+          takenBy: handoffs.get(c.id)?.takenBy ?? null,
+        };
+      });
+      const perfRows = new Map(agentPerformance(timings).map((r) => [r.agentId ?? '', r]));
+
+      // Answered-in-time over an agent's own answered chats, against the same
+      // 5-minute default target the performance pages open with.
+      const TARGET_SEC = 5 * 60;
+      const inTime = new Map<string, { answered: number; inTime: number }>();
+      for (const c of timings) {
+        if (c.passedOn || !c.firstCustomerAt || !c.firstAgentAt) continue;
+        const key = c.agentId ?? '';
+        const t = inTime.get(key) ?? { answered: 0, inTime: 0 };
+        t.answered += 1;
+        const sec =
+          (new Date(c.firstAgentAt).getTime() - new Date(c.firstCustomerAt).getTime()) / 1000;
+        if (sec >= 0 && sec <= TARGET_SEC) t.inTime += 1;
+        inTime.set(key, t);
+      }
+
+      // Union of the ticket-side and chat-side agents: someone who only chats
+      // (or only handles tickets) still gets a full row.
+      for (const key of perfRows.keys()) {
+        const id = key === '' ? null : key;
+        ensure(id, agentOf(id));
+      }
+
       const agents: AgentKpiRow[] = Array.from(accs.values())
         .map((a) => {
           const decided = a.frMet + a.frBreached;
+          const perf = perfRows.get(a.agentId ?? '');
+          const it = inTime.get(a.agentId ?? '');
           return {
             agentId: a.agentId,
             agentName: a.agentName,
@@ -601,9 +694,18 @@ export function useAgentReportData(
             csatAvg: a.csatCount ? a.csatSum / a.csatCount : null,
             missed: missedBy.get(a.agentId ?? '') ?? 0,
             offered: offeredBy.get(a.agentId ?? '') ?? 0,
+            chats: perf?.chats ?? 0,
+            noReply: perf?.unanswered ?? 0,
+            commonTaken: perf?.commonChats ?? 0,
+            avgFirstResponseSec: perf?.avgFirstResponseSec ?? null,
+            avgTimeToSolveSec: perf?.avgTimeToSolveSec ?? null,
+            inTimePct: it && it.answered > 0 ? (it.inTime / it.answered) * 100 : null,
           };
         })
-        .sort((x, y) => y.tickets - x.tickets || x.agentName.localeCompare(y.agentName));
+        .sort(
+          (x, y) =>
+            y.chats - x.chats || y.tickets - x.tickets || x.agentName.localeCompare(y.agentName),
+        );
 
       /* Report 3: conversations by status / priority / day. */
       const byStatusMap = new Map<string, number>();

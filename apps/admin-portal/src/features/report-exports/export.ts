@@ -1,4 +1,4 @@
-import type { CellValue, Sheet, Translate } from '@yiji/reports';
+import { formatDuration, type CellValue, type Sheet, type Translate } from '@yiji/reports';
 import type { AgentKpiRow, ConversationStatusReport, TicketReportRow } from './api.js';
 
 /**
@@ -221,31 +221,38 @@ export function buildTicketsSheets(
 /* ── Report 2: Agent KPI ──────────────────────────────────────────────── */
 
 export function buildAgentKpiSheets(agents: AgentKpiRow[], t: Translate): Sheet[] {
+  // Mirrors the on-screen table — the operational chat measures the
+  // performance pages evaluate agents by, then tickets and CSAT.
   const columns = [
     { header: t('agentReports.col.agent', { defaultValue: 'Agent' }), width: 24 },
+    { header: t('agentReports.col.chats', { defaultValue: 'Chats' }), width: 10 },
+    { header: t('agentReports.col.noReply', { defaultValue: 'No reply yet' }), width: 13 },
+    { header: t('agentReports.col.inTime', { defaultValue: 'Answered in time' }), width: 17 },
+    {
+      header: t('agentReports.col.firstResponseAvg', { defaultValue: 'First response (avg)' }),
+      width: 19,
+    },
+    {
+      header: t('agentReports.col.timeToSolve', { defaultValue: 'Time to solve (avg)' }),
+      width: 19,
+    },
+    {
+      header: t('agentReports.col.commonTaken', { defaultValue: 'Common chats taken' }),
+      width: 19,
+    },
     { header: t('agentReports.col.tickets', { defaultValue: 'Tickets' }), width: 12 },
-    { header: t('agentReports.col.responded', { defaultValue: 'Responded' }), width: 12 },
-    {
-      header: t('agentReports.col.avgFirstResponseMin', {
-        defaultValue: 'Avg first response (min)',
-      }),
-      width: 22,
-    },
-    {
-      header: t('agentReports.col.firstResponsePct', { defaultValue: 'First response SLA %' }),
-      width: 18,
-    },
-    { header: t('agentReports.col.csatCount', { defaultValue: 'CSAT responses' }), width: 16 },
     { header: t('agentReports.col.csatAvg', { defaultValue: 'CSAT avg (1–5)' }), width: 16 },
   ];
 
   const data: CellValue[][] = agents.map((a) => [
     a.agentName,
+    a.chats,
+    a.noReply,
+    a.inTimePct == null ? '' : `${Math.round(a.inTimePct)}%`,
+    formatDuration(a.avgFirstResponseSec) ?? '',
+    formatDuration(a.avgTimeToSolveSec) ?? '',
+    a.commonTaken,
     a.tickets,
-    a.responded,
-    roundMin(a.avgFirstResponseMin),
-    a.firstResponsePct == null ? '' : Math.round(a.firstResponsePct),
-    a.csatCount,
     round1(a.csatAvg),
   ]);
 

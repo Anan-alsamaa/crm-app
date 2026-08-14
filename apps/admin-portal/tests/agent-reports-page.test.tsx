@@ -143,6 +143,14 @@ const agents = [
     firstResponsePct: 66.6,
     csatCount: 3,
     csatAvg: 4.26,
+    missed: 0,
+    offered: 2,
+    chats: 4,
+    noReply: 1,
+    commonTaken: 2,
+    avgFirstResponseSec: 125,
+    avgTimeToSolveSec: 7300,
+    inTimePct: 85.4,
   },
   {
     agentId: null,
@@ -153,6 +161,14 @@ const agents = [
     firstResponsePct: null,
     csatCount: 0,
     csatAvg: null,
+    missed: 0,
+    offered: 0,
+    chats: 0,
+    noReply: 0,
+    commonTaken: 0,
+    avgFirstResponseSec: null,
+    avgTimeToSolveSec: null,
+    inTimePct: null,
   },
 ];
 
@@ -494,11 +510,13 @@ describe('AgentReportsPage — agent KPI report', () => {
 
     const body = within(container.querySelector('tbody') as HTMLElement);
     expect(body.getByText('Ann Lee')).toBeInTheDocument();
-    expect(body.getByText('12m')).toBeInTheDocument(); // 12.4 min
-    expect(body.getByText('67%')).toBeInTheDocument(); // 66.6 %
+    expect(body.getByText('85%')).toBeInTheDocument(); // in-time 85.4 %
+    expect(body.getByText('2m 5s')).toBeInTheDocument(); // first response 125s
+    expect(body.getByText('2h 1m')).toBeInTheDocument(); // time to solve 7300s
     expect(body.getByText('4.26')).toBeInTheDocument(); // CSAT to 2 dp
-    // The Unassigned bucket has nothing measured -> em dashes.
-    expect(body.getAllByText('—').length).toBe(3);
+    // The Unassigned bucket has nothing measured -> em dashes in the in-time,
+    // first-response, time-to-solve and CSAT cells.
+    expect(body.getAllByText('—').length).toBe(4);
   });
 
   it('sorts the agent table and exports the KPI workbook', async () => {

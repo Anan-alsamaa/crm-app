@@ -584,7 +584,7 @@
     "ticketsTitle": "Tickets",
     "ticketsSubtitle": "Every ticket with SLA timings and the linked customer order — export to Excel.",
     "agentsTitle": "Agent KPI",
-    "agentsSubtitle": "One row per agent, over TICKETS: how many they held, how fast the first reply went out, how many breached, and what customers scored them. For the individual breaches see SLA performance; for chat response times see Agent performance.",
+    "agentsSubtitle": "One row per agent with the operational measures the performance pages track — chats handled, unanswered, answered in time, first response and time to solve, common chats taken — plus tickets and CSAT. Same arithmetic as Agent performance.",
     "conversationsTitle": "Conversation status",
     "conversationsSubtitle": "Conversations by status, priority and day — export to Excel.",
     "columns": "Columns",
@@ -595,7 +595,13 @@
     "notMapped": "Not mapped",
     "exportExcelCount": "Export {{count}} rows",
     "noContact": "no contact on file",
-    "noName": "—"
+    "noName": "—",
+    "col.chats": "Chats",
+    "col.noReply": "No reply yet",
+    "col.inTime": "Answered in time",
+    "col.firstResponseAvg": "First response (avg)",
+    "col.timeToSolve": "Time to solve (avg)",
+    "col.commonTaken": "Common chats taken"
   },
   "ticketOps": {
     "title": "Ticket report",
@@ -1068,7 +1074,8 @@
     "create": "Create role",
     "delete": "Delete",
     "deleteConfirm": "Delete “{{name}}”? Users still holding it must be reassigned first.",
-    "assignHint": "Assign people to this role from the Users page once it shows Active."
+    "assignHint": "Assign people to this role from the Users page once it shows Active.",
+    "privCount": "{{n}} privileges"
   },
   "backup": {
     "title": "Backup",

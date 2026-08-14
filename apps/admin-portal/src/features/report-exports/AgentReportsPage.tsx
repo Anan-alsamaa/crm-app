@@ -44,7 +44,7 @@ import {
 } from './api.js';
 import { useStoreIndex } from '../restaurants/api.js';
 import { directus } from '../../lib/directus.js';
-import { parseTicketsXlsx } from '@yiji/reports';
+import { formatDuration, parseTicketsXlsx } from '@yiji/reports';
 import { TicketHistoryDrawer } from './TicketHistoryDrawer.js';
 import { useImportTickets } from './import-api.js';
 import {
@@ -139,10 +139,13 @@ const TICKET_SORT: Record<string, (r: TicketReportRow) => string | number | null
 };
 const AGENT_SORT: Record<string, (r: AgentKpiRow) => string | number | null | undefined> = {
   agent: (r) => r.agentName.toLowerCase(),
+  chats: (r) => r.chats,
+  noReply: (r) => r.noReply,
+  inTimePct: (r) => r.inTimePct,
+  avgFirstResponseSec: (r) => r.avgFirstResponseSec,
+  avgTimeToSolveSec: (r) => r.avgTimeToSolveSec,
+  commonTaken: (r) => r.commonTaken,
   tickets: (r) => r.tickets,
-  avgFirstResponse: (r) => r.avgFirstResponseMin,
-  firstResponsePct: (r) => r.firstResponsePct,
-  csatCount: (r) => r.csatCount,
   csatAvg: (r) => r.csatAvg,
 };
 
@@ -1400,20 +1403,26 @@ function AgentKpiReport({
               <SortTh {...sp('agent')}>
                 {tr('agentReports.col.agent', { defaultValue: 'Agent' })}
               </SortTh>
+              <SortTh {...sp('chats', 'end')}>
+                {tr('agentReports.col.chats', { defaultValue: 'Chats' })}
+              </SortTh>
+              <SortTh {...sp('noReply', 'end')}>
+                {tr('agentReports.col.noReply', { defaultValue: 'No reply yet' })}
+              </SortTh>
+              <SortTh {...sp('inTimePct', 'end')}>
+                {tr('agentReports.col.inTime', { defaultValue: 'Answered in time' })}
+              </SortTh>
+              <SortTh {...sp('avgFirstResponseSec', 'end')}>
+                {tr('agentReports.col.firstResponseAvg', { defaultValue: 'First response (avg)' })}
+              </SortTh>
+              <SortTh {...sp('avgTimeToSolveSec', 'end')}>
+                {tr('agentReports.col.timeToSolve', { defaultValue: 'Time to solve (avg)' })}
+              </SortTh>
+              <SortTh {...sp('commonTaken', 'end')}>
+                {tr('agentReports.col.commonTaken', { defaultValue: 'Common chats taken' })}
+              </SortTh>
               <SortTh {...sp('tickets', 'end')}>
                 {tr('agentReports.col.tickets', { defaultValue: 'Tickets' })}
-              </SortTh>
-              <SortTh {...sp('avgFirstResponse', 'end')}>
-                {tr('agentReports.col.avgFirstResponse', { defaultValue: 'Avg first response' })}
-              </SortTh>
-              <SortTh {...sp('firstResponsePct', 'end')}>
-                {tr('agentReports.col.firstResponsePct', { defaultValue: 'First response SLA %' })}
-              </SortTh>
-              <SortTh {...sp('missed', 'end')}>
-                {tr('agentReports.col.missed', { defaultValue: 'Missed' })}
-              </SortTh>
-              <SortTh {...sp('csatCount', 'end')}>
-                {tr('agentReports.col.csatCount', { defaultValue: 'CSAT responses' })}
               </SortTh>
               <SortTh {...sp('csatAvg', 'end')}>
                 {tr('agentReports.col.csatAvg', { defaultValue: 'CSAT avg (1–5)' })}
@@ -1424,45 +1433,50 @@ function AgentKpiReport({
             {sorted.map((a) => (
               <Tr key={a.agentId ?? '__unassigned__'}>
                 <Td className="font-medium">{a.agentName}</Td>
-                <Td className="text-end tabular-nums text-muted-foreground">{a.tickets}</Td>
-                <Td className="text-end tabular-nums text-muted-foreground">
-                  {fmtMins(a.avgFirstResponseMin)}
+                <Td className="text-end tabular-nums font-semibold">{a.chats}</Td>
+                <Td className="text-end tabular-nums">
+                  {a.noReply > 0 ? (
+                    <span className="font-semibold text-destructive">{a.noReply}</span>
+                  ) : (
+                    <span className="text-muted-foreground">0</span>
+                  )}
                 </Td>
                 <Td className="text-end tabular-nums text-muted-foreground">
-                  {a.firstResponsePct == null ? (
-                    fmtPct(a.firstResponsePct)
+                  {a.inTimePct == null ? (
+                    '—'
                   ) : (
                     /* Number + thin meter, boards-style: the magnitude stays
                        tabular, the bar makes the laggard visible at a scan. */
                     <span className="flex items-center justify-end gap-2">
                       <MeterBar
-                        value={a.firstResponsePct}
+                        value={a.inTimePct}
                         tone={
-                          a.firstResponsePct >= 90
+                          a.inTimePct >= 90
                             ? 'success'
-                            : a.firstResponsePct >= 75
+                            : a.inTimePct >= 75
                               ? 'primary'
                               : 'destructive'
                         }
                         className="w-12"
                       />
-                      {fmtPct(a.firstResponsePct)}
+                      {fmtPct(a.inTimePct)}
                     </span>
                   )}
                 </Td>
+                <Td className="text-end tabular-nums text-muted-foreground">
+                  {formatDuration(a.avgFirstResponseSec) ?? '—'}
+                </Td>
+                <Td className="text-end tabular-nums text-muted-foreground">
+                  {formatDuration(a.avgTimeToSolveSec) ?? '—'}
+                </Td>
                 <Td className="text-end tabular-nums">
-                  {a.offered === 0 ? (
-                    <span className="text-muted-foreground">—</span>
+                  {a.commonTaken > 0 ? (
+                    <span className="font-semibold text-success">{a.commonTaken}</span>
                   ) : (
-                    <>
-                      <span className={a.missed > 0 ? 'font-semibold text-destructive' : ''}>
-                        {a.missed}
-                      </span>
-                      <span className="text-muted-foreground"> / {a.offered}</span>
-                    </>
+                    <span className="text-muted-foreground">0</span>
                   )}
                 </Td>
-                <Td className="text-end tabular-nums text-muted-foreground">{a.csatCount}</Td>
+                <Td className="text-end tabular-nums text-muted-foreground">{a.tickets}</Td>
                 <Td className="text-end tabular-nums font-semibold">{fmtScore(a.csatAvg)}</Td>
               </Tr>
             ))}
