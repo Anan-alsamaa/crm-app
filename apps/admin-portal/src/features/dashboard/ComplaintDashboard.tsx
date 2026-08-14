@@ -133,6 +133,26 @@ function Kpi({
  * every board in the app draws — the aside slot still carries "top 10 of 24". */
 
 /**
+ * The in-card empty: an icon dot over the sentence. Every chart on this page
+ * used to fall back to one bare grey line adrift in a card, which reads as a
+ * rendering failure rather than as "the range is empty" — this is the composed
+ * version, compact enough for the smallest CutCard.
+ */
+function CardEmpty({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-6 text-center">
+      <span
+        aria-hidden
+        className="grid h-8 w-8 place-items-center rounded-lg bg-secondary text-muted-foreground"
+      >
+        <InboxIcon size={15} />
+      </span>
+      <p className="text-xs text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+/**
  * His bar breakdown: label, proportional track, then "count · share". The share
  * is what makes the list readable — 40 complaints means nothing until you know
  * it is a third of everything.
@@ -153,9 +173,9 @@ function Bars({
   const max = Math.max(1, ...rows.map((r) => r.count));
   if (rows.length === 0)
     return (
-      <p className="text-sm text-muted-foreground">
-        {t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
-      </p>
+      <CardEmpty
+        label={t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
+      />
     );
   return (
     <ul className="space-y-2">
@@ -284,9 +304,9 @@ function Donut({ rows, onSelect }: { rows: Breakdown[]; onSelect?: (row: Breakdo
   const total = rows.reduce((s, r) => s + r.count, 0);
   if (total === 0)
     return (
-      <p className="text-sm text-muted-foreground">
-        {t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
-      </p>
+      <CardEmpty
+        label={t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
+      />
     );
 
   const R = 54;
@@ -342,7 +362,10 @@ function Donut({ rows, onSelect }: { rows: Breakdown[]; onSelect?: (row: Breakdo
           {t('complaintDash.donutTotal', { defaultValue: 'total' })}
         </text>
       </svg>
-      <ul className="min-w-0 flex-1 space-y-1.5">
+      {/* Hairline separators, table-style: the counts are end-aligned across
+          the card's whole half, and without a rule per row the eye loses which
+          label a number belongs to over the gap. */}
+      <ul className="min-w-0 flex-1 divide-y divide-border/60">
         {rows.map((r, i) => {
           const body = (
             <>
@@ -366,12 +389,12 @@ function Donut({ rows, onSelect }: { rows: Breakdown[]; onSelect?: (row: Breakdo
                 <button
                   type="button"
                   onClick={() => onSelect(r)}
-                  className="flex w-full items-center gap-2 rounded-lg px-1 py-0.5 -mx-1 text-xs transition-colors duration-fast hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  className="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 -mx-1 text-xs transition-colors duration-fast hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                 >
                   {body}
                 </button>
               ) : (
-                <span className="flex items-center gap-2 text-xs">{body}</span>
+                <span className="flex items-center gap-2 py-1.5 text-xs">{body}</span>
               )}
             </li>
           );
@@ -396,9 +419,9 @@ function Composition({
   const total = shown.reduce((sum, s) => sum + s.value, 0);
   if (total === 0)
     return (
-      <p className="mt-4 text-sm text-muted-foreground">
-        {t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
-      </p>
+      <CardEmpty
+        label={t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
+      />
     );
   return (
     <div className="mt-4">
@@ -440,9 +463,9 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
   const { t } = useTranslation();
   if (months.length === 0)
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        {t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
-      </p>
+      <CardEmpty
+        label={t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
+      />
     );
 
   const maxCount = Math.max(1, ...months.map((m) => m.count));
@@ -578,9 +601,9 @@ function DrillDown({
       })}
     >
       {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
-        </p>
+        <CardEmpty
+          label={t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
+        />
       ) : (
         <ul className="divide-y divide-border">
           {rows.map((r) => (
@@ -1122,9 +1145,11 @@ export function ComplaintDashboard() {
             })}
           >
             {d.agents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
-              </p>
+              <CardEmpty
+                label={t('complaintDash.nothingInRange', {
+                  defaultValue: 'Nothing in this range.',
+                })}
+              />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -1241,9 +1266,9 @@ export function ComplaintDashboard() {
             })}
           >
             {d.chatAgents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {t('complaintDash.noChatActivity', { defaultValue: 'No chat activity yet.' })}
-              </p>
+              <CardEmpty
+                label={t('complaintDash.noChatActivity', { defaultValue: 'No chat activity yet.' })}
+              />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -1348,11 +1373,11 @@ export function ComplaintDashboard() {
               className="md:col-span-2"
             >
               {d.byOpenAgent.rows.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {t('complaintDash.nothingOutstanding', {
+                <CardEmpty
+                  label={t('complaintDash.nothingOutstanding', {
                     defaultValue: 'Nothing outstanding — every complaint in this range is closed.',
                   })}
-                </p>
+                />
               ) : (
                 // Shares are OF THE OPEN PILE, not of every complaint: "40% of
                 // what is still open" is the question being asked here.

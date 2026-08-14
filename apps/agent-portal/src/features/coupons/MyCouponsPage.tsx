@@ -1,7 +1,16 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { cn, formatRelative, Pill, Skeleton, Toolbar, ToolbarSpacer } from '@yiji/ui';
+import {
+  cn,
+  EmptyState,
+  formatRelative,
+  Pill,
+  Skeleton,
+  TicketIcon,
+  Toolbar,
+  ToolbarSpacer,
+} from '@yiji/ui';
 import { COUPON_APPROVAL_STATUSES, type CouponApprovalStatus } from '@yiji/shared-types';
 import { useMyCouponRequests, type CouponRequestRow } from './api.js';
 
@@ -67,89 +76,108 @@ export function MyCouponsPage() {
         </span>
       </Toolbar>
 
-      <div className="flex flex-wrap gap-1.5 border-b border-border bg-card px-4 py-2.5">
-        {(
-          ['pending', ...COUPON_APPROVAL_STATUSES.filter((s) => s !== 'pending'), 'all'] as const
-        ).map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setView(s)}
-            aria-pressed={view === s}
-            className={cn(
-              'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast ease-out',
-              view === s
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {t(`coupons.status.${s}`, { defaultValue: s })}
-            <span className="ms-1.5 tabular-nums opacity-70">{count(s)}</span>
-          </button>
-        ))}
+      {/* The filter band keeps its full-bleed hairline, but the pills sit in
+          the same centered column as the cards below — at 1920px a cluster of
+          pills pinned to the far edge belonged to nothing. */}
+      <div className="border-b border-border bg-card px-4 py-2.5">
+        <div className="mx-auto flex w-full max-w-3xl flex-wrap gap-1.5">
+          {(
+            ['pending', ...COUPON_APPROVAL_STATUSES.filter((s) => s !== 'pending'), 'all'] as const
+          ).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setView(s)}
+              aria-pressed={view === s}
+              className={cn(
+                'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast ease-out',
+                view === s
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {t(`coupons.status.${s}`, { defaultValue: s })}
+              <span className="ms-1.5 tabular-nums opacity-70">{count(s)}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-3">
-        {requests.isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-16 w-full rounded-2xl" />
-            ))}
-          </div>
-        ) : rows.length === 0 ? (
-          <p className="p-8 text-center text-sm text-muted-foreground">
-            {view === 'pending'
-              ? t('coupons.noneWaiting', { defaultValue: 'Nothing waiting on a supervisor.' })
-              : t('coupons.none', { defaultValue: 'No coupon requests here.' })}
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {rows.map((r) => (
-              <li key={r.id}>
-                <button
-                  type="button"
-                  onClick={() => r.ticket && navigate(`/tickets/${r.ticket.id}`)}
-                  // Board card anatomy: code + status pill leading, the amount as
-                  // the bold end-aligned numeral, meta underneath — hairline ring
-                  // so the card holds its edge on the dark canvas.
-                  className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 rounded-2xl bg-card p-4 text-start shadow-soft ring-1 ring-foreground/[0.06] transition-colors duration-fast hover:bg-secondary/40"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-sm font-semibold text-foreground">
-                        {r.coupon_code ?? t('coupons.noCode', { defaultValue: 'no code' })}
-                      </span>
-                      <Pill tone={TONE[r.status]} size="sm">
-                        {t(`coupons.status.${r.status}`, { defaultValue: r.status })}
-                      </Pill>
+      {/* Sparse content stays a readable column, not a full-bleed sprawl. */}
+      <div className="min-h-0 flex-1 overflow-auto px-4 py-5">
+        <div className="mx-auto w-full max-w-3xl">
+          {requests.isLoading ? (
+            <div className="space-y-2.5">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full rounded-2xl" />
+              ))}
+            </div>
+          ) : rows.length === 0 ? (
+            // Composed empty state on the card surface — never a bare line
+            // floating in the middle of the canvas.
+            <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+              <EmptyState
+                icon={<TicketIcon size={24} />}
+                title={
+                  view === 'pending'
+                    ? t('coupons.noneWaiting', { defaultValue: 'Nothing waiting on a supervisor.' })
+                    : t('coupons.none', { defaultValue: 'No coupon requests here.' })
+                }
+                description={t('coupons.emptyHint', {
+                  defaultValue:
+                    'Coupon requests you send from a ticket land here with their approval status.',
+                })}
+              />
+            </div>
+          ) : (
+            <ul className="space-y-2.5">
+              {rows.map((r) => (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    onClick={() => r.ticket && navigate(`/tickets/${r.ticket.id}`)}
+                    // Board card anatomy: code + status pill leading, the amount as
+                    // the bold end-aligned numeral, meta underneath — hairline ring
+                    // so the card holds its edge on the dark canvas.
+                    className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 rounded-2xl bg-card p-4 text-start shadow-soft ring-1 ring-foreground/[0.06] transition-colors duration-fast hover:bg-secondary/40"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-sm font-semibold text-foreground">
+                          {r.coupon_code ?? t('coupons.noCode', { defaultValue: 'no code' })}
+                        </span>
+                        <Pill tone={TONE[r.status]} size="sm">
+                          {t(`coupons.status.${r.status}`, { defaultValue: r.status })}
+                        </Pill>
+                      </div>
+                      <div className="mt-1 truncate text-xs text-muted-foreground">
+                        {[r.contact?.name ?? r.contact?.phone, r.ticket?.subject]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </div>
                     </div>
-                    <div className="mt-1 truncate text-xs text-muted-foreground">
-                      {[r.contact?.name ?? r.contact?.phone, r.ticket?.subject]
-                        .filter(Boolean)
-                        .join(' · ')}
+                    <div className="shrink-0 text-end">
+                      <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
+                        {amount(r, 'SAR') || '—'}
+                      </div>
+                      <div className="mt-1 text-2xs tabular-nums text-muted-foreground">
+                        {formatRelative(r.decided_at ?? r.date_created)}
+                      </div>
                     </div>
-                  </div>
-                  <div className="shrink-0 text-end">
-                    <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
-                      {amount(r, 'SAR') || '—'}
-                    </div>
-                    <div className="mt-1 text-2xs tabular-nums text-muted-foreground">
-                      {formatRelative(r.decided_at ?? r.date_created)}
-                    </div>
-                  </div>
-                  {r.status === 'rejected' && (
-                    // On the row, not behind a click: this is what the agent
-                    // has to tell the customer.
-                    <p className="col-span-full mt-1 rounded-lg bg-destructive/10 px-3 py-1.5 text-xs leading-relaxed text-foreground">
-                      {r.decision_note ??
-                        t('coupons.noReason', { defaultValue: 'No reason was given.' })}
-                    </p>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+                    {r.status === 'rejected' && (
+                      // On the row, not behind a click: this is what the agent
+                      // has to tell the customer.
+                      <p className="col-span-full mt-1 rounded-lg bg-destructive/10 px-3 py-1.5 text-xs leading-relaxed text-foreground">
+                        {r.decision_note ??
+                          t('coupons.noReason', { defaultValue: 'No reason was given.' })}
+                      </p>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );

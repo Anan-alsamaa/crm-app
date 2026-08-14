@@ -6,7 +6,9 @@ import {
   Button,
   cn,
   EmptyState,
+  ErrorState,
   FormField,
+  InboxIcon,
   Input,
   Pill,
   Select,
@@ -125,16 +127,27 @@ function RequestQueue() {
           <Skeleton className="h-20 w-full rounded-2xl" />
         </div>
       ) : isError ? (
-        <p className="text-sm text-muted-foreground">
-          {t('compensation.loadError', { defaultValue: 'Could not load compensation requests.' })}
-        </p>
+        // Composed failure state on the card surface — a bare sentence adrift
+        // in the queue column reads as a rendering bug, not as an error.
+        <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+          <ErrorState
+            title={t('compensation.loadError', {
+              defaultValue: 'Could not load compensation requests.',
+            })}
+          />
+        </div>
       ) : rows.length === 0 ? (
-        <EmptyState
-          title={t('compensation.empty', { defaultValue: 'No compensation requests' })}
-          description={t('compensation.emptyHint', {
-            defaultValue: 'Requests submitted by customers will appear here.',
-          })}
-        />
+        // Same card surface as the request cards, so "empty" keeps the page's
+        // shape instead of leaving a headline floating over dead canvas.
+        <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+          <EmptyState
+            icon={<InboxIcon size={24} />}
+            title={t('compensation.empty', { defaultValue: 'No compensation requests' })}
+            description={t('compensation.emptyHint', {
+              defaultValue: 'Requests submitted by customers will appear here.',
+            })}
+          />
+        </div>
       ) : (
         <ul className="space-y-2">
           {rows.map((r) => (
@@ -233,9 +246,11 @@ function RequestDetail({ id }: { id: string }) {
           <ArrowLeftIcon size={16} className="rtl:-scale-x-100" />{' '}
           {t('compensation.back', { defaultValue: 'Back' })}
         </Button>
-        <p className="mt-4 text-sm text-muted-foreground">
-          {t('compensation.notFound', { defaultValue: 'Request not found.' })}
-        </p>
+        {/* Dashed quiet panel — the "nothing here" idiom the other boards use,
+            rather than a stray sentence under the Back button. */}
+        <div className="mt-4 rounded-2xl border border-dashed border-foreground/[0.08] bg-card/40">
+          <EmptyState title={t('compensation.notFound', { defaultValue: 'Request not found.' })} />
+        </div>
       </div>
     );
   }

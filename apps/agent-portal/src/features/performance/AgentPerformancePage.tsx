@@ -2,7 +2,9 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
+  EmptyState,
   HBarChart,
+  InboxIcon,
   Input,
   MeterBar,
   SectionCard,
@@ -224,9 +226,14 @@ export function AgentPerformancePage() {
               <Skeleton className="h-56 w-full rounded-2xl" />
             </div>
           ) : chats.length === 0 ? (
-            <p className="rounded-2xl bg-card p-10 text-center text-sm text-muted-foreground shadow-soft ring-1 ring-foreground/[0.06]">
-              {t('performance.empty', { defaultValue: 'No chats match these filters.' })}
-            </p>
+            // Composed empty state on the card surface — a lone sentence in a
+            // 1152px column reads as a rendering gap, not as a quiet range.
+            <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+              <EmptyState
+                icon={<InboxIcon size={24} />}
+                title={t('performance.empty', { defaultValue: 'No chats match these filters.' })}
+              />
+            </div>
           ) : (
             <>
               {/* 1 — the headline. Five numbers, no chrome around them.
@@ -320,7 +327,11 @@ export function AgentPerformancePage() {
                       emptyLabel={nothingToChart}
                     />
                   </Card>
+                  {/* Two series per agent — the widest chart of the three, and
+                      the odd one out of a two-column grid. Spanning it stops the
+                      row from carrying a dead empty cell beside it. */}
                   <Card
+                    className="lg:col-span-2"
                     title={t('performance.fastTitle', { defaultValue: 'How fast they replied' })}
                     help={t('performance.fastHelp', {
                       defaultValue: 'Averages per agent — shorter is better',
@@ -563,7 +574,9 @@ function Tile({
             )}
           />
         )}
-        <span className="min-w-0 truncate">
+        {/* Wraps rather than truncates: at six-up these micro-labels were
+            clipping to "COMMON CHATS TA…", which is not a label at all. */}
+        <span className="min-w-0 leading-snug">
           {label}
           {hint && <span className="ms-1 font-normal normal-case tracking-normal">({hint})</span>}
         </span>
@@ -576,9 +589,19 @@ function Tile({
 /** A chart in a card, with the question it answers written above it — thin
     adapter over the shared SectionCard surface so every chart carries the same
     header anatomy as the rest of the boards. */
-function Card({ title, help, children }: { title: string; help: string; children: ReactNode }) {
+function Card({
+  title,
+  help,
+  children,
+  className,
+}: {
+  title: string;
+  help: string;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <SectionCard title={title} hint={help}>
+    <SectionCard title={title} hint={help} className={className}>
       {children}
     </SectionCard>
   );

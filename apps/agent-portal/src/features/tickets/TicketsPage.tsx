@@ -202,7 +202,11 @@ export function TicketsPage() {
                       ? t('tickets.overdue', { defaultValue: 'Overdue' })
                       : t(`status.${f}`, { ns: 'common' })}
                 </span>
-                <span className={cn('tabular-nums text-2xs', !active && tone)}>{count}</span>
+                {/* The alarm hue only when there is something to be alarmed
+                    about — "Overdue 0" in red is a false alarm on every visit. */}
+                <span className={cn('tabular-nums text-2xs', !active && count > 0 && tone)}>
+                  {count}
+                </span>
                 {active && (
                   <span
                     aria-hidden
@@ -248,57 +252,65 @@ export function TicketsPage() {
                 aria-label={t('tickets.searchLabel', { defaultValue: 'Search tickets' })}
                 className="h-9"
               />
-              <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-1.5">
-                <SelectMenu
-                  size="sm"
-                  className="col-span-3 w-full"
-                  value={criteria.complaintType ?? ''}
-                  onChange={(v) => setCriteria((c) => ({ ...c, complaintType: v }))}
-                  aria-label={t('complaint.type', { defaultValue: 'Complaint type' })}
-                  options={[
-                    {
-                      value: '',
-                      label: t('tickets.anyType', { defaultValue: 'Any complaint type' }),
-                    },
-                    // From the data in range, not the full vocabulary: a menu of
-                    // types this agent has never handled is a list to read past.
-                    ...typesInRange.map((v) => ({ value: v, label: optionLabel(v) })),
-                  ]}
-                />
-                <Input
-                  type="date"
-                  value={criteria.from ?? ''}
-                  onChange={(e) => setCriteria((c) => ({ ...c, from: e.target.value }))}
-                  aria-label={t('performance.from', { defaultValue: 'From' })}
-                  className="h-8 w-[8.5rem] text-xs"
-                />
-                <Input
-                  type="date"
-                  value={criteria.to ?? ''}
-                  onChange={(e) => setCriteria((c) => ({ ...c, to: e.target.value }))}
-                  aria-label={t('performance.to', { defaultValue: 'To' })}
-                  className="h-8 w-[8.5rem] text-xs"
-                />
-                {!isEmptyFilter(criteria) && (
+              <SelectMenu
+                size="sm"
+                className="w-full"
+                value={criteria.complaintType ?? ''}
+                onChange={(v) => setCriteria((c) => ({ ...c, complaintType: v }))}
+                aria-label={t('complaint.type', { defaultValue: 'Complaint type' })}
+                options={[
+                  {
+                    value: '',
+                    label: t('tickets.anyType', { defaultValue: 'Any complaint type' }),
+                  },
+                  // From the data in range, not the full vocabulary: a menu of
+                  // types this agent has never handled is a list to read past.
+                  ...typesInRange.map((v) => ({ value: v, label: optionLabel(v) })),
+                ]}
+              />
+              {/* The dates carry visible micro-labels: two bare date boxes side
+                  by side read as one range control with no way to tell which
+                  end is which. Full-width halves, so the pair squares up with
+                  the search box above instead of ending ragged mid-rail. */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <label className="block space-y-1">
+                  <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {t('performance.from', { defaultValue: 'From' })}
+                  </span>
+                  <Input
+                    type="date"
+                    value={criteria.from ?? ''}
+                    onChange={(e) => setCriteria((c) => ({ ...c, from: e.target.value }))}
+                    aria-label={t('performance.from', { defaultValue: 'From' })}
+                    className="h-8 w-full text-xs"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {t('performance.to', { defaultValue: 'To' })}
+                  </span>
+                  <Input
+                    type="date"
+                    value={criteria.to ?? ''}
+                    onChange={(e) => setCriteria((c) => ({ ...c, to: e.target.value }))}
+                    aria-label={t('performance.to', { defaultValue: 'To' })}
+                    className="h-8 w-full text-xs"
+                  />
+                </label>
+              </div>
+              {!isEmptyFilter(criteria) && (
+                // Undo lives with the controls it undoes. The "what is the
+                // queue showing" count moved to the rail's foot, which shows
+                // it whether or not a filter is on — one count, one place.
+                <div className="flex justify-end">
                   <button
                     type="button"
                     onClick={() => setCriteria({})}
-                    className="h-8 rounded-lg px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    className="h-7 rounded-lg px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                   >
                     {t('tickets.clearSearch', { defaultValue: 'Clear' })}
                   </button>
-                )}
-              </div>
-              {!isEmptyFilter(criteria) && (
-                // Says what the queue is showing. Without it a filtered list
-                // that happens to be short reads as "I have no tickets".
-                <p className="text-2xs text-muted-foreground">
-                  {t('tickets.searchCount', {
-                    defaultValue: '{{shown}} of {{total}} tickets',
-                    shown: searched.length,
-                    total: list.length,
-                  })}
-                </p>
+                </div>
               )}
             </div>
             <div className="flex-1 overflow-auto">
@@ -416,11 +428,35 @@ export function TicketsPage() {
                 </div>
               )}
             </div>
+            {/* Queue foot — pins the count to the rail's bottom edge, so a
+                short queue ends in a deliberate hairline rather than trailing
+                off into dead canvas. It also says what the queue is showing:
+                without it a filtered list that happens to be short reads as
+                "I have no tickets". */}
+            {!complaints.isLoading && list.length > 0 && (
+              <div className="flex h-9 shrink-0 items-center border-t border-border px-3.5 text-2xs tabular-nums text-muted-foreground">
+                {t('tickets.searchCount', {
+                  defaultValue: '{{shown}} of {{total}} tickets',
+                  shown: filtered.length,
+                  total: list.length,
+                })}
+              </div>
+            )}
           </aside>
         )}
 
         {(isDesktop || selected !== null) && (
-          <section className="min-w-0 flex-1 overflow-auto rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
+          <section
+            className={cn(
+              'min-w-0 flex-1 overflow-auto',
+              // An OPEN ticket renders on the canvas so its SectionCards and
+              // timing cards actually elevate — card-on-card at the same
+              // lightness reads flat, which is the one thing the board look
+              // cannot survive. The empty pane keeps the card chrome: a
+              // composed empty state needs a surface to be composed on.
+              selected === null && 'rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft',
+            )}
+          >
             {selected ? (
               <TicketDetail
                 ticketId={selected}
@@ -444,6 +480,11 @@ export function TicketsPage() {
                       })}
                     </p>
                   </div>
+                  {/* The pane's one affordance. Without it the only way out of
+                      this dead space is the small button in the toolbar. */}
+                  <Button type="button" size="md" onClick={() => navigate('/new-ticket')}>
+                    {t('tickets.newTicket', { defaultValue: '+ New ticket' })}
+                  </Button>
                 </div>
               </div>
             )}
@@ -482,7 +523,8 @@ function ChatMediaRow({
         : t('tickets.fromSystem', { defaultValue: 'System' });
 
   return (
-    <li className="flex items-center gap-2 rounded-lg bg-card px-2 py-1.5 ring-1 ring-foreground/[0.04]">
+    // Inset on the dialog's card surface — bg-card here would vanish into it.
+    <li className="flex items-center gap-2 rounded-lg bg-secondary/40 px-2 py-1.5 ring-1 ring-foreground/[0.04]">
       <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-md bg-secondary">
         {showImg && url ? (
           <img src={url} alt="" className="h-full w-full object-cover" />
@@ -862,7 +904,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         {/* The agent's own words only — the order block is stripped out of
             legacy descriptions and rendered as a card below instead. */}
         {(legacyOrder ? legacyOrder.description : tk.description) && (
-          <p className="max-w-prose whitespace-pre-wrap rounded-xl bg-secondary/50 px-4 py-3 text-sm leading-relaxed text-foreground/85">
+          <p className="max-w-prose whitespace-pre-wrap rounded-xl bg-secondary/50 px-4 py-3 text-sm leading-relaxed text-foreground/85 ring-1 ring-foreground/[0.04]">
             {legacyOrder ? legacyOrder.description : tk.description}
           </p>
         )}
@@ -1068,24 +1110,21 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
           <TicketComplaintPanel ticket={tk} />
 
           {/* Attachments — front and center with live image previews, so the
-              agent sees what was shared without clicking anything. */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold tracking-tight text-foreground">
+              agent sees what was shared without clicking anything. On the
+              shared SectionCard surface, with the two dashed attach actions in
+              the card's own aside slot. */}
+          <SectionCard
+            title={
+              <>
                 {t('tickets.attachments', { defaultValue: 'Attachments' })}
                 {tk.attachments && tk.attachments.length > 0 && (
                   <span className="ms-2 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary-subtle px-1.5 text-xs font-semibold tabular-nums text-primary">
                     {tk.attachments.length}
                   </span>
                 )}
-              </h3>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                hidden
-                onChange={(e) => void onPickFiles(e.target.files)}
-              />
+              </>
+            }
+            aside={
               <div className="flex items-center gap-2">
                 {tk.conversation && chatItems.length > 0 && (
                   <button
@@ -1113,7 +1152,15 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                   )}
                 </button>
               </div>
-            </div>
+            }
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => void onPickFiles(e.target.files)}
+            />
 
             {/* Picker modal: files the customer (or agent) already shared in the
                 chat — attach any that weren't carried over at creation. */}
@@ -1139,18 +1186,20 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 }
               />
             ) : (
-              <p className="text-xs text-muted-foreground">
+              /* Composed placeholder, not a stray sentence: the dashed frame
+                 marks out where files will land, in the same idiom as the
+                 dashed attach buttons above it. */
+              <p className="rounded-xl border border-dashed border-border-strong px-4 py-5 text-center text-xs text-muted-foreground">
                 {t('tickets.noAttachments', { defaultValue: 'No attachments yet.' })}
               </p>
             )}
-          </section>
+          </SectionCard>
 
-          {/* Internal note composer — appends a 'commented' event to the history. */}
-          <section className="space-y-2">
-            <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {t('tickets.addNote', { defaultValue: 'Add internal note' })}
-            </h3>
-            <div className="rounded-2xl bg-card/60 p-2 ring-1 ring-foreground/[0.04] focus-within:ring-primary/30">
+          {/* Internal note composer — appends a 'commented' event to the history.
+              The composer itself is an inset on the card (bg-secondary), not a
+              second card: card-on-card at the same lightness reads flat. */}
+          <SectionCard title={t('tickets.addNote', { defaultValue: 'Add internal note' })}>
+            <div className="rounded-xl bg-secondary/40 p-2 ring-1 ring-foreground/[0.04] focus-within:ring-primary/30">
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
@@ -1180,22 +1229,16 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 </Button>
               </div>
             </div>
-          </section>
+          </SectionCard>
 
           {/* Field changes — Directus's own revisions, so imports and raw API
               edits show here too, with the actor attached. */}
-          <section className="space-y-3">
-            <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {t('tickets.fieldHistory', { defaultValue: 'Change history' })}
-            </h3>
+          <SectionCard title={t('tickets.fieldHistory', { defaultValue: 'Change history' })}>
             <ChangeHistory ticketId={tk.id} />
-          </section>
+          </SectionCard>
 
           {/* History timeline — actual timeline with connector line */}
-          <section className="space-y-3">
-            <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {t('tickets.history')}
-            </h3>
+          <SectionCard title={t('tickets.history')}>
             {events.isLoading ? (
               <div className="space-y-2">
                 <Skeleton className="h-10 w-full" />
@@ -1227,9 +1270,11 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                       : null;
                   return (
                     <li key={ev.id} className="relative flex items-start gap-3 py-2.5 ps-0">
+                      {/* ring-card, not ring-background: the halo has to match
+                          the surface the timeline sits on. */}
                       <span
                         className={cn(
-                          'relative z-10 mt-1 grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full ring-4 ring-background',
+                          'relative z-10 mt-1 grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full ring-4 ring-card',
                           isComment ? 'bg-foreground/70' : dotBg,
                         )}
                         aria-hidden
@@ -1258,11 +1303,13 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 })}
               </ol>
             ) : (
-              <p className="py-6 text-center text-sm text-muted-foreground/80">
+              /* Same dashed frame as the attachments placeholder — an empty
+                 timeline is a state of the section, not a floating sentence. */
+              <p className="rounded-xl border border-dashed border-border-strong px-4 py-5 text-center text-xs text-muted-foreground">
                 {t('tickets.noEvents')}
               </p>
             )}
-          </section>
+          </SectionCard>
         </div>
       </div>
     </div>

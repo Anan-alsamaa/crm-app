@@ -579,7 +579,7 @@ ${text}`
         </div>
         {/* Thread placeholder — alternating inbound/outbound bubbles */}
         <div className="flex-1 overflow-hidden">
-          <div className="mx-auto flex max-w-4xl flex-col gap-4 px-5 py-6">
+          <div className="mx-auto flex max-w-3xl flex-col gap-4 px-5 py-6">
             {[
               { me: false, w: 'w-52' },
               { me: true, w: 'w-40' },
@@ -653,8 +653,10 @@ ${text}`
               normally. */}
           <div className="mx-auto flex min-h-full max-w-3xl flex-col justify-end gap-5 px-5 py-6">
             {/* Conversation-start header — the Instagram move: the contact's
-                profile opens the scrollback instead of an empty void. */}
-            {threadMessages.length > 0 && (
+                profile opens the scrollback instead of an empty void. Also the
+                zero-message state: the same composed profile block with a
+                "No messages yet" line, never dead space over the composer. */}
+            {(threadMessages.length > 0 || c) && (
               <div className="flex flex-col items-center gap-3 pb-8 pt-10 text-center">
                 <span className="rounded-full bg-primary/30 p-[2px]">
                   <span className="block rounded-full bg-canvas p-[3px]">
@@ -671,10 +673,12 @@ ${text}`
                     {contactName}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {t('conversation.startedOn', {
-                      defaultValue: 'Conversation started {{date}}',
-                      date: dayLabel(threadMessages[0]!.date_created),
-                    })}
+                    {threadMessages.length > 0
+                      ? t('conversation.startedOn', {
+                          defaultValue: 'Conversation started {{date}}',
+                          date: dayLabel(threadMessages[0]!.date_created),
+                        })
+                      : t('inbox.noMessagesYet', { defaultValue: 'No messages yet' })}
                   </div>
                 </div>
               </div>
@@ -833,7 +837,10 @@ ${text}`
 
         {/* Reply composer — floating card lit by focus. */}
         <div>
-          <div className="mx-auto max-w-4xl px-5 pb-5 pt-3">
+          {/* max-w-3xl matches the thread column above — the composer, tabs and
+              quick replies share the bubbles' start/end edges instead of
+              overhanging them. */}
+          <div className="mx-auto max-w-3xl px-5 pb-5 pt-3">
             {/* Ready-made replies, directly above the box — the operations portal
                 puts them here and agents already reach for them there. Hidden on
                 an internal note: a canned customer reply is never the right
@@ -1109,7 +1116,10 @@ ${text}`
               onClick={() => setDetailsOpen(false)}
               className="absolute inset-0 bg-black/55 backdrop-blur-sm motion-safe:animate-fade-in"
             />
-            <div className="absolute inset-y-0 end-0 flex bg-card shadow-2xl shadow-foreground/20 motion-safe:animate-slide-in-drawer">
+            {/* Plain shadow-2xl: a foreground-based shadow inverts on the dark
+                theme (near-white bloom instead of depth) — the design-law
+                foreground-scrim/shadow trap. */}
+            <div className="absolute inset-y-0 end-0 flex bg-card shadow-2xl motion-safe:animate-slide-in-drawer">
               <button
                 type="button"
                 onClick={() => setDetailsOpen(false)}

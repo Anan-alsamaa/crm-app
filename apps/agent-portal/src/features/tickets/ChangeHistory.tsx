@@ -132,7 +132,9 @@ export function ChangeHistory({ ticketId }: { ticketId: string }) {
   if (revisions.isLoading) return <Skeleton className="h-20 w-full rounded-xl" />;
   if (entries.length === 0)
     return (
-      <p className="text-2xs text-muted-foreground">
+      // Composed placeholder in the detail's shared dashed idiom — an empty
+      // audit trail is a state of the section, not a stray line of copy.
+      <p className="rounded-xl border border-dashed border-border-strong px-4 py-5 text-center text-xs text-muted-foreground">
         {t('tickets.noFieldChanges', {
           defaultValue: 'No field changes recorded since this ticket was created.',
         })}

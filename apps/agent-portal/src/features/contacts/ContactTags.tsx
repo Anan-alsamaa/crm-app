@@ -70,7 +70,7 @@ export function ContactTags({ contact }: { contact: ContactRow }) {
   };
 
   return (
-    <section className="rounded-2xl bg-card/70 p-4 ring-1 ring-foreground/[0.04] shadow-soft">
+    <section className="rounded-2xl bg-card p-4 ring-1 ring-foreground/[0.06] shadow-soft">
       <h2 className="mb-3 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         {t('sidebar.tags')}
       </h2>
@@ -84,8 +84,10 @@ export function ContactTags({ contact }: { contact: ContactRow }) {
             >
               <span
                 aria-hidden
-                className="h-1.5 w-1.5 shrink-0 rounded-full"
-                style={{ background: j.tags_id!.color ?? '#94a3b8' }}
+                // Token fallback (not a hex literal) so a colorless tag still
+                // reads correctly on both themes; a stored color overrides it.
+                className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground"
+                style={j.tags_id!.color ? { background: j.tags_id!.color } : undefined}
               />
               <span className="max-w-[10rem] truncate">{j.tags_id!.name}</span>
               <button
@@ -155,8 +157,8 @@ export function ContactTags({ contact }: { contact: ContactRow }) {
                 >
                   <span
                     aria-hidden
-                    className="h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ background: tg.color ?? '#94a3b8' }}
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground"
+                    style={tg.color ? { background: tg.color } : undefined}
                   />
                   <span className="truncate">{tg.name}</span>
                 </button>

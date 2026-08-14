@@ -16,6 +16,7 @@ import {
   Input,
   Pill,
   ProgressRing,
+  SearchIcon,
   SelectMenu,
   ShieldIcon,
   Skeleton,
@@ -343,16 +344,33 @@ export function UsersPage() {
             }
           />
         ) : filtered.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            {t('users.noMatch', {
+          /* Composed miss state — an icon chip and a real title, never a bare
+             text line floating in dead space. */
+          <EmptyState
+            icon={<SearchIcon size={20} />}
+            title={t('users.noMatch', {
               defaultValue: 'No accounts match your search.',
             })}
-          </p>
+          />
         ) : (
           /* Dense list — one row per account (density is a feature). Rows sit
              flush inside one board card: hairline separators, quiet hover,
              a footer aggregate band. Columns read like a table at sm+. */
           <div className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
+            {/* Micro-label column header band — anchors the pill columns so
+                they read as a table, not floating chips. Reuses the same
+                gap + fixed widths as the rows below. */}
+            <div className="hidden items-center gap-3 border-b border-foreground/[0.06] bg-secondary/30 px-4 py-2 sm:flex">
+              <span className="flex-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('users.title')}
+              </span>
+              <span className="w-28 shrink-0 text-end text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('users.role')}
+              </span>
+              <span className="w-32 shrink-0 text-end text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('users.team')}
+              </span>
+            </div>
             <ul className="divide-y divide-foreground/[0.06]">
               {filtered.map((u) => {
                 const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
@@ -386,15 +404,19 @@ export function UsersPage() {
                           <div className="truncate text-xs text-muted-foreground">{u.email}</div>
                         )}
                       </div>
-                      <span
-                        className={cn(
-                          'hidden shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold sm:inline-flex',
-                          isAdmin
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-primary-tint text-primary',
-                        )}
-                      >
-                        {u.role?.name ?? '—'}
+                      {/* Fixed-width column so pills line up under the ROLE
+                          header instead of ragging to their own widths. */}
+                      <span className="hidden w-28 shrink-0 justify-end sm:flex">
+                        <span
+                          className={cn(
+                            'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold',
+                            isAdmin
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-primary-tint text-primary',
+                          )}
+                        >
+                          {u.role?.name ?? '—'}
+                        </span>
                       </span>
                       {u.team ? (
                         <span

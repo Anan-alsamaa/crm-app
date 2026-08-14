@@ -541,18 +541,20 @@ export function StorePicker({
 
 /** One titled group of fields — his "Order & location" / "Complaint Details" cards. */
 /**
- * Each section owns a hue, carried by a single dot.
+ * Each section owns a hue, carried by a tinted rounded-square chip with the
+ * hue's dot inside — the board's icon-chip anatomy (bg-<hue>-tint), so a form
+ * card opens the same way a stat card does.
  *
- * Colour as an accent, never as a surface (DESIGN.md): the card stays white so
- * it floats off the tinted canvas, and the dot is what tells the three columns
+ * Colour as an accent, never as a surface (DESIGN.md): the card surface stays
+ * neutral so it floats off the canvas, and the chip is what tells the columns
  * apart at a glance. A tinted section fill was the first attempt and read as a
  * wireframe, which is the same failure the KPI tiles went through.
  */
 const SECTION_DOT = {
-  primary: 'bg-primary',
-  violet: 'bg-violet',
-  success: 'bg-success',
-  sky: 'bg-sky',
+  primary: { chip: 'bg-primary-tint', dot: 'bg-primary' },
+  violet: { chip: 'bg-violet-tint', dot: 'bg-violet' },
+  success: { chip: 'bg-success-tint', dot: 'bg-success' },
+  sky: { chip: 'bg-sky-tint', dot: 'bg-sky' },
 } as const;
 
 export function ComplaintSection({
@@ -584,9 +586,17 @@ export function ComplaintSection({
     >
       {/* Not an uppercase eyebrow: the field labels below are already uppercase
           and tracked, so a second caps size stacked above them reads as noise
-          rather than hierarchy. Weight plus the hue dot carry it. */}
-      <header className="mb-4 flex items-baseline gap-2">
-        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', SECTION_DOT[tone])} aria-hidden />
+          rather than hierarchy. Weight plus the hue chip carry it. */}
+      <header className="mb-4 flex items-center gap-2.5">
+        <span
+          className={cn(
+            'grid h-6 w-6 shrink-0 place-items-center rounded-lg',
+            SECTION_DOT[tone].chip,
+          )}
+          aria-hidden
+        >
+          <span className={cn('h-1.5 w-1.5 rounded-full', SECTION_DOT[tone].dot)} />
+        </span>
         <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">{title}</h2>
         {hint && <span className="ms-auto shrink-0 text-2xs text-muted-foreground">{hint}</span>}
       </header>

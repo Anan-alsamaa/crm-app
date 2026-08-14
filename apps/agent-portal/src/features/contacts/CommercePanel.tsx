@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { Skeleton } from '@yiji/ui';
+import { Skeleton, StoreIcon } from '@yiji/ui';
 import type { YijiPurchaseActivity } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
 import { CustomerOrders } from '../commerce/OrderViews.js';
@@ -39,9 +39,17 @@ export function CommercePanel({ yijiVendorId, externalCustomerId }: Props) {
   });
 
   if (!yijiVendorId || !externalCustomerId) {
+    // Composed quiet state — a dashed panel with an icon chip, so "no data"
+    // reads as a deliberate state of the board rather than a stray sentence.
     return (
-      <div className="rounded-2xl bg-card/60 ring-1 ring-foreground/[0.04] px-5 py-4">
-        <p className="text-xs text-muted-foreground">
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-foreground/[0.08] bg-card/40 px-5 py-8 text-center">
+        <span
+          aria-hidden
+          className="grid h-9 w-9 place-items-center rounded-lg bg-secondary text-muted-foreground"
+        >
+          <StoreIcon size={18} />
+        </span>
+        <p className="max-w-[16rem] text-xs leading-relaxed text-muted-foreground">
           {t('commerce.noLink', {
             defaultValue: 'No Yiji customer linked — commerce data not available.',
           })}
@@ -53,7 +61,7 @@ export function CommercePanel({ yijiVendorId, externalCustomerId }: Props) {
   return (
     <div className="space-y-4">
       {/* Activity summary */}
-      <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-5 py-4">
+      <div className="rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft px-5 py-4">
         <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {t('commerce.activity', { defaultValue: 'Lifetime activity' })}
         </h3>

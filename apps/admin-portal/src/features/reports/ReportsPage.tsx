@@ -244,22 +244,12 @@ export function ReportsPage() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Toolbar>
+        {/* Title only, as the sibling report pages do — the editorial header
+            below carries the subtitle and the saved count, so repeating them up
+            here made the two headers read as a collision. */}
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
           {t('reports.title', { defaultValue: 'Scheduled reports' })}
         </h1>
-        <span className="hidden text-xs text-muted-foreground sm:inline-flex items-center gap-2.5">
-          <span className="opacity-50">·</span>
-          <span>
-            {t('reports.purpose', {
-              defaultValue: 'Saved report definitions that run on a schedule and email a CSV',
-            })}
-          </span>
-          <span className="opacity-50">·</span>
-          <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{total}</strong>{' '}
-            {t('reports.saved', { defaultValue: 'saved' })}
-          </span>
-        </span>
         <ToolbarSpacer />
         <Button
           type="button"
@@ -345,6 +335,30 @@ export function ReportsPage() {
                   />
                 </li>
               ))}
+              {/* Ghost tile — the next report's parking space. With one or two
+                  saved reports the grid was a card in a corner of dead canvas;
+                  the dashed slot fills the rhythm and is the affordance the page
+                  is for anyway. */}
+              <li>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null);
+                    setDrawerOpen(true);
+                  }}
+                  className="flex h-full min-h-[10rem] w-full flex-col items-center justify-center gap-2.5 rounded-2xl border-2 border-dashed border-foreground/10 text-muted-foreground transition-colors duration-base ease-out hover:border-primary/40 hover:bg-primary/[0.04] hover:text-primary"
+                >
+                  <span
+                    aria-hidden
+                    className="grid h-9 w-9 place-items-center rounded-lg bg-secondary/80"
+                  >
+                    <PlusIcon />
+                  </span>
+                  <span className="text-xs font-semibold">
+                    {t('reports.create', { defaultValue: 'New report' })}
+                  </span>
+                </button>
+              </li>
             </ul>
           )}
         </div>
@@ -625,17 +639,19 @@ function ReportCard({
           {t('reports.runNow', { defaultValue: 'Run now' })}
         </Button>
         <ToolbarSpacer />
+        {/* Quiet chip buttons rather than underlined text links — the same
+            words, dressed as the actions they are. */}
         <button
           type="button"
           onClick={onEdit}
-          className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
+          className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/10"
         >
           {t('actions.edit', { ns: 'common', defaultValue: 'edit' })}
         </button>
         <button
           type="button"
           onClick={onDelete}
-          className="text-2xs font-medium text-destructive underline-offset-2 hover:underline"
+          className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-destructive transition-colors duration-fast ease-out hover:bg-destructive/10"
         >
           {t('actions.delete', { ns: 'common', defaultValue: 'delete' })}
         </button>

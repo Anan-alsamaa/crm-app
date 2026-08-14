@@ -209,239 +209,289 @@ export function RolesPage() {
           {t('roles.title', { defaultValue: 'Roles & privileges' })}
         </h1>
         <ToolbarSpacer />
-        <Button size="sm" variant="secondary" onClick={() => setDraft(EMPTY)}>
+        <Button size="sm" onClick={() => setDraft(EMPTY)} iconStart={<PlusIcon />}>
           {t('roles.new', { defaultValue: 'New role' })}
         </Button>
       </Toolbar>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto px-5 py-4 lg:grid-cols-[18rem_1fr]">
-        {/* ── page hero — the boards' header anatomy ── */}
-        <div className="border-b border-foreground/10 pb-5 lg:col-span-2">
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">
-            {t('roles.title', { defaultValue: 'Roles & privileges' })}
-          </h2>
-          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            {t('roles.heroSubtitle', {
-              defaultValue:
-                'Named sets of ticked privileges, optionally fenced to specific brands. Pick a role to see or change what it can do.',
-            })}
-          </p>
-        </div>
+      {/* Scroll lives on the page wrapper; the grid inside is capped so the
+          editor doesn't stretch full-bleed across wide monitors. */}
+      <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+        <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-4 lg:grid-cols-[18rem_1fr] lg:items-start">
+          {/* ── page hero — the boards' header anatomy ── */}
+          <div className="border-b border-foreground/10 pb-5 lg:col-span-2">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">
+              {t('roles.title', { defaultValue: 'Roles & privileges' })}
+            </h2>
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {t('roles.heroSubtitle', {
+                defaultValue:
+                  'Named sets of ticked privileges, optionally fenced to specific brands. Pick a role to see or change what it can do.',
+              })}
+            </p>
+          </div>
 
-        {/* ── the roles ── */}
-        <div className="space-y-2">
-          {roles.isLoading ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 rounded-xl" />
-            ))
-          ) : (
-            /* Clean board list — rows flush inside one card, hairline
+          {/* ── the roles ── */}
+          <div className="space-y-2">
+            {roles.isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 rounded-xl" />
+              ))
+            ) : (
+              /* Clean board list — rows flush inside one card, hairline
                separators, quiet hover; the selected row is jade-tinted. */
-            <ul className="divide-y divide-foreground/[0.06] overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-              {(roles.data ?? []).map((r) => (
-                <li key={r.id}>
-                  <button
-                    type="button"
-                    onClick={() => setDraft((d) => ({ ...d, id: r.id }))}
-                    className={cn(
-                      'min-h-12 w-full px-3.5 py-2.5 text-start transition-colors duration-fast',
-                      'focus-visible:outline-none focus-visible:bg-foreground/[0.05]',
-                      draft.id === r.id
-                        ? 'bg-primary/10 ring-1 ring-inset ring-primary/30'
-                        : 'hover:bg-foreground/[0.03]',
-                    )}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
-                        {r.name}
-                      </span>
-                      {r.builtin ? (
-                        <Pill tone="neutral" size="sm">
-                          {t('roles.builtin', { defaultValue: 'Built-in' })}
-                        </Pill>
-                      ) : r.directus_role ? (
-                        <Pill tone="success" size="sm">
-                          {t('roles.active', { defaultValue: 'Active' })}
-                        </Pill>
-                      ) : (
-                        <Pill tone="warning" size="sm">
-                          {t('roles.pending', { defaultValue: 'Applying…' })}
-                        </Pill>
-                      )}
-                    </span>
-                    {r.brands && r.brands.length > 0 && (
-                      <span className="mt-0.5 block text-2xs text-muted-foreground">
-                        {t('roles.brandLimited', {
-                          n: r.brands.length,
-                          defaultValue: 'Limited to {{n}} brand(s)',
-                        })}
-                      </span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* ── the editor ── */}
-        <div className="space-y-4">
-          {locked ? (
-            <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
-              <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                {selected?.name}
-              </h2>
-              <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                {selected?.description}
-              </p>
-              <p className="mt-3 max-w-2xl rounded-xl bg-secondary/50 px-3 py-2 text-2xs leading-relaxed text-muted-foreground">
-                {t('roles.builtinHelp', {
-                  defaultValue:
-                    'Built-in roles are defined in code, where their security hardening lives, and cannot be edited here. Create a new role for anything these two do not cover.',
-                })}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="grid gap-3 rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] sm:grid-cols-2">
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    {t('roles.name', { defaultValue: 'Role name' })}
-                  </span>
-                  <Input
-                    value={draft.name}
-                    onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-                    placeholder={t('roles.namePlaceholder', {
-                      defaultValue: 'e.g. Brand Supervisor',
-                    })}
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    {t('roles.description', { defaultValue: 'Description' })}
-                  </span>
-                  <Textarea
-                    rows={1}
-                    value={draft.description}
-                    onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-                  />
-                </label>
-              </div>
-
-              {/* privilege matrix — SectionCard-like group cards: compact
-                  title header, hairline-separated tick rows, jade ticks */}
-              <div className="grid gap-4 sm:grid-cols-2">
-                {Object.entries(GROUPS).map(([group, label]) => (
-                  <fieldset
-                    key={group}
-                    className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]"
-                  >
-                    <legend className="sr-only">{label}</legend>
-                    <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                      {label}
-                    </h3>
-                    <ul className="mt-4 divide-y divide-foreground/[0.06]">
-                      {PRIVS.filter((p) => p.group === group).map((p) => (
-                        <li key={p.key}>
-                          <label className="flex min-h-9 cursor-pointer items-center gap-2.5 rounded-md px-1.5 py-1.5 text-sm text-foreground transition-colors duration-fast hover:bg-foreground/[0.03]">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded-sm border-border-strong bg-input accent-primary"
-                              checked={!!draft.privileges[p.key]}
-                              onChange={(e) =>
-                                setDraft((d) => ({
-                                  ...d,
-                                  privileges: { ...d.privileges, [p.key]: e.target.checked },
-                                }))
-                              }
-                            />
-                            {PRIV_LABELS[p.key]}
-                          </label>
-                        </li>
-                      ))}
-                    </ul>
-                  </fieldset>
-                ))}
-              </div>
-
-              {/* brand restriction — the shared SectionCard surface */}
-              <SectionCard
-                title={t('roles.brands', { defaultValue: 'Brand access' })}
-                hint={t('roles.brandsHelp', {
-                  defaultValue:
-                    'Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a conversation has no brand until a ticket gives it one.',
-                })}
-              >
-                <div className="flex flex-wrap gap-2">
-                  {(brands.data ?? []).map((b) => {
-                    const on = draft.brands.includes(b.id);
-                    return (
+              <div className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+                <ul className="divide-y divide-foreground/[0.06]">
+                  {(roles.data ?? []).map((r) => (
+                    <li key={r.id}>
                       <button
-                        key={b.id}
                         type="button"
-                        aria-pressed={on}
-                        onClick={() =>
-                          setDraft((d) => ({
-                            ...d,
-                            brands: on ? d.brands.filter((x) => x !== b.id) : [...d.brands, b.id],
-                          }))
-                        }
+                        onClick={() => setDraft((d) => ({ ...d, id: r.id }))}
                         className={cn(
-                          'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast',
-                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-                          // Tinted chip with hue text — the boards' tag-pill
-                          // treatment for the ticked state.
-                          on
-                            ? 'bg-primary-tint text-primary ring-1 ring-inset ring-primary/30'
-                            : 'bg-secondary text-muted-foreground hover:text-foreground',
+                          'min-h-12 w-full px-3.5 py-2.5 text-start transition-colors duration-fast',
+                          'focus-visible:outline-none focus-visible:bg-foreground/[0.05]',
+                          draft.id === r.id
+                            ? 'bg-primary/10 ring-1 ring-inset ring-primary/30'
+                            : 'hover:bg-foreground/[0.03]',
                         )}
                       >
-                        {b.name}
+                        <span className="flex items-center gap-2">
+                          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                            {r.name}
+                          </span>
+                          {r.builtin ? (
+                            <Pill tone="neutral" size="sm">
+                              {t('roles.builtin', { defaultValue: 'Built-in' })}
+                            </Pill>
+                          ) : r.directus_role ? (
+                            <Pill tone="success" size="sm">
+                              {t('roles.active', { defaultValue: 'Active' })}
+                            </Pill>
+                          ) : (
+                            <Pill tone="warning" size="sm">
+                              {t('roles.pending', { defaultValue: 'Applying…' })}
+                            </Pill>
+                          )}
+                        </span>
+                        {r.brands && r.brands.length > 0 && (
+                          <span className="mt-0.5 block text-2xs text-muted-foreground">
+                            {t('roles.brandLimited', {
+                              n: r.brands.length,
+                              defaultValue: 'Limited to {{n}} brand(s)',
+                            })}
+                          </span>
+                        )}
                       </button>
+                    </li>
+                  ))}
+                </ul>
+                {/* Footer aggregate band — the boards' table anatomy, matching
+                every other board list in the portal. */}
+                <div className="flex items-center justify-between gap-3 border-t border-foreground/[0.06] bg-secondary/30 px-3.5 py-2.5">
+                  <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {t('roles.total', { defaultValue: 'roles' })}
+                  </span>
+                  <span className="text-sm font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
+                    {(roles.data ?? []).length}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── the editor ── */}
+          <div className="space-y-4">
+            {locked ? (
+              <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                  {selected?.name}
+                </h2>
+                <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+                  {selected?.description}
+                </p>
+                <p className="mt-3 max-w-2xl rounded-xl bg-secondary/50 px-3 py-2 text-2xs leading-relaxed text-muted-foreground">
+                  {t('roles.builtinHelp', {
+                    defaultValue:
+                      'Built-in roles are defined in code, where their security hardening lives, and cannot be edited here. Create a new role for anything these two do not cover.',
+                  })}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-3 rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] sm:grid-cols-2">
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      {t('roles.name', { defaultValue: 'Role name' })}
+                    </span>
+                    <Input
+                      value={draft.name}
+                      onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                      placeholder={t('roles.namePlaceholder', {
+                        defaultValue: 'e.g. Brand Supervisor',
+                      })}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      {t('roles.description', { defaultValue: 'Description' })}
+                    </span>
+                    <Textarea
+                      rows={1}
+                      value={draft.description}
+                      onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+                    />
+                  </label>
+                </div>
+
+                {/* privilege matrix — SectionCard-like group cards: compact
+                  title header, hairline-separated tick rows, jade ticks.
+                  items-start keeps a two-item card from stretching to its
+                  seven-item neighbour's height and hoarding dead space. */}
+                <div className="grid items-start gap-4 sm:grid-cols-2">
+                  {Object.entries(GROUPS).map(([group, label]) => {
+                    const groupPrivs = PRIVS.filter((p) => p.group === group);
+                    const ticked = groupPrivs.filter((p) => !!draft.privileges[p.key]).length;
+                    return (
+                      <fieldset
+                        key={group}
+                        className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]"
+                      >
+                        <legend className="sr-only">{label}</legend>
+                        <div className="flex items-baseline justify-between gap-2 border-b border-foreground/[0.06] pb-3">
+                          <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                            {label}
+                          </h3>
+                          {/* Ticked-of-total, right-aligned tabular — the boards'
+                          quiet aggregate idiom; jade only once something is on. */}
+                          <span
+                            className={cn(
+                              'text-2xs font-semibold tabular-nums',
+                              ticked > 0 ? 'text-primary' : 'text-muted-foreground',
+                            )}
+                          >
+                            {ticked}/{groupPrivs.length}
+                          </span>
+                        </div>
+                        <ul className="mt-1 divide-y divide-foreground/[0.06]">
+                          {groupPrivs.map((p) => (
+                            <li key={p.key}>
+                              <label className="flex min-h-9 cursor-pointer items-center gap-2.5 rounded-md px-1.5 py-1.5 text-sm text-foreground transition-colors duration-fast hover:bg-foreground/[0.03]">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded-sm border-border-strong bg-input accent-primary"
+                                  checked={!!draft.privileges[p.key]}
+                                  onChange={(e) =>
+                                    setDraft((d) => ({
+                                      ...d,
+                                      privileges: { ...d.privileges, [p.key]: e.target.checked },
+                                    }))
+                                  }
+                                />
+                                {PRIV_LABELS[p.key]}
+                              </label>
+                            </li>
+                          ))}
+                        </ul>
+                      </fieldset>
                     );
                   })}
                 </div>
-              </SectionCard>
 
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={() => save.mutate(draft)}
-                  disabled={!draft.name.trim() || save.isPending}
-                >
-                  {draft.id
-                    ? t('roles.save', { defaultValue: 'Save role' })
-                    : t('roles.create', { defaultValue: 'Create role' })}
-                </Button>
-                {draft.id && (
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          t('roles.deleteConfirm', {
-                            name: draft.name,
-                            defaultValue:
-                              'Delete “{{name}}”? Users still holding it must be reassigned first.',
-                          }),
-                        )
-                      )
-                        removeRole.mutate(draft.id!);
-                    }}
-                  >
-                    {t('roles.delete', { defaultValue: 'Delete' })}
-                  </Button>
-                )}
-                <span className="text-2xs text-muted-foreground">
-                  {t('roles.assignHint', {
+                {/* brand restriction — the shared SectionCard surface */}
+                <SectionCard
+                  title={t('roles.brands', { defaultValue: 'Brand access' })}
+                  hint={t('roles.brandsHelp', {
                     defaultValue:
-                      'Assign people to this role from the Users page once it shows Active.',
+                      'Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a conversation has no brand until a ticket gives it one.',
                   })}
-                </span>
-              </div>
-            </>
-          )}
+                >
+                  <div className="flex flex-wrap gap-2">
+                    {(brands.data ?? []).map((b) => {
+                      const on = draft.brands.includes(b.id);
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() =>
+                            setDraft((d) => ({
+                              ...d,
+                              brands: on ? d.brands.filter((x) => x !== b.id) : [...d.brands, b.id],
+                            }))
+                          }
+                          className={cn(
+                            'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast',
+                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                            // Tinted chip with hue text — the boards' tag-pill
+                            // treatment for the ticked state.
+                            on
+                              ? 'bg-primary-tint text-primary ring-1 ring-inset ring-primary/30'
+                              : 'bg-secondary text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          {b.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </SectionCard>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => save.mutate(draft)}
+                    disabled={!draft.name.trim() || save.isPending}
+                  >
+                    {draft.id
+                      ? t('roles.save', { defaultValue: 'Save role' })
+                      : t('roles.create', { defaultValue: 'Create role' })}
+                  </Button>
+                  {draft.id && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            t('roles.deleteConfirm', {
+                              name: draft.name,
+                              defaultValue:
+                                'Delete “{{name}}”? Users still holding it must be reassigned first.',
+                            }),
+                          )
+                        )
+                          removeRole.mutate(draft.id!);
+                      }}
+                    >
+                      {t('roles.delete', { defaultValue: 'Delete' })}
+                    </Button>
+                  )}
+                  <span className="text-2xs text-muted-foreground">
+                    {t('roles.assignHint', {
+                      defaultValue:
+                        'Assign people to this role from the Users page once it shows Active.',
+                    })}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      className="h-3.5 w-3.5"
+      aria-hidden
+    >
+      <path d="M8 3v10M3 8h10" />
+    </svg>
   );
 }

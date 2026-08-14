@@ -7,7 +7,10 @@ const DIRECTUS = process.env.DIRECTUS_URL ?? 'http://localhost:8055';
 const OWNER_EMAIL = process.env.E2E_OWNER_EMAIL ?? 'e.habibi@anan.sa';
 const OWNER_PASSWORD = process.env.E2E_OWNER_PASSWORD ?? '123456';
 const AGENT_EMAIL = process.env.E2E_AGENT_EMAIL ?? 'e2e.agent@example.com';
-const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD ?? 'E2eAgentPass1!';
+// Matches docs/LOCAL_PROD.md — the setup PATCHes this onto the agent user on
+// every run, so a different default here silently rotates the owner's login
+// away from the documented credential (it did, twice).
+const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD ?? '123456';
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${await res.text()}`);

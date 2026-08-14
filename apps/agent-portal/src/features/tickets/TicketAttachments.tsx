@@ -57,7 +57,7 @@ export function TicketAttachments({
           {files.map((a) => (
             <span
               key={a.id}
-              className="group inline-flex max-w-[18rem] items-center gap-2 rounded-xl bg-card/70 px-2.5 py-2 ring-1 ring-foreground/[0.06] shadow-soft"
+              className="group inline-flex max-w-[18rem] items-center gap-2 rounded-xl bg-secondary/40 px-2.5 py-2 ring-1 ring-foreground/[0.06]"
             >
               <FileGlyph
                 type={a.file?.type ?? null}
@@ -127,7 +127,7 @@ function TicketImageThumb({
       <button
         type="button"
         onClick={onFallbackDownload}
-        className="inline-flex items-center gap-2 rounded-xl bg-card/70 px-2.5 py-2 text-xs font-medium text-foreground ring-1 ring-foreground/[0.06] hover:underline"
+        className="inline-flex items-center gap-2 rounded-xl bg-secondary/40 px-2.5 py-2 text-xs font-medium text-foreground ring-1 ring-foreground/[0.06] hover:underline"
       >
         <FileGlyph type={a.file?.type ?? null} filename={a.file?.filename ?? null} size="sm" />
         {a.file?.filename ?? t('conversation.attachment', { defaultValue: 'Attachment' })}

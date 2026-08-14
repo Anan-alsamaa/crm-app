@@ -3,21 +3,25 @@ import { useTranslation } from 'react-i18next';
 import {
   Avatar,
   Button,
+  ClockIcon,
   cn,
   EmptyState,
   type MetricTone,
   Pill,
   ProgressRing,
   SelectMenu,
+  ShieldIcon,
   Spinner,
   Table,
   TableFooterBar,
   TableSurface,
   Td,
   Th,
+  TicketIcon,
   Toolbar,
   ToolbarSpacer,
   Tr,
+  ZapIcon,
 } from '@yiji/ui';
 import { useSlaReports, type SlaCell, type TicketSla } from './api.js';
 
@@ -91,6 +95,15 @@ const KPI_DOT: Record<KpiTone, string> = {
   amber: 'bg-warning',
   crimson: 'bg-destructive',
 };
+/* Icon chips take tint + hue token pairs, same anatomy as the export reports'
+ * tiles; amber stays NEUTRAL — warning is a light token and a warning-tinted
+ * chip fails contrast on the light theme. */
+const KPI_CHIP: Record<KpiTone, string> = {
+  blue: 'bg-sky-tint text-sky',
+  green: 'bg-success-tint text-success',
+  amber: 'bg-secondary text-muted-foreground',
+  crimson: 'bg-destructive-tint text-destructive',
+};
 /** Green ≥90, amber ≥75, red below (no data → blue). */
 const pctKpiTone = (n: number | null): KpiTone =>
   n == null ? 'blue' : n >= 90 ? 'green' : n >= 75 ? 'amber' : 'crimson';
@@ -107,30 +120,45 @@ function Kpi({
   label,
   value,
   tone = 'blue',
+  icon,
   visual,
 }: {
   label: string;
   value: string;
   tone?: KpiTone;
+  /** Rendered inside a tinted rounded-square chip above the numeral. */
+  icon?: ReactNode;
   /** End-aligned data accent — a `<ProgressRing>` for the % tiles. */
   visual?: ReactNode;
 }) {
   return (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-2xl bg-card px-4 py-4 shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
+        'rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
       )}
     >
-      <div className="min-w-0 flex-1">
-        <div className="text-4xl font-extrabold tracking-[-0.03em] tabular-nums leading-none text-foreground">
-          {value}
+      {/* Chip and ring share the top band: identity at the start, the data
+          accent at the end, boards-style. */}
+      {(icon || visual) && (
+        <div className="mb-3 flex items-start justify-between gap-2">
+          {icon && (
+            <span
+              aria-hidden
+              className={cn('grid h-9 w-9 place-items-center rounded-lg', KPI_CHIP[tone])}
+            >
+              {icon}
+            </span>
+          )}
+          {visual && <div className="ms-auto shrink-0">{visual}</div>}
         </div>
-        <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', KPI_DOT[tone])} />
-          {label}
-        </div>
+      )}
+      <div className="text-4xl font-extrabold tracking-[-0.03em] tabular-nums leading-none text-foreground">
+        {value}
       </div>
-      {visual && <div className="shrink-0">{visual}</div>}
+      <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', KPI_DOT[tone])} />
+        {label}
+      </div>
     </div>
   );
 }
@@ -202,14 +230,12 @@ export function SlaReportsPage() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Toolbar>
+        {/* Title only, as the sibling report pages do — the editorial header
+            below carries the subtitle, so repeating it up here made the two
+            headers read as a collision. */}
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
           {t('slaReports.title', { defaultValue: 'SLA reports' })}
         </h1>
-        <span className="hidden text-xs text-muted-foreground sm:inline">
-          {t('slaReports.subtitle', {
-            defaultValue: 'Which TICKETS met the deadline they were promised',
-          })}
-        </span>
         <ToolbarSpacer />
         {/* The by-agent / by-ticket toggle that used to sit here is gone. The
             per-agent half was retired when Agent KPI took that job, so the
@@ -244,6 +270,7 @@ export function SlaReportsPage() {
           </div>
         ) : !report.data || report.data.tickets.length === 0 ? (
           <EmptyState
+            icon={<TicketIcon size={22} />}
             title={t('slaReports.empty', { defaultValue: 'No tickets in this window' })}
             description={t('slaReports.emptyHint', {
               defaultValue: 'Widen the date range, or wait for tickets with SLA targets to land.',
@@ -271,11 +298,13 @@ export function SlaReportsPage() {
                 label={t('slaReports.kpiTickets', { defaultValue: 'Tickets' })}
                 value={String(totals?.tickets ?? 0)}
                 tone="blue"
+                icon={<TicketIcon size={18} />}
               />
               <Kpi
                 label={t('slaReports.kpiFirstResponse', { defaultValue: 'First-response SLA' })}
                 value={fmtPct(totals?.frPct ?? null)}
                 tone={pctKpiTone(totals?.frPct ?? null)}
+                icon={<ZapIcon size={18} />}
                 visual={
                   totals?.frPct != null ? (
                     <ProgressRing value={totals.frPct} tone={RING_TONE[pctKpiTone(totals.frPct)]} />
@@ -286,6 +315,7 @@ export function SlaReportsPage() {
                 label={t('slaReports.kpiResolution', { defaultValue: 'Resolution SLA' })}
                 value={fmtPct(totals?.resPct ?? null)}
                 tone={pctKpiTone(totals?.resPct ?? null)}
+                icon={<ClockIcon size={18} />}
                 visual={
                   totals?.resPct != null ? (
                     <ProgressRing
@@ -299,6 +329,7 @@ export function SlaReportsPage() {
                 label={t('slaReports.kpiBreaches', { defaultValue: 'Breaches' })}
                 value={String(totals?.breaches ?? 0)}
                 tone={(totals?.breaches ?? 0) > 0 ? 'crimson' : 'green'}
+                icon={<ShieldIcon size={18} />}
               />
             </div>
 
