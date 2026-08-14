@@ -856,7 +856,19 @@
     "colReplies": "ردود النظام",
     "drillHint": "عرض هذه الشكاوى",
     "drillCount": "{{n}} شكوى · {{money}} تعويض",
-    "untitled": "(بدون عنوان)"
+    "untitled": "(بدون عنوان)",
+    "snapshot": "لمحة تشغيلية",
+    "chipOpen": "مفتوحة",
+    "chipSolved": "محلولة",
+    "chipWaiting": "محادثات منتظرة",
+    "heatmap": "النشاط الأسبوعي",
+    "heatmapHint": "آخر ستة أسابيع — الخلية الأغمق يوم أكثر ازدحامًا.",
+    "funnel": "مسار الشكاوى",
+    "funnelHint": "كل مرحلة مقارنةً بكل ما سُجّل في النطاق.",
+    "funnelLogged": "مسجّلة",
+    "funnelClosed": "مغلقة",
+    "funnelRated": "مقيّمة",
+    "funnelSatisfied": "راضون"
   },
   "performance": {
     "title": "أداء الموظف",
