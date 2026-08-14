@@ -243,17 +243,45 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
 }
 
 /*
- * Horizontal primary nav — the light band under the dark utility bar.
+ * Horizontal primary nav — text pills in the floating top bar (the owner's
+ * reference dashboards: rounded pills on a dark bar, no per-pill icon).
  *
- * The rail's sections are flattened to a single row of buttons. At five entries
- * that fits one bar with room to spare in both EN and AR (the longest labels,
- * "Compensation" and "جهات الاتصال", are comparable), so there is no overflow
- * menu and no dropdown: every destination stays one click away, which was the
- * point of the move.
- *
- * Selection is a filled pill, not a side stripe or an underline — DESIGN.md
- * bans the stripe, and white on `--primary` measures 4.55:1.
+ * The rail's sections flatten to a single row so every destination stays one
+ * click away; the Work/Account boundary survives as a hairline divider. If a
+ * viewport is too narrow for the row, the list scrolls sideways instead of
+ * squishing the pills into ellipses (the scrollbar itself is hidden).
  */
+function TopNav({ sections }: { sections: NavSection[] }) {
+  const items = sections.flatMap((sec, sIdx) =>
+    sec.items.map((it, iIdx) => ({ ...it, startsSection: sIdx > 0 && iIdx === 0 })),
+  );
+  return (
+    <ul className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {items.map((it) => (
+        <li key={it.to} className="flex items-center">
+          {it.startsSection && <span aria-hidden className="mx-1.5 h-5 w-px shrink-0 bg-border" />}
+          <NavLink
+            to={it.to}
+            end={it.end}
+            className={({ isActive }) =>
+              cn(
+                'flex h-9 items-center rounded-full px-3.5 text-sm whitespace-nowrap',
+                'transition-[background-color,color,box-shadow] duration-fast ease-out',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                'motion-safe:active:scale-[0.97]',
+                isActive
+                  ? 'bg-primary/15 font-semibold text-primary ring-1 ring-inset ring-primary/25'
+                  : 'font-medium text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
+              )
+            }
+          >
+            {it.label}
+          </NavLink>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /** Compact brand lockup for the mobile top bar. */
 function MobileBrand() {
@@ -314,10 +342,9 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [{ to: '/preferences', label: t('nav.preferences'), icon: SettingsIcon }],
     },
   ];
-  // The top bar used to carry the current section label. The nav band below it
-  // now shows the active destination as a filled pill, so a title here would
-  // just say the same thing twice; the brand lockup takes that slot instead,
-  // which is also where it lived at the top of the rail.
+  // ONE floating bar (the owner's reference layout — no sidebars): brand at
+  // the start, the flat nav pills in the middle, utilities at the end. The
+  // rail still exists but only as the mobile drawer.
   return (
     <>
       <AppShell
@@ -338,66 +365,43 @@ function Shell({ children }: { children: React.ReactNode }) {
             <LanguageToggle />
           </div>
         }
+        navBar={<TopNav sections={sections} />}
         topBar={
-          <div className="flex w-full items-center gap-4">
-            {/* Identity lives in the rail now — repeating it here read as a
-                rendering bug the moment the sidebar landed. A spacer keeps the
-                actions pinned to the end. */}
-            <div className="min-w-0 flex-1" />
-            {/* Center: the search field */}
-            <div className="flex w-full max-w-sm justify-center">
-              <SearchTrigger
-                fullWidth
-                tone="dark"
-                label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
-                aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
-                onClick={() => setPaletteOpen(true)}
-              />
+          <>
+            {/* The bar is a card surface now, so the utility triggers read
+                correctly with their own tokens — no rebinding needed. The
+                search chrome yields first when the row gets tight; the
+                palette stays reachable via Cmd/Ctrl+K regardless. */}
+            <SearchTrigger
+              label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
+              aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
+              onClick={() => setPaletteOpen(true)}
+              className="hidden xl:inline-flex"
+            />
+            <div className="flex items-center gap-0.5 rounded-full bg-secondary/50 p-1 ring-1 ring-border">
+              <NotificationBell />
+              <HelpAssistant />
+              <SoundToggle />
+              <LanguageToggle />
             </div>
-            {/* End: utility cluster + user chip + sign out */}
-            <div className="flex flex-1 items-center justify-end gap-2">
-              <div
-                className="flex items-center gap-0.5 rounded-xl bg-white/[0.08] p-1 ring-1 ring-white/15"
-                style={
-                  {
-                    // The four utility triggers hardcode the light-surface
-                    // tokens (text-muted-foreground, hover:bg-secondary,
-                    // hover:text-foreground), which are near-invisible on the
-                    // rail teal. Rebinding the tokens here re-tones all four at
-                    // once instead of forking four feature components. Their
-                    // popover and drawer both render through createPortal, so
-                    // this scope never reaches them.
-                    // Measured on --rail: label 8.1:1, hover label 19:1.
-                    '--muted-foreground': '0.86 0.02 196',
-                    '--foreground': '0.99 0.005 196',
-                    '--secondary': '0.40 0.06 196',
-                  } as React.CSSProperties
-                }
-              >
-                <NotificationBell />
-                <HelpAssistant />
-                <SoundToggle />
-                <LanguageToggle />
-              </div>
-              <span className="hidden items-center gap-2 rounded-full bg-white/[0.08] py-1 pe-1 ps-1 ring-1 ring-white/15 sm:flex">
-                <Avatar name={displayName} email={user?.email} size="sm" />
-                <span className="max-w-[9rem] truncate text-xs font-semibold text-rail-foreground">
-                  {displayName}
-                </span>
-                {/* Sign out lived in the rail footer, which desktop no longer
-                    renders — without this there is no way out on desktop. */}
-                <button
-                  type="button"
-                  onClick={() => void logout()}
-                  aria-label={t('auth.signOut', { ns: 'common' })}
-                  title={t('auth.signOut', { ns: 'common' })}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-rail-foreground/70 transition-[background-color,color] duration-fast ease-out hover:bg-white/15 hover:text-rail-foreground motion-safe:active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-foreground/60"
-                >
-                  <SignOutIcon size={14} />
-                </button>
+            <span className="hidden items-center gap-2 rounded-full bg-secondary/50 py-1 pe-1 ps-1 ring-1 ring-border sm:flex">
+              <Avatar name={displayName} email={user?.email} size="sm" />
+              <span className="hidden max-w-[8rem] truncate text-xs font-semibold text-foreground xl:inline">
+                {displayName}
               </span>
-            </div>
-          </div>
+              {/* Sign out lived in the rail footer, which desktop no longer
+                  renders — without this there is no way out on desktop. */}
+              <button
+                type="button"
+                onClick={() => void logout()}
+                aria-label={t('auth.signOut', { ns: 'common' })}
+                title={t('auth.signOut', { ns: 'common' })}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[background-color,color] duration-fast ease-out hover:bg-secondary hover:text-foreground motion-safe:active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <SignOutIcon size={14} />
+              </button>
+            </span>
+          </>
         }
         resizeStorageKey="yiji.agent.sidebarWidth"
         navLabel={t('nav.primary', { defaultValue: 'Primary navigation' })}

@@ -226,12 +226,15 @@ export function Inbox() {
               tone: 'default' | 'pink' | 'primary';
               onClick?: () => void;
             }) => (
+              // Boxed mini-tile with a status dot by the label — the KPI
+              // grammar of the reference boards, shrunk to the list header.
               <button
                 type="button"
                 onClick={onClick}
                 className={cn(
-                  'flex flex-1 flex-col gap-0.5 rounded-lg px-2.5 py-2 text-start transition-colors duration-fast ease-out',
-                  'hover:bg-secondary/70 active:scale-[0.98]',
+                  'flex flex-1 flex-col gap-0.5 rounded-xl bg-card px-2.5 py-2 text-start ring-1 ring-foreground/[0.06]',
+                  'transition-[background-color,box-shadow] duration-fast ease-out',
+                  'hover:bg-secondary/60 active:scale-[0.98]',
                 )}
               >
                 <span
@@ -244,13 +247,22 @@ export function Inbox() {
                 >
                   {value}
                 </span>
-                <span className="text-2xs uppercase tracking-wide text-muted-foreground">
-                  {label}
+                <span className="flex items-center gap-1.5 text-2xs uppercase tracking-wide text-muted-foreground">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'h-1.5 w-1.5 shrink-0 rounded-full',
+                      tone === 'pink' && 'bg-magenta',
+                      tone === 'primary' && 'bg-primary',
+                      tone === 'default' && 'bg-success',
+                    )}
+                  />
+                  <span className="truncate">{label}</span>
                 </span>
               </button>
             );
             return (
-              <div className="mt-2 flex gap-0.5 px-3">
+              <div className="mt-2 flex gap-1.5 px-3">
                 <Stat
                   label={t('inbox.stats.open', { defaultValue: 'open' })}
                   value={openCount}

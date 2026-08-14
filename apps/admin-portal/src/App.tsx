@@ -24,6 +24,7 @@ import {
   YijiLogo,
 } from '@yiji/ui';
 import { RouteError } from './components/RouteError.js';
+import { TopNav } from './components/TopNav.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
 import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
@@ -384,9 +385,9 @@ function Shell({ children }: { children: React.ReactNode }) {
       ],
     },
   ];
-  // The top bar used to carry the current section label. The nav band below it
-  // now shows the active area as a filled pill, so a title here would repeat
-  // it; the brand lockup takes that slot, where it sat at the top of the rail.
+  // ONE floating bar (the owner's reference layout — no sidebars): brand at
+  // the start, the grouped nav pills in the middle, utilities at the end. The
+  // rail still exists but only as the mobile drawer.
   return (
     <>
       <AppShell
@@ -397,55 +398,31 @@ function Shell({ children }: { children: React.ReactNode }) {
             <HelpAssistant />
           </div>
         }
+        navBar={<TopNav sections={sections} />}
         topBar={
-          <div className="flex w-full items-center gap-4">
-            {/* Identity lives in the rail now — repeating it here read as a
-                rendering bug the moment the sidebar landed. A spacer keeps the
-                actions pinned to the end. */}
-            <div className="min-w-0 flex-1" />
-            {/* No search field here by request. The command palette is still
-                bound to Cmd/Ctrl+K, so nothing is unreachable — only the
-                permanent chrome for it is gone. */}
-            {/* End: utility cluster + user chip + sign out */}
-            <div className="flex flex-1 items-center justify-end gap-2">
-              <div
-                className="flex items-center gap-0.5 rounded-xl bg-white/[0.08] p-1 ring-1 ring-white/15"
-                style={
-                  {
-                    // The utility triggers hardcode the light-surface tokens,
-                    // which are near-invisible on the rail teal. Rebinding the
-                    // tokens re-tones them without forking the components; the
-                    // help drawer portals out, so this scope never reaches it.
-                    // Measured on --rail: label 8.1:1, hover label 19:1.
-                    '--muted-foreground': '0.86 0.02 196',
-                    '--foreground': '0.99 0.005 196',
-                    '--secondary': '0.40 0.06 196',
-                  } as React.CSSProperties
-                }
-              >
-                <HelpAssistant />
-                {/* Both of these lived in the rail footer, which desktop no
-                    longer renders — without moving them there is no way to
-                    switch language or sign out on desktop. */}
-                <LanguageToggle />
-              </div>
-              <span className="hidden items-center gap-2 rounded-full bg-white/[0.08] py-1 pe-1 ps-1 ring-1 ring-white/15 sm:flex">
-                <Avatar name={displayName} email={user?.email} size="sm" />
-                <span className="max-w-[9rem] truncate text-xs font-semibold text-rail-foreground">
-                  {displayName}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void logout()}
-                  aria-label={t('auth.signOut', { ns: 'common' })}
-                  title={t('auth.signOut', { ns: 'common' })}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-rail-foreground/70 transition-[background-color,color] duration-fast ease-out hover:bg-white/15 hover:text-rail-foreground motion-safe:active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-foreground/60"
-                >
-                  <SignOutIcon size={14} />
-                </button>
-              </span>
+          <>
+            {/* The bar is a card surface now, so the utility triggers read
+                correctly with their own tokens — no rebinding needed. */}
+            <div className="flex items-center gap-0.5 rounded-full bg-secondary/50 p-1 ring-1 ring-border">
+              <HelpAssistant />
+              <LanguageToggle />
             </div>
-          </div>
+            <span className="hidden items-center gap-2 rounded-full bg-secondary/50 py-1 pe-1 ps-1 ring-1 ring-border sm:flex">
+              <Avatar name={displayName} email={user?.email} size="sm" />
+              <span className="max-w-[9rem] truncate text-xs font-semibold text-foreground">
+                {displayName}
+              </span>
+              <button
+                type="button"
+                onClick={() => void logout()}
+                aria-label={t('auth.signOut', { ns: 'common' })}
+                title={t('auth.signOut', { ns: 'common' })}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[background-color,color] duration-fast ease-out hover:bg-secondary hover:text-foreground motion-safe:active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <SignOutIcon size={14} />
+              </button>
+            </span>
+          </>
         }
         resizeStorageKey="yiji.admin.sidebarWidth"
         navLabel={t('nav.primary', { defaultValue: 'Primary navigation' })}

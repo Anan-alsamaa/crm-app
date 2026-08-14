@@ -140,27 +140,22 @@ export function AppShell({
       </nav>
     );
 
-    // Top-nav layout: no side rail at all. Two stacked bars — the dark brand
-    // utility bar, then the light nav band — over the full-bleed content.
-    // The brand surface survives the move from the rail as the top strip, so
-    // the product still opens on teal rather than on an all-white page.
+    // Top-nav layout: no side rail at all. ONE floating bar over the canvas —
+    // brand at the start, the nav pills in the middle, utilities at the end —
+    // the shape of the owner's reference dashboards. Rounded and hairlined so
+    // it reads as an elevated surface on the dark canvas, not a page-wide band.
+    // `relative z-30` so a nav dropdown paints over the page content below
+    // rather than being covered by stacking contexts inside it.
     if (navBar) {
       return (
         <div className="flex h-full flex-col text-foreground">
-          <header className="flex h-14 shrink-0 items-center bg-gradient-to-b from-rail to-rail-deep px-4 text-rail-foreground">
-            {topBar}
+          <header className="relative z-30 mx-3 mt-3 flex h-14 shrink-0 items-center gap-3 rounded-2xl border border-border bg-card/90 px-3 shadow-[0_12px_32px_-20px_oklch(var(--shadow-color)/0.9)] backdrop-blur">
+            <div className="shrink-0">{topBarBrand}</div>
+            <nav aria-label={navLabel} className="flex h-full min-w-0 flex-1 items-center">
+              {navBar}
+            </nav>
+            {topBar && <div className="flex shrink-0 items-center gap-2">{topBar}</div>}
           </header>
-          {/* Light band. Hairline below rather than above: it separates the nav
-              from the content, while the dark/light tone change already does
-              the separating above. */}
-          {/* `relative z-30` so a nav dropdown paints over the page content
-              below rather than being covered by stacking contexts inside it. */}
-          <nav
-            aria-label={navLabel}
-            className="relative z-30 flex h-12 shrink-0 items-center border-b border-border bg-card px-4"
-          >
-            {navBar}
-          </nav>
           <main className="app-aurora min-h-0 min-w-0 flex-1 overflow-hidden">{children}</main>
         </div>
       );

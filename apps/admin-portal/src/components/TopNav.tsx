@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { ChevronDownIcon, cn } from '@yiji/ui';
-import type { NavItem, NavSection } from '../nav.js';
+import type { NavSection } from '../nav.js';
 
 /*
- * Horizontal primary nav for the admin console — the light band under the dark
- * utility bar.
+ * Horizontal primary nav for the admin console — text pills in the floating
+ * top bar (the owner's reference dashboards: rounded pills on a dark bar,
+ * no icon per pill; icons live in the dropdown panels where there is room).
  *
- * The agent portal's five entries fit one flat row; the admin console's
+ * The agent portal's entries fit one flat row; the admin console's
  * fourteen do not, so the rail's own grouping becomes the bar: each multi-item
  * section collapses to one menu button, and each single-item section stays a
  * direct link. Fourteen destinations become six top-level controls, and the
@@ -49,43 +50,23 @@ function tileFor(section: NavSection): string {
 }
 
 const TRIGGER_BASE =
-  'group flex h-9 items-center gap-2 rounded-md px-2.5 text-sm transition-[background-color,color] duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:active:scale-[0.97]';
-
-function Tile({ item, active, tile }: { item: NavItem; active: boolean; tile: string }) {
-  return (
-    <span
-      className={cn(
-        'grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors duration-fast ease-out',
-        active ? 'bg-white/20 text-primary-foreground' : tile,
-      )}
-    >
-      <item.icon size={14} />
-    </span>
-  );
-}
+  'group flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm whitespace-nowrap transition-[background-color,color,box-shadow] duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:active:scale-[0.97]';
+/* The selected pill is a jade wash with a hairline of the same hue — the glow
+ * treatment from the reference boards — rather than a solid fill, which on the
+ * floating dark bar read as a button, not a location. */
+const TRIGGER_ACTIVE = 'bg-primary/15 font-semibold text-primary ring-1 ring-inset ring-primary/25';
+const TRIGGER_IDLE =
+  'font-medium text-muted-foreground hover:bg-secondary/70 hover:text-foreground';
 
 /** A section with one item: a plain link, no menu. */
 function DirectLink({ section }: { section: NavSection }) {
   const item = section.items[0];
-  const tile = tileFor(section);
   return (
     <NavLink
       to={item.to}
-      className={({ isActive }) =>
-        cn(
-          TRIGGER_BASE,
-          isActive
-            ? 'bg-primary font-semibold text-primary-foreground'
-            : 'font-medium text-foreground hover:bg-secondary',
-        )
-      }
+      className={({ isActive }) => cn(TRIGGER_BASE, isActive ? TRIGGER_ACTIVE : TRIGGER_IDLE)}
     >
-      {({ isActive }) => (
-        <>
-          <Tile item={item} active={isActive} tile={tile} />
-          <span className="truncate">{item.label}</span>
-        </>
-      )}
+      <span className="truncate">{item.label}</span>
     </NavLink>
   );
 }
@@ -196,21 +177,15 @@ function MenuGroup({ section }: { section: NavSection }) {
         aria-expanded={open}
         onClick={() => (open ? close(false) : setOpen(true))}
         onKeyDown={onTriggerKeyDown}
-        className={cn(
-          TRIGGER_BASE,
-          active
-            ? 'bg-primary font-semibold text-primary-foreground'
-            : 'font-medium text-foreground hover:bg-secondary',
-        )}
+        className={cn(TRIGGER_BASE, active ? TRIGGER_ACTIVE : TRIGGER_IDLE)}
       >
-        <Tile item={section.items[0]} active={active} tile={tile} />
         <span className="truncate">{section.heading}</span>
         <ChevronDownIcon
           size={14}
           className={cn(
             'shrink-0 transition-transform duration-fast ease-out',
             open && 'rotate-180',
-            active ? 'text-primary-foreground/80' : 'text-muted-foreground',
+            active ? 'text-primary/70' : 'text-muted-foreground',
           )}
         />
       </button>
@@ -220,8 +195,8 @@ function MenuGroup({ section }: { section: NavSection }) {
           role="menu"
           aria-label={section.heading}
           className={cn(
-            'absolute top-full start-0 z-50 mt-1.5 min-w-[16rem] rounded-xl p-1.5',
-            'bg-popover text-popover-foreground shadow-md ring-1 ring-border',
+            'absolute top-full start-0 z-50 mt-2 min-w-[16rem] rounded-2xl p-1.5',
+            'bg-popover/95 text-popover-foreground shadow-xl shadow-black/30 ring-1 ring-border backdrop-blur',
             'origin-top motion-safe:animate-scale-in',
           )}
         >
@@ -269,6 +244,9 @@ function MenuGroup({ section }: { section: NavSection }) {
 
 export function TopNav({ sections }: { sections: NavSection[] }) {
   return (
+    // No overflow scroll here: a scroll container would clip the absolutely
+    // positioned dropdown panels. If the row is ever too tight the pills
+    // truncate; below lg the drawer takes over anyway.
     <ul className="flex min-w-0 items-center gap-1">
       {sections.map((section, i) => {
         // Divider before the rarely-touched setup groups, so the bar keeps the
