@@ -196,7 +196,7 @@ function Bars({
     );
   return (
     <ul className="space-y-2">
-      {rows.map((r) => {
+      {rows.map((r, idx) => {
         const body = (
           <>
             <span
@@ -210,10 +210,14 @@ function Bars({
             <span className="h-2 flex-1 overflow-hidden rounded-full bg-foreground/[0.08]">
               <span
                 className={cn(
-                  'block h-full rounded-full transition-[width] duration-slow ease-out',
+                  'block h-full origin-left rounded-full rtl:origin-right',
+                  'transition-[width] duration-slow ease-out motion-safe:animate-grow-x',
                   color,
                 )}
-                style={{ width: `${Math.max(2, (r.count / max) * 100)}%` }}
+                style={{
+                  width: `${Math.max(2, (r.count / max) * 100)}%`,
+                  animationDelay: `${Math.min(idx, 10) * 45}ms`,
+                }}
               />
             </span>
             <span className="w-20 shrink-0 text-end text-2xs tabular-nums text-muted-foreground">
@@ -289,15 +293,16 @@ function Heatmap({ rows, locale }: { rows: ComplaintRow[]; locale: string }) {
       <div className="space-y-1.5">
         {weeks.map((week, wi) => (
           <div key={wi} className="flex gap-1.5">
-            {week.map((c) => (
+            {week.map((c, di) => (
               <span
                 key={c.iso}
                 title={`${c.iso} · ${c.count}`}
-                className="h-6 flex-1 rounded-md ring-1 ring-inset ring-foreground/[0.04]"
+                className="h-6 flex-1 rounded-md ring-1 ring-inset ring-foreground/[0.04] transition-transform duration-fast ease-out hover:scale-[1.06] motion-safe:animate-fade-in"
                 style={{
                   backgroundColor: `oklch(var(--primary) / ${
                     c.count === 0 ? 0.05 : 0.15 + 0.75 * (c.count / max)
                   })`,
+                  animationDelay: `${(wi * 7 + di) * 12}ms`,
                 }}
               />
             ))}

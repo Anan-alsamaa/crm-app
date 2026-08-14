@@ -96,8 +96,18 @@ export function Tr({
         // marked aria-selected="true" hold a deeper jade wash so a checked
         // selection stays visible without any per-page styling.
         'border-b border-foreground/[0.06] last:border-b-0',
-        'group/row transition-colors duration-fast ease-out hover:bg-primary/[0.07]',
+        // The hover wash also lifts the row's ink, so a scanned row reads as
+        // active rather than merely tinted.
+        'group/row transition-colors duration-fast ease-out hover:bg-primary/[0.07] hover:text-foreground',
         '[&[aria-selected=true]]:bg-primary/10',
+        // A jade rail on the selected row — the boards' selection idiom, and
+        // logical so it lands on the start edge in RTL too.
+        '[&[aria-selected=true]>td:first-child]:relative',
+        '[&[aria-selected=true]>td:first-child]:before:absolute',
+        '[&[aria-selected=true]>td:first-child]:before:inset-y-0',
+        '[&[aria-selected=true]>td:first-child]:before:start-0',
+        '[&[aria-selected=true]>td:first-child]:before:w-0.5',
+        '[&[aria-selected=true]>td:first-child]:before:bg-primary',
         className,
       )}
       {...rest}
