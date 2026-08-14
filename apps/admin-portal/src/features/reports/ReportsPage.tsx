@@ -279,7 +279,7 @@ export function ReportsPage() {
           {/* Clean editorial header — no gradient banner. */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-foreground/10 pb-5">
             <div>
-              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">
                 {t('reports.title', { defaultValue: 'Scheduled reports' })}
               </h2>
               <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
@@ -582,19 +582,33 @@ function ReportCard({
   return (
     <div
       className={cn(
-        'flex flex-col gap-3 rounded-2xl bg-card/70 px-5 py-4',
-        'shadow-soft ring-1 ring-foreground/[0.04]',
+        'flex flex-col gap-3 rounded-2xl bg-card px-5 py-4',
+        'shadow-soft ring-1 ring-foreground/[0.06]',
+        'transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
       )}
     >
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <h3 className="text-sm font-semibold tracking-tight text-foreground">{r.name}</h3>
-        <p className="text-2xs font-mono text-muted-foreground">{r.type}</p>
+        {/* The machine type as a quiet tag chip — same text, board dressing. */}
+        <p>
+          <span className="inline-flex items-center rounded-md bg-secondary px-1.5 py-0.5 font-mono text-2xs text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
+            {r.type}
+          </span>
+        </p>
         {r.description && (
           <p className="line-clamp-2 text-xs text-muted-foreground">{r.description}</p>
         )}
       </div>
       <div className="flex items-baseline justify-between gap-2 text-2xs text-muted-foreground tabular-nums">
-        <span>
+        <span className="inline-flex items-center gap-1.5">
+          {/* Run-state dot: jade once it has run, quiet until then. */}
+          <span
+            aria-hidden
+            className={cn(
+              'h-1.5 w-1.5 shrink-0 rounded-full',
+              r.last_run_at ? 'bg-success' : 'bg-muted-foreground/50',
+            )}
+          />
           {r.last_run_at
             ? `${t('reports.lastRun', { defaultValue: 'Last run' })}: ${new Date(r.last_run_at).toLocaleString()}`
             : t('reports.neverRun', { defaultValue: 'Never run' })}
@@ -614,7 +628,7 @@ function ReportCard({
         <button
           type="button"
           onClick={onEdit}
-          className="text-xs font-semibold text-[oklch(0.42_0.10_196)] underline-offset-2 hover:underline"
+          className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
         >
           {t('actions.edit', { ns: 'common', defaultValue: 'edit' })}
         </button>

@@ -211,7 +211,7 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
                 aria-label={t('conversation.tagSearchPlaceholder', {
                   defaultValue: 'Search or create a tag',
                 })}
-                className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background/80 px-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                className="h-7 min-w-0 flex-1 rounded-md border-none bg-secondary/50 px-2 text-xs text-foreground ring-1 ring-inset ring-foreground/10 placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 transition-[background-color,box-shadow] duration-fast ease-out"
               />
               <button
                 type="button"

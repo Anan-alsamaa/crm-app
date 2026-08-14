@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import {
   HBarChart,
   Input,
+  MeterBar,
+  SectionCard,
   SelectMenu,
   Skeleton,
   Toolbar,
@@ -222,7 +224,7 @@ export function AgentPerformancePage() {
               <Skeleton className="h-56 w-full rounded-2xl" />
             </div>
           ) : chats.length === 0 ? (
-            <p className="rounded-2xl bg-card p-10 text-center text-sm text-muted-foreground shadow-soft">
+            <p className="rounded-2xl bg-card p-10 text-center text-sm text-muted-foreground shadow-soft ring-1 ring-foreground/[0.06]">
               {t('performance.empty', { defaultValue: 'No chats match these filters.' })}
             </p>
           ) : (
@@ -247,6 +249,15 @@ export function AgentPerformancePage() {
                   label={t('performance.metPct', { defaultValue: 'Answered in time' })}
                   value={summary.metPct == null ? '—' : `${summary.metPct}%`}
                   tone={summary.metPct == null ? 'plain' : summary.metPct >= 80 ? 'good' : 'bad'}
+                  meter={
+                    summary.metPct == null ? undefined : (
+                      <MeterBar
+                        value={summary.metPct}
+                        tone={summary.metPct >= 80 ? 'success' : 'destructive'}
+                        className="mt-2.5"
+                      />
+                    )
+                  }
                 />
                 <Tile
                   label={t('performance.avgFirst', { defaultValue: 'First response' })}
@@ -362,8 +373,8 @@ export function AgentPerformancePage() {
 
               {/* 4 — the chats themselves. An average nobody can drill into is
                   an accusation. */}
-              <section className="overflow-hidden rounded-2xl bg-card shadow-soft">
-                <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border px-4 py-3">
+              <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+                <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-foreground/[0.08] px-4 py-3">
                   <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
                     {t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
                   </h2>
@@ -382,7 +393,7 @@ export function AgentPerformancePage() {
                     aria-label={t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
                   >
                     <thead className="sticky top-0 z-10 bg-card">
-                      <tr className="border-b border-border text-2xs uppercase tracking-wide text-muted-foreground">
+                      <tr className="border-b border-foreground/10 text-2xs uppercase tracking-[0.12em] text-muted-foreground">
                         <th className="px-4 py-2.5 text-start font-semibold">
                           {t('performance.customer', { defaultValue: 'Customer' })}
                         </th>
@@ -409,7 +420,7 @@ export function AgentPerformancePage() {
                           onClick={() =>
                             navigate(`/?conv=${encodeURIComponent(chat.conversationId)}`)
                           }
-                          className="cursor-pointer border-t border-border/60 transition-colors duration-fast hover:bg-secondary/50"
+                          className="cursor-pointer border-t border-foreground/[0.06] transition-colors duration-fast hover:bg-primary/[0.07]"
                         >
                           <td className="px-4 py-2.5 text-foreground">
                             <span className="font-medium">
@@ -466,6 +477,32 @@ export function AgentPerformancePage() {
                     </tbody>
                   </table>
                 </div>
+                {/* Footer aggregate band — the table's totals live on the table,
+                    in the board idiom, so the averages read next to their rows. */}
+                <footer className="flex h-11 flex-wrap items-center gap-x-6 gap-y-1 border-t border-foreground/[0.08] bg-foreground/[0.02] px-4 text-xs text-muted-foreground">
+                  <span className="tabular-nums">
+                    {t('performance.chatsCount', {
+                      defaultValue: '{{n}} chats',
+                      n: breakdown.length,
+                    })}
+                  </span>
+                  <span className="hidden items-baseline gap-1.5 sm:inline-flex">
+                    <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
+                      {t('performance.avgFirst', { defaultValue: 'First response' })}
+                    </span>
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {formatDuration(summary.avgFirstResponseSec) ?? '—'}
+                    </span>
+                  </span>
+                  <span className="hidden items-baseline gap-1.5 sm:inline-flex">
+                    <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
+                      {t('performance.avgSolve', { defaultValue: 'Time to solve' })}
+                    </span>
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {formatDuration(summary.avgTimeToSolveSec) ?? '—'}
+                    </span>
+                  </span>
+                </footer>
               </section>
             </>
           )}
@@ -486,23 +523,27 @@ export function AgentPerformancePage() {
   );
 }
 
-/** One headline number. No card chrome competing with it — the number is the thing. */
+/** One headline number, in the board tile anatomy: extrabold numeral, tone dot
+    beside the uppercase micro-label, optional meter accent underneath. */
 function Tile({
   label,
   value,
   hint,
   tone = 'plain',
+  meter,
 }: {
   label: string;
   value: string;
   hint?: string;
   tone?: 'plain' | 'good' | 'bad';
+  /** Optional data accent under the label — pass a `<MeterBar>`. */
+  meter?: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl bg-card px-4 py-3.5 shadow-soft">
+    <div className="rounded-2xl bg-card px-4 py-3.5 shadow-soft ring-1 ring-foreground/[0.06]">
       <div
         className={cn(
-          'text-2xl font-bold leading-none tracking-[-0.02em] tabular-nums',
+          'text-2xl font-extrabold leading-none tracking-[-0.03em] tabular-nums',
           tone === 'bad'
             ? 'text-destructive'
             : tone === 'good'
@@ -512,21 +553,33 @@ function Tile({
       >
         {value}
       </div>
-      <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-        {label}
-        {hint && <span className="ms-1 font-normal normal-case tracking-normal">({hint})</span>}
+      <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {tone !== 'plain' && (
+          <span
+            aria-hidden
+            className={cn(
+              'h-1.5 w-1.5 shrink-0 rounded-full',
+              tone === 'bad' ? 'bg-destructive' : 'bg-success',
+            )}
+          />
+        )}
+        <span className="min-w-0 truncate">
+          {label}
+          {hint && <span className="ms-1 font-normal normal-case tracking-normal">({hint})</span>}
+        </span>
       </div>
+      {meter}
     </div>
   );
 }
 
-/** A chart in a card, with the question it answers written above it. */
+/** A chart in a card, with the question it answers written above it — thin
+    adapter over the shared SectionCard surface so every chart carries the same
+    header anatomy as the rest of the boards. */
 function Card({ title, help, children }: { title: string; help: string; children: ReactNode }) {
   return (
-    <section className="rounded-2xl bg-card p-4 shadow-soft">
-      <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">{title}</h2>
-      <p className="mb-3 text-2xs text-muted-foreground">{help}</p>
+    <SectionCard title={title} hint={help}>
       {children}
-    </section>
+    </SectionCard>
   );
 }

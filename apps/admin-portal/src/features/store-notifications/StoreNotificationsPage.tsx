@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pill, Skeleton, cn, toast } from '@yiji/ui';
+import { Pill, SectionCard, Skeleton, cn, toast } from '@yiji/ui';
 import { ComplaintType } from '@yiji/shared-types';
 import {
   useSetStoreNotifyRule,
@@ -47,10 +47,12 @@ function TypeToggle({
       className={cn(
         'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast ease-out disabled:opacity-60',
         enabled
-          ? 'bg-primary text-primary-foreground'
-          : // Filled, not outlined: on a white card a hairline ring is
+          ? // Selected reads as a jade wash — the board's tinted-pill idiom —
+            // with an inset ring so the edge holds on both themes.
+            'bg-primary/15 text-primary ring-1 ring-inset ring-primary/25'
+          : // Filled, not outlined: on a bare card a hairline ring alone is
             // invisible, and these stop reading as controls at all.
-            'bg-secondary text-muted-foreground hover:text-foreground',
+            'bg-secondary/60 text-muted-foreground hover:text-foreground',
       )}
     >
       {type}
@@ -126,25 +128,22 @@ export function StoreNotificationsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      <section className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
-        <header className="mb-1 flex items-baseline gap-2">
-          <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
-            {t('storeNotify.rulesTitle', { defaultValue: 'Complaints the branch is told about' })}
-          </h2>
-          <span className="ms-auto shrink-0 text-2xs text-muted-foreground">
+      <SectionCard
+        title={t('storeNotify.rulesTitle', { defaultValue: 'Complaints the branch is told about' })}
+        hint={t('storeNotify.rulesHelp', {
+          defaultValue:
+            'A ticket is reported to its branch only when its complaint type is selected here. The branch receives the order number and its items, the description and the resolution notes — nothing else about the customer.',
+        })}
+        aside={
+          <span className="tabular-nums">
             {t('storeNotify.enabledCount', {
               defaultValue: '{{n}} of {{total}} selected',
               n: enabledCount,
               total: ComplaintType.options.length,
             })}
           </span>
-        </header>
-        <p className="mb-4 max-w-3xl text-xs leading-relaxed text-muted-foreground">
-          {t('storeNotify.rulesHelp', {
-            defaultValue:
-              'A ticket is reported to its branch only when its complaint type is selected here. The branch receives the order number and its items, the description and the resolution notes — nothing else about the customer.',
-          })}
-        </p>
+        }
+      >
         {rules.isLoading ? (
           <div className="flex flex-wrap gap-2">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -165,7 +164,9 @@ export function StoreNotificationsPage() {
           </div>
         )}
         {enabledCount === 0 && !rules.isLoading && (
-          <p className="mt-4 flex items-start gap-2 rounded-xl bg-warning/10 px-3 py-2 text-xs leading-relaxed text-foreground">
+          // A proper notice card, not a bare paragraph — warning-foreground ink
+          // because the raw warning hue is a light token that fails on light.
+          <p className="mt-4 flex items-start gap-2 rounded-xl bg-warning/15 px-3.5 py-2.5 text-xs leading-relaxed text-warning-foreground ring-1 ring-warning/25">
             <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-warning" />
             <span>
               {t('storeNotify.noneSelected', {
@@ -175,11 +176,11 @@ export function StoreNotificationsPage() {
             </span>
           </p>
         )}
-      </section>
+      </SectionCard>
 
-      <section className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+      <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
         <header className="flex items-baseline gap-2 border-b border-border px-5 py-4">
-          <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
+          <h2 className="text-sm font-semibold tracking-tight text-foreground">
             {t('storeNotify.queueTitle', { defaultValue: 'What has been queued' })}
           </h2>
           <span className="ms-auto shrink-0 text-2xs text-muted-foreground">
@@ -206,7 +207,7 @@ export function StoreNotificationsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border text-2xs uppercase tracking-wide text-muted-foreground">
+                <tr className="border-b border-border text-2xs uppercase tracking-[0.08em] text-muted-foreground">
                   <th className="px-4 py-2.5 text-start font-semibold">
                     {t('storeNotify.branch', { defaultValue: 'Branch' })}
                   </th>

@@ -365,7 +365,10 @@
     "kpiPolicies": "Policies",
     "kpiActive": "Active",
     "kpiAvgFirst": "Avg first reply",
-    "policyCount": "{{count}} policies"
+    "policyCount": "{{count}} policies",
+    "rowFirstReply": "first reply",
+    "rowResolution": "resolution",
+    "rowWarnAt": "warn at"
   },
   "users": {
     "inactive": "Inactive",
@@ -411,7 +414,10 @@
     "heroSubtitle": "Everyone who can sign in to Yiji — their role, team, and account status at a glance. Select anyone to edit access or reset a password.",
     "total": "total",
     "admins": "admins",
-    "noTeamShort": "no team"
+    "noTeamShort": "no team",
+    "statActiveCap": "active",
+    "statAdminCap": "admin",
+    "statNoTeamCap": "no team"
   },
   "teams": {
     "title": "Teams",
@@ -435,7 +441,13 @@
     "heroSubtitle": "Groups that decide where conversations and tickets route. See each team, who belongs to it, and who still needs a home.",
     "total": "teams",
     "assigned": "assigned",
-    "unassigned": "unassigned"
+    "unassigned": "unassigned",
+    "statTeamsCap": "teams",
+    "statAssignedCap": "assigned",
+    "statUnassignedCap": "unassigned",
+    "noMembers": "no members",
+    "memberOne": "member",
+    "memberOther": "members"
   },
   "cmd": {
     "pages": "Pages",
@@ -747,6 +759,7 @@
     "importExisting": "{{n}} unchanged"
   },
   "complaintDash": {
+    "tableTotal": "Total",
     "nothingInRange": "Nothing in this range.",
     "from": "From",
     "to": "To",

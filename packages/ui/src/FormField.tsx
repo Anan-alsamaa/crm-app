@@ -47,7 +47,7 @@ export function FormField({
       {label && (
         <label
           htmlFor={controlId}
-          className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+          className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
         >
           {label}
         </label>

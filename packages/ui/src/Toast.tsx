@@ -58,15 +58,26 @@ export const toast = Object.assign(
   },
 );
 
+// Tones share one card surface (the base class owns bg); only text color here
+// so nothing fights the base `bg-card/90` (cn is a plain joiner).
 const toneStyles: Record<ToastTone, string> = {
-  default: 'bg-card text-card-foreground',
-  success: 'bg-card text-card-foreground',
-  error: 'bg-card text-card-foreground',
-  warning: 'bg-card text-card-foreground',
+  default: 'text-card-foreground',
+  success: 'text-card-foreground',
+  error: 'text-card-foreground',
+  warning: 'text-card-foreground',
+};
+
+// Start accent bar — the tone's hue as a thin tinted strip on the card's start
+// edge. Decorative (not text), so the solid-ish hue is safe in both themes.
+const toneAccent: Record<ToastTone, string> = {
+  default: 'bg-primary/80',
+  success: 'bg-success/80',
+  error: 'bg-destructive/80',
+  warning: 'bg-warning/80',
 };
 
 const toneIconBg: Record<ToastTone, string> = {
-  default: 'bg-primary-subtle text-primary',
+  default: 'bg-primary-tint text-primary',
   success: 'bg-success/15 text-success',
   error: 'bg-destructive/15 text-destructive',
   warning: 'bg-warning/20 text-warning-foreground',
@@ -192,10 +203,12 @@ function ToastCard({ toast: t, onDismiss }: { toast: ToastRecord; onDismiss: () 
       role="status"
       aria-labelledby={labelId}
       className={cn(
-        'pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-2xl bg-card/90 backdrop-blur-md p-3.5 shadow-xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-slide-up-and-fade',
+        'pointer-events-auto relative flex w-full max-w-sm items-start gap-3 overflow-hidden rounded-2xl bg-card/90 backdrop-blur-md py-3.5 ps-4 pe-3.5 shadow-xl shadow-black/30 ring-1 ring-border animate-slide-up-and-fade',
         toneStyles[tone],
       )}
     >
+      {/* Tone accent bar — hugs the start edge under the rounded corner. */}
+      <span aria-hidden className={cn('absolute inset-y-0 start-0 w-1', toneAccent[tone])} />
       <span
         aria-hidden
         className={cn(

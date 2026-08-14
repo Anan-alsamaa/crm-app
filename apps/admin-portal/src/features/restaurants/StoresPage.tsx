@@ -440,29 +440,32 @@ export function StoresPage() {
             description={t('stores.noMatchesHint', { defaultValue: 'Try a different term.' })}
           />
         ) : (
-          <div className="mx-auto max-w-6xl overflow-x-auto rounded-2xl bg-card p-2 ring-1 ring-foreground/[0.06] shadow-soft">
+          /* Board table — raised micro-label header band, hairline rows, a
+             footer aggregate band. overflow-x-auto stays on the card so wide
+             registers scroll inside it, never the page. */
+          <div className="mx-auto max-w-6xl overflow-x-auto rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             <table className="w-full min-w-[54rem] border-collapse text-sm">
               <thead>
-                <tr className="text-2xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-3 py-2 text-start font-semibold">
+                <tr className="border-b border-foreground/10 bg-foreground/[0.03] text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
                     {t('stores.colRestaurantId', { defaultValue: 'Restaurant ID' })}
                   </th>
-                  <th className="px-3 py-2 text-start font-semibold">
+                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
                     {t('stores.colStore', { defaultValue: 'Store' })}
                   </th>
-                  <th className="px-3 py-2 text-start font-semibold">
+                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
                     {t('stores.colBrand', { defaultValue: 'Brand' })}
                   </th>
-                  <th className="px-3 py-2 text-start font-semibold">
+                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
                     {t('stores.colCity', { defaultValue: 'City' })}
                   </th>
-                  <th className="px-3 py-2 text-start font-semibold">
+                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
                     {t('stores.colArea', { defaultValue: 'Area manager' })}
                   </th>
-                  <th className="px-3 py-2 text-start font-semibold">
+                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
                     {t('stores.colChain', { defaultValue: 'Chain manager' })}
                   </th>
-                  <th className="px-3 py-2 text-end font-semibold" />
+                  <th className="h-11 px-4 text-end align-middle font-semibold" />
                 </tr>
               </thead>
               <tbody>
@@ -471,10 +474,11 @@ export function StoresPage() {
                     key={s.id}
                     className={cn(
                       'border-t border-foreground/[0.06] transition-colors duration-fast',
-                      'hover:bg-secondary/50',
+                      // The board's accent-tinted hover wash, not a grey one.
+                      'hover:bg-primary/[0.07]',
                     )}
                   >
-                    <td className="whitespace-nowrap px-3 py-2.5">
+                    <td className="whitespace-nowrap px-4 py-3">
                       {s.yiji_restaurant_id ? (
                         <span className="font-mono text-xs tabular-nums text-foreground">
                           {s.yiji_restaurant_id}
@@ -485,7 +489,7 @@ export function StoresPage() {
                         <span className="font-mono text-xs text-muted-foreground/60">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-4 py-3">
                       <button
                         type="button"
                         onClick={() => openEdit(s)}
@@ -506,7 +510,7 @@ export function StoresPage() {
                         )}
                       </button>
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-4 py-3">
                       {s.brand ? (
                         <span className="text-foreground">{s.brand.name}</span>
                       ) : (
@@ -515,10 +519,10 @@ export function StoresPage() {
                         </Pill>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{s.city ?? '—'}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{s.area_manager ?? '—'}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{s.chain_manager ?? '—'}</td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-end">
+                    <td className="px-4 py-3 text-muted-foreground">{s.city ?? '—'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{s.area_manager ?? '—'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{s.chain_manager ?? '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-end">
                       <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(s)}>
                         {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
                       </Button>
@@ -535,6 +539,24 @@ export function StoresPage() {
                 ))}
               </tbody>
             </table>
+            {/* Footer aggregate band — the board table's closing line. Counts
+                describe the rows on screen, so a search never mixes scopes. */}
+            <div className="flex h-11 items-center gap-6 border-t border-foreground/[0.08] bg-foreground/[0.02] px-4 text-xs text-muted-foreground">
+              <span>
+                <span className="font-semibold tabular-nums text-foreground">
+                  {filtered.length}
+                </span>{' '}
+                {t('stores.total', { defaultValue: 'stores' })}
+              </span>
+              {filtered.some((s) => !s.brand) && (
+                <span>
+                  <span className="font-semibold tabular-nums text-foreground">
+                    {filtered.filter((s) => !s.brand).length}
+                  </span>{' '}
+                  {t('stores.noBrand', { defaultValue: 'without a brand' })}
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -365,7 +365,10 @@
     "kpiPolicies": "السياسات",
     "kpiActive": "مُفعّلة",
     "kpiAvgFirst": "متوسط أول رد",
-    "policyCount": "{{count}} سياسة"
+    "policyCount": "{{count}} سياسة",
+    "rowFirstReply": "أول رد",
+    "rowResolution": "زمن الحل",
+    "rowWarnAt": "التنبيه عند"
   },
   "users": {
     "inactive": "غير نشط",
@@ -411,7 +414,10 @@
     "heroSubtitle": "كل من يمكنه تسجيل الدخول إلى يجي — دوره وفريقه وحالة حسابه في لمحة. اختر أي شخص لتعديل صلاحياته أو إعادة تعيين كلمة المرور.",
     "total": "الإجمالي",
     "admins": "مشرف",
-    "noTeamShort": "بلا فريق"
+    "noTeamShort": "بلا فريق",
+    "statActiveCap": "نشط",
+    "statAdminCap": "مشرف",
+    "statNoTeamCap": "بلا فريق"
   },
   "teams": {
     "title": "الفرق",
@@ -435,7 +441,13 @@
     "heroSubtitle": "مجموعات تحدّد وجهة توجيه المحادثات والتذاكر. اطّلع على كل فريق وأعضائه ومَن لم يُسنَد إلى فريق بعد.",
     "total": "فريق",
     "assigned": "مُعيَّن",
-    "unassigned": "غير مُعيَّن"
+    "unassigned": "غير مُعيَّن",
+    "statTeamsCap": "فريق",
+    "statAssignedCap": "مُعيَّن",
+    "statUnassignedCap": "غير مُعيَّن",
+    "noMembers": "بلا أعضاء",
+    "memberOne": "عضو",
+    "memberOther": "أعضاء"
   },
   "cmd": {
     "pages": "الصفحات",
@@ -747,6 +759,7 @@
     "importExisting": "{{n}} دون تغيير"
   },
   "complaintDash": {
+    "tableTotal": "الإجمالي",
     "nothingInRange": "لا يوجد شيء في هذا النطاق.",
     "from": "من",
     "to": "إلى",

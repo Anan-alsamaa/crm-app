@@ -1,27 +1,35 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteItem, readUsers } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
 // Moved here when the Ticket report page was retired: the register belongs with
 // the Tickets report, the workload table with Agent KPI.
 import {
+  Avatar,
   Button,
   cn,
   EmptyState,
+  InboxIcon,
   Input,
+  MeterBar,
+  type MetricTone,
   Pagination,
   Pill,
   SelectMenu,
   Skeleton,
   SortTh,
+  SparkleIcon,
   Table,
+  TableFooterBar,
   TableSurface,
   Td,
   Th,
+  TicketIcon,
   toast,
   Toolbar,
   ToolbarSpacer,
   Tr,
+  UsersIcon,
   useTableSort,
 } from '@yiji/ui';
 import { matchStore, isUnmappedStore, resolveStoreAttribution } from '@yiji/shared-types';
@@ -81,12 +89,17 @@ const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructi
   high: 'warning',
   urgent: 'destructive',
 };
-const STATUS_TONE: Record<string, 'primary' | 'success' | 'warning' | 'muted' | 'neutral'> = {
+/* Board mapping: open reads sky, resolved jade, closed neutral. 'warning'
+ * keeps the darkened-treatment pill (warning is a light token on its own). */
+const STATUS_TONE: Record<
+  string,
+  'primary' | 'success' | 'warning' | 'muted' | 'neutral' | 'blue'
+> = {
   new: 'primary',
-  open: 'success',
+  open: 'blue',
   pending: 'warning',
-  resolved: 'primary',
-  closed: 'muted',
+  resolved: 'success',
+  closed: 'neutral',
 };
 const SLA_TONE: Record<SlaOutcome, 'success' | 'destructive' | 'warning' | 'muted'> = {
   met: 'success',
@@ -94,6 +107,10 @@ const SLA_TONE: Record<SlaOutcome, 'success' | 'destructive' | 'warning' | 'mute
   pending: 'warning',
   na: 'muted',
 };
+/* Meter accents for the breakdown cards. MetricTone deliberately has no
+ * warning/amber (a light token), so mid tones fall back to jade/sky. */
+const STATUS_METER: Record<string, MetricTone> = { open: 'sky', resolved: 'success' };
+const PRIORITY_METER: Record<string, MetricTone> = { urgent: 'destructive', high: 'violet' };
 
 const fmtMins = (n: number | null) =>
   n == null ? '—' : n < 60 ? `${Math.round(n)}m` : `${(n / 60).toFixed(1)}h`;
@@ -129,7 +146,7 @@ const AGENT_SORT: Record<string, (r: AgentKpiRow) => string | number | null | un
   csatAvg: (r) => r.csatAvg,
 };
 
-/* ── KPI card — vibrant tinted card, colored number (reference style) ───── */
+/* ── KPI card — boxed board tile: icon chip, hero numeral, micro-label ──── */
 type Tone = 'blue' | 'violet' | 'green' | 'amber';
 /* Colour as ACCENT, not surface — see TicketOpsPage for the rationale. This
  * page's Tone union is narrower (no crimson/slate). */
@@ -139,14 +156,43 @@ const DOT_TONE: Record<Tone, string> = {
   green: 'bg-success',
   amber: 'bg-warning',
 };
-function KpiTile({ label, value, tone }: { label: string; value: string; tone: Tone }) {
+/* Icon chips take tint + hue token pairs; amber stays NEUTRAL — warning is a
+ * light token and a warning-tinted chip fails contrast on the light theme. */
+const CHIP_TONE: Record<Tone, string> = {
+  blue: 'bg-sky-tint text-sky',
+  violet: 'bg-violet-tint text-violet',
+  green: 'bg-success-tint text-success',
+  amber: 'bg-secondary text-muted-foreground',
+};
+function KpiTile({
+  label,
+  value,
+  tone,
+  icon,
+}: {
+  label: string;
+  value: string;
+  tone: Tone;
+  /** Rendered inside a tinted rounded-square chip above the numeral. */
+  icon?: ReactNode;
+}) {
   return (
     <div
       className={cn(
-        'rounded-2xl bg-card px-4 py-4 shadow-soft ring-1 ring-border transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
+        'rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
       )}
     >
-      <div className="text-4xl font-bold tabular-nums leading-none tracking-[-0.03em] text-foreground">
+      {icon && (
+        <span
+          aria-hidden
+          className={cn('mb-3 grid h-9 w-9 place-items-center rounded-lg', CHIP_TONE[tone])}
+        >
+          {icon}
+        </span>
+      )}
+      {/* Numeral first, label as its NEXT sibling — the KPI reader in the
+          tests walks exactly this pair, so the anatomy is contractual. */}
+      <div className="text-4xl font-extrabold tabular-nums leading-none tracking-[-0.03em] text-foreground">
         {value}
       </div>
       <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -513,8 +559,22 @@ function TicketsReport({
                 <Td>
                   <PriorityPill value={r.priority} />
                 </Td>
-                <Td className="max-w-[12rem] truncate text-muted-foreground">
-                  {r.contactName || r.contactPhone || r.contactEmail || '—'}
+                <Td className="max-w-[12rem] text-muted-foreground">
+                  {r.contactName || r.contactPhone || r.contactEmail ? (
+                    <span className="flex items-center gap-2">
+                      <Avatar
+                        size="xs"
+                        name={r.contactName}
+                        email={r.contactEmail}
+                        phone={r.contactPhone}
+                      />
+                      <span className="min-w-0 truncate">
+                        {r.contactName || r.contactPhone || r.contactEmail}
+                      </span>
+                    </span>
+                  ) : (
+                    '—'
+                  )}
                 </Td>
                 <Td className="text-muted-foreground">{r.agentName}</Td>
                 <Td className="text-end tabular-nums text-muted-foreground">
@@ -909,18 +969,6 @@ function ComplaintsReport({
             })}
           </Pill>
         )}
-        <span className="text-2xs tabular-nums text-muted-foreground">
-          {isEmptyFilter(criteria)
-            ? t('complaintReport.rowCount', {
-                count: joined.length,
-                defaultValue: '{{count}} rows',
-              })
-            : t('complaintReport.matches', {
-                count: visible.length,
-                total: joined.length,
-                defaultValue: '{{count}} of {{total}}',
-              })}
-        </span>
         <div className="relative ms-auto flex items-center gap-2">
           <button
             type="button"
@@ -1213,6 +1261,15 @@ function ComplaintsReport({
                         <Pill tone="warning" size="sm">
                           {t('agentReports.notMapped', { defaultValue: 'Not mapped' })}
                         </Pill>
+                      ) : k === 'complaintStatus' && text ? (
+                        /* Status as a tag pill — the same translated text the
+                           export writes, toned off the RAW status value. */
+                        <Pill
+                          tone={STATUS_TONE[r.complaintStatus.toLowerCase()] ?? 'neutral'}
+                          size="sm"
+                        >
+                          {text}
+                        </Pill>
                       ) : layout === 'text' ? (
                         /* Fixed width on an inner block, not a max-width on the
                            cell: the table is `min-w-max`, under which a td's
@@ -1232,6 +1289,23 @@ function ComplaintsReport({
             ))}
           </tbody>
         </Table>
+        {/* Footer aggregate band — the row count that used to float above the
+            table now reads as part of it, boards-style: same strings, same
+            numbers, anchored under the data they describe. */}
+        <TableFooterBar>
+          <span className="font-medium tabular-nums">
+            {isEmptyFilter(criteria)
+              ? t('complaintReport.rowCount', {
+                  count: joined.length,
+                  defaultValue: '{{count}} rows',
+                })
+              : t('complaintReport.matches', {
+                  count: visible.length,
+                  total: joined.length,
+                  defaultValue: '{{count}} of {{total}}',
+                })}
+          </span>
+        </TableFooterBar>
       </TableSurface>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -1353,7 +1427,26 @@ function AgentKpiReport({
                   {fmtMins(a.avgFirstResponseMin)}
                 </Td>
                 <Td className="text-end tabular-nums text-muted-foreground">
-                  {fmtPct(a.firstResponsePct)}
+                  {a.firstResponsePct == null ? (
+                    fmtPct(a.firstResponsePct)
+                  ) : (
+                    /* Number + thin meter, boards-style: the magnitude stays
+                       tabular, the bar makes the laggard visible at a scan. */
+                    <span className="flex items-center justify-end gap-2">
+                      <MeterBar
+                        value={a.firstResponsePct}
+                        tone={
+                          a.firstResponsePct >= 90
+                            ? 'success'
+                            : a.firstResponsePct >= 75
+                              ? 'primary'
+                              : 'destructive'
+                        }
+                        className="w-12"
+                      />
+                      {fmtPct(a.firstResponsePct)}
+                    </span>
+                  )}
                 </Td>
                 <Td className="text-end tabular-nums">
                   {a.offered === 0 ? (
@@ -1420,7 +1513,7 @@ function ConversationReport({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.05] shadow-soft">
+        <div className="rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.06] shadow-soft">
           <h3 className="mb-3 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('agentReports.byStatus', { defaultValue: 'By status' })}
           </h3>
@@ -1439,9 +1532,12 @@ function ConversationReport({
                     className="flex w-full items-center justify-between gap-2 rounded-lg px-1.5 py-1 text-sm transition-colors duration-fast hover:bg-secondary/60"
                   >
                     <StatusPill value={s.key} />
-                    <span className="ms-auto tabular-nums font-semibold text-foreground">
-                      {s.count}
-                    </span>
+                    <MeterBar
+                      value={report.total > 0 ? (s.count / report.total) * 100 : 0}
+                      tone={STATUS_METER[s.key] ?? 'primary'}
+                      className="ms-auto w-16 shrink-0"
+                    />
+                    <span className="tabular-nums font-semibold text-foreground">{s.count}</span>
                     <span aria-hidden className="text-2xs text-muted-foreground">
                       {open ? '▴' : '▾'}
                     </span>
@@ -1481,14 +1577,19 @@ function ConversationReport({
             })}
           </ul>
         </div>
-        <div className="rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.05] shadow-soft">
+        <div className="rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.06] shadow-soft">
           <h3 className="mb-3 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('agentReports.byPriority', { defaultValue: 'By priority' })}
           </h3>
           <ul className="space-y-2">
             {report.byPriority.map((p) => (
-              <li key={p.key} className="flex items-center justify-between gap-2 text-sm">
+              <li key={p.key} className="flex items-center gap-2 px-1.5 text-sm">
                 <PriorityPill value={p.key} />
+                <MeterBar
+                  value={report.total > 0 ? (p.count / report.total) * 100 : 0}
+                  tone={PRIORITY_METER[p.key] ?? 'sky'}
+                  className="ms-auto w-16 shrink-0"
+                />
                 <span className="tabular-nums font-semibold text-foreground">{p.count}</span>
               </li>
             ))}
@@ -1516,7 +1617,14 @@ function ConversationReport({
             {report.rows.slice(0, 50).map((r) => (
               <Tr key={r.id}>
                 <Td className="font-medium">
-                  {r.customerName || t('agentReports.noName', { defaultValue: '—' })}
+                  {r.customerName ? (
+                    <span className="flex items-center gap-2">
+                      <Avatar size="xs" name={r.customerName} phone={r.customerPhone} />
+                      <span className="min-w-0 truncate">{r.customerName}</span>
+                    </span>
+                  ) : (
+                    t('agentReports.noName', { defaultValue: '—' })
+                  )}
                 </Td>
                 <Td className="font-mono tabular-nums text-muted-foreground">
                   {r.customerPhone || '—'}
@@ -1687,7 +1795,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
         >
           {/* Clean editorial header — no gradient banner. */}
           <div className="border-b border-foreground/10 pb-5">
-            <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+            <h2 className="text-3xl font-bold tracking-tight text-foreground">
               {t(meta.titleKey, { defaultValue: meta.titleDefault })}
             </h2>
             <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
@@ -1699,7 +1807,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[0, 1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-20 rounded-2xl" />
+                  <Skeleton key={i} className="h-28 rounded-2xl" />
                 ))}
               </div>
               <Skeleton className="h-64 w-full rounded-2xl" />
@@ -1721,27 +1829,31 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
             />
           ) : (
             <>
-              {/* KPI strip — colored, report-relevant. */}
+              {/* KPI strip — boxed board tiles: tinted icon chips, hero numerals. */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <KpiTile
                   label={t('agentReports.kpiTickets', { defaultValue: 'Tickets' })}
                   value={String(data.tickets.length)}
                   tone="blue"
+                  icon={<TicketIcon size={18} />}
                 />
                 <KpiTile
                   label={t('agentReports.kpiConversations', { defaultValue: 'Conversations' })}
                   value={String(data.conversations.total)}
                   tone="violet"
+                  icon={<InboxIcon size={18} />}
                 />
                 <KpiTile
                   label={t('agentReports.kpiAgents', { defaultValue: 'Agents' })}
                   value={String(data.agents.filter((a) => a.agentId).length)}
                   tone="amber"
+                  icon={<UsersIcon size={18} />}
                 />
                 <KpiTile
                   label={t('agentReports.kpiCsat', { defaultValue: 'CSAT avg' })}
                   value={fmtScore(data.csatOverall.avg)}
                   tone="green"
+                  icon={<SparkleIcon size={18} />}
                 />
               </div>
 

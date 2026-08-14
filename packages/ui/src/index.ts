@@ -90,7 +90,7 @@ export { DrawerSection } from './DrawerSection.js';
 export type { DrawerSectionProps } from './DrawerSection.js';
 export { StatCard } from './StatCard.js';
 export type { StatCardProps } from './StatCard.js';
-export { TableSurface, Table, Th, Tr, Td, SortTh, useTableSort } from './Table.js';
+export { TableSurface, Table, Th, Tr, Td, SortTh, TableFooterBar, useTableSort } from './Table.js';
 export type { SortDir } from './Table.js';
 export { Pagination } from './Pagination.js';
 export type { PaginationProps } from './Pagination.js';
@@ -106,3 +106,12 @@ export type { ResizeHandleProps } from './ResizeHandle.js';
 export { useMediaQuery, useIsDesktop } from './useMediaQuery.js';
 export { AppShell } from './AppShell.js';
 export type { AppShellProps, AppShellRailContext } from './AppShell.js';
+export { ProgressRing, MeterBar, Sparkline, DeltaBadge, SectionCard } from './Metrics.js';
+export type {
+  MetricTone,
+  ProgressRingProps,
+  MeterBarProps,
+  SparklineProps,
+  DeltaBadgeProps,
+  SectionCardProps,
+} from './Metrics.js';

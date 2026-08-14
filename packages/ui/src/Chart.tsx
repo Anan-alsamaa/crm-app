@@ -217,6 +217,21 @@ export function TrendChart({
           className="min-w-0 flex-1 overflow-visible"
           role="img"
         >
+          {/* Hairline gridlines at the two labelled stops only — the scale's
+              top and its zero. More lines than labels is ink without
+              information. Token alpha, so the hairline holds on both themes. */}
+          {[0, 100].map((gy) => (
+            <line
+              key={gy}
+              x1={0}
+              x2={W}
+              y1={gy}
+              y2={gy}
+              stroke="oklch(var(--foreground) / 0.08)"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
           {series.map((s) => {
             // Split into unbroken runs so a null leaves a real gap.
             const runs: Array<Array<[number, number]>> = [];

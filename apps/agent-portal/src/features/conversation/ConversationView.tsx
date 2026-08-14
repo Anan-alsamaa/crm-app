@@ -588,7 +588,7 @@ ${text}`
             ].map((b, i) => (
               <div key={i} className={cn('flex gap-2.5', b.me ? 'flex-row-reverse' : 'flex-row')}>
                 <Skeleton className="h-7 w-7 shrink-0 rounded-full" />
-                <Skeleton className={cn('h-10 rounded-[18px]', b.w)} />
+                <Skeleton className={cn('h-10 rounded-2xl', b.w)} />
               </div>
             ))}
           </div>
@@ -753,15 +753,16 @@ ${text}`
                                     className={cn(
                                       'px-4 py-2.5 text-[15px] leading-relaxed break-words text-start max-w-fit',
                                       'motion-safe:animate-message-in',
-                                      // Instagram-DM style: outgoing = aurora gradient
-                                      // bubble, incoming = soft solid bubble. Big rounding.
+                                      // Board bubbles: outgoing = solid jade,
+                                      // incoming = token bubble surface with a
+                                      // hairline ring. One rounding everywhere.
                                       isNote
                                         ? 'bg-warning/15 text-warning-foreground ring-1 ring-warning/20'
                                         : isAgent
                                           ? 'bg-primary text-primary-foreground'
                                           : 'bg-bubble text-foreground ring-1 ring-foreground/[0.06]',
-                                      // Smooth pill shape, tail only on the LAST bubble of a run.
-                                      'rounded-[22px]',
+                                      // rounded-2xl consistency, tail only on the LAST bubble of a run.
+                                      'rounded-2xl',
                                       isLast && isAgent && 'rounded-ee-md',
                                       isLast && !isAgent && 'rounded-es-md',
                                       // Optimistic message: dim until the server confirms.
@@ -817,7 +818,7 @@ ${text}`
                   phone={c?.contact?.phone}
                   size="sm"
                 />
-                <div className="rounded-[22px] rounded-es-md bg-bubble px-3.5 py-2.5">
+                <div className="rounded-2xl rounded-es-md bg-bubble px-3.5 py-2.5 ring-1 ring-foreground/[0.06]">
                   <span className="flex items-center gap-1" aria-hidden>
                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse" />
                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse [animation-delay:120ms]" />
@@ -893,11 +894,15 @@ ${text}`
 
             <div
               className={cn(
-                'group relative rounded-[26px] transition-[box-shadow,background-color] duration-fast ease-out',
-                internalNote ? 'bg-warning/10' : 'bg-card shadow-soft ring-1 ring-border',
-                // Confident aurora lift on focus: glow + a 2px brand ring.
-                'focus-within:ring-2 focus-within:ring-primary/40',
-                internalNote && 'focus-within:ring-warning/50',
+                'group relative rounded-2xl transition-[box-shadow,background-color] duration-fast ease-out',
+                // The input-well look: recessed secondary surface with an inset
+                // hairline at rest, lifting to the card surface + a 2px jade
+                // ring on focus. The note mode swaps the hue wholesale — the
+                // two focus rings are mutually exclusive branches because cn()
+                // is a plain joiner and conflicting rings are unpredictable.
+                internalNote
+                  ? 'bg-warning/10 focus-within:ring-2 focus-within:ring-warning/50'
+                  : 'bg-secondary/50 ring-1 ring-inset ring-foreground/10 focus-within:bg-card focus-within:ring-2 focus-within:ring-primary/40',
               )}
             >
               {/* Pending attachments (uploaded, not yet sent) — image thumbnails
@@ -1069,10 +1074,14 @@ ${text}`
             </div>
 
             <p className="mt-2 text-2xs text-muted-foreground">
-              <kbd className="font-mono text-[10px]">Enter</kbd>{' '}
+              <kbd className="rounded bg-secondary px-1 py-0.5 font-mono text-[10px] ring-1 ring-inset ring-foreground/[0.06]">
+                Enter
+              </kbd>{' '}
               {t('conversation.sendHint', { defaultValue: 'to send' })}
               {' · '}
-              <kbd className="font-mono text-[10px]">Shift+Enter</kbd>{' '}
+              <kbd className="rounded bg-secondary px-1 py-0.5 font-mono text-[10px] ring-1 ring-inset ring-foreground/[0.06]">
+                Shift+Enter
+              </kbd>{' '}
               {t('conversation.newlineHint', { defaultValue: 'for newline' })}
             </p>
           </div>

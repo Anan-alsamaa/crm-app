@@ -15,12 +15,16 @@ import {
   FormField,
   Input,
   Pill,
+  ProgressRing,
   SelectMenu,
+  ShieldIcon,
   Skeleton,
-  StatStrip,
+  StatCard,
   toast,
   Toolbar,
   ToolbarSpacer,
+  UsersIcon,
+  ZapIcon,
 } from '@yiji/ui';
 import {
   useUsers,
@@ -186,6 +190,7 @@ export function UsersPage() {
   const activeCount = list.filter((u) => u.status === 'active').length;
   const adminCount = list.filter((u) => u.role?.name?.toLowerCase() === 'administrator').length;
   const teamlessCount = list.filter((u) => !u.team).length;
+  const activePct = total > 0 ? Math.round((activeCount / total) * 100) : 0;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -200,17 +205,22 @@ export function UsersPage() {
           </span>
           <span className="opacity-30">·</span>
           <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{activeCount}</strong> active
+            <strong className="font-semibold text-foreground">{activeCount}</strong>{' '}
+            {t('users.statActiveCap', { defaultValue: 'active' })}
           </span>
           <span className="opacity-30">·</span>
           <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{adminCount}</strong> admin
+            <strong className="font-semibold text-foreground">{adminCount}</strong>{' '}
+            {t('users.statAdminCap', { defaultValue: 'admin' })}
           </span>
           {teamlessCount > 0 && (
             <>
               <span className="opacity-30">·</span>
-              <span className="tabular-nums text-warning-foreground">
-                <strong className="font-semibold">{teamlessCount}</strong> no team
+              {/* Bare warning ink is near-invisible on the dark canvas — the
+                  tinted chip treatment stays readable on both themes. */}
+              <span className="rounded-full bg-warning/20 px-2 py-0.5 tabular-nums text-warning-foreground">
+                <strong className="font-semibold">{teamlessCount}</strong>{' '}
+                {t('users.statNoTeamCap', { defaultValue: 'no team' })}
               </span>
             </>
           )}
@@ -250,7 +260,7 @@ export function UsersPage() {
         {!users.isLoading && !users.isError && list.length > 0 && (
           <div className="mx-auto mb-5 max-w-5xl space-y-5">
             <div className="border-b border-foreground/10 pb-5">
-              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">
                 {t('users.title')}
               </h2>
               <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
@@ -260,26 +270,45 @@ export function UsersPage() {
                 })}
               </p>
             </div>
-            <StatStrip
-              items={[
-                { label: t('users.total', { defaultValue: 'total' }), value: total, tone: 'blue' },
-                {
-                  label: t('users.active', { defaultValue: 'active' }),
-                  value: activeCount,
-                  tone: 'green',
-                },
-                {
-                  label: t('users.admins', { defaultValue: 'admins' }),
-                  value: adminCount,
-                  tone: 'violet',
-                },
-                {
-                  label: t('users.noTeamShort', { defaultValue: 'no team' }),
-                  value: teamlessCount,
-                  tone: teamlessCount > 0 ? 'amber' : 'neutral',
-                },
-              ]}
-            />
+            {/* Boxed board tiles — tinted icon chips, hero numerals; tone lives
+                in the chip / dot, never in a colored outline. */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard
+                icon={<UsersIcon />}
+                tone="primary"
+                label={t('users.total', { defaultValue: 'total' })}
+                value={total}
+              />
+              <StatCard
+                icon={<ZapIcon />}
+                tone="success"
+                label={t('users.active', { defaultValue: 'active' })}
+                value={activeCount}
+                visual={
+                  <span className="hidden sm:block">
+                    <ProgressRing
+                      value={activePct}
+                      tone="success"
+                      size={40}
+                      label={`${activePct}%`}
+                    />
+                  </span>
+                }
+              />
+              <StatCard
+                icon={<ShieldIcon />}
+                tone="pink"
+                label={t('users.admins', { defaultValue: 'admins' })}
+                value={adminCount}
+              />
+              {/* No icon here on purpose: the warning hue may not tint a chip
+                  (light-token contrast), so the label dot carries it. */}
+              <StatCard
+                tone={teamlessCount > 0 ? 'warning' : 'default'}
+                label={t('users.noTeamShort', { defaultValue: 'no team' })}
+                value={teamlessCount}
+              />
+            </div>
           </div>
         )}
         {users.isError ? (
@@ -292,9 +321,9 @@ export function UsersPage() {
             onRetry={() => void users.refetch()}
           />
         ) : users.isLoading ? (
-          <div className="space-y-2">
+          <div className="mx-auto max-w-5xl divide-y divide-foreground/[0.06] rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-lg px-2 py-3">
+              <div key={i} className="flex min-h-14 items-center gap-3 px-4 py-3">
                 <Skeleton className="h-8 w-8 rounded-full" />
                 <Skeleton className="h-3 w-1/3" />
                 <Skeleton className="ms-auto h-3 w-16" />
@@ -321,64 +350,86 @@ export function UsersPage() {
           </p>
         ) : (
           /* Dense list — one row per account (density is a feature). Rows sit
-             on a soft floating card; columns read like a table at sm+. */
-          <ul className="mx-auto max-w-5xl space-y-1 rounded-2xl bg-card p-2 ring-1 ring-foreground/[0.06] shadow-soft">
-            {filtered.map((u) => {
-              const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
-              const isAdmin = u.role?.name?.toLowerCase() === 'administrator';
-              return (
-                <li key={u.id}>
-                  <button
-                    type="button"
-                    onClick={() => openEdit(u)}
-                    className={cn(
-                      'group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-start',
-                      'transition-colors duration-fast ease-out hover:bg-secondary/60',
-                      'focus-visible:outline-none focus-visible:bg-secondary/60',
-                    )}
-                  >
-                    {/* No presence dot — a green avatar dot reads as "online",
-                        which we don't track. Account status shows as a label. */}
-                    <Avatar name={fullName} email={u.email} size="md" className="shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-semibold text-foreground">
-                          {fullName || u.email}
-                        </span>
-                        {u.status !== 'active' && (
-                          <Pill tone="muted" size="sm" dot className="shrink-0">
-                            {t('users.inactive', { defaultValue: 'Inactive' })}
-                          </Pill>
+             flush inside one board card: hairline separators, quiet hover,
+             a footer aggregate band. Columns read like a table at sm+. */
+          <div className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
+            <ul className="divide-y divide-foreground/[0.06]">
+              {filtered.map((u) => {
+                const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
+                const isAdmin = u.role?.name?.toLowerCase() === 'administrator';
+                return (
+                  <li key={u.id}>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(u)}
+                      className={cn(
+                        'group flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-start',
+                        'transition-colors duration-fast ease-out hover:bg-foreground/[0.03]',
+                        'focus-visible:outline-none focus-visible:bg-foreground/[0.05]',
+                      )}
+                    >
+                      {/* No presence dot — a green avatar dot reads as "online",
+                          which we don't track. Account status shows as a label. */}
+                      <Avatar name={fullName} email={u.email} size="md" className="shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-semibold text-foreground">
+                            {fullName || u.email}
+                          </span>
+                          {u.status !== 'active' && (
+                            <Pill tone="muted" size="sm" dot className="shrink-0">
+                              {t('users.inactive', { defaultValue: 'Inactive' })}
+                            </Pill>
+                          )}
+                        </div>
+                        {fullName && (
+                          <div className="truncate text-xs text-muted-foreground">{u.email}</div>
                         )}
                       </div>
-                      {fullName && (
-                        <div className="truncate text-xs text-muted-foreground">{u.email}</div>
+                      <span
+                        className={cn(
+                          'hidden shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold sm:inline-flex',
+                          isAdmin
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-primary-tint text-primary',
+                        )}
+                      >
+                        {u.role?.name ?? '—'}
+                      </span>
+                      {u.team ? (
+                        <span
+                          title={u.team.name}
+                          className="hidden w-32 shrink-0 truncate text-end text-xs text-muted-foreground sm:block"
+                        >
+                          {u.team.name}
+                        </span>
+                      ) : (
+                        /* Bare warning ink vanished on the dark canvas — the
+                           tinted pill keeps "No team" readable on both themes. */
+                        <span
+                          title={t('users.noTeam')}
+                          className="hidden w-32 shrink-0 justify-end sm:flex"
+                        >
+                          <Pill tone="warning" size="sm">
+                            {t('users.noTeam')}
+                          </Pill>
+                        </span>
                       )}
-                    </div>
-                    <span
-                      className={cn(
-                        'hidden shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold sm:inline-flex',
-                        isAdmin
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-primary-subtle text-primary',
-                      )}
-                    >
-                      {u.role?.name ?? '—'}
-                    </span>
-                    <span
-                      title={u.team?.name ?? t('users.noTeam')}
-                      className={cn(
-                        'hidden w-32 shrink-0 truncate text-end text-xs sm:block',
-                        u.team ? 'text-muted-foreground' : 'text-warning-foreground',
-                      )}
-                    >
-                      {u.team?.name ?? t('users.noTeam')}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {/* Footer aggregate band — the boards' table anatomy. */}
+            <div className="flex items-center justify-between gap-3 border-t border-foreground/[0.06] bg-secondary/30 px-4 py-2.5">
+              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('users.statTotalCap', { defaultValue: 'total' })}
+              </span>
+              <span className="text-sm font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
+                {filtered.length}
+              </span>
+            </div>
+          </div>
         )}
       </div>
 

@@ -9,6 +9,9 @@ import {
   ErrorState,
   InboxIcon,
   Input,
+  MeterBar,
+  ProgressRing,
+  SectionCard,
   SelectMenu,
   Skeleton,
   SparkleIcon,
@@ -80,12 +83,18 @@ function Kpi({
   sub,
   tone,
   icon,
+  visual,
+  meter,
 }: {
   value: string;
   label: string;
   sub?: string;
   tone: keyof typeof KPI_CHIPS;
   icon: React.ReactNode;
+  /** End-side data accent — a ProgressRing on the KPIs that are a share. */
+  visual?: React.ReactNode;
+  /** Thin meter under the text — the boards' load reading, for the counts-of-a-whole. */
+  meter?: React.ReactNode;
 }) {
   return (
     <div className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
@@ -96,49 +105,32 @@ function Kpi({
         >
           {icon}
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-3xl font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
             {value}
           </div>
-          <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {label}
           </div>
           {/* Fixed height so a card with no context line does not sit shorter
               than its neighbours and break the row. */}
           <div className="mt-1 min-h-[1rem] text-2xs text-muted-foreground">{sub ?? ''}</div>
         </div>
+        {/* Decorative: it re-draws a share the card already states in text. */}
+        {visual && (
+          <span aria-hidden className="shrink-0 self-center">
+            {visual}
+          </span>
+        )}
       </div>
+      {meter && <div className="mt-3">{meter}</div>}
     </div>
   );
 }
 
-function Card({
-  title,
-  hint,
-  aside,
-  children,
-  className,
-}: {
-  title: string;
-  hint?: string;
-  /** Right-aligned note in the header — his "top 10 of 24". */
-  aside?: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={cn('rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]', className)}
-    >
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold tracking-tight text-foreground">{title}</h2>
-        {aside && <span className="shrink-0 text-2xs text-muted-foreground">{aside}</span>}
-      </div>
-      {hint && <p className="mt-0.5 text-2xs leading-relaxed text-muted-foreground">{hint}</p>}
-      <div className="mt-4">{children}</div>
-    </section>
-  );
-}
+/* Section surfaces are the shared SectionCard: identical title/hint/aside
+ * anatomy to the local helper it replaced, but now literally the same card
+ * every board in the app draws — the aside slot still carries "top 10 of 24". */
 
 /**
  * His bar breakdown: label, proportional track, then "count · share". The share
@@ -176,7 +168,9 @@ function Bars({
             >
               {r.label}
             </span>
-            <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-secondary">
+            {/* Hairline track, same as the shared MeterBar — the tone fill is
+                what reads, not the rail. */}
+            <span className="h-2 flex-1 overflow-hidden rounded-full bg-foreground/[0.08]">
               <span
                 className={cn(
                   'block h-full rounded-full transition-[width] duration-slow ease-out',
@@ -237,7 +231,7 @@ function CutCard({
   const { t } = useTranslation();
   const hidden = cut.distinct > cut.rows.length;
   return (
-    <Card
+    <SectionCard
       title={title}
       hint={hint}
       className={className}
@@ -252,7 +246,7 @@ function CutCard({
       }
     >
       <Bars rows={cut.rows} total={total} color={color} onSelect={onSelect} />
-    </Card>
+    </SectionCard>
   );
 }
 
@@ -273,9 +267,12 @@ function CutCard({
  * browser drops the declaration and the slice paints nothing, leaving a donut
  * that is present in the DOM and invisible on screen. (Same trap the KPI chips
  * hit with `bg-violet` earlier in this feature.) */
+/* No `--warning` slice: it is a LIGHT token, and a pale-yellow wedge on the
+ * light theme's white card is a slice you cannot see. Magenta fills its seat
+ * in the categorical order. */
 const SLICE = [
   'oklch(var(--primary))',
-  'oklch(var(--warning))',
+  'oklch(var(--magenta))',
   'oklch(var(--success))',
   'oklch(var(--violet))',
   'oklch(var(--sky))',
@@ -332,11 +329,16 @@ function Donut({ rows, onSelect }: { rows: Breakdown[]; onSelect?: (row: Breakdo
           x="70"
           y="67"
           textAnchor="middle"
-          className="fill-foreground text-xl font-bold tabular-nums"
+          className="fill-foreground text-xl font-extrabold tabular-nums tracking-[-0.03em]"
         >
           {total}
         </text>
-        <text x="70" y="84" textAnchor="middle" className="fill-muted-foreground text-[10px]">
+        <text
+          x="70"
+          y="84"
+          textAnchor="middle"
+          className="fill-muted-foreground text-[9px] font-semibold uppercase tracking-[0.12em]"
+        >
           {t('complaintDash.donutTotal', { defaultValue: 'total' })}
         </text>
       </svg>
@@ -463,7 +465,9 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
           <span className="tabular-nums">(max {maxCount})</span>
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="h-0.5 w-4 rounded-full bg-warning" />
+          {/* Violet, not warning: `--warning` is a light token and the line
+              would vanish against the light theme's card. */}
+          <span aria-hidden className="h-0.5 w-4 rounded-full bg-violet" />
           {t('complaintDash.compensationAxis', { defaultValue: 'Compensation' })}
           <span className="tabular-nums">(max {SAR(maxMoney)})</span>
         </span>
@@ -501,7 +505,7 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
             <polyline
               points={linePoints}
               fill="none"
-              stroke="var(--warning, #F2A900)"
+              stroke="oklch(var(--violet))"
               strokeWidth="2"
               strokeLinejoin="round"
               strokeLinecap="round"
@@ -512,7 +516,7 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
                 cx={x(i)}
                 cy={y(m.compensation)}
                 r="3"
-                fill="var(--warning, #F2A900)"
+                fill="oklch(var(--violet))"
               />
             ))}
           </svg>
@@ -672,12 +676,53 @@ export function ComplaintDashboard() {
   const dirty = JSON.stringify(draft) !== JSON.stringify(applied);
   const anyFilter = Object.values(applied).some(Boolean);
 
+  // Footer aggregate bands for the two tables — the reference boards close
+  // every table with the whole-team row. Sums for the additive columns only;
+  // the blended solve rate is recomputed from the sums (averaging the
+  // per-agent percentages would weight a one-ticket agent like a fifty-ticket
+  // one), and the duration means cannot be blended from means at all.
+  const agentTotals = useMemo(() => {
+    const s = {
+      logged: 0,
+      open: 0,
+      replies: 0,
+      solved: 0,
+      chatsOpen: 0,
+      chatsSolved: 0,
+      compensation: 0,
+    };
+    for (const a of d?.agents ?? []) {
+      s.logged += a.logged;
+      s.open += a.open;
+      s.replies += a.replies;
+      s.solved += a.solved;
+      s.chatsOpen += a.chatsOpen;
+      s.chatsSolved += a.chatsSolved;
+      s.compensation += a.compensation;
+    }
+    return s;
+  }, [d?.agents]);
+  const chatTotals = useMemo(() => {
+    const s = { messages: 0, chatsHandled: 0, chatsSolved: 0, offered: 0, answered: 0, missed: 0 };
+    for (const a of d?.chatAgents ?? []) {
+      s.messages += a.messages;
+      s.chatsHandled += a.chatsHandled;
+      s.chatsSolved += a.chatsSolved;
+      s.offered += a.offered;
+      s.answered += a.answered;
+      s.missed += a.missed;
+    }
+    return s;
+  }, [d?.chatAgents]);
+
   return (
     <div className="mx-auto max-w-7xl space-y-4">
-      {/* ── Filter bar ─────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-end gap-2 rounded-2xl bg-card p-3 shadow-soft ring-1 ring-foreground/[0.06]">
+      {/* ── Filter bar ─────────────────────────────────────────────────
+          Same surface as every SectionCard on the page; the fields inside
+          carry the shared Input/SelectMenu styling on their own. */}
+      <div className="flex flex-wrap items-end gap-x-3 gap-y-3 rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('complaintDash.from', { defaultValue: 'From' })}
           </span>
           <Input
@@ -688,7 +733,7 @@ export function ComplaintDashboard() {
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('complaintDash.to', { defaultValue: 'To' })}
           </span>
           <Input
@@ -699,7 +744,7 @@ export function ComplaintDashboard() {
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('complaintDash.brand', { defaultValue: 'Brand' })}
           </span>
           <SelectMenu
@@ -714,7 +759,7 @@ export function ComplaintDashboard() {
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('complaintDash.area', { defaultValue: 'Area' })}
           </span>
           <SelectMenu
@@ -729,7 +774,7 @@ export function ComplaintDashboard() {
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('complaintDash.city', { defaultValue: 'City' })}
           </span>
           <SelectMenu
@@ -744,7 +789,7 @@ export function ComplaintDashboard() {
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('complaintDash.restaurant', { defaultValue: 'Restaurant' })}
           </span>
           <SelectMenu
@@ -788,7 +833,7 @@ export function ComplaintDashboard() {
         />
       ) : m.isLoading || !d ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-28 rounded-2xl" />
             ))}
@@ -817,8 +862,12 @@ export function ComplaintDashboard() {
                 })}
           </p>
 
-          {/* ── Six KPIs ─────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+          {/* ── Six KPIs ─────────────────────────────────────────────────
+              The share-of-a-whole cards carry the boards' data accents: a ring
+              beside the two percentages, a thin meter under the two counts
+              that are really fractions of a known total. Tones match the icon
+              chip so the accent reads as the same signal, louder. */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
             <Kpi
               tone="neutral"
               icon={<TicketIcon size={17} />}
@@ -846,6 +895,7 @@ export function ComplaintDashboard() {
                     })
                   : ''
               }
+              visual={<ProgressRing value={d.total ? (d.open / d.total) * 100 : 0} tone="sky" />}
             />
             <Kpi
               tone="violet"
@@ -855,6 +905,7 @@ export function ComplaintDashboard() {
               // His "Escalated" has no equivalent status here, so this counts
               // the real thing a supervisor would chase instead.
               sub={t('complaintDash.overdueHint', { defaultValue: 'past first-reply SLA' })}
+              meter={<MeterBar value={d.total ? (d.overdue / d.total) * 100 : 0} tone="violet" />}
             />
             <Kpi
               tone="success"
@@ -866,6 +917,7 @@ export function ComplaintDashboard() {
                 sat: d.satisfied,
                 rated: d.rated,
               })}
+              visual={<ProgressRing value={d.satisfiedPct ?? 0} tone="success" />}
             />
             <Kpi
               tone="primary"
@@ -891,6 +943,12 @@ export function ComplaintDashboard() {
                 defaultValue: '{{n}} total',
                 n: d.chatsTotal,
               })}
+              meter={
+                <MeterBar
+                  value={d.chatsTotal ? (d.chatsWaiting / d.chatsTotal) * 100 : 0}
+                  tone="destructive"
+                />
+              }
             />
           </div>
 
@@ -913,7 +971,9 @@ export function ComplaintDashboard() {
               both, and on a page people scan rather than study, that is the
               point rather than a duplication. */}
           <div className="grid gap-4 md:grid-cols-2">
-            <Card title={t('complaintDash.statusMix', { defaultValue: 'Complaint status mix' })}>
+            <SectionCard
+              title={t('complaintDash.statusMix', { defaultValue: 'Complaint status mix' })}
+            >
               <Donut
                 rows={d.byStatus.rows.map((r) => ({
                   ...r,
@@ -924,8 +984,8 @@ export function ComplaintDashboard() {
                   (r) => r.status,
                 )}
               />
-            </Card>
-            <Card
+            </SectionCard>
+            <SectionCard
               title={t('complaintDash.brandMix', { defaultValue: 'Where complaints come from' })}
             >
               <Donut
@@ -935,14 +995,14 @@ export function ComplaintDashboard() {
                   (r) => r.brandName,
                 )}
               />
-            </Card>
+            </SectionCard>
           </div>
 
           {/* ── Service health ───────────────────────────────────────────
               His gauge + composition strip: one glance at whether the work is
               finishing well, and whether chats are being picked up. */}
           <div className="grid gap-4 md:grid-cols-2">
-            <Card
+            <SectionCard
               title={t('complaintDash.health', { defaultValue: 'Service health' })}
               hint={t('complaintDash.healthHint', {
                 defaultValue: 'Where every complaint in this range currently stands.',
@@ -1005,9 +1065,9 @@ export function ComplaintDashboard() {
                   },
                 ]}
               />
-            </Card>
+            </SectionCard>
 
-            <Card
+            <SectionCard
               title={t('complaintDash.chatHealth', { defaultValue: 'Chat responsiveness' })}
               hint={t('complaintDash.chatHealthHint', {
                 defaultValue: 'Whether conversations are being picked up, and how fast.',
@@ -1035,25 +1095,27 @@ export function ComplaintDashboard() {
                     key: 'waiting',
                     label: t('complaintDash.segWaiting', { defaultValue: 'Still waiting' }),
                     value: d.health.chatsWaiting,
-                    className: 'bg-warning',
+                    // Destructive, not warning (a light token that dies on the
+                    // light theme) — and it matches the Chats-waiting KPI chip.
+                    className: 'bg-destructive',
                   },
                 ]}
               />
-            </Card>
+            </SectionCard>
           </div>
 
           {/* ── Trend ────────────────────────────────────────────────────── */}
-          <Card
+          <SectionCard
             title={t('complaintDash.perMonth', { defaultValue: 'Complaints per month' })}
             hint={t('complaintDash.perMonthHint', {
               defaultValue: 'Volume as columns, compensation paid overlaid as a line.',
             })}
           >
             <TrendChart months={d.months} />
-          </Card>
+          </SectionCard>
 
           {/* ── Agent performance ────────────────────────────────────────── */}
-          <Card
+          <SectionCard
             title={t('complaintDash.agentPerf', { defaultValue: 'Agent performance' })}
             hint={t('complaintDash.agentPerfHint', {
               defaultValue: 'Complaints handled, how many are finished, and what they cost.',
@@ -1067,7 +1129,7 @@ export function ComplaintDashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-2xs uppercase tracking-[0.08em] text-muted-foreground">
+                    <tr className="border-b border-border text-2xs uppercase tracking-[0.12em] text-muted-foreground">
                       <th className="py-2 text-start font-semibold">
                         {t('complaintDash.colAgent', { defaultValue: 'Agent' })}
                       </th>
@@ -1138,15 +1200,40 @@ export function ComplaintDashboard() {
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr className="border-t border-border bg-secondary/40 font-semibold text-foreground">
+                      <td className="py-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        {t('complaintDash.tableTotal', { defaultValue: 'Total' })}
+                      </td>
+                      <td className="py-2 text-end tabular-nums">{agentTotals.logged}</td>
+                      <td className="py-2 text-end tabular-nums">{agentTotals.open}</td>
+                      <td className="py-2 text-end tabular-nums">{agentTotals.replies}</td>
+                      <td className="py-2 text-end tabular-nums">{agentTotals.solved}</td>
+                      <td className="py-2 text-end tabular-nums">
+                        {agentTotals.logged
+                          ? `${Math.round((agentTotals.solved / agentTotals.logged) * 100)}%`
+                          : '—'}
+                      </td>
+                      {/* A mean of per-agent means is not the team's mean. */}
+                      <td className="py-2 text-end tabular-nums">—</td>
+                      <td className="py-2 text-end tabular-nums">{agentTotals.chatsOpen}</td>
+                      <td className="py-2 text-end tabular-nums">{agentTotals.chatsSolved}</td>
+                      <td className="py-2 text-end tabular-nums">
+                        {agentTotals.compensation.toLocaleString(undefined, {
+                          maximumFractionDigits: 0,
+                        })}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             )}
-          </Card>
+          </SectionCard>
 
           {/* ── Agent performance: chat ──────────────────────────────────
               His second table. Complaint counts say nothing about who is
               picking conversations up, which is the other half of the day. */}
-          <Card
+          <SectionCard
             title={t('complaintDash.chatPerf', { defaultValue: 'Agent performance — chat' })}
             hint={t('complaintDash.chatPerfHint', {
               defaultValue:
@@ -1161,7 +1248,7 @@ export function ComplaintDashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-2xs uppercase tracking-[0.08em] text-muted-foreground">
+                    <tr className="border-b border-border text-2xs uppercase tracking-[0.12em] text-muted-foreground">
                       <th className="py-2 text-start font-semibold">
                         {t('complaintDash.colAgent', { defaultValue: 'Agent' })}
                       </th>
@@ -1213,10 +1300,32 @@ export function ComplaintDashboard() {
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr className="border-t border-border bg-secondary/40 font-semibold text-foreground">
+                      <td className="py-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        {t('complaintDash.tableTotal', { defaultValue: 'Total' })}
+                      </td>
+                      <td className="py-2 text-end tabular-nums">{chatTotals.messages}</td>
+                      <td className="py-2 text-end tabular-nums">{chatTotals.chatsHandled}</td>
+                      <td className="py-2 text-end tabular-nums">{chatTotals.chatsSolved}</td>
+                      <td className="py-2 text-end tabular-nums">{chatTotals.offered}</td>
+                      <td className="py-2 text-end tabular-nums">{chatTotals.answered}</td>
+                      <td
+                        className={cn(
+                          'py-2 text-end tabular-nums',
+                          chatTotals.missed > 0 && 'text-destructive',
+                        )}
+                      >
+                        {chatTotals.missed}
+                      </td>
+                      {/* A mean of per-agent means is not the team's mean. */}
+                      <td className="py-2 text-end tabular-nums">—</td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             )}
-          </Card>
+          </SectionCard>
 
           {/* ── Breakdowns ───────────────────────────────────────────────── */}
           <div className="grid gap-4 md:grid-cols-2">
@@ -1224,7 +1333,7 @@ export function ComplaintDashboard() {
                 agent": that ranks who logged the most, this ranks who is still
                 holding unfinished work — a heavy logger with nothing
                 outstanding is the opposite of a problem. */}
-            <Card
+            <SectionCard
               title={t('complaintDash.unsolvedByAgent', {
                 defaultValue: 'Unsolved complaints by agent',
               })}
@@ -1262,7 +1371,7 @@ export function ComplaintDashboard() {
                   )}
                 />
               )}
-            </Card>
+            </SectionCard>
             <CutCard
               title={t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' })}
               hint={
@@ -1296,7 +1405,9 @@ export function ComplaintDashboard() {
               title={t('complaintDash.byBrand', { defaultValue: 'By brand' })}
               cut={d.byBrand}
               total={d.total}
-              color="bg-warning"
+              // Magenta, not warning: `--warning` is a light token whose bars
+              // wash out on the light theme.
+              color="bg-magenta"
               onSelect={drillInto(
                 t('complaintDash.byBrand', { defaultValue: 'By brand' }),
                 (r) => r.brandName,
@@ -1309,7 +1420,7 @@ export function ComplaintDashboard() {
               })}
               cut={d.byArea}
               total={d.total}
-              color="bg-warning"
+              color="bg-primary"
               onSelect={drillInto(
                 t('complaintDash.byArea', { defaultValue: 'By area' }),
                 (r) => r.area,

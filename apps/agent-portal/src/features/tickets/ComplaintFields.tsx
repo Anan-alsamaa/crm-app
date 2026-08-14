@@ -573,11 +573,12 @@ export function ComplaintSection({
   return (
     <section
       className={cn(
-        'px-6 py-5',
-        // A hairline, not a box. Four bordered-and-shadowed panels is the
-        // "drop shadows on every panel" admin template PRODUCT.md names as an
-        // anti-reference, and it turns one task into four things to look at.
-        // The rule separates just as well and disappears while reading.
+        // SectionCard anatomy (FLUID DARK, 2026-08-14): the elevated board
+        // surface — charcoal card, hairline ring, soft shadow — so each form
+        // half reads as a peer of every other dashboard card. This supersedes
+        // the earlier flat-hairline treatment; the cards separate themselves
+        // now, so `divider` survives only for callers that still pass it.
+        'rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.06] shadow-soft',
         divider && 'border-t border-border',
       )}
     >

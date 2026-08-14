@@ -3,30 +3,26 @@ import { cn } from './cn.js';
 
 export type StatStripTone = 'blue' | 'violet' | 'green' | 'amber' | 'crimson' | 'neutral';
 
-// Vibrant tinted tiles — saturated wash + strong matching number per tone
-// (the colorful stat-card pattern from the reference dashboards).
-const TILE: Record<StatStripTone, string> = {
-  blue: 'bg-sky-500/10 ring-sky-500/25',
-  violet: 'bg-violet-500/10 ring-violet-500/25',
-  green: 'bg-emerald-500/10 ring-emerald-500/25',
-  amber: 'bg-orange-400/15 ring-orange-400/30',
-  crimson: 'bg-rose-500/10 ring-rose-500/25',
-  neutral: 'bg-card ring-foreground/[0.06]',
-};
+// Boxed mini KPI tiles — a uniform card box, with the tone carried by the
+// numeral hue + dot (the board-style stat-tile pattern from the reference
+// dashboards). Theme tokens only, so the light theme survives.
 const NUM: Record<StatStripTone, string> = {
-  blue: 'text-sky-600',
-  violet: 'text-violet-600',
-  green: 'text-emerald-600',
-  amber: 'text-orange-500',
-  crimson: 'text-rose-600',
+  blue: 'text-sky',
+  violet: 'text-violet',
+  green: 'text-success',
+  // `--warning` is a light token (its ink flips per theme), so a warning-hued
+  // numeral fails contrast on the card in one theme or the other. Keep the
+  // number in foreground ink and let the dot carry the hue.
+  amber: 'text-foreground',
+  crimson: 'text-destructive',
   neutral: 'text-foreground',
 };
 const DOT: Record<StatStripTone, string> = {
-  blue: 'bg-sky-500',
-  violet: 'bg-violet-500',
-  green: 'bg-emerald-500',
-  amber: 'bg-orange-400',
-  crimson: 'bg-rose-500',
+  blue: 'bg-sky',
+  violet: 'bg-violet',
+  green: 'bg-success',
+  amber: 'bg-warning',
+  crimson: 'bg-destructive',
   neutral: 'bg-muted-foreground/50',
 };
 
@@ -37,7 +33,7 @@ export interface StatStripItem {
 }
 
 /**
- * A row of colorful stat tiles used at the top of list pages — the bold
+ * A row of boxed stat tiles used at the top of list pages — the bold
  * rebrand header that replaces thin "2 total · 2 active" toolbar text.
  * Auto-fits: tiles wrap responsively.
  */
@@ -60,17 +56,19 @@ export function StatStrip({
           <div
             key={i}
             role="listitem"
-            className={cn(
-              'rounded-2xl px-4 py-3 shadow-soft ring-1 transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
-              TILE[tone],
-            )}
+            className="rounded-xl bg-card px-3 py-2 shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5"
           >
-            <div className={cn('text-2xl font-extrabold leading-none tabular-nums', NUM[tone])}>
+            <div
+              className={cn(
+                'text-2xl font-extrabold leading-none tabular-nums tracking-[-0.03em]',
+                NUM[tone],
+              )}
+            >
               {it.value}
             </div>
             <div className="mt-1 flex items-center gap-1.5">
               <span className={cn('h-1.5 w-1.5 rounded-full', DOT[tone])} aria-hidden />
-              <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {it.label}
               </span>
             </div>

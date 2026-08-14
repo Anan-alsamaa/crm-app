@@ -1,6 +1,5 @@
 import type { JSX, ReactNode } from 'react';
 import { cn } from './cn.js';
-import { Pill } from './Pill.js';
 
 export interface PageHeaderProps {
   /** Title prefix (rendered bold, in display ink). */
@@ -12,7 +11,7 @@ export interface PageHeaderProps {
   accent?: ReactNode;
   /** One-line subtitle in muted text. */
   subtitle?: ReactNode;
-  /** Optional coral eyebrow pill content (e.g. "● new · single-origin"). */
+  /** Optional jade eyebrow chip content (e.g. "● new · single-origin"). */
   eyebrow?: ReactNode;
   /** Trailing actions (buttons, filters) rendered at the start side. */
   actions?: ReactNode;
@@ -22,17 +21,17 @@ export interface PageHeaderProps {
 }
 
 const sizes: Record<NonNullable<PageHeaderProps['size']>, string> = {
-  md: 'text-2xl sm:text-3xl',
-  lg: 'text-3xl sm:text-4xl',
-  xl: 'text-4xl sm:text-5xl',
+  md: 'text-xl sm:text-2xl',
+  lg: 'text-2xl sm:text-3xl',
+  xl: 'text-3xl sm:text-4xl',
 };
 
 /**
- * Marketing-grade page header for product surfaces. Sets the energy from the
- * host-page hero: coral eyebrow + huge bold title with a teal accent line +
- * muted subtitle, in a generous vertical rhythm.
+ * Board-grade page header for product surfaces: jade eyebrow chip + big
+ * display title with a jade accent word + muted subtitle, actions at the end
+ * side, in a generous vertical rhythm.
  *
- * Pair with a `bg-transparent` page wrapper so the body's mesh canvas shows
+ * Pair with a `bg-transparent` page wrapper so the near-black canvas shows
  * through behind it.
  */
 export function PageHeader({
@@ -50,13 +49,13 @@ export function PageHeader({
     >
       <div className="space-y-3">
         {eyebrow && (
-          <Pill tone="pink" size="md">
+          <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-primary/15 px-2.5 text-2xs font-semibold uppercase tracking-[0.12em] text-primary ring-1 ring-inset ring-primary/25">
             {eyebrow}
-          </Pill>
+          </span>
         )}
         <h2
           className={cn(
-            'font-extrabold text-display leading-[1.02] tracking-[-0.035em] text-balance',
+            'font-bold text-display leading-[1.1] tracking-tight text-balance',
             sizes[size],
           )}
         >
@@ -69,7 +68,7 @@ export function PageHeader({
           )}
         </h2>
         {subtitle && (
-          <p className="max-w-prose text-base text-muted-foreground leading-relaxed">{subtitle}</p>
+          <p className="max-w-prose text-sm text-muted-foreground leading-relaxed">{subtitle}</p>
         )}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}

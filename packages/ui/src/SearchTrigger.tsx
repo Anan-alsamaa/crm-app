@@ -4,8 +4,8 @@ import { SearchIcon } from './Icon.js';
 
 /*
  * SearchTrigger — a search-field-looking button for the top bar that opens the
- * command palette. Styled as an inset search field (subtle border + tinted fill,
- * no drop shadow) so it sits flush inside the white navbar rather than floating
+ * command palette. Styled as an inset search well (`--input` fill + hairline,
+ * no drop shadow) so it sits flush inside the top bar rather than floating
  * like a card. Leading magnifier, a "Search…" placeholder, and a plain ⌘ + K
  * hint. It's a trigger, not a real input — click or Cmd/Ctrl+K opens the one
  * palette, where the actual typing and clearing happen.
@@ -13,7 +13,7 @@ import { SearchIcon } from './Icon.js';
  * `fullWidth` makes it the centered, full-width bar in the middle of the top bar;
  * the default compact form is for tight spots like the mobile action row.
  *
- * `tone` picks the surface it sits on. The default `light` is the white navbar.
+ * `tone` picks the surface it sits on. The default `light` is the app top bar.
  * `dark` is for the brand rail surface (the agent portal's dark utility bar),
  * where the light tokens would render near-invisible: it lifts the fill with
  * white alphas over the teal rather than tinting a dark accent down, and holds
@@ -63,7 +63,7 @@ export function SearchTrigger({
         isDark &&
           'bg-white/[0.10] text-rail-foreground/80 ring-white/15 hover:bg-white/[0.16] hover:text-rail-foreground hover:ring-white/25 focus-visible:ring-rail-foreground/60',
         !isDark &&
-          'bg-secondary/50 text-muted-foreground ring-border/70 shadow-sm shadow-foreground/[0.03] hover:bg-secondary hover:text-foreground hover:ring-primary/30 hover:shadow-md hover:shadow-foreground/[0.06] focus-visible:ring-primary/50',
+          'bg-input text-muted-foreground ring-foreground/[0.08] hover:text-foreground hover:ring-foreground/[0.14] focus-visible:ring-primary/40',
         fullWidth ? 'h-10 w-full ps-4 pe-2' : 'h-9 ps-3.5 pe-2',
         className,
       )}
@@ -92,7 +92,7 @@ export function SearchTrigger({
           'font-sans text-[10px] font-semibold tracking-tight shadow-sm sm:inline-flex',
           isDark
             ? 'border-white/20 bg-white/10 text-rail-foreground/75'
-            : 'border-border/80 bg-background/70 text-muted-foreground/80',
+            : 'border-border/80 bg-secondary/70 text-muted-foreground/80',
         )}
       >
         {meta}

@@ -33,21 +33,23 @@ const base =
 
 const variants: Record<Variant, string> = {
   /**
-   * Default CTA = solid display ink with a jade-tinted shadow. The previous
+   * Default CTA = solid display ink with a soft jade glow. The previous
    * cyan→violet gradient was the single loudest "AI default" in the product —
    * a flagship CTA states its case in one confident color and lets the
-   * tinted shadow carry the depth.
+   * jade-tinted glow carry the depth (it reads as light on the dark canvas).
    */
   default:
     'bg-display text-background border border-transparent ' +
-    'shadow-md shadow-primary/20 hover:bg-foreground hover:shadow-lg hover:shadow-primary/25',
-  // Solid brand fill for secondary brand moments.
+    'shadow-[0_8px_24px_-12px_oklch(var(--primary)/0.5)] hover:bg-foreground ' +
+    'hover:shadow-[0_10px_28px_-12px_oklch(var(--primary)/0.6)]',
+  // Solid brand fill for secondary brand moments — same jade glow as default.
   brand:
     'bg-primary text-primary-foreground border border-transparent ' +
-    'shadow-sm shadow-primary/30 hover:bg-primary/90 hover:shadow-md hover:shadow-primary/40',
+    'shadow-[0_8px_24px_-12px_oklch(var(--primary)/0.5)] hover:bg-primary/90 ' +
+    'hover:shadow-[0_10px_28px_-12px_oklch(var(--primary)/0.6)]',
   secondary:
-    'bg-secondary/70 text-foreground border border-transparent ' +
-    'ring-1 ring-foreground/[0.05] hover:bg-secondary',
+    'bg-secondary text-foreground border border-transparent ' +
+    'ring-1 ring-foreground/[0.06] hover:ring-foreground/[0.12]',
   outline:
     'bg-card/40 text-foreground border-0 ring-1 ring-foreground/[0.08] hover:bg-card hover:ring-foreground/[0.14]',
   ghost: 'bg-transparent text-foreground border border-transparent hover:bg-secondary/60',

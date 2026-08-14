@@ -430,7 +430,9 @@ export function CreateTicketDialog({
   return (
     <form
       onSubmit={onSubmit}
-      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card"
+      // The near-black canvas, not a full-bleed sheet: the two form halves are
+      // elevated cards now, and cards need ground to float off.
+      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
       noValidate
     >
       {/* One header, not a back-strip stacked on a title bar. Save stays
@@ -520,7 +522,7 @@ export function CreateTicketDialog({
             in whatever is left. Two 50% columns on a 1920 screen put 640px of
             inputs against a 300px empty gutter each, which reads as a layout
             that failed rather than one that chose. */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 justify-center overflow-y-auto lg:grid-cols-[minmax(0,44rem)_minmax(0,44rem)] lg:overflow-hidden">
+        <div className="grid min-h-0 flex-1 grid-cols-1 justify-center gap-4 overflow-y-auto p-4 sm:p-5 lg:grid-cols-[minmax(0,44rem)_minmax(0,44rem)] lg:overflow-hidden">
           <div className="min-h-0 lg:overflow-y-auto">
             <ComplaintSection
               tone="violet"
@@ -579,9 +581,9 @@ export function CreateTicketDialog({
             </ComplaintSection>
           </div>
 
-          {/* The rule between the columns is vertical and logical, so it swaps
-              sides in Arabic. */}
-          <div className="min-h-0 border-t border-border lg:overflow-y-auto lg:border-s lg:border-t-0">
+          {/* No rule between the columns any more — the cards' own edges do
+              the separating, and the grid gap is logical so RTL is free. */}
+          <div className="min-h-0 lg:overflow-y-auto">
             <ComplaintSection
               tone="success"
               title={t('complaint.resolution', { defaultValue: 'Resolution' })}

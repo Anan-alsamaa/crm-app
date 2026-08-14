@@ -132,7 +132,16 @@ export function Login() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-12">
+    // No solid fill here: the body already paints the near-black canvas with
+    // the ambient brand wash, and covering it flattened the welcome screen.
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-12">
+      {/* Jade glow pooled behind the card — the accent light of the board
+          language. Logical/centered positioning so RTL needs nothing extra. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-1/2 mx-auto h-[30rem] w-full max-w-[36rem] -translate-y-1/2 rounded-full bg-primary/[0.08] blur-3xl"
+      />
+
       <div className="absolute end-5 top-5 z-10">
         <LanguageToggle />
       </div>
@@ -143,11 +152,16 @@ export function Login() {
         </span>
       </div>
 
+      {/* Centered board card — elevated surface, hairline ring, deep shadow. */}
       <div className="relative z-10 w-full max-w-[420px] animate-fade-in">
-        <div className="overflow-hidden rounded-3xl bg-card shadow-2xl shadow-black/40 ring-1 ring-foreground/[0.08]">
-          <div className="overflow-hidden rounded-3xl bg-card">
+        <div className="overflow-hidden rounded-2xl bg-card shadow-xl shadow-black/40 ring-1 ring-foreground/[0.06]">
+          <div className="overflow-hidden rounded-2xl bg-card">
+            {/* Top brand panel inside the card — the logo sits in a tinted tile
+                chip, the board's icon-chip move at welcome scale. */}
             <div className="flex flex-col items-center gap-3 px-8 pb-2 pt-8 text-center">
-              <YijiLogo size={72} />
+              <span className="grid h-16 w-16 place-items-center rounded-2xl bg-secondary/70 ring-1 ring-foreground/[0.06]">
+                <YijiLogo size={44} />
+              </span>
               <div className="space-y-1.5">
                 <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
                   {view === 'signin'

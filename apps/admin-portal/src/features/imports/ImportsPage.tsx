@@ -8,6 +8,7 @@ import {
   FormField,
   SelectMenu,
   Skeleton,
+  StoreIcon,
   Table,
   TableSurface,
   Td,
@@ -17,6 +18,7 @@ import {
   Toolbar,
   ToolbarSpacer,
   Tr,
+  UploadIcon,
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { jobProducer } from '../../lib/job-producer.js';
@@ -152,71 +154,91 @@ export function ImportsPage() {
           </p>
         </div>
 
-        {/* Vendor select */}
+        {/* Vendor select — an action card with a tinted icon chip. */}
         <section className="rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft px-5 py-5">
-          <FormField
-            label={t('imports.vendor', { defaultValue: 'Target vendor' })}
-            hint={t('imports.vendorHint', {
-              defaultValue: 'Dedup runs per-vendor on phone OR email.',
-            })}
-          >
-            <SelectMenu
-              fullWidth
-              value={vendorId}
-              onChange={(v) => setVendorId(v)}
-              aria-label={t('imports.vendor', { defaultValue: 'Target vendor' })}
-              placeholder="—"
-              options={[
-                { value: '', label: '—' },
-                ...(vendors.data ?? []).map((v) => ({
-                  value: v.id,
-                  label: `${v.name} (${v.yiji_vendor_id})`,
-                })),
-              ]}
-            />
-          </FormField>
+          <div className="flex items-start gap-3.5">
+            <span
+              aria-hidden
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-tint text-sky"
+            >
+              <StoreIcon size={18} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <FormField
+                label={t('imports.vendor', { defaultValue: 'Target vendor' })}
+                hint={t('imports.vendorHint', {
+                  defaultValue: 'Dedup runs per-vendor on phone OR email.',
+                })}
+              >
+                <SelectMenu
+                  fullWidth
+                  value={vendorId}
+                  onChange={(v) => setVendorId(v)}
+                  aria-label={t('imports.vendor', { defaultValue: 'Target vendor' })}
+                  placeholder="—"
+                  options={[
+                    { value: '', label: '—' },
+                    ...(vendors.data ?? []).map((v) => ({
+                      value: v.id,
+                      label: `${v.name} (${v.yiji_vendor_id})`,
+                    })),
+                  ]}
+                />
+              </FormField>
+            </div>
+          </div>
         </section>
 
-        {/* File upload */}
+        {/* File upload — same card anatomy, upload chip in the jade tint. */}
         <section className="rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft px-5 py-5">
-          <FormField label={t('imports.file', { defaultValue: 'CSV file' })}>
-            {/* A bare <input type="file"> renders the BROWSER's control — grey
-                "Choose File | No file chosen" — which ignores the design system
-                entirely and is the one obviously foreign element on the page.
-                The input stays (it is what actually opens the picker and what
-                assistive tech drives) but is visually hidden inside a styled
-                label, so the whole area is a proper drop target. */}
-            <label
-              className={cn(
-                'flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border bg-secondary/40 px-4 py-7 text-center transition-colors duration-fast',
-                'hover:border-primary/50 hover:bg-primary/[0.04] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/40',
-              )}
+          <div className="flex items-start gap-3.5">
+            <span
+              aria-hidden
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-tint text-primary"
             >
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={onFileChange}
-                className="sr-only"
-              />
-              <span className="text-sm font-medium text-foreground">
-                {preview
-                  ? t('imports.chooseAnother', { defaultValue: 'Choose a different CSV' })
-                  : t('imports.chooseFile', { defaultValue: 'Choose a CSV file' })}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {t('imports.fileHint', {
-                  defaultValue: 'Header row required. UTF-8 recommended.',
-                })}
-              </span>
-            </label>
-          </FormField>
-          {upload.isPending && <Skeleton className="h-4 w-32 mt-2" />}
-          {preview && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t('imports.uploaded', { defaultValue: 'File uploaded' })}:{' '}
-              <span className="font-mono">{preview.filename}</span>
-            </p>
-          )}
+              <UploadIcon size={18} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <FormField label={t('imports.file', { defaultValue: 'CSV file' })}>
+                {/* A bare <input type="file"> renders the BROWSER's control — grey
+                    "Choose File | No file chosen" — which ignores the design system
+                    entirely and is the one obviously foreign element on the page.
+                    The input stays (it is what actually opens the picker and what
+                    assistive tech drives) but is visually hidden inside a styled
+                    label, so the whole area is a proper drop target. */}
+                <label
+                  className={cn(
+                    'flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border bg-secondary/40 px-4 py-7 text-center transition-colors duration-fast',
+                    'hover:border-primary/50 hover:bg-primary/[0.04] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/40',
+                  )}
+                >
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={onFileChange}
+                    className="sr-only"
+                  />
+                  <span className="text-sm font-medium text-foreground">
+                    {preview
+                      ? t('imports.chooseAnother', { defaultValue: 'Choose a different CSV' })
+                      : t('imports.chooseFile', { defaultValue: 'Choose a CSV file' })}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {t('imports.fileHint', {
+                      defaultValue: 'Header row required. UTF-8 recommended.',
+                    })}
+                  </span>
+                </label>
+              </FormField>
+              {upload.isPending && <Skeleton className="h-4 w-32 mt-2" />}
+              {preview && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t('imports.uploaded', { defaultValue: 'File uploaded' })}:{' '}
+                  <span className="font-mono">{preview.filename}</span>
+                </p>
+              )}
+            </div>
+          </div>
         </section>
 
         {/* Mapping + preview */}
@@ -228,7 +250,10 @@ export function ImportsPage() {
             <div className="rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft px-5 py-5 space-y-3">
               {preview.header.map((h) => (
                 <div key={h} className="grid grid-cols-12 items-center gap-2">
-                  <span className="col-span-5 truncate text-xs font-mono text-foreground">{h}</span>
+                  {/* The CSV's own header, as a code chip. */}
+                  <span className="col-span-5 max-w-full justify-self-start truncate rounded-md bg-secondary px-2 py-1 font-mono text-2xs text-foreground ring-1 ring-inset ring-foreground/[0.06]">
+                    {h}
+                  </span>
                   <span className="col-span-1 text-center text-muted-foreground">→</span>
                   <div className="col-span-6">
                     <SelectMenu

@@ -146,7 +146,7 @@ export function ContactsPage() {
             placeholder={t('contacts.searchPlaceholder', { defaultValue: 'Search…' })}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="block h-8 w-full rounded-md border border-border bg-background/60 ps-8 pe-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none text-start transition-colors duration-fast ease-out"
+            className="block h-8 w-full rounded-lg bg-input ps-8 pe-3 text-xs text-foreground placeholder:text-muted-foreground/60 ring-1 ring-inset ring-foreground/[0.08] hover:ring-foreground/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 text-start transition-[box-shadow,background-color] duration-fast ease-out"
           />
         </div>
         <Button type="button" variant="outline" size="sm" onClick={onExport}>
@@ -184,18 +184,20 @@ export function ContactsPage() {
           </div>
         )}
         {contacts.isLoading ? (
-          <ul className="mx-auto max-w-5xl space-y-1">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <li key={i} className="flex items-center gap-3 px-4 py-2.5">
-                <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
-                <div className="flex-1 space-y-1.5">
-                  <Skeleton className="h-3 w-40" />
-                  <Skeleton className="h-2.5 w-28" />
-                </div>
-                <Skeleton className="hidden h-2.5 w-24 sm:block" />
-              </li>
-            ))}
-          </ul>
+          <div className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+            <ul className="divide-y divide-foreground/[0.06]">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <li key={i} className="flex items-center gap-3 px-4 py-3">
+                  <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-3 w-40" />
+                    <Skeleton className="h-2.5 w-28" />
+                  </div>
+                  <Skeleton className="hidden h-2.5 w-24 sm:block" />
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : total === 0 ? (
           <EmptyState
             icon={<UsersIcon size={40} />}
@@ -210,49 +212,62 @@ export function ContactsPage() {
             {t('contacts.noMatch', { defaultValue: 'No contacts match your search.' })}
           </p>
         ) : (
-          <ul className="mx-auto max-w-5xl space-y-1">
-            {filtered.map((c) => {
-              const name = c.name ?? c.email ?? c.phone ?? c.external_customer_id ?? '—';
-              return (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/contacts/${c.id}`)}
-                    className={cn(
-                      'group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-start',
-                      'transition-colors duration-fast ease-out hover:bg-secondary/50',
-                      'focus-visible:outline-none focus-visible:bg-secondary/60',
-                    )}
-                  >
-                    <Avatar
-                      name={c.name}
-                      email={c.email}
-                      phone={c.phone}
-                      size="md"
-                      className="shrink-0"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-foreground">{name}</div>
-                      {c.email && (
-                        <div className="truncate text-xs text-muted-foreground">{c.email}</div>
+          // The board list surface: one elevated card, hairline row separators,
+          // and a footer aggregate band — not loose hover rows on the canvas.
+          <div className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+            <ul className="divide-y divide-foreground/[0.06]">
+              {filtered.map((c) => {
+                const name = c.name ?? c.email ?? c.phone ?? c.external_customer_id ?? '—';
+                return (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/contacts/${c.id}`)}
+                      // Fixed columns (avatar | identity | phone | vendor) so the
+                      // end-aligned cells line up down the list like table columns.
+                      className={cn(
+                        'group grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 text-start',
+                        'sm:grid-cols-[auto_minmax(0,1fr)_8.5rem_9rem]',
+                        'transition-colors duration-fast ease-out hover:bg-primary/[0.07]',
+                        'focus-visible:outline-none focus-visible:bg-secondary/60',
                       )}
-                    </div>
-                    {c.phone && (
-                      <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block">
-                        {c.phone}
-                      </span>
-                    )}
-                    <span
-                      title={c.vendor?.name ?? ''}
-                      className="hidden w-32 shrink-0 truncate text-end text-xs text-muted-foreground sm:block"
                     >
-                      {c.vendor?.name ?? '—'}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                      <Avatar
+                        name={c.name}
+                        email={c.email}
+                        phone={c.phone}
+                        size="md"
+                        className="shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-foreground">{name}</div>
+                        {c.email && (
+                          <div className="truncate text-xs text-muted-foreground">{c.email}</div>
+                        )}
+                      </div>
+                      <span className="hidden truncate text-end text-xs tabular-nums text-muted-foreground sm:block">
+                        {c.phone ?? '—'}
+                      </span>
+                      <span
+                        title={c.vendor?.name ?? ''}
+                        className="hidden truncate text-end text-xs text-muted-foreground sm:block"
+                      >
+                        {c.vendor?.name ?? '—'}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <footer className="flex h-11 items-center gap-6 border-t border-foreground/[0.08] bg-foreground/[0.02] px-4 text-xs text-muted-foreground">
+              <span className="tabular-nums">
+                <strong className="font-semibold text-foreground">{filtered.length}</strong>{' '}
+                {filtered.length === total
+                  ? t('contacts.total', { defaultValue: 'total' })
+                  : t('contacts.matching', { defaultValue: 'matching' })}
+              </span>
+            </footer>
+          </div>
         )}
       </div>
     </div>
