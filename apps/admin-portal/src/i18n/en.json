@@ -856,7 +856,19 @@
     "colReplies": "CRM replies",
     "drillHint": "Show these complaints",
     "drillCount": "{{n}} complaint(s) · {{money}} compensation",
-    "untitled": "(no subject)"
+    "untitled": "(no subject)",
+    "snapshot": "Ops snapshot",
+    "chipOpen": "Open",
+    "chipSolved": "Solved",
+    "chipWaiting": "Chats waiting",
+    "heatmap": "Weekly activity",
+    "heatmapHint": "Last six weeks — a darker cell is a busier day.",
+    "funnel": "Complaints funnel",
+    "funnelHint": "Each stage against everything logged in range.",
+    "funnelLogged": "Logged",
+    "funnelClosed": "Closed",
+    "funnelRated": "Rated",
+    "funnelSatisfied": "Satisfied"
   },
   "performance": {
     "title": "Agent performance",

@@ -5,6 +5,7 @@ import {
   ChartIcon,
   ClockIcon,
   cn,
+  DeltaBadge,
   Drawer,
   ErrorState,
   InboxIcon,
@@ -85,6 +86,7 @@ function Kpi({
   icon,
   visual,
   meter,
+  delta,
 }: {
   value: string;
   label: string;
@@ -95,6 +97,8 @@ function Kpi({
   visual?: React.ReactNode;
   /** Thin meter under the text — the boards' load reading, for the counts-of-a-whole. */
   meter?: React.ReactNode;
+  /** Month-over-month badge beside the numeral — the reference cards' +12%. */
+  delta?: React.ReactNode;
 }) {
   return (
     <div className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
@@ -106,8 +110,11 @@ function Kpi({
           {icon}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-3xl font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
-            {value}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-3xl font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
+              {value}
+            </div>
+            {delta}
           </div>
           <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {label}
@@ -222,6 +229,96 @@ function Bars({
           </li>
         );
       })}
+    </ul>
+  );
+}
+
+/**
+ * Weekly activity heatmap — the reference dashboard's grid: the last six ISO
+ * weeks as rows, weekdays as columns, cell intensity = complaints that day.
+ * Reads load patterns (weekend spikes, a bad Tuesday) that totals hide.
+ */
+function Heatmap({ rows, locale }: { rows: ComplaintRow[]; locale: string }) {
+  const byDay = new Map<string, number>();
+  for (const r of rows) {
+    const day = (r.date ?? '').slice(0, 10);
+    if (day) byDay.set(day, (byDay.get(day) ?? 0) + 1);
+  }
+  // 6 rows × 7 columns ending today, weeks starting Monday.
+  const today = new Date();
+  const dow = (today.getDay() + 6) % 7; // 0 = Monday
+  const weeks: Array<Array<{ iso: string; count: number }>> = [];
+  for (let w = 5; w >= 0; w--) {
+    const week: Array<{ iso: string; count: number }> = [];
+    for (let d = 0; d < 7; d++) {
+      const dt = new Date(today);
+      dt.setDate(today.getDate() - dow - w * 7 + d);
+      const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(
+        dt.getDate(),
+      ).padStart(2, '0')}`;
+      week.push({ iso, count: byDay.get(iso) ?? 0 });
+    }
+    weeks.push(week);
+  }
+  const max = Math.max(1, ...weeks.flat().map((c) => c.count));
+  const weekdayNames = weeks[0]!.map((c) =>
+    new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(new Date(`${c.iso}T12:00:00`)),
+  );
+  return (
+    <div>
+      <div className="mb-1.5 flex gap-1.5">
+        {weekdayNames.map((n, i) => (
+          <span
+            key={i}
+            className="flex-1 text-center text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+          >
+            {n}
+          </span>
+        ))}
+      </div>
+      <div className="space-y-1.5">
+        {weeks.map((week, wi) => (
+          <div key={wi} className="flex gap-1.5">
+            {week.map((c) => (
+              <span
+                key={c.iso}
+                title={`${c.iso} · ${c.count}`}
+                className="h-6 flex-1 rounded-md ring-1 ring-inset ring-foreground/[0.04]"
+                style={{
+                  backgroundColor: `oklch(var(--primary) / ${
+                    c.count === 0 ? 0.05 : 0.15 + 0.75 * (c.count / max)
+                  })`,
+                }}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The reference dashboard's funnel: each stage as a meter against the first
+ * stage, count at the end. Where the complaints go — and where they stall.
+ */
+function Funnel({
+  steps,
+}: {
+  steps: Array<{ label: string; value: number; tone: 'primary' | 'sky' | 'success' | 'violet' }>;
+}) {
+  const base = Math.max(1, steps[0]?.value ?? 1);
+  return (
+    <ul className="space-y-3.5">
+      {steps.map((s) => (
+        <li key={s.label}>
+          <div className="mb-1 flex items-baseline justify-between gap-2">
+            <span className="text-xs text-foreground">{s.label}</span>
+            <span className="text-xs font-semibold tabular-nums text-foreground">{s.value}</span>
+          </div>
+          <MeterBar value={(s.value / base) * 100} tone={s.tone} />
+        </li>
+      ))}
     </ul>
   );
 }
@@ -677,7 +774,7 @@ function DrillDown({
 }
 
 export function ComplaintDashboard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // Draft vs applied: his bar only re-runs the dashboard on Apply, which matters
   // when a filter change means refetching every ticket.
   const [draft, setDraft] = useState<ComplaintFilters>(emptyComplaintFilters);
@@ -933,6 +1030,22 @@ export function ComplaintDashboard() {
                     })
                   : ''
               }
+              delta={(() => {
+                // Month-over-month, only when two full-ish months exist. For a
+                // complaints count, DOWN is the good direction.
+                const cur = d.months[d.months.length - 1]?.count;
+                const prev = d.months[d.months.length - 2]?.count;
+                if (cur == null || prev == null || prev === 0) return undefined;
+                const pct = Math.round(((cur - prev) / prev) * 100);
+                // A partial month against a full one produces four-digit
+                // swings that read as noise, not signal — show nothing.
+                if (pct === 0 || Math.abs(pct) > 200) return undefined;
+                return (
+                  <DeltaBadge direction={pct > 0 ? 'up' : 'down'} positiveIsGood={false}>
+                    {pct > 0 ? `+${pct}%` : `${pct}%`}
+                  </DeltaBadge>
+                );
+              })()}
             />
             <Kpi
               tone="sky"
@@ -1016,6 +1129,48 @@ export function ComplaintDashboard() {
               })}
             </p>
           )}
+
+          {/* ── Ops snapshot ─────────────────────────────────────────────
+              The reference dashboard's chip row: the four numbers a shift
+              lead quotes out loud, as saturated chips. text-background flips
+              with the theme, so the label holds on both. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="me-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('complaintDash.snapshot', { defaultValue: 'Ops snapshot' })}
+            </span>
+            {(
+              [
+                ['bg-sky', t('complaintDash.chipOpen', { defaultValue: 'Open' }), d.open],
+                [
+                  'bg-violet',
+                  t('complaintDash.kpiOverdue', { defaultValue: 'Overdue' }),
+                  d.overdue,
+                ],
+                ['bg-success', t('complaintDash.chipSolved', { defaultValue: 'Solved' }), d.closed],
+                [
+                  'bg-destructive',
+                  t('complaintDash.chipWaiting', { defaultValue: 'Chats waiting' }),
+                  d.chatsWaiting,
+                ],
+                [
+                  'bg-primary',
+                  'SAR',
+                  d.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 }),
+                ],
+              ] as const
+            ).map(([bg, label, value]) => (
+              <span
+                key={label}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-background shadow-sm',
+                  bg,
+                )}
+              >
+                <span className="tabular-nums">{value}</span>
+                <span className="opacity-80">{label}</span>
+              </span>
+            ))}
+          </div>
 
           {/* ── The two rings ────────────────────────────────────────────
               Same numbers as the By-status and By-brand bars further down, read
@@ -1165,6 +1320,52 @@ export function ComplaintDashboard() {
           >
             <TrendChart months={d.months} />
           </SectionCard>
+
+          {/* ── Heatmap + funnel ─────────────────────────────────────────
+              The reference dashboard's pair: WHEN complaints land (weekday ×
+              week intensity) beside WHERE they go (logged → closed → rated →
+              satisfied). */}
+          <div className="grid items-start gap-4 lg:grid-cols-[1.6fr_1fr]">
+            <SectionCard
+              title={t('complaintDash.heatmap', { defaultValue: 'Weekly activity' })}
+              hint={t('complaintDash.heatmapHint', {
+                defaultValue: 'Last six weeks — a darker cell is a busier day.',
+              })}
+            >
+              <Heatmap rows={d.rows ?? []} locale={i18n?.language ?? 'en'} />
+            </SectionCard>
+            <SectionCard
+              title={t('complaintDash.funnel', { defaultValue: 'Complaints funnel' })}
+              hint={t('complaintDash.funnelHint', {
+                defaultValue: 'Each stage against everything logged in range.',
+              })}
+            >
+              <Funnel
+                steps={[
+                  {
+                    label: t('complaintDash.funnelLogged', { defaultValue: 'Logged' }),
+                    value: d.total,
+                    tone: 'primary',
+                  },
+                  {
+                    label: t('complaintDash.funnelClosed', { defaultValue: 'Closed' }),
+                    value: d.closed,
+                    tone: 'sky',
+                  },
+                  {
+                    label: t('complaintDash.funnelRated', { defaultValue: 'Rated' }),
+                    value: d.rated,
+                    tone: 'violet',
+                  },
+                  {
+                    label: t('complaintDash.funnelSatisfied', { defaultValue: 'Satisfied' }),
+                    value: d.satisfied,
+                    tone: 'success',
+                  },
+                ]}
+              />
+            </SectionCard>
+          </div>
 
           {/* ── Agent performance ────────────────────────────────────────── */}
           <SectionCard
