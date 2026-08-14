@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { cn } from './cn.js';
 
@@ -15,6 +15,36 @@ import { cn } from './cn.js';
  */
 
 export type MetricTone = 'primary' | 'success' | 'destructive' | 'sky' | 'violet';
+
+/**
+ * Animate a metric from 0 to its value on mount.
+ *
+ * Two frames, not one: a browser that paints the committed state before the
+ * effect runs would show the final value with no transition at all, and
+ * requestAnimationFrame twice guarantees the zero state was painted first.
+ * Honours prefers-reduced-motion by jumping straight to the value.
+ */
+function useDrawIn(value: number): number {
+  const [drawn, setDrawn] = useState(0);
+  useEffect(() => {
+    if (
+      typeof window === 'undefined' ||
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ) {
+      setDrawn(value);
+      return;
+    }
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setDrawn(value));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [value]);
+  return drawn;
+}
 
 // Inline SVG strokes/fills — token variables, not literals.
 const TONE_COLOR: Record<MetricTone, string> = {
@@ -61,6 +91,9 @@ export function ProgressRing({
   className,
 }: ProgressRingProps): JSX.Element {
   const clamped = Math.min(100, Math.max(0, value));
+  // The arc sweeps in from zero on mount — the ring reads as a measurement
+  // being taken rather than a picture of one.
+  const drawn = useDrawIn(clamped);
   const r = Math.max((size - stroke) / 2, 1);
   const circumference = 2 * Math.PI * r;
   // A string label doubles as the accessible name; otherwise the percentage.
@@ -90,7 +123,8 @@ export function ProgressRing({
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - clamped / 100)}
+          strokeDashoffset={circumference * (1 - drawn / 100)}
+          style={{ transition: 'stroke-dashoffset 900ms cubic-bezier(0.23, 1, 0.32, 1)' }}
         />
       </svg>
       {label != null && (
@@ -123,8 +157,11 @@ export function MeterBar({
   className,
 }: MeterBarProps): JSX.Element {
   const clamped = Math.min(100, Math.max(0, value));
+  // Same draw-in as the ring: the fill grows to its reading on mount.
+  const drawn = useDrawIn(clamped);
   if (segments && segments > 0) {
     const filled = Math.round((clamped / 100) * segments);
+    const drawnFilled = Math.round((drawn / 100) * segments);
     return (
       <div className={cn('flex items-center gap-0.5', className)}>
         {Array.from({ length: segments }, (_, i) => (
@@ -132,9 +169,11 @@ export function MeterBar({
             key={i}
             aria-hidden
             className={cn(
-              'h-1.5 min-w-0 flex-1 rounded-full',
-              i < filled ? TONE_BG[tone] : 'bg-foreground/[0.08]',
+              'h-1.5 min-w-0 flex-1 rounded-full transition-colors duration-medium ease-out',
+              i < drawnFilled ? TONE_BG[tone] : 'bg-foreground/[0.08]',
             )}
+            // Blocks light up left-to-right rather than all at once.
+            style={{ transitionDelay: `${Math.min(i, filled) * 45}ms` }}
           />
         ))}
       </div>
@@ -143,7 +182,13 @@ export function MeterBar({
   return (
     <div className={cn('h-1.5 overflow-hidden rounded-full bg-foreground/[0.08]', className)}>
       {/* Block-level fill hugs the start edge, so RTL flips for free. */}
-      <div className={cn('h-full rounded-full', TONE_BG[tone])} style={{ width: `${clamped}%` }} />
+      <div
+        className={cn('h-full rounded-full', TONE_BG[tone])}
+        style={{
+          width: `${drawn}%`,
+          transition: 'width 900ms cubic-bezier(0.23, 1, 0.32, 1)',
+        }}
+      />
     </div>
   );
 }
@@ -265,6 +310,12 @@ export interface SectionCardProps {
   hint?: ReactNode;
   /** End-aligned header slot — a filter, a total, a link. */
   aside?: ReactNode;
+  /**
+   * Position in a group of cards. Sets the entrance delay so a dashboard
+   * cascades in instead of appearing all at once (capped so a long page
+   * never makes the reader wait).
+   */
+  index?: number;
   className?: string;
   children: ReactNode;
 }
@@ -278,12 +329,20 @@ export function SectionCard({
   title,
   hint,
   aside,
+  index = 0,
   className,
   children,
 }: SectionCardProps): JSX.Element {
   return (
     <section
-      className={cn('rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.06] shadow-soft', className)}
+      style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
+      className={cn(
+        'rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.06] shadow-soft',
+        // Settles up into place on mount, and lifts a hair under the cursor.
+        'motion-safe:animate-rise-in',
+        'transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
+        className,
+      )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">

@@ -87,6 +87,7 @@ function Kpi({
   visual,
   meter,
   delta,
+  order = 0,
 }: {
   value: string;
   label: string;
@@ -99,9 +100,18 @@ function Kpi({
   meter?: React.ReactNode;
   /** Month-over-month badge beside the numeral — the reference cards' +12%. */
   delta?: React.ReactNode;
+  /** Position in the KPI row — drives the entrance cascade. */
+  order?: number;
 }) {
   return (
-    <div className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
+    <div
+      style={{ animationDelay: `${Math.min(order, 6) * 55}ms` }}
+      className={cn(
+        'rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]',
+        'motion-safe:animate-rise-in',
+        'transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
+      )}
+    >
       <div className="flex items-start gap-3">
         <span
           aria-hidden
@@ -624,7 +634,7 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
           </div>
           {/* Columns: slim, centered, rounded — not full-bleed slabs. */}
           <div className="flex items-end gap-1" style={{ height: H }}>
-            {months.map((m) => (
+            {months.map((m, i) => (
               <div
                 key={m.month}
                 className="group relative flex h-full flex-1 flex-col justify-end"
@@ -634,8 +644,11 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
                   {m.count}
                 </span>
                 <div
-                  className="mx-auto w-[55%] min-w-[8px] max-w-[28px] rounded-full bg-gradient-to-t from-primary/60 to-primary transition-[filter] duration-fast group-hover:brightness-110"
-                  style={{ height: `${Math.max(4, (m.count / maxCount) * (H - 24))}px` }}
+                  className="mx-auto w-[55%] min-w-[8px] max-w-[28px] origin-bottom rounded-full bg-gradient-to-t from-primary/60 to-primary transition-[filter] duration-fast group-hover:brightness-110 motion-safe:animate-grow-y"
+                  style={{
+                    height: `${Math.max(4, (m.count / maxCount) * (H - 24))}px`,
+                    animationDelay: `${Math.min(i, 12) * 45}ms`,
+                  }}
                 />
               </div>
             ))}
@@ -1020,6 +1033,7 @@ export function ComplaintDashboard() {
             <Kpi
               tone="neutral"
               icon={<TicketIcon size={17} />}
+              order={0}
               value={d.total.toLocaleString()}
               label={t('complaintDash.kpiTotal', { defaultValue: 'Complaints' })}
               sub={
@@ -1050,6 +1064,7 @@ export function ComplaintDashboard() {
             <Kpi
               tone="sky"
               icon={<InboxIcon size={17} />}
+              order={1}
               value={String(d.open)}
               label={t('complaintDash.kpiOpen', { defaultValue: 'Open / in progress' })}
               sub={
@@ -1065,6 +1080,7 @@ export function ComplaintDashboard() {
             <Kpi
               tone="violet"
               icon={<ClockIcon size={17} />}
+              order={2}
               value={String(d.overdue)}
               label={t('complaintDash.kpiOverdue', { defaultValue: 'Overdue' })}
               // His "Escalated" has no equivalent status here, so this counts
@@ -1075,6 +1091,7 @@ export function ComplaintDashboard() {
             <Kpi
               tone="success"
               icon={<SparkleIcon size={17} />}
+              order={3}
               value={d.satisfiedPct === null ? '—' : `${Math.round(d.satisfiedPct)}%`}
               label={t('complaintDash.kpiSatisfied', { defaultValue: 'Rated satisfied' })}
               sub={t('complaintDash.ratedOf', {
@@ -1087,6 +1104,7 @@ export function ComplaintDashboard() {
             <Kpi
               tone="primary"
               icon={<ChartIcon size={17} />}
+              order={4}
               value={d.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               label={t('complaintDash.kpiCompensation', { defaultValue: 'Compensation SAR' })}
               sub={
@@ -1102,6 +1120,7 @@ export function ComplaintDashboard() {
             <Kpi
               tone="destructive"
               icon={<UsersIcon size={17} />}
+              order={5}
               value={String(d.chatsWaiting)}
               label={t('complaintDash.kpiChats', { defaultValue: 'Chats waiting' })}
               sub={t('complaintDash.ofChats', {

@@ -100,7 +100,12 @@
     "storeBasis": "From {{total}} of {{all}} tickets that have a linked order.",
     "compensationIssued": "Compensation issued",
     "notWiredYet": "Not reporting yet",
-    "compensationIssuedHint": "Coupon value and compensation are already recorded on every ticket. This panel starts reporting once the rules for it are agreed."
+    "compensationIssuedHint": "Coupon value and compensation are already recorded on every ticket. This panel starts reporting once the rules for it are agreed.",
+    "heroWelcome": "Welcome back, {{name}}",
+    "heroWelcomeBare": "Welcome back",
+    "heroSub": "Here is where every complaint stands right now — filter the range below, or jump straight in.",
+    "heroTickets": "Tickets report",
+    "heroAgents": "Agent performance"
   },
   "automation": {
     "title": "Automation",

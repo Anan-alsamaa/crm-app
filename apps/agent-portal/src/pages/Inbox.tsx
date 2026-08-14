@@ -672,9 +672,15 @@ export function Inbox() {
                 .slice(0, 5);
               return (
                 <div className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-5 p-6">
-                  {/* The agent's morning glance — clean, no gradient. */}
-                  <div>
-                    <h2 className="text-3xl font-extrabold leading-[1.05] tracking-[-0.035em] text-balance text-foreground">
+                  {/* The agent's morning glance, on the brand sweep the admin
+                      Overview opens with — the same welcome language in both
+                      portals. White ink: the fill is saturated in both themes. */}
+                  <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-violet via-sky to-primary p-6 shadow-float motion-safe:animate-rise-in">
+                    <div
+                      aria-hidden
+                      className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.25),transparent_60%)]"
+                    />
+                    <h2 className="relative font-display text-3xl font-extrabold leading-[1.05] tracking-[-0.035em] text-balance text-white">
                       {openCount === 0
                         ? `${t('inbox.welcome.zeroTitle')} ${t('inbox.welcome.zeroAccent')}`
                         : `${t('inbox.welcome.waiting', { count: openCount })} ${
@@ -683,7 +689,7 @@ export function Inbox() {
                               : t('inbox.welcome.pace')
                           }`}
                     </h2>
-                    <p className="mt-2 max-w-prose text-sm text-muted-foreground">
+                    <p className="relative mt-2 max-w-prose text-sm text-white/85">
                       {t('inbox.welcomeHint', {
                         defaultValue:
                           'Pick the next thread on the left, or filter by what needs attention first.',
