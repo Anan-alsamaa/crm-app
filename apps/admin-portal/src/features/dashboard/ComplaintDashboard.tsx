@@ -475,7 +475,19 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
   const step = W / months.length;
   const x = (i: number) => step * i + step / 2;
   const y = (v: number) => H - (v / maxMoney) * (H - 16);
-  const linePoints = months.map((m, i) => `${x(i)},${y(m.compensation)}`).join(' ');
+  // Catmull-Rom smoothing — the boards draw money as a calm curve, not a zigzag.
+  const pts: Array<[number, number]> = months.map((m, i) => [x(i), y(m.compensation)]);
+  // Clamped indices are always in bounds — assert away noUncheckedIndexedAccess.
+  let lineD = pts.length ? `M${pts[0]![0]},${pts[0]![1]}` : '';
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)]!;
+    const p1 = pts[i]!;
+    const p2 = pts[i + 1]!;
+    const p3 = pts[Math.min(pts.length - 1, i + 2)]!;
+    lineD += ` C${p1[0] + (p2[0] - p0[0]) / 6},${p1[1] + (p2[1] - p0[1]) / 6} ${
+      p2[0] - (p3[0] - p1[0]) / 6
+    },${p2[1] - (p3[1] - p1[1]) / 6} ${p2[0]},${p2[1]}`;
+  }
   const busiest = months.reduce((a, b) => (b.count > a.count ? b : a));
   const avg = months.reduce((s, m) => s + m.count, 0) / months.length;
 
@@ -498,7 +510,22 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
 
       <div className="overflow-x-auto">
         <div className="relative" style={{ minWidth: W }}>
-          {/* Columns */}
+          {/* Dashed quarter gridlines behind the columns — the boards' ruling. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0"
+            style={{ height: H }}
+          >
+            {[0.25, 0.5, 0.75].map((f) => (
+              <div
+                key={f}
+                className="absolute inset-x-0 border-t border-dashed border-foreground/[0.07]"
+                style={{ top: `${f * 100}%` }}
+              />
+            ))}
+            <div className="absolute inset-x-0 bottom-0 border-t border-foreground/[0.09]" />
+          </div>
+          {/* Columns: slim, centered, rounded — not full-bleed slabs. */}
           <div className="flex items-end gap-1" style={{ height: H }}>
             {months.map((m) => (
               <div
@@ -510,13 +537,13 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
                   {m.count}
                 </span>
                 <div
-                  className="w-full rounded-t-md bg-primary transition-[filter] duration-fast group-hover:brightness-110"
-                  style={{ height: `${Math.max(2, (m.count / maxCount) * (H - 24))}px` }}
+                  className="mx-auto w-[55%] min-w-[8px] max-w-[28px] rounded-full bg-gradient-to-t from-primary/60 to-primary transition-[filter] duration-fast group-hover:brightness-110"
+                  style={{ height: `${Math.max(4, (m.count / maxCount) * (H - 24))}px` }}
                 />
               </div>
             ))}
           </div>
-          {/* Compensation line, drawn over the columns on its own scale. */}
+          {/* Compensation curve, drawn over the columns on its own scale. */}
           <svg
             className="pointer-events-none absolute inset-x-0 top-0"
             width={W}
@@ -525,8 +552,8 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
             preserveAspectRatio="none"
             aria-hidden
           >
-            <polyline
-              points={linePoints}
+            <path
+              d={lineD}
               fill="none"
               stroke="oklch(var(--violet))"
               strokeWidth="2"
@@ -538,8 +565,10 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
                 key={m.month}
                 cx={x(i)}
                 cy={y(m.compensation)}
-                r="3"
+                r="3.5"
                 fill="oklch(var(--violet))"
+                stroke="oklch(var(--card))"
+                strokeWidth="1.5"
               />
             ))}
           </svg>
@@ -1151,43 +1180,43 @@ export function ComplaintDashboard() {
                 })}
               />
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/[0.06]">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-2xs uppercase tracking-[0.12em] text-muted-foreground">
-                      <th className="py-2 text-start font-semibold">
+                    <tr className="bg-secondary/40 text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                      <th className="h-10 px-3 text-start font-semibold">
                         {t('complaintDash.colAgent', { defaultValue: 'Agent' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colLogged', { defaultValue: 'Complaints' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colOpen', { defaultValue: 'Still open' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colReplies', { defaultValue: 'CRM replies' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colSolved', { defaultValue: 'Solved' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colSolvedPct', { defaultValue: 'Solved %' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colHours', { defaultValue: 'Avg hrs to close' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colChatsOpen', { defaultValue: 'Chats open' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colChatsSolved', { defaultValue: 'Chats solved' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colMoney', { defaultValue: 'Compensation' })}
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className="divide-y divide-foreground/[0.06]">
                     {d.agents.map((a) => (
                       <tr
                         key={a.id || 'unassigned'}
@@ -1199,51 +1228,53 @@ export function ComplaintDashboard() {
                         }
                         className="cursor-pointer transition-colors duration-fast hover:bg-secondary/60"
                       >
-                        <td className="py-2 font-medium text-foreground">{a.name}</td>
-                        <td className="py-2 text-end tabular-nums">{a.logged}</td>
+                        <td className="px-3 py-2.5 font-medium text-foreground">{a.name}</td>
+                        <td className="px-3 py-2.5 text-end tabular-nums">{a.logged}</td>
                         <td
                           className={cn(
-                            'py-2 text-end tabular-nums',
-                            a.open > 0 && 'font-semibold text-warning-foreground',
+                            'px-3 py-2.5 text-end tabular-nums',
+                            a.open > 0 && 'font-semibold text-foreground',
                           )}
                         >
                           {a.open}
                         </td>
-                        <td className="py-2 text-end tabular-nums">{a.replies}</td>
-                        <td className="py-2 text-end tabular-nums">{a.solved}</td>
-                        <td className="py-2 text-end tabular-nums">
+                        <td className="px-3 py-2.5 text-end tabular-nums">{a.replies}</td>
+                        <td className="px-3 py-2.5 text-end tabular-nums">{a.solved}</td>
+                        <td className="px-3 py-2.5 text-end tabular-nums">
                           {a.solvedPct === null ? '—' : `${Math.round(a.solvedPct)}%`}
                         </td>
-                        <td className="py-2 text-end tabular-nums">
+                        <td className="px-3 py-2.5 text-end tabular-nums">
                           {a.avgHoursToClose === null ? '—' : a.avgHoursToClose.toFixed(1)}
                         </td>
-                        <td className="py-2 text-end tabular-nums">{a.chatsOpen}</td>
-                        <td className="py-2 text-end tabular-nums">{a.chatsSolved}</td>
-                        <td className="py-2 text-end tabular-nums">
+                        <td className="px-3 py-2.5 text-end tabular-nums">{a.chatsOpen}</td>
+                        <td className="px-3 py-2.5 text-end tabular-nums">{a.chatsSolved}</td>
+                        <td className="px-3 py-2.5 text-end tabular-nums">
                           {a.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t border-border bg-secondary/40 font-semibold text-foreground">
-                      <td className="py-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    <tr className="border-t border-foreground/[0.08] bg-foreground/[0.02] font-semibold text-foreground">
+                      <td className="px-3 py-2.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                         {t('complaintDash.tableTotal', { defaultValue: 'Total' })}
                       </td>
-                      <td className="py-2 text-end tabular-nums">{agentTotals.logged}</td>
-                      <td className="py-2 text-end tabular-nums">{agentTotals.open}</td>
-                      <td className="py-2 text-end tabular-nums">{agentTotals.replies}</td>
-                      <td className="py-2 text-end tabular-nums">{agentTotals.solved}</td>
-                      <td className="py-2 text-end tabular-nums">
+                      <td className="px-3 py-2.5 text-end tabular-nums">{agentTotals.logged}</td>
+                      <td className="px-3 py-2.5 text-end tabular-nums">{agentTotals.open}</td>
+                      <td className="px-3 py-2.5 text-end tabular-nums">{agentTotals.replies}</td>
+                      <td className="px-3 py-2.5 text-end tabular-nums">{agentTotals.solved}</td>
+                      <td className="px-3 py-2.5 text-end tabular-nums">
                         {agentTotals.logged
                           ? `${Math.round((agentTotals.solved / agentTotals.logged) * 100)}%`
                           : '—'}
                       </td>
                       {/* A mean of per-agent means is not the team's mean. */}
-                      <td className="py-2 text-end tabular-nums">—</td>
-                      <td className="py-2 text-end tabular-nums">{agentTotals.chatsOpen}</td>
-                      <td className="py-2 text-end tabular-nums">{agentTotals.chatsSolved}</td>
-                      <td className="py-2 text-end tabular-nums">
+                      <td className="px-3 py-2.5 text-end tabular-nums">—</td>
+                      <td className="px-3 py-2.5 text-end tabular-nums">{agentTotals.chatsOpen}</td>
+                      <td className="px-3 py-2.5 text-end tabular-nums">
+                        {agentTotals.chatsSolved}
+                      </td>
+                      <td className="px-3 py-2.5 text-end tabular-nums">
                         {agentTotals.compensation.toLocaleString(undefined, {
                           maximumFractionDigits: 0,
                         })}
@@ -1270,81 +1301,85 @@ export function ComplaintDashboard() {
                 label={t('complaintDash.noChatActivity', { defaultValue: 'No chat activity yet.' })}
               />
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/[0.06]">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-2xs uppercase tracking-[0.12em] text-muted-foreground">
-                      <th className="py-2 text-start font-semibold">
+                    <tr className="bg-secondary/40 text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                      <th className="h-10 px-3 text-start font-semibold">
                         {t('complaintDash.colAgent', { defaultValue: 'Agent' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colMessages', { defaultValue: 'Replies sent' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colHandled', { defaultValue: 'Chats handled' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colChatSolved', { defaultValue: 'Chats solved' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colOffered', { defaultValue: 'Offered' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colAnswered', { defaultValue: 'Answered' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colMissed', { defaultValue: 'Timed out' })}
                       </th>
-                      <th className="py-2 text-end font-semibold">
+                      <th className="h-10 px-3 text-end font-semibold">
                         {t('complaintDash.colWait', { defaultValue: 'Avg wait' })}
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className="divide-y divide-foreground/[0.06]">
                     {d.chatAgents.map((a) => (
                       <tr key={a.id}>
-                        <td className="py-2 font-medium text-foreground">{a.name}</td>
-                        <td className="py-2 text-end tabular-nums">{a.messages}</td>
-                        <td className="py-2 text-end tabular-nums">{a.chatsHandled}</td>
-                        <td className="py-2 text-end tabular-nums">{a.chatsSolved}</td>
-                        <td className="py-2 text-end tabular-nums">{a.offered}</td>
-                        <td className="py-2 text-end tabular-nums">{a.answered}</td>
+                        <td className="px-3 py-2.5 font-medium text-foreground">{a.name}</td>
+                        <td className="px-3 py-2.5 text-end tabular-nums">{a.messages}</td>
+                        <td className="px-3 py-2.5 text-end tabular-nums">{a.chatsHandled}</td>
+                        <td className="px-3 py-2.5 text-end tabular-nums">{a.chatsSolved}</td>
+                        <td className="px-3 py-2.5 text-end tabular-nums">{a.offered}</td>
+                        <td className="px-3 py-2.5 text-end tabular-nums">{a.answered}</td>
                         {/* Called out: a conversation nobody picked up in time is
                             the failure this table exists to surface. */}
                         <td
                           className={cn(
-                            'py-2 text-end tabular-nums',
+                            'px-3 py-2.5 text-end tabular-nums',
                             a.missed > 0 && 'font-semibold text-destructive',
                           )}
                         >
                           {a.missed}
                         </td>
-                        <td className="py-2 text-end tabular-nums">
+                        <td className="px-3 py-2.5 text-end tabular-nums">
                           {a.avgWaitMinutes === null ? '—' : `${a.avgWaitMinutes.toFixed(1)}m`}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t border-border bg-secondary/40 font-semibold text-foreground">
-                      <td className="py-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    <tr className="border-t border-foreground/[0.08] bg-foreground/[0.02] font-semibold text-foreground">
+                      <td className="px-3 py-2.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                         {t('complaintDash.tableTotal', { defaultValue: 'Total' })}
                       </td>
-                      <td className="py-2 text-end tabular-nums">{chatTotals.messages}</td>
-                      <td className="py-2 text-end tabular-nums">{chatTotals.chatsHandled}</td>
-                      <td className="py-2 text-end tabular-nums">{chatTotals.chatsSolved}</td>
-                      <td className="py-2 text-end tabular-nums">{chatTotals.offered}</td>
-                      <td className="py-2 text-end tabular-nums">{chatTotals.answered}</td>
+                      <td className="px-3 py-2.5 text-end tabular-nums">{chatTotals.messages}</td>
+                      <td className="px-3 py-2.5 text-end tabular-nums">
+                        {chatTotals.chatsHandled}
+                      </td>
+                      <td className="px-3 py-2.5 text-end tabular-nums">
+                        {chatTotals.chatsSolved}
+                      </td>
+                      <td className="px-3 py-2.5 text-end tabular-nums">{chatTotals.offered}</td>
+                      <td className="px-3 py-2.5 text-end tabular-nums">{chatTotals.answered}</td>
                       <td
                         className={cn(
-                          'py-2 text-end tabular-nums',
+                          'px-3 py-2.5 text-end tabular-nums',
                           chatTotals.missed > 0 && 'text-destructive',
                         )}
                       >
                         {chatTotals.missed}
                       </td>
                       {/* A mean of per-agent means is not the team's mean. */}
-                      <td className="py-2 text-end tabular-nums">—</td>
+                      <td className="px-3 py-2.5 text-end tabular-nums">—</td>
                     </tr>
                   </tfoot>
                 </table>

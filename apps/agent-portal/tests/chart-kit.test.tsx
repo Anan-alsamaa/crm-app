@@ -99,9 +99,10 @@ describe('TrendChart', () => {
         format={secs}
       />,
     );
-    // Two runs => two polylines. One would mean the gap was bridged, which
-    // would read as "answered instantly" on a day nobody worked.
-    expect(container.querySelectorAll('polyline')).toHaveLength(2);
+    // Two runs => two stroked paths (the area fills only draw on multi-point
+    // runs). One would mean the gap was bridged, which would read as
+    // "answered instantly" on a day nobody worked.
+    expect(container.querySelectorAll('path[fill="none"]')).toHaveLength(2);
   });
 
   it('shows the scale so the shape can be read as a size', () => {

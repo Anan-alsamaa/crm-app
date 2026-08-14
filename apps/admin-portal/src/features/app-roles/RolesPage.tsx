@@ -273,14 +273,23 @@ export function RolesPage() {
                             </Pill>
                           )}
                         </span>
-                        {r.brands && r.brands.length > 0 && (
-                          <span className="mt-0.5 block text-2xs text-muted-foreground">
-                            {t('roles.brandLimited', {
-                              n: r.brands.length,
-                              defaultValue: 'Limited to {{n}} brand(s)',
-                            })}
-                          </span>
-                        )}
+                        {/* Permission count under the name — the reference
+                            boards' "12 permissions" chip, as quiet text. */}
+                        <span className="mt-0.5 block text-2xs tabular-nums text-muted-foreground">
+                          {t('roles.privCount', {
+                            n: Object.values(r.privileges ?? {}).filter(Boolean).length,
+                            defaultValue: '{{n}} privileges',
+                          })}
+                          {r.brands && r.brands.length > 0 && (
+                            <>
+                              {' · '}
+                              {t('roles.brandLimited', {
+                                n: r.brands.length,
+                                defaultValue: 'Limited to {{n}} brand(s)',
+                              })}
+                            </>
+                          )}
+                        </span>
                       </button>
                     </li>
                   ))}
@@ -375,19 +384,33 @@ export function RolesPage() {
                         <ul className="mt-1 divide-y divide-foreground/[0.06]">
                           {groupPrivs.map((p) => (
                             <li key={p.key}>
-                              <label className="flex min-h-9 cursor-pointer items-center gap-2.5 rounded-md px-1.5 py-1.5 text-sm text-foreground transition-colors duration-fast hover:bg-foreground/[0.03]">
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 rounded-sm border-border-strong bg-input accent-primary"
-                                  checked={!!draft.privileges[p.key]}
-                                  onChange={(e) =>
-                                    setDraft((d) => ({
-                                      ...d,
-                                      privileges: { ...d.privileges, [p.key]: e.target.checked },
-                                    }))
-                                  }
-                                />
-                                {PRIV_LABELS[p.key]}
+                              {/* Toggle switch, label first — the permission
+                                  rows of the reference console. The thumb
+                                  moves via the logical inset so RTL slides the
+                                  right way. */}
+                              <label className="flex min-h-9 cursor-pointer items-center justify-between gap-2.5 rounded-md px-1.5 py-1.5 text-sm text-foreground transition-colors duration-fast hover:bg-foreground/[0.03]">
+                                <span className="min-w-0 flex-1">{PRIV_LABELS[p.key]}</span>
+                                <span className="relative inline-flex shrink-0">
+                                  <input
+                                    type="checkbox"
+                                    className="peer sr-only"
+                                    checked={!!draft.privileges[p.key]}
+                                    onChange={(e) =>
+                                      setDraft((d) => ({
+                                        ...d,
+                                        privileges: { ...d.privileges, [p.key]: e.target.checked },
+                                      }))
+                                    }
+                                  />
+                                  <span
+                                    aria-hidden
+                                    className="block h-5 w-9 rounded-full bg-secondary ring-1 ring-inset ring-foreground/[0.1] transition-colors duration-fast peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50"
+                                  />
+                                  <span
+                                    aria-hidden
+                                    className="absolute top-0.5 start-0.5 h-4 w-4 rounded-full bg-foreground/70 shadow-sm transition-all duration-fast peer-checked:start-[1.125rem] peer-checked:bg-primary-foreground"
+                                  />
+                                </span>
                               </label>
                             </li>
                           ))}

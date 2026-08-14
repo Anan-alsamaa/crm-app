@@ -15,15 +15,6 @@ import { cn } from './cn.js';
 
 export type ChartTone = 'primary' | 'violet' | 'success' | 'warning' | 'sky' | 'destructive';
 
-const BAR_TONE: Record<ChartTone, string> = {
-  primary: 'fill-primary',
-  violet: 'fill-violet',
-  success: 'fill-success',
-  warning: 'fill-warning',
-  sky: 'fill-sky',
-  destructive: 'fill-destructive',
-};
-
 const DOT_TONE: Record<ChartTone, string> = {
   primary: 'bg-primary',
   violet: 'bg-violet',
@@ -197,84 +188,137 @@ export function TrendChart({
   const x = (i: number) => (points.length === 1 ? W / 2 : (i / (points.length - 1)) * W);
   const y = (v: number) => 100 - (v / safeMax) * 100;
 
+  // Catmull-Rom → cubic bézier: the reference boards draw trends as calm
+  // curves, and a two-segment polyline over sparse days reads as a glitch.
+  const smoothPath = (pts: Array<[number, number]>): string => {
+    if (pts.length < 3) return pts.map(([px, py], i) => `${i ? 'L' : 'M'}${px},${py}`).join(' ');
+    // The clamped indices below are always in bounds — assert away the
+    // noUncheckedIndexedAccess undefineds.
+    let d = `M${pts[0]![0]},${pts[0]![1]}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)]!;
+      const p1 = pts[i]!;
+      const p2 = pts[i + 1]!;
+      const p3 = pts[Math.min(pts.length - 1, i + 2)]!;
+      d += ` C${p1[0] + (p2[0] - p0[0]) / 6},${p1[1] + (p2[1] - p0[1]) / 6} ${
+        p2[0] - (p3[0] - p1[0]) / 6
+      },${p2[1] - (p3[1] - p1[1]) / 6} ${p2[0]},${p2[1]}`;
+    }
+    return d;
+  };
+
+  // Per-series runs (a null is a real gap), computed once and shared by the
+  // SVG lines and the HTML dot layer below.
+  const seriesRuns = series.map((s) => {
+    const runs: Array<Array<[number, number, number]>> = [];
+    let run: Array<[number, number, number]> = [];
+    points.forEach((p, i) => {
+      const v = p.values[s.key];
+      if (v == null) {
+        if (run.length) runs.push(run);
+        run = [];
+        return;
+      }
+      run.push([x(i), y(v), v]);
+    });
+    if (run.length) runs.push(run);
+    return { s, runs };
+  });
+
   return (
     <div className={className}>
       <Legend series={series} />
       <div className="mt-2 flex gap-2">
-        {/* Axis: just the top and bottom of the scale. A full gridline set on a
-            chart this size is more ink than information. */}
         <div
           className="flex shrink-0 flex-col justify-between text-2xs tabular-nums text-muted-foreground"
           style={{ height }}
         >
           <span>{format(safeMax)}</span>
+          <span>{format(safeMax / 2)}</span>
           <span>0</span>
         </div>
-        <svg
-          viewBox={`0 0 ${W} 100`}
-          preserveAspectRatio="none"
-          style={{ height }}
-          className="min-w-0 flex-1 overflow-visible"
-          role="img"
-        >
-          {/* Hairline gridlines at the two labelled stops only — the scale's
-              top and its zero. More lines than labels is ink without
-              information. Token alpha, so the hairline holds on both themes. */}
-          {[0, 100].map((gy) => (
-            <line
-              key={gy}
-              x1={0}
-              x2={W}
-              y1={gy}
-              y2={gy}
-              stroke="oklch(var(--foreground) / 0.08)"
-              strokeWidth={1}
-              vectorEffect="non-scaling-stroke"
-            />
-          ))}
-          {series.map((s) => {
-            // Split into unbroken runs so a null leaves a real gap.
-            const runs: Array<Array<[number, number]>> = [];
-            let run: Array<[number, number]> = [];
-            points.forEach((p, i) => {
-              const v = p.values[s.key];
-              if (v == null) {
-                if (run.length) runs.push(run);
-                run = [];
-                return;
-              }
-              run.push([x(i), y(v)]);
-            });
-            if (run.length) runs.push(run);
-
-            return (
+        {/* The SVG stretches (preserveAspectRatio none) so lines fill the box;
+            dots and value labels live in an HTML layer on top, because a
+            circle inside a stretched SVG renders as an ellipse. */}
+        <div className="relative min-w-0 flex-1" style={{ height }}>
+          <svg
+            viewBox={`0 0 ${W} 100`}
+            preserveAspectRatio="none"
+            className="absolute inset-0 h-full w-full overflow-visible"
+            role="img"
+          >
+            {/* Dashed quarter gridlines — the reference boards' quiet ruling. */}
+            {[0, 25, 50, 75, 100].map((gy) => (
+              <line
+                key={gy}
+                x1={0}
+                x2={W}
+                y1={gy}
+                y2={gy}
+                stroke="oklch(var(--foreground) / 0.07)"
+                strokeWidth={1}
+                strokeDasharray={gy === 100 ? undefined : '3 4'}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+            {seriesRuns.map(({ s, runs }) => (
               <g key={s.key}>
-                {runs.map((r, ri) => (
-                  <polyline
-                    key={ri}
-                    points={r.map(([px, py]) => `${px},${py}`).join(' ')}
-                    fill="none"
-                    strokeWidth={2}
-                    vectorEffect="non-scaling-stroke"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className={cn('stroke-current', TEXT_TONE[s.tone])}
-                  />
-                ))}
-                {runs.flat().map(([px, py], i) => (
-                  <circle
-                    key={i}
-                    cx={px}
-                    cy={py}
-                    r={2}
-                    vectorEffect="non-scaling-stroke"
-                    className={cn(BAR_TONE[s.tone])}
-                  />
-                ))}
+                {runs.map((r, ri) => {
+                  const line = r.map(([px, py]) => [px, py] as [number, number]);
+                  return (
+                    <g key={ri}>
+                      {/* Soft area fill under the curve grounds it — a bare
+                          line over empty dark reads unfinished. */}
+                      {line.length > 1 && (
+                        <path
+                          d={`${smoothPath(line)} L${line[line.length - 1]![0]},100 L${line[0]![0]},100 Z`}
+                          fill={`oklch(var(--${s.tone}) / 0.10)`}
+                          stroke="none"
+                        />
+                      )}
+                      <path
+                        d={smoothPath(line)}
+                        fill="none"
+                        strokeWidth={2}
+                        vectorEffect="non-scaling-stroke"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className={cn('stroke-current', TEXT_TONE[s.tone])}
+                      />
+                    </g>
+                  );
+                })}
               </g>
-            );
-          })}
-        </svg>
+            ))}
+          </svg>
+          {/* Crisp round markers + a value label on isolated points, so a
+              single measured day reads as a deliberate data point instead of
+              a floating smudge. */}
+          {seriesRuns.map(({ s, runs }) =>
+            runs.map((r, ri) =>
+              r.map(([px, py, v], pi) => (
+                <span
+                  key={`${s.key}-${ri}-${pi}`}
+                  className="absolute"
+                  style={{ left: `${px}%`, top: `${py}%` }}
+                >
+                  <span
+                    className={cn(
+                      'absolute -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-card',
+                      'h-2 w-2',
+                      DOT_TONE[s.tone],
+                    )}
+                  />
+                  {r.length === 1 && (
+                    <span className="absolute -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-md bg-secondary px-1.5 py-0.5 text-2xs font-semibold tabular-nums text-foreground">
+                      {format(v)}
+                    </span>
+                  )}
+                </span>
+              )),
+            ),
+          )}
+        </div>
       </div>
       {/* First, middle and last label only — every date on a narrow chart is an
           unreadable smear. */}
