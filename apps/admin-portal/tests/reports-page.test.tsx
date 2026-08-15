@@ -83,6 +83,11 @@ describe('ReportsPage — the schedule', () => {
     api.useReports.mockReturnValue({ data: [], isLoading: false });
     renderPage();
     await userEvent.click(screen.getAllByText('New report')[0]!);
+    // Wait for the drawer to commit. `getBy*` assumes the click and the
+    // resulting render landed in the same tick, which is true on a quiet
+    // machine and false on a loaded CI runner — the whole reason this file
+    // failed only there.
+    await screen.findByText('Recipients');
   };
 
   it('offers a monthly-on-the-1st preset instead of asking for cron', async () => {
@@ -110,7 +115,7 @@ describe('ReportsPage — the schedule', () => {
       screen.getByPlaceholderText('ops@example.com, manager@example.com'),
       'ops@anan.sa',
     );
-    await userEvent.click(screen.getByText('actions.save'));
+    await userEvent.click(await screen.findByText('actions.save'));
 
     // onSubmit is async (it awaits the mutation), so asserting on the tick
     // after the click assumed a flush that CI's slower scheduling did not
@@ -130,7 +135,7 @@ describe('ReportsPage — the schedule', () => {
     await openDrawer();
 
     await userEvent.type(screen.getByLabelText('Name'), 'Ad hoc');
-    await userEvent.click(screen.getByText('actions.save'));
+    await userEvent.click(await screen.findByText('actions.save'));
 
     await waitFor(() =>
       expect(mutateAsync).toHaveBeenCalledWith(
