@@ -18,7 +18,14 @@ import { getSocket, uploadAttachment } from '../../lib/socket.js';
 import { noteSelfSend } from '../../lib/sound.js';
 import { formatBytes, isImage, validateAttachment, ATTACHMENT_ACCEPT } from '../../lib/files.js';
 import { FileGlyph } from '../../components/FileGlyph.js';
-import { useAgents, useConversation, useMessages, type ConversationMessage } from '../inbox/api.js';
+import {
+  conversationVendorId,
+  useAgents,
+  useConversation,
+  useMessages,
+  type ConversationMessage,
+} from '../inbox/api.js';
+import { AiPanel } from '../ai/AiPanel.js';
 import { AttachmentChips } from './AttachmentChips.js';
 import { ConversationToolbar } from './ConversationToolbar.js';
 import { ConversationSidebar } from './ConversationSidebar.js';
@@ -74,6 +81,8 @@ export function ConversationView({
   const isDesktop = useIsDesktop();
   const messagesQuery = useMessages(conversationId);
   const conversation = useConversation(conversationId);
+  // Governs the monthly AI budget, so the panel only mounts once known.
+  const aiVendorId = conversationVendorId(conversation.data);
   const agents = useAgents();
   const [live, setLive] = useState<ConversationMessage[]>([]);
   const [customerTyping, setCustomerTyping] = useState(false);
@@ -841,6 +850,21 @@ ${text}`
               quick replies share the bubbles' start/end edges instead of
               overhanging them. */}
           <div className="mx-auto max-w-3xl px-5 pb-5 pt-3">
+            {/* AI assistance sits directly above the reply box: an agent
+                reaches for it WHILE writing, so it belongs beside the box
+                rather than in a side panel they have to look away to find.
+                A suggestion still only ever lands in the composer for the
+                agent to edit — nothing reaches the customer unreviewed. */}
+            {!internalNote && aiVendorId && (
+              <AiPanel
+                className="mb-2"
+                conversationId={conversationId}
+                vendorId={aiVendorId}
+                draft={draft}
+                onReplySuggested={(reply) => setDraft(reply)}
+              />
+            )}
+
             {/* Ready-made replies, directly above the box — the operations portal
                 puts them here and agents already reach for them there. Hidden on
                 an internal note: a canned customer reply is never the right
@@ -1103,10 +1127,6 @@ ${text}`
           onDeleteNote={deleteNote}
           resizable
           onCreateTicketForOrder={openTicketForOrder}
-          composerDraft={draft}
-          // A suggestion goes into the composer, never to the customer: the
-          // agent reads it, edits it, and presses send like any other reply.
-          onReplySuggested={(reply) => setDraft(reply)}
         />
       ) : (
         detailsOpen && (
@@ -1135,10 +1155,6 @@ ${text}`
                 onDeleteNote={deleteNote}
                 className="w-[20rem] max-w-[85vw]"
                 onCreateTicketForOrder={openTicketForOrder}
-                composerDraft={draft}
-                // A suggestion goes into the composer, never to the customer: the
-                // agent reads it, edits it, and presses send like any other reply.
-                onReplySuggested={(reply) => setDraft(reply)}
               />
             </div>
           </div>

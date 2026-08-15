@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { readItems, readUsers } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
 import {
+  Avatar,
   BellIcon,
   ChartIcon,
   ClockIcon,
@@ -10,6 +11,8 @@ import {
   HBarChart,
   InboxIcon,
   Input,
+  MeterBar,
+  Pill,
   ProgressRing,
   SectionCard,
   SelectMenu,
@@ -380,8 +383,10 @@ export function AgentPerformancePage() {
                       // The board's ring accent — the same figure drawn as an arc.
                       <ProgressRing
                         value={summary.metPct}
-                        size={36}
+                        size={48}
+                        stroke={5}
                         tone={summary.metPct >= 80 ? 'success' : 'destructive'}
+                        label={`${summary.metPct}%`}
                       />
                     )
                   }
@@ -493,74 +498,114 @@ export function AgentPerformancePage() {
 
               {/* The numbers behind the charts. No row opens anything — this page
               reviews the team, it does not work the queue. */}
-              <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-                <header className="border-b border-border px-4 py-3">
-                  <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                    {t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
-                  </h2>
+              <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
+                <header className="flex items-baseline justify-between gap-3 border-b border-foreground/[0.07] px-5 py-4">
+                  <div>
+                    <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                      {t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
+                    </h2>
+                    <p className="mt-0.5 text-2xs text-muted-foreground">
+                      {t('performance.summaryHint', {
+                        defaultValue: 'Every agent with chats in this range, busiest first.',
+                      })}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                    {t('performance.chatsCount', {
+                      defaultValue: '{{n}} chats',
+                      n: rows.reduce((sum, r) => sum + r.chats, 0),
+                    })}
+                  </span>
                 </header>
                 <div className="overflow-x-auto">
                   <table
-                    className="w-full text-sm"
+                    className="w-full min-w-max text-sm"
                     aria-label={t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
                   >
                     <thead>
-                      <tr className="border-b border-border text-2xs uppercase tracking-[0.12em] text-muted-foreground">
-                        <th className="px-4 py-2.5 text-start font-semibold">
+                      <tr className="bg-foreground/[0.03] text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                        <th className="h-10 px-5 text-start font-semibold">
                           {t('performance.agent', { defaultValue: 'Agent' })}
                         </th>
-                        <th className="px-4 py-2.5 text-end font-semibold">
+                        <th className="h-10 px-5 text-start font-semibold">
                           {t('performance.chats', { defaultValue: 'Chats' })}
                         </th>
-                        <th className="px-4 py-2.5 text-end font-semibold">
+                        <th className="h-10 px-5 text-end font-semibold">
                           {t('performance.noReplyYet', { defaultValue: 'No reply yet' })}
                         </th>
-                        <th className="px-4 py-2.5 text-end font-semibold">
+                        <th className="h-10 px-5 text-end font-semibold">
                           {t('performance.commonChats', { defaultValue: 'Common chats taken' })}
                         </th>
-                        <th className="px-4 py-2.5 text-end font-semibold">
+                        <th className="h-10 px-5 text-end font-semibold">
                           {t('performance.avgFirstCol', { defaultValue: 'First response (avg)' })}
                         </th>
-                        <th className="px-4 py-2.5 text-end font-semibold">
+                        <th className="h-10 px-5 text-end font-semibold">
                           {t('performance.medFirst', { defaultValue: 'First response (median)' })}
                         </th>
-                        <th className="px-4 py-2.5 text-end font-semibold">
+                        <th className="h-10 px-5 text-end font-semibold">
                           {t('performance.solved', { defaultValue: 'Solved' })}
                         </th>
-                        <th className="px-4 py-2.5 text-end font-semibold">
+                        <th className="h-10 px-5 text-end font-semibold">
                           {t('performance.avgSolveCol', { defaultValue: 'Time to solve (avg)' })}
                         </th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-foreground/[0.06]">
                       {rows.map((r) => (
-                        <tr key={r.agentId ?? 'unassigned'} className="border-t border-border/60">
-                          <td className="px-4 py-2.5 font-medium text-foreground">{r.agentName}</td>
-                          <td className="px-4 py-2.5 text-end tabular-nums">{r.chats}</td>
-                          <td
-                            className={cn(
-                              'px-4 py-2.5 text-end tabular-nums',
-                              r.unanswered > 0 ? 'font-semibold text-destructive' : '',
-                            )}
-                          >
-                            {r.unanswered}
+                        <tr
+                          key={r.agentId ?? 'unassigned'}
+                          className="transition-colors duration-fast hover:bg-primary/[0.06]"
+                        >
+                          <td className="px-5 py-3">
+                            <span className="flex items-center gap-2.5">
+                              <Avatar name={r.agentName} size="sm" />
+                              <span className="truncate font-medium text-foreground">
+                                {r.agentName}
+                              </span>
+                            </span>
                           </td>
-                          <td
-                            className={cn(
-                              'px-4 py-2.5 text-end tabular-nums',
-                              r.commonChats > 0 ? 'font-semibold text-success' : '',
-                            )}
-                          >
-                            {r.commonChats}
+                          {/* Chats read as a share of the busiest agent, so the
+                              workload spread is visible without the division. */}
+                          <td className="px-5 py-3">
+                            <span className="flex items-center gap-2.5">
+                              <span className="w-6 text-end text-sm font-bold tabular-nums text-foreground">
+                                {r.chats}
+                              </span>
+                              <MeterBar
+                                value={(r.chats / Math.max(1, ...rows.map((x) => x.chats))) * 100}
+                                tone="sky"
+                                className="w-20"
+                              />
+                            </span>
                           </td>
-                          <td className="px-4 py-2.5 text-end tabular-nums">
+                          <td className="px-5 py-3 text-end tabular-nums">
+                            {r.unanswered > 0 ? (
+                              <Pill tone="destructive" size="sm">
+                                {r.unanswered}
+                              </Pill>
+                            ) : (
+                              <span className="text-muted-foreground">0</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3 text-end tabular-nums">
+                            {r.commonChats > 0 ? (
+                              <Pill tone="success" size="sm">
+                                {r.commonChats}
+                              </Pill>
+                            ) : (
+                              <span className="text-muted-foreground">0</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3 text-end tabular-nums text-foreground">
                             {formatDuration(r.avgFirstResponseSec) ?? dash}
                           </td>
-                          <td className="px-4 py-2.5 text-end tabular-nums">
+                          <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
                             {formatDuration(r.medianFirstResponseSec) ?? dash}
                           </td>
-                          <td className="px-4 py-2.5 text-end tabular-nums">{r.solved}</td>
-                          <td className="px-4 py-2.5 text-end tabular-nums">
+                          <td className="px-5 py-3 text-end tabular-nums text-foreground">
+                            {r.solved}
+                          </td>
+                          <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
                             {formatDuration(r.avgTimeToSolveSec) ?? dash}
                           </td>
                         </tr>

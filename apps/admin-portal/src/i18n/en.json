@@ -919,7 +919,8 @@
     "commonChat": "common",
     "commonTitle": "Chats picked up for the team",
     "commonHelp": "Chats answered after somebody else let them go",
-    "commonBasis": "A chat the system had to pass on is left out of the response-time figures — it carries the wait the earlier agents caused — and counted here instead, for whoever picked it up."
+    "commonBasis": "A chat the system had to pass on is left out of the response-time figures — it carries the wait the earlier agents caused — and counted here instead, for whoever picked it up.",
+    "summaryHint": "Every agent with chats in this range, busiest first."
   },
   "storeNotify": {
     "rulesTitle": "Complaints the branch is told about",
@@ -1029,7 +1030,8 @@
     "historyEdited": "edited",
     "unknownUser": "Unknown user",
     "systemUser": "System",
-    "selectHint": "Click a row, then use History or Delete."
+    "selectHint": "Click a row, then use History or Delete.",
+    "importDisabled": "Importing is disabled"
   },
   "lists": {
     "title": "Complaint types",
@@ -1096,7 +1098,9 @@
     "delete": "Delete",
     "deleteConfirm": "Delete “{{name}}”? Users still holding it must be reassigned first.",
     "assignHint": "Assign people to this role from the Users page once it shows Active.",
-    "privCount": "{{n}} privileges"
+    "privCount": "{{n}} privileges",
+    "listTitle": "Roles",
+    "clearSelection": "Clear"
   },
   "backup": {
     "title": "Backup",

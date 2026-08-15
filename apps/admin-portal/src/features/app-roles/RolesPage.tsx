@@ -217,7 +217,7 @@ export function RolesPage() {
       {/* Scroll lives on the page wrapper; the grid inside is capped so the
           editor doesn't stretch full-bleed across wide monitors. */}
       <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
-        <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-4 lg:grid-cols-[18rem_1fr] lg:items-start">
+        <div className="mx-auto grid w-full max-w-[92rem] grid-cols-1 gap-5 lg:grid-cols-[20rem_1fr] lg:items-start">
           {/* ── page hero — the boards' header anatomy ── */}
           <div className="border-b border-foreground/10 pb-5 lg:col-span-2">
             <h2 className="text-2xl font-bold tracking-tight text-foreground">
@@ -240,7 +240,23 @@ export function RolesPage() {
             ) : (
               /* Clean board list — rows flush inside one card, hairline
                separators, quiet hover; the selected row is jade-tinted. */
-              <div className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+              <div className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] lg:sticky lg:top-4">
+                <div className="flex items-center justify-between gap-2 border-b border-foreground/[0.07] px-3.5 py-2.5">
+                  <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {t('roles.listTitle', { defaultValue: 'Roles' })}
+                  </span>
+                  {/* Nothing could clear a selection once made, so a built-in
+                      role's read-only panel became a dead end. */}
+                  {draft.id && (
+                    <button
+                      type="button"
+                      onClick={() => setDraft(EMPTY)}
+                      className="rounded-md px-1.5 py-0.5 text-2xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/10"
+                    >
+                      {t('roles.clearSelection', { defaultValue: 'Clear' })}
+                    </button>
+                  )}
+                </div>
                 <ul className="divide-y divide-foreground/[0.06]">
                   {(roles.data ?? []).map((r) => (
                     <li key={r.id}>
@@ -356,7 +372,7 @@ export function RolesPage() {
                   title header, hairline-separated tick rows, jade ticks.
                   items-start keeps a two-item card from stretching to its
                   seven-item neighbour's height and hoarding dead space. */}
-                <div className="grid items-start gap-4 sm:grid-cols-2">
+                <div className="grid items-start gap-4 sm:grid-cols-2 2xl:grid-cols-4">
                   {Object.entries(GROUPS).map(([group, label]) => {
                     const groupPrivs = PRIVS.filter((p) => p.group === group);
                     const ticked = groupPrivs.filter((p) => !!draft.privileges[p.key]).length;

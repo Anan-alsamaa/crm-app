@@ -406,6 +406,9 @@ export function AgentPerformancePage() {
                     <thead className="sticky top-0 z-10 bg-card">
                       <tr className="border-b border-foreground/10 text-2xs uppercase tracking-[0.12em] text-muted-foreground">
                         <th className="px-4 py-2.5 text-start font-semibold">
+                          {t('performance.subject', { defaultValue: 'Complaint / chat' })}
+                        </th>
+                        <th className="px-4 py-2.5 text-start font-semibold">
                           {t('performance.customer', { defaultValue: 'Customer' })}
                         </th>
                         {!oneAgent && (
@@ -433,16 +436,22 @@ export function AgentPerformancePage() {
                           }
                           className="cursor-pointer border-t border-foreground/[0.06] transition-colors duration-fast hover:bg-primary/[0.07]"
                         >
-                          <td className="px-4 py-2.5 text-foreground">
-                            <span className="font-medium">
-                              {chat.customer ??
-                                t('performance.unknownCustomer', { defaultValue: 'Customer' })}
+                          <td className="max-w-[18rem] px-4 py-2.5 text-foreground">
+                            <span className="block truncate font-medium" title={chat.subject ?? ''}>
+                              {chat.subject ??
+                                t('performance.noSubject', { defaultValue: 'Chat (no ticket)' })}
                             </span>
                             {chat.orderId && (
-                              <span className="ms-2 font-mono text-2xs text-muted-foreground">
+                              <span className="font-mono text-2xs text-muted-foreground">
                                 #{chat.orderId}
                               </span>
                             )}
+                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground">
+                            <span className="block max-w-[12rem] truncate">
+                              {chat.customer ??
+                                t('performance.unknownCustomer', { defaultValue: 'Customer' })}
+                            </span>
                           </td>
                           {!oneAgent && (
                             <td className="px-4 py-2.5 text-muted-foreground">{chat.agentName}</td>

@@ -22,6 +22,7 @@ interface Props {
   locale?: string;
   /** Called when Suggest Reply produces text; lets the parent paste it into the composer. */
   onReplySuggested?: (reply: string) => void;
+  className?: string;
 }
 
 function fmtErr(err: unknown): string {
@@ -39,7 +40,14 @@ function fmtErr(err: unknown): string {
   return e?.message ?? 'Failed.';
 }
 
-export function AiPanel({ conversationId, vendorId, draft, locale, onReplySuggested }: Props) {
+export function AiPanel({
+  conversationId,
+  vendorId,
+  draft,
+  locale,
+  onReplySuggested,
+  className,
+}: Props) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -153,7 +161,12 @@ export function AiPanel({ conversationId, vendorId, draft, locale, onReplySugges
   };
 
   return (
-    <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-5 py-4 space-y-4">
+    <div
+      className={cn(
+        'rounded-2xl bg-card/70 px-5 py-4 shadow-soft ring-1 ring-foreground/[0.04] space-y-4',
+        className,
+      )}
+    >
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {t('ai.title', { defaultValue: 'AI assistance' })}

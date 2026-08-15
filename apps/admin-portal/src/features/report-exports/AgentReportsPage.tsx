@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteItem, readUsers } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
@@ -44,9 +44,8 @@ import {
 } from './api.js';
 import { useStoreIndex } from '../restaurants/api.js';
 import { directus } from '../../lib/directus.js';
-import { formatDuration, parseTicketsXlsx } from '@yiji/reports';
+import { formatDuration } from '@yiji/reports';
 import { TicketHistoryDrawer } from './TicketHistoryDrawer.js';
-import { useImportTickets } from './import-api.js';
 import {
   buildAgentKpiSheets,
   buildComplaintsSheets,
@@ -657,9 +656,6 @@ function ComplaintsReport({
    */
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [historyOf, setHistoryOf] = useState<{ id: string; label: string } | null>(null);
-  const [importing, setImporting] = useState(false);
-  const importFileRef = useRef<HTMLInputElement | null>(null);
-  const importTickets = useImportTickets();
   const qc = useQueryClient();
   const del = useMutation({
     mutationFn: (id: string) => directus.request(deleteItem('tickets' as never, id)),
@@ -687,36 +683,6 @@ function ComplaintsReport({
     [users.data],
   );
 
-  /** Bulk import, moved here from the agent portal — an operations job. */
-  const onImportFile = async (file: File) => {
-    setImporting(true);
-    try {
-      const result = await importTickets.mutateAsync(
-        /\.xlsx$/i.test(file.name)
-          ? await parseTicketsXlsx(await file.arrayBuffer())
-          : await file.text(),
-      );
-      if (result.imported === 0 && result.skipped.length === 0) {
-        toast.error(
-          t('complaintReport.importEmpty', {
-            defaultValue: 'No usable rows found — expected a Date and Restaurant column.',
-          }),
-        );
-      } else {
-        toast.success(
-          t('complaintReport.importOk', {
-            count: result.imported,
-            defaultValue: '{{count}} imported',
-          }) + (result.skipped.length ? ` · ${result.skipped.length} skipped` : ''),
-        );
-        void qc.invalidateQueries({ queryKey: ['agent-reports'] });
-      }
-    } catch {
-      toast.error(t('complaintReport.importFailed', { defaultValue: 'Import failed.' }));
-    } finally {
-      setImporting(false);
-    }
-  };
   /**
    * The filter, shared with the agent portal's own ticket queue so "find order
    * 946641" behaves identically wherever it is asked. See @yiji/reports.
@@ -1163,27 +1129,16 @@ function ComplaintsReport({
           >
             {t('complaintReport.deleteBtn', { defaultValue: 'Delete' })}
           </Button>
-          <input
-            ref={importFileRef}
-            type="file"
-            accept=".csv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void onImportFile(f);
-              e.target.value = '';
-            }}
-          />
           <Button
             size="sm"
             variant="ghost"
             className="ring-1 ring-border"
-            disabled={importing}
-            onClick={() => importFileRef.current?.click()}
+            disabled
+            title={t('complaintReport.importDisabled', {
+              defaultValue: 'Importing is disabled',
+            })}
           >
-            {importing
-              ? t('complaintReport.importing', { defaultValue: 'Importing…' })
-              : t('complaintReport.importBtn', { defaultValue: 'Import file' })}
+            {t('complaintReport.importBtn', { defaultValue: 'Import file' })}
           </Button>
         </div>
       </div>

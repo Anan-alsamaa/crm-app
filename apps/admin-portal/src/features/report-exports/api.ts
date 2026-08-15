@@ -733,7 +733,7 @@ export function useAgentReportData(
           agentName: agentOf(c.assigned_agent),
           createdAt: c.date_created,
           lastMessageAt: c.last_message_at,
-          customerName: c.contact?.name ?? '',
+          customerName: c.contact?.name?.trim() || c.contact?.phone?.trim() || '',
           customerPhone: c.contact?.phone ?? '',
           customerEmail: c.contact?.email ?? '',
           orderId: c.last_order_id ?? '',

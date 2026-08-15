@@ -263,72 +263,76 @@ export function SlaPoliciesPage() {
                 />
               </div>
 
-              {/* Board list rows — one policy per hairline-separated row, its
-                  deadlines as right-aligned tabular numerals. */}
-              <ul className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-                {policies.data.map((p) => (
-                  <li
+              {/* Policy CARDS, not a flat list: each policy is an object an
+                  admin reasons about as a whole — its priorities, its three
+                  deadlines and whether it is live — and a boxed card keeps
+                  those together instead of smearing them along a row. */}
+              <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+                {policies.data.map((p, i) => (
+                  <article
                     key={p.id}
-                    className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-border/60 px-5 py-4 transition-colors duration-fast ease-out last:border-b-0 hover:bg-primary/[0.04]"
+                    style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}
+                    className="flex flex-col rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5 motion-safe:animate-rise-in"
                   >
-                    <div className="min-w-0 flex-1 basis-56">
-                      <div className="flex items-center gap-2">
-                        <h3 className="truncate text-sm font-semibold tracking-tight text-foreground">
-                          {p.name}
-                        </h3>
-                        <Pill tone={p.active ? 'success' : 'muted'} size="sm" dot>
-                          {p.active
-                            ? t('sla.active')
-                            : t('sla.inactive', { defaultValue: 'Inactive' })}
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="min-w-0 truncate text-sm font-semibold tracking-tight text-foreground">
+                        {p.name}
+                      </h3>
+                      <Pill tone={p.active ? 'success' : 'muted'} size="sm" dot>
+                        {p.active
+                          ? t('sla.active')
+                          : t('sla.inactive', { defaultValue: 'Inactive' })}
+                      </Pill>
+                    </div>
+
+                    {p.description && (
+                      <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                        {p.description}
+                      </p>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {p.applies_to_priority?.map((pr) => (
+                        <Pill key={pr} tone="primary" size="sm">
+                          {t(`priority.${pr}`, { ns: 'common' })}
                         </Pill>
-                      </div>
-                      {p.description && (
-                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                          {p.description}
-                        </p>
-                      )}
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {p.applies_to_priority?.map((pr) => (
-                          <Pill key={pr} tone="primary" size="sm">
-                            {t(`priority.${pr}`, { ns: 'common' })}
-                          </Pill>
-                        ))}
-                      </div>
+                      ))}
                     </div>
 
-                    {/* The deadline trio — big numeral, micro-label under, the
-                        board's stat anatomy at row scale. */}
-                    <div className="flex shrink-0 items-center gap-5 sm:gap-6">
-                      <div className="min-w-[4.5rem] text-end">
-                        <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
-                          {p.first_response_minutes}m
+                    {/* The deadline trio as three boxed readings — the shape
+                        the owner had before, restored. */}
+                    <div className="mt-4 grid grid-cols-3 gap-2">
+                      {(
+                        [
+                          [
+                            `${p.first_response_minutes}m`,
+                            t('sla.rowFirstReply', { defaultValue: 'first reply' }),
+                          ],
+                          [
+                            `${p.resolution_minutes}m`,
+                            t('sla.rowResolution', { defaultValue: 'resolution' }),
+                          ],
+                          [
+                            `${p.warning_threshold_percent}%`,
+                            t('sla.rowWarnAt', { defaultValue: 'warn at' }),
+                          ],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <div
+                          key={label}
+                          className="rounded-xl bg-secondary/40 px-3 py-2.5 text-center ring-1 ring-inset ring-foreground/[0.05]"
+                        >
+                          <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
+                            {value}
+                          </div>
+                          <div className="mt-1 truncate text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                            {label}
+                          </div>
                         </div>
-                        <div className="mt-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                          {t('sla.rowFirstReply', { defaultValue: 'first reply' })}
-                        </div>
-                      </div>
-                      <div className="min-w-[4.5rem] text-end">
-                        <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
-                          {p.resolution_minutes}m
-                        </div>
-                        <div className="mt-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                          {t('sla.rowResolution', { defaultValue: 'resolution' })}
-                        </div>
-                      </div>
-                      <div className="min-w-[4.5rem] text-end">
-                        <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
-                          {p.warning_threshold_percent}%
-                        </div>
-                        <div className="mt-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                          {t('sla.rowWarnAt', { defaultValue: 'warn at' })}
-                        </div>
-                      </div>
+                      ))}
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-3">
-                      <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(p)}>
-                        {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
-                      </Button>
+                    <div className="mt-4 flex items-center justify-between gap-3 border-t border-foreground/[0.07] pt-3">
                       <label className="inline-flex cursor-pointer items-center gap-1.5 text-2xs text-muted-foreground">
                         <input
                           type="checkbox"
@@ -341,10 +345,13 @@ export function SlaPoliciesPage() {
                         />
                         <span>{t('sla.active')}</span>
                       </label>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(p)}>
+                        {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
+                      </Button>
                     </div>
-                  </li>
+                  </article>
                 ))}
-              </ul>
+              </div>
             </>
           )}
         </div>

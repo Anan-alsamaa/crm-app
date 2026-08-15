@@ -749,7 +749,9 @@
     "commonChat": "common",
     "commonTitle": "Chats picked up for the team",
     "commonHelp": "Chats answered after somebody else let them go",
-    "commonBasis": "A chat the system had to pass on is left out of the response-time figures — it carries the wait the earlier agents caused — and counted here instead, for whoever picked it up."
+    "commonBasis": "A chat the system had to pass on is left out of the response-time figures — it carries the wait the earlier agents caused — and counted here instead, for whoever picked it up.",
+    "subject": "Complaint / chat",
+    "noSubject": "Chat (no ticket)"
   },
   "coupons": {
     "title": "My coupons",

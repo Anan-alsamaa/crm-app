@@ -28,6 +28,12 @@ export interface ChatTimingRow extends ChatTiming {
   startedAt: string | null;
   customer: string | null;
   orderId: string | null;
+  /**
+   * What the chat was ABOUT — the linked ticket's complaint type, falling back
+   * to its subject. A row of timings tells you how fast; the subject tells you
+   * what was slow, which is the half a supervisor acts on.
+   */
+  subject: string | null;
 }
 
 export interface PerformanceFilters {
@@ -99,6 +105,33 @@ export function useChatTimings(filters: PerformanceFilters) {
 
       if (conversations.length === 0) return [];
 
+      /* What each chat was about. Read separately: the subject lives on the
+       * ticket, and a conversation with no ticket simply has none. Best-effort
+       * — a permissions gap here must not empty the whole page. */
+      const subjectOf = new Map<string, string>();
+      try {
+        const linked = (await directus.request(
+          readItems('tickets', {
+            limit: -1,
+            filter: { conversation: { _in: conversations.map((c) => c.id) } },
+            fields: ['conversation', 'subject', 'complaint_type'],
+            sort: ['-date_created'],
+          }),
+        )) as unknown as Array<{
+          conversation: string | null;
+          subject: string | null;
+          complaint_type: string | null;
+        }>;
+        for (const tk of linked) {
+          if (!tk.conversation) continue;
+          const label = tk.complaint_type?.trim() || tk.subject?.trim();
+          // Newest ticket wins; the sort above puts it first.
+          if (label && !subjectOf.has(tk.conversation)) subjectOf.set(tk.conversation, label);
+        }
+      } catch {
+        /* no ticket read access — rows fall back to the customer alone */
+      }
+
       const messages = (await directus.request(
         readItems('messages', {
           limit: -1,
@@ -163,6 +196,7 @@ export function useChatTimings(filters: PerformanceFilters) {
         startedAt: c.date_created,
         customer: c.contact?.name ?? c.contact?.phone ?? null,
         orderId: c.last_order_id,
+        subject: subjectOf.get(c.id) ?? null,
         passedOn: handoffs.get(c.id)?.passedOn ?? false,
         takenBy: handoffs.get(c.id)?.takenBy ?? null,
       }));
