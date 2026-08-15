@@ -352,7 +352,7 @@ export function AgentPerformancePage() {
                 aria-label={t('performance.summary', { defaultValue: 'Summary' })}
                 // Same ladder as the Overview's KPI row — the six-up jump straight
                 // from two columns left mid widths with tiles too narrow to name.
-                className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6"
+                className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
               >
                 <Tile
                   icon={<InboxIcon size={17} />}

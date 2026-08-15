@@ -524,11 +524,14 @@ export function CreateTicketDialog({
             that failed rather than one that chose. 42.5rem exactly: the
             sections cap their fields at 40rem and pad 1.25rem a side, so a
             wider column just re-opens a ragged gutter inside the card. */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 justify-center gap-5 overflow-y-auto p-5 sm:p-6 lg:grid-cols-[minmax(0,42.5rem)_minmax(0,42.5rem)] lg:overflow-hidden">
+        <div className="mx-auto grid min-h-0 w-full max-w-[85rem] flex-1 grid-cols-1 gap-5 overflow-y-auto p-5 sm:p-6 lg:grid-cols-2 lg:overflow-hidden">
           <div className="min-h-0 lg:overflow-y-auto">
             <ComplaintSection
               tone="violet"
               title={t('complaint.whatHappened', { defaultValue: 'What happened' })}
+              hint={t('complaint.whatHappenedHint', {
+                defaultValue: 'The complaint as the customer reported it',
+              })}
             >
               <ComplaintClassification
                 values={complaint}
@@ -589,7 +592,9 @@ export function CreateTicketDialog({
             <ComplaintSection
               tone="success"
               title={t('complaint.resolution', { defaultValue: 'Resolution' })}
-              hint={t('complaint.optional', { defaultValue: 'Optional' })}
+              hint={t('complaint.resolutionHint', {
+                defaultValue: 'Optional — what you did about it',
+              })}
             >
               {/* Said BEFORE saving, next to the notes it is about: for these
                   complaint types the description and the resolution notes are

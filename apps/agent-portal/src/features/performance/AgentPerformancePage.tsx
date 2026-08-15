@@ -241,7 +241,7 @@ export function AgentPerformancePage() {
                   rather than five loose numbers before the charts. */}
               <section
                 aria-label={t('performance.summary', { defaultValue: 'Summary' })}
-                className="grid grid-cols-2 gap-3 md:grid-cols-6"
+                className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
               >
                 <Tile
                   label={t('performance.chats', { defaultValue: 'Chats' })}

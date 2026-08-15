@@ -325,7 +325,7 @@ export function SlaPoliciesPage() {
                           <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
                             {value}
                           </div>
-                          <div className="mt-1 truncate text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                          <div className="mt-1 text-2xs font-semibold uppercase leading-tight tracking-[0.06em] text-muted-foreground">
                             {label}
                           </div>
                         </div>

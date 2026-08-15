@@ -655,7 +655,9 @@
       "closed_at": "Closed at",
       "first_responded_at": "First responded at",
       "order_id": "Order number"
-    }
+    },
+    "whatHappenedHint": "The complaint as the customer reported it",
+    "resolutionHint": "Optional — what you did about it"
   },
   "complaints": {
     "title": "My complaints",

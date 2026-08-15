@@ -666,7 +666,9 @@
       "closed_at": "وقت الإغلاق",
       "first_responded_at": "وقت أول رد",
       "order_id": "رقم الطلب"
-    }
+    },
+    "whatHappenedHint": "الشكوى كما ذكرها العميل",
+    "resolutionHint": "اختياري — ما تم عمله بشأنها"
   },
   "complaints": {
     "title": "شكاواي",

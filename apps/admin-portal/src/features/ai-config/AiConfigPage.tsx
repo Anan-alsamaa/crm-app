@@ -216,7 +216,7 @@ export function AiConfigPage() {
         </div>
 
         {/* Usage card */}
-        <section className="rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft px-5 py-5">
+        <section className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
           <div className="flex items-center gap-2">
             <span
               aria-hidden
@@ -224,7 +224,7 @@ export function AiConfigPage() {
             >
               <ClockIcon size={13} />
             </span>
-            <h2 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <h2 className="text-sm font-semibold tracking-tight text-foreground">
               {t('aiConfig.usage', { defaultValue: 'This month' })}
             </h2>
           </div>
@@ -262,7 +262,7 @@ export function AiConfigPage() {
         {/* Features list */}
         <section className="space-y-3">
           <div className="space-y-1 px-1">
-            <h2 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <h2 className="text-sm font-semibold tracking-tight text-foreground">
               {t('aiConfig.features', { defaultValue: 'Features' })}
             </h2>
             <p className="text-sm text-foreground/80">
@@ -343,7 +343,7 @@ export function AiConfigPage() {
         {/* Monthly cap */}
         <section className="space-y-3">
           <div className="space-y-1 px-1">
-            <h2 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <h2 className="text-sm font-semibold tracking-tight text-foreground">
               {t('aiConfig.budget', { defaultValue: 'Monthly budget' })}
             </h2>
             <p className="text-sm text-foreground/80">
@@ -353,7 +353,7 @@ export function AiConfigPage() {
               })}
             </p>
           </div>
-          <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] px-5 py-4">
+          <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
             <FormField
               label={t('aiConfig.cap', { defaultValue: 'Monthly cap' })}
               htmlFor="monthlyCap"
@@ -380,7 +380,7 @@ export function AiConfigPage() {
             monthly cap because this feature is asked for ad hoc by every agent. */}
         <section className="space-y-3">
           <div className="space-y-1 px-1">
-            <h2 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <h2 className="text-sm font-semibold tracking-tight text-foreground">
               {t('aiConfig.helpBudget', { defaultValue: 'Help assistant allowance' })}
             </h2>
             <p className="text-sm text-foreground/80">
@@ -390,7 +390,7 @@ export function AiConfigPage() {
               })}
             </p>
           </div>
-          <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] px-5 py-4">
+          <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
             <FormField
               label={t('aiConfig.helpDailyPerUser', { defaultValue: 'Daily questions per user' })}
               htmlFor="helpDailyPerUser"

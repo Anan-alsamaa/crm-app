@@ -1503,8 +1503,9 @@ export function ComplaintDashboard() {
           {/* ── Trend ────────────────────────────────────────────────────── */}
           <SectionCard
             title={t('complaintDash.perMonth', { defaultValue: 'Complaints per month' })}
-            hint={t('complaintDash.perMonthHint', {
-              defaultValue: 'Volume as columns, compensation paid overlaid as a line.',
+            hint={t('complaintDash.perMonthHint2', {
+              defaultValue:
+                'Each column is how many complaints were logged that month (left scale). The line is how much compensation was paid (right scale) — the two are counted differently, so they are scaled separately and only their SHAPES should be compared.',
             })}
           >
             <TrendChart months={d.months} />
