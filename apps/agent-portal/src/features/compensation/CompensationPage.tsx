@@ -204,23 +204,43 @@ function QueueCard({ row, onOpen }: { row: CompensationRow; onOpen: () => void }
 
 /* ── Detail ──────────────────────────────────────────────────────── */
 
+/**
+ * One fact about the request. The label sits ABOVE its value rather than
+ * opposite it: the old side-by-side row truncated every value that mattered
+ * (restaurant names, coupon codes, decline reasons) to fit a narrow column.
+ */
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 py-1">
-      <dt className="shrink-0 text-2xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 truncate text-end text-xs text-foreground">{value}</dd>
+    <div className="min-w-0 py-1.5">
+      <dt className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-0.5 break-words text-sm text-foreground">{value}</dd>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
-      <h3 className="mb-2 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+    <section
+      className={cn(
+        'rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in',
+        className,
+      )}
+    >
+      <h3 className="mb-3 border-b border-foreground/[0.07] pb-2.5 text-sm font-semibold tracking-tight text-foreground">
         {title}
       </h3>
-      <dl>{children}</dl>
-    </div>
+      <dl className="grid gap-x-6 gap-y-1 sm:grid-cols-2">{children}</dl>
+    </section>
   );
 }
 
@@ -256,21 +276,55 @@ function RequestDetail({ id }: { id: string }) {
   }
 
   return (
-    <div className="mx-auto h-full w-full max-w-3xl space-y-4 overflow-y-auto px-4 py-6 sm:px-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/compensation')}>
-          <ArrowLeftIcon size={16} className="rtl:-scale-x-100" />{' '}
-          {t('compensation.back', { defaultValue: 'Back' })}
-        </Button>
-        <span className="font-mono text-sm text-muted-foreground">
-          {r.request_code ?? r.id.slice(0, 8)}
-        </span>
-        <StatusPill status={r.status} />
-      </div>
+    <div className="mx-auto h-full w-full max-w-6xl space-y-5 overflow-y-auto px-4 py-6 sm:px-6">
+      <Button variant="ghost" size="sm" onClick={() => navigate('/compensation')}>
+        <ArrowLeftIcon size={16} className="rtl:-scale-x-100" />{' '}
+        {t('compensation.back', { defaultValue: 'Back' })}
+      </Button>
+
+      {/* Hero: who, how much, and where it stands — the three facts anyone
+          opening a request needs before reading anything else. The old header
+          was a thin strip of a code and a pill, so the page opened on nothing
+          in particular. */}
+      <header className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-2xs text-muted-foreground">
+                {r.request_code ?? r.id.slice(0, 8)}
+              </span>
+              <StatusPill status={r.status} />
+            </div>
+            <h2 className="mt-1.5 truncate text-2xl font-bold tracking-tight text-foreground">
+              {r.customer_name ?? t('compensation.unknownCustomer', { defaultValue: 'Customer' })}
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {[r.brand_name, r.restaurant_name].filter(Boolean).join(' · ') || '—'}
+              {r.order_id ? ` · #${r.order_id}` : ''}
+            </p>
+          </div>
+          <div className="text-end">
+            <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('compensation.final', { defaultValue: 'Final value' })}
+            </div>
+            <div className="mt-1 text-[2.25rem] font-extrabold leading-none tabular-nums tracking-[-0.035em] text-foreground">
+              {money(r.final_compensation_value)}
+            </div>
+            {r.suggested_compensation_value != null && (
+              <div className="mt-1.5 text-2xs text-muted-foreground">
+                {t('compensation.suggested', { defaultValue: 'Suggested' })}:{' '}
+                <span className="tabular-nums text-foreground">
+                  {r.suggested_compensation_value}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
 
       <ActionPanel request={r} />
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         <Section title={t('compensation.customer', { defaultValue: 'Customer' })}>
           <Row
             label={t('compensation.name', { defaultValue: 'Name' })}
@@ -350,14 +404,18 @@ function RequestDetail({ id }: { id: string }) {
 
       {items && items.length > 0 && (
         <Section title={t('compensation.orderItems', { defaultValue: 'Order line items' })}>
-          <ul className="space-y-1 text-xs">
+          <ul className="sm:col-span-2 divide-y divide-foreground/[0.06] text-sm">
             {items.map((it) => (
-              <li key={it.id} className="flex items-baseline justify-between gap-2">
-                <span className="truncate">
-                  <span className="tabular-nums text-foreground/80">{it.quantity ?? 1}×</span>{' '}
-                  {it.name}
+              <li key={it.id} className="flex items-baseline justify-between gap-3 py-2">
+                <span className="min-w-0">
+                  <span className="me-1.5 tabular-nums text-muted-foreground">
+                    {it.quantity ?? 1}×
+                  </span>
+                  <span className="break-words text-foreground">{it.name}</span>
                 </span>
-                <span className="shrink-0 tabular-nums">{money(it.price)}</span>
+                <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                  {money(it.price)}
+                </span>
               </li>
             ))}
           </ul>

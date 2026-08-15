@@ -705,7 +705,10 @@
     "deleteTitle": "Delete this brand?",
     "deleteHint": "Its stores are kept, but they lose their brand link and will show as unmapped in reports until you reassign them.",
     "loadError": "Could not load brands",
-    "loadErrorHint": "Check your connection and try again."
+    "loadErrorHint": "Check your connection and try again.",
+    "colBrand": "Brand",
+    "colYiji": "Yiji sends",
+    "colStatus": "Status"
   },
   "stores": {
     "title": "Stores",

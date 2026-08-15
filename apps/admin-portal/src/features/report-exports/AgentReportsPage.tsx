@@ -739,6 +739,8 @@ function ComplaintsReport({
     setPage(1); // a filtered set is a different set; page 7 of it means nothing
   };
 
+  /** The column currently being dragged in the picker, if any. */
+  const [dragKey, setDragKey] = useState<ComplaintColumnKey | null>(null);
   /** Columns that are ON, in the order the user arranged them. */
   const chosenColumns = useMemo(() => order.filter((k) => cols.has(k)), [order, cols]);
 
@@ -963,7 +965,7 @@ function ComplaintsReport({
                   columns through a 64-wide list scrolled two rows at a time was
                   the actual complaint. The list IS the arrangement — its order
                   is the table's order and the export's order. */}
-              <div className="absolute end-0 top-9 z-40 flex max-h-[32rem] w-80 flex-col rounded-xl bg-card shadow-float ring-1 ring-foreground/10">
+              <div className="absolute end-0 top-9 z-40 flex max-h-[34rem] w-[30rem] flex-col rounded-2xl bg-card shadow-float ring-1 ring-foreground/10">
                 <div className="space-y-2 border-b border-border p-2.5">
                   <div className="flex items-center justify-between">
                     <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
@@ -1001,7 +1003,8 @@ function ComplaintsReport({
                   />
                   <p className="text-2xs text-muted-foreground">
                     {t('complaintReport.columnsHelp', {
-                      defaultValue: 'The order here is the order in the table and the export.',
+                      defaultValue:
+                        'Drag a row to reorder. The order here is the order in the table and the export.',
                     })}
                   </p>
                 </div>
@@ -1016,7 +1019,45 @@ function ComplaintsReport({
                       return null;
                     }
                     return (
-                      <li key={k} className="flex items-center gap-1">
+                      <li
+                        key={k}
+                        draggable
+                        onDragStart={(e) => {
+                          setDragKey(k);
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragEnd={() => setDragKey(null)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (!dragKey || dragKey === k) return;
+                          setOrder((prev) => {
+                            const from = prev.indexOf(dragKey);
+                            const to = prev.indexOf(k);
+                            if (from < 0 || to < 0) return prev;
+                            const next = moveColumn(prev, from, to);
+                            saveColumnOrder(TICKET_REPORT_ORDER_KEY, next);
+                            return next;
+                          });
+                          setDragKey(null);
+                        }}
+                        className={cn(
+                          'flex items-center gap-1 rounded-lg',
+                          dragKey === k && 'opacity-40',
+                        )}
+                      >
+                        {/* Drag to reorder — arranging 29 columns two rows at a
+                            time with arrows was the actual complaint. The
+                            arrows stay as the keyboard-reachable path. */}
+                        <span
+                          aria-hidden
+                          className="shrink-0 cursor-grab select-none px-1 text-muted-foreground/60 active:cursor-grabbing"
+                          title={t('complaintReport.dragHint', {
+                            defaultValue: 'Drag to reorder',
+                          })}
+                        >
+                          ⠿
+                        </span>
                         <span className="w-5 shrink-0 text-end text-2xs tabular-nums text-muted-foreground/70">
                           {i + 1}
                         </span>

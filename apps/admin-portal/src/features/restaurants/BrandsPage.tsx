@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
-  cn,
   ConfirmDialog,
   Drawer,
   DrawerSection,
@@ -17,9 +16,15 @@ import {
   Select,
   Skeleton,
   StatStrip,
+  Table,
+  TableFooterBar,
+  TableSurface,
+  Td,
+  Th,
   toast,
   Toolbar,
   ToolbarSpacer,
+  Tr,
 } from '@yiji/ui';
 import {
   useBrands,
@@ -213,61 +218,106 @@ export function BrandsPage() {
             }
           />
         ) : (
-          /* Board list rows — hairline separators edge to edge, the accent
-             hover wash, numbers right-aligned in the end column. */
-          <ul className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
-            {list.map((b) => (
-              <li key={b.id} className="border-b border-border/60 last:border-b-0">
-                <div
-                  className={cn(
-                    'group flex w-full items-center gap-3 px-4 py-3 text-start',
-                    'transition-colors duration-fast ease-out hover:bg-primary/[0.05]',
-                  )}
-                >
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-subtle text-2xs font-bold uppercase text-primary">
-                    {b.code.slice(0, 3)}
+          /* A real table: brands are records with comparable attributes
+             (code, what Yiji calls them, how many stores, status), and a
+             column grid lets them be scanned down rather than read across. */
+          <div className="mx-auto max-w-6xl">
+            <TableSurface>
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>{t('brands.colBrand', { defaultValue: 'Brand' })}</Th>
+                    <Th>{t('brands.colYiji', { defaultValue: 'Yiji sends' })}</Th>
+                    <Th className="text-end">
+                      {t('brands.storesUnit', { defaultValue: 'stores' })}
+                    </Th>
+                    <Th>{t('brands.colStatus', { defaultValue: 'Status' })}</Th>
+                    <Th className="text-end">
+                      <span className="sr-only">
+                        {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
+                      </span>
+                    </Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.map((b) => (
+                    <Tr key={b.id}>
+                      <Td>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(b)}
+                          className="flex min-w-0 items-center gap-3 text-start focus-visible:outline-none"
+                        >
+                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-subtle text-2xs font-bold uppercase text-primary">
+                            {b.code.slice(0, 3)}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium text-foreground">
+                              {b.name}
+                            </span>
+                            <span className="block truncate font-mono text-2xs text-muted-foreground">
+                              {b.code}
+                            </span>
+                          </span>
+                        </button>
+                      </Td>
+                      <Td className="text-muted-foreground">
+                        {b.yiji_brand_name && b.yiji_brand_name !== b.name ? (
+                          <span className="truncate">“{b.yiji_brand_name}”</span>
+                        ) : (
+                          <span className="text-muted-foreground/60">—</span>
+                        )}
+                      </Td>
+                      <Td className="text-end">
+                        <span className="font-semibold tabular-nums text-foreground">
+                          {storeCountFor(b.id)}
+                        </span>
+                      </Td>
+                      <Td>
+                        {b.status === 'inactive' ? (
+                          <Pill tone="muted">
+                            {t('brands.inactive', { defaultValue: 'Inactive' })}
+                          </Pill>
+                        ) : (
+                          <Pill tone="success" size="sm" dot>
+                            {t('brands.active', { defaultValue: 'Active' })}
+                          </Pill>
+                        )}
+                      </Td>
+                      <Td className="text-end">
+                        <span className="flex items-center justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEdit(b)}
+                          >
+                            {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setConfirmDelete(b)}
+                          >
+                            {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+                          </Button>
+                        </span>
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+              <TableFooterBar>
+                <span className="flex items-baseline gap-1.5">
+                  <span className="font-semibold tabular-nums text-foreground">{list.length}</span>
+                  <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
+                    {t('brands.title', { defaultValue: 'Brands' })}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => openEdit(b)}
-                    className="min-w-0 flex-1 text-start focus-visible:outline-none"
-                  >
-                    <div className="truncate text-sm font-medium text-foreground">{b.name}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {b.code}
-                      {b.yiji_brand_name && b.yiji_brand_name !== b.name && (
-                        <>
-                          {' · '}
-                          {t('brands.yijiAs', { defaultValue: 'Yiji sends' })} “{b.yiji_brand_name}”
-                        </>
-                      )}
-                    </div>
-                  </button>
-                  {b.status === 'inactive' && (
-                    <Pill tone="muted">{t('brands.inactive', { defaultValue: 'Inactive' })}</Pill>
-                  )}
-                  <span className="w-24 shrink-0 text-end text-xs text-muted-foreground tabular-nums">
-                    {/* Number leads in foreground weight; the unit stays quiet. */}
-                    <span className="font-semibold text-foreground">
-                      {storeCountFor(b.id)}
-                    </span>{' '}
-                    {t('brands.storesUnit', { defaultValue: 'stores' })}
-                  </span>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(b)}>
-                    {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setConfirmDelete(b)}
-                  >
-                    {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                </span>
+              </TableFooterBar>
+            </TableSurface>
+          </div>
         )}
       </div>
 
