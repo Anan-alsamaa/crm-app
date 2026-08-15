@@ -1104,7 +1104,9 @@
     "assignHint": "Assign people to this role from the Users page once it shows Active.",
     "privCount": "{{n}} privileges",
     "listTitle": "Roles",
-    "clearSelection": "Clear"
+    "clearSelection": "Clear",
+    "allGroup": "All",
+    "clearGroup": "None"
   },
   "backup": {
     "title": "Backup",

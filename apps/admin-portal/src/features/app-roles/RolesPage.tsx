@@ -4,11 +4,16 @@ import { createItem, deleteItem, readItems, updateItem } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
+  ChartIcon,
+  InboxIcon,
   Input,
+  MeterBar,
   Pill,
   SectionCard,
+  ShieldIcon,
   Skeleton,
   Textarea,
+  TicketIcon,
   Toolbar,
   ToolbarSpacer,
   cn,
@@ -47,6 +52,16 @@ const PRIVS: ReadonlyArray<{ key: string; group: string }> = [
   { key: 'manage_restaurants', group: 'admin' },
   { key: 'manage_users', group: 'admin' },
 ];
+
+/* One hue per capability area, so a role's shape is legible before reading a
+ * single label: chat is sky, tickets jade, reporting violet, administration
+ * red — the same ranking the catalogue itself implies. */
+const GROUP_CHIPS: Record<string, string> = {
+  chat: 'bg-sky-tint text-sky',
+  tickets: 'bg-primary-tint text-primary',
+  reporting: 'bg-violet-tint text-violet',
+  admin: 'bg-destructive-tint text-destructive',
+};
 
 interface AppRole {
   id: string;
@@ -175,6 +190,12 @@ export function RolesPage() {
     });
   }, [selected]);
 
+  const GROUP_ICONS: Record<string, React.ReactNode> = {
+    chat: <InboxIcon size={15} />,
+    tickets: <TicketIcon size={15} />,
+    reporting: <ChartIcon size={15} />,
+    admin: <ShieldIcon size={15} />,
+  };
   const locked = selected?.builtin ?? false;
   const GROUPS: Record<string, string> = {
     chat: t('roles.groupChat', { defaultValue: 'Customer chat' }),
@@ -271,7 +292,18 @@ export function RolesPage() {
                             : 'hover:bg-foreground/[0.03]',
                         )}
                       >
-                        <span className="flex items-center gap-2">
+                        <span className="flex items-center gap-2.5">
+                          <span
+                            aria-hidden
+                            className={cn(
+                              'grid h-8 w-8 shrink-0 place-items-center rounded-xl text-2xs font-bold uppercase',
+                              r.builtin
+                                ? 'bg-secondary text-muted-foreground'
+                                : 'bg-primary-tint text-primary',
+                            )}
+                          >
+                            {r.name.slice(0, 2)}
+                          </span>
                           <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
                             {r.name}
                           </span>
@@ -382,20 +414,58 @@ export function RolesPage() {
                         className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]"
                       >
                         <legend className="sr-only">{label}</legend>
-                        <div className="flex items-baseline justify-between gap-2 border-b border-foreground/[0.06] pb-3">
-                          <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                            {label}
-                          </h3>
-                          {/* Ticked-of-total, right-aligned tabular — the boards'
-                          quiet aggregate idiom; jade only once something is on. */}
-                          <span
-                            className={cn(
-                              'text-2xs font-semibold tabular-nums',
-                              ticked > 0 ? 'text-primary' : 'text-muted-foreground',
-                            )}
-                          >
-                            {ticked}/{groupPrivs.length}
-                          </span>
+                        {/* Each capability area is identified by a tinted glyph
+                            and shows how much of it this role has been given —
+                            four identical grey cards told an admin nothing at a
+                            glance about where a role's power actually sits. */}
+                        <div className="border-b border-foreground/[0.06] pb-3">
+                          <div className="flex items-center gap-2.5">
+                            <span
+                              aria-hidden
+                              className={cn(
+                                'grid h-8 w-8 shrink-0 place-items-center rounded-xl',
+                                GROUP_CHIPS[group] ?? 'bg-secondary text-muted-foreground',
+                              )}
+                            >
+                              {GROUP_ICONS[group]}
+                            </span>
+                            <h3 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight text-foreground">
+                              {label}
+                            </h3>
+                            <span
+                              className={cn(
+                                'shrink-0 text-2xs font-semibold tabular-nums',
+                                ticked > 0 ? 'text-primary' : 'text-muted-foreground',
+                              )}
+                            >
+                              {ticked}/{groupPrivs.length}
+                            </span>
+                          </div>
+                          <div className="mt-2.5 flex items-center gap-3">
+                            <MeterBar
+                              value={(ticked / groupPrivs.length) * 100}
+                              tone="primary"
+                              className="flex-1"
+                            />
+                            {/* Granting a whole area is the common case; ticking
+                                seven switches one at a time was busywork. */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDraft((d) => {
+                                  const all = ticked === groupPrivs.length;
+                                  const next = { ...d.privileges };
+                                  for (const gp of groupPrivs) next[gp.key] = !all;
+                                  return { ...d, privileges: next };
+                                })
+                              }
+                              className="shrink-0 rounded-md px-1.5 py-0.5 text-2xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/10"
+                            >
+                              {ticked === groupPrivs.length
+                                ? t('roles.clearGroup', { defaultValue: 'None' })
+                                : t('roles.allGroup', { defaultValue: 'All' })}
+                            </button>
+                          </div>
                         </div>
                         <ul className="mt-1 divide-y divide-foreground/[0.06]">
                           {groupPrivs.map((p) => (

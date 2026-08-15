@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 /**
  * US1 — admin login + create team + create user (T026).
@@ -22,11 +22,24 @@ async function login(page: import('@playwright/test').Page) {
   });
 }
 
+/**
+ * Reach a Workspace destination.
+ *
+ * The admin masthead groups fourteen destinations into six controls, so Users
+ * and Teams are NOT top-level links any more — they live behind the
+ * "Workspace" menu button. These specs still clicked a top-level link and
+ * timed out on every run.
+ */
+async function gotoWorkspace(page: Page, name: RegExp, url: RegExp): Promise<void> {
+  await page.getByRole('button', { name: /workspace/i }).click();
+  await page.getByRole('menuitem', { name }).click();
+  await page.waitForURL(url);
+}
+
 test('admin signs in and reaches Users management', async ({ page }) => {
   await login(page);
   // Admin lands on the Dashboard; navigate to Users management.
-  await page.getByRole('link', { name: /users/i }).click();
-  await page.waitForURL(/\/users/);
+  await gotoWorkspace(page, /^users$/i, /\/users/);
   // Match the AppShell's page title (h1) specifically: the Users page also has
   // its own <h2>Users</h2>, and an unqualified heading query resolves to both,
   // which Playwright strict mode rejects. `login()` above already scopes by
@@ -40,8 +53,7 @@ test('admin creates a team then a user assigned to it', async ({ page }) => {
   await login(page);
   const teamName = `QA Team ${Date.now()}`;
 
-  await page.getByRole('link', { name: /teams/i }).click();
-  await page.waitForURL(/\/teams/);
+  await gotoWorkspace(page, /^teams$/i, /\/teams/);
   // Create-team is a Drawer (role="dialog"); the toolbar/empty-state CTA opens
   // it. Scope the form + submit to the drawer (the trigger shares its label).
   await page
@@ -54,8 +66,7 @@ test('admin creates a team then a user assigned to it', async ({ page }) => {
   await teamDrawer.getByRole('button', { name: /create team/i }).click();
   await expect(page.getByText(teamName)).toBeVisible();
 
-  await page.getByRole('link', { name: /users/i }).click();
-  await page.waitForURL(/\/users/);
+  await gotoWorkspace(page, /^users$/i, /\/users/);
   const email = `agent.${Date.now()}@example.com`;
   await page
     .getByRole('button', { name: /create user/i })

@@ -38,12 +38,13 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   await agent.locator('aside li button').first().waitFor({ timeout: 15_000 });
   await agent.locator('aside li button').first().click();
 
-  // 3. Click "+ Create ticket" in the toolbar. (The toolbar now grows + sits at
-  // z-10 above the thread, so its hit-box is no longer covered by a chat bubble
-  // — a plain, actionable click works without force.)
+  // 3. Click "+ Add ticket" in the toolbar. The always-present control is
+  // labelled from tickets.createTitle ("Add ticket"); "Create ticket" belongs
+  // to the prompt that only appears once a chat is solved, so matching on it
+  // waited forever on an unsolved conversation.
   const subject = `From conv ${Date.now()}`;
   await agent
-    .getByRole('button', { name: /create ticket/i })
+    .getByRole('button', { name: /add ticket/i })
     .first()
     .click();
   await agent.getByLabel(/subject/i).fill(subject);

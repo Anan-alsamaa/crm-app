@@ -1104,7 +1104,9 @@
     "assignHint": "أسند الأشخاص إلى هذا الدور من صفحة المستخدمين بعد ظهور «مفعّل».",
     "privCount": "{{n}} صلاحية",
     "listTitle": "الأدوار",
-    "clearSelection": "إلغاء التحديد"
+    "clearSelection": "إلغاء التحديد",
+    "allGroup": "الكل",
+    "clearGroup": "لا شيء"
   },
   "backup": {
     "title": "النسخ الاحتياطي",

@@ -5,10 +5,12 @@ import { useTranslation } from 'react-i18next';
 import type { Socket } from 'socket.io-client';
 import {
   Avatar,
+  ChevronDownIcon,
   CloseIcon,
   cn,
   formatRelative,
   Skeleton,
+  SparkleIcon,
   Spinner,
   toast,
   useIsDesktop,
@@ -83,6 +85,8 @@ export function ConversationView({
   const conversation = useConversation(conversationId);
   // Governs the monthly AI budget, so the panel only mounts once known.
   const aiVendorId = conversationVendorId(conversation.data);
+  /** AI assistance is opt-in per session — see the trigger by the composer. */
+  const [aiOpen, setAiOpen] = useState(false);
   const agents = useAgents();
   const [live, setLive] = useState<ConversationMessage[]>([]);
   const [customerTyping, setCustomerTyping] = useState(false);
@@ -856,13 +860,42 @@ ${text}`
                 A suggestion still only ever lands in the composer for the
                 agent to edit — nothing reaches the customer unreviewed. */}
             {!internalNote && aiVendorId && (
-              <AiPanel
-                className="mb-2"
-                conversationId={conversationId}
-                vendorId={aiVendorId}
-                draft={draft}
-                onReplySuggested={(reply) => setDraft(reply)}
-              />
+              <div className="mb-2">
+                {/* Collapsed by default: expanded it ate the height the THREAD
+                    needs, and an agent wants it only at the moment they are
+                    stuck for words. The trigger sits with the quick replies —
+                    both are "help me write this" — and the panel opens in
+                    place, directly over the box it feeds. */}
+                <button
+                  type="button"
+                  onClick={() => setAiOpen((v) => !v)}
+                  aria-expanded={aiOpen}
+                  className={cn(
+                    'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-2xs font-semibold',
+                    'ring-1 ring-inset transition-colors duration-fast ease-out',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                    aiOpen
+                      ? 'bg-primary/15 text-primary ring-primary/25'
+                      : 'bg-secondary/50 text-muted-foreground ring-border hover:text-foreground',
+                  )}
+                >
+                  <SparkleIcon size={13} />
+                  {t('ai.title', { defaultValue: 'AI assistance' })}
+                  <ChevronDownIcon
+                    size={12}
+                    className={cn('transition-transform duration-fast', aiOpen && 'rotate-180')}
+                  />
+                </button>
+                {aiOpen && (
+                  <AiPanel
+                    className="mt-2"
+                    conversationId={conversationId}
+                    vendorId={aiVendorId}
+                    draft={draft}
+                    onReplySuggested={(reply) => setDraft(reply)}
+                  />
+                )}
+              </div>
             )}
 
             {/* Ready-made replies, directly above the box — the operations portal
