@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test';
 const AGENT_EMAIL = process.env.E2E_AGENT_EMAIL!;
 const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD!;
 
-test('agent changes status, priority, and assignment then sees them persist', async ({ page }) => {
+test('agent changes case state and priority then sees them persist', async ({ page }) => {
   await page.goto('http://localhost:5173/login');
   await page.getByLabel(/email/i).fill(AGENT_EMAIL);
   await page.locator('#password').fill(AGENT_PASSWORD);
@@ -24,22 +24,25 @@ test('agent changes status, priority, and assignment then sees them persist', as
   await firstConvo.waitFor({ timeout: 15_000 });
   await firstConvo.click();
 
-  // The toolbar Status/Priority controls are custom comboboxes (SelectMenu), not
-  // native <select>s — open them and pick an option. Exact name 'Status' targets
-  // the toolbar control, not the inbox's "All statuses" filter.
-  const statusSelect = page.getByRole('combobox', { name: 'Status', exact: true });
-  const prioritySelect = page.getByRole('combobox', { name: 'Priority', exact: true });
-  await expect(statusSelect).toBeVisible({ timeout: 10_000 });
+  /*
+   * Status is no longer a four-option combobox. The operations team tracks a
+   * case as "dealt with or not", so the toolbar carries a two-state toggle —
+   * "Mark as solved" / "Reopen" — and the raw open/pending distinction is
+   * gone. This spec drove the retired control and failed on every run; it now
+   * drives the one that exists.
+   */
+  const solveButton = page.getByRole('button', { name: /mark as solved/i });
+  await expect(solveButton).toBeVisible({ timeout: 10_000 });
+  await solveButton.click();
+  // Once solved the same control offers the way back, which is how we know the
+  // patch persisted (the query invalidation refetches the live state).
+  await expect(page.getByRole('button', { name: /reopen/i })).toBeVisible({ timeout: 10_000 });
 
-  // Change status to Pending, priority to High.
-  await statusSelect.click();
-  await page.getByRole('option', { name: 'Pending' }).click();
+  // Priority is still a custom combobox (SelectMenu), not a native <select>.
+  const prioritySelect = page.getByRole('combobox', { name: 'Priority', exact: true });
+  await expect(prioritySelect).toBeVisible({ timeout: 10_000 });
   await prioritySelect.click();
   await page.getByRole('option', { name: 'High' }).click();
-
-  // The trigger reflects the persisted value (no reload — the onSuccess query
-  // invalidation refetches the live state; the trigger shows the chosen label).
-  await expect(statusSelect).toContainText('Pending');
   await expect(prioritySelect).toContainText('High');
 });
 

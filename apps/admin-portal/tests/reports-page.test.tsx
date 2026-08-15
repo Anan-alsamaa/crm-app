@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -112,10 +112,15 @@ describe('ReportsPage — the schedule', () => {
     );
     await userEvent.click(screen.getByText('actions.save'));
 
-    expect(mutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({
-        schedule: { email: ['ops@anan.sa'], cron: '0 7 1 * *' },
-      }),
+    // onSubmit is async (it awaits the mutation), so asserting on the tick
+    // after the click assumed a flush that CI's slower scheduling did not
+    // always deliver — this test failed only on CI, for that reason alone.
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          schedule: { email: ['ops@anan.sa'], cron: '0 7 1 * *' },
+        }),
+      ),
     );
   });
 
@@ -127,8 +132,10 @@ describe('ReportsPage — the schedule', () => {
     await userEvent.type(screen.getByLabelText('Name'), 'Ad hoc');
     await userEvent.click(screen.getByText('actions.save'));
 
-    expect(mutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ schedule: { email: [], cron: '' } }),
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ schedule: { email: [], cron: '' } }),
+      ),
     );
   });
 

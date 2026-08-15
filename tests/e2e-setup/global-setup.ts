@@ -222,6 +222,36 @@ export default async function globalSetup(): Promise<void> {
         );
       }
       console.log('[e2e-setup] ensured Demo Customer contact + conversation');
+      /*
+       * The "unlinked" contact: US6 navigates straight to
+       * /contacts/00000000-0000-0000-0000-000000000001 to prove the commerce
+       * panel degrades gracefully when a contact has no Yiji customer behind
+       * it. Nothing created that row, so the spec 404'd on every run. Fixed
+       * id, no external_customer_id — that absence IS the fixture.
+       */
+      const UNLINKED_ID = '00000000-0000-0000-0000-000000000001';
+      const unlinked = await json<{ data: Array<{ id: string }> }>(
+        await fetchT(
+          `${DIRECTUS}/items/contacts?filter[id][_eq]=${UNLINKED_ID}&fields=id&limit=1`,
+          {
+            headers,
+          },
+        ),
+      );
+      if (!unlinked.data[0]) {
+        await json(
+          await fetchT(`${DIRECTUS}/items/contacts`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              id: UNLINKED_ID,
+              vendor: vendorId,
+              name: 'Unlinked Customer',
+            }),
+          }),
+        );
+      }
+      console.log('[e2e-setup] ensured Unlinked Customer contact');
     }
   } catch (err) {
     console.warn('[e2e-setup] conversation seed failed (specs may fall back):', err);
