@@ -96,51 +96,72 @@ function Kpi({
   icon: React.ReactNode;
   /** End-side data accent — a ProgressRing on the KPIs that are a share. */
   visual?: React.ReactNode;
-  /** Thin meter under the text — the boards' load reading, for the counts-of-a-whole. */
+  /** Thin meter in the footer — the boards' load reading, for counts-of-a-whole. */
   meter?: React.ReactNode;
-  /** Month-over-month badge beside the numeral — the reference cards' +12%. */
+  /** Month-over-month badge under the numeral — the reference cards' +12%. */
   delta?: React.ReactNode;
   /** Position in the KPI row — drives the entrance cascade. */
   order?: number;
 }) {
+  // An unmeasurable KPI used to render its em dash at hero size, which reads as
+  // a broken card rather than as "nothing to measure yet".
+  const empty = value === '—';
   return (
     <div
       style={{ animationDelay: `${Math.min(order, 6) * 55}ms` }}
       className={cn(
-        'rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]',
+        'group flex flex-col rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]',
         'motion-safe:animate-rise-in',
-        'transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
+        'transition-[box-shadow,transform,border-color] duration-base ease-out',
+        'hover:shadow-float hover:ring-foreground/[0.12] motion-safe:hover:-translate-y-1',
       )}
     >
-      <div className="flex items-start gap-3">
+      {/* Label above the numeral and the icon chip at the END — the reference
+          card's anatomy, which gives the number the whole width instead of
+          squeezing it beside a chip. */}
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          {label}
+        </span>
         <span
           aria-hidden
-          className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl', KPI_CHIPS[tone])}
+          className={cn(
+            'grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-transform duration-base ease-out',
+            'motion-safe:group-hover:scale-110',
+            KPI_CHIPS[tone],
+          )}
         >
           {icon}
         </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="text-3xl font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
-              {value}
-            </div>
-            {delta}
+      </div>
+
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <div
+            className={cn(
+              'font-extrabold leading-none tabular-nums tracking-[-0.035em]',
+              empty ? 'text-2xl text-muted-foreground/60' : 'text-[2.5rem] text-foreground',
+            )}
+          >
+            {value}
           </div>
-          <div className="mt-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {label}
-          </div>
-          {/* Fixed height so a card with no context line does not sit shorter
-              than its neighbours and break the row. */}
-          <div className="mt-1 min-h-[1rem] text-2xs text-muted-foreground">{sub ?? ''}</div>
+          {delta && <div className="mt-2">{delta}</div>}
         </div>
-        {/* Decorative: it re-draws a share the card already states in text. */}
         {visual && (
-          <span aria-hidden className="shrink-0 self-center">
+          <span aria-hidden className="shrink-0">
             {visual}
           </span>
         )}
       </div>
-      {meter && <div className="mt-3">{meter}</div>}
+
+      {/* Footer rule + context line, so every card ends on the same baseline
+          however much its middle carries. */}
+      <div className="mt-4 border-t border-foreground/[0.07] pt-3">
+        {meter && <div className="mb-2">{meter}</div>}
+        <div className="min-h-[1rem] text-2xs leading-relaxed text-muted-foreground">
+          {sub ?? ''}
+        </div>
+      </div>
     </div>
   );
 }
@@ -309,6 +330,79 @@ function Heatmap({ rows, locale }: { rows: ComplaintRow[]; locale: string }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Vertical column chart — the reference dashboard's signature panel (its
+ * "by department" bars): one rounded, gradient column per category, its hue
+ * rotating through the palette so the row reads as a set rather than as one
+ * colour repeated.
+ *
+ * Columns are buttons when a drill is available: the same records the ranked
+ * list opens, reached from the shape instead of the row.
+ */
+const COLUMN_TONES = [
+  'from-sky/50 to-sky',
+  'from-violet/50 to-violet',
+  'from-primary/50 to-primary',
+  'from-success/50 to-success',
+  'from-magenta/50 to-magenta',
+  'from-destructive/50 to-destructive',
+] as const;
+
+function Columns({
+  rows,
+  onSelect,
+  emptyLabel,
+}: {
+  rows: Breakdown[];
+  onSelect?: (row: Breakdown) => void;
+  emptyLabel: string;
+}) {
+  const top = rows.slice(0, 8);
+  const max = Math.max(1, ...top.map((r) => r.count));
+  if (top.length === 0) return <CardEmpty label={emptyLabel} />;
+  return (
+    <div className="flex h-56 items-end gap-3 sm:gap-4">
+      {top.map((r, i) => {
+        const pct = Math.max(4, (r.count / max) * 100);
+        const body = (
+          <>
+            <span className="mb-2 text-sm font-bold tabular-nums text-foreground">{r.count}</span>
+            <span
+              className={cn(
+                'mx-auto w-full max-w-[72px] origin-bottom rounded-t-xl bg-gradient-to-t motion-safe:animate-grow-y',
+                COLUMN_TONES[i % COLUMN_TONES.length],
+              )}
+              style={{ height: `${pct}%`, animationDelay: `${i * 70}ms` }}
+            />
+          </>
+        );
+        return (
+          <div key={r.key} className="flex h-full min-w-0 flex-1 flex-col">
+            {onSelect ? (
+              <button
+                type="button"
+                onClick={() => onSelect(r)}
+                aria-label={`${r.label} — ${r.count}`}
+                className="flex h-full w-full flex-col justify-end rounded-lg transition-opacity duration-fast hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                {body}
+              </button>
+            ) : (
+              <span className="flex h-full w-full flex-col justify-end">{body}</span>
+            )}
+            <span
+              title={r.label}
+              className="mt-2 block truncate text-center text-2xs text-muted-foreground"
+            >
+              {r.label}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -621,82 +715,84 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
       </div>
 
       <div className="overflow-x-auto">
-        <div className="relative" style={{ minWidth: W }}>
-          {/* Dashed quarter gridlines behind the columns — the boards' ruling. */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0"
-            style={{ height: H }}
-          >
-            {[0.25, 0.5, 0.75].map((f) => (
-              <div
-                key={f}
-                className="absolute inset-x-0 border-t border-dashed border-foreground/[0.07]"
-                style={{ top: `${f * 100}%` }}
-              />
-            ))}
-            <div className="absolute inset-x-0 bottom-0 border-t border-foreground/[0.09]" />
-          </div>
-          {/* Columns: slim, centered, rounded — not full-bleed slabs. */}
-          <div className="flex items-end gap-1" style={{ height: H }}>
-            {months.map((m, i) => (
-              <div
-                key={m.month}
-                className="group relative flex h-full flex-1 flex-col justify-end"
-                title={`${monthLabel(m.month)} · ${m.count} · ${SAR(m.compensation)}`}
-              >
-                <span className="mb-1 text-center text-[10px] font-semibold tabular-nums text-foreground">
-                  {m.count}
-                </span>
-                <div
-                  className="mx-auto w-[55%] min-w-[8px] max-w-[28px] origin-bottom rounded-full bg-gradient-to-t from-primary/60 to-primary transition-[filter] duration-fast group-hover:brightness-110 motion-safe:animate-grow-y"
-                  style={{
-                    height: `${Math.max(4, (m.count / maxCount) * (H - 24))}px`,
-                    animationDelay: `${Math.min(i, 12) * 45}ms`,
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-          {/* Compensation curve, drawn over the columns on its own scale. */}
-          <svg
-            className="pointer-events-none absolute inset-x-0 top-0"
-            width={W}
-            height={H}
-            viewBox={`0 0 ${W} ${H}`}
-            preserveAspectRatio="none"
-            aria-hidden
-          >
-            <path
-              d={lineD}
-              fill="none"
-              stroke="oklch(var(--violet))"
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-            {months.map((m, i) => (
-              <circle
-                key={m.month}
-                cx={x(i)}
-                cy={y(m.compensation)}
-                r="3.5"
-                fill="oklch(var(--violet))"
-                stroke="oklch(var(--card))"
-                strokeWidth="1.5"
-              />
-            ))}
-          </svg>
-        </div>
-        <div className="mt-1.5 flex gap-1" style={{ minWidth: W }}>
-          {months.map((m) => (
-            <span
-              key={m.month}
-              className="flex-1 truncate text-center text-[10px] tabular-nums text-muted-foreground"
+        <div className="mx-auto" style={{ maxWidth: Math.max(months.length * 150, 320) }}>
+          <div className="relative" style={{ minWidth: W }}>
+            {/* Dashed quarter gridlines behind the columns — the boards' ruling. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0"
+              style={{ height: H }}
             >
-              {monthLabel(m.month)}
-            </span>
-          ))}
+              {[0.25, 0.5, 0.75].map((f) => (
+                <div
+                  key={f}
+                  className="absolute inset-x-0 border-t border-dashed border-foreground/[0.07]"
+                  style={{ top: `${f * 100}%` }}
+                />
+              ))}
+              <div className="absolute inset-x-0 bottom-0 border-t border-foreground/[0.09]" />
+            </div>
+            {/* Columns: slim, centered, rounded — not full-bleed slabs. */}
+            <div className="flex items-end gap-1" style={{ height: H }}>
+              {months.map((m, i) => (
+                <div
+                  key={m.month}
+                  className="group relative flex h-full flex-1 flex-col justify-end"
+                  title={`${monthLabel(m.month)} · ${m.count} · ${SAR(m.compensation)}`}
+                >
+                  <span className="mb-1 text-center text-[10px] font-semibold tabular-nums text-foreground">
+                    {m.count}
+                  </span>
+                  <div
+                    className="mx-auto w-[55%] min-w-[8px] max-w-[28px] origin-bottom rounded-full bg-gradient-to-t from-primary/60 to-primary transition-[filter] duration-fast group-hover:brightness-110 motion-safe:animate-grow-y"
+                    style={{
+                      height: `${Math.max(4, (m.count / maxCount) * (H - 24))}px`,
+                      animationDelay: `${Math.min(i, 12) * 45}ms`,
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            {/* Compensation curve, drawn over the columns on its own scale. */}
+            <svg
+              className="pointer-events-none absolute inset-x-0 top-0"
+              width={W}
+              height={H}
+              viewBox={`0 0 ${W} ${H}`}
+              preserveAspectRatio="none"
+              aria-hidden
+            >
+              <path
+                d={lineD}
+                fill="none"
+                stroke="oklch(var(--violet))"
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              {months.map((m, i) => (
+                <circle
+                  key={m.month}
+                  cx={x(i)}
+                  cy={y(m.compensation)}
+                  r="3.5"
+                  fill="oklch(var(--violet))"
+                  stroke="oklch(var(--card))"
+                  strokeWidth="1.5"
+                />
+              ))}
+            </svg>
+          </div>
+          <div className="mt-1.5 flex gap-1" style={{ minWidth: W }}>
+            {months.map((m) => (
+              <span
+                key={m.month}
+                className="flex-1 truncate text-center text-[10px] tabular-nums text-muted-foreground"
+              >
+                {monthLabel(m.month)}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -1000,9 +1096,9 @@ export function ComplaintDashboard() {
         />
       ) : m.isLoading || !d ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-28 rounded-2xl" />
+              <Skeleton key={i} className="h-40 rounded-2xl" />
             ))}
           </div>
           <Skeleton className="h-64 rounded-2xl" />
@@ -1034,7 +1130,7 @@ export function ComplaintDashboard() {
               beside the two percentages, a thin meter under the two counts
               that are really fractions of a known total. Tones match the icon
               chip so the accent reads as the same signal, louder. */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Kpi
               tone="neutral"
               icon={<TicketIcon size={17} />}
@@ -1155,46 +1251,105 @@ export function ComplaintDashboard() {
           )}
 
           {/* ── Ops snapshot ─────────────────────────────────────────────
-              The reference dashboard's chip row: the four numbers a shift
-              lead quotes out loud, as saturated chips. text-background flips
-              with the theme, so the label holds on both. */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="me-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {t('complaintDash.snapshot', { defaultValue: 'Ops snapshot' })}
-            </span>
-            {(
-              [
-                ['bg-sky', t('complaintDash.chipOpen', { defaultValue: 'Open' }), d.open],
-                [
-                  'bg-violet',
-                  t('complaintDash.kpiOverdue', { defaultValue: 'Overdue' }),
-                  d.overdue,
-                ],
-                ['bg-success', t('complaintDash.chipSolved', { defaultValue: 'Solved' }), d.closed],
-                [
-                  'bg-destructive',
-                  t('complaintDash.chipWaiting', { defaultValue: 'Chats waiting' }),
-                  d.chatsWaiting,
-                ],
-                [
-                  'bg-primary',
-                  'SAR',
-                  d.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 }),
-                ],
-              ] as const
-            ).map(([bg, label, value]) => (
-              <span
-                key={label}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-background shadow-sm',
-                  bg,
-                )}
-              >
-                <span className="tabular-nums">{value}</span>
-                <span className="opacity-80">{label}</span>
+              The reference dashboard's snapshot band: a titled card whose
+              chips carry a tinted glyph tile, the number, and its word. Chips
+              are saturated fills with `text-background` ink, which flips with
+              the theme so the label holds on light too. */}
+          <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                {t('complaintDash.snapshot', { defaultValue: 'Ops snapshot' })}
+              </h3>
+              <span className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground">
+                <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" />
+                {t('complaintDash.snapshotRange', { defaultValue: 'Selected range' })}
               </span>
-            ))}
+            </div>
+            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+              {(
+                [
+                  ['bg-sky', t('complaintDash.chipOpen', { defaultValue: 'Open' }), d.open],
+                  [
+                    'bg-violet',
+                    t('complaintDash.kpiOverdue', { defaultValue: 'Overdue' }),
+                    d.overdue,
+                  ],
+                  [
+                    'bg-success',
+                    t('complaintDash.chipSolved', { defaultValue: 'Solved' }),
+                    d.closed,
+                  ],
+                  [
+                    'bg-destructive',
+                    t('complaintDash.chipWaiting', { defaultValue: 'Chats waiting' }),
+                    d.chatsWaiting,
+                  ],
+                  [
+                    'bg-primary',
+                    'SAR',
+                    d.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 }),
+                  ],
+                ] as const
+              ).map(([bg, label, value], i) => (
+                <span
+                  key={label}
+                  style={{ animationDelay: `${i * 60}ms` }}
+                  className={cn(
+                    'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-background shadow-sm',
+                    'transition-transform duration-base ease-out motion-safe:hover:-translate-y-0.5',
+                    'motion-safe:animate-rise-in',
+                    bg,
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-background/25 text-background"
+                  >
+                    <SparkleIcon size={14} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-lg font-extrabold leading-none tabular-nums tracking-[-0.02em]">
+                      {value}
+                    </span>
+                    <span className="mt-0.5 block truncate text-2xs font-semibold uppercase tracking-[0.1em] opacity-85">
+                      {label}
+                    </span>
+                  </span>
+                </span>
+              ))}
+            </div>
           </div>
+
+          {/* ── Complaints by type ───────────────────────────────────────
+              The reference board's column panel. It replaces the ranked
+              "By complaint type" list further down — same records, same
+              drill, read as a shape instead of a table. */}
+          <SectionCard
+            title={t('complaintDash.byType', { defaultValue: 'By complaint type' })}
+            hint={t('complaintDash.byTypeHint', {
+              defaultValue: 'What customers are actually complaining about, biggest first.',
+            })}
+            aside={
+              d.byType.distinct > 8
+                ? t('complaintDash.topOf', {
+                    defaultValue: 'top {{n}} of {{m}}',
+                    n: 8,
+                    m: d.byType.distinct,
+                  })
+                : undefined
+            }
+          >
+            <Columns
+              rows={d.byType.rows}
+              emptyLabel={t('complaintDash.nothingInRange', {
+                defaultValue: 'Nothing in this range.',
+              })}
+              onSelect={drillInto(
+                t('complaintDash.byType', { defaultValue: 'By complaint type' }),
+                (r) => r.complaintType,
+              )}
+            />
+          </SectionCard>
 
           {/* ── The two rings ────────────────────────────────────────────
               Same numbers as the By-status and By-brand bars further down, read
@@ -1242,7 +1397,9 @@ export function ComplaintDashboard() {
               <div className="flex items-baseline gap-3">
                 <span
                   className={cn(
-                    'text-4xl font-extrabold tabular-nums tracking-[-0.03em]',
+                    d.satisfiedPct === null
+                      ? 'text-sm font-semibold'
+                      : 'text-4xl font-extrabold tabular-nums tracking-[-0.03em]',
                     d.satisfiedPct === null
                       ? 'text-muted-foreground'
                       : d.satisfiedPct >= 80
@@ -1252,7 +1409,9 @@ export function ComplaintDashboard() {
                           : 'text-destructive',
                   )}
                 >
-                  {d.satisfiedPct === null ? '—' : `${Math.round(d.satisfiedPct)}%`}
+                  {d.satisfiedPct === null
+                    ? t('complaintDash.notMeasured', { defaultValue: 'Not measured yet' })
+                    : `${Math.round(d.satisfiedPct)}%`}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {t('complaintDash.healthGauge', {
@@ -1305,9 +1464,15 @@ export function ComplaintDashboard() {
               })}
             >
               <div className="flex items-baseline gap-3">
-                <span className="text-4xl font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
+                <span
+                  className={cn(
+                    d.health.avgChatWaitMinutes === null
+                      ? 'text-sm font-semibold text-muted-foreground'
+                      : 'text-4xl font-extrabold tabular-nums tracking-[-0.03em] text-foreground',
+                  )}
+                >
                   {d.health.avgChatWaitMinutes === null
-                    ? '—'
+                    ? t('complaintDash.notMeasured', { defaultValue: 'Not measured yet' })
                     : `${d.health.avgChatWaitMinutes.toFixed(1)}m`}
                 </span>
                 <span className="text-xs text-muted-foreground">
@@ -1674,16 +1839,6 @@ export function ComplaintDashboard() {
               onSelect={drillInto(
                 t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' }),
                 (r) => r.restaurantName,
-              )}
-            />
-            <CutCard
-              title={t('complaintDash.byType', { defaultValue: 'By complaint type' })}
-              cut={d.byType}
-              total={d.total}
-              color="bg-violet"
-              onSelect={drillInto(
-                t('complaintDash.byType', { defaultValue: 'By complaint type' }),
-                (r) => r.complaintType,
               )}
             />
             <CutCard

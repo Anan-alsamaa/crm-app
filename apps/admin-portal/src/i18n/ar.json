@@ -873,7 +873,11 @@
     "funnelLogged": "مسجّلة",
     "funnelClosed": "مغلقة",
     "funnelRated": "مقيّمة",
-    "funnelSatisfied": "راضون"
+    "funnelSatisfied": "راضون",
+    "snapshotRange": "النطاق المحدد",
+    "byTypeHint": "عمّا يشتكي العملاء فعلًا، الأكبر أولًا.",
+    "topOf": "أعلى {{n}} من {{m}}",
+    "notMeasured": "لم يُقَس بعد"
   },
   "performance": {
     "title": "أداء الموظف",

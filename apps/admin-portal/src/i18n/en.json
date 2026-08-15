@@ -873,7 +873,11 @@
     "funnelLogged": "Logged",
     "funnelClosed": "Closed",
     "funnelRated": "Rated",
-    "funnelSatisfied": "Satisfied"
+    "funnelSatisfied": "Satisfied",
+    "snapshotRange": "Selected range",
+    "byTypeHint": "What customers are actually complaining about, biggest first.",
+    "topOf": "top {{n}} of {{m}}",
+    "notMeasured": "Not measured yet"
   },
   "performance": {
     "title": "Agent performance",
