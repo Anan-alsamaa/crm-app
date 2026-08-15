@@ -130,7 +130,6 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
               dir="ltr"
               className="flex items-baseline gap-1.5 text-[15px] font-semibold tracking-[-0.015em] text-rail-active-foreground"
             >
-              <span>Yiji</span>
               <span className="text-rail-foreground/70 font-normal">CRM</span>
             </div>
             <div className="text-2xs text-rail-foreground/75 mt-0.5">
@@ -265,13 +264,13 @@ function TopNav({ sections }: { sections: NavSection[] }) {
             end={it.end}
             className={({ isActive }) =>
               cn(
-                'flex h-9 items-center rounded-full px-3.5 text-sm whitespace-nowrap',
-                'transition-[background-color,color,box-shadow] duration-fast ease-out',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                'motion-safe:active:scale-[0.97]',
+                // Tabs, not pills — see the admin portal's TopNav for why.
+                'relative flex h-12 items-center px-3.5 text-sm whitespace-nowrap',
+                'transition-colors duration-fast ease-out',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50',
                 isActive
-                  ? 'bg-primary/15 font-semibold text-primary ring-1 ring-inset ring-primary/25'
-                  : 'font-medium text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
+                  ? "font-semibold text-primary after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-primary after:shadow-[0_0_12px_oklch(var(--primary)/0.6)] after:content-['']"
+                  : 'font-medium text-muted-foreground hover:text-foreground',
               )
             }
           >
@@ -285,11 +284,18 @@ function TopNav({ sections }: { sections: NavSection[] }) {
 
 /** Compact brand lockup for the mobile top bar. */
 function MobileBrand() {
+  const { t } = useTranslation();
   return (
-    <div className="flex items-center gap-2">
-      <YijiLogo variant="tile" size={28} className="bg-rail shadow-sm shrink-0" />
-      <span dir="ltr" className="text-[15px] font-semibold tracking-[-0.015em] text-foreground">
-        Yiji <span className="font-normal text-muted-foreground">CRM</span>
+    <div className="flex items-center gap-2.5">
+      <YijiLogo variant="tile" size={34} className="shrink-0 bg-rail shadow-sm" />
+      {/* The masthead names the product AND which portal you are in — the
+          lockup used to be a bare word, which told a supervisor with both
+          portals open nothing about which one they were looking at. */}
+      <span className="min-w-0 leading-tight">
+        <span className="block text-[15px] font-bold tracking-[-0.015em] text-foreground">CRM</span>
+        <span className="block text-2xs text-muted-foreground">
+          {t('app.workspace', { defaultValue: 'Agent workspace' })}
+        </span>
       </span>
     </div>
   );

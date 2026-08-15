@@ -176,7 +176,7 @@ export function ResetPassword() {
       </div>
 
       <p className="absolute bottom-4 inset-x-0 z-10 text-center text-2xs text-muted-foreground">
-        © YIJI CRM
+        © CRM
       </p>
     </div>
   );

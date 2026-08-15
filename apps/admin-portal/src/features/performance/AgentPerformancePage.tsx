@@ -31,8 +31,10 @@ import {
   comparisonRows,
   conversationTimestamps,
   dailyTrend,
+  firstResponseSec,
   formatDuration,
   performanceSummary,
+  timeToSolveSec,
   type ChatTiming,
 } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
@@ -77,7 +79,13 @@ function useAgentList() {
 }
 
 /** A `ChatTiming` plus the day it belongs to, which the trend chart buckets by. */
-type AdminChatTiming = ChatTiming & { startedAt: string | null };
+type AdminChatTiming = ChatTiming & {
+  startedAt: string | null;
+  /** Who the chat was with — name, else the phone we recognise them by. */
+  customer: string | null;
+  /** What it was ABOUT: the linked ticket's complaint type, else its subject. */
+  subject: string | null;
+};
 
 /**
  * Deliberately does NOT resolve agent names — see the user portal's copy of
@@ -99,7 +107,14 @@ function useChatTimings(filters: Filters) {
           'conversations' as never,
           {
             limit: -1,
-            fields: ['id', 'status', 'assigned_agent', 'solved_at', 'date_created'],
+            fields: [
+              'id',
+              'status',
+              'assigned_agent',
+              'solved_at',
+              'date_created',
+              { contact: ['id', 'name', 'phone'] },
+            ],
             ...(and.length ? { filter: { _and: and } } : {}),
           } as never,
         ),
@@ -109,8 +124,39 @@ function useChatTimings(filters: Filters) {
         assigned_agent: string | null;
         solved_at: string | null;
         date_created: string | null;
+        contact: { id: string; name: string | null; phone: string | null } | null;
       }>;
       if (conversations.length === 0) return [];
+
+      /* What each chat was about. Read separately — the subject lives on the
+       * ticket, and a chat with no ticket simply has none. Best-effort so a
+       * permissions gap cannot empty the page. */
+      const subjectOf = new Map<string, string>();
+      try {
+        const linked = (await directus.request(
+          readItems(
+            'tickets' as never,
+            {
+              limit: -1,
+              filter: { conversation: { _in: conversations.map((c) => c.id) } },
+              fields: ['conversation', 'subject', 'complaint_type'],
+              sort: ['-date_created'],
+            } as never,
+          ),
+        )) as unknown as Array<{
+          conversation: string | null;
+          subject: string | null;
+          complaint_type: string | null;
+        }>;
+        for (const tk of linked) {
+          if (!tk.conversation) continue;
+          const label = tk.complaint_type?.trim() || tk.subject?.trim();
+          // Newest ticket wins — the sort above puts it first.
+          if (label && !subjectOf.has(tk.conversation)) subjectOf.set(tk.conversation, label);
+        }
+      } catch {
+        /* no ticket read access — rows fall back to the customer alone */
+      }
 
       // First response needs the messages: the conversation row knows when it
       // started, never when somebody answered.
@@ -177,6 +223,8 @@ function useChatTimings(filters: Filters) {
         // Carried so a chat nobody ever wrote in still lands on a day in the
         // trend instead of vanishing from it.
         startedAt: c.date_created,
+        customer: c.contact?.name ?? c.contact?.phone ?? null,
+        subject: subjectOf.get(c.id) ?? null,
         passedOn: handoffs.get(c.id)?.passedOn ?? false,
         takenBy: handoffs.get(c.id)?.takenBy ?? null,
       }));
@@ -248,6 +296,21 @@ export function AgentPerformancePage() {
   const trend = useMemo(() => dailyTrend(chats), [chats]);
   /** The full numbers per agent — this page's drill-down, since no row opens a chat. */
   const rows = useMemo(() => agentPerformance(chats), [chats]);
+
+  /* Chat by chat — slowest first, and chats nobody answered at the very top,
+   * because "no reply" is the thing a supervisor must act on today. Same
+   * ordering rule as the agent portal's copy. */
+  const breakdown = useMemo(
+    () =>
+      chats
+        .map((c) => ({ chat: c, first: firstResponseSec(c), solve: timeToSolveSec(c) }))
+        .sort((a, b) => {
+          if (a.first == null && b.first != null) return -1;
+          if (b.first == null && a.first != null) return 1;
+          return (b.first ?? 0) - (a.first ?? 0);
+        }),
+    [chats],
+  );
 
   const dash = <span className="text-muted-foreground/50">—</span>;
   const durFmt = (v: number) => formatDuration(v) ?? '—';
@@ -607,6 +670,101 @@ export function AgentPerformancePage() {
                           </td>
                           <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
                             {formatDuration(r.avgTimeToSolveSec) ?? dash}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              {/* Chat by chat — the six columns the owner asked for. A row
+                  opens the conversation in the agent portal, which is where a
+                  supervisor goes to see what was actually said. */}
+              <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
+                <header className="flex items-baseline justify-between gap-3 border-b border-foreground/[0.07] px-5 py-4">
+                  <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                    {t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
+                  </h2>
+                  <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                    {breakdown.length}
+                  </span>
+                </header>
+                <div className="max-h-[32rem] overflow-auto">
+                  <table
+                    className="w-full min-w-max text-sm"
+                    aria-label={t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
+                  >
+                    <thead className="sticky top-0 z-10 bg-card">
+                      <tr className="bg-foreground/[0.03] text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                        <th className="h-10 px-5 text-start font-semibold">
+                          {t('performance.subject', { defaultValue: 'Complaint / chat' })}
+                        </th>
+                        <th className="h-10 px-5 text-start font-semibold">
+                          {t('performance.customer', { defaultValue: 'Customer' })}
+                        </th>
+                        <th className="h-10 px-5 text-start font-semibold">
+                          {t('performance.agent', { defaultValue: 'Agent' })}
+                        </th>
+                        <th className="h-10 px-5 text-start font-semibold">
+                          {t('performance.started', { defaultValue: 'Started' })}
+                        </th>
+                        <th className="h-10 px-5 text-end font-semibold">
+                          {t('performance.firstResponse', { defaultValue: 'First response' })}
+                        </th>
+                        <th className="h-10 px-5 text-end font-semibold">
+                          {t('performance.timeToSolve', { defaultValue: 'Time to solve' })}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-foreground/[0.06]">
+                      {breakdown.map(({ chat, first, solve }) => (
+                        <tr
+                          key={chat.conversationId}
+                          className="transition-colors duration-fast hover:bg-primary/[0.06]"
+                        >
+                          <td className="max-w-[20rem] px-5 py-3">
+                            <span
+                              className="block truncate font-medium text-foreground"
+                              title={chat.subject ?? ''}
+                            >
+                              {chat.subject ??
+                                t('performance.noSubject', { defaultValue: 'Chat (no ticket)' })}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-muted-foreground">
+                            <span className="block max-w-[12rem] truncate">
+                              {chat.customer ??
+                                t('performance.unknownCustomer', { defaultValue: 'Customer' })}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3">
+                            <span className="flex items-center gap-2">
+                              <Avatar name={chat.agentName} size="sm" />
+                              <span className="truncate text-foreground">{chat.agentName}</span>
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 tabular-nums text-muted-foreground">
+                            {chat.startedAt ? new Date(chat.startedAt).toLocaleString() : dash}
+                          </td>
+                          {/* "No reply" rather than a dash: the worst outcome
+                              on the page must not read as missing data. */}
+                          <td
+                            className={cn(
+                              'px-5 py-3 text-end tabular-nums',
+                              chat.passedOn
+                                ? 'text-muted-foreground'
+                                : first == null
+                                  ? 'font-semibold text-destructive'
+                                  : 'text-foreground',
+                            )}
+                          >
+                            {first == null
+                              ? t('performance.noReplyYet', { defaultValue: 'No reply yet' })
+                              : formatDuration(first)}
+                          </td>
+                          <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
+                            {solve == null ? dash : formatDuration(solve)}
                           </td>
                         </tr>
                       ))}

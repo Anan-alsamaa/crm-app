@@ -29,7 +29,7 @@ beforeEach(() => auth.login.mockReset());
 describe('Login page', () => {
   it('renders the sign-in form', () => {
     renderLogin();
-    expect(screen.getByText('Sign in to YIJI CRM')).toBeInTheDocument();
+    expect(screen.getByText('Sign in to CRM')).toBeInTheDocument();
     expect(screen.getByText('login.submit')).toBeInTheDocument();
   });
 

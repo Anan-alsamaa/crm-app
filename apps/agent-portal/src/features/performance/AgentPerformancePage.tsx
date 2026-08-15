@@ -2,11 +2,13 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
+  Avatar,
   EmptyState,
   HBarChart,
   InboxIcon,
   Input,
   MeterBar,
+  Pill,
   SectionCard,
   SelectMenu,
   Skeleton,
@@ -17,6 +19,7 @@ import {
   type ChartSeries,
 } from '@yiji/ui';
 import {
+  agentPerformance,
   comparisonRows,
   dailyTrend,
   firstResponseSec,
@@ -143,6 +146,9 @@ export function AgentPerformancePage() {
         }),
     [chats],
   );
+
+  /** Per-agent totals — the same shared rollup the admin console reports. */
+  const totals = useMemo(() => agentPerformance(chats), [chats]);
 
   const oneAgent = !!filters.agentId;
   const durFmt = (v: number) => formatDuration(v) ?? '—';
@@ -384,6 +390,114 @@ export function AgentPerformancePage() {
 
               {/* 4 — the chats themselves. An average nobody can drill into is
                   an accusation. */}
+              {/* Totals per agent — the shape the owner liked in the admin
+                  console: an avatar beside the name, and the chat count drawn
+                  as a share of the busiest agent so the workload spread is
+                  visible without doing the division. Hidden when the page is
+                  already filtered to one agent, where a one-row table of
+                  totals says nothing the tiles above have not. */}
+              {!oneAgent && totals.length > 1 && (
+                <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
+                  <header className="flex items-baseline justify-between gap-3 border-b border-foreground/[0.07] px-5 py-4">
+                    <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                      {t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
+                    </h2>
+                    <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                      {t('performance.chatsCount', {
+                        defaultValue: '{{n}} chats',
+                        n: totals.reduce((sum, r) => sum + r.chats, 0),
+                      })}
+                    </span>
+                  </header>
+                  <div className="overflow-x-auto">
+                    <table
+                      className="w-full min-w-max text-sm"
+                      aria-label={t('performance.summaryTable', {
+                        defaultValue: 'Totals per agent',
+                      })}
+                    >
+                      <thead>
+                        <tr className="bg-foreground/[0.03] text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                          <th className="h-10 px-5 text-start font-semibold">
+                            {t('performance.agent', { defaultValue: 'Agent' })}
+                          </th>
+                          <th className="h-10 px-5 text-start font-semibold">
+                            {t('performance.chats', { defaultValue: 'Chats' })}
+                          </th>
+                          <th className="h-10 px-5 text-end font-semibold">
+                            {t('performance.noReplyYet', { defaultValue: 'No reply yet' })}
+                          </th>
+                          <th className="h-10 px-5 text-end font-semibold">
+                            {t('performance.commonChats', { defaultValue: 'Common chats taken' })}
+                          </th>
+                          <th className="h-10 px-5 text-end font-semibold">
+                            {t('performance.avgFirstCol', { defaultValue: 'First response (avg)' })}
+                          </th>
+                          <th className="h-10 px-5 text-end font-semibold">
+                            {t('performance.avgSolveCol', { defaultValue: 'Time to solve (avg)' })}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-foreground/[0.06]">
+                        {totals.map((r) => (
+                          <tr
+                            key={r.agentId ?? 'unassigned'}
+                            className="transition-colors duration-fast hover:bg-primary/[0.06]"
+                          >
+                            <td className="px-5 py-3">
+                              <span className="flex items-center gap-2.5">
+                                <Avatar name={r.agentName} size="sm" />
+                                <span className="truncate font-medium text-foreground">
+                                  {r.agentName}
+                                </span>
+                              </span>
+                            </td>
+                            <td className="px-5 py-3">
+                              <span className="flex items-center gap-2.5">
+                                <span className="w-6 text-end text-sm font-bold tabular-nums text-foreground">
+                                  {r.chats}
+                                </span>
+                                <MeterBar
+                                  value={
+                                    (r.chats / Math.max(1, ...totals.map((x) => x.chats))) * 100
+                                  }
+                                  tone="sky"
+                                  className="w-20"
+                                />
+                              </span>
+                            </td>
+                            <td className="px-5 py-3 text-end tabular-nums">
+                              {r.unanswered > 0 ? (
+                                <Pill tone="destructive" size="sm">
+                                  {r.unanswered}
+                                </Pill>
+                              ) : (
+                                <span className="text-muted-foreground">0</span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3 text-end tabular-nums">
+                              {r.commonChats > 0 ? (
+                                <Pill tone="success" size="sm">
+                                  {r.commonChats}
+                                </Pill>
+                              ) : (
+                                <span className="text-muted-foreground">0</span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3 text-end tabular-nums text-foreground">
+                              {formatDuration(r.avgFirstResponseSec) ?? '—'}
+                            </td>
+                            <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
+                              {formatDuration(r.avgTimeToSolveSec) ?? '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
               <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
                 <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-foreground/[0.08] px-4 py-3">
                   <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">

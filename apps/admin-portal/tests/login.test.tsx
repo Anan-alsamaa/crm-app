@@ -50,7 +50,7 @@ beforeEach(() => {
 describe('Login', () => {
   it('renders the sign-in form', () => {
     renderLogin();
-    expect(screen.getByText('Sign in to YIJI CRM Admin')).toBeInTheDocument();
+    expect(screen.getByText('Sign in to CRM Admin')).toBeInTheDocument();
     expect(screen.getByText('login.submit')).toBeInTheDocument();
   });
 

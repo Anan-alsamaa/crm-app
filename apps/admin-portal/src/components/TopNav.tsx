@@ -49,14 +49,18 @@ function tileFor(section: NavSection): string {
   return GROUP_TILES[section.items[0].to] ?? NEUTRAL_TILE;
 }
 
+/* Tabs, not pills: the nav now owns its own row in the masthead, so the
+ * active destination is marked by a jade underline sitting on the header's
+ * bottom edge — the way a masthead marks a section — instead of a filled
+ * lozenge that competed with every button on the page. */
 const TRIGGER_BASE =
-  'group flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm whitespace-nowrap transition-[background-color,color,box-shadow] duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:active:scale-[0.97]';
+  'group relative flex h-12 items-center gap-1.5 px-3.5 text-sm whitespace-nowrap transition-colors duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset';
 /* The selected pill is a jade wash with a hairline of the same hue — the glow
  * treatment from the reference boards — rather than a solid fill, which on the
  * floating dark bar read as a button, not a location. */
-const TRIGGER_ACTIVE = 'bg-primary/15 font-semibold text-primary ring-1 ring-inset ring-primary/25';
-const TRIGGER_IDLE =
-  'font-medium text-muted-foreground hover:bg-secondary/70 hover:text-foreground';
+const TRIGGER_ACTIVE =
+  "font-semibold text-primary after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-primary after:shadow-[0_0_12px_oklch(var(--primary)/0.6)] after:content-['']";
+const TRIGGER_IDLE = 'font-medium text-muted-foreground hover:text-foreground';
 
 /** A section with one item: a plain link, no menu. */
 function DirectLink({ section }: { section: NavSection }) {
@@ -195,7 +199,7 @@ function MenuGroup({ section }: { section: NavSection }) {
           role="menu"
           aria-label={section.heading}
           className={cn(
-            'absolute top-full start-0 z-50 mt-2 min-w-[16rem] rounded-2xl p-1.5',
+            'absolute top-full start-0 z-50 mt-1 min-w-[16rem] rounded-2xl p-1.5',
             'bg-popover/95 text-popover-foreground shadow-xl shadow-black/30 ring-1 ring-border backdrop-blur',
             'origin-top motion-safe:animate-scale-in',
           )}

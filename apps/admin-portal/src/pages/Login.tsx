@@ -165,7 +165,7 @@ export function Login() {
               <div className="space-y-1.5">
                 <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
                   {view === 'signin'
-                    ? t('login.title', { defaultValue: 'Sign in to YIJI CRM Admin' })
+                    ? t('login.title', { defaultValue: 'Sign in to CRM Admin' })
                     : t('login.forgotTitle', { defaultValue: 'Reset your password' })}
                 </h1>
                 <p className="text-sm text-muted-foreground">
@@ -356,7 +356,7 @@ export function Login() {
       </div>
 
       <p className="absolute bottom-4 inset-x-0 z-10 text-center text-2xs text-muted-foreground">
-        © YIJI CRM
+        © CRM
       </p>
 
       {/* Login sits outside the app shell, so it mounts its own toaster (used by

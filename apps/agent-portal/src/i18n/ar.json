@@ -1,7 +1,7 @@
 {
-  "brandName": "YIJI CRM",
+  "brandName": "CRM",
   "portalName": "المستخدم",
-  "portalFullName": "YIJI CRM · المستخدم",
+  "portalFullName": "CRM · المستخدم",
   "auth": {
     "sessionExpired": "انتهت جلستك. يُرجى تسجيل الدخول مرة أخرى."
   },

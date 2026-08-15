@@ -140,21 +140,41 @@ export function AppShell({
       </nav>
     );
 
-    // Top-nav layout: no side rail at all. ONE floating bar over the canvas —
-    // brand at the start, the nav pills in the middle, utilities at the end —
-    // the shape of the owner's reference dashboards. Rounded and hairlined so
-    // it reads as an elevated surface on the dark canvas, not a page-wide band.
-    // `relative z-30` so a nav dropdown paints over the page content below
-    // rather than being covered by stacking contexts inside it.
+    /*
+     * Top-nav layout: no side rail at all — TWO TIERS in one sticky header.
+     *
+     * Tier 1 is the identity + utility band: the brand lockup, then search,
+     * notifications, language and the signed-in user pushed to the end. Tier 2
+     * is navigation alone. Separating them stops the two competing for the same
+     * row: the single floating island had the brand, fourteen destinations and
+     * six utility controls all fighting for one 56px line, which is why it read
+     * as a toolbar rather than as the product's masthead.
+     *
+     * Full-bleed and hairlined rather than a rounded island: the header is the
+     * frame of the app, and an inset card floating over the canvas made the
+     * page look like it started twice. A blurred translucent ground keeps the
+     * canvas glow visible through it.
+     *
+     * `relative z-30` so a nav dropdown paints over the page content below
+     * rather than being covered by stacking contexts inside it.
+     */
     if (navBar) {
       return (
         <div className="flex h-full flex-col text-foreground">
-          <header className="relative z-30 mx-3 mt-3 flex h-14 shrink-0 items-center gap-3 rounded-2xl border border-border bg-card/90 px-3 shadow-[0_12px_32px_-20px_oklch(var(--shadow-color)/0.9)] backdrop-blur">
-            <div className="shrink-0">{topBarBrand}</div>
-            <nav aria-label={navLabel} className="flex h-full min-w-0 flex-1 items-center">
+          <header className="relative z-30 shrink-0 border-b border-border bg-card/75 backdrop-blur-xl">
+            {/* Tier 1 — identity + utilities */}
+            <div className="flex h-16 items-center gap-4 px-4 sm:px-6">
+              <div className="shrink-0">{topBarBrand}</div>
+              <div className="min-w-0 flex-1" />
+              {topBar && <div className="flex shrink-0 items-center gap-2">{topBar}</div>}
+            </div>
+            {/* Tier 2 — navigation, on its own line with room to breathe */}
+            <nav
+              aria-label={navLabel}
+              className="flex h-12 items-center border-t border-border/60 px-2 sm:px-4"
+            >
               {navBar}
             </nav>
-            {topBar && <div className="flex shrink-0 items-center gap-2">{topBar}</div>}
           </header>
           <main className="app-aurora min-h-0 min-w-0 flex-1 overflow-hidden">{children}</main>
         </div>

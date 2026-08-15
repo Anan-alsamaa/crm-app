@@ -1,9 +1,9 @@
 {
-  "brandName": "YIJI CRM",
+  "brandName": "CRM",
   "portalName": "Admin",
-  "portalFullName": "YIJI CRM · Admin",
+  "portalFullName": "CRM · Admin",
   "login": {
-    "title": "Sign in to YIJI CRM Admin",
+    "title": "Sign in to CRM Admin",
     "submit": "Sign in",
     "error": "Invalid email or password",
     "notAdmin": "Your account does not have administrator access.",

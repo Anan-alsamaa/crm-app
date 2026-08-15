@@ -103,15 +103,28 @@ export default async function globalSetup(): Promise<void> {
   //    bulk-select spec has more than one row. demo-vendor is created by the CI
   //    "Seed demo vendor" step before this runs (and exists locally by hand).
   try {
-    const vendorRes = await json<{ data: Array<{ id: string }> }>(
-      await fetchT(
-        `${DIRECTUS}/items/vendors?filter[yiji_vendor_id][_eq]=demo-vendor&fields=id&limit=1`,
-        { headers },
-      ),
-    );
-    const vendorId = vendorRes.data[0]?.id;
+    /*
+     * Resolve the vendor these fixtures hang off.
+     *
+     * This looked up `yiji_vendor_id=demo-vendor` only, while CI's "Seed demo
+     * vendor" step creates `yiji_vendor_id=1` (the id the gateway expects).
+     * The lookup therefore missed on every CI run, the seed was skipped, and
+     * the three specs that need "Demo Customer" failed on main forever. Try
+     * the known ids, then fall back to ANY vendor, so the fixtures attach to
+     * whatever the environment actually provisioned.
+     */
+    const findVendor = async (q: string) =>
+      (
+        await json<{ data: Array<{ id: string }> }>(
+          await fetchT(`${DIRECTUS}/items/vendors?${q}&fields=id&limit=1`, { headers }),
+        )
+      ).data[0]?.id;
+    const vendorId =
+      (await findVendor('filter[yiji_vendor_id][_eq]=demo-vendor')) ??
+      (await findVendor('filter[yiji_vendor_id][_eq]=1')) ??
+      (await findVendor('sort=id'));
     if (!vendorId) {
-      console.warn('[e2e-setup] demo-vendor not found — skipping conversation seed');
+      console.warn('[e2e-setup] no vendor exists at all — skipping conversation seed');
     } else {
       const stamp = process.env.E2E_AGENT_EXPIRES ?? '0';
       for (let i = 1; i <= 2; i++) {

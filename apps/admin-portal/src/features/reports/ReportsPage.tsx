@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import {
@@ -174,10 +174,22 @@ export function ReportsPage() {
     }
   };
 
+  /*
+   * The rows, readable inside the effect WITHOUT being one of its
+   * dependencies. react-query hands back a NEW array identity on every
+   * background refetch, and with `reports.data` in the deps that refetch
+   * re-ran this effect and called `setDraft(blank())` — silently wiping
+   * whatever the admin had typed into the open drawer. It also made
+   * reports-page.test.tsx fail on CI and pass locally, because whether the
+   * refetch landed mid-test was pure timing.
+   */
+  const rowsRef = useRef(reports.data);
+  rowsRef.current = reports.data;
+
   useEffect(() => {
     if (!drawerOpen) return;
     if (editingId) {
-      const existing = reports.data?.find((r) => r.id === editingId);
+      const existing = rowsRef.current?.find((r) => r.id === editingId);
       if (existing) {
         setDraft({
           name: existing.name,
@@ -196,7 +208,7 @@ export function ReportsPage() {
     } else {
       setDraft(blank());
     }
-  }, [drawerOpen, editingId, reports.data]);
+  }, [drawerOpen, editingId]);
 
   const onSubmit = async (): Promise<void> => {
     if (!draft.name.trim()) {

@@ -132,7 +132,6 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
               dir="ltr"
               className="flex items-baseline gap-1.5 text-[15px] font-semibold tracking-[-0.015em] text-rail-active-foreground"
             >
-              <span>Yiji</span>
               <span className="text-rail-foreground/70 font-normal">CRM</span>
             </div>
             <div className="text-2xs text-rail-foreground/75 mt-0.5">
@@ -241,11 +240,18 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
 
 /** Compact brand lockup for the mobile top bar. */
 function MobileBrand() {
+  const { t } = useTranslation();
   return (
-    <div className="flex items-center gap-2">
-      <YijiLogo variant="tile" size={28} className="bg-rail shadow-sm shrink-0" />
-      <span dir="ltr" className="text-[15px] font-semibold tracking-[-0.015em] text-foreground">
-        Yiji <span className="font-normal text-muted-foreground">CRM</span>
+    <div className="flex items-center gap-2.5">
+      <YijiLogo variant="tile" size={34} className="shrink-0 bg-rail shadow-sm" />
+      {/* The masthead names the product AND which portal you are in — the
+          lockup used to be a bare word, which told a supervisor with both
+          portals open nothing about which one they were looking at. */}
+      <span className="min-w-0 leading-tight">
+        <span className="block text-[15px] font-bold tracking-[-0.015em] text-foreground">CRM</span>
+        <span className="block text-2xs text-muted-foreground">
+          {t('app.console', { defaultValue: 'Admin console' })}
+        </span>
       </span>
     </div>
   );

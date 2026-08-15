@@ -6,7 +6,7 @@ describe('i18n: t()', () => {
     const en = t('en');
     expect(en.title).toBe('Support');
     expect(en.send).toBe('Send');
-    expect(en.poweredBy).toBe('Powered by YIJI CRM');
+    expect(en.poweredBy).toBe('Powered by CRM');
     expect(en.offlineCallLabel).toBe('Call us');
   });
 
@@ -14,7 +14,7 @@ describe('i18n: t()', () => {
     const ar = t('ar');
     expect(ar.title).toBe('الدعم');
     expect(ar.send).toBe('إرسال');
-    expect(ar.poweredBy).toBe('مدعوم بواسطة YIJI CRM');
+    expect(ar.poweredBy).toBe('مدعوم بواسطة CRM');
     expect(ar.offlineCallLabel).toBe('اتصل بنا');
   });
 
