@@ -2,7 +2,7 @@ import type { JSX } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
-import { Button, cn, Drawer, FormField, Pill, Spinner, Textarea, toast } from '@yiji/ui';
+import { Button, cn, Drawer, Pill, Spinner, Textarea, toast } from '@yiji/ui';
 import {
   HELP_HISTORY_MAX_TURNS,
   type AuraAction,
@@ -137,6 +137,24 @@ function Row({ label, value }: { label: string; value: string }) {
       <dt className="shrink-0 text-muted-foreground">{label}</dt>
       <dd className="min-w-0 break-words font-medium text-foreground">{value}</dd>
     </div>
+  );
+}
+
+/** Paper-plane send glyph for the composer. */
+function SendIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+      aria-hidden
+    >
+      <path d="M14 2 7.5 8.5M14 2l-4.2 12-2.3-5.5L2 6.2 14 2Z" />
+    </svg>
   );
 }
 
@@ -305,13 +323,16 @@ export function HelpAssistant(): JSX.Element {
             }}
             className="w-full space-y-3"
           >
-            <FormField
-              label={t('helpAssistant.label', { defaultValue: 'Your question' })}
-              htmlFor="help-assistant-question"
-            >
+            {/* No field label: the placeholder says what to do, and a labelled
+                form control above a chat composer reads as a form to fill in
+                rather than a conversation to continue. The accessible name is
+                carried by aria-label instead. */}
+            <div className="flex items-end gap-2">
               <Textarea
                 id="help-assistant-question"
-                rows={3}
+                aria-label={t('helpAssistant.label', { defaultValue: 'Your question' })}
+                className="min-h-[3rem] flex-1 resize-none rounded-2xl"
+                rows={2}
                 maxLength={MAX_LENGTH}
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
@@ -323,15 +344,34 @@ export function HelpAssistant(): JSX.Element {
                   }
                 }}
                 placeholder={t('helpAssistant.placeholder', {
-                  defaultValue: 'How do I add an agent to a team?',
+                  defaultValue: 'Ask Aura anything…',
                 })}
               />
-            </FormField>
+              {/* Send sits INSIDE the composer row, as a square beside the box
+                  rather than a labelled button on a line of its own. */}
+              <Button
+                type="submit"
+                size="sm"
+                className="h-10 w-10 shrink-0 rounded-2xl p-0"
+                disabled={!canSend}
+                loading={ask.isPending}
+                aria-label={t('helpAssistant.send', { defaultValue: 'Ask' })}
+              >
+                <SendIcon />
+              </Button>
+            </div>
 
             <div className="flex items-center justify-between gap-3">
+              {/* The caveat belongs under the box the answer comes from, not in
+                  a help page nobody opens. */}
+              <span className="text-2xs text-muted-foreground">
+                {t('helpAssistant.caveat', {
+                  defaultValue: 'Aura can be wrong — check anything that matters.',
+                })}
+              </span>
               <span
                 aria-live="polite"
-                className="text-2xs tabular-nums text-muted-foreground"
+                className="shrink-0 text-2xs tabular-nums text-muted-foreground"
                 data-testid="help-assistant-counter"
               >
                 {/* `chars`, not `count` — `count` is i18next's plural selector. */}
@@ -341,9 +381,6 @@ export function HelpAssistant(): JSX.Element {
                   max: MAX_LENGTH,
                 })}
               </span>
-              <Button type="submit" size="sm" disabled={!canSend} loading={ask.isPending}>
-                {t('helpAssistant.send', { defaultValue: 'Ask' })}
-              </Button>
             </div>
           </form>
         }

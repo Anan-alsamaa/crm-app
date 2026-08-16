@@ -136,6 +136,9 @@ export default async function globalSetup(): Promise<void> {
               vendor: vendorId,
               external_customer_id: `e2e-seed-${i}-${stamp}`,
               name: `E2E Seed ${i}`,
+              // Real customers always have one; a fixture without a phone made
+              // the reports' phone column look broken when it was merely empty.
+              phone: `+96650000${String(i).padStart(4, '0')}`,
             }),
           }),
         );

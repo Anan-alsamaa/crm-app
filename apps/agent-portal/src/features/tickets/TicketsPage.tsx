@@ -5,9 +5,8 @@ import {
   ArrowLeftIcon,
   Avatar,
   Button,
+  ChevronDownIcon,
   CloseIcon,
-  cn,
-  formatRelative,
   Input,
   MeterBar,
   Pill,
@@ -16,9 +15,11 @@ import {
   Skeleton,
   Spinner,
   TicketEmptyArt,
-  toast,
   Toolbar,
   ToolbarSpacer,
+  cn,
+  formatRelative,
+  toast,
   useIsDesktop,
 } from '@yiji/ui';
 import {
@@ -114,6 +115,13 @@ export function TicketsPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<TicketFilter>('all');
   const [criteria, setCriteria] = useState<TicketFilterCriteria>({});
+  /* The rail's job is showing tickets. Filters are set once and then left, so
+     they fold away and report how many are on rather than occupying four rows
+     of the queue permanently. */
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilters = [criteria.complaintType, criteria.from, criteria.to].filter(
+    (v) => v != null && v !== '',
+  ).length;
 
   // Deep-link support: open a specific ticket from /tickets?id=<id> (command
   // palette, AI search) or /tickets/<id> (notification "View" links).
@@ -252,52 +260,75 @@ export function TicketsPage() {
                 aria-label={t('tickets.searchLabel', { defaultValue: 'Search tickets' })}
                 className="h-9"
               />
-              <SelectMenu
-                size="sm"
-                className="w-full"
-                value={criteria.complaintType ?? ''}
-                onChange={(v) => setCriteria((c) => ({ ...c, complaintType: v }))}
-                aria-label={t('complaint.type', { defaultValue: 'Complaint type' })}
-                options={[
-                  {
-                    value: '',
-                    label: t('tickets.anyType', { defaultValue: 'Any complaint type' }),
-                  },
-                  // From the data in range, not the full vocabulary: a menu of
-                  // types this agent has never handled is a list to read past.
-                  ...typesInRange.map((v) => ({ value: v, label: optionLabel(v) })),
-                ]}
-              />
-              {/* The dates carry visible micro-labels: two bare date boxes side
+              <button
+                type="button"
+                onClick={() => setFiltersOpen((v) => !v)}
+                aria-expanded={filtersOpen}
+                className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition-colors duration-fast hover:text-foreground"
+              >
+                <span className="flex items-center gap-1.5">
+                  {t('tickets.filters', { defaultValue: 'Filters' })}
+                  {activeFilters > 0 && (
+                    <span className="grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+                      {activeFilters}
+                    </span>
+                  )}
+                </span>
+                <ChevronDownIcon
+                  size={12}
+                  className={cn('transition-transform duration-fast', filtersOpen && 'rotate-180')}
+                />
+              </button>
+              {filtersOpen && (
+                <>
+                  <SelectMenu
+                    size="sm"
+                    className="w-full"
+                    value={criteria.complaintType ?? ''}
+                    onChange={(v) => setCriteria((c) => ({ ...c, complaintType: v }))}
+                    aria-label={t('complaint.type', { defaultValue: 'Complaint type' })}
+                    options={[
+                      {
+                        value: '',
+                        label: t('tickets.anyType', { defaultValue: 'Any complaint type' }),
+                      },
+                      // From the data in range, not the full vocabulary: a menu of
+                      // types this agent has never handled is a list to read past.
+                      ...typesInRange.map((v) => ({ value: v, label: optionLabel(v) })),
+                    ]}
+                  />
+                  {/* The dates carry visible micro-labels: two bare date boxes side
                   by side read as one range control with no way to tell which
                   end is which. Full-width halves, so the pair squares up with
                   the search box above instead of ending ragged mid-rail. */}
-              <div className="grid grid-cols-2 gap-1.5">
-                <label className="block space-y-1">
-                  <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    {t('performance.from', { defaultValue: 'From' })}
-                  </span>
-                  <Input
-                    type="date"
-                    value={criteria.from ?? ''}
-                    onChange={(e) => setCriteria((c) => ({ ...c, from: e.target.value }))}
-                    aria-label={t('performance.from', { defaultValue: 'From' })}
-                    className="h-8 w-full text-xs"
-                  />
-                </label>
-                <label className="block space-y-1">
-                  <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    {t('performance.to', { defaultValue: 'To' })}
-                  </span>
-                  <Input
-                    type="date"
-                    value={criteria.to ?? ''}
-                    onChange={(e) => setCriteria((c) => ({ ...c, to: e.target.value }))}
-                    aria-label={t('performance.to', { defaultValue: 'To' })}
-                    className="h-8 w-full text-xs"
-                  />
-                </label>
-              </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <label className="block space-y-1">
+                      <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        {t('performance.from', { defaultValue: 'From' })}
+                      </span>
+                      <Input
+                        type="date"
+                        value={criteria.from ?? ''}
+                        onChange={(e) => setCriteria((c) => ({ ...c, from: e.target.value }))}
+                        aria-label={t('performance.from', { defaultValue: 'From' })}
+                        className="h-8 w-full text-xs"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        {t('performance.to', { defaultValue: 'To' })}
+                      </span>
+                      <Input
+                        type="date"
+                        value={criteria.to ?? ''}
+                        onChange={(e) => setCriteria((c) => ({ ...c, to: e.target.value }))}
+                        aria-label={t('performance.to', { defaultValue: 'To' })}
+                        className="h-8 w-full text-xs"
+                      />
+                    </label>
+                  </div>
+                </>
+              )}
               {!isEmptyFilter(criteria) && (
                 // Undo lives with the controls it undoes. The "what is the
                 // queue showing" count moved to the rail's foot, which shows
@@ -727,10 +758,22 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         ? tk.order_snapshot.orderId
         : null));
 
-  const patch = (p: Parameters<typeof update.mutateAsync>[0]['patch']) =>
-    void update
-      .mutateAsync({ id: tk.id, patch: p })
+  const patch = (p: Parameters<typeof update.mutateAsync>[0]['patch']) => {
+    /*
+     * Stamp the first response the first time anyone acts on this ticket.
+     *
+     * `first_responded_at` used to be set only by an agent replying in a
+     * LINKED CHAT, so a complaint taken over the phone or typed straight into
+     * the CRM never got one: 56 of 62 tickets had none, and the SLA report
+     * could therefore only ever show a resolution figure for them. Working the
+     * ticket at all IS the response. This records a floor ("no later than
+     * this"), which beats a null that reads as "nobody ever answered".
+     */
+    const body = tk.first_responded_at ? p : { ...p, first_responded_at: new Date().toISOString() };
+    return void update
+      .mutateAsync({ id: tk.id, patch: body })
       .catch(() => toast.error(t('errors.updateFailed', { ns: 'common' })));
+  };
 
   const submitNote = () => {
     const text = note.trim();
@@ -1574,18 +1617,20 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
         </p>
       ) : (
         <div className="space-y-3">
-          {/* Board-table rows: micro-label heads, hairline separators, values
-              end-aligned with tabular numerals for the coupon columns. */}
-          <dl className="grid gap-x-8 sm:grid-cols-2">
+          {/* Label above value, in a quiet grid. The old shape pushed each
+              label and its value to opposite ends of a ruled row, so the eye
+              had to cross a gap to pair them and every row drew another line —
+              which is what made this panel read as a stack of boxes. */}
+          <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
             {rows.map(([label, value]) => (
-              <div
-                key={label}
-                className="flex items-baseline justify-between gap-3 border-b border-border/50 py-2"
-              >
-                <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <div key={label} className="min-w-0">
+                <dt className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   {label}
                 </dt>
-                <dd className="min-w-0 text-end text-xs font-medium tabular-nums text-foreground">
+                <dd
+                  dir="auto"
+                  className="mt-1 min-w-0 break-words text-sm font-semibold text-foreground"
+                >
                   {optionLabel(value)}
                 </dd>
               </div>
