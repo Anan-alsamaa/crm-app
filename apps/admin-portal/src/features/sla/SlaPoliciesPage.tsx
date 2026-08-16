@@ -337,7 +337,7 @@ export function SlaPoliciesPage() {
                           onChange={(e) =>
                             void toggleActive.mutateAsync({ id: p.id, active: e.target.checked })
                           }
-                          className="h-3.5 w-3.5 rounded-sm border-border-strong bg-input accent-primary"
+                          className="h-3.5 w-3.5 rounded-md border-border-strong bg-input accent-primary"
                           aria-label={t('sla.active')}
                         />
                         <span>{t('sla.active')}</span>
@@ -427,7 +427,7 @@ export function SlaPoliciesPage() {
                     <input
                       type="checkbox"
                       value={p}
-                      className="h-3.5 w-3.5 rounded-sm border-border-strong bg-input accent-primary"
+                      className="h-3.5 w-3.5 rounded-md border-border-strong bg-input accent-primary"
                       {...register('applies_to_priority')}
                     />
                     {t(`priority.${p}`, { ns: 'common' })}

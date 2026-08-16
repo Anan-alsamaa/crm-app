@@ -124,7 +124,7 @@ function IncludeToggle({
     <label className="flex cursor-pointer items-start gap-2.5">
       <span
         className={cn(
-          'mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-[5px] ring-1 transition-colors duration-fast ease-out',
+          'mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-md ring-1 transition-colors duration-fast ease-out',
           checked
             ? 'bg-primary text-primary-foreground ring-primary'
             : 'bg-card text-transparent ring-foreground/20',

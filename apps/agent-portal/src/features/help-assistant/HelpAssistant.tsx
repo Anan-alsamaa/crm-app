@@ -324,7 +324,7 @@ export function HelpAssistant(): JSX.Element {
           {turns.map((turn, i) =>
             turn.role === 'user' ? (
               <div key={i} className="flex justify-end">
-                <p className="max-w-[85%] whitespace-pre-wrap rounded-[22px] rounded-ee-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-foreground">
+                <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-ee-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-foreground">
                   {turn.content}
                 </p>
               </div>
@@ -339,7 +339,7 @@ export function HelpAssistant(): JSX.Element {
                 )}
                 <p
                   className={cn(
-                    'max-w-[85%] whitespace-pre-wrap rounded-[22px] rounded-es-md px-4 py-2.5 text-sm leading-relaxed ring-1 ring-foreground/[0.06]',
+                    'max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-es-md px-4 py-2.5 text-sm leading-relaxed ring-1 ring-foreground/[0.06]',
                     turn.offTopic
                       ? 'bg-secondary text-muted-foreground'
                       : 'bg-bubble text-foreground',

@@ -90,8 +90,8 @@ export function ResetPassword() {
       </div>
 
       <div className="relative z-10 w-full max-w-[420px] animate-fade-in">
-        <div className="overflow-hidden rounded-3xl bg-card shadow-2xl shadow-black/40 ring-1 ring-foreground/[0.08]">
-          <div className="overflow-hidden rounded-3xl bg-card">
+        <div className="overflow-hidden rounded-2xl bg-card shadow-2xl shadow-black/40 ring-1 ring-foreground/[0.08]">
+          <div className="overflow-hidden rounded-2xl bg-card">
             <div className="flex flex-col items-center gap-4 px-8 pb-2 pt-8 text-center">
               <YijiLogo size={72} />
               <div className="space-y-1.5">
@@ -166,7 +166,7 @@ export function ResetPassword() {
             <div className="px-8 py-3 text-center text-2xs text-muted-foreground">
               <Link
                 to="/login"
-                className="rounded-sm transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="rounded-md transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {t('login.backToSignIn', { defaultValue: 'Back to sign in' })}
               </Link>

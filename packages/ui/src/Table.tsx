@@ -30,7 +30,7 @@ export function TableSurface({
         // used to be CLIPPED, so the right-hand columns were unreachable rather
         // than merely cramped. Wide registers (ticket ops, agent reports) now
         // scroll horizontally inside the card instead of losing data.
-        'overflow-x-auto rounded-3xl bg-card shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
+        'overflow-x-auto rounded-2xl bg-card shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
         className,
       )}
       {...rest}

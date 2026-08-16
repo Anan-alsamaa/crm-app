@@ -485,7 +485,7 @@ export function Inbox() {
                       if (el) el.indeterminate = someChecked && !allChecked;
                     }}
                     onChange={toggleAll}
-                    className="h-3.5 w-3.5 rounded-sm border-border-strong bg-input accent-primary"
+                    className="h-3.5 w-3.5 rounded-md border-border-strong bg-input accent-primary"
                   />
                   {t('inbox.selectAll')}
                 </label>
@@ -518,7 +518,7 @@ export function Inbox() {
                       >
                         <input
                           type="checkbox"
-                          className="ms-4 mt-4 h-3.5 w-3.5 rounded-sm border-border-strong bg-card accent-primary opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity duration-fast"
+                          className="ms-4 mt-4 h-3.5 w-3.5 rounded-md border-border-strong bg-card accent-primary opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity duration-fast"
                           checked={checked.has(c.id)}
                           onChange={() => toggleOne(c.id)}
                           aria-label={displayName}

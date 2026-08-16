@@ -600,7 +600,7 @@ function Donut({ rows, onSelect }: { rows: Breakdown[]; onSelect?: (row: Breakdo
             <>
               <span
                 aria-hidden
-                className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                className="h-2.5 w-2.5 shrink-0 rounded-md"
                 style={{ background: SLICE[i % SLICE.length] }}
               />
               <span className="min-w-0 flex-1 truncate text-start text-foreground" title={r.label}>
@@ -670,7 +670,7 @@ function Composition({
             key={s.key}
             className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground"
           >
-            <span aria-hidden className={cn('h-2 w-2 shrink-0 rounded-sm', s.className)} />
+            <span aria-hidden className={cn('h-2 w-2 shrink-0 rounded-md', s.className)} />
             {s.label}
             <strong className="font-semibold tabular-nums text-foreground">{s.value}</strong>
           </li>

@@ -203,7 +203,7 @@ export function Login() {
                       <button
                         type="button"
                         onClick={openForgot}
-                        className="rounded-sm text-xs font-medium normal-case tracking-normal text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="rounded-md text-xs font-medium normal-case tracking-normal text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {t('login.forgot', { defaultValue: 'Forgot password?' })}
                       </button>
@@ -295,7 +295,7 @@ export function Login() {
                 <button
                   type="button"
                   onClick={backToSignIn}
-                  className="mx-auto block rounded-sm text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="mx-auto block rounded-md text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {t('login.backToSignIn', { defaultValue: 'Back to sign in' })}
                 </button>

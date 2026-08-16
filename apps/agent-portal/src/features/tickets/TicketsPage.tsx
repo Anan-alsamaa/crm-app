@@ -603,7 +603,7 @@ function ChatMediaDialog({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[80vh] w-full max-w-md flex-col rounded-3xl bg-card p-6 shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in">
+      <div className="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl bg-card p-6 shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="space-y-1">
             <h3 className="text-lg font-semibold tracking-[-0.02em] text-foreground">

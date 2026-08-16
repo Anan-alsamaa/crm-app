@@ -197,7 +197,7 @@ function KpiTile({
   return (
     <div
       className={cn(
-        'rounded-3xl p-5 shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
+        'rounded-2xl p-5 shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
         'transition-[box-shadow,transform] duration-base ease-out motion-safe:hover:-translate-y-1',
         'hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.08),0_20px_44px_-16px_oklch(var(--shadow-color)/0.28)]',
         SURFACE_TONE[tone],
