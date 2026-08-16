@@ -35,7 +35,7 @@ export class GeminiProvider implements AIProvider {
         systemInstruction: input.system,
         generationConfig: {
           temperature: input.temperature ?? 0.4,
-          maxOutputTokens: input.maxOutputTokens ?? 1024,
+          maxOutputTokens: input.maxOutputTokens ?? 4096,
         },
       },
       { timeout: REQUEST_TIMEOUT_MS },

@@ -6,6 +6,7 @@ import {
   SuggestReplyRequest,
   SemanticSearchRequest,
   HelpAssistantRequest,
+  AuraAction,
   HELP_HISTORY_MAX_TURNS,
   type HelpAssistantResponse,
   type SummaryResponse,
@@ -21,7 +22,7 @@ import { verifyCaller, AuthError, type Caller } from './auth/index.js';
 import { AiConfigStore, FEATURE_BY_ENDPOINT } from './aiconfig/index.js';
 import { SlidingWindowLimiter, MonthlyCap, DailyQuota } from './ratelimit/index.js';
 import { ResponseCache } from './cache/index.js';
-import { redactDeep } from './redaction/index.js';
+import { redactDeep, unredact } from './redaction/index.js';
 import { prompts } from './prompts/index.js';
 import type { AIProvider } from './provider/types.js';
 import { AiProviderError } from './provider/types.js';
@@ -196,13 +197,18 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     extract: (text: string) => T,
   ): Promise<T> {
     // PII redaction before the outbound call — this is the perimeter
-    const { redacted } = redactDeep({ system, user });
+    const { redacted, entries } = redactDeep({ system, user });
     const out = await deps.provider.run({
       endpoint,
       system: redacted.system,
       user: redacted.user,
     });
-    const result = extract(out.text);
+    // ...and restored on the way back in. The placeholders exist to keep values
+    // away from the PROVIDER, not from the user, who supplied them and is
+    // already cleared to see them. Without this, a reply that quotes an address
+    // back reads '<EMAIL_1>', and an email Aura is asked to schedule a report to
+    // never survives validation.
+    const result = extract(unredact(out.text, entries));
     schema.parse(result);
     await deps.cache.set(endpoint, cacheKey, result);
     return result;
@@ -593,7 +599,13 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     }
 
     const p = prompts.helpAssistant(question, history);
-    const schema = z.object({ answer: z.string(), offTopic: z.boolean() });
+    // `action` is validated by the shared contract, so a malformed or
+    // unrecognised proposal is dropped here rather than reaching the portal.
+    const schema = z.object({
+      answer: z.string(),
+      offTopic: z.boolean(),
+      action: AuraAction.nullish(),
+    });
     try {
       const result: HelpAssistantResponse = await runWith(
         AI_ENDPOINTS.helpAssistant,
@@ -608,6 +620,8 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
               ? truncateChars(raw.answer, HELP_OFFTOPIC_MAX_CHARS)
               : truncateWords(raw.answer, HELP_ANSWER_MAX_WORDS),
             offTopic: raw.offTopic,
+            // An off-topic turn can never carry a change to make.
+            action: raw.offTopic ? null : (raw.action ?? null),
           };
         },
       );

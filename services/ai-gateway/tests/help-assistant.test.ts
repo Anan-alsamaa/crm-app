@@ -124,7 +124,7 @@ describe('/help-assistant — happy path', () => {
   it('grounds the system prompt in this product and fences the question as data', async () => {
     await ask(h.app, 'What are the ticket statuses?');
     const call = h.provider.calls[0]!;
-    expect(call.system).toContain('Yiji CRM');
+    expect(call.system).toContain('Sara CRM');
     expect(call.system).toContain('new -> open -> pending -> resolved -> closed');
     // The scope guard actually reaches the provider.
     expect(call.system).toContain('OUT OF SCOPE');

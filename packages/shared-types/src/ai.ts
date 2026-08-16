@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Locale } from './enums.js';
+import { Locale, ReportType } from './enums.js';
 
 /**
  * AI gateway request/response contracts (contracts/ai-gateway.openapi.yaml).
@@ -101,11 +101,37 @@ export const HelpAssistantRequest = z.object({
 });
 export type HelpAssistantRequest = z.infer<typeof HelpAssistantRequest>;
 
+/**
+ * A change Aura believes the user asked for, described but NOT performed.
+ *
+ * The assistant never writes anything itself. It returns a proposal, the
+ * portal renders exactly what would be created, and the user presses the
+ * button — so the write runs under THEIR session and THEIR permissions, and
+ * an assistant that misreads a request produces a wrong card rather than a
+ * wrong record. `kind` is a closed set for the same reason: an action the
+ * portal does not recognise is ignored, not attempted.
+ */
+export const AuraAction = z.object({
+  kind: z.literal('create_scheduled_report'),
+  /** Human-readable summary of the proposal, rendered above the button. */
+  summary: z.string().max(300),
+  payload: z.object({
+    name: z.string().min(1).max(120),
+    type: ReportType,
+    /** Cron the worker registers; absent means run-on-demand only. */
+    cron: z.string().max(80).optional(),
+    recipients: z.array(z.string().email()).max(20).optional(),
+  }),
+});
+export type AuraAction = z.infer<typeof AuraAction>;
+
 export const HelpAssistantResponse = z.object({
   answer: z.string(),
   /** True when the question was out of scope and `answer` is the refusal. */
   offTopic: z.boolean(),
   cached: z.boolean().optional(),
+  /** Present when the user asked Aura to DO something she can propose. */
+  action: AuraAction.nullish(),
 });
 export type HelpAssistantResponse = z.infer<typeof HelpAssistantResponse>;
 

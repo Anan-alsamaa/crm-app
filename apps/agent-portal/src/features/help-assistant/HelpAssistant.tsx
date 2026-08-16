@@ -3,7 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import { Button, cn, Drawer, FormField, Pill, Spinner, Textarea } from '@yiji/ui';
-import { HELP_HISTORY_MAX_TURNS, type HelpAssistantTurn } from '@yiji/shared-types';
+import {
+  HELP_HISTORY_MAX_TURNS,
+  type AuraAction,
+  type HelpAssistantTurn,
+} from '@yiji/shared-types';
 import { ai, type AiError } from '../../lib/ai-client.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
@@ -32,6 +36,8 @@ type Turn = {
    *  replaying our own copy back to the model wastes tokens and teaches it
    *  nothing about what the user actually asked. */
   welcome?: boolean;
+  /** A change Aura worked out from the ask, which only an admin can apply. */
+  action?: AuraAction | null;
 };
 
 /* Starter prompts for the empty state. Grounded in things this product really
@@ -49,6 +55,61 @@ const MIN_LENGTH = 3;
 
 /* House-style glyph (24x24, 1.75 stroke, currentColor) — @yiji/ui ships no
  * help icon, so it stays local like the AI-config page glyphs. */
+
+/**
+ * What Aura worked out, shown in full — but without a button.
+ *
+ * Scheduled reports are created in the admin portal; an agent has no write
+ * access to them, so offering the action here would only produce a denial.
+ * Showing the worked-out settings still saves the trip: the agent can hand
+ * these four lines to an admin verbatim.
+ */
+function ActionCard({ action }: { action: AuraAction }) {
+  const { t } = useTranslation();
+  if (action.kind !== 'create_scheduled_report') return null;
+  const { name, type } = action.payload;
+  const cron = action.payload.cron ?? '';
+  const recipients = action.payload.recipients ?? [];
+
+  return (
+    <div className="mt-1 max-w-[85%] rounded-2xl bg-primary/[0.06] p-4 ring-1 ring-inset ring-primary/20">
+      <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-primary">
+        {t('helpAssistant.proposal', { defaultValue: 'The settings for this' })}
+      </p>
+      <dl className="mt-2.5 space-y-1.5 text-xs">
+        <Row label={t('helpAssistant.fieldName', { defaultValue: 'Name' })} value={name} />
+        <Row label={t('helpAssistant.fieldType', { defaultValue: 'Report' })} value={type} />
+        <Row
+          label={t('helpAssistant.fieldFrequency', { defaultValue: 'How often' })}
+          value={cron || t('helpAssistant.freqManual', { defaultValue: 'On demand only' })}
+        />
+        <Row
+          label={t('helpAssistant.fieldRecipients', { defaultValue: 'Sent to' })}
+          value={
+            recipients.length
+              ? recipients.join(', ')
+              : t('helpAssistant.noRecipients', { defaultValue: 'nobody yet' })
+          }
+        />
+      </dl>
+      <p className="mt-3 text-xs text-muted-foreground">
+        {t('helpAssistant.adminOnly', {
+          defaultValue:
+            'Scheduled reports are set up in the admin portal — pass these to an admin.',
+        })}
+      </p>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-2">
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words font-medium text-foreground">{value}</dd>
+    </div>
+  );
+}
 
 export function HelpAssistant(): JSX.Element {
   const { t } = useTranslation();
@@ -74,7 +135,7 @@ export function HelpAssistant(): JSX.Element {
     onSuccess: (res) =>
       setTurns((prev) => [
         ...prev,
-        { role: 'assistant', content: res.answer, offTopic: res.offTopic },
+        { role: 'assistant', content: res.answer, offTopic: res.offTopic, action: res.action },
       ]),
   });
 
@@ -286,6 +347,7 @@ export function HelpAssistant(): JSX.Element {
                 >
                   {turn.content}
                 </p>
+                {turn.action && <ActionCard action={turn.action} />}
               </div>
             ),
           )}
