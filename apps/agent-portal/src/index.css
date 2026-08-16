@@ -76,6 +76,14 @@
   --brand: 0.5 0.115 192;
 
   --bubble: 0.965 0.02 195;
+  /* Already-dark canvas: ink lifts slightly instead of vanishing. */
+  --ink: 0.24 0.02 235;
+  --ink-foreground: 0.97 0.005 195;
+  --ink-muted: 0.68 0.02 210;
+  /* Ink: the dark counterweight in a light app — masthead, table headers. */
+  --ink: 0.21 0.018 235;
+  --ink-foreground: 0.98 0.005 195;
+  --ink-muted: 0.72 0.02 210;
 
   --secondary: 0.955 0.014 195;
   --secondary-foreground: 0.27 0.008 285;

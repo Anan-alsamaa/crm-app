@@ -143,10 +143,7 @@ export function ImportsPage() {
       <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 py-8 space-y-6 sm:px-10">
         {/* Clean editorial header — no gradient banner. */}
         <div className="border-b border-foreground/10 pb-5">
-          <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
-            {t('imports.title', { defaultValue: 'Import contacts' })}
-          </h2>
-          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
             {t('imports.heroSubtitle', {
               defaultValue:
                 'Upload a CSV, map its columns to contact fields, preview the first rows, then queue the import. Deduplication runs per-vendor on phone or email.',

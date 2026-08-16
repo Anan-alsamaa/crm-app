@@ -239,10 +239,7 @@ export function CustomFieldsPage() {
           {/* Clean editorial header — no gradient banner. */}
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-foreground/10 pb-5">
             <div>
-              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
-                {t('customFields.title', { defaultValue: 'Custom fields' })}
-              </h2>
-              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t('customFields.heroSubtitle', {
                   defaultValue:
                     'Define fields once per entity; they render dynamically in the agent portal on the matching contact, conversation, or ticket.',

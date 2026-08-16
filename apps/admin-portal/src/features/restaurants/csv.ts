@@ -160,3 +160,34 @@ export function parseStoresCsv(text: string): ParseStoresResult {
 
   return { rows: out, skipped, unmappedHeaders };
 }
+
+/** RFC 4180 quoting: wrap when the value could otherwise break the row. */
+function csvCell(value: unknown): string {
+  const s = value == null ? '' : String(value);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * Build a CSV from rows of plain values.
+ *
+ * Prefixed with a UTF-8 BOM because Excel otherwise reads the file as the
+ * local codepage and mangles every Arabic store name — which is most of them.
+ */
+export function toCsv(header: string[], rows: Array<Array<unknown>>): string {
+  const lines = [header.map(csvCell).join(',')];
+  for (const r of rows) lines.push(r.map(csvCell).join(','));
+  return `\ufeff${lines.join('\r\n')}\r\n`;
+}
+
+/** Hand a generated CSV to the browser as a download. */
+export function downloadCsv(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

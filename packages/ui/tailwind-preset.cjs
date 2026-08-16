@@ -35,6 +35,13 @@ module.exports = {
         // each portal's index.css (light + dark).
         background: 'oklch(var(--background) / <alpha-value>)',
         canvas: 'oklch(var(--canvas) / <alpha-value>)',
+        /* Deliberate darkness inside a light app: the masthead band, dark
+           table headers, and any surface that should read as ink rather than
+           paper. Defined in both themes so it stays dark in light mode and
+           does not turn black-on-black in dark mode. */
+        ink: 'oklch(var(--ink) / <alpha-value>)',
+        'ink-foreground': 'oklch(var(--ink-foreground) / <alpha-value>)',
+        'ink-muted': 'oklch(var(--ink-muted) / <alpha-value>)',
         foreground: 'oklch(var(--foreground) / <alpha-value>)',
         card: {
           DEFAULT: 'oklch(var(--card) / <alpha-value>)',

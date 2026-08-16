@@ -232,10 +232,7 @@ export function AutomationPage() {
           {/* Clean editorial header — no gradient banner. */}
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-foreground/10 pb-5">
             <div>
-              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
-                {t('automation.title', { defaultValue: 'Automation' })}
-              </h2>
-              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t('automation.heroSubtitle', {
                   defaultValue:
                     'Rules fire when a trigger matches — conditions are AND-joined, then actions run in order to assign, tag, escalate, or notify automatically.',

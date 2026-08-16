@@ -151,10 +151,7 @@ export function BrandsPage() {
         {!brands.isLoading && !brands.isError && list.length > 0 && (
           <div className="mx-auto mb-5 max-w-5xl space-y-5">
             <div className="border-b border-foreground/10 pb-5">
-              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
-                {t('brands.title', { defaultValue: 'Brands' })}
-              </h2>
-              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t('brands.heroSubtitle', {
                   defaultValue:
                     'The restaurant brands you operate. Each store belongs to a brand, and ticket reports break down by both.',

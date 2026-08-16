@@ -207,7 +207,7 @@ export function StoreNotificationsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border text-2xs uppercase tracking-[0.08em] text-muted-foreground">
+                <tr className="border-b border-border tracking-[0.08em] bg-ink text-2xs uppercase tracking-[0.12em] text-ink-foreground/75">
                   <th className="px-4 py-2.5 text-start font-semibold">
                     {t('storeNotify.branch', { defaultValue: 'Branch' })}
                   </th>

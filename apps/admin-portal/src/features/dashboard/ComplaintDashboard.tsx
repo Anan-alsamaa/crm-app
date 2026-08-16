@@ -1583,7 +1583,7 @@ export function ComplaintDashboard() {
               <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/[0.06]">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-secondary/40 text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                    <tr className="tracking-[0.12em] bg-ink text-2xs uppercase tracking-[0.12em] text-ink-foreground/75">
                       <th className="h-10 px-3 text-start font-semibold">
                         {t('complaintDash.colAgent', { defaultValue: 'Agent' })}
                       </th>
@@ -1704,7 +1704,7 @@ export function ComplaintDashboard() {
               <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/[0.06]">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-secondary/40 text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                    <tr className="tracking-[0.12em] bg-ink text-2xs uppercase tracking-[0.12em] text-ink-foreground/75">
                       <th className="h-10 px-3 text-start font-semibold">
                         {t('complaintDash.colAgent', { defaultValue: 'Agent' })}
                       </th>

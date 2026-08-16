@@ -636,7 +636,7 @@ export function AgentPerformancePage() {
                     aria-label={t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
                   >
                     <thead>
-                      <tr className="bg-foreground/[0.03] text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                      <tr className="tracking-[0.12em] bg-ink text-2xs uppercase tracking-[0.12em] text-ink-foreground/75">
                         <th className="h-10 px-5 text-start font-semibold">
                           {t('performance.agent', { defaultValue: 'Agent' })}
                         </th>
@@ -769,7 +769,7 @@ export function AgentPerformancePage() {
                     aria-label={t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
                   >
                     <thead className="sticky top-0 z-10 bg-card">
-                      <tr className="bg-foreground/[0.03] text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                      <tr className="tracking-[0.12em] bg-ink text-2xs uppercase tracking-[0.12em] text-ink-foreground/75">
                         <th className="h-10 px-5 text-start font-semibold">
                           {t('performance.subject', { defaultValue: 'Complaint / chat' })}
                         </th>

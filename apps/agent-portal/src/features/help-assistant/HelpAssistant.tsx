@@ -250,7 +250,7 @@ export function HelpAssistant(): JSX.Element {
           'text-2xs font-bold uppercase tracking-[0.1em]',
           'transition-colors duration-fast ease-out',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
-          'bg-primary/12 text-primary hover:bg-primary/20',
+          'bg-ink-foreground/10 text-ink-foreground hover:bg-ink-foreground/20',
         )}
       >
         AI

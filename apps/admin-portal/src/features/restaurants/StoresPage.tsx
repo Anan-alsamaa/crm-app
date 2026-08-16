@@ -31,7 +31,7 @@ import {
   useBulkCreateBrands,
   type Store,
 } from './api.js';
-import { parseStoresCsv } from './csv.js';
+import { downloadCsv, parseStoresCsv, toCsv } from './csv.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
 const schema = z.object({
@@ -86,6 +86,23 @@ function UploadIcon() {
       aria-hidden
     >
       <path d="M8 11V3M5 6l3-3 3 3M3 11v2h10v-2" />
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+      aria-hidden
+    >
+      <path d="M8 3v8M5 8l3 3 3-3M3 13h10" />
     </svg>
   );
 }
@@ -308,6 +325,30 @@ export function StoresPage() {
     );
   }, [list, query]);
 
+  const exportCsv = () => {
+    const header = [
+      t('stores.colRestaurantId', { defaultValue: 'Restaurant ID' }),
+      t('stores.colCode', { defaultValue: 'Code' }),
+      t('stores.colName', { defaultValue: 'Store' }),
+      t('stores.colBrand', { defaultValue: 'Brand' }),
+      t('stores.colCity', { defaultValue: 'City' }),
+      t('stores.colAreaManager', { defaultValue: 'Area manager' }),
+      t('stores.colChainManager', { defaultValue: 'Chain manager' }),
+      t('stores.colStatus', { defaultValue: 'Status' }),
+    ];
+    const rows = filtered.map((s) => [
+      s.yiji_restaurant_id,
+      s.code,
+      s.name,
+      s.brand?.name,
+      s.city,
+      s.area_manager,
+      s.chain_manager,
+      t(`status.${s.status}`, { ns: 'common', defaultValue: s.status }),
+    ]);
+    downloadCsv(`stores-${filtered.length}.csv`, toCsv(header, rows));
+  };
+
   const cities = new Set(list.map((s) => s.city).filter(Boolean));
   const unmapped = list.filter((s) => !s.brand).length;
 
@@ -338,6 +379,16 @@ export function StoresPage() {
         >
           {t('stores.import', { defaultValue: 'Import CSV' })}
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={filtered.length === 0}
+          onClick={exportCsv}
+          iconStart={<DownloadIcon />}
+        >
+          {t('stores.export', { defaultValue: 'Export CSV' })}
+        </Button>
         <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
           {t('stores.create', { defaultValue: 'Add store' })}
         </Button>
@@ -347,10 +398,7 @@ export function StoresPage() {
         {!stores.isLoading && !stores.isError && list.length > 0 && (
           <div className="mx-auto mb-5 max-w-6xl space-y-5">
             <div className="border-b border-foreground/10 pb-5">
-              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
-                {t('stores.title', { defaultValue: 'Stores' })}
-              </h2>
-              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t('stores.heroSubtitle', {
                   defaultValue:
                     'Every branch you operate, with its brand, city and managers. Ticket reports and dashboards join orders onto these rows.',
@@ -446,7 +494,7 @@ export function StoresPage() {
           <div className="mx-auto max-w-6xl overflow-x-auto rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             <table className="w-full min-w-[54rem] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-foreground/10 bg-foreground/[0.03] text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                <tr className="tracking-[0.12em] bg-ink text-2xs uppercase tracking-[0.12em] text-ink-foreground/75">
                   <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
                     {t('stores.colRestaurantId', { defaultValue: 'Restaurant ID' })}
                   </th>

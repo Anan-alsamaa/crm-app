@@ -77,6 +77,8 @@ export function OptionListsPage() {
   const rows = useOptionRows();
   const [listKey, setListKey] = useState<ListKey>('complaint_type');
   const [draft, setDraft] = useState('');
+  /** The value currently being dragged, so the row it left can dim. */
+  const [dragId, setDragId] = useState<string | null>(null);
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['option-lists-admin'] });
@@ -138,6 +140,27 @@ export function OptionListsPage() {
     setDraft('');
   };
 
+  /**
+   * Renumber the list from a new visual order. Shared by the arrow buttons and
+   * by dragging, so both land on exactly the same write.
+   */
+  const commitOrder = (next: OptionRow[]) => {
+    next.forEach((r, i) => {
+      if (r.sort !== i) patch.mutate({ id: r.id, body: { sort: i } });
+    });
+  };
+
+  /** Drag a value anywhere in the list, rather than one arrow-press per step. */
+  const moveTo = (fromId: string, toId: string) => {
+    const from = current.findIndex((r) => r.id === fromId);
+    const to = current.findIndex((r) => r.id === toId);
+    if (from < 0 || to < 0 || from === to) return;
+    const next = [...current];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved!);
+    commitOrder(next);
+  };
+
   const move = (row: OptionRow, delta: number) => {
     const idx = current.findIndex((r) => r.id === row.id);
     if (idx < 0 || !current[idx + delta]) return;
@@ -150,16 +173,14 @@ export function OptionListsPage() {
     const next = [...current];
     const [moved] = next.splice(idx, 1);
     next.splice(idx + delta, 0, moved!);
-    next.forEach((r, i) => {
-      if (r.sort !== i) patch.mutate({ id: r.id, body: { sort: i } });
-    });
+    commitOrder(next);
   };
 
   return (
     <div className="flex h-full flex-col">
       <Toolbar>
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('lists.title', { defaultValue: 'Dropdown lists' })}
+          {t('lists.title', { defaultValue: 'Dropdown values' })}
         </h1>
         <ToolbarSpacer />
         <SelectMenu
@@ -227,12 +248,34 @@ export function OptionListsPage() {
                 {current.map((row, i) => (
                   <li
                     key={row.id}
+                    draggable
+                    onDragStart={(e) => {
+                      setDragId(row.id);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragEnd={() => setDragId(null)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (dragId) moveTo(dragId, row.id);
+                      setDragId(null);
+                    }}
                     className={cn(
-                      'flex items-center gap-2 px-4 py-2.5',
+                      'flex cursor-grab items-center gap-2 px-4 py-2.5 active:cursor-grabbing',
+                      'transition-colors duration-fast ease-out hover:bg-secondary/40',
                       !row.active && 'opacity-60',
+                      dragId === row.id && 'opacity-40',
                     )}
                   >
-                    {/* Numbered chip — the row's rank in the dropdown, as a tile. */}
+                    {/* Grip, then rank. Arranging a long list two rows at a time
+                        with arrows was the complaint; the arrows stay for
+                        keyboard users, who cannot drag. */}
+                    <span
+                      aria-hidden
+                      className="shrink-0 select-none text-xs leading-none text-muted-foreground/50"
+                    >
+                      ⠿
+                    </span>
                     <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-secondary text-2xs font-semibold tabular-nums text-muted-foreground">
                       {i + 1}
                     </span>

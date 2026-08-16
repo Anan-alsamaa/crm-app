@@ -63,7 +63,8 @@ const TRIGGER_BASE =
  * floating dark bar read as a button, not a location. */
 const TRIGGER_ACTIVE =
   'bg-display font-semibold text-background shadow-[0_8px_20px_-8px_oklch(var(--display)/0.55)]';
-const TRIGGER_IDLE = 'font-medium text-foreground/70 hover:bg-card/70 hover:text-foreground';
+const TRIGGER_IDLE =
+  'font-medium text-ink-foreground/65 hover:bg-ink-foreground/10 hover:text-ink-foreground';
 
 /** A section with one item: a plain link, no menu. */
 function DirectLink({ section }: { section: NavSection }) {

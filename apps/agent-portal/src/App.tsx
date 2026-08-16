@@ -272,7 +272,7 @@ function TopNav({ sections }: { sections: NavSection[] }) {
                 'motion-safe:active:scale-[0.97]',
                 isActive
                   ? 'bg-display font-semibold text-background shadow-[0_8px_20px_-8px_oklch(var(--display)/0.55)]'
-                  : 'font-medium text-foreground/70 hover:bg-card/70 hover:text-foreground',
+                  : 'font-medium text-ink-foreground/65 hover:bg-ink-foreground/10 hover:text-ink-foreground',
               )
             }
           >
@@ -294,10 +294,10 @@ function MobileBrand() {
           lockup used to be a bare word, which told a supervisor with both
           portals open nothing about which one they were looking at. */}
       <span className="min-w-0 leading-tight">
-        <span className="block text-[15px] font-bold tracking-[-0.015em] text-foreground">
+        <span className="block text-[15px] font-bold tracking-[-0.015em] text-ink-foreground">
           Sara CRM
         </span>
-        <span className="block text-2xs text-muted-foreground">
+        <span className="block text-2xs text-ink-muted">
           {t('app.workspace', { defaultValue: 'Agent workspace' })}
         </span>
       </span>
@@ -389,13 +389,13 @@ function Shell({ children }: { children: React.ReactNode }) {
               onClick={() => setPaletteOpen(true)}
               className="hidden min-[1600px]:inline-flex"
             />
-            <div className="flex items-center gap-0.5 rounded-full bg-secondary/50 p-1 ring-1 ring-border">
+            <div className="flex items-center gap-0.5 rounded-full bg-ink-foreground/10 p-1 ring-1 ring-ink-foreground/15">
               <NotificationBell />
               <HelpAssistant />
               <SoundToggle />
               <LanguageToggle />
             </div>
-            <span className="hidden items-center gap-2 rounded-full bg-secondary/50 py-1 pe-1 ps-1 ring-1 ring-border sm:flex">
+            <span className="hidden items-center gap-2 rounded-full bg-ink-foreground/10 py-1 pe-1 ps-1 ring-1 ring-ink-foreground/15 sm:flex">
               <Avatar name={displayName} email={user?.email} size="sm" />
               <span className="hidden max-w-[8rem] truncate text-xs font-semibold text-foreground min-[1600px]:inline">
                 {displayName}

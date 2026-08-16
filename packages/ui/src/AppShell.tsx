@@ -153,7 +153,7 @@ export function AppShell({
     if (navBar) {
       return (
         <div className="flex h-full flex-col text-foreground">
-          <header className="relative z-30 flex h-20 shrink-0 items-center gap-4 px-5 sm:px-8">
+          <header className="relative z-30 flex h-20 shrink-0 items-center gap-4 bg-ink px-5 text-ink-foreground shadow-[0_10px_30px_-18px_oklch(var(--shadow-color)/0.85)] sm:px-8">
             <div className="shrink-0">{topBarBrand}</div>
             <nav aria-label={navLabel} className="flex min-w-0 flex-1 items-center justify-center">
               {navBar}

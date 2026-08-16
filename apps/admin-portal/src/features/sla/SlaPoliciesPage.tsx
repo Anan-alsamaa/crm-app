@@ -196,10 +196,7 @@ export function SlaPoliciesPage() {
           {/* Clean editorial header — no gradient banner. */}
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-foreground/10 pb-5">
             <div>
-              <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
-                {t('sla.title')}
-              </h2>
-              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t('sla.heroSubtitle', {
                   defaultValue:
                     'Each policy maps ticket priorities to first-response and resolution deadlines — the worker schedules warnings and breach events automatically.',

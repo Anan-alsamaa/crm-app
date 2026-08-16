@@ -248,10 +248,10 @@ function MobileBrand() {
           lockup used to be a bare word, which told a supervisor with both
           portals open nothing about which one they were looking at. */}
       <span className="min-w-0 leading-tight">
-        <span className="block text-[15px] font-bold tracking-[-0.015em] text-foreground">
+        <span className="block text-[15px] font-bold tracking-[-0.015em] text-ink-foreground">
           Sara CRM
         </span>
-        <span className="block text-2xs text-muted-foreground">
+        <span className="block text-2xs text-ink-muted">
           {t('app.console', { defaultValue: 'Admin console' })}
         </span>
       </span>
@@ -411,13 +411,13 @@ function Shell({ children }: { children: React.ReactNode }) {
           <>
             {/* The bar is a card surface now, so the utility triggers read
                 correctly with their own tokens — no rebinding needed. */}
-            <div className="flex items-center gap-0.5 rounded-full bg-secondary/50 p-1 ring-1 ring-border">
+            <div className="flex items-center gap-0.5 rounded-full bg-ink-foreground/10 p-1 ring-1 ring-ink-foreground/15">
               <HelpAssistant />
               <LanguageToggle />
             </div>
-            <span className="hidden items-center gap-2 rounded-full bg-secondary/50 py-1 pe-1 ps-1 ring-1 ring-border sm:flex">
+            <span className="hidden items-center gap-2 rounded-full bg-ink-foreground/10 py-1 pe-1 ps-1 ring-1 ring-ink-foreground/15 sm:flex">
               <Avatar name={displayName} email={user?.email} size="sm" />
-              <span className="max-w-[9rem] truncate text-xs font-semibold text-foreground">
+              <span className="max-w-[9rem] truncate text-xs font-semibold text-ink-foreground">
                 {displayName}
               </span>
               <button

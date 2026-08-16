@@ -205,10 +205,7 @@ export function AiConfigPage() {
       <div className="mx-auto w-full max-w-3xl flex-1 overflow-auto px-6 py-8 space-y-8 sm:px-10">
         {/* Clean editorial header — no gradient banner. */}
         <div className="border-b border-foreground/10 pb-5">
-          <h2 className="text-2xl font-bold tracking-[-0.02em] text-foreground">
-            {t('aiConfig.title', { defaultValue: 'AI assistance' })}
-          </h2>
-          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
             {t('aiConfig.subtitle', {
               defaultValue: 'Toggle features and set a monthly call budget.',
             })}

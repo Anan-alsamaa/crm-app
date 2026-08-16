@@ -71,9 +71,9 @@ export function Th({
   return (
     <th
       className={cn(
-        // Slightly raised header band with a crisp hairline underline.
-        'sticky top-0 z-10 h-12 whitespace-nowrap bg-secondary/60 px-5 text-start align-middle',
-        'text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground',
+        // Ink header band: the table's own masthead.
+        'sticky top-0 z-10 h-12 whitespace-nowrap bg-ink px-5 text-start align-middle',
+        'text-2xs font-semibold uppercase tracking-[0.12em] text-ink-foreground/75',
         className,
       )}
       {...rest}
