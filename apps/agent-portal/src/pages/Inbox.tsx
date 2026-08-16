@@ -676,7 +676,7 @@ export function Inbox() {
                   {/* The agent's morning glance, on the brand sweep the admin
                       Overview opens with — the same welcome language in both
                       portals. White ink: the fill is saturated in both themes. */}
-                  <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-violet via-sky to-primary p-6 shadow-float motion-safe:animate-rise-in">
+                  <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-[oklch(0.66_0.13_190)] to-sky p-6 shadow-float motion-safe:animate-rise-in">
                     <div
                       aria-hidden
                       className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.25),transparent_60%)]"

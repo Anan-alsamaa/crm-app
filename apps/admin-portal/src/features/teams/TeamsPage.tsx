@@ -113,10 +113,7 @@ export function TeamsPage() {
         {!teams.isLoading && !teams.isError && teamCount > 0 && (
           <div className="mx-auto mb-5 max-w-5xl space-y-5">
             <div className="border-b border-foreground/10 pb-5">
-              <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                {t('teams.title')}
-              </h2>
-              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t('teams.heroSubtitle', {
                   defaultValue:
                     'Groups that decide where conversations and tickets route. See each team, who belongs to it, and who still needs a home.',

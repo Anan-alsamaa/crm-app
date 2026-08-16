@@ -80,7 +80,7 @@ const KPI_CHIPS = {
 
 /* The card surface carries the hue — see StatCard for the reasoning. */
 const KPI_SURFACES = {
-  neutral: 'bg-card ring-foreground/[0.06]',
+  neutral: 'bg-gradient-to-br from-secondary/60 to-card ring-foreground/[0.06]',
   sky: 'bg-gradient-to-br from-sky-tint/70 to-card ring-sky/15',
   violet: 'bg-gradient-to-br from-violet-tint/70 to-card ring-violet/15',
   success: 'bg-gradient-to-br from-success-tint/70 to-card ring-success/15',
@@ -122,9 +122,10 @@ function Kpi({
   /** Position in the KPI row — drives the entrance cascade. */
   order?: number;
 }) {
-  // An unmeasurable KPI used to render its em dash at hero size, which reads as
-  // a broken card rather than as "nothing to measure yet".
-  const empty = value === '—';
+  // An unmeasurable KPI used to render at hero size, which reads as a broken
+  // card rather than as "nothing to measure yet". Anything without a digit in
+  // it is a phrase standing in for a measurement, not a measurement.
+  const empty = !/\d/.test(value);
   return (
     <div
       style={{ animationDelay: `${Math.min(order, 6) * 55}ms` }}
@@ -160,7 +161,9 @@ function Kpi({
           <div
             className={cn(
               'font-extrabold leading-none tabular-nums tracking-[-0.035em]',
-              empty ? 'text-2xl text-muted-foreground/60' : `text-[2.5rem] ${KPI_NUMERALS[tone]}`,
+              empty
+                ? 'text-base font-semibold text-muted-foreground'
+                : `text-[2.5rem] ${KPI_NUMERALS[tone]}`,
             )}
           >
             {value}
@@ -1131,8 +1134,9 @@ export function ComplaintDashboard() {
               sub={
                 d.monthsCovered
                   ? t('complaintDash.months', {
-                      defaultValue: '{{n}} month(s)',
-                      n: d.monthsCovered,
+                      defaultValue_one: 'Past month',
+                      defaultValue_other: 'Past {{count}} months',
+                      count: d.monthsCovered,
                     })
                   : ''
               }
@@ -1184,14 +1188,28 @@ export function ComplaintDashboard() {
               tone="success"
               icon={<SparkleIcon size={17} />}
               order={3}
-              value={d.satisfiedPct === null ? '—' : `${Math.round(d.satisfiedPct)}%`}
+              value={
+                d.satisfiedPct === null
+                  ? t('complaintDash.notRatedYet', { defaultValue: 'No ratings yet' })
+                  : `${Math.round(d.satisfiedPct)}%`
+              }
               label={t('complaintDash.kpiSatisfied', { defaultValue: 'Rated satisfied' })}
-              sub={t('complaintDash.ratedOf', {
-                defaultValue: '{{sat}} of {{rated}} rated',
-                sat: d.satisfied,
-                rated: d.rated,
-              })}
-              visual={<ProgressRing value={d.satisfiedPct ?? 0} tone="success" />}
+              sub={
+                d.rated
+                  ? t('complaintDash.ratedOf', {
+                      defaultValue: '{{sat}} of {{rated}} rated',
+                      sat: d.satisfied,
+                      rated: d.rated,
+                    })
+                  : t('complaintDash.ratedNone', {
+                      defaultValue: 'Customers have not rated these yet',
+                    })
+              }
+              visual={
+                d.satisfiedPct === null ? undefined : (
+                  <ProgressRing value={d.satisfiedPct} tone="success" />
+                )
+              }
             />
             <Kpi
               tone="primary"

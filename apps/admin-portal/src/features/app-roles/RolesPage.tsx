@@ -241,10 +241,7 @@ export function RolesPage() {
         <div className="mx-auto grid w-full max-w-[92rem] grid-cols-1 gap-5 lg:grid-cols-[20rem_1fr] lg:items-start">
           {/* ── page hero — the boards' header anatomy ── */}
           <div className="border-b border-foreground/10 pb-5 lg:col-span-2">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">
-              {t('roles.title', { defaultValue: 'Roles & privileges' })}
-            </h2>
-            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               {t('roles.heroSubtitle', {
                 defaultValue:
                   'Named sets of ticked privileges, optionally fenced to specific brands. Pick a role to see or change what it can do.',

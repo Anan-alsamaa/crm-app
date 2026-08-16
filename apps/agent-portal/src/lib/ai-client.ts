@@ -10,6 +10,7 @@ import type {
   SummaryResponse,
 } from '@yiji/shared-types';
 import { AI_ENDPOINTS } from '@yiji/shared-types';
+import { onPageHost } from '@yiji/shared-config';
 import { auth } from './directus.js';
 
 /**
@@ -22,8 +23,9 @@ import { auth } from './directus.js';
  * only as the monthly-cap bucket hint.
  */
 
-const GATEWAY_URL =
-  (import.meta.env.VITE_AI_GATEWAY_URL as string | undefined) ?? 'http://localhost:8081';
+const GATEWAY_URL = onPageHost(
+  (import.meta.env.VITE_AI_GATEWAY_URL as string | undefined) ?? 'http://localhost:8081',
+);
 
 export interface AiCaller {
   /** Kept for call-site compatibility; identity is derived server-side. */

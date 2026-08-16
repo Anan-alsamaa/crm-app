@@ -38,6 +38,16 @@ import { jobProducer } from '../../lib/job-producer.js';
  * saved report definitions and surfaces the last-run timestamp.
  */
 
+const TYPE_LABELS: Record<ReportType, string> = {
+  conversation_volume: 'Conversation volume',
+  response_time: 'Response time',
+  sla_compliance: 'SLA compliance',
+  ticket_resolution: 'Ticket resolution',
+  agent_productivity: 'Agent productivity',
+  csat: 'Customer satisfaction',
+  vendor_activity: 'Vendor activity',
+};
+
 const TYPES: ReportType[] = [
   'conversation_volume',
   'response_time',
@@ -281,10 +291,7 @@ export function ReportsPage() {
           {/* Clean editorial header — no gradient banner. */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-foreground/10 pb-5">
             <div>
-              <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                {t('reports.title', { defaultValue: 'Scheduled reports' })}
-              </h2>
-              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t('reports.heroSubtitle', {
                   defaultValue:
                     'Saved report definitions that run automatically on a schedule and email a CSV to their recipients. Set once, delivered on time.',
@@ -436,7 +443,7 @@ export function ReportsPage() {
               >
                 {TYPES.map((tp) => (
                   <option key={tp} value={tp}>
-                    {tp}
+                    {t(`reports.type_${tp}`, { defaultValue: TYPE_LABELS[tp] })}
                   </option>
                 ))}
               </select>
@@ -617,8 +624,8 @@ function ReportCard({
         <h3 className="text-sm font-semibold tracking-tight text-foreground">{r.name}</h3>
         {/* The machine type as a quiet tag chip — same text, board dressing. */}
         <p>
-          <span className="inline-flex items-center rounded-md bg-secondary px-1.5 py-0.5 font-mono text-2xs text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
-            {r.type}
+          <span className="inline-flex items-center rounded-full bg-primary-tint/60 px-2.5 py-0.5 text-2xs font-semibold text-primary ring-1 ring-inset ring-primary/15">
+            {t(`reports.type_${r.type}`, { defaultValue: TYPE_LABELS[r.type] })}
           </span>
         </p>
         {r.description && (
@@ -641,8 +648,12 @@ function ReportCard({
         </span>
         {(r.schedule?.email?.length ?? 0) > 0 && (
           <span>
-            ✉ {r.schedule!.email!.length}{' '}
-            {t('reports.recipientsShort', { defaultValue: 'recipients' })}
+            ✉{' '}
+            {t('reports.recipientsShort', {
+              count: r.schedule!.email!.length,
+              defaultValue_one: '{{count}} recipient',
+              defaultValue_other: '{{count}} recipients',
+            })}
           </span>
         )}
       </div>

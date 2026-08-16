@@ -261,10 +261,7 @@ export function UsersPage() {
         {!users.isLoading && !users.isError && list.length > 0 && (
           <div className="mx-auto mb-5 max-w-5xl space-y-5">
             <div className="border-b border-foreground/10 pb-5">
-              <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                {t('users.title')}
-              </h2>
-              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t('users.heroSubtitle', {
                   defaultValue:
                     'Everyone who can sign in to the CRM — their role, team, and account status at a glance. Select anyone to edit access or reset a password.',

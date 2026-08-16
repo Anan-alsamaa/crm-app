@@ -25,8 +25,9 @@ import {
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { useVendors, useCreateVendor, useUpdateVendor, type VendorRow } from './api.js';
+import { onPageHost } from '@yiji/shared-config';
 
-const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_URL ?? 'http://localhost:8055';
+const DIRECTUS_URL = onPageHost(import.meta.env.VITE_DIRECTUS_URL ?? 'http://localhost:8055');
 
 /**
  * Vendor management.
@@ -191,10 +192,7 @@ export function VendorsPage() {
         {!vendors.isLoading && total > 0 && (
           <div className="mx-auto mb-5 max-w-5xl space-y-5">
             <div className="border-b border-foreground/10 pb-5">
-              <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                {t('vendors.title', { defaultValue: 'Vendors' })}
-              </h2>
-              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t('vendors.heroSubtitle', {
                   defaultValue:
                     'Every brand you support, with the colors and logo that drive its customer chat widget. Select a vendor to edit its branding or status.',

@@ -17,17 +17,18 @@ const ONLY = process.env.ONLY ?? '';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const AGENT = {
-  url: 'http://127.0.0.1:5173',
+  url: process.env.AGENT_URL ?? 'http://127.0.0.1:8090',
   email: 'e2e.agent@example.com',
   pass: '123456',
   routes: [
     ['agent-inbox', '/'],
     ['agent-tickets', '/tickets'],
     ['agent-contacts', '/contacts'],
+    ['agent-performance', '/performance'],
   ],
 };
 const ADMIN = {
-  url: 'http://127.0.0.1:5174',
+  url: process.env.ADMIN_URL ?? 'http://127.0.0.1:8092',
   email: 'e.habibi@anan.sa',
   pass: '123456',
   routes: [
@@ -35,6 +36,8 @@ const ADMIN = {
     ['admin-users', '/users'],
     ['admin-sla', '/sla'],
     ['admin-ai-config', '/ai-config'],
+    ['admin-reports', '/reports'],
+    ['admin-tickets', '/tickets'],
   ],
 };
 const WIDGET = 'http://127.0.0.1:5175';

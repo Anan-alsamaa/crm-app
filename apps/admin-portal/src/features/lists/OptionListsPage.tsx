@@ -177,10 +177,7 @@ export function OptionListsPage() {
           {/* Page hero — the boards' header anatomy, same as every sibling
               page, so the suite reads as one product. */}
           <div className="border-b border-foreground/10 pb-5">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">
-              {t('lists.title', { defaultValue: 'Dropdown lists' })}
-            </h2>
-            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               {t('lists.heroSubtitle', {
                 defaultValue:
                   'Every dropdown the ticket form offers, editable live. Pick a list, then add, reorder, retire, or restore its values.',
