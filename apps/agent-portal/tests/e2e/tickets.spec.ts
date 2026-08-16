@@ -38,42 +38,40 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   await agent.locator('aside li button').first().waitFor({ timeout: 15_000 });
   await agent.locator('aside li button').first().click();
 
-  // 3. Click "+ Add ticket" in the toolbar. The always-present control is
-  // labelled from tickets.createTitle ("Add ticket"); "Create ticket" belongs
-  // to the prompt that only appears once a chat is solved, so matching on it
-  // waited forever on an unsolved conversation.
-  const subject = `From conv ${Date.now()}`;
+  // 3. Open "Add ticket" from the conversation, which carries the contact and
+  // vendor across. The form has no subject box on purpose — a ticket is named
+  // after its complaint type (see CreateTicketDialog) — so choosing that type
+  // is what makes the form submittable, not typing a title.
   await agent
     .getByRole('button', { name: /add ticket/i })
     .first()
     .click();
-  await agent.getByLabel(/subject/i).fill(subject);
+  const typeSelect = agent.getByRole('combobox', { name: /complaint type/i });
+  await typeSelect.waitFor({ timeout: 15_000 });
+  await typeSelect.click();
+  const typeOption = agent.getByRole('option').nth(1);
+  const ticketName = (await typeOption.innerText()).trim();
+  await typeOption.click();
   await agent.getByLabel(/^description$/i).fill('Auto-created via E2E.');
   await agent.getByRole('button', { name: /^create$/i }).click();
-  // Dialog closes; subject appears in the tickets list. Scope to the list-row
-  // button (not getByText) so we don't also match the success toast, whose
-  // description echoes the subject (strict-mode double match).
-  await agent.getByRole('link', { name: /tickets/i }).click();
-  const ticketRow = agent.getByRole('button', { name: subject });
-  await expect(ticketRow).toBeVisible({ timeout: 10_000 });
 
-  // 4. Open the ticket detail.
-  await ticketRow.click();
-  await expect(agent.getByRole('heading', { name: subject })).toBeVisible();
+  // 4. Creating lands on the new ticket's own page.
+  await agent.waitForURL(/\/tickets\/[0-9a-f-]{6,}/i, { timeout: 15_000 });
+  await expect(agent.getByRole('heading', { name: ticketName })).toBeVisible({
+    timeout: 10_000,
+  });
 
-  // 5. Mark the first response → button is replaced by the logged-confirmation
-  // and the first-response SLA card flips to "Responded at".
-  await agent.getByRole('button', { name: /mark first response/i }).click();
-  await expect(agent.getByText(/responded at/i)).toBeVisible({ timeout: 10_000 });
+  // 5. Close the work. One control now does it: "Mark as solved" sets the
+  // ticket to resolved, stops both SLA timers, and backfills first_responded_at
+  // when nothing else stamped it — which replaced the separate first-response
+  // button and status dropdown this test used to drive.
+  await agent.getByRole('button', { name: /mark as solved/i }).click();
+  await expect(agent.getByText(/^solved ·/i)).toBeVisible({ timeout: 10_000 });
 
-  // 6. Change status to resolved. The ticket status control is a custom combobox
-  // (SelectMenu, aria-label "Status"), not a native <select> — open it and pick
-  // the option. The trigger then reflects the persisted status (onChange →
-  // patch → query invalidation).
-  const statusSelect = agent.getByRole('combobox', { name: 'Status', exact: true });
-  await statusSelect.click();
-  await agent.getByRole('option', { name: 'Resolved' }).click();
-  await expect(statusSelect).toContainText('Resolved');
+  // And it survives a reload, so the state was persisted rather than only set
+  // in the client's cache.
+  await agent.reload();
+  await expect(agent.getByText(/^solved ·/i)).toBeVisible({ timeout: 15_000 });
 });
 
 test('agent visits notification preferences page and saves', async ({ page }) => {
