@@ -132,7 +132,7 @@
     "noEntities": "No entities detected."
   },
   "helpAssistant": {
-    "launch": "Ask AI help",
+    "launch": "Aura",
     "title": "Ask AI help",
     "description": "Ask how something works in this CRM. Follow-up questions keep their context; the chat is cleared when you close this panel and nothing is saved.",
     "label": "Your question",
@@ -152,7 +152,8 @@
       "invalid": "Ask a question between 3 and 500 characters.",
       "generic": "Couldn’t get an answer. Please try again."
     },
-    "empty": "Ask about the inbox, tickets, SLA, reports, contacts, automation or the widget. Follow-up questions work — the chat clears when you close this panel."
+    "empty": "Ask about the inbox, tickets, SLA, reports, contacts, automation or the widget. Follow-up questions work — the chat clears when you close this panel.",
+    "title2": "Aura"
   },
   "login": {
     "title": "Sign in to CRM",

@@ -1,4 +1,4 @@
-import type { JSX, SVGProps } from 'react';
+import type { JSX } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
@@ -49,24 +49,6 @@ const MIN_LENGTH = 3;
 
 /* House-style glyph (24x24, 1.75 stroke, currentColor) — @yiji/ui ships no
  * help icon, so it stays local like the AI-config page glyphs. */
-function HelpGlyph(props: SVGProps<SVGSVGElement>): JSX.Element {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      {...props}
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M9.6 9.3a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2.1-2.5 3.7" />
-      <path d="M12 16.8h.01" />
-    </svg>
-  );
-}
 
 export function HelpAssistant(): JSX.Element {
   const { t } = useTranslation();
@@ -193,7 +175,7 @@ export function HelpAssistant(): JSX.Element {
                     welcome: true,
                     content: t('helpAssistant.welcome', {
                       defaultValue:
-                        'Hi {{name}} — I can help with anything in this CRM: the inbox, tickets, SLA, reports, contacts, automation and the widget. How may I help you?',
+                        'Hi {{name}}, I am Aura. I know this CRM inside out — the inbox, tickets, SLA, reports, contacts, automation and the widget. What are we solving?',
                       name: firstName,
                     }),
                   },
@@ -203,23 +185,24 @@ export function HelpAssistant(): JSX.Element {
         aria-label={launchLabel}
         title={launchLabel}
         className={cn(
-          'inline-flex h-9 w-9 items-center justify-center rounded-lg',
+          'inline-flex h-9 items-center justify-center rounded-full px-3',
+          'text-2xs font-bold uppercase tracking-[0.1em]',
           'transition-colors duration-fast ease-out',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
-          'text-muted-foreground hover:bg-secondary hover:text-foreground',
+          'bg-primary/12 text-primary hover:bg-primary/20',
         )}
       >
-        <HelpGlyph width={17} height={17} />
+        AI
       </button>
 
       <Drawer
         open={open}
         onClose={close}
         width="md"
-        title={t('helpAssistant.title', { defaultValue: 'Ask AI help' })}
+        title={t('helpAssistant.title2', { defaultValue: 'Aura' })}
         description={t('helpAssistant.description', {
           defaultValue:
-            'Ask how something works in this CRM. Follow-up questions keep their context; the chat is cleared when you close this panel and nothing is saved.',
+            'Your assistant for this CRM. Ask how anything works — follow-ups keep their context, and nothing is saved when you close this panel.',
         })}
         // The composer belongs in the STICKY footer, not the scrolling body:
         // trailing the last reply meant it drifted off-screen exactly when the

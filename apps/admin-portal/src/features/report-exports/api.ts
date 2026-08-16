@@ -520,11 +520,62 @@ export function useAgentReportData(
           compensation: t.compensation ?? '',
           // Blank until the first edit — a creation is not a modification, and
           // a column of creation timestamps would drown the real signal.
-          lastModifiedBy: t.date_updated ? agentOf(t.user_updated ?? null) : '',
-          lastModifiedAt: t.date_updated ? fmtStamp(t.date_updated) : '',
+          lastModifiedBy: lastEditBy.get(t.id)?.name ?? '',
+          lastModifiedAt: lastEditBy.get(t.id)?.at ?? '',
           storeSnapshot: t.store_snapshot ?? null,
         };
       });
+
+      /*
+       * Who last edited each ticket, and when — from the AUDIT TRAIL, not from
+       * `user_updated`.
+       *
+       * `user_updated` is Directus's own stamp and it is correct, but it
+       * records the LAST writer of any kind. Background jobs write to tickets
+       * routinely (the SLA sweep stamps due dates, the gateway stamps first
+       * response), and a server-side write carries no accountability — so it
+       * lands as NULL and erases whichever human edited the row before it.
+       * Every ticket in this database showed a `date_updated` with a null
+       * `user_updated` for exactly that reason, which made the column read as
+       * "nobody edited this" when somebody had.
+       *
+       * Revisions keep every write with its actor, so the last revision whose
+       * activity has a real user IS the last human edit. Bounded to the
+       * tickets in range and best-effort: no audit read must ever empty the
+       * report.
+       */
+      const lastEditBy = new Map<string, { name: string; at: string }>();
+      if (tickets.length > 0) {
+        try {
+          const revs = (await directus.request(
+            readItems(
+              'directus_revisions' as never,
+              {
+                limit: -1,
+                filter: {
+                  collection: { _eq: 'tickets' },
+                  item: { _in: tickets.map((t) => t.id) },
+                },
+                fields: ['item', 'activity.action', 'activity.timestamp', 'activity.user'],
+                // Newest first, so the first row seen for a ticket wins.
+                sort: ['-id'],
+              } as never,
+            ) as never,
+          )) as Array<{
+            item: string;
+            activity: { action: string; timestamp: string; user: string | null } | null;
+          }>;
+          for (const r of revs) {
+            if (!r.activity?.user || r.activity.action !== 'update') continue;
+            if (lastEditBy.has(r.item)) continue;
+            const name = userName.get(r.activity.user);
+            if (!name) continue; // service accounts are not people
+            lastEditBy.set(r.item, { name, at: fmtStamp(r.activity.timestamp) });
+          }
+        } catch {
+          /* no revision read access — the column falls back to blank */
+        }
+      }
 
       /* Report 2: agent KPI — first response + CSAT. */
       interface Acc {
