@@ -316,6 +316,8 @@ export interface SectionCardProps {
    * never makes the reader wait).
    */
   index?: number;
+  /** Hue of the title accent bar. Defaults to the brand. */
+  tone?: MetricTone;
   className?: string;
   children: ReactNode;
 }
@@ -330,6 +332,7 @@ export function SectionCard({
   hint,
   aside,
   index = 0,
+  tone = 'primary',
   className,
   children,
 }: SectionCardProps): JSX.Element {
@@ -337,17 +340,24 @@ export function SectionCard({
     <section
       style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
       className={cn(
-        'rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.06] shadow-soft',
+        'rounded-3xl bg-card p-6 shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
         // Settles up into place on mount, and lifts a hair under the cursor.
         'motion-safe:animate-rise-in',
-        'transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
+        'transition-[box-shadow,transform] duration-base ease-out hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.08),0_20px_44px_-16px_oklch(var(--shadow-color)/0.28)] motion-safe:hover:-translate-y-1',
         className,
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
-          {hint && <p className="mt-0.5 text-2xs leading-relaxed text-muted-foreground">{hint}</p>}
+        <div className="flex min-w-0 gap-2.5">
+          {/* A short hue bar beside the title: the cheapest way to give a wall
+              of white cards individual identity without tinting the surface. */}
+          <span aria-hidden className={cn('mt-0.5 h-4 w-1 shrink-0 rounded-full', TONE_BG[tone])} />
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
+            {hint && (
+              <p className="mt-0.5 text-2xs leading-relaxed text-muted-foreground">{hint}</p>
+            )}
+          </div>
         </div>
         {aside && <div className="shrink-0 text-2xs text-muted-foreground">{aside}</div>}
       </div>

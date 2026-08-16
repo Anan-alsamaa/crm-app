@@ -30,7 +30,7 @@ export function TableSurface({
         // used to be CLIPPED, so the right-hand columns were unreachable rather
         // than merely cramped. Wide registers (ticket ops, agent reports) now
         // scroll horizontally inside the card instead of losing data.
-        'overflow-x-auto rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-float',
+        'overflow-x-auto rounded-3xl bg-card shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
         className,
       )}
       {...rest}
@@ -72,9 +72,8 @@ export function Th({
     <th
       className={cn(
         // Slightly raised header band with a crisp hairline underline.
-        'sticky top-0 z-10 h-11 whitespace-nowrap bg-foreground/[0.03] px-4 text-start align-middle',
+        'sticky top-0 z-10 h-12 whitespace-nowrap bg-secondary/60 px-5 text-start align-middle',
         'text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground',
-        'border-b border-foreground/10',
         className,
       )}
       {...rest}
@@ -95,10 +94,10 @@ export function Tr({
         // Crisp faint hairline dividers + an accent-tinted hover wash. Rows
         // marked aria-selected="true" hold a deeper jade wash so a checked
         // selection stays visible without any per-page styling.
-        'border-b border-foreground/[0.06] last:border-b-0',
+        'border-b border-foreground/[0.04] last:border-b-0',
         // The hover wash also lifts the row's ink, so a scanned row reads as
         // active rather than merely tinted.
-        'group/row transition-colors duration-fast ease-out hover:bg-primary/[0.07] hover:text-foreground',
+        'group/row transition-colors duration-fast ease-out hover:bg-primary/[0.06] hover:text-foreground',
         '[&[aria-selected=true]]:bg-primary/10',
         // A jade rail on the selected row — the boards' selection idiom, and
         // logical so it lands on the start edge in RTL too.
@@ -123,7 +122,7 @@ export function Td({
   ...rest
 }: TdHTMLAttributes<HTMLTableCellElement>): JSX.Element {
   return (
-    <td className={cn('h-12 px-4 align-middle text-foreground', className)} {...rest}>
+    <td className={cn('h-14 px-5 align-middle text-foreground', className)} {...rest}>
       {children}
     </td>
   );
@@ -141,7 +140,7 @@ export function TableFooterBar({
   return (
     <div
       className={cn(
-        'flex h-11 items-center gap-6 border-t border-foreground/[0.08] bg-foreground/[0.02] px-4 text-xs text-muted-foreground',
+        'flex h-12 items-center gap-6 border-t border-foreground/[0.06] bg-secondary/40 px-5 text-xs text-muted-foreground',
         className,
       )}
       {...rest}
@@ -205,7 +204,7 @@ export function SortTh({
         type="button"
         onClick={onSort}
         className={cn(
-          'flex h-12 w-full items-center gap-1 px-4 text-2xs font-semibold uppercase tracking-[0.12em] transition-colors duration-fast ease-out',
+          'flex h-12 w-full items-center gap-1 px-5 text-2xs font-semibold uppercase tracking-[0.12em] transition-colors duration-fast ease-out',
           align === 'end' ? 'justify-end' : 'justify-start',
           active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
         )}

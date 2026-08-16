@@ -59,8 +59,8 @@ const dotColors: Record<Tone, string> = {
 };
 
 const sizes: Record<Size, string> = {
-  sm: 'text-2xs px-2 h-5',
-  md: 'text-xs px-2.5 h-6',
+  sm: 'text-2xs px-2.5 h-6',
+  md: 'text-xs px-3 h-7',
 };
 
 const dotByDefault: Record<Tone, boolean> = {

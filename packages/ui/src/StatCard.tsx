@@ -31,6 +31,34 @@ const chipTone: Record<NonNullable<StatCardProps['tone']>, string> = {
   pink: 'bg-magenta/15 text-magenta',
 };
 
+/*
+ * The SURFACE carries the hue, not just the icon chip.
+ *
+ * A grid of white cards with one small coloured square each reads as a form;
+ * the reference's KPIs are soft colour fields you can tell apart from across
+ * the room. A very light tint (plus a slightly deeper hairline of the same
+ * hue) does that without shouting — and the numeral takes the hue too, which
+ * is what actually makes the card feel alive.
+ */
+const surface: Record<NonNullable<StatCardProps['tone']>, string> = {
+  default: 'bg-card ring-foreground/[0.06]',
+  primary: 'bg-gradient-to-br from-primary-tint/70 to-card ring-primary/15',
+  success: 'bg-gradient-to-br from-success-tint/70 to-card ring-success/15',
+  warning: 'bg-gradient-to-br from-warning-tint/70 to-card ring-warning/25',
+  destructive: 'bg-gradient-to-br from-destructive-tint/70 to-card ring-destructive/15',
+  pink: 'bg-gradient-to-br from-magenta/10 to-card ring-magenta/15',
+};
+
+/** Numeral ink per tone — deep enough to stay readable on its own tint. */
+const numeral: Record<NonNullable<StatCardProps['tone']>, string> = {
+  default: 'text-foreground',
+  primary: 'text-primary',
+  success: 'text-[oklch(0.45_0.13_155)]',
+  warning: 'text-[oklch(0.5_0.13_75)]',
+  destructive: 'text-destructive',
+  pink: 'text-magenta',
+};
+
 const dotBg: Record<NonNullable<StatCardProps['tone']>, string> = {
   default: 'bg-muted-foreground/50',
   primary: 'bg-primary',
@@ -59,11 +87,11 @@ export function StatCard({
   className,
   ...rest
 }: StatCardProps): JSX.Element {
-  const accent = tone === 'primary';
   return (
     <div
       className={cn(
-        'flex items-start gap-3 rounded-2xl bg-card p-4 ring-1 ring-foreground/[0.06] shadow-soft',
+        'flex items-start gap-3 rounded-2xl p-4 ring-1 shadow-soft',
+        surface[tone],
         className,
       )}
       {...rest}
@@ -81,9 +109,10 @@ export function StatCard({
           <span
             className={cn(
               'text-3xl font-extrabold tabular-nums tracking-[-0.03em] leading-none',
-              // OBSIDIAN + JADE: the accent numeral is solid jade — the
-              // gradient clip-text was the last survivor of the aurora look.
-              accent ? 'text-primary' : 'text-foreground',
+              // The numeral takes the card's hue — that, more than the tint
+              // behind it, is what makes a KPI read as alive rather than as a
+              // form field with a big font.
+              numeral[tone],
             )}
           >
             {value}

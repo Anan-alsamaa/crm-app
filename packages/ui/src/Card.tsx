@@ -26,9 +26,9 @@ export function Card({
   return (
     <div
       className={cn(
-        'rounded-2xl bg-card text-card-foreground ring-1 ring-foreground/[0.06] shadow-soft',
+        'rounded-3xl bg-card text-card-foreground shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
         interactive &&
-          'transition-[box-shadow,transform] duration-base ease-out hover:shadow-float hover:ring-foreground/[0.1] motion-safe:hover:-translate-y-0.5',
+          'transition-[box-shadow,transform] duration-base ease-out hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.08),0_20px_44px_-16px_oklch(var(--shadow-color)/0.28)] motion-safe:hover:-translate-y-1',
         paddings[padding],
         className,
       )}

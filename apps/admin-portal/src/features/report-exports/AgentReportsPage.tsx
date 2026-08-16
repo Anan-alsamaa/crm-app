@@ -167,6 +167,21 @@ const CHIP_TONE: Record<Tone, string> = {
   green: 'bg-success-tint text-success',
   amber: 'bg-secondary text-muted-foreground',
 };
+/* The SURFACE carries the hue too — a row of white boxes with one small
+ * coloured square each reads as a form, not a dashboard. */
+const SURFACE_TONE: Record<Tone, string> = {
+  blue: 'bg-gradient-to-br from-sky-tint/70 to-card',
+  violet: 'bg-gradient-to-br from-violet-tint/70 to-card',
+  green: 'bg-gradient-to-br from-success-tint/70 to-card',
+  amber: 'bg-gradient-to-br from-warning-tint/70 to-card',
+};
+const NUMERAL_TONE: Record<Tone, string> = {
+  blue: 'text-[oklch(0.48_0.13_215)]',
+  violet: 'text-violet',
+  green: 'text-[oklch(0.45_0.13_155)]',
+  amber: 'text-[oklch(0.5_0.13_75)]',
+};
+
 function KpiTile({
   label,
   value,
@@ -182,7 +197,10 @@ function KpiTile({
   return (
     <div
       className={cn(
-        'rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
+        'rounded-3xl p-5 shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
+        'transition-[box-shadow,transform] duration-base ease-out motion-safe:hover:-translate-y-1',
+        'hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.08),0_20px_44px_-16px_oklch(var(--shadow-color)/0.28)]',
+        SURFACE_TONE[tone],
       )}
     >
       {icon && (
@@ -195,7 +213,12 @@ function KpiTile({
       )}
       {/* Numeral first, label as its NEXT sibling — the KPI reader in the
           tests walks exactly this pair, so the anatomy is contractual. */}
-      <div className="text-4xl font-extrabold tabular-nums leading-none tracking-[-0.03em] text-foreground">
+      <div
+        className={cn(
+          'text-4xl font-extrabold tabular-nums leading-none tracking-[-0.03em]',
+          NUMERAL_TONE[tone],
+        )}
+      >
         {value}
       </div>
       <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">

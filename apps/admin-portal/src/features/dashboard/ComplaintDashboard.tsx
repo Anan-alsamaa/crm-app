@@ -78,6 +78,25 @@ const KPI_CHIPS = {
   destructive: 'bg-destructive-tint text-destructive',
 } as const;
 
+/* The card surface carries the hue — see StatCard for the reasoning. */
+const KPI_SURFACES = {
+  neutral: 'bg-card ring-foreground/[0.06]',
+  sky: 'bg-gradient-to-br from-sky-tint/70 to-card ring-sky/15',
+  violet: 'bg-gradient-to-br from-violet-tint/70 to-card ring-violet/15',
+  success: 'bg-gradient-to-br from-success-tint/70 to-card ring-success/15',
+  primary: 'bg-gradient-to-br from-primary-tint/70 to-card ring-primary/15',
+  destructive: 'bg-gradient-to-br from-destructive-tint/70 to-card ring-destructive/15',
+} as const;
+
+const KPI_NUMERALS = {
+  neutral: 'text-foreground',
+  sky: 'text-[oklch(0.48_0.13_215)]',
+  violet: 'text-violet',
+  success: 'text-[oklch(0.45_0.13_155)]',
+  primary: 'text-primary',
+  destructive: 'text-destructive',
+} as const;
+
 function Kpi({
   value,
   label,
@@ -110,7 +129,8 @@ function Kpi({
     <div
       style={{ animationDelay: `${Math.min(order, 6) * 55}ms` }}
       className={cn(
-        'group flex flex-col rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]',
+        'group flex flex-col rounded-2xl p-5 shadow-soft ring-1',
+        KPI_SURFACES[tone],
         'motion-safe:animate-rise-in',
         'transition-[box-shadow,transform,border-color] duration-base ease-out',
         'hover:shadow-float hover:ring-foreground/[0.12] motion-safe:hover:-translate-y-1',
@@ -140,7 +160,7 @@ function Kpi({
           <div
             className={cn(
               'font-extrabold leading-none tabular-nums tracking-[-0.035em]',
-              empty ? 'text-2xl text-muted-foreground/60' : 'text-[2.5rem] text-foreground',
+              empty ? 'text-2xl text-muted-foreground/60' : `text-[2.5rem] ${KPI_NUMERALS[tone]}`,
             )}
           >
             {value}

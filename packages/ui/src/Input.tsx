@@ -9,7 +9,7 @@ import { cn } from './cn.js';
  * without a raw 1px border.
  */
 const fieldBase =
-  'block w-full rounded-xl bg-input text-foreground ' +
+  'block w-full rounded-2xl bg-input text-foreground ' +
   'placeholder:text-muted-foreground/60 ' +
   'ring-1 ring-inset ' +
   'transition-[box-shadow,background-color] duration-fast ease-out ' +

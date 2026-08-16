@@ -164,7 +164,7 @@ export function SelectMenu({
         )
       : cn(
           // Same inset-well language as Input: `--input` fill + inset hairline.
-          'inline-flex items-center justify-between gap-2 rounded-xl bg-input text-start text-foreground',
+          'inline-flex items-center justify-between gap-2 rounded-2xl bg-input text-start text-foreground',
           'ring-1 ring-inset transition-[box-shadow,background-color] duration-fast ease-out',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
           size === 'sm' ? 'h-8 ps-3 pe-2 text-xs' : 'h-10 ps-3.5 pe-2.5 text-sm',
