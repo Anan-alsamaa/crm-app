@@ -110,15 +110,16 @@ describe('ReportsPage — the schedule', () => {
     api.useCreateReport.mockReturnValue({ mutateAsync, isPending: false });
     const d = await openDrawer();
 
-    await userEvent.type(screen.getByLabelText('Name'), 'Monthly');
+    const nameField = d.getByLabelText('Name');
+    await userEvent.type(nameField, 'Monthly');
+    await waitFor(() => expect(nameField).toHaveValue('Monthly'));
     await userEvent.click(screen.getByRole('combobox', { name: 'How often' }));
     // The option is an <li> wrapping the real <button>; clicking the li does
     // nothing, which is exactly the kind of thing a test should hold.
     await userEvent.click(screen.getByRole('button', { name: 'The 1st of every month at 07:00' }));
-    await userEvent.type(
-      screen.getByPlaceholderText('ops@example.com, manager@example.com'),
-      'ops@anan.sa',
-    );
+    const recipientsField = screen.getByPlaceholderText('ops@example.com, manager@example.com');
+    await userEvent.type(recipientsField, 'ops@anan.sa');
+    await waitFor(() => expect(recipientsField).toHaveValue('ops@anan.sa'));
     await userEvent.click(await d.findByText('actions.save'));
 
     // onSubmit is async (it awaits the mutation), so asserting on the tick
@@ -138,7 +139,9 @@ describe('ReportsPage — the schedule', () => {
     api.useCreateReport.mockReturnValue({ mutateAsync, isPending: false });
     const d = await openDrawer();
 
-    await userEvent.type(screen.getByLabelText('Name'), 'Ad hoc');
+    const nameField = d.getByLabelText('Name');
+    await userEvent.type(nameField, 'Ad hoc');
+    await waitFor(() => expect(nameField).toHaveValue('Ad hoc'));
     await userEvent.click(await d.findByText('actions.save'));
 
     await waitFor(() =>
