@@ -42,16 +42,21 @@ describe('HBarChart', () => {
     expect(screen.getByText('—')).toBeInTheDocument();
   });
 
-  it('survives a dataset that is entirely zero', () => {
+  it('says so rather than drawing an all-zero dataset', () => {
     // The naive scale divides by the max and paints every bar full width.
+    // Guarding that leaves a column of empty tracks each labelled 0, which is
+    // the shape of a chart with no information in it — a reader takes that for
+    // broken rendering, not for "none of this happened".
     render(
       <HBarChart
         rows={[{ label: 'Sara', values: { first: 0, solve: 0 } }]}
         series={series}
         format={secs}
+        emptyLabel="Nothing measured"
       />,
     );
-    expect(screen.getAllByText('0s')).toHaveLength(2);
+    expect(screen.getByText('Nothing measured')).toBeInTheDocument();
+    expect(screen.queryByText('Sara')).not.toBeInTheDocument();
   });
 
   it('says so when there is nothing to chart', () => {

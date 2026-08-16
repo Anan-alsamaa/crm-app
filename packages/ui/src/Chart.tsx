@@ -74,7 +74,12 @@ export function HBarChart({
   // charted value is missing. The second used to render as a column of empty
   // tracks and em dashes — the shape of a chart, carrying no information, which
   // reads as a rendering failure rather than as "this was never measured".
-  if (rows.length === 0 || values.length === 0) {
+  // A third case belongs here too: every value present but ZERO. That drew a
+  // column of empty tracks each labelled 0 — again the shape of a chart with
+  // no information in it, which reads as broken rendering rather than as
+  // "none of this happened in this range".
+  const allZero = values.length > 0 && (values as number[]).every((v) => v === 0);
+  if (rows.length === 0 || values.length === 0 || allZero) {
     return (
       <p className={cn('py-8 text-center text-sm text-muted-foreground', className)}>
         {emptyLabel ?? 'Nothing to chart yet.'}

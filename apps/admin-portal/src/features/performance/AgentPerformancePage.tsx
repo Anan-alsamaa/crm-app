@@ -268,7 +268,9 @@ export function AgentPerformancePage() {
   const agents = useAgentList();
   const agentNames = useMemo(() => {
     const m = new Map<string, string>();
-    for (const a of agents.data ?? []) m.set(a.id, a.first_name ?? a.email ?? a.id);
+    for (const a of agents.data ?? []) {
+      m.set(a.id, a.first_name?.trim() || a.email?.trim() || a.id);
+    }
     return m;
   }, [agents.data]);
 
@@ -650,10 +652,7 @@ export function AgentPerformancePage() {
                           {t('performance.commonChats', { defaultValue: 'Common chats taken' })}
                         </th>
                         <th className="h-10 px-5 text-end font-semibold">
-                          {t('performance.avgFirstCol', { defaultValue: 'First response (avg)' })}
-                        </th>
-                        <th className="h-10 px-5 text-end font-semibold">
-                          {t('performance.medFirst', { defaultValue: 'First response (median)' })}
+                          {t('performance.avgFirstCol', { defaultValue: 'First response' })}
                         </th>
                         <th className="h-10 px-5 text-end font-semibold">
                           {t('performance.solved', { defaultValue: 'Solved' })}
@@ -714,9 +713,6 @@ export function AgentPerformancePage() {
                           </td>
                           <td className="px-5 py-3 text-end tabular-nums text-foreground">
                             {formatDuration(r.avgFirstResponseSec) ?? dash}
-                          </td>
-                          <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
-                            {formatDuration(r.medianFirstResponseSec) ?? dash}
                           </td>
                           <td className="px-5 py-3 text-end tabular-nums text-foreground">
                             {r.solved}

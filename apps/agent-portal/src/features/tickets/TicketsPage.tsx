@@ -333,7 +333,7 @@ export function TicketsPage() {
                 /* CARDS, not ruled rows. A bordered bar per ticket is what made
                    this list read as a spreadsheet from 2009; separated cards
                    with air between them read as a modern queue. */
-                <ul className="space-y-2 p-2">
+                <ul className="divide-y divide-foreground/[0.06]">
                   {filtered.map((r) => {
                     const active = selected === r.id;
                     const overdue = isOverdue(r);
@@ -343,11 +343,11 @@ export function TicketsPage() {
                           type="button"
                           onClick={() => setSelected(r.id)}
                           className={cn(
-                            'group flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-start',
+                            'group relative flex w-full items-center gap-3 px-4 py-3 text-start',
                             'transition-[background-color,box-shadow,transform] duration-base ease-out',
                             active
-                              ? 'bg-primary/10 shadow-[0_6px_18px_-10px_oklch(var(--shadow-color)/0.5)] ring-1 ring-inset ring-primary/25'
-                              : 'hover:bg-card hover:shadow-[0_4px_14px_-10px_oklch(var(--shadow-color)/0.45)]',
+                              ? 'bg-primary/[0.07] before:absolute before:inset-y-0 before:start-0 before:w-[3px] before:rounded-e-full before:bg-primary'
+                              : 'hover:bg-foreground/[0.03]',
                           )}
                         >
                           <span className="relative shrink-0">
