@@ -668,8 +668,9 @@ export function Inbox() {
               const openCount = all.filter((c) => c.status === 'open').length;
               const urgentCount = all.filter((c) => c.priority === 'urgent').length;
               const unreadCount = all.filter((c) => c.unread_count_agent > 0).length;
-              const recent = [...all]
-                .sort((a, b) => (b.last_message_at ?? '').localeCompare(a.last_message_at ?? ''))
+              const waiting = [...all]
+                .filter((c) => c.status === 'open')
+                .sort((a, b) => (a.last_message_at ?? '').localeCompare(b.last_message_at ?? ''))
                 .slice(0, 5);
               return (
                 <div className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-5 p-6">
@@ -764,12 +765,18 @@ export function Inbox() {
                     />
                   </div>
 
-                  {/* Recent activity — a board section card: built-in title row,
-                      hairline row separators, status pills, tabular times. */}
-                  {recent.length > 0 ? (
-                    <SectionCard title={t('inbox.welcome.recent')}>
+                  {/* Oldest-waiting, not most-recent: the rail beside this is
+                      already sorted newest-first, so repeating it here was a
+                      mirror. What an agent cannot see there is who has been
+                      waiting longest, which is where to start. */}
+                  {waiting.length > 0 ? (
+                    <SectionCard
+                      title={t('inbox.welcome.waitingLongest', {
+                        defaultValue: 'Waiting longest',
+                      })}
+                    >
                       <ul className="divide-y divide-foreground/[0.06]">
-                        {recent.map((c) => {
+                        {waiting.map((c) => {
                           const name =
                             c.contact?.name ||
                             c.contact?.phone ||

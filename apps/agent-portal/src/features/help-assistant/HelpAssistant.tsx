@@ -278,10 +278,30 @@ export function HelpAssistant(): JSX.Element {
         open={open}
         onClose={close}
         width="md"
-        title={t('helpAssistant.title2', { defaultValue: 'Aura' })}
+        /* A lockup, not a word. The panel opened on a bare heading over two
+           lines of body copy, which read as a document rather than as somebody
+           you are about to talk to — the assistant had no presence in its own
+           panel. Mark, name, and what she is, in one line. */
+        title={
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-ink text-base font-bold text-ink-foreground ring-1 ring-primary/30"
+            >
+              A
+            </span>
+            <span className="min-w-0">
+              <span className="block font-display text-xl font-bold tracking-tight text-foreground">
+                Aura
+              </span>
+              <span className="block text-2xs font-medium uppercase tracking-[0.12em] text-primary">
+                {t('helpAssistant.role', { defaultValue: 'CRM assistant' })}
+              </span>
+            </span>
+          </div>
+        }
         description={t('helpAssistant.description', {
-          defaultValue:
-            'Your assistant for this CRM. Ask how anything works — follow-ups keep their context, and nothing is saved when you close this panel.',
+          defaultValue: 'Nothing here is saved — the chat clears when you close the panel.',
         })}
         // The composer belongs in the STICKY footer, not the scrolling body:
         // trailing the last reply meant it drifted off-screen exactly when the
