@@ -3,14 +3,13 @@ import { BrowserRouter, Routes, Route, Navigate, NavLink, useLocation } from 're
 import { useTranslation } from 'react-i18next';
 import {
   AppShell,
-  type AppShellRailContext,
   Avatar,
   CalendarIcon,
   ChartIcon,
   ClockIcon,
-  cn,
   DownloadIcon,
   ErrorBoundary,
+  NewVersionBanner,
   SettingsIcon,
   ShieldIcon,
   SignOutIcon,
@@ -22,6 +21,8 @@ import {
   UploadIcon,
   UsersIcon,
   YijiLogo,
+  cn,
+  type AppShellRailContext,
 } from '@yiji/ui';
 import { RouteError } from './components/RouteError.js';
 import { TopNav } from './components/TopNav.js';
@@ -459,6 +460,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         </ErrorBoundary>
       </AppShell>
       <AppCommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      {/* Says so when this tab is running a build the server has replaced. */}
+      <NewVersionBanner />
       <AppKeyboardShortcuts />
       <Toaster position="bottom" />
     </>

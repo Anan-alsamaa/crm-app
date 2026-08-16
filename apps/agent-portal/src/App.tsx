@@ -4,12 +4,11 @@ import { useTranslation } from 'react-i18next';
 import {
   AddTicketIcon,
   AppShell,
-  type AppShellRailContext,
   Avatar,
   ClockIcon,
-  cn,
   ErrorBoundary,
   InboxIcon,
+  NewVersionBanner,
   SettingsIcon,
   SignOutIcon,
   Spinner,
@@ -17,6 +16,8 @@ import {
   Toaster,
   UsersIcon,
   YijiLogo,
+  cn,
+  type AppShellRailContext,
 } from '@yiji/ui';
 import { RouteError } from './components/RouteError.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
@@ -431,6 +432,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         </ErrorBoundary>
       </AppShell>
       <AppCommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      {/* Says so when this tab is running a build the server has replaced. */}
+      <NewVersionBanner />
       <AppKeyboardShortcuts />
       <NewMessageSound />
       <Toaster position="bottom" />
