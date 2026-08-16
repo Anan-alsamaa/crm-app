@@ -20,6 +20,15 @@ import { test, expect } from '@playwright/test';
 const AGENT_EMAIL = process.env.E2E_AGENT_EMAIL!;
 const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD!;
 const FULL_STACK = process.env.E2E_FULL_STACK === '1';
+/*
+ * Separate from FULL_STACK: this file has one test that asserts on fixture
+ * ORDERS (`O-5921`), which only exist when the ai-gateway falls back to
+ * MockYijiClient — i.e. when YIJI_API_URL is unset. Any environment configured
+ * against a real commerce API serves that customer's real orders instead, and
+ * the assertion is meaningless there rather than merely failing. Opt in with
+ * E2E_COMMERCE=1 where the mock is known to be in use.
+ */
+const COMMERCE_FIXTURES = process.env.E2E_COMMERCE === '1';
 
 async function signIn(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('http://localhost:5173/login');
@@ -56,6 +65,7 @@ test.describe('US6 — contact profile + commerce panel', () => {
 
   test('profile shows identity + commerce panel with seeded order data', async ({ page }) => {
     test.skip(!FULL_STACK, 'requires E2E_FULL_STACK=1');
+    test.skip(!COMMERCE_FIXTURES, 'requires E2E_COMMERCE=1 (asserts MockYijiClient fixtures)');
     await signIn(page);
     // Navigate via the in-app Contacts link (client-side route) rather than a
     // full page.goto() — post-H-2, a hard reload drops the in-memory access token
