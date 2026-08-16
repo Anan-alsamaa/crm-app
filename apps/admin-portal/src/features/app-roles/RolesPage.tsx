@@ -490,11 +490,11 @@ export function RolesPage() {
                                   />
                                   <span
                                     aria-hidden
-                                    className="block h-5 w-9 rounded-full bg-secondary ring-1 ring-inset ring-foreground/[0.1] transition-colors duration-fast peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50"
+                                    className="block h-6 w-11 rounded-full bg-foreground/15 transition-colors duration-fast peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50"
                                   />
                                   <span
                                     aria-hidden
-                                    className="absolute top-0.5 start-0.5 h-4 w-4 rounded-full bg-foreground/70 shadow-sm transition-all duration-fast peer-checked:start-[1.125rem] peer-checked:bg-primary-foreground"
+                                    className="pointer-events-none absolute top-0.5 start-0.5 h-5 w-5 rounded-full bg-card shadow-md transition-all duration-fast peer-checked:start-[1.375rem]"
                                   />
                                 </span>
                               </label>

@@ -674,134 +674,105 @@ function TrendChart({ months }: { months: MonthPoint[] }) {
       />
     );
 
+  /*
+   * TWO STACKED READINGS, not one dual-axis chart.
+   *
+   * Volume and money have unrelated units, so drawing them on one pair of axes
+   * meant scaling each to its own maximum — which makes a tall bar and a high
+   * line look comparable when they are not. The owner's verdict was that it
+   * "doesn't make any sense", and that was the honest reading of it.
+   *
+   * Each measure now gets its own row with its own labelled scale, sharing one
+   * month axis. Comparing them is still possible (they line up vertically) but
+   * nothing implies the two heights mean the same thing.
+   */
   const maxCount = Math.max(1, ...months.map((m) => m.count));
   const maxMoney = Math.max(1, ...months.map((m) => m.compensation));
-  const H = 160;
-  const W = Math.max(months.length * 56, 280);
-  const step = W / months.length;
-  const x = (i: number) => step * i + step / 2;
-  const y = (v: number) => H - (v / maxMoney) * (H - 16);
-  // Catmull-Rom smoothing — the boards draw money as a calm curve, not a zigzag.
-  const pts: Array<[number, number]> = months.map((m, i) => [x(i), y(m.compensation)]);
-  // Clamped indices are always in bounds — assert away noUncheckedIndexedAccess.
-  let lineD = pts.length ? `M${pts[0]![0]},${pts[0]![1]}` : '';
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)]!;
-    const p1 = pts[i]!;
-    const p2 = pts[i + 1]!;
-    const p3 = pts[Math.min(pts.length - 1, i + 2)]!;
-    lineD += ` C${p1[0] + (p2[0] - p0[0]) / 6},${p1[1] + (p2[1] - p0[1]) / 6} ${
-      p2[0] - (p3[0] - p1[0]) / 6
-    },${p2[1] - (p3[1] - p1[1]) / 6} ${p2[0]},${p2[1]}`;
-  }
   const busiest = months.reduce((a, b) => (b.count > a.count ? b : a));
-  const avg = months.reduce((s, m) => s + m.count, 0) / months.length;
+  const avg = months.reduce((sum, m) => sum + m.count, 0) / months.length;
+  const totalMoney = months.reduce((sum, m) => sum + m.compensation, 0);
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-2xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="h-2 w-2 rounded-sm bg-primary" />
+      {/* Row 1 — how many complaints. */}
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           {t('complaintDash.complaintsAxis', { defaultValue: 'Complaints' })}
-          <span className="tabular-nums">(max {maxCount})</span>
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          {/* Violet, not warning: `--warning` is a light token and the line
-              would vanish against the light theme's card. */}
-          <span aria-hidden className="h-0.5 w-4 rounded-full bg-violet" />
+        <span className="text-2xs tabular-nums text-muted-foreground">
+          {t('complaintDash.peakLabel', {
+            defaultValue: 'peak {{n}}',
+            n: maxCount,
+          })}
+        </span>
+      </div>
+      <div className="mt-2 flex items-end gap-2" style={{ height: 132 }}>
+        {months.map((m, i) => (
+          <div key={m.month} className="group flex h-full min-w-0 flex-1 flex-col justify-end">
+            <span className="mb-1.5 text-center text-2xs font-bold tabular-nums text-foreground">
+              {m.count}
+            </span>
+            <span
+              title={`${monthLabel(m.month)} · ${m.count}`}
+              className="mx-auto w-full max-w-[44px] origin-bottom rounded-t-xl bg-gradient-to-t from-primary/55 to-primary transition-[filter] duration-fast group-hover:brightness-110 motion-safe:animate-grow-y"
+              style={{
+                height: `${Math.max(4, (m.count / maxCount) * 100)}%`,
+                animationDelay: `${Math.min(i, 12) * 45}ms`,
+              }}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Row 2 — what it cost, on its OWN scale, said so in words. */}
+      <div className="mt-5 flex items-baseline justify-between gap-3 border-t border-foreground/[0.07] pt-4">
+        <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           {t('complaintDash.compensationAxis', { defaultValue: 'Compensation' })}
-          <span className="tabular-nums">(max {SAR(maxMoney)})</span>
+        </span>
+        <span className="text-2xs tabular-nums text-muted-foreground">
+          {t('complaintDash.peakLabel', { defaultValue: 'peak {{n}}', n: SAR(maxMoney) })}
         </span>
       </div>
-
-      <div className="overflow-x-auto">
-        <div className="mx-auto" style={{ maxWidth: Math.max(months.length * 150, 320) }}>
-          <div className="relative" style={{ minWidth: W }}>
-            {/* Dashed quarter gridlines behind the columns — the boards' ruling. */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-0 top-0"
-              style={{ height: H }}
-            >
-              {[0.25, 0.5, 0.75].map((f) => (
-                <div
-                  key={f}
-                  className="absolute inset-x-0 border-t border-dashed border-foreground/[0.07]"
-                  style={{ top: `${f * 100}%` }}
-                />
-              ))}
-              <div className="absolute inset-x-0 bottom-0 border-t border-foreground/[0.09]" />
-            </div>
-            {/* Columns: slim, centered, rounded — not full-bleed slabs. */}
-            <div className="flex items-end gap-1" style={{ height: H }}>
-              {months.map((m, i) => (
-                <div
-                  key={m.month}
-                  className="group relative flex h-full flex-1 flex-col justify-end"
-                  title={`${monthLabel(m.month)} · ${m.count} · ${SAR(m.compensation)}`}
-                >
-                  <span className="mb-1 text-center text-[10px] font-semibold tabular-nums text-foreground">
-                    {m.count}
-                  </span>
-                  <div
-                    className="mx-auto w-[55%] min-w-[8px] max-w-[28px] origin-bottom rounded-full bg-gradient-to-t from-primary/60 to-primary transition-[filter] duration-fast group-hover:brightness-110 motion-safe:animate-grow-y"
-                    style={{
-                      height: `${Math.max(4, (m.count / maxCount) * (H - 24))}px`,
-                      animationDelay: `${Math.min(i, 12) * 45}ms`,
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-            {/* Compensation curve, drawn over the columns on its own scale. */}
-            <svg
-              className="pointer-events-none absolute inset-x-0 top-0"
-              width={W}
-              height={H}
-              viewBox={`0 0 ${W} ${H}`}
-              preserveAspectRatio="none"
-              aria-hidden
-            >
-              <path
-                d={lineD}
-                fill="none"
-                stroke="oklch(var(--violet))"
-                strokeWidth="2"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-              {months.map((m, i) => (
-                <circle
-                  key={m.month}
-                  cx={x(i)}
-                  cy={y(m.compensation)}
-                  r="3.5"
-                  fill="oklch(var(--violet))"
-                  stroke="oklch(var(--card))"
-                  strokeWidth="1.5"
-                />
-              ))}
-            </svg>
+      <div className="mt-2 flex items-end gap-2" style={{ height: 84 }}>
+        {months.map((m, i) => (
+          <div key={m.month} className="group flex h-full min-w-0 flex-1 flex-col justify-end">
+            <span className="mb-1.5 text-center text-2xs tabular-nums text-muted-foreground">
+              {m.compensation > 0 ? Math.round(m.compensation) : ''}
+            </span>
+            <span
+              title={`${monthLabel(m.month)} · ${SAR(m.compensation)}`}
+              className="mx-auto w-full max-w-[44px] origin-bottom rounded-t-xl bg-gradient-to-t from-violet/45 to-violet transition-[filter] duration-fast group-hover:brightness-110 motion-safe:animate-grow-y"
+              style={{
+                height: `${Math.max(2, (m.compensation / maxMoney) * 100)}%`,
+                animationDelay: `${Math.min(i, 12) * 45}ms`,
+              }}
+            />
           </div>
-          <div className="mt-1.5 flex gap-1" style={{ minWidth: W }}>
-            {months.map((m) => (
-              <span
-                key={m.month}
-                className="flex-1 truncate text-center text-[10px] tabular-nums text-muted-foreground"
-              >
-                {monthLabel(m.month)}
-              </span>
-            ))}
-          </div>
-        </div>
+        ))}
       </div>
 
-      <p className="mt-3 text-2xs text-muted-foreground">
+      {/* Shared month axis. */}
+      <div className="mt-2 flex gap-2 border-t border-foreground/[0.07] pt-2">
+        {months.map((m) => (
+          <span
+            key={m.month}
+            className="min-w-0 flex-1 truncate text-center text-2xs tabular-nums text-muted-foreground"
+          >
+            {monthLabel(m.month)}
+          </span>
+        ))}
+      </div>
+
+      <p className="mt-3 text-2xs leading-relaxed text-muted-foreground">
         {t('complaintDash.trendCaption', {
           defaultValue: 'Busiest month {{month}} with {{peak}}. Average {{avg}} per month.',
           month: monthLabel(busiest.month),
           peak: busiest.count,
           avg: avg.toFixed(1),
+        })}{' '}
+        {t('complaintDash.trendMoney', {
+          defaultValue: '{{total}} paid out across the range.',
+          total: SAR(totalMoney),
         })}
       </p>
     </div>
@@ -1503,9 +1474,9 @@ export function ComplaintDashboard() {
           {/* ── Trend ────────────────────────────────────────────────────── */}
           <SectionCard
             title={t('complaintDash.perMonth', { defaultValue: 'Complaints per month' })}
-            hint={t('complaintDash.perMonthHint2', {
+            hint={t('complaintDash.perMonthHint3', {
               defaultValue:
-                'Each column is how many complaints were logged that month (left scale). The line is how much compensation was paid (right scale) — the two are counted differently, so they are scaled separately and only their SHAPES should be compared.',
+                'Two readings over the same months: how many complaints were logged, and what was paid out. Each has its own scale — they are different units.',
             })}
           >
             <TrendChart months={d.months} />

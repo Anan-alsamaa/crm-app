@@ -19,7 +19,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const AGENT = {
   url: 'http://127.0.0.1:5173',
   email: 'e2e.agent@example.com',
-  pass: 'E2eAgentPass1!',
+  pass: '123456',
   routes: [
     ['agent-inbox', '/'],
     ['agent-tickets', '/tickets'],

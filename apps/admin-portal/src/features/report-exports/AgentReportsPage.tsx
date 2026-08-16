@@ -8,6 +8,7 @@ import {
   Avatar,
   Button,
   cn,
+  Drawer,
   EmptyState,
   InboxIcon,
   Input,
@@ -490,7 +491,7 @@ function TicketsReport({
                       <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-xs text-foreground hover:bg-secondary/60">
                         <input
                           type="checkbox"
-                          className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary/60"
+                          className="h-3.5 w-3.5 rounded border-border accent-primary focus:ring-primary/60"
                           checked={cols.has(k)}
                           onChange={() => toggleCol(k)}
                         />
@@ -952,171 +953,174 @@ function ComplaintsReport({
               {cols.size}/{COMPLAINT_COLUMN_KEYS.length}
             </span>
           </button>
-          {showCols && (
-            <>
-              <button
-                type="button"
-                aria-hidden
-                tabIndex={-1}
-                className="fixed inset-0 z-30 cursor-default"
-                onClick={() => setShowCols(false)}
-              />
-              {/* Wider and taller than before, with a search: arranging 27
-                  columns through a 64-wide list scrolled two rows at a time was
-                  the actual complaint. The list IS the arrangement — its order
-                  is the table's order and the export's order. */}
-              <div className="absolute end-0 top-9 z-40 flex max-h-[34rem] w-[30rem] flex-col rounded-2xl bg-card shadow-float ring-1 ring-foreground/10">
-                <div className="space-y-2 border-b border-border p-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                      {t('agentReports.exportColumns', { defaultValue: 'Columns' })}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="text-2xs font-medium text-primary hover:underline"
-                        onClick={() => setCols(new Set(COMPLAINT_COLUMN_KEYS))}
-                      >
-                        {t('agentReports.selectAll', { defaultValue: 'All' })}
-                      </button>
-                      <button
-                        type="button"
-                        className="text-2xs font-medium text-muted-foreground hover:text-foreground hover:underline"
-                        onClick={() => {
-                          const next = [...COMPLAINT_COLUMN_KEYS];
-                          setOrder(next);
-                          saveColumnOrder(TICKET_REPORT_ORDER_KEY, next);
-                        }}
-                      >
-                        {t('complaintReport.resetOrder', { defaultValue: 'Reset order' })}
-                      </button>
-                    </div>
+          {/* A real dialog, not a dropdown: arranging 29 columns is a task, and
+              a task needs room, a title that says what the order controls, a
+              search, and a way to leave deliberately. The cramped popover was
+              the actual complaint. */}
+          <Drawer
+            open={showCols}
+            onClose={() => setShowCols(false)}
+            title={t('agentReports.exportColumns', { defaultValue: 'Columns' })}
+            description={t('complaintReport.columnsHelp', {
+              defaultValue:
+                'Drag a row to reorder. The order here is the order in the table and the export.',
+            })}
+            width="lg"
+            footer={
+              <Button onClick={() => setShowCols(false)}>
+                {t('actions.done', { ns: 'common', defaultValue: 'Done' })}
+              </Button>
+            }
+          >
+            <div className="flex h-full flex-col">
+              <div className="space-y-2 border-b border-border p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                    {t('complaintReport.shownCount', {
+                      defaultValue: '{{n}} of {{m}} shown',
+                      n: cols.size,
+                      m: COMPLAINT_COLUMN_KEYS.length,
+                    })}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="text-2xs font-medium text-primary hover:underline"
+                      onClick={() => setCols(new Set(COMPLAINT_COLUMN_KEYS))}
+                    >
+                      {t('agentReports.selectAll', { defaultValue: 'All' })}
+                    </button>
+                    <button
+                      type="button"
+                      className="text-2xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+                      onClick={() => {
+                        const next = [...COMPLAINT_COLUMN_KEYS];
+                        setOrder(next);
+                        saveColumnOrder(TICKET_REPORT_ORDER_KEY, next);
+                      }}
+                    >
+                      {t('complaintReport.resetOrder', { defaultValue: 'Reset order' })}
+                    </button>
                   </div>
-                  <Input
-                    value={colQuery}
-                    onChange={(e) => setColQuery(e.target.value)}
-                    className="h-7 text-xs"
-                    aria-label={t('complaintReport.findColumn', { defaultValue: 'Find a column' })}
-                    placeholder={t('complaintReport.findColumn', {
-                      defaultValue: 'Find a column…',
-                    })}
-                  />
-                  <p className="text-2xs text-muted-foreground">
-                    {t('complaintReport.columnsHelp', {
-                      defaultValue:
-                        'Drag a row to reorder. The order here is the order in the table and the export.',
-                    })}
-                  </p>
                 </div>
-                <ul className="flex-1 space-y-0.5 overflow-auto p-1.5">
-                  {order.map((k, i) => {
-                    const label = t(COMPLAINT_COLUMN_LABELS[k].key, {
-                      defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
-                    });
-                    // Filtering hides rows but never renumbers them: the
-                    // position shown is the real position in the report.
-                    if (colQuery.trim() && !label.toLowerCase().includes(colQuery.toLowerCase())) {
-                      return null;
-                    }
-                    return (
-                      <li
-                        key={k}
-                        draggable
-                        onDragStart={(e) => {
-                          setDragKey(k);
-                          e.dataTransfer.effectAllowed = 'move';
-                        }}
-                        onDragEnd={() => setDragKey(null)}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          if (!dragKey || dragKey === k) return;
-                          setOrder((prev) => {
-                            const from = prev.indexOf(dragKey);
-                            const to = prev.indexOf(k);
-                            if (from < 0 || to < 0) return prev;
-                            const next = moveColumn(prev, from, to);
-                            saveColumnOrder(TICKET_REPORT_ORDER_KEY, next);
-                            return next;
-                          });
-                          setDragKey(null);
-                        }}
-                        className={cn(
-                          'flex items-center gap-1 rounded-lg',
-                          dragKey === k && 'opacity-40',
-                        )}
-                      >
-                        {/* Drag to reorder — arranging 29 columns two rows at a
+                <Input
+                  value={colQuery}
+                  onChange={(e) => setColQuery(e.target.value)}
+                  className="h-7 text-xs"
+                  aria-label={t('complaintReport.findColumn', { defaultValue: 'Find a column' })}
+                  placeholder={t('complaintReport.findColumn', {
+                    defaultValue: 'Find a column…',
+                  })}
+                />
+              </div>
+              <ul className="flex-1 space-y-0.5 overflow-auto p-3">
+                {order.map((k, i) => {
+                  const label = t(COMPLAINT_COLUMN_LABELS[k].key, {
+                    defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
+                  });
+                  // Filtering hides rows but never renumbers them: the
+                  // position shown is the real position in the report.
+                  if (colQuery.trim() && !label.toLowerCase().includes(colQuery.toLowerCase())) {
+                    return null;
+                  }
+                  return (
+                    <li
+                      key={k}
+                      draggable
+                      onDragStart={(e) => {
+                        setDragKey(k);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onDragEnd={() => setDragKey(null)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (!dragKey || dragKey === k) return;
+                        setOrder((prev) => {
+                          const from = prev.indexOf(dragKey);
+                          const to = prev.indexOf(k);
+                          if (from < 0 || to < 0) return prev;
+                          const next = moveColumn(prev, from, to);
+                          saveColumnOrder(TICKET_REPORT_ORDER_KEY, next);
+                          return next;
+                        });
+                        setDragKey(null);
+                      }}
+                      className={cn(
+                        'flex items-center gap-1 rounded-lg',
+                        dragKey === k && 'opacity-40',
+                      )}
+                    >
+                      {/* Drag to reorder — arranging 29 columns two rows at a
                             time with arrows was the actual complaint. The
                             arrows stay as the keyboard-reachable path. */}
-                        <span
-                          aria-hidden
-                          className="shrink-0 cursor-grab select-none px-1 text-muted-foreground/60 active:cursor-grabbing"
-                          title={t('complaintReport.dragHint', {
-                            defaultValue: 'Drag to reorder',
-                          })}
-                        >
-                          ⠿
-                        </span>
-                        <span className="w-5 shrink-0 text-end text-2xs tabular-nums text-muted-foreground/70">
-                          {i + 1}
-                        </span>
-                        <label className="flex flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-xs text-foreground hover:bg-secondary/60">
-                          <input
-                            type="checkbox"
-                            className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary/60"
-                            checked={cols.has(k)}
-                            onChange={() => toggleCol(k)}
-                          />
-                          {label}
-                        </label>
-                        <button
-                          type="button"
-                          disabled={i === 0}
-                          onClick={() => moveCol(k, -1)}
-                          aria-label={t('complaintReport.moveUp', {
-                            col: label,
-                            defaultValue: 'Move {{col}} earlier',
-                          })}
-                          className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          disabled={i === order.length - 1}
-                          onClick={() => moveCol(k, 1)}
-                          aria-label={t('complaintReport.moveDown', {
-                            col: label,
-                            defaultValue: 'Move {{col}} later',
-                          })}
-                          className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
-                        >
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          disabled={i === 0}
-                          onClick={() => moveCol(k, -i)}
-                          aria-label={t('complaintReport.moveFirst', {
-                            col: label,
-                            defaultValue: 'Move {{col}} to the front',
-                          })}
-                          title={t('complaintReport.moveFirst', {
-                            col: label,
-                            defaultValue: 'Move {{col}} to the front',
-                          })}
-                          className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
-                        >
-                          ⤒
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            </>
-          )}
+                      <span
+                        aria-hidden
+                        className="shrink-0 cursor-grab select-none px-1 text-muted-foreground/60 active:cursor-grabbing"
+                        title={t('complaintReport.dragHint', {
+                          defaultValue: 'Drag to reorder',
+                        })}
+                      >
+                        ⠿
+                      </span>
+                      <span className="w-5 shrink-0 text-end text-2xs tabular-nums text-muted-foreground/70">
+                        {i + 1}
+                      </span>
+                      <label className="flex flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-xs text-foreground hover:bg-secondary/60">
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 rounded border-border accent-primary focus:ring-primary/60"
+                          checked={cols.has(k)}
+                          onChange={() => toggleCol(k)}
+                        />
+                        {label}
+                      </label>
+                      <button
+                        type="button"
+                        disabled={i === 0}
+                        onClick={() => moveCol(k, -1)}
+                        aria-label={t('complaintReport.moveUp', {
+                          col: label,
+                          defaultValue: 'Move {{col}} earlier',
+                        })}
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        disabled={i === order.length - 1}
+                        onClick={() => moveCol(k, 1)}
+                        aria-label={t('complaintReport.moveDown', {
+                          col: label,
+                          defaultValue: 'Move {{col}} later',
+                        })}
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        disabled={i === 0}
+                        onClick={() => moveCol(k, -i)}
+                        aria-label={t('complaintReport.moveFirst', {
+                          col: label,
+                          defaultValue: 'Move {{col}} to the front',
+                        })}
+                        title={t('complaintReport.moveFirst', {
+                          col: label,
+                          defaultValue: 'Move {{col}} to the front',
+                        })}
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                      >
+                        ⤒
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </Drawer>
           {/* Says the COUNT, so nobody has to wonder whether "export" means the
               page in front of them. It never has — it has always exported the
               whole filtered set — but a promise that has to be trusted is one

@@ -16,7 +16,9 @@ const DIRECTUS = process.env.DIRECTUS_INTERNAL_URL ?? 'http://localhost:8055';
 const ADMIN_EMAIL = process.env.DIRECTUS_ADMIN_EMAIL ?? 'e.habibi@anan.sa';
 const ADMIN_PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD ?? '123456';
 const AGENT_EMAIL = process.env.SEED_AGENT_EMAIL ?? 'e2e.agent@example.com';
-const AGENT_PASSWORD = process.env.SEED_AGENT_PASSWORD ?? 'E2eAgentPass1!';
+// Must match docs/LOCAL_PROD.md and tests/e2e-setup: three places used to
+// disagree, so whichever ran last silently changed the owner's login.
+const AGENT_PASSWORD = process.env.SEED_AGENT_PASSWORD ?? '123456';
 
 let TOKEN = '';
 

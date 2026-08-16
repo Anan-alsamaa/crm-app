@@ -760,7 +760,7 @@ describe('AgentReportsPage — complaints report', () => {
     await user.click(screen.getByText('Columns'));
     // Date starts first; move it one place later and the list reflects it.
     await user.click(screen.getByLabelText('Move Date later'));
-    const labels = screen
+    const labels = within(screen.getByRole('dialog'))
       .getAllByRole('checkbox')
       .map((c) => c.closest('label')?.textContent?.trim());
     expect(labels[0]).toBe('Year');
@@ -848,7 +848,7 @@ describe('AgentReportsPage — complaints report', () => {
 
     await user.click(screen.getByText('Columns'));
     await user.click(screen.getByLabelText('Move Compensation to the front'));
-    const first = screen.getAllByRole('checkbox')[0]!.closest('label')!;
+    const first = within(screen.getByRole('dialog')).getAllByRole('checkbox')[0]!.closest('label')!;
     expect(first).toHaveTextContent('Compensation');
   });
 

@@ -881,7 +881,10 @@
     "byTypeHint": "What customers are actually complaining about, biggest first.",
     "topOf": "top {{n}} of {{m}}",
     "notMeasured": "Not measured yet",
-    "perMonthHint2": "Each column is how many complaints were logged that month (left scale). The line is how much compensation was paid (right scale) — the two are counted differently, so they are scaled separately and only their SHAPES should be compared."
+    "perMonthHint2": "Each column is how many complaints were logged that month (left scale). The line is how much compensation was paid (right scale) — the two are counted differently, so they are scaled separately and only their SHAPES should be compared.",
+    "peakLabel": "peak {{n}}",
+    "trendMoney": "{{total}} paid out across the range.",
+    "perMonthHint3": "Two readings over the same months: how many complaints were logged, and what was paid out. Each has its own scale — they are different units."
   },
   "performance": {
     "title": "Agent performance",
@@ -1035,7 +1038,8 @@
     "unknownUser": "Unknown user",
     "systemUser": "System",
     "selectHint": "Click a row, then use History or Delete.",
-    "importDisabled": "Importing is disabled"
+    "importDisabled": "Importing is disabled",
+    "shownCount": "{{n}} of {{m}} shown"
   },
   "lists": {
     "title": "Complaint types",
