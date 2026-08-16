@@ -352,6 +352,25 @@ export function useAgentReportData(
     queryKey: ['agent-reports', days, labels.unassigned, labels.noSubject],
     staleTime: 60_000,
     queryFn: async (): Promise<AgentReportData> => {
+      try {
+        return await loadAgentReport(days, labels);
+      } catch (err) {
+        // Report the cause. A generic "could not load" on a page that made
+        // twenty successful requests sends whoever is looking hunting through
+        // the network tab for a failure that is not there.
+        console.error('[agent-reports] failed to build the report', (err as Error)?.stack ?? err);
+        throw err;
+      }
+    },
+  });
+}
+
+async function loadAgentReport(
+  days: number,
+  labels: { unassigned: string; noSubject: string },
+): Promise<AgentReportData> {
+  {
+    {
       const since = new Date(Date.now() - days * DAY_MS).toISOString();
       const now = Date.now();
 
@@ -483,49 +502,6 @@ export function useAgentReportData(
           String(a.complaint_date ?? a.date_created ?? ''),
         ),
       );
-      const complaintRows: ComplaintReportRow[] = byWhen.map((t) => {
-        // When it HAPPENED, not when it was typed in. Older tickets have no
-        // complaint_date and keep dating from creation.
-        const when = splitLocalDateTime(t.complaint_date ?? t.date_created);
-        const snap = t.order_snapshot ?? null;
-        return {
-          id: t.id,
-          ...when,
-          // Filled by the store join on the page; blank here rather than
-          // guessed, so an unjoined row is visibly unjoined.
-          chain: '',
-          area: '',
-          brand: snap?.brandName?.trim() ?? '',
-          city: '',
-          restaurantName: snap?.restaurantName?.trim() ?? '',
-          // Filled by the store join; blank until then.
-          storeCode: '',
-          yijiRestaurantId: '',
-          storeMapped: false,
-          serviceType: t.service_type ?? '',
-          complaintType: t.complaint_type ?? '',
-          customerName: t.contact?.name ?? '',
-          customerMobile: t.contact?.phone ?? '',
-          complaintDescription: t.description ?? '',
-          responseDesc: t.response_desc ?? '',
-          complaintSource: t.complaint_source ?? '',
-          orderAmount: toNumber(snap?.total),
-          orderNumber: snap?.orderId ? String(snap.orderId) : '',
-          communicationMethod: t.communication_method ?? '',
-          couponCode: t.coupon_code ?? '',
-          couponValue: toNumber(t.coupon_value),
-          couponPercent: toNumber(t.coupon_percent),
-          complaintStatus: t.status,
-          agent: agentOf(t.assigned_agent),
-          compensation: t.compensation ?? '',
-          // Blank until the first edit — a creation is not a modification, and
-          // a column of creation timestamps would drown the real signal.
-          lastModifiedBy: lastEditBy.get(t.id)?.name ?? '',
-          lastModifiedAt: lastEditBy.get(t.id)?.at ?? '',
-          storeSnapshot: t.store_snapshot ?? null,
-        };
-      });
-
       /*
        * Who last edited each ticket, and when — from the AUDIT TRAIL, not from
        * `user_updated`.
@@ -576,6 +552,49 @@ export function useAgentReportData(
           /* no revision read access — the column falls back to blank */
         }
       }
+
+      const complaintRows: ComplaintReportRow[] = byWhen.map((t) => {
+        // When it HAPPENED, not when it was typed in. Older tickets have no
+        // complaint_date and keep dating from creation.
+        const when = splitLocalDateTime(t.complaint_date ?? t.date_created);
+        const snap = t.order_snapshot ?? null;
+        return {
+          id: t.id,
+          ...when,
+          // Filled by the store join on the page; blank here rather than
+          // guessed, so an unjoined row is visibly unjoined.
+          chain: '',
+          area: '',
+          brand: snap?.brandName?.trim() ?? '',
+          city: '',
+          restaurantName: snap?.restaurantName?.trim() ?? '',
+          // Filled by the store join; blank until then.
+          storeCode: '',
+          yijiRestaurantId: '',
+          storeMapped: false,
+          serviceType: t.service_type ?? '',
+          complaintType: t.complaint_type ?? '',
+          customerName: t.contact?.name ?? '',
+          customerMobile: t.contact?.phone ?? '',
+          complaintDescription: t.description ?? '',
+          responseDesc: t.response_desc ?? '',
+          complaintSource: t.complaint_source ?? '',
+          orderAmount: toNumber(snap?.total),
+          orderNumber: snap?.orderId ? String(snap.orderId) : '',
+          communicationMethod: t.communication_method ?? '',
+          couponCode: t.coupon_code ?? '',
+          couponValue: toNumber(t.coupon_value),
+          couponPercent: toNumber(t.coupon_percent),
+          complaintStatus: t.status,
+          agent: agentOf(t.assigned_agent),
+          compensation: t.compensation ?? '',
+          // Blank until the first edit — a creation is not a modification, and
+          // a column of creation timestamps would drown the real signal.
+          lastModifiedBy: lastEditBy.get(t.id)?.name ?? '',
+          lastModifiedAt: lastEditBy.get(t.id)?.at ?? '',
+          storeSnapshot: t.store_snapshot ?? null,
+        };
+      });
 
       /* Report 2: agent KPI — first response + CSAT. */
       interface Acc {
@@ -816,8 +835,8 @@ export function useAgentReportData(
         },
         generatedAt: new Date().toISOString(),
       };
-    },
-  });
+    }
+  }
 }
 
 /* ── Order enrichment (commerce proxy, bounded + best-effort) ─────────── */

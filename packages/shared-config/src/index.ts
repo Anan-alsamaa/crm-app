@@ -6,14 +6,9 @@
  * - auth.ts: Directus auth client for portals (Phase 3, T030)
  */
 
-export {
-  parseEnv,
-  numericEnv,
-  booleanEnv,
-  redisUrlSchema,
-  onPageHost,
-  exportFileName,
-} from './env.js';
+export { parseEnv, numericEnv, booleanEnv, redisUrlSchema } from './env.js';
+/* Zod-free browser helpers — see runtime.ts for why they are not in env.ts. */
+export { onPageHost, exportFileName } from './runtime.js';
 export {
   createServiceClient,
   type YijiDirectusClient,

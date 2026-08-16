@@ -10,7 +10,6 @@ import {
   cn,
   ErrorBoundary,
   InboxIcon,
-  SearchTrigger,
   SettingsIcon,
   SignOutIcon,
   Spinner,
@@ -362,13 +361,6 @@ function Shell({ children }: { children: React.ReactNode }) {
         topBarBrand={<MobileBrand />}
         topBarActions={
           <div className="flex items-center gap-1.5 text-muted-foreground">
-            <SearchTrigger
-              label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
-              aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
-              onClick={() => setPaletteOpen(true)}
-              className="hidden sm:inline-flex"
-            />
-            <span className="mx-0.5 hidden h-5 w-px bg-border sm:block" aria-hidden />
             <NotificationBell />
             <HelpAssistant />
             <SoundToggle />
@@ -378,17 +370,9 @@ function Shell({ children }: { children: React.ReactNode }) {
         navBar={<TopNav sections={sections} />}
         topBar={
           <>
-            {/* The bar is a card surface now, so the utility triggers read
-                correctly with their own tokens — no rebinding needed. The
-                search chrome and the user's name yield below 1600px — at
-                1440 they crowded the row and clipped the last nav pill; the
-                palette stays reachable via Cmd/Ctrl+K regardless. */}
-            <SearchTrigger
-              label={t('actions.searchPlaceholder', { ns: 'common', defaultValue: 'Search…' })}
-              aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
-              onClick={() => setPaletteOpen(true)}
-              className="hidden min-[1600px]:inline-flex"
-            />
+            {/* No search box in the masthead: every page that has something
+                to search already has its own field, and a second one competed
+                with them. The command palette is still one Cmd/Ctrl+K away. */}
             <div className="flex items-center gap-0.5 rounded-full bg-ink-foreground/10 p-1 ring-1 ring-ink-foreground/15">
               <NotificationBell />
               <HelpAssistant />
