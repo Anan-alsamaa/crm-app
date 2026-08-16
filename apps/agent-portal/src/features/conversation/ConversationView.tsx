@@ -877,61 +877,55 @@ ${text}`;
                 rather than in a side panel they have to look away to find.
                 A suggestion still only ever lands in the composer for the
                 agent to edit — nothing reaches the customer unreviewed. */}
-            {!internalNote && aiVendorId && (
-              <div className="mb-2">
-                {/* Collapsed by default: expanded it ate the height the THREAD
-                    needs, and an agent wants it only at the moment they are
-                    stuck for words. The trigger sits with the quick replies —
-                    both are "help me write this" — and the panel opens in
-                    place, directly over the box it feeds. */}
-                <button
-                  type="button"
-                  onClick={() => setAiOpen((v) => !v)}
-                  aria-expanded={aiOpen}
-                  className={cn(
-                    'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-2xs font-semibold',
-                    'ring-1 ring-inset transition-colors duration-fast ease-out',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                    aiOpen
-                      ? 'bg-primary/15 text-primary ring-primary/25'
-                      : 'bg-secondary/50 text-muted-foreground ring-border hover:text-foreground',
-                  )}
-                >
-                  <SparkleIcon size={13} />
-                  {t('ai.title', { defaultValue: 'AI assistance' })}
-                  <ChevronDownIcon
-                    size={12}
-                    className={cn('transition-transform duration-fast', aiOpen && 'rotate-180')}
-                  />
-                </button>
-                {aiOpen && (
-                  <AiPanel
-                    className="mt-2"
-                    conversationId={conversationId}
-                    vendorId={aiVendorId}
-                    draft={draft}
-                    onReplySuggested={(reply) => setDraft(reply)}
-                  />
-                )}
-              </div>
-            )}
-
             {/* Ready-made replies, directly above the box — the operations portal
                 puts them here and agents already reach for them there. Hidden on
                 an internal note: a canned customer reply is never the right
                 thing to say to the team. */}
             {!internalNote && (
-              <QuickReplies
-                className="mb-1"
-                customerText={customerText}
-                query={replyFilter}
-                vars={{
-                  order: c?.last_order_id ?? null,
-                  name: c?.contact?.name ?? null,
-                  brand: c?.last_order_snapshot?.brandName ?? null,
-                  restaurant: c?.last_order_snapshot?.restaurantName ?? null,
-                }}
-                onPick={insertQuickReply}
+              <div className="mb-1 flex items-start gap-2">
+                <QuickReplies
+                  className="min-w-0 flex-1"
+                  customerText={customerText}
+                  query={replyFilter}
+                  vars={{
+                    order: c?.last_order_id ?? null,
+                    name: c?.contact?.name ?? null,
+                    brand: c?.last_order_snapshot?.brandName ?? null,
+                    restaurant: c?.last_order_snapshot?.restaurantName ?? null,
+                  }}
+                  onPick={insertQuickReply}
+                />
+                {aiVendorId && (
+                  <button
+                    type="button"
+                    onClick={() => setAiOpen((v) => !v)}
+                    aria-expanded={aiOpen}
+                    className={cn(
+                      'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-2xs font-semibold',
+                      'ring-1 ring-inset transition-colors duration-fast ease-out',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                      aiOpen
+                        ? 'bg-primary/15 text-primary ring-primary/25'
+                        : 'bg-secondary/50 text-muted-foreground ring-border hover:text-foreground',
+                    )}
+                  >
+                    <SparkleIcon size={13} />
+                    {t('ai.title', { defaultValue: 'AI' })}
+                    <ChevronDownIcon
+                      size={12}
+                      className={cn('transition-transform duration-fast', aiOpen && 'rotate-180')}
+                    />
+                  </button>
+                )}
+              </div>
+            )}
+            {!internalNote && aiVendorId && aiOpen && (
+              <AiPanel
+                className="mb-2"
+                conversationId={conversationId}
+                vendorId={aiVendorId}
+                draft={draft}
+                onReplySuggested={(reply) => setDraft(reply)}
               />
             )}
 

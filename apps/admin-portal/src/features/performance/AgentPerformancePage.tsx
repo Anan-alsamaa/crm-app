@@ -403,7 +403,7 @@ export function AgentPerformancePage() {
                   { value: '', label: t('performance.allAgents', { defaultValue: 'All agents' }) },
                   ...(agents.data ?? []).map((a) => ({
                     value: a.id,
-                    label: a.first_name ?? a.email ?? a.id,
+                    label: a.first_name?.trim() || a.email?.trim() || a.id,
                   })),
                 ]}
               />

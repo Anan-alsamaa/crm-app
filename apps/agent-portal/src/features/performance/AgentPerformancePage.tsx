@@ -76,7 +76,9 @@ export function AgentPerformancePage() {
 
   const agentNames = useMemo(() => {
     const m = new Map<string, string>();
-    for (const a of agents.data ?? []) m.set(a.id, a.first_name ?? a.email ?? a.id);
+    for (const a of agents.data ?? []) {
+      m.set(a.id, a.first_name?.trim() || a.email?.trim() || a.id);
+    }
     return m;
   }, [agents.data]);
 
@@ -214,7 +216,7 @@ export function AgentPerformancePage() {
             { value: '', label: t('performance.allAgents', { defaultValue: 'All agents' }) },
             ...(agents.data ?? []).map((a) => ({
               value: a.id,
-              label: a.first_name ?? a.email ?? a.id,
+              label: a.first_name?.trim() || a.email?.trim() || a.id,
             })),
           ]}
         />

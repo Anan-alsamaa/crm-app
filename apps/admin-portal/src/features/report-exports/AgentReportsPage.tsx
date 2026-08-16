@@ -700,7 +700,10 @@ function ComplaintsReport({
       )) as unknown as Array<{ id: string; first_name: string | null; email: string | null }>,
   });
   const userNames = useMemo(
-    () => new Map((users.data ?? []).map((u) => [u.id, u.first_name ?? u.email ?? u.id])),
+    () =>
+      new Map(
+        (users.data ?? []).map((u) => [u.id, u.first_name?.trim() || u.email?.trim() || u.id]),
+      ),
     [users.data],
   );
 

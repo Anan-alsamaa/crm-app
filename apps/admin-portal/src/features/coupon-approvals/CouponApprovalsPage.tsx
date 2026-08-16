@@ -97,7 +97,7 @@ function Row({
             {t('couponApprovals.agent', { defaultValue: 'Asked by' })}
           </dt>
           <dd className="min-w-0 truncate font-medium text-foreground">
-            {row.requested_by?.first_name ?? row.requested_by?.email ?? '—'}
+            {row.requested_by?.first_name?.trim() || row.requested_by?.email?.trim() || '—'}
           </dd>
         </div>
         <div className="flex min-w-0 items-baseline gap-2">
@@ -130,7 +130,7 @@ function Row({
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
           {t('couponApprovals.decidedBy', {
             defaultValue: 'Decided by {{who}}: {{note}}',
-            who: row.decided_by?.first_name ?? row.decided_by?.email ?? '—',
+            who: row.decided_by?.first_name?.trim() || row.decided_by?.email?.trim() || '—',
             note: row.decision_note,
           })}
         </p>
