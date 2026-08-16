@@ -681,7 +681,7 @@ export function Inbox() {
                       aria-hidden
                       className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.25),transparent_60%)]"
                     />
-                    <h2 className="relative font-display text-3xl font-extrabold leading-[1.05] tracking-[-0.035em] text-balance text-white">
+                    <h2 className="relative font-display text-3xl font-extrabold leading-[1.25] tracking-[-0.03em] text-balance text-white">
                       {openCount === 0
                         ? `${t('inbox.welcome.zeroTitle')} ${t('inbox.welcome.zeroAccent')}`
                         : `${t('inbox.welcome.waiting', { count: openCount })} ${

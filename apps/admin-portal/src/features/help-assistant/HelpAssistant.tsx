@@ -348,30 +348,45 @@ export function HelpAssistant(): JSX.Element {
           </form>
         }
       >
-        {/* Transcript — this session only, cleared when the panel closes. */}
-        <div className="space-y-3" aria-live="polite">
+        {/* Transcript — this session only, cleared when the panel closes.
+            Aura on the left under her name, the user on the right: the
+            arrangement every messaging app uses, so who said what is readable
+            without reading. */}
+        <div className="space-y-4" aria-live="polite">
           {turns.map((turn, i) =>
             turn.role === 'user' ? (
-              <div key={i} className="flex justify-end">
-                <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-ee-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-foreground">
+              <div key={i} className="flex flex-col items-end gap-1">
+                <span className="pe-1 text-2xs font-medium text-muted-foreground">
+                  {t('helpAssistant.you', { defaultValue: 'You' })}
+                </span>
+                <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-ee-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.4)]">
                   {turn.content}
                 </p>
               </div>
             ) : (
-              <div key={i} className="flex flex-col items-start gap-1.5">
-                {/* Off-topic replies are shown but visually demoted, so nobody
-                    mistakes a refusal for guidance about this CRM. */}
-                {turn.offTopic && (
-                  <Pill tone="muted" size="sm">
-                    {t('helpAssistant.offTopicTag', { defaultValue: 'Out of scope' })}
-                  </Pill>
-                )}
+              <div key={i} className="flex flex-col items-start gap-1">
+                <div className="flex items-center gap-1.5 ps-1">
+                  <span
+                    aria-hidden
+                    className="grid h-4 w-4 place-items-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground"
+                  >
+                    A
+                  </span>
+                  <span className="text-2xs font-medium text-muted-foreground">Aura</span>
+                  {/* Off-topic replies are labelled but not hidden, so nobody
+                      mistakes a refusal for guidance about this CRM. */}
+                  {turn.offTopic && (
+                    <Pill tone="muted" size="sm">
+                      {t('helpAssistant.offTopicTag', { defaultValue: 'Out of scope' })}
+                    </Pill>
+                  )}
+                </div>
                 <p
                   className={cn(
-                    'max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-es-md px-4 py-2.5 text-sm leading-relaxed ring-1 ring-foreground/[0.06]',
+                    'max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-es-md px-4 py-2.5 text-sm leading-relaxed',
                     turn.offTopic
                       ? 'bg-secondary text-muted-foreground'
-                      : 'bg-bubble text-foreground',
+                      : 'bg-card text-foreground shadow-[0_2px_10px_-6px_oklch(var(--shadow-color)/0.45)] ring-1 ring-foreground/[0.05]',
                   )}
                 >
                   {turn.content}

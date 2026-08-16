@@ -84,6 +84,8 @@ export function AgentPerformancePage() {
 
   const [filters, setFilters] = useState<PerformanceFilters>({});
   const [targetMin, setTargetMin] = useState(DEFAULT_TARGET_MIN);
+  /** What is in the box WHILE typing — '' is a legal intermediate state. */
+  const [targetDraft, setTargetDraft] = useState(String(DEFAULT_TARGET_MIN));
 
   const timings = useChatTimings(filters);
   /**
@@ -252,8 +254,21 @@ export function AgentPerformancePage() {
               min={1}
               className="h-8"
               aria-label={t('performance.target', { defaultValue: 'Answer within (minutes)' })}
-              value={targetMin}
-              onChange={(e) => setTargetMin(Math.max(1, Number(e.target.value) || 1))}
+              value={targetDraft}
+              onChange={(e) => {
+                setTargetDraft(e.target.value);
+                const n = Number(e.target.value);
+                if (Number.isFinite(n) && n >= 1) setTargetMin(n);
+              }}
+              onBlur={() => {
+                // Only settle the value when the agent has finished. Clamping
+                // per keystroke made the field impossible to clear and edit
+                // from the keyboard — the spinner was the only way in.
+                const n = Number(targetDraft);
+                const settled = Number.isFinite(n) && n >= 1 ? Math.round(n) : DEFAULT_TARGET_MIN;
+                setTargetMin(settled);
+                setTargetDraft(String(settled));
+              }}
             />
           </span>
           {t('performance.minutesShort', { defaultValue: 'min' })}

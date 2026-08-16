@@ -154,7 +154,10 @@ export function agentPerformance(chats: readonly ChatTiming[]): AgentPerformance
     const solves = group.map(timeToSolveSec).filter((n): n is number => n !== null);
     rows.push({
       agentId,
-      agentName: group[0]!.agentName,
+      // Never blank: a row whose agent has no name is unreadable, and the
+      // caller cannot always resolve one (an account with no name set, a
+      // /users read that failed, a chat assigned to a filtered-out account).
+      agentName: group[0]!.agentName?.trim() || group[0]!.agentId || 'Unassigned',
       chats: group.length,
       answered: responses.length,
       // Every chat with no reply, passed on or not — see the note in
