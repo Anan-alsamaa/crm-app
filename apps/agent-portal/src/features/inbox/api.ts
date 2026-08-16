@@ -57,7 +57,7 @@ export interface MessageAttachment {
 export interface ConversationMessage {
   id: string;
   sender_type: 'customer' | 'agent' | 'system';
-  content: string;
+  content: string | null;
   is_internal_note: boolean;
   date_created: string | null;
   attachments?: MessageAttachment[];

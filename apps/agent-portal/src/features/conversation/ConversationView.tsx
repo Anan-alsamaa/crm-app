@@ -525,7 +525,7 @@ export function ConversationView({
     () =>
       all
         .filter((m) => m.sender_type === 'customer' && !m.is_internal_note)
-        .map((m) => m.content)
+        .map((m) => m.content ?? '')
         .join(' '),
     [all],
   );
@@ -768,7 +768,7 @@ ${text}`;
                       <div className={cn('flex flex-col gap-0.5', isAgent && 'items-end')}>
                         {run.map((m, i) => {
                           const isLast = i === run.length - 1;
-                          const hasContent = m.content.trim().length > 0;
+                          const hasContent = (m.content ?? '').trim().length > 0;
                           return (
                             <div
                               key={m.id}
@@ -809,7 +809,7 @@ ${text}`;
                                   {/* Signature touch: copy a message on hover. */}
                                   <button
                                     type="button"
-                                    onClick={() => copyMessage(m.content)}
+                                    onClick={() => copyMessage(m.content ?? '')}
                                     aria-label={t('conversation.copyMessage', {
                                       defaultValue: 'Copy message',
                                     })}
