@@ -26,6 +26,22 @@ async function fetchT(url: string, init: RequestInit = {}, ms = 15_000): Promise
   return fetch(url, { ...init, signal: AbortSignal.timeout(ms) });
 }
 
+/**
+ * Names for the seeded customers.
+ *
+ * A demo machine's inbox, ticket list and every report is filled with these.
+ * Called "E2E Seed 1" they make a finished product look like a test harness to
+ * anyone the app is shown to, which is the first thing they notice.
+ */
+const SEED_CUSTOMERS = [
+  'Saad Al-Harbi',
+  'Nouf Al-Qahtani',
+  'Faisal Al-Otaibi',
+  'Maha Al-Dossary',
+  'Turki Al-Shammari',
+  'Reem Al-Ghamdi',
+] as const;
+
 export default async function globalSetup(): Promise<void> {
   // 1. Sign in as the project owner.
   const login = await json<{ data: { access_token: string } }>(
@@ -135,10 +151,12 @@ export default async function globalSetup(): Promise<void> {
             body: JSON.stringify({
               vendor: vendorId,
               external_customer_id: `e2e-seed-${i}-${stamp}`,
-              name: `E2E Seed ${i}`,
+              name: SEED_CUSTOMERS[(i - 1) % SEED_CUSTOMERS.length]!,
               // Real customers always have one; a fixture without a phone made
               // the reports' phone column look broken when it was merely empty.
-              phone: `+96650000${String(i).padStart(4, '0')}`,
+              // (vendor, phone) is UNIQUE, so this has to vary per run the way
+              // external_customer_id above already does.
+              phone: `+9665${String(`${stamp}${i}`).slice(-8).padStart(8, '0')}`,
             }),
           }),
         );
