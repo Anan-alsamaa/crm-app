@@ -141,19 +141,11 @@ export function AppShell({
     );
 
     /*
-     * Top-nav layout: no side rail at all — TWO TIERS in one sticky header.
-     *
-     * Tier 1 is the identity + utility band: the brand lockup, then search,
-     * notifications, language and the signed-in user pushed to the end. Tier 2
-     * is navigation alone. Separating them stops the two competing for the same
-     * row: the single floating island had the brand, fourteen destinations and
-     * six utility controls all fighting for one 56px line, which is why it read
-     * as a toolbar rather than as the product's masthead.
-     *
-     * Full-bleed and hairlined rather than a rounded island: the header is the
-     * frame of the app, and an inset card floating over the canvas made the
-     * page look like it started twice. A blurred translucent ground keeps the
-     * canvas glow visible through it.
+     * Top-nav layout (AURA LIGHT): the masthead sits ON the canvas rather than
+     * on a slab — no fill, no bottom border. Brand at the start, the
+     * destinations CENTRED as pills, utilities at the end. That centring is
+     * what makes the reference read as a product rather than as an admin tool:
+     * the navigation is the page's spine, not a strip of links above it.
      *
      * `relative z-30` so a nav dropdown paints over the page content below
      * rather than being covered by stacking contexts inside it.
@@ -161,20 +153,12 @@ export function AppShell({
     if (navBar) {
       return (
         <div className="flex h-full flex-col text-foreground">
-          <header className="relative z-30 shrink-0 border-b border-border bg-card/75 backdrop-blur-xl">
-            {/* Tier 1 — identity + utilities */}
-            <div className="flex h-16 items-center gap-4 px-4 sm:px-6">
-              <div className="shrink-0">{topBarBrand}</div>
-              <div className="min-w-0 flex-1" />
-              {topBar && <div className="flex shrink-0 items-center gap-2">{topBar}</div>}
-            </div>
-            {/* Tier 2 — navigation, on its own line with room to breathe */}
-            <nav
-              aria-label={navLabel}
-              className="flex h-12 items-center border-t border-border/60 px-2 sm:px-4"
-            >
+          <header className="relative z-30 flex h-20 shrink-0 items-center gap-4 px-5 sm:px-8">
+            <div className="shrink-0">{topBarBrand}</div>
+            <nav aria-label={navLabel} className="flex min-w-0 flex-1 items-center justify-center">
               {navBar}
             </nav>
+            {topBar && <div className="flex shrink-0 items-center gap-2">{topBar}</div>}
           </header>
           <main className="app-aurora min-h-0 min-w-0 flex-1 overflow-hidden">{children}</main>
         </div>

@@ -26,107 +26,97 @@
  * Primary = #0F8D8F (oklch 0.58 0.097 196).
  */
 
+:root,
 :root[data-theme='light'],
 .theme-light {
-  --radius: 0.875rem;
-
-  /* SURFACE LADDER (contrast pass 2026-07-29).
-   * White cards used to sit on a 0.985 canvas — a 1.5% lightness difference,
-   * so nothing read as elevated and every screen looked washed out. The canvas
-   * now matches the `--canvas` token that already existed for exactly this
-   * ("visibly tinted so white surfaces genuinely float") but was wired to a
-   * single 3px avatar ring and nothing else.
+  /* ── AURA LIGHT (2026-08-16, owner-directed from the monday-CRM reference) ──
    *
-   * Deepening the canvas alone would have collided with --secondary/--muted
-   * (0.96), erasing hover states, so the whole ladder moved together:
-   *   card/popover 1.000  ← content sits here, still pure white
-   *   canvas       0.965  ← workspace behind it (3.5% below the card)
-   *   hover/input  0.935  ← ghost buttons, table hover, form fields
-   * Hairlines went 0.10 → 0.14 (and 0.18 → 0.24 for fields/dividers) so edges
-   * are visible without becoming boxes. Dark theme already had separation and
-   * is untouched. */
-  --background: 0.965 0.005 250;
-  --canvas: 0.945 0.006 250;
-  --foreground: 0.155 0.006 250;
+   * The product's default look. A soft mint-to-white canvas, PURE WHITE cards
+   * floating on it with generous radii, and a vivid trio — cyan, green, yellow —
+   * carrying the data. Ink is #292A2F rather than black, which is what keeps a
+   * bright interface from feeling harsh.
+   *
+   * The previous FLUID DARK palette is not deleted; it moved behind
+   * [data-theme='dark']. Dark read as premium but, in the owner's words, dull:
+   * the reference's energy comes from light + saturation + air, and no amount
+   * of accent work on charcoal reproduces it.
+   *
+   * Contrast rule unchanged and still load-bearing: the vivid trio are DATA
+   * colours (bars, dots, rings, tinted fills). Anything carrying small text
+   * uses the deeper `--primary` or dark ink, because OKLCH L is perceptual and
+   * a bright fill with white text fails AA every time.
+   */
+  --radius: 1.25rem;
+
+  /* Surfaces: tinted air, white content. */
+  --background: 0.985 0.008 195;
+  --canvas: 0.978 0.012 190;
+  --foreground: 0.27 0.008 285;
   --card: 1 0 0;
-  --card-foreground: 0.155 0.006 250;
+  --card-foreground: 0.27 0.008 285;
   --popover: 1 0 0;
-  --popover-foreground: 0.155 0.006 250;
-  /* YIJI BRAND TEAL — #0B8C8D = oklch(0.581 0.097 195.7). Fill steps one
-   * notch darker (L 0.55) so white label text clears WCAG AA at 4.63:1. */
+  --popover-foreground: 0.27 0.008 285;
 
-  /* MULTI-HUE VIVID (2026-07-29). Chroma raised across every accent so colour
-   * carries meaning instead of decorating: teal is the brand, and status /
-   * priority / category each own a hue. `--primary` gained chroma at the SAME
-   * lightness AND its lightness re-solved: raising chroma alone dropped white-on-
-   * primary from 4.61 to 4.31:1 (under AA) because OKLCH L is PERCEPTUAL, not
-   * WCAG luminance. L was solved numerically per accent to clear 4.5:1 against
-   * white text; `--warning` deliberately stays light because its foreground is
-   * dark ink (6.74:1). `--sky` is new, for
-   * informational surfaces that were borrowing the brand teal and blurring it. */
-  --primary: 0.5 0.115 190;
-  /* Readable green ink for green-on-green: `primary` on a primary/10
-   * tint is 3.99:1, under AA for small text. Solved to the LIGHTEST
-   * value that still clears 4.5:1 (4.52:1), so it stays the brand
-   * colour rather than drifting to near-black. */
-  --primary-strong: 0.46 0.115 190;
+  /* Brand teal, deep enough to carry white text (4.6:1). */
+  --primary: 0.5 0.115 192;
+  --primary-strong: 0.45 0.115 192;
   --primary-foreground: 1 0 0;
-  --primary-subtle: 0.5 0.115 190 / 0.14;
-  --brand: 0.5 0.115 190;
-  --bubble: 0.955 0.006 230;
-  --secondary: 0.925 0.006 250;
-  --secondary-foreground: 0.155 0.006 250;
-  --muted: 0.925 0.006 250;
-  --muted-foreground: 0.42 0.012 250;
-  --accent: 0.5 0.115 190;
+  --primary-subtle: 0.5 0.115 192 / 0.12;
+  --brand: 0.5 0.115 192;
+
+  --bubble: 0.965 0.02 195;
+
+  --secondary: 0.955 0.014 195;
+  --secondary-foreground: 0.27 0.008 285;
+  --muted: 0.955 0.014 195;
+  --muted-foreground: 0.5 0.014 260;
+
+  --accent: 0.5 0.115 192;
   --accent-foreground: 1 0 0;
-  --destructive: 0.53 0.19 27;
+
+  --destructive: 0.58 0.19 22;
   --destructive-foreground: 1 0 0;
-  --success: 0.5 0.14 160;
-  --success-foreground: 1 0 0;
-  --warning: 0.72 0.16 70;
-  --warning-foreground: 0.22 0.005 250;
-  --border: 0.22 0.005 250 / 0.2;
-  --border-strong: 0.22 0.005 250 / 0.32;
-  --input: 0.93 0.006 250;
-  --ring: 0.5 0.115 190;
-  --shadow-color: 0.22 0.02 200;
+  /* The reference's green — bright, used as a DATA fill; its ink is dark. */
+  --success: 0.78 0.17 155;
+  --success-foreground: 0.24 0.02 160;
+  /* The reference's yellow — same rule, dark ink on top. */
+  --warning: 0.88 0.13 90;
+  --warning-foreground: 0.3 0.03 80;
 
-  /* Rail — deep BRAND teal ink; the brand teal lights the active item. */
+  /* Hairlines: barely there. The reference separates by SHADOW and space, not
+     by drawing boxes around everything. */
+  --border: 0.27 0.008 285 / 0.09;
+  --border-strong: 0.27 0.008 285 / 0.16;
+  --input: 0.965 0.014 195;
+  --ring: 0.5 0.115 192;
+  --shadow-color: 0.55 0.05 210;
 
-  /* RAIL — the nav is a BRAND surface, not a dark panel. Chroma was 0.045, so it
-   * read as near-black and threw away the teal identity; now 0.068 at a slightly
-   * higher lightness so it is unmistakably teal while still anchoring the page.
-   * Labels lifted 0.90 -> 0.965 and the active pill is the vivid brand teal.
-   * Ratios: labels 12.9:1 on the rail, white on the active pill 4.54:1. */
-  --rail: 0.21 0.03 200;
-  /* Deeper stop for the rail gradient — same hue, lower lightness, slightly
-   * more chroma so the fade reads as brand depth rather than as grime. */
-  --rail-deep: 0.17 0.028 202;
-  --rail-foreground: 0.94 0.01 196;
-  --rail-active: 0.5 0.115 190;
+  /* Rail (mobile drawer only in the top-nav layout) — the ink, not teal. */
+  --rail: 0.27 0.008 285;
+  --rail-deep: 0.22 0.008 285;
+  --rail-foreground: 0.95 0.006 250;
+  --rail-active: 0.5 0.115 192;
   --rail-active-foreground: 1 0 0;
-  --rail-border: 0.27 0.03 198;
-  --secondary-brand: 0.55 0.19 20;
-  --secondary-brand-foreground: 1 0 0;
-  --display: 0.15 0.012 255;
-  --violet: 0.48 0.16 285;
-  --sky: 0.52 0.14 245;
+  --rail-border: 1 0 0 / 0.1;
 
-  /* TINT RAMP — light, SATURATED fills for coloured surfaces (stat tiles, pills,
-   * callouts). Deliberately separate tokens rather than an alpha of the accent:
-   * `bg-success/18` is 18% of a DARK green over white, which reads grey-green and
-   * washed out. A high-lightness / mid-chroma colour reads unmistakably green
-   * while staying quiet enough for dark text on top. Pair as:
-   *   fill  bg-<hue>-tint   ring  ring-<hue>/35   text  text-<hue>
-   * That is what makes a tile colourful AND clean instead of merely pale. */
-  --primary-tint: 0.94 0.045 190;
-  --success-tint: 0.94 0.055 160;
-  --destructive-tint: 0.945 0.045 27;
-  --warning-tint: 0.95 0.06 75;
-  --sky-tint: 0.94 0.045 245;
-  --violet-tint: 0.94 0.045 285;
-  --magenta: 0.52 0.17 20;
+  --secondary-brand: 0.6 0.19 20;
+  --secondary-brand-foreground: 1 0 0;
+
+  /* Display ink — the reference's #292A2F, used for hero type and solid CTAs. */
+  --display: 0.27 0.008 285;
+  --violet: 0.55 0.17 285;
+  /* The reference's cyan. */
+  --sky: 0.78 0.12 205;
+  --magenta: 0.6 0.19 10;
+
+  /* TINT RAMP — saturated pastel fills for coloured surfaces. Separate tokens,
+     never an alpha of the accent (an alpha of a dark hue reads grey). */
+  --primary-tint: 0.93 0.06 192;
+  --success-tint: 0.93 0.08 155;
+  --destructive-tint: 0.94 0.05 22;
+  --warning-tint: 0.95 0.07 90;
+  --sky-tint: 0.93 0.06 205;
+  --violet-tint: 0.94 0.05 285;
 }
 
 /* DEFAULT THEME — "midnight ink" (mirrors agent portal). Light via
@@ -137,7 +127,6 @@
  * white, the jade accent lifted to glow. Light remains available via
  * [data-theme='light'].
  */
-:root,
 :root[data-theme='dark'] {
   /* Hue washes for dark surfaces — the light theme's pastels would blind here. */
   --primary-tint: 0.28 0.045 190;
@@ -197,7 +186,7 @@
 
 /* Aurora workspace wash (mirrors agent portal). */
 .app-aurora {
-  background-color: oklch(var(--background));
+  background-color: transparent;
   /* Clean off-black canvas with ONE quiet, static accent glow for depth.
      No animated multi-colour mesh — that reads as AI slop. */
   background-image: radial-gradient(
@@ -222,13 +211,22 @@
 body {
   margin: 0;
   /* Ambient brand wash — the Yiji teal only, no off-brand second hue. */
+  /* The reference's canvas: a soft mint wash that lifts toward the top-left
+     and fades to near-white, so white cards float rather than sit. Fixed
+     attachment keeps it still while content scrolls over it. */
   background:
-    radial-gradient(at 8% 10%, oklch(var(--brand) / 0.08) 0%, transparent 40%),
-    radial-gradient(at 92% 90%, oklch(var(--brand) / 0.05) 0%, transparent 42%),
+    radial-gradient(ellipse 90% 55% at 8% 0%, oklch(0.955 0.042 190) 0%, transparent 62%),
+    radial-gradient(ellipse 75% 45% at 96% 4%, oklch(0.968 0.03 155) 0%, transparent 58%),
+    radial-gradient(ellipse 65% 45% at 65% 100%, oklch(0.975 0.025 90) 0%, transparent 62%),
     oklch(var(--background));
   background-attachment: fixed;
   color: oklch(var(--foreground));
+  /* Outfit is the geometric, slightly rounded face the reference uses (Lufga);
+     it now sets the WHOLE interface, not just headings. Body type in a
+     geometric sans is the single biggest reason the reference reads friendly
+     where a grotesque reads administrative. */
   font-family:
+    'Outfit Variable',
     'Inter Variable',
     ui-sans-serif,
     system-ui,
@@ -243,6 +241,14 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* The dark theme keeps its own quieter ground. */
+:root[data-theme='dark'] body {
+  background:
+    radial-gradient(at 8% 10%, oklch(var(--brand) / 0.08) 0%, transparent 40%),
+    radial-gradient(at 92% 90%, oklch(var(--brand) / 0.05) 0%, transparent 42%),
+    oklch(var(--background));
 }
 
 [dir='rtl'] body {

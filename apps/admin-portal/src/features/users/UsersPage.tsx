@@ -267,7 +267,7 @@ export function UsersPage() {
               <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t('users.heroSubtitle', {
                   defaultValue:
-                    'Everyone who can sign in to Yiji — their role, team, and account status at a glance. Select anyone to edit access or reset a password.',
+                    'Everyone who can sign in to the CRM — their role, team, and account status at a glance. Select anyone to edit access or reset a password.',
                 })}
               </p>
             </div>

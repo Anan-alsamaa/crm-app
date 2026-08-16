@@ -147,9 +147,7 @@ export function Login() {
       </div>
       <div className="absolute start-6 top-5 z-10 flex items-center gap-2">
         <YijiLogo size={28} />
-        <span className="text-[15px] font-semibold tracking-[-0.015em] text-display">
-          Yiji <span className="text-muted-foreground font-normal">CRM</span>
-        </span>
+        <span className="text-[15px] font-semibold tracking-[-0.015em] text-display">CRM</span>
       </div>
 
       {/* Centered board card — elevated surface, hairline ring, deep shadow. */}
@@ -341,7 +339,7 @@ export function Login() {
                 <span className="text-border" aria-hidden>
                   ·
                 </span>
-                <span>YIJI · Admin</span>
+                <span>CRM · Admin</span>
               </div>
             </div>
           </div>

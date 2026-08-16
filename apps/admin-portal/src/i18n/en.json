@@ -416,7 +416,7 @@
     "passwordHint": "At least 6 characters.",
     "loadError": "Could not load users",
     "loadErrorHint": "Check your connection and try again.",
-    "heroSubtitle": "Everyone who can sign in to Yiji — their role, team, and account status at a glance. Select anyone to edit access or reset a password.",
+    "heroSubtitle": "Everyone who can sign in to the CRM — their role, team, and account status at a glance. Select anyone to edit access or reset a password.",
     "total": "total",
     "admins": "admins",
     "noTeamShort": "no team",

@@ -1295,7 +1295,7 @@ export function ComplaintDashboard() {
                   key={label}
                   style={{ animationDelay: `${i * 60}ms` }}
                   className={cn(
-                    'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-background shadow-sm',
+                    'flex items-center gap-2.5 rounded-2xl px-3.5 py-3 text-display shadow-sm',
                     'transition-transform duration-base ease-out motion-safe:hover:-translate-y-0.5',
                     'motion-safe:animate-rise-in',
                     bg,
@@ -1303,7 +1303,7 @@ export function ComplaintDashboard() {
                 >
                   <span
                     aria-hidden
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-background/25 text-background"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-card/45 text-display"
                   >
                     <SparkleIcon size={14} />
                   </span>

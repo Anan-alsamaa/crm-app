@@ -264,13 +264,15 @@ function TopNav({ sections }: { sections: NavSection[] }) {
             end={it.end}
             className={({ isActive }) =>
               cn(
-                // Tabs, not pills — see the admin portal's TopNav for why.
-                'relative flex h-12 items-center px-3.5 text-sm whitespace-nowrap',
-                'transition-colors duration-fast ease-out',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50',
+                // Solid dark pill for the current destination — see the admin
+                // portal's TopNav for the reasoning.
+                'relative flex h-10 items-center rounded-full px-4 text-sm whitespace-nowrap',
+                'transition-[background-color,color,box-shadow] duration-base ease-out',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                'motion-safe:active:scale-[0.97]',
                 isActive
-                  ? "font-semibold text-primary after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-primary after:shadow-[0_0_12px_oklch(var(--primary)/0.6)] after:content-['']"
-                  : 'font-medium text-muted-foreground hover:text-foreground',
+                  ? 'bg-display font-semibold text-background shadow-[0_8px_20px_-8px_oklch(var(--display)/0.55)]'
+                  : 'font-medium text-foreground/70 hover:bg-card/70 hover:text-foreground',
               )
             }
           >

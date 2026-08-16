@@ -53,14 +53,17 @@ function tileFor(section: NavSection): string {
  * active destination is marked by a jade underline sitting on the header's
  * bottom edge — the way a masthead marks a section — instead of a filled
  * lozenge that competed with every button on the page. */
+/* The reference marks the current section with a solid DARK pill and leaves
+ * everything else as quiet text on the canvas — high contrast where you are,
+ * nothing where you are not. */
 const TRIGGER_BASE =
-  'group relative flex h-12 items-center gap-1.5 px-3.5 text-sm whitespace-nowrap transition-colors duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset';
+  'group relative flex h-10 items-center gap-1.5 rounded-full px-4 text-sm whitespace-nowrap transition-[background-color,color,box-shadow] duration-base ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:active:scale-[0.97]';
 /* The selected pill is a jade wash with a hairline of the same hue — the glow
  * treatment from the reference boards — rather than a solid fill, which on the
  * floating dark bar read as a button, not a location. */
 const TRIGGER_ACTIVE =
-  "font-semibold text-primary after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-primary after:shadow-[0_0_12px_oklch(var(--primary)/0.6)] after:content-['']";
-const TRIGGER_IDLE = 'font-medium text-muted-foreground hover:text-foreground';
+  'bg-display font-semibold text-background shadow-[0_8px_20px_-8px_oklch(var(--display)/0.55)]';
+const TRIGGER_IDLE = 'font-medium text-foreground/70 hover:bg-card/70 hover:text-foreground';
 
 /** A section with one item: a plain link, no menu. */
 function DirectLink({ section }: { section: NavSection }) {
@@ -189,7 +192,7 @@ function MenuGroup({ section }: { section: NavSection }) {
           className={cn(
             'shrink-0 transition-transform duration-fast ease-out',
             open && 'rotate-180',
-            active ? 'text-primary/70' : 'text-muted-foreground',
+            active ? 'text-background/70' : 'text-muted-foreground',
           )}
         />
       </button>
