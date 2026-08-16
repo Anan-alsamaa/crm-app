@@ -47,6 +47,13 @@ COPY --from=builder /app/apps/agent-portal/dist /usr/share/nginx/html
 # picked up on reload; the content-hashed /assets/* are immutable (year-long).
 # An add_header in a location cancels server-level inheritance, so headers repeat.
 RUN printf 'server {\n  listen 80;\n  server_name _;\n  root /usr/share/nginx/html;\n  location = /health { return 200 "ok"; add_header Content-Type text/plain; }\n  location /assets/ {\n    add_header X-Content-Type-Options "nosniff" always;\n    add_header X-Frame-Options "DENY" always;\n    add_header Referrer-Policy "strict-origin-when-cross-origin" always;\n    add_header Cache-Control "public, max-age=31536000, immutable" always;\n    try_files $uri =404;\n  }\n  location / {\n    add_header X-Content-Type-Options "nosniff" always;\n    add_header X-Frame-Options "DENY" always;\n    add_header Referrer-Policy "strict-origin-when-cross-origin" always;\n    add_header Cache-Control "no-cache" always;\n    try_files $uri $uri/ /index.html;\n  }\n}\n' > /etc/nginx/conf.d/default.conf
+# One image, every environment: the entrypoint writes /config.js from the
+# container's own environment before nginx starts, so the bundle that passed
+# staging is byte-for-byte the bundle that ships. VITE_* build args remain only
+# as the fallback for a container started with no environment at all.
+COPY apps/agent-portal/docker-entrypoint.sh /docker-entrypoint-sara.sh
+RUN chmod +x /docker-entrypoint-sara.sh
+ENTRYPOINT ["/docker-entrypoint-sara.sh"]
 EXPOSE 80
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1/health || exit 1
