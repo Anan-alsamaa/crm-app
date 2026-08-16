@@ -155,7 +155,6 @@ const ASSIGNED_OR_UNASSIGNED = {
  * the most sensitive thing in the product; scoping the container and leaving
  * its contents open is not a smaller version of the same rule.
  */
-const MESSAGE_OF_VISIBLE_CONVERSATION = { conversation: ASSIGNED_OR_UNASSIGNED };
 /**
  * What an agent may change on their own ticket.
  *
@@ -272,20 +271,28 @@ export const roles: RoleSpec[] = [
       },
       { collection: 'contacts', action: 'read' },
       { collection: 'contacts', action: 'update' },
-      // conversations: scoped
-      { collection: 'conversations', action: 'read', permissions: ASSIGNED_OR_UNASSIGNED },
+      /* conversations: READ everything, WRITE only your own / your team's.
+       *
+       * Reading was scoped to own+unassigned+team until 2026-08-16, when the
+       * operations manager reported the cost: a returning customer routed to a
+       * different agent arrived with no history, so the new agent asked them to
+       * repeat a story the company already had. Support is a shared desk —
+       * whoever picks the customer up needs what came before.
+       *
+       * The 2026-08-14 incident this replaces was about MODIFICATION and about
+       * team-less agents inheriting everything through a null-team match; that
+       * guard stays exactly where it was. An agent still cannot touch a chat
+       * that is not theirs, and `assigned_team _nnull` still gates the team
+       * branch on the write rule below.
+       */
+      { collection: 'conversations', action: 'read' },
       { collection: 'conversations', action: 'create' },
       { collection: 'conversations', action: 'update', permissions: ASSIGNED_OR_UNASSIGNED },
       { collection: 'messages', action: 'create' },
-      // Scoped through the parent conversation — see
-      // MESSAGE_OF_VISIBLE_CONVERSATION. An unfiltered read here let any agent
-      // fetch any chat's contents by id even once the conversation list itself
-      // was scoped.
-      {
-        collection: 'messages',
-        action: 'read',
-        permissions: MESSAGE_OF_VISIBLE_CONVERSATION,
-      },
+      // Messages follow their conversation. Now that agents read every chat
+      // (customer history — see above), the thread contents follow; a history
+      // list you cannot open is not history.
+      { collection: 'messages', action: 'read' },
       // NOTE (H-3): `messages.update` is intentionally NOT granted to agents.
       // Messages are an immutable chat record; agents must not edit historical
       // content (tampering), and the app never PATCHes a message via the agent

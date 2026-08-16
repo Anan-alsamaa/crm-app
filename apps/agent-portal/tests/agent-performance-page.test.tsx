@@ -34,7 +34,10 @@ vi.mock('../src/lib/auth/AuthContext.js', () => ({
   useAuth: () => ({ user: { id: 'a1', first_name: 'Sara' } }),
 }));
 
-const perf = vi.hoisted(() => ({ useChatTimings: vi.fn() }));
+const perf = vi.hoisted(() => ({
+  useChatTimings: vi.fn(),
+  useCsatByConversation: vi.fn(() => ({ data: new Map<string, number>() })),
+}));
 vi.mock('../src/features/performance/api.js', () => perf);
 
 import { AgentPerformancePage } from '../src/features/performance/AgentPerformancePage.js';

@@ -17,6 +17,7 @@ import {
 import type { YijiOrder } from '@yiji/shared-types';
 import {
   useConversation,
+  useCustomerHistory,
   useLinkedTickets,
   type ConversationMessage,
   type MessageAttachment,
@@ -134,6 +135,7 @@ export function ConversationSidebar({
   const { t } = useTranslation();
   const convo = useConversation(conversationId);
   const tickets = useLinkedTickets(conversationId);
+  const history = useCustomerHistory(convo.data?.contact?.id ?? null, conversationId);
   const navigate = useNavigate();
   const updateContact = useUpdateContact();
   // Pull the contact's Yiji ids (external_customer_id + vendor.yiji_vendor_id) so
@@ -373,6 +375,42 @@ export function ConversationSidebar({
             stamped={c.last_order_snapshot ?? null}
             onCreateTicket={onCreateTicketForOrder}
           />
+        </section>
+      )}
+
+      {/* Everything this customer said to us BEFORE this chat.
+          The operations manager's ask: a returning customer routed to another
+          agent used to arrive with no history, so the new agent made them
+          repeat a story we already had. */}
+      {history.data && history.data.length > 0 && (
+        <section className="px-5 py-4">
+          <SectionLabel count={history.data.length}>
+            {t('sidebar.customerHistory', { defaultValue: 'Earlier chats' })}
+          </SectionLabel>
+          <ul className="divide-y divide-foreground/[0.06]">
+            {history.data.map((h) => (
+              <li key={h.id}>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/?conv=${encodeURIComponent(h.id)}`)}
+                  className="block w-full rounded-lg px-1 py-2.5 text-start transition-colors duration-fast ease-out hover:bg-foreground/[0.04]"
+                >
+                  <div className="flex items-center gap-2">
+                    <Pill tone={h.status === 'solved' ? 'success' : 'neutral'} size="sm">
+                      {t(`status.${h.status}`, { ns: 'common', defaultValue: h.status })}
+                    </Pill>
+                    <span className="truncate text-2xs tabular-nums text-muted-foreground">
+                      {h.last_message_at
+                        ? new Date(h.last_message_at).toLocaleDateString()
+                        : h.date_created
+                          ? new Date(h.date_created).toLocaleDateString()
+                          : ''}
+                    </span>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

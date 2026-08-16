@@ -928,7 +928,9 @@
     "commonTitle": "Chats picked up for the team",
     "commonHelp": "Chats answered after somebody else let them go",
     "commonBasis": "A chat the system had to pass on is left out of the response-time figures — it carries the wait the earlier agents caused — and counted here instead, for whoever picked it up.",
-    "summaryHint": "Every agent with chats in this range, busiest first."
+    "summaryHint": "Every agent with chats in this range, busiest first.",
+    "csat": "Customer rating",
+    "csatCount": "{{n}} rated"
   },
   "storeNotify": {
     "rulesTitle": "Complaints the branch is told about",

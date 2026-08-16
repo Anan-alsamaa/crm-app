@@ -29,7 +29,12 @@ import {
 } from '@yiji/reports';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useAgents } from '../inbox/api.js';
-import { useChatTimings, type ChatTimingRow, type PerformanceFilters } from './api.js';
+import {
+  useChatTimings,
+  useCsatByConversation,
+  type ChatTimingRow,
+  type PerformanceFilters,
+} from './api.js';
 
 /**
  * Agent performance: how much work arrived, how fast it was answered, and every
@@ -148,7 +153,37 @@ export function AgentPerformancePage() {
   );
 
   /** Per-agent totals — the same shared rollup the admin console reports. */
+  const csat = useCsatByConversation(filters);
   const totals = useMemo(() => agentPerformance(chats), [chats]);
+  /* CSAT joined onto the same chats the rest of the page measures, so the
+     rating column can never describe a different population than the timings
+     beside it. `null` where nobody rated — an unrated agent is not a zero. */
+  const csatByAgent = useMemo(() => {
+    const acc = new Map<string, { sum: number; n: number }>();
+    for (const c of chats) {
+      const score = csat.data?.get(c.conversationId);
+      if (typeof score !== 'number') continue;
+      const key = c.agentId ?? '';
+      const cur = acc.get(key) ?? { sum: 0, n: 0 };
+      cur.sum += score;
+      cur.n += 1;
+      acc.set(key, cur);
+    }
+    const out = new Map<string, { avg: number; n: number }>();
+    for (const [k, v] of acc) out.set(k, { avg: v.sum / v.n, n: v.n });
+    return out;
+  }, [chats, csat.data]);
+
+  /** Team-wide rating for the tile. */
+  const csatOverall = useMemo(() => {
+    let sum = 0;
+    let n = 0;
+    for (const v of csatByAgent.values()) {
+      sum += v.avg * v.n;
+      n += v.n;
+    }
+    return n ? { avg: sum / n, n } : null;
+  }, [csatByAgent]);
 
   const oneAgent = !!filters.agentId;
   const durFmt = (v: number) => formatDuration(v) ?? '—';
@@ -286,6 +321,21 @@ export function AgentPerformancePage() {
                     number: it never shows in a response-time average, and it is
                     the one thing on this page a person can decide to do more
                     of. */}
+                {/* What the customer thought — the only measure here they do
+                    not control by working faster. */}
+                <Tile
+                  label={t('performance.csat', { defaultValue: 'Customer rating' })}
+                  value={csatOverall ? `${csatOverall.avg.toFixed(1)}/5` : '—'}
+                  tone={csatOverall == null ? 'plain' : csatOverall.avg >= 4 ? 'good' : 'bad'}
+                  hint={
+                    csatOverall
+                      ? t('performance.csatCount', {
+                          defaultValue: '{{n}} rated',
+                          n: csatOverall.n,
+                        })
+                      : undefined
+                  }
+                />
                 <Tile
                   label={t('performance.commonChats', { defaultValue: 'Common chats taken' })}
                   value={String(summary.commonChats)}
@@ -436,6 +486,9 @@ export function AgentPerformancePage() {
                           <th className="h-10 px-5 text-end font-semibold">
                             {t('performance.avgSolveCol', { defaultValue: 'Time to solve (avg)' })}
                           </th>
+                          <th className="h-10 px-5 text-end font-semibold">
+                            {t('performance.csat', { defaultValue: 'Customer rating' })}
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-foreground/[0.06]">
@@ -489,6 +542,22 @@ export function AgentPerformancePage() {
                             </td>
                             <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
                               {formatDuration(r.avgTimeToSolveSec) ?? '—'}
+                            </td>
+                            <td className="px-5 py-3 text-end tabular-nums">
+                              {(() => {
+                                const c = csatByAgent.get(r.agentId ?? '');
+                                if (!c) return <span className="text-muted-foreground">—</span>;
+                                return (
+                                  <span
+                                    className={cn(
+                                      'font-semibold',
+                                      c.avg >= 4 ? 'text-success' : 'text-foreground',
+                                    )}
+                                  >
+                                    {c.avg.toFixed(1)}
+                                  </span>
+                                );
+                              })()}
                             </td>
                           </tr>
                         ))}

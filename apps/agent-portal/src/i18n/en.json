@@ -327,7 +327,8 @@
     "contactSaved": "Customer details saved everywhere.",
     "editContact": "Edit customer details",
     "name": "Name",
-    "openTicket": "Open ticket"
+    "openTicket": "Open ticket",
+    "customerHistory": "Earlier chats"
   },
   "tickets": {
     "title": "Tickets",
@@ -754,7 +755,9 @@
     "commonHelp": "Chats answered after somebody else let them go",
     "commonBasis": "A chat the system had to pass on is left out of the response-time figures — it carries the wait the earlier agents caused — and counted here instead, for whoever picked it up.",
     "subject": "Complaint / chat",
-    "noSubject": "Chat (no ticket)"
+    "noSubject": "Chat (no ticket)",
+    "csat": "Customer rating",
+    "csatCount": "{{n}} rated"
   },
   "coupons": {
     "title": "My coupons",

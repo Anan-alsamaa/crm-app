@@ -232,6 +232,37 @@ function useChatTimings(filters: Filters) {
   });
 }
 
+/**
+ * CSAT for the chats in range, keyed by conversation — see the agent portal's
+ * copy for why it is a separate read.
+ */
+function useCsatByConversation(filters: Filters) {
+  return useQuery({
+    queryKey: ['admin-csat-by-conversation', filters],
+    queryFn: async (): Promise<Map<string, number>> => {
+      const and: Array<Record<string, unknown>> = [];
+      if (filters.from) and.push({ submitted_at: { _gte: filters.from } });
+      if (filters.to) and.push({ submitted_at: { _lte: endOfDay(filters.to) } });
+      const rows = (await directus.request(
+        readItems(
+          'csat_responses' as never,
+          {
+            limit: -1,
+            fields: ['conversation', 'score'],
+            ...(and.length ? { filter: { _and: and } } : {}),
+          } as never,
+        ),
+      )) as unknown as Array<{ conversation: string | null; score: number | null }>;
+      const out = new Map<string, number>();
+      for (const r of rows) {
+        if (!r.conversation || typeof r.score !== 'number') continue;
+        out.set(r.conversation, r.score);
+      }
+      return out;
+    },
+  });
+}
+
 export function AgentPerformancePage() {
   const { t } = useTranslation();
   const agents = useAgentList();
@@ -296,6 +327,25 @@ export function AgentPerformancePage() {
   const trend = useMemo(() => dailyTrend(chats), [chats]);
   /** The full numbers per agent — this page's drill-down, since no row opens a chat. */
   const rows = useMemo(() => agentPerformance(chats), [chats]);
+  /* CSAT joined onto the same chats the rest of the page measures, so the
+     rating can never describe a different population than the timings beside
+     it. `null` where nobody rated — an unrated agent is not a zero. */
+  const csat = useCsatByConversation(filters);
+  const csatByAgent = useMemo(() => {
+    const acc = new Map<string, { sum: number; n: number }>();
+    for (const c of chats) {
+      const score = csat.data?.get(c.conversationId);
+      if (typeof score !== 'number') continue;
+      const key = c.agentId ?? '';
+      const cur = acc.get(key) ?? { sum: 0, n: 0 };
+      cur.sum += score;
+      cur.n += 1;
+      acc.set(key, cur);
+    }
+    const out = new Map<string, { avg: number; n: number }>();
+    for (const [k, v] of acc) out.set(k, { avg: v.sum / v.n, n: v.n });
+    return out;
+  }, [chats, csat.data]);
 
   /* Chat by chat — slowest first, and chats nobody answered at the very top,
    * because "no reply" is the thing a supervisor must act on today. Same
@@ -611,6 +661,9 @@ export function AgentPerformancePage() {
                         <th className="h-10 px-5 text-end font-semibold">
                           {t('performance.avgSolveCol', { defaultValue: 'Time to solve (avg)' })}
                         </th>
+                        <th className="h-10 px-5 text-end font-semibold">
+                          {t('performance.csat', { defaultValue: 'Customer rating' })}
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-foreground/[0.06]">
@@ -670,6 +723,26 @@ export function AgentPerformancePage() {
                           </td>
                           <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
                             {formatDuration(r.avgTimeToSolveSec) ?? dash}
+                          </td>
+                          <td className="px-5 py-3 text-end tabular-nums">
+                            {(() => {
+                              const c = csatByAgent.get(r.agentId ?? '');
+                              if (!c) return <span className="text-muted-foreground">{dash}</span>;
+                              return (
+                                <span
+                                  className={cn(
+                                    'font-semibold',
+                                    c.avg >= 4 ? 'text-success' : 'text-foreground',
+                                  )}
+                                  title={t('performance.csatCount', {
+                                    defaultValue: '{{n}} rated',
+                                    n: c.n,
+                                  })}
+                                >
+                                  {c.avg.toFixed(1)}
+                                </span>
+                              );
+                            })()}
                           </td>
                         </tr>
                       ))}

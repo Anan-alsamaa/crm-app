@@ -27,6 +27,7 @@ const inbox = vi.hoisted(() => ({
   useAddTagToConversation: vi.fn(),
   useUpdateConversation: vi.fn(),
   useLinkedTickets: vi.fn(),
+  useCustomerHistory: vi.fn(() => ({ data: [] })),
   // Not a hook — the toolbar calls it to read the vendor off the conversation,
   // and mocking the module wholesale would otherwise blank it out.
   conversationVendorId: (c: { vendor?: { id?: string } | string | null }) =>

@@ -18,6 +18,7 @@ const inbox = vi.hoisted(() => ({
   conversationVendorId: (c: { vendor?: { id?: string } | string | null }) =>
     typeof c?.vendor === 'string' ? c.vendor : (c?.vendor?.id ?? ''),
   useLinkedTickets: vi.fn(),
+  useCustomerHistory: vi.fn(() => ({ data: [] })),
   // ConversationSidebar now renders <ConversationTags>, which reads these.
   useTags: () => ({ data: [] }),
   useCreateTag: () => ({ mutateAsync: () => Promise.resolve({ id: 't', name: '', color: null }) }),

@@ -556,6 +556,41 @@ export function useLinkedTickets(conversationId: string | null) {
   });
 }
 
+/** One earlier conversation with the same customer. */
+export interface PastConversation {
+  id: string;
+  status: string;
+  date_created: string | null;
+  last_message_at: string | null;
+  assigned_agent: string | null;
+}
+
+/**
+ * Everything this customer has talked to us about before.
+ *
+ * The operations manager's ask: a returning customer routed to a different
+ * agent used to arrive with no history, so the new agent made them repeat a
+ * story the company already had. Excludes the conversation being viewed —
+ * that one is on screen.
+ */
+export function useCustomerHistory(contactId: string | null, excludeId: string | null) {
+  return useQuery({
+    enabled: !!contactId,
+    queryKey: ['customer-history', contactId, excludeId],
+    queryFn: async () => {
+      const rows = (await directus.request(
+        readItems('conversations', {
+          filter: { contact: { _eq: contactId } },
+          fields: ['id', 'status', 'date_created', 'last_message_at', 'assigned_agent'],
+          sort: ['-last_message_at'],
+          limit: 25,
+        }),
+      )) as unknown as PastConversation[];
+      return rows.filter((r) => r.id !== excludeId);
+    },
+  });
+}
+
 // ----- Agents/teams (for assignment + @mentions) -----
 export interface AgentOption {
   id: string;

@@ -203,3 +203,44 @@ export function useChatTimings(filters: PerformanceFilters) {
     },
   });
 }
+
+/** One customer rating, joined to the agent who handled the chat. */
+export interface CsatRow {
+  conversation: string | null;
+  score: number | null;
+}
+
+/**
+ * CSAT for the chats in range, keyed by conversation.
+ *
+ * Kept OUT of the timings query on purpose: ratings live in their own
+ * collection and arrive late (a customer rates after the chat ends), so
+ * folding them into the chat read would make every timing refetch wait on
+ * them. The page joins the two by conversation id.
+ */
+export function useCsatByConversation(filters: PerformanceFilters) {
+  return useQuery({
+    queryKey: ['csat-by-conversation', filters],
+    queryFn: async (): Promise<Map<string, number>> => {
+      const and: Array<Record<string, unknown>> = [];
+      if (filters.from) and.push({ submitted_at: { _gte: filters.from } });
+      if (filters.to) and.push({ submitted_at: { _lte: `${filters.to}T23:59:59.999Z` } });
+      const rows = (await directus.request(
+        readItems(
+          'csat_responses' as never,
+          {
+            limit: -1,
+            fields: ['conversation', 'score'],
+            ...(and.length ? { filter: { _and: and } } : {}),
+          } as never,
+        ),
+      )) as unknown as CsatRow[];
+      const out = new Map<string, number>();
+      for (const r of rows) {
+        if (!r.conversation || typeof r.score !== 'number') continue;
+        out.set(r.conversation, r.score);
+      }
+      return out;
+    },
+  });
+}
