@@ -109,6 +109,21 @@ const pctKpiTone = (n: number | null): KpiTone =>
   n == null ? 'blue' : n >= 90 ? 'green' : n >= 75 ? 'amber' : 'crimson';
 /* Ring accents for the % tiles. MetricTone deliberately has no warning/amber
  * (a light token), so the amber band falls back to jade. */
+/* The SURFACE carries the hue, like every other report's tiles — this page
+ * was the last one left showing four white boxes. */
+const KPI_SURFACE: Record<KpiTone, string> = {
+  blue: 'bg-gradient-to-br from-sky-tint/70 to-card',
+  green: 'bg-gradient-to-br from-success-tint/70 to-card',
+  amber: 'bg-gradient-to-br from-warning-tint/70 to-card',
+  crimson: 'bg-gradient-to-br from-destructive-tint/70 to-card',
+};
+const KPI_NUMERAL: Record<KpiTone, string> = {
+  blue: 'text-[oklch(0.48_0.13_215)]',
+  green: 'text-[oklch(0.45_0.13_155)]',
+  amber: 'text-[oklch(0.5_0.13_75)]',
+  crimson: 'text-destructive',
+};
+
 const RING_TONE: Record<KpiTone, MetricTone> = {
   blue: 'sky',
   green: 'success',
@@ -134,7 +149,10 @@ function Kpi({
   return (
     <div
       className={cn(
-        'rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5',
+        'rounded-3xl p-5 shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
+        'transition-[box-shadow,transform] duration-base ease-out motion-safe:hover:-translate-y-1',
+        'hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.08),0_20px_44px_-16px_oklch(var(--shadow-color)/0.28)]',
+        KPI_SURFACE[tone],
       )}
     >
       {/* Chip and ring share the top band: identity at the start, the data
@@ -152,7 +170,12 @@ function Kpi({
           {visual && <div className="ms-auto shrink-0">{visual}</div>}
         </div>
       )}
-      <div className="text-4xl font-extrabold tracking-[-0.03em] tabular-nums leading-none text-foreground">
+      <div
+        className={cn(
+          'text-4xl font-extrabold leading-none tabular-nums tracking-[-0.03em]',
+          KPI_NUMERAL[tone],
+        )}
+      >
         {value}
       </div>
       <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">

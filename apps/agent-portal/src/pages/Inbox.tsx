@@ -489,7 +489,7 @@ export function Inbox() {
                   />
                   {t('inbox.selectAll')}
                 </label>
-                <ul className="pb-2">
+                <ul className="space-y-1.5 p-2">
                   {conversations.data.map((c) => {
                     const active = selected === c.id;
                     const unread = c.unread_count_agent > 0;
@@ -507,12 +507,13 @@ export function Inbox() {
                         // colors (border-b-* / border-s-*) so the two edges
                         // never fight — cn() is a plain joiner, not a merger.
                         className={cn(
-                          'group relative flex min-h-14 items-stretch border-s-2 border-b border-b-foreground/[0.06] last:border-b-0 transition-colors duration-fast ease-out',
+                          // Cards, not ruled rows — see TicketsPage for why.
+                          'group relative flex min-h-14 items-stretch rounded-2xl transition-[background-color,box-shadow] duration-base ease-out',
                           active
-                            ? 'border-s-primary bg-primary/10'
+                            ? 'bg-primary/10 shadow-[0_6px_18px_-10px_oklch(var(--shadow-color)/0.5)] ring-1 ring-inset ring-primary/25'
                             : unread
-                              ? 'border-s-transparent bg-foreground/[0.03] hover:bg-foreground/[0.06]'
-                              : 'border-s-transparent hover:bg-foreground/[0.04]',
+                              ? 'bg-card shadow-[0_2px_10px_-8px_oklch(var(--shadow-color)/0.4)] hover:shadow-[0_6px_18px_-10px_oklch(var(--shadow-color)/0.45)]'
+                              : 'hover:bg-card hover:shadow-[0_4px_14px_-10px_oklch(var(--shadow-color)/0.45)]',
                         )}
                       >
                         <input

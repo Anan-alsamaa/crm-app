@@ -148,7 +148,7 @@ export function Login() {
       {/* Top-start wordmark */}
       <div className="absolute start-6 top-5 z-10 flex items-center gap-2">
         <YijiLogo size={28} />
-        <span className="text-[15px] font-semibold tracking-[-0.015em] text-display">CRM</span>
+        <span className="text-[15px] font-semibold tracking-[-0.015em] text-display">Sara CRM</span>
       </div>
 
       {/* Centered board card — elevated surface, hairline ring, deep shadow. */}
@@ -164,7 +164,7 @@ export function Login() {
               <div className="space-y-1.5">
                 <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
                   {view === 'signin'
-                    ? t('login.title', { defaultValue: 'Sign in to CRM' })
+                    ? t('login.title', { defaultValue: 'Sign in to Sara CRM' })
                     : t('login.forgotTitle', { defaultValue: 'Reset your password' })}
                 </h1>
                 <p className="text-sm text-muted-foreground">
@@ -342,7 +342,7 @@ export function Login() {
                 <span className="text-border" aria-hidden>
                   ·
                 </span>
-                <span>CRM · Agent</span>
+                <span>Sara CRM · Agent</span>
               </div>
             </div>
           </div>
@@ -358,7 +358,7 @@ export function Login() {
 
       {/* Bottom-end footer */}
       <p className="absolute bottom-4 inset-x-0 z-10 text-center text-2xs text-muted-foreground">
-        © CRM
+        © Sara CRM
       </p>
 
       {/* Login sits outside the app shell, so it mounts its own toaster (used by

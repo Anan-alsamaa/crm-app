@@ -85,7 +85,7 @@ export function ResetPassword() {
       <div className="absolute start-6 top-5 z-10 flex items-center gap-2">
         <YijiLogo size={28} />
         <span className="text-[15px] font-semibold tracking-[-0.015em] text-display">
-          Yiji <span className="text-muted-foreground font-normal">CRM</span>
+          Yiji <span className="text-muted-foreground font-normal">Sara CRM</span>
         </span>
       </div>
 
@@ -176,7 +176,7 @@ export function ResetPassword() {
       </div>
 
       <p className="absolute bottom-4 inset-x-0 z-10 text-center text-2xs text-muted-foreground">
-        © CRM
+        © Sara CRM
       </p>
     </div>
   );

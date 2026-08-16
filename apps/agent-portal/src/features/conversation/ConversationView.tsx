@@ -122,6 +122,7 @@ export function ConversationView({
     setCustomerPresence(null);
     lastReadRef.current = null;
     setDraft('');
+    lastQuickReplyRef.current = null;
     setInternalNote(false);
     setDetailsOpen(false);
     setMentionMenu(null);
@@ -407,6 +408,7 @@ export function ConversationView({
       ]);
     }
     setDraft('');
+    lastQuickReplyRef.current = null;
     pending.forEach((p) => p.preview && URL.revokeObjectURL(p.preview));
     setPending([]);
     setMentionMenu(null);
@@ -536,14 +538,30 @@ export function ConversationView({
    * to stop trusting the row. A "/query" is consumed (it was the search, not the
    * message); anything else is appended to what is already written.
    */
+  /** The canned reply currently sitting in the composer, so picking another
+   *  swaps it instead of stacking — but a hand-typed draft is never lost. */
+  const lastQuickReplyRef = useRef<string | null>(null);
+
+  /**
+   * A canned reply REPLACES the draft; it does not stack onto it.
+   *
+   * Appending was the old behaviour and it was wrong in practice: picking a
+   * second canned reply is how an agent says "not that one, this one", and
+   * they were left having to delete the first by hand every time. Anything the
+   * agent TYPED is still protected — see the guard below.
+   */
   const insertQuickReply = (text: string) => {
     setDraft((prev) => {
-      if (/^\/.*/.test(prev)) return text;
       const base = prev.trimEnd();
-      return base
-        ? `${base}
-${text}`
-        : text;
+      // Nothing to lose, or what is there is a previous canned reply: swap it.
+      if (!base || lastQuickReplyRef.current === base) {
+        lastQuickReplyRef.current = text;
+        return text;
+      }
+      // The agent has written something of their own — never destroy it.
+      lastQuickReplyRef.current = null;
+      return `${base}
+${text}`;
     });
     requestAnimationFrame(() => {
       draftRef.current?.focus();

@@ -1,9 +1,9 @@
 {
-  "brandName": "CRM",
+  "brandName": "Sara CRM",
   "portalName": "Admin",
-  "portalFullName": "CRM · Admin",
+  "portalFullName": "Sara CRM · Admin",
   "login": {
-    "title": "Sign in to CRM Admin",
+    "title": "Sign in to Sara CRM Admin",
     "submit": "Sign in",
     "error": "Invalid email or password",
     "notAdmin": "Your account does not have administrator access.",

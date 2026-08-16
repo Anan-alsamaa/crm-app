@@ -330,24 +330,24 @@ export function TicketsPage() {
                   ))}
                 </ul>
               ) : filtered.length > 0 ? (
-                <ul>
+                /* CARDS, not ruled rows. A bordered bar per ticket is what made
+                   this list read as a spreadsheet from 2009; separated cards
+                   with air between them read as a modern queue. */
+                <ul className="space-y-2 p-2">
                   {filtered.map((r) => {
                     const active = selected === r.id;
                     const overdue = isOverdue(r);
                     return (
-                      <li key={r.id} className="border-b border-border/60 last:border-b-0">
-                        {/* Board row: h-14, hairline separators, and the active
-                            row carries a jade start-accent instead of a filled
-                            rounded chip. */}
+                      <li key={r.id}>
                         <button
                           type="button"
                           onClick={() => setSelected(r.id)}
                           className={cn(
-                            'group flex h-14 w-full items-center gap-3 border-s-2 px-3.5 text-start',
-                            'transition-colors duration-fast ease-out',
+                            'group flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-start',
+                            'transition-[background-color,box-shadow,transform] duration-base ease-out',
                             active
-                              ? 'border-primary bg-primary/10'
-                              : 'border-transparent hover:bg-secondary/60',
+                              ? 'bg-primary/10 shadow-[0_6px_18px_-10px_oklch(var(--shadow-color)/0.5)] ring-1 ring-inset ring-primary/25'
+                              : 'hover:bg-card hover:shadow-[0_4px_14px_-10px_oklch(var(--shadow-color)/0.45)]',
                           )}
                         >
                           <span className="relative shrink-0">

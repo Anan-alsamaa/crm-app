@@ -130,7 +130,7 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
               dir="ltr"
               className="flex items-baseline gap-1.5 text-[15px] font-semibold tracking-[-0.015em] text-rail-active-foreground"
             >
-              <span className="text-rail-foreground/70 font-normal">CRM</span>
+              <span className="text-rail-foreground/70 font-normal">Sara CRM</span>
             </div>
             <div className="text-2xs text-rail-foreground/75 mt-0.5">
               {t('app.workspace', { defaultValue: 'User workspace' })}
@@ -294,7 +294,9 @@ function MobileBrand() {
           lockup used to be a bare word, which told a supervisor with both
           portals open nothing about which one they were looking at. */}
       <span className="min-w-0 leading-tight">
-        <span className="block text-[15px] font-bold tracking-[-0.015em] text-foreground">CRM</span>
+        <span className="block text-[15px] font-bold tracking-[-0.015em] text-foreground">
+          Sara CRM
+        </span>
         <span className="block text-2xs text-muted-foreground">
           {t('app.workspace', { defaultValue: 'Agent workspace' })}
         </span>

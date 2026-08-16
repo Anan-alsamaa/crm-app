@@ -1,7 +1,7 @@
 {
-  "brandName": "CRM",
+  "brandName": "Sara CRM",
   "portalName": "User",
-  "portalFullName": "CRM · User",
+  "portalFullName": "Sara CRM · User",
   "auth": {
     "sessionExpired": "Your session expired. Please sign in again."
   },
@@ -156,7 +156,7 @@
     "title2": "Aura"
   },
   "login": {
-    "title": "Sign in to CRM",
+    "title": "Sign in to Sara CRM",
     "submit": "Sign in",
     "error": "Invalid email or password",
     "emailPlaceholder": "you@company.com",
