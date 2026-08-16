@@ -168,7 +168,7 @@ describe('helpers', () => {
 
   it('names the workbook with its range', () => {
     expect(reportFilename('my-complaints', 30)).toMatch(
-      /^my-complaints-30d-\d{4}-\d{2}-\d{2}\.xlsx$/,
+      /^Sara CRM - my-complaints \(last 30 days\) - \d{4}-\d{2}-\d{2}\.xlsx$/,
     );
   });
 });

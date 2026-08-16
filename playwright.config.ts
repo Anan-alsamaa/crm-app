@@ -21,6 +21,21 @@ export default defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5173',
     trace: 'on-first-retry',
+    /*
+     * Run every spec as a reduced-motion user.
+     *
+     * The portals cascade cards, rings and bars in on mount. Playwright waits
+     * for an element to be "stable" — unmoving between two animation frames —
+     * before it will click, so an entrance animation makes the click retry
+     * until the test times out. That is not a flake to chase per-spec: every
+     * animated surface can produce it, and it lands hardest on a loaded CI
+     * runner where the animations take longest.
+     *
+     * The app already honours prefers-reduced-motion everywhere (motion-safe:
+     * on every animated class), so this switches all of it off at once and
+     * tests the same DOM without the moving parts.
+     */
+    reducedMotion: 'reduce',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 });

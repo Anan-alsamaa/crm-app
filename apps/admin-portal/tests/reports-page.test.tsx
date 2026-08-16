@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -83,11 +83,15 @@ describe('ReportsPage — the schedule', () => {
     api.useReports.mockReturnValue({ data: [], isLoading: false });
     renderPage();
     await userEvent.click(screen.getAllByText('New report')[0]!);
-    // Wait for the drawer to commit. `getBy*` assumes the click and the
-    // resulting render landed in the same tick, which is true on a quiet
-    // machine and false on a loaded CI runner — the whole reason this file
-    // failed only there.
-    await screen.findByText('Recipients');
+    // Wait for the drawer to commit, then hand back a scope INSIDE it.
+    // Waiting on 'Recipients' alone proved the drawer had started rendering,
+    // not that it had finished: the footer with the save button mounts after,
+    // so a query against the whole screen could still miss it on a loaded CI
+    // runner. Returning the dialog makes every later query wait for the one
+    // element that only exists once the drawer is fully mounted.
+    const dialog = await screen.findByRole('dialog', undefined, { timeout: 5000 });
+    await within(dialog).findByText('Recipients');
+    return within(dialog);
   };
 
   it('offers a monthly-on-the-1st preset instead of asking for cron', async () => {
@@ -104,7 +108,7 @@ describe('ReportsPage — the schedule', () => {
     // and inert.
     const mutateAsync = vi.fn().mockResolvedValue({});
     api.useCreateReport.mockReturnValue({ mutateAsync, isPending: false });
-    await openDrawer();
+    const d = await openDrawer();
 
     await userEvent.type(screen.getByLabelText('Name'), 'Monthly');
     await userEvent.click(screen.getByRole('combobox', { name: 'How often' }));
@@ -115,7 +119,7 @@ describe('ReportsPage — the schedule', () => {
       screen.getByPlaceholderText('ops@example.com, manager@example.com'),
       'ops@anan.sa',
     );
-    await userEvent.click(await screen.findByText('actions.save'));
+    await userEvent.click(await d.findByText('actions.save'));
 
     // onSubmit is async (it awaits the mutation), so asserting on the tick
     // after the click assumed a flush that CI's slower scheduling did not
@@ -132,10 +136,10 @@ describe('ReportsPage — the schedule', () => {
   it('leaves the cron empty for a manual-only report', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({});
     api.useCreateReport.mockReturnValue({ mutateAsync, isPending: false });
-    await openDrawer();
+    const d = await openDrawer();
 
     await userEvent.type(screen.getByLabelText('Name'), 'Ad hoc');
-    await userEvent.click(await screen.findByText('actions.save'));
+    await userEvent.click(await d.findByText('actions.save'));
 
     await waitFor(() =>
       expect(mutateAsync).toHaveBeenCalledWith(

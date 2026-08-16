@@ -19,6 +19,7 @@ import {
   StatStrip,
   toast,
   Toolbar,
+  Pagination,
   ToolbarSpacer,
 } from '@yiji/ui';
 import {
@@ -33,6 +34,7 @@ import {
 } from './api.js';
 import { downloadCsv, parseStoresCsv, toCsv } from './csv.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { exportFileName } from '@yiji/shared-config';
 
 const schema = z.object({
   code: z.string().optional(),
@@ -108,6 +110,8 @@ function DownloadIcon() {
 }
 
 const blank = (v: string | undefined) => (v && v.trim() ? v.trim() : null);
+
+const PAGE_SIZE = 25;
 
 export function StoresPage() {
   const { t } = useTranslation();
@@ -325,6 +329,13 @@ export function StoresPage() {
     );
   }, [list, query]);
 
+  /* Long lists page rather than scroll: the same control the ticket report
+     uses, so every table in the product behaves the same way. */
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const current = Math.min(page, pageCount);
+  const paged = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+
   const exportCsv = () => {
     const header = [
       t('stores.colRestaurantId', { defaultValue: 'Restaurant ID' }),
@@ -346,7 +357,10 @@ export function StoresPage() {
       s.chain_manager,
       t(`status.${s.status}`, { ns: 'common', defaultValue: s.status }),
     ]);
-    downloadCsv(`stores-${filtered.length}.csv`, toCsv(header, rows));
+    downloadCsv(
+      exportFileName('Stores', { scope: query.trim() ? `matching ${query.trim()}` : 'all' }),
+      toCsv(header, rows),
+    );
   };
 
   const cities = new Set(list.map((s) => s.city).filter(Boolean));
@@ -517,7 +531,7 @@ export function StoresPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((s) => (
+                {paged.map((s) => (
                   <tr
                     key={s.id}
                     className={cn(
@@ -605,6 +619,17 @@ export function StoresPage() {
                 </span>
               )}
             </div>
+            {pageCount > 1 && (
+              <div className="border-t border-foreground/[0.08] px-2 py-1.5">
+                <Pagination
+                  page={current}
+                  pageCount={pageCount}
+                  onPage={setPage}
+                  prevLabel={t('pagination.prev', { defaultValue: 'Previous' })}
+                  nextLabel={t('pagination.next', { defaultValue: 'Next' })}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

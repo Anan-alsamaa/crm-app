@@ -25,6 +25,7 @@ import { matchStore } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
 import { useTicketOps, type AgentLoad, type TicketOpsRow, type TicketOps } from './api.js';
 import { useStoreIndex } from '../restaurants/api.js';
+import { reportFilename } from '@yiji/reports';
 
 const RANGE_DAYS = [7, 30, 90] as const;
 
@@ -287,7 +288,7 @@ export function TicketOpsPage() {
         r.ageHours == null ? '' : Math.round(r.ageHours),
       ]),
     ];
-    downloadCsv(`ticket-report-${days}d.csv`, rows);
+    downloadCsv(reportFilename('Ticket operations', days, 'csv'), rows);
   };
 
   return (

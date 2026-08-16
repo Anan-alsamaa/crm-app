@@ -24,6 +24,7 @@ import {
   ZapIcon,
 } from '@yiji/ui';
 import { useSlaReports, type SlaCell, type TicketSla } from './api.js';
+import { reportFilename } from '@yiji/reports';
 
 const RANGE_DAYS = [7, 30, 90] as const;
 
@@ -244,7 +245,7 @@ export function SlaReportsPage() {
           tk.responseMinutes == null ? '' : Math.round(tk.responseMinutes),
         ]),
       ];
-      downloadCsv(`sla-by-ticket-${days}d.csv`, rows);
+      downloadCsv(reportFilename('SLA by ticket', days, 'csv'), rows);
     }
   };
 

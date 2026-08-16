@@ -402,11 +402,17 @@ export function countUnmappedComplaints(rows: ComplaintReportRow[]): number {
   return rows.filter((r) => (r.restaurantName || r.brand) && !r.storeMapped).length;
 }
 
-/** `reports-complaints-30d-2026-08-12.xlsx` — shared so both portals' exports
- *  land in a downloads folder under the same naming. */
-export function reportFilename(base: string, days: number): string {
+/**
+ * `Sara CRM - Complaints (last 30 days) - 2026-08-12.xlsx`
+ *
+ * An exported file lands in a downloads folder beside exports from every other
+ * system someone uses, so it has to say what it is on its own. `base` is the
+ * human subject, not a slug: "Complaints", not "reports-complaints".
+ */
+export function reportFilename(base: string, days: number, ext = 'xlsx'): string {
   const today = new Date().toISOString().slice(0, 10);
-  return `${base}-${days}d-${today}.xlsx`;
+  const subject = base.replace(/[/:*?"<>|\\]/g, ' ').trim();
+  return `Sara CRM - ${subject} (last ${days} days) - ${today}.${ext}`;
 }
 
 /** Local `YYYY-MM-DD` + `HH:mm` for a ticket's creation timestamp. */

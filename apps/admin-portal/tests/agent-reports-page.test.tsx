@@ -462,7 +462,7 @@ describe('AgentReportsPage — tickets report', () => {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     expect(dl.blobs[0]!.size).toBeGreaterThan(0);
-    expect(dl.names[0]).toMatch(/^reports-tickets-30d-\d{4}-\d{2}-\d{2}\.xlsx$/);
+    expect(dl.names[0]).toMatch(/^Sara CRM - Tickets \(last 30 days\) - \d{4}-\d{2}-\d{2}\.xlsx$/);
     dl.restore();
   });
 
@@ -532,7 +532,9 @@ describe('AgentReportsPage — agent KPI report', () => {
     expect(firstAgent()).toBe('Unassigned');
 
     await userEvent.click(screen.getByText('Export to Excel'));
-    expect(dl.names[0]).toMatch(/^reports-agent-kpi-30d-\d{4}-\d{2}-\d{2}\.xlsx$/);
+    expect(dl.names[0]).toMatch(
+      /^Sara CRM - Agent performance \(last 30 days\) - \d{4}-\d{2}-\d{2}\.xlsx$/,
+    );
     dl.restore();
   });
 });
@@ -591,7 +593,9 @@ describe('AgentReportsPage — conversation status report', () => {
 
     await userEvent.click(screen.getByText('Export to Excel'));
     expect(dl.blobs).toHaveLength(1);
-    expect(dl.names[0]).toMatch(/^reports-conversations-30d-\d{4}-\d{2}-\d{2}\.xlsx$/);
+    expect(dl.names[0]).toMatch(
+      /^Sara CRM - Conversations \(last 30 days\) - \d{4}-\d{2}-\d{2}\.xlsx$/,
+    );
     dl.restore();
   });
 
@@ -687,7 +691,7 @@ describe('AgentReportsPage — complaints report', () => {
     // before it is clicked rather than checked by hand afterwards.
     await userEvent.click(screen.getByText('Export 2 rows'));
     expect(dl.blobs).toHaveLength(1);
-    expect(dl.names[0]).toMatch(/^reports-tickets-30d-\d{4}-\d{2}-\d{2}\.xlsx$/);
+    expect(dl.names[0]).toMatch(/^Sara CRM - Tickets \(last 30 days\) - \d{4}-\d{2}-\d{2}\.xlsx$/);
     dl.restore();
   });
 

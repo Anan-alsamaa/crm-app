@@ -15,6 +15,7 @@ import {
   UsersIcon,
 } from '@yiji/ui';
 import { useContacts, type ContactRow } from './api.js';
+import { exportFileName } from '@yiji/shared-config';
 
 /**
  * Contacts list — searchable list of every contact across vendors.
@@ -57,7 +58,7 @@ function exportCsv(rows: ContactRow[]): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `contacts-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = exportFileName('Contacts');
   document.body.appendChild(a);
   a.click();
   a.remove();

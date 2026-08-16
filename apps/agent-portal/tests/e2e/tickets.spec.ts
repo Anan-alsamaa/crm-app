@@ -71,6 +71,12 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   // And it survives a reload, so the state was persisted rather than only set
   // in the client's cache.
   await agent.reload();
+  // Wait for the ticket itself to come back before asking about its state: a
+  // reload drops the in-memory access token and restores it from the cookie,
+  // and on a loaded runner that round-trip outlasts a bare text assertion.
+  await expect(agent.getByRole('heading', { name: ticketName })).toBeVisible({
+    timeout: 20_000,
+  });
   await expect(agent.getByText(/^solved ·/i)).toBeVisible({ timeout: 15_000 });
 });
 

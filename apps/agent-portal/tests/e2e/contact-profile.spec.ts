@@ -51,7 +51,7 @@ test.describe('US6 — contact profile + commerce panel', () => {
       page.waitForEvent('download'),
       page.getByRole('button', { name: /export csv/i }).click(),
     ]);
-    expect(download.suggestedFilename()).toMatch(/^contacts-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(download.suggestedFilename()).toMatch(/^Sara CRM - Contacts - \d{4}-\d{2}-\d{2}\.csv$/);
   });
 
   test('profile shows identity + commerce panel with seeded order data', async ({ page }) => {
@@ -123,6 +123,11 @@ test.describe('US6 — contact profile + commerce panel', () => {
       });
     });
     await page.goto('http://localhost:5173/contacts/00000000-0000-0000-0000-000000000001');
+    // A hard navigation drops the in-memory access token; the app restores it
+    // from the refresh cookie and only then renders. Landing back on /login
+    // means that restore lost the race, so wait it out rather than asserting
+    // into a login form.
+    await expect(page).not.toHaveURL(/\/login/, { timeout: 20_000 });
 
     await expect(page.getByRole('heading', { name: /unlinked customer/i }).first()).toBeVisible({
       timeout: 10_000,

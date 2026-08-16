@@ -22,6 +22,7 @@ import {
   Skeleton,
   StatCard,
   toast,
+  Pagination,
   Toolbar,
   ToolbarSpacer,
   UsersIcon,
@@ -51,6 +52,8 @@ const schema = z.object({
   locale: z.enum(['en', 'ar']).optional(),
 });
 type FormValues = z.infer<typeof schema>;
+
+const PAGE_SIZE = 20;
 
 export function UsersPage() {
   const { t } = useTranslation();
@@ -185,6 +188,13 @@ export function UsersPage() {
       (u.team?.name ?? '').toLowerCase().includes(q)
     );
   });
+
+  /* Long lists page rather than scroll — the same control the ticket report
+     uses, so every table in the product behaves the same way. */
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const current = Math.min(page, pageCount);
+  const paged = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
   const list = users.data ?? [];
   const total = list.length;
@@ -369,7 +379,7 @@ export function UsersPage() {
               </span>
             </div>
             <ul className="divide-y divide-foreground/[0.06]">
-              {filtered.map((u) => {
+              {paged.map((u) => {
                 const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
                 const isAdmin = u.role?.name?.toLowerCase() === 'administrator';
                 return (
@@ -439,6 +449,17 @@ export function UsersPage() {
                 );
               })}
             </ul>
+            {pageCount > 1 && (
+              <div className="border-t border-foreground/[0.06] px-2 py-1.5">
+                <Pagination
+                  page={current}
+                  pageCount={pageCount}
+                  onPage={setPage}
+                  prevLabel={t('pagination.prev', { defaultValue: 'Previous' })}
+                  nextLabel={t('pagination.next', { defaultValue: 'Next' })}
+                />
+              </div>
+            )}
             {/* Footer aggregate band — the boards' table anatomy. */}
             <div className="flex items-center justify-between gap-3 border-t border-foreground/[0.06] bg-secondary/30 px-4 py-2.5">
               <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">

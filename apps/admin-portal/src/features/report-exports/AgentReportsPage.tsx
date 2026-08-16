@@ -412,10 +412,7 @@ function TicketsReport({
     }
     // Full dataset, only the chosen columns (in canonical order).
     const chosen = TICKET_COLUMN_KEYS.filter((k) => cols.has(k));
-    downloadWorkbook(
-      reportFilename('reports-tickets', days),
-      buildTicketsSheets(merged, tr, chosen),
-    );
+    downloadWorkbook(reportFilename('Tickets', days), buildTicketsSheets(merged, tr, chosen));
     toast.success(
       t('agentReports.exported', {
         count: merged.length,
@@ -782,7 +779,7 @@ function ComplaintsReport({
       return;
     }
     downloadWorkbook(
-      reportFilename('reports-tickets', days),
+      reportFilename('Tickets', days),
       // Export what is on screen: the filter is part of the question being
       // asked, so exporting the unfiltered set would answer a different one.
       buildComplaintsSheets(visible, tr, chosenColumns),
@@ -1401,7 +1398,7 @@ function AgentKpiReport({
       toast.error(t('agentReports.nothingToExport', { defaultValue: 'Nothing to export.' }));
       return;
     }
-    downloadWorkbook(reportFilename('reports-agent-kpi', days), buildAgentKpiSheets(agents, tr));
+    downloadWorkbook(reportFilename('Agent performance', days), buildAgentKpiSheets(agents, tr));
     toast.success(
       t('agentReports.exported', {
         count: agents.length,
@@ -1540,10 +1537,7 @@ function ConversationReport({
       toast.error(t('agentReports.nothingToExport', { defaultValue: 'Nothing to export.' }));
       return;
     }
-    downloadWorkbook(
-      reportFilename('reports-conversations', days),
-      buildConversationSheets(report, tr),
-    );
+    downloadWorkbook(reportFilename('Conversations', days), buildConversationSheets(report, tr));
     toast.success(
       t('agentReports.exported', { count: report.total, defaultValue: 'Exported {{count}} rows.' }),
     );

@@ -3,6 +3,7 @@ import { readItems } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
 import { Button, DownloadIcon, Toolbar, cn, toast } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
+import { exportFileName } from '@yiji/shared-config';
 
 /**
  * Self-serve backup: every business collection, one JSON file, downloaded to
@@ -98,7 +99,7 @@ export function BackupPage() {
     const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `yiji-crm-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = exportFileName('Backup', { ext: 'json' });
     a.click();
     URL.revokeObjectURL(a.href);
     setRunning(false);

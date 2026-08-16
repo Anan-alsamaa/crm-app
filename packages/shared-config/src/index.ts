@@ -6,7 +6,14 @@
  * - auth.ts: Directus auth client for portals (Phase 3, T030)
  */
 
-export { parseEnv, numericEnv, booleanEnv, redisUrlSchema, onPageHost } from './env.js';
+export {
+  parseEnv,
+  numericEnv,
+  booleanEnv,
+  redisUrlSchema,
+  onPageHost,
+  exportFileName,
+} from './env.js';
 export {
   createServiceClient,
   type YijiDirectusClient,

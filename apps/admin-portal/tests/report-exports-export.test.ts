@@ -426,7 +426,11 @@ describe('reportFilename', () => {
   it('stamps the base name with the window length and today (UTC) date', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-22T10:30:00.000Z'));
-    expect(reportFilename('reports-tickets', 30)).toBe('reports-tickets-30d-2026-07-22.xlsx');
-    expect(reportFilename('reports-agent-kpi', 7)).toBe('reports-agent-kpi-7d-2026-07-22.xlsx');
+    expect(reportFilename('Tickets', 30)).toBe(
+      'Sara CRM - Tickets (last 30 days) - 2026-07-22.xlsx',
+    );
+    expect(reportFilename('Agent performance', 7)).toBe(
+      'Sara CRM - Agent performance (last 7 days) - 2026-07-22.xlsx',
+    );
   });
 });

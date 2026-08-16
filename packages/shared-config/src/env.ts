@@ -69,3 +69,35 @@ export function onPageHost(url: string): string {
     return url;
   }
 }
+
+/**
+ * One filename rule for every export the product produces.
+ *
+ * An exported file leaves the app and lands in someone's downloads folder,
+ * an email, a shared drive — next to exports from every other system they
+ * use. `stores-132.csv` or `ticket-report-30d.csv` says nothing there about
+ * what it is or when it was taken, and the trailing number reads as noise.
+ *
+ *   exportFileName('Stores')                        Sara CRM - Stores - 2026-08-16.csv
+ *   exportFileName('Tickets', { scope: 'last 30 days' })
+ *                                   Sara CRM - Tickets (last 30 days) - 2026-08-16.csv
+ *   exportFileName('Backup', { ext: 'json' })       Sara CRM - Backup - 2026-08-16.json
+ *
+ * Characters are restricted to what every OS accepts in a filename, so a
+ * scope carrying a store name or a date range cannot produce a file the user
+ * is unable to save.
+ */
+export function exportFileName(
+  what: string,
+  opts: { scope?: string; ext?: string; date?: Date } = {},
+): string {
+  const { scope, ext = 'csv', date } = opts;
+  const safe = (v: string) =>
+    v
+      .replace(/[/:*?"<>|\\]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const stamp = (date ?? new Date()).toISOString().slice(0, 10);
+  const subject = scope ? `${safe(what)} (${safe(scope)})` : safe(what);
+  return `Sara CRM - ${subject} - ${stamp}.${ext}`;
+}
