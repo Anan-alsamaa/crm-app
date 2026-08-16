@@ -1,6 +1,10 @@
-import { createAuthClient, onPageHost } from '@yiji/shared-config';
+import { createAuthClient, resolveUrl } from '@yiji/shared-config';
 
-const DIRECTUS_URL = onPageHost(import.meta.env.VITE_DIRECTUS_URL ?? 'http://localhost:8055');
+const DIRECTUS_URL = resolveUrl(
+  'DIRECTUS_URL',
+  import.meta.env.VITE_DIRECTUS_URL,
+  'http://localhost:8055',
+);
 
 // H-2: no storage arg → in-memory access token only; the refresh token lives in
 // an httpOnly cookie set by Directus (unreadable by JS).

@@ -5,7 +5,7 @@ import type {
   YijiShipmentTracking,
 } from '@yiji/shared-types';
 import { auth } from './directus.js';
-import { onPageHost } from '@yiji/shared-config';
+import { resolveUrl } from '@yiji/shared-config';
 
 /**
  * Commerce client — calls the ai-gateway commerce PROXY (C-2) instead of the
@@ -15,8 +15,10 @@ import { onPageHost } from '@yiji/shared-config';
  * unchanged.
  */
 
-const GATEWAY_URL = onPageHost(
-  (import.meta.env.VITE_AI_GATEWAY_URL as string | undefined) ?? 'http://localhost:8081',
+const GATEWAY_URL = resolveUrl(
+  'AI_GATEWAY_URL',
+  import.meta.env.VITE_AI_GATEWAY_URL as string | undefined,
+  'http://localhost:8081',
 );
 
 async function get<T>(path: string, params: Record<string, string>): Promise<T> {

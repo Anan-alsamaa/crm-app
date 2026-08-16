@@ -27,6 +27,7 @@ import { NotificationBell } from './features/notifications/NotificationBell.js';
 import { HelpAssistant } from './features/help-assistant/HelpAssistant.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { SoundToggle } from './components/SoundToggle.js';
+import { MyComplaintsPage } from './features/complaints/MyComplaintsPage.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
 import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
 import { NewMessageSound } from './components/NewMessageSound.js';
@@ -340,6 +341,11 @@ function Shell({ children }: { children: React.ReactNode }) {
           icon: ClockIcon,
         },
         {
+          to: '/my-complaints',
+          label: t('nav.myComplaints', { defaultValue: 'My complaints' }),
+          icon: TicketIcon,
+        },
+        {
           to: '/compensation',
           label: t('nav.compensation', { defaultValue: 'Compensation' }),
           icon: ClockIcon,
@@ -478,6 +484,16 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <AgentPerformancePage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/my-complaints"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <MyComplaintsPage />
                 </Shell>
               </ProtectedRoute>
             }

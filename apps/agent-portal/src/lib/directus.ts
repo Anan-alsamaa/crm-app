@@ -1,8 +1,10 @@
 import { readAssetBlob } from '@directus/sdk';
-import { createAuthClient, onPageHost } from '@yiji/shared-config';
+import { createAuthClient, resolveUrl } from '@yiji/shared-config';
 
-export const DIRECTUS_URL = onPageHost(
-  import.meta.env.VITE_DIRECTUS_URL ?? 'http://localhost:8055',
+export const DIRECTUS_URL = resolveUrl(
+  'DIRECTUS_URL',
+  import.meta.env.VITE_DIRECTUS_URL,
+  'http://localhost:8055',
 );
 
 /** Download/preview URL for a Directus file id (via the assets endpoint). */

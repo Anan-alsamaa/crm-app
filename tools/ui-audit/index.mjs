@@ -21,7 +21,7 @@ const AGENT = {
   pass: process.env.AGENT_PASSWORD ?? '123456',
   routes: [
     '/', '/tickets', '/new-ticket', '/contacts', '/coupons',
-    '/performance', '/compensation', '/preferences',
+    '/performance', '/my-complaints', '/compensation', '/preferences',
   ],
 };
 const ADMIN = {

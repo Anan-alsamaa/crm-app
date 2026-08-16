@@ -69,3 +69,39 @@ export function exportFileName(
   const subject = scope ? `${safe(what)} (${safe(scope)})` : safe(what);
   return `Sara CRM - ${subject} - ${stamp}.${ext}`;
 }
+
+/** What a deployed portal may be told about itself at boot. */
+export interface RuntimeConfig {
+  DIRECTUS_URL?: string;
+  SOCKET_URL?: string;
+  AI_GATEWAY_URL?: string;
+}
+
+/**
+ * Where a portal's API lives, decided when the page loads rather than when it
+ * was built.
+ *
+ * A Vite build inlines `import.meta.env.*`, so a URL baked in at build time
+ * makes the bundle specific to one environment. That breaks the release rule
+ * the whole pipeline rests on — build ONCE, promote the same artifact — and it
+ * is why staging and production would otherwise need separate builds, with the
+ * staging pass proving nothing about the thing that ships.
+ *
+ * Resolution order:
+ *   1. `window.__SARA_CONFIG__` — written by `/config.js`, which the container
+ *      replaces per environment. The same image serves every environment.
+ *   2. the build-time value — how local dev works, unchanged.
+ *   3. the loopback default.
+ *
+ * Whatever wins is then passed through `onPageHost`, so a loopback address
+ * still follows the host the page was opened on.
+ */
+export function resolveUrl(
+  key: keyof RuntimeConfig,
+  buildTime: string | undefined,
+  fallback: string,
+): string {
+  const injected = (globalThis as { __SARA_CONFIG__?: RuntimeConfig }).__SARA_CONFIG__;
+  const chosen = injected?.[key]?.trim() || buildTime?.trim() || fallback;
+  return onPageHost(chosen);
+}

@@ -1,6 +1,6 @@
 import type { AiFeatureConfig, HelpAssistantResponse, HelpAssistantTurn } from '@yiji/shared-types';
 import { AI_ENDPOINTS } from '@yiji/shared-types';
-import { onPageHost } from '@yiji/shared-config';
+import { resolveUrl } from '@yiji/shared-config';
 import { auth } from './directus.js';
 
 /**
@@ -12,8 +12,10 @@ import { auth } from './directus.js';
  * self-asserted `x-yiji-admin` header is gone (the gateway ignores it).
  */
 
-const GATEWAY_URL = onPageHost(
-  (import.meta.env.VITE_AI_GATEWAY_URL as string | undefined) ?? 'http://localhost:8081',
+const GATEWAY_URL = resolveUrl(
+  'AI_GATEWAY_URL',
+  import.meta.env.VITE_AI_GATEWAY_URL as string | undefined,
+  'http://localhost:8081',
 );
 
 interface CallerHeaders {

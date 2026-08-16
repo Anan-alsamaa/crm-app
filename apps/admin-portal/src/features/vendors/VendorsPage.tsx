@@ -25,9 +25,13 @@ import {
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { useVendors, useCreateVendor, useUpdateVendor, type VendorRow } from './api.js';
-import { onPageHost } from '@yiji/shared-config';
+import { resolveUrl } from '@yiji/shared-config';
 
-const DIRECTUS_URL = onPageHost(import.meta.env.VITE_DIRECTUS_URL ?? 'http://localhost:8055');
+const DIRECTUS_URL = resolveUrl(
+  'DIRECTUS_URL',
+  import.meta.env.VITE_DIRECTUS_URL,
+  'http://localhost:8055',
+);
 
 /**
  * Vendor management.

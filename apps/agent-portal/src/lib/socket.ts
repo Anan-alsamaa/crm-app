@@ -1,9 +1,13 @@
 import { io, type Socket } from 'socket.io-client';
 import { SOCKET_EVENTS } from '@yiji/shared-types';
 import { auth } from './directus.js';
-import { onPageHost } from '@yiji/shared-config';
+import { resolveUrl } from '@yiji/shared-config';
 
-const SOCKET_URL = onPageHost(import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:8080');
+const SOCKET_URL = resolveUrl(
+  'SOCKET_URL',
+  import.meta.env.VITE_SOCKET_URL,
+  'http://localhost:8080',
+);
 
 /**
  * The agent gateway socket is a SINGLETON across the whole app — every page

@@ -8,7 +8,7 @@
 
 export { parseEnv, numericEnv, booleanEnv, redisUrlSchema } from './env.js';
 /* Zod-free browser helpers — see runtime.ts for why they are not in env.ts. */
-export { onPageHost, exportFileName } from './runtime.js';
+export { onPageHost, exportFileName, resolveUrl, type RuntimeConfig } from './runtime.js';
 export {
   createServiceClient,
   type YijiDirectusClient,
