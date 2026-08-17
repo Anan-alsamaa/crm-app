@@ -68,7 +68,7 @@ describe('CouponRequestDialog', () => {
   it('generates a code the agent cannot mistype, and can replace', async () => {
     renderDialog();
     const first = (screen.getByLabelText(/coupon code/i) as HTMLInputElement).value;
-    expect(first).toMatch(/^SARA-[A-Z2-9]{8}$/);
+    expect(first).toMatch(/^[A-Z]{3,6}-[A-Z2-9]{8}$/);
     await userEvent.click(screen.getByRole('button', { name: /new code/i }));
     await waitFor(() =>
       expect((screen.getByLabelText(/coupon code/i) as HTMLInputElement).value).not.toBe(first),
@@ -103,10 +103,10 @@ describe('CouponRequestDialog', () => {
     // rather than a compiled-in enum.
     await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
 
-    const max = screen.getByLabelText(/maximum discount/i);
-    await userEvent.clear(max);
-    await userEvent.type(max, '25');
-    await waitFor(() => expect((max as HTMLInputElement).value).toBe('25'));
+    const val = screen.getByLabelText(/coupon value/i);
+    await userEvent.clear(val);
+    await userEvent.type(val, '25');
+    await waitFor(() => expect((val as HTMLInputElement).value).toBe('25'));
 
     await userEvent.click(screen.getByRole('button', { name: /send for approval/i }));
 
@@ -138,10 +138,10 @@ describe('CouponRequestDialog', () => {
     await userEvent.click(screen.getByLabelText(/discount category/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Percentage' }));
 
-    const max = screen.getByLabelText(/maximum discount/i);
-    await userEvent.clear(max);
-    await userEvent.type(max, '10');
-    await waitFor(() => expect((max as HTMLInputElement).value).toBe('10'));
+    const pct = screen.getByLabelText(/coupon percentage/i);
+    await userEvent.clear(pct);
+    await userEvent.type(pct, '10');
+    await waitFor(() => expect((pct as HTMLInputElement).value).toBe('10'));
 
     await userEvent.click(screen.getByRole('button', { name: /send for approval/i }));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());

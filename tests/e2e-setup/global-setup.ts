@@ -68,8 +68,9 @@ export default async function globalSetup(): Promise<void> {
       { headers },
     ),
   );
+  let agentUserId: string | null = found.data[0]?.id ?? null;
   if (!found.data[0]) {
-    await json(
+    const createdAgent = await json<{ data: { id: string } }>(
       await fetchT(`${DIRECTUS}/users`, {
         method: 'POST',
         headers,
@@ -83,6 +84,7 @@ export default async function globalSetup(): Promise<void> {
         }),
       }),
     );
+    agentUserId = createdAgent.data.id;
     console.log(`[e2e-setup] created agent user ${AGENT_EMAIL}`);
   } else {
     await json(
@@ -169,6 +171,9 @@ export default async function globalSetup(): Promise<void> {
               contact: contact.data.id,
               status: 'open',
               priority: 'medium',
+              // The inbox opens on the signed-in agent's own queue, so an
+              // unassigned fixture is invisible to the account the suite drives.
+              assigned_agent: agentUserId,
               unread_count_agent: 1,
               last_message_at: new Date().toISOString(),
             }),

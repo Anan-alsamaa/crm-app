@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Button, Drawer, DrawerSection, FormField, Input, SelectMenu, toast } from '@yiji/ui';
 import {
   compensationFlag,
+  couponPrefix,
   CouponRequestDraftChecked,
   defaultCouponDates,
   generateCouponCode,
@@ -81,6 +82,8 @@ export function CouponRequestDialog({
     discount_category: 'Amount',
     valid_from: dates.valid_from,
     valid_to: dates.valid_to,
+    coupon_value: 0,
+    coupon_percent: null,
     max_discount: 0,
     usage_limit: 1,
     compensation_reason: description ?? '',
@@ -117,8 +120,9 @@ export function CouponRequestDialog({
         coupon_code: d.code,
         // Which of the two money fields carries the number depends on the
         // category, and only one of them is ever set.
-        coupon_value: d.discount_category === 'Amount' ? d.max_discount : null,
-        coupon_percent: d.discount_category === 'Percentage' ? d.max_discount : null,
+        // As entered, not derived from the cap: they answer different questions.
+        coupon_value: d.discount_category === 'Percentage' ? null : (d.coupon_value ?? null),
+        coupon_percent: d.discount_category === 'Percentage' ? (d.coupon_percent ?? null) : null,
         title: d.title,
         issuing_side: d.issuing_side,
         delivery_type: d.delivery_type,
@@ -144,6 +148,14 @@ export function CouponRequestDialog({
         toast.error(t('coupons.requestFailed', { defaultValue: 'Could not send that request.' })),
       );
   };
+
+  const setIssuingSide = (v: string) =>
+    setDraft((d) => ({
+      ...d,
+      issuing_side: v,
+      // The code carries the issuing side, so changing one re-stamps the other.
+      code: generateCouponCode(Math.random, couponPrefix(v)),
+    }));
 
   const sel = (key: keyof CouponRequestDraft, list: string, label: string) => (
     <SelectMenu
@@ -221,11 +233,16 @@ export function CouponRequestDialog({
         </FormField>
         <div className="grid gap-3 sm:grid-cols-2">
           <FormField label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}>
-            {sel(
-              'issuing_side',
-              'issuing_side',
-              t('lists.issuingSide', { defaultValue: 'Issuing side' }),
-            )}
+            <SelectMenu
+              fullWidth
+              value={draft.issuing_side}
+              onChange={setIssuingSide}
+              options={optionsFor(lists.data, 'issuing_side', draft.issuing_side).map((v) => ({
+                value: v,
+                label: v,
+              }))}
+              aria-label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}
+            />
           </FormField>
           <FormField label={t('lists.deliveryType', { defaultValue: 'Delivery type' })}>
             {sel(
@@ -278,6 +295,38 @@ export function CouponRequestDialog({
               onChange={(e) => set('valid_to', e.target.value)}
             />
           </FormField>
+          {draft.discount_category === 'Percentage' ? (
+            <FormField
+              label={t('coupons.couponPercent', { defaultValue: 'Coupon percentage %' })}
+              hint={t('coupons.couponPercentHint', { defaultValue: 'How much comes off, as a %.' })}
+            >
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step="1"
+                value={String(draft.coupon_percent ?? '')}
+                onChange={(e) =>
+                  set('coupon_percent', e.target.value === '' ? null : Number(e.target.value))
+                }
+              />
+            </FormField>
+          ) : (
+            <FormField
+              label={t('coupons.couponValue', { defaultValue: 'Coupon value (SAR)' })}
+              hint={t('coupons.couponValueHint', { defaultValue: 'The flat amount off.' })}
+            >
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={String(draft.coupon_value ?? '')}
+                onChange={(e) =>
+                  set('coupon_value', e.target.value === '' ? null : Number(e.target.value))
+                }
+              />
+            </FormField>
+          )}
           <FormField
             label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
             hint={t('coupons.maxDiscountHint', {

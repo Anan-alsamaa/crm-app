@@ -705,9 +705,18 @@ export function ComplaintClassification({
 export function ComplaintResolution({
   values,
   onChange,
+  hideCoupon = false,
 }: {
   values: ComplaintValues;
   onChange: (patch: Partial<ComplaintValues>) => void;
+  /**
+   * Drop the compensation and coupon inputs.
+   *
+   * Where the coupon dialog is available it owns all of this — asking for a
+   * code and an amount here as well gives an agent two places to answer the
+   * same question, and nothing reconciles them if the answers differ.
+   */
+  hideCoupon?: boolean;
 }) {
   const { t } = useTranslation();
   const lists = useOptionLists();
@@ -732,60 +741,64 @@ export function ComplaintResolution({
           })}
         />
       </FormField>
-      <div className="grid gap-3.5 sm:grid-cols-2">
-        <FormField label={t('complaint.compensation', { defaultValue: 'Compensation' })}>
-          <Combobox
-            value={values.compensation}
-            onChange={(v) => onChange({ compensation: v })}
-            options={optionsFor(lists.data, 'compensation', values.compensation)}
-            placeholder={t('complaint.search', { defaultValue: 'Type to search…' })}
-          />
-        </FormField>
-        <FormField label={t('complaint.couponCode', { defaultValue: 'Coupon code' })}>
-          <Input
-            value={values.coupon_code}
-            autoComplete="off"
-            onChange={(e) => onChange({ coupon_code: e.target.value })}
-          />
-        </FormField>
-        <FormField
-          label={t('complaint.couponValue', { defaultValue: 'Coupon value (SAR)' })}
-          error={
-            badValue
-              ? t('complaint.badValue', { defaultValue: 'Enter an amount of 0 or more.' })
-              : undefined
-          }
-        >
-          <Input
-            type="number"
-            min={0}
-            step="0.01"
-            inputMode="decimal"
-            invalid={badValue}
-            value={values.coupon_value}
-            onChange={(e) => onChange({ coupon_value: e.target.value })}
-          />
-        </FormField>
-        <FormField
-          label={t('complaint.couponPercent', { defaultValue: 'Coupon %' })}
-          error={
-            badPercent
-              ? t('complaint.badPercent', { defaultValue: 'Enter a percentage between 0 and 100.' })
-              : undefined
-          }
-        >
-          <Input
-            type="number"
-            min={0}
-            max={100}
-            step="1"
-            inputMode="decimal"
-            invalid={badPercent}
-            value={values.coupon_percent}
-            onChange={(e) => onChange({ coupon_percent: e.target.value })}
-          />
-        </FormField>
-      </div>
+      {hideCoupon ? null : (
+        <div className="grid gap-3.5 sm:grid-cols-2">
+          <FormField label={t('complaint.compensation', { defaultValue: 'Compensation' })}>
+            <Combobox
+              value={values.compensation}
+              onChange={(v) => onChange({ compensation: v })}
+              options={optionsFor(lists.data, 'compensation', values.compensation)}
+              placeholder={t('complaint.search', { defaultValue: 'Type to search…' })}
+            />
+          </FormField>
+          <FormField label={t('complaint.couponCode', { defaultValue: 'Coupon code' })}>
+            <Input
+              value={values.coupon_code}
+              autoComplete="off"
+              onChange={(e) => onChange({ coupon_code: e.target.value })}
+            />
+          </FormField>
+          <FormField
+            label={t('complaint.couponValue', { defaultValue: 'Coupon value (SAR)' })}
+            error={
+              badValue
+                ? t('complaint.badValue', { defaultValue: 'Enter an amount of 0 or more.' })
+                : undefined
+            }
+          >
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              invalid={badValue}
+              value={values.coupon_value}
+              onChange={(e) => onChange({ coupon_value: e.target.value })}
+            />
+          </FormField>
+          <FormField
+            label={t('complaint.couponPercent', { defaultValue: 'Coupon %' })}
+            error={
+              badPercent
+                ? t('complaint.badPercent', {
+                    defaultValue: 'Enter a percentage between 0 and 100.',
+                  })
+                : undefined
+            }
+          >
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              step="1"
+              inputMode="decimal"
+              invalid={badPercent}
+              value={values.coupon_percent}
+              onChange={(e) => onChange({ coupon_percent: e.target.value })}
+            />
+          </FormField>
+        </div>
+      )}
     </div>
   );
 }

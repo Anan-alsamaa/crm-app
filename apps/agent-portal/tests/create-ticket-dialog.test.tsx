@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -67,10 +67,6 @@ beforeEach(() => {
 });
 
 /** Type a value into a labelled field on the form. */
-function fill(label: string, value: string) {
-  const el = screen.getByText(label).parentElement!.querySelector('input, textarea')!;
-  fireEvent.change(el, { target: { value } });
-}
 
 describe('CreateTicketForm', () => {
   it('renders as a page with its fields, not a modal', () => {
@@ -173,40 +169,17 @@ describe('CreateTicketForm', () => {
     );
   });
 
-  it('keeps a coupon OFF the ticket and sends it for approval instead', async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({ id: 'tk1', storeNotify: 'no-store' });
-    hooks.useCreateTicketFromConversation.mockReturnValue({ mutateAsync });
-    const requestCoupon = vi.fn().mockResolvedValue({ id: 'ca1' });
-    coupons.useRequestCouponApproval.mockReturnValue({ mutateAsync: requestCoupon });
-
+  it('asks about a coupon in ONE place, not two', () => {
+    // The coupon inputs used to sit inline on this form as well as in the
+    // dialog, which gave an agent two places to answer the same question with
+    // nothing reconciling the answers. The dialog owns it now; the form offers
+    // the decision and the button that opens it.
     renderDialog();
-    await chooseComplaintType('Missing item');
-    fill('Coupon code', 'SORRY10');
-    fill('Coupon value (SAR)', '25');
-    await userEvent.click(screen.getByText('tickets.create'));
-
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
-    // Writing it now and asking after would make approval a formality applied
-    // to money the customer has already been promised.
-    const ticket = mutateAsync.mock.calls[0]![0].ticket;
-    expect(ticket.coupon_code).toBeNull();
-    expect(ticket.coupon_value).toBeNull();
-    expect(ticket.compensation).toBeNull();
-
-    await waitFor(() => expect(requestCoupon).toHaveBeenCalled());
-    expect(requestCoupon.mock.calls[0]![0]).toMatchObject({
-      ticket: 'tk1',
-      coupon_code: 'SORRY10',
-      coupon_value: 25,
-      requested_by: 'agent-1',
-    });
-  });
-
-  it('warns the agent not to promise a coupon that is not approved yet', async () => {
-    renderDialog();
-    expect(screen.queryByText(/supervisor has to approve/)).not.toBeInTheDocument();
-    fill('Coupon code', 'SORRY10');
-    expect(screen.getByText(/supervisor has to approve/)).toBeInTheDocument();
+    expect(screen.queryByText('Coupon code')).not.toBeInTheDocument();
+    expect(screen.queryByText('Coupon value (SAR)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Coupon %')).not.toBeInTheDocument();
+    expect(screen.getByText(/assign a coupon/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create coupon/i })).toBeDisabled();
   });
 
   it('does not queue an approval when no coupon was given', async () => {

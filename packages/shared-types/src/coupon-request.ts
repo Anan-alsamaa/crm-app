@@ -48,6 +48,14 @@ export const CouponRequestDraft = z.object({
   /** `YYYY-MM-DD`. */
   valid_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   valid_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** The flat amount off, when the category is an amount. */
+  coupon_value: z.number().nonnegative('A coupon value cannot be negative.').nullish(),
+  /** The percentage off, when the category is a percentage. */
+  coupon_percent: z
+    .number()
+    .min(0, 'A percentage cannot be negative.')
+    .max(100, 'A percentage cannot be over 100.')
+    .nullish(),
   /** The ceiling on what this coupon can ever be worth, in SAR. */
   max_discount: z.number().nonnegative('A discount cannot be negative.'),
   /** How many times it may be redeemed. */
@@ -83,6 +91,21 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
  * aloud. Uniqueness is the caller's job — generate, check against the store,
  * regenerate on the rare collision.
  */
+export function couponPrefix(issuingSide: string | null | undefined): string {
+  const s = (issuingSide ?? '').trim().toLowerCase();
+  if (!s) return 'SARA';
+  if (s.startsWith('op')) return 'OPS';
+  if (s.startsWith('mk') || s.startsWith('mar')) return 'MKT';
+  // Anything else is the delivery company itself, so its own name leads: the
+  // list is editable, and a new courier should not need a code change.
+  return (
+    s
+      .replace(/[^a-z0-9]+/g, '')
+      .slice(0, 6)
+      .toUpperCase() || 'SARA'
+  );
+}
+
 export function generateCouponCode(
   random: () => number = Math.random,
   prefix = 'SARA',

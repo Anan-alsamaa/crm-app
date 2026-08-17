@@ -714,6 +714,7 @@ export function CreateTicketDialog({
               <ComplaintResolution
                 values={complaint}
                 onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}
+                hideCoupon
               />
               {/* Said while the agent is still typing the coupon, not after
                   they have told the customer about it. */}
