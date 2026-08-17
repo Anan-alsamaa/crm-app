@@ -38,20 +38,20 @@ export type CouponRequestStatus = z.infer<typeof CouponRequestStatus>;
  */
 export const CouponRequestDraft = z.object({
   /** Prefilled with the customer's phone; the agent may rewrite it. */
-  title: z.string().min(1).max(120),
+  title: z.string().min(1, 'Give the coupon a title — the customer’s phone works.').max(120),
   /** Generated, not typed — see `generateCouponCode`. */
   code: z.string().min(4).max(40),
-  issuing_side: z.string().min(1),
-  delivery_type: z.string().min(1),
-  coupon_type: z.string().min(1),
-  discount_category: z.string().min(1),
+  issuing_side: z.string().min(1, 'Choose an issuing side.'),
+  delivery_type: z.string().min(1, 'Choose a delivery type.'),
+  coupon_type: z.string().min(1, 'Choose a coupon type.'),
+  discount_category: z.string().min(1, 'Choose a discount category.'),
   /** `YYYY-MM-DD`. */
   valid_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   valid_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   /** The ceiling on what this coupon can ever be worth, in SAR. */
-  max_discount: z.number().nonnegative(),
+  max_discount: z.number().nonnegative('A discount cannot be negative.'),
   /** How many times it may be redeemed. */
-  usage_limit: z.number().int().positive(),
+  usage_limit: z.number().int().positive('It has to be usable at least once.'),
   /**
    * Why, carried over from the ticket's description and editable here — the
    * agent who typed the complaint is not always the one raising the coupon.
