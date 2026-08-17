@@ -75,6 +75,22 @@ async function auditPortal(browser, p) {
   await page.click('button[type=submit]');
   await page.waitForTimeout(3500);
 
+  // If sign-in failed there is nothing to audit, and walking the routes anyway
+  // produces one "redirected to /login" per page: fifteen findings describing
+  // a single problem, none of them naming it. Say the real thing and stop.
+  if (new URL(page.url()).pathname.startsWith('/login')) {
+    await ctx.close();
+    return [
+      {
+        route: '/login',
+        kind: 'auth',
+        detail:
+          `could not sign in as ${p.email} — every other check was skipped. ` +
+          'Reset the password or check the account is active.',
+      },
+    ];
+  }
+
   for (const route of p.routes) {
     const consoleErrors = [];
     const netErrors = [];
