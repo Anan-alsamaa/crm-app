@@ -21,6 +21,18 @@ export interface CouponApprovalRow {
   compensation: string | null;
   reason: string | null;
   status: CouponApprovalStatus;
+  /* The coupon's own terms, as the agent asked for them. */
+  title: string | null;
+  issuing_side: string | null;
+  delivery_type: string | null;
+  coupon_type: string | null;
+  discount_category: string | null;
+  valid_from: string | null;
+  valid_to: string | null;
+  max_discount: number | null;
+  usage_limit: number | null;
+  /** True when a supervisor changed those terms before approving. */
+  edited_by_admin: boolean | null;
   decided_at: string | null;
   decision_note: string | null;
   date_created: string | null;
@@ -52,6 +64,16 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
               'decided_at',
               'decision_note',
               'date_created',
+              'title',
+              'issuing_side',
+              'delivery_type',
+              'coupon_type',
+              'discount_category',
+              'valid_from',
+              'valid_to',
+              'max_discount',
+              'usage_limit',
+              'edited_by_admin',
               { ticket: ['id', 'subject', 'complaint_type'] },
               { contact: ['id', 'name', 'phone'] },
               { requested_by: ['id', 'first_name', 'email'] },
@@ -71,12 +93,42 @@ export interface DecideInput {
   approve: boolean;
   note: string;
   supervisorId: string | null;
+  /**
+   * Terms the supervisor changed before approving.
+   *
+   * A supervisor who thinks 50 SAR is too much has three honest options:
+   * reject it, approve it as asked, or approve a smaller one. The third is what
+   * actually happens and used to require rejecting and asking the agent to
+   * redo it. Approving an amended request is recorded AS an amendment —
+   * `edited_by_admin` — so the report can tell it apart from a straight
+   * approval and an agent can see their number was changed.
+   */
+  edits?: Partial<
+    Pick<
+      CouponApprovalRow,
+      | 'title'
+      | 'issuing_side'
+      | 'delivery_type'
+      | 'coupon_type'
+      | 'discount_category'
+      | 'valid_from'
+      | 'valid_to'
+      | 'max_discount'
+      | 'usage_limit'
+      | 'coupon_value'
+      | 'coupon_percent'
+    >
+  >;
 }
 
 export function useDecideCoupon() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ row, approve, note, supervisorId }: DecideInput) => {
+    mutationFn: async ({ row, approve, note, supervisorId, edits }: DecideInput) => {
+      // Amendments are applied to the REQUEST before the coupon is written from
+      // it, so the ticket and the audited request can never tell different
+      // stories about what was granted.
+      const amended = edits && Object.keys(edits).length > 0 ? { ...row, ...edits } : row;
       if (approve) {
         /**
          * Approving with no ticket used to skip the write and mark the request
@@ -92,14 +144,19 @@ export function useDecideCoupon() {
         if (!row.ticket?.id) {
           throw new Error('COUPON_APPROVAL_NO_TICKET');
         }
-        // The coupon reaches the ticket FIRST — see the note at the top.
+        // The coupon reaches the ticket FIRST — see the note at the top — and
+        // carries the AMENDED terms, not what the agent originally asked for.
         await directus.request(
-          updateItem('tickets' as never, row.ticket.id, approvedCouponPatch(row) as never),
+          updateItem('tickets' as never, row.ticket.id, approvedCouponPatch(amended) as never),
         );
       }
       return directus.request(
         updateItem('coupon_approvals' as never, row.id, {
+          ...(edits ?? {}),
           status: approve ? 'approved' : 'rejected',
+          // An approval of changed terms is still an approval, but the report
+          // has to be able to count it separately.
+          edited_by_admin: approve && !!edits && Object.keys(edits).length > 0,
           decided_at: new Date().toISOString(),
           decided_by: supervisorId,
           decision_note: note.trim() || null,

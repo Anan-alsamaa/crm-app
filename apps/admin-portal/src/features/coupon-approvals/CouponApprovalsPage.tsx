@@ -51,12 +51,23 @@ function Row({
   busy,
 }: {
   row: CouponApprovalRow;
-  onDecide: (approve: boolean, note: string) => void;
+  onDecide: (approve: boolean, note: string, edits?: Record<string, number>) => void;
   busy: boolean;
 }) {
   const { t } = useTranslation();
   const [note, setNote] = useState('');
   const [rejecting, setRejecting] = useState(false);
+  /**
+   * Amended terms, held until the supervisor approves.
+   *
+   * A supervisor who thinks the amount is too high had two options and needed a
+   * third: reject it, approve it as asked, or approve a smaller one. The third
+   * is what actually happens, and it used to mean rejecting and asking the
+   * agent to start again.
+   */
+  const [editing, setEditing] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [uses, setUses] = useState('');
   const pending = row.status === 'pending';
 
   const worth = [
@@ -166,6 +177,42 @@ function Row({
             </>
           ) : (
             <>
+              {editing && (
+                <div className="mb-1 grid w-full gap-2 rounded-xl bg-secondary/40 p-3 sm:grid-cols-2">
+                  <label className="block space-y-1">
+                    <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      {t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
+                    </span>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      aria-label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      {t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
+                    </span>
+                    <Input
+                      type="number"
+                      min={1}
+                      step="1"
+                      value={uses}
+                      onChange={(e) => setUses(e.target.value)}
+                      aria-label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
+                    />
+                  </label>
+                  <p className="text-2xs leading-relaxed text-muted-foreground sm:col-span-2">
+                    {t('couponApprovals.editHint', {
+                      defaultValue:
+                        'Approving now grants these instead of what was asked for, and is recorded as an amendment.',
+                    })}
+                  </p>
+                </div>
+              )}
               {/* No ticket, nowhere to put the coupon. Approving used to
                   succeed silently and write nothing, so the supervisor believed
                   they had issued money that did not exist. Rejecting stays
@@ -174,9 +221,38 @@ function Row({
                 type="button"
                 size="sm"
                 disabled={busy || !row.ticket?.id}
-                onClick={() => onDecide(true, note)}
+                onClick={() => {
+                  const edits: Record<string, number> = {};
+                  const a = Number(amount);
+                  if (amount.trim() !== '' && Number.isFinite(a) && a >= 0) {
+                    edits.max_discount = a;
+                    // Only the column the category implies, so an amended
+                    // percentage can never arrive as an amount.
+                    if ((row.discount_category ?? '').toLowerCase() === 'percentage')
+                      edits.coupon_percent = a;
+                    else edits.coupon_value = a;
+                  }
+                  const u = Number(uses);
+                  if (uses.trim() !== '' && Number.isInteger(u) && u > 0) edits.usage_limit = u;
+                  onDecide(true, note, Object.keys(edits).length ? edits : undefined);
+                }}
               >
                 {t('couponApprovals.approve', { defaultValue: 'Approve' })}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => {
+                  setEditing((v) => !v);
+                  // Seed from what was asked for, so the supervisor adjusts a
+                  // number rather than recalling it.
+                  setAmount(String(row.max_discount ?? row.coupon_value ?? ''));
+                  setUses(String(row.usage_limit ?? ''));
+                }}
+              >
+                {t('couponApprovals.edit', { defaultValue: 'Edit' })}
               </Button>
               <Button
                 type="button"
@@ -214,16 +290,27 @@ export function CouponApprovalsPage() {
 
   const rows = approvals.data ?? [];
 
-  const onDecide = (row: CouponApprovalRow, approve: boolean, note: string) => {
+  const onDecide = (
+    row: CouponApprovalRow,
+    approve: boolean,
+    note: string,
+    edits?: Record<string, number>,
+  ) => {
     decide.mutate(
-      { row, approve, note, supervisorId: user?.id ?? null },
+      { row, approve, note, supervisorId: user?.id ?? null, edits },
       {
         onSuccess: () =>
           toast.success(
             approve
-              ? t('couponApprovals.approved', {
-                  defaultValue: 'Approved — the coupon is on the ticket',
-                })
+              ? edits
+                ? // Say that the terms changed, so nobody thinks the agent's
+                  // numbers went through untouched.
+                  t('couponApprovals.approvedEdited', {
+                    defaultValue: 'Approved with changes — the amended coupon is on the ticket',
+                  })
+                : t('couponApprovals.approved', {
+                    defaultValue: 'Approved — the coupon is on the ticket',
+                  })
               : t('couponApprovals.rejected', { defaultValue: 'Rejected' }),
           ),
         onError: (err) =>
@@ -320,7 +407,7 @@ export function CouponApprovalsPage() {
                   key={row.id}
                   row={row}
                   busy={decide.isPending}
-                  onDecide={(approve, note) => onDecide(row, approve, note)}
+                  onDecide={(approve, note, edits) => onDecide(row, approve, note, edits)}
                 />
               ))}
             </ul>
