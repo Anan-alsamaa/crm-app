@@ -25,7 +25,8 @@
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck",
     "verify": "node scripts/verify.mjs",
-    "verify:e2e": "node scripts/verify.mjs --e2e"
+    "verify:e2e": "node scripts/verify.mjs --e2e",
+    "fix:agent-login": "node scripts/fix-agent-login.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.1",

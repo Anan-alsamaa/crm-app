@@ -6,7 +6,7 @@
 const DIRECTUS = process.env.DIRECTUS_URL ?? 'http://localhost:8055';
 const OWNER_EMAIL = process.env.E2E_OWNER_EMAIL ?? 'e.habibi@anan.sa';
 const OWNER_PASSWORD = process.env.E2E_OWNER_PASSWORD ?? '123456';
-const AGENT_EMAIL = process.env.E2E_AGENT_EMAIL ?? 'e2e.agent@example.com';
+const AGENT_EMAIL = process.env.E2E_AGENT_EMAIL ?? 'e2e-runner@example.com';
 // Matches docs/LOCAL_PROD.md — the setup PATCHes this onto the agent user on
 // every run, so a different default here silently rotates the owner's login
 // away from the documented credential (it did, twice).
@@ -156,7 +156,7 @@ export default async function globalSetup(): Promise<void> {
               // the reports' phone column look broken when it was merely empty.
               // (vendor, phone) is UNIQUE, so this has to vary per run the way
               // external_customer_id above already does.
-              phone: `+9665${String(`${stamp}${i}`).slice(-8).padStart(8, '0')}`,
+              phone: `+9665${String(Date.now()).slice(-7)}${i}`,
             }),
           }),
         );
