@@ -440,7 +440,7 @@
     "waNoNumber": "No valid Saudi mobile number on this ticket.",
     "waStampFailed": "WhatsApp opened, but recording the contact failed.",
     "waOpening": "Opening WhatsApp…",
-    "fieldHistory": "Change history",
+    "fieldHistory": "What changed",
     "noFieldChanges": "No field changes recorded since this ticket was created.",
     "historyCreated": "created the ticket",
     "historyEdited": "edited",

@@ -67,7 +67,9 @@ test('admin creates a team then a user assigned to it', async ({ page }) => {
   await expect(page.getByText(teamName)).toBeVisible();
 
   await gotoWorkspace(page, /^users$/i, /\/users/);
-  const email = `agent.${Date.now()}@example.com`;
+  // Prefixed so the residue this test leaves is identifiable in the Users
+  // list — it created one real-looking agent per run and never removed it.
+  const email = `zz-e2e-agent.${Date.now()}@example.com`;
   await page
     .getByRole('button', { name: /create user/i })
     .first()

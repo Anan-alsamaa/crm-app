@@ -8,6 +8,7 @@
 
 export { cn } from './cn.js';
 export { NewVersionBanner } from './NewVersionBanner.js';
+export { SavedTick } from './SavedTick.js';
 export { formatRelative } from './time.js';
 export { Avatar } from './Avatar.js';
 export type { AvatarProps } from './Avatar.js';

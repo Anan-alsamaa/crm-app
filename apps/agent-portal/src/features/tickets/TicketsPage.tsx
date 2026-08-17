@@ -10,6 +10,7 @@ import {
   Input,
   MeterBar,
   Pill,
+  SavedTick,
   SectionCard,
   SelectMenu,
   Skeleton,
@@ -1275,13 +1276,16 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
           </SectionCard>
 
           {/* Field changes — Directus's own revisions, so imports and raw API
-              edits show here too, with the actor attached. */}
-          <SectionCard title={t('tickets.fieldHistory', { defaultValue: 'Change history' })}>
+              edits show here too, with the actor attached. Named for the
+              question it answers: "Change history" and "History" side by side
+              told nobody which held what. */}
+          <SectionCard title={t('tickets.fieldHistory', { defaultValue: 'What changed' })}>
             <ChangeHistory ticketId={tk.id} />
           </SectionCard>
 
-          {/* History timeline — actual timeline with connector line */}
-          <SectionCard title={t('tickets.history')}>
+          {/* The worked timeline: notes, replies, assignments — what PEOPLE did,
+              as opposed to which FIELDS moved above. */}
+          <SectionCard title={t('tickets.activity', { defaultValue: 'Activity' })}>
             {events.isLoading ? (
               <div className="space-y-2">
                 <Skeleton className="h-10 w-full" />
@@ -1585,7 +1589,12 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
               </span>
             </p>
           )}
-          <div className="flex justify-end gap-2">
+          <div className="flex items-center justify-end gap-2">
+            <SavedTick
+              saved={update.isSuccess}
+              label={t('actions.saved', { ns: 'common', defaultValue: 'Saved' })}
+              className="me-auto"
+            />
             <Button
               type="button"
               variant="ghost"
