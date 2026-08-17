@@ -3,6 +3,7 @@
  */
 
 export * from './enums.js';
+export * from './coupon-request.js';
 export * from './entities/common.js';
 export * from './entities/index.js';
 export * from './yiji.js';
