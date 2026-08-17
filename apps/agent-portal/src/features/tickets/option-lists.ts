@@ -29,6 +29,12 @@ const FALLBACK: Record<string, readonly string[]> = {
   complaint_source: ComplaintSource.options,
   communication_method: CommunicationMethod.options,
   compensation: Compensation.options,
+  // Born editable, so there is no enum to fall back to — these are the seeded
+  // starting values, used only when option_lists cannot be read at all.
+  issuing_side: ['Marketing', 'Operations', 'Delivery'],
+  delivery_type: ['All', 'Delivery', 'Pickup', 'Carhop'],
+  coupon_type: ['Private', 'Public'],
+  discount_category: ['Amount', 'Percentage'],
 };
 
 interface OptionRow {

@@ -20,6 +20,17 @@ export interface CouponRequestRow {
   compensation: string | null;
   reason: string | null;
   status: CouponApprovalStatus;
+  title: string | null;
+  issuing_side: string | null;
+  delivery_type: string | null;
+  coupon_type: string | null;
+  discount_category: string | null;
+  valid_from: string | null;
+  valid_to: string | null;
+  max_discount: number | null;
+  usage_limit: number | null;
+  /** True when an admin changed the agent's values before approving. */
+  edited_by_admin: boolean | null;
   decided_at: string | null;
   decision_note: string | null;
   date_created: string | null;
@@ -39,6 +50,16 @@ export const COUPON_REQUEST_FIELDS = [
   'decided_at',
   'decision_note',
   'date_created',
+  'title',
+  'issuing_side',
+  'delivery_type',
+  'coupon_type',
+  'discount_category',
+  'valid_from',
+  'valid_to',
+  'max_discount',
+  'usage_limit',
+  'edited_by_admin',
   { ticket: ['id', 'subject'] },
   { contact: ['id', 'name', 'phone'] },
   { decided_by: ['id', 'first_name', 'email'] },
@@ -66,6 +87,19 @@ export interface CreateCouponRequestInput extends CouponFields {
   contact: string | null;
   requested_by: string | null;
   reason?: string | null;
+  /* The coupon's own terms, validated by CouponRequestDraft before we get here. */
+  title?: string;
+  issuing_side?: string;
+  delivery_type?: string;
+  coupon_type?: string;
+  discount_category?: string;
+  valid_from?: string;
+  valid_to?: string;
+  max_discount?: number;
+  usage_limit?: number;
+  /* Resolved from the ticket's order, never chosen in the form. */
+  brand_id?: string | null;
+  restaurant_id?: string | null;
 }
 
 /**
