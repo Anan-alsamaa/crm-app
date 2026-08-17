@@ -129,7 +129,7 @@ export function CouponRequestDialog({
       );
   };
 
-  const sel = (key: keyof CouponRequestDraft, list: string) => (
+  const sel = (key: keyof CouponRequestDraft, list: string, label: string) => (
     <SelectMenu
       fullWidth
       value={String(draft[key] ?? '')}
@@ -138,7 +138,7 @@ export function CouponRequestDialog({
         value: v,
         label: v,
       }))}
-      aria-label={list}
+      aria-label={label}
     />
   );
 
@@ -186,7 +186,12 @@ export function CouponRequestDialog({
           })}
         >
           <div className="flex gap-2">
-            <Input value={draft.code} readOnly className="flex-1 font-mono" />
+            <Input
+              value={draft.code}
+              readOnly
+              aria-label={t('coupons.code', { defaultValue: 'Coupon code' })}
+              className="flex-1 font-mono"
+            />
             <Button
               type="button"
               variant="secondary"
@@ -198,10 +203,18 @@ export function CouponRequestDialog({
         </FormField>
         <div className="grid gap-3 sm:grid-cols-2">
           <FormField label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}>
-            {sel('issuing_side', 'issuing_side')}
+            {sel(
+              'issuing_side',
+              'issuing_side',
+              t('lists.issuingSide', { defaultValue: 'Issuing side' }),
+            )}
           </FormField>
           <FormField label={t('lists.deliveryType', { defaultValue: 'Delivery type' })}>
-            {sel('delivery_type', 'delivery_type')}
+            {sel(
+              'delivery_type',
+              'delivery_type',
+              t('lists.deliveryType', { defaultValue: 'Delivery type' }),
+            )}
           </FormField>
           <FormField
             label={t('lists.couponType', { defaultValue: 'Coupon type' })}
@@ -209,10 +222,18 @@ export function CouponRequestDialog({
               defaultValue: 'Private is one customer; public is a campaign.',
             })}
           >
-            {sel('coupon_type', 'coupon_type')}
+            {sel(
+              'coupon_type',
+              'coupon_type',
+              t('lists.couponType', { defaultValue: 'Coupon type' }),
+            )}
           </FormField>
           <FormField label={t('lists.discountCategory', { defaultValue: 'Discount category' })}>
-            {sel('discount_category', 'discount_category')}
+            {sel(
+              'discount_category',
+              'discount_category',
+              t('lists.discountCategory', { defaultValue: 'Discount category' }),
+            )}
           </FormField>
         </div>
       </DrawerSection>

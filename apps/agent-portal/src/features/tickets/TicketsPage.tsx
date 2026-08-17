@@ -24,6 +24,7 @@ import {
   useIsDesktop,
 } from '@yiji/ui';
 import {
+  compensationFlag,
   couponDiffers,
   isCouponRequested,
   splitCouponForApproval,
@@ -46,6 +47,7 @@ import {
 import { useAgents, useTeamOptions } from '../inbox/api.js';
 import { WhatsAppReply } from './WhatsAppReply.js';
 import { ChangeHistory } from './ChangeHistory.js';
+import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { exportTicketWorkbook } from './export-ticket.js';
 import {
   distinctValues,
@@ -1452,6 +1454,13 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
    * every visit to a ticket that already has one — it answers the wrong
    * question here.
    */
+  /* Ticking the box is the compensation decision; the button is unreachable
+     until it is made, so nobody opens a coupon form they did not choose. */
+  const [assignCoupon, setAssignCoupon] = useState(() =>
+    (ticket.compensation ?? '').toLowerCase().startsWith('compensated'),
+  );
+  const [couponOpen, setCouponOpen] = useState(false);
+
   const couponChanged = useMemo(
     () =>
       couponDiffers(draft, {
@@ -1574,6 +1583,55 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           <ComplaintResolution
             values={draft}
             onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+            couponAction={
+              <div className="rounded-2xl bg-primary/[0.05] p-3.5 ring-1 ring-inset ring-primary/15">
+                <label className="flex items-start gap-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={assignCoupon}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setAssignCoupon(on);
+                      // The ticket's compensation flag follows the box, so the
+                      // two can never disagree — the agent is not asked twice.
+                      setDraft((d) => ({ ...d, compensation: compensationFlag(on) }));
+                    }}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded accent-primary"
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-medium text-foreground">
+                      {t('coupons.assign', { defaultValue: 'Assign a coupon' })}
+                    </span>
+                    <span className="block text-2xs leading-relaxed text-muted-foreground">
+                      {t('coupons.assignHint', {
+                        defaultValue:
+                          'A supervisor approves it before anything reaches the customer.',
+                      })}
+                    </span>
+                  </span>
+                </label>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="mt-3"
+                  disabled={!assignCoupon}
+                  onClick={() => setCouponOpen(true)}
+                >
+                  {t('coupons.create', { defaultValue: 'Create coupon' })}
+                </Button>
+              </div>
+            }
+          />
+          <CouponRequestDialog
+            open={couponOpen}
+            onClose={() => setCouponOpen(false)}
+            ticketId={ticket.id}
+            contactId={ticket.contact?.id ?? null}
+            customerPhone={ticket.contact?.phone ?? null}
+            description={ticket.description ?? null}
+            brandId={ticket.store_snapshot?.brandName ?? null}
+            restaurantId={ticket.store ?? ticket.store_snapshot?.storeId ?? null}
+            requestedBy={user?.id ?? null}
           />
           {/* Said while the agent is still typing the coupon, not after they
               have told the customer about it — the same warning the create

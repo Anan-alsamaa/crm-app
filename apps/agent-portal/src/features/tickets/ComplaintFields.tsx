@@ -705,9 +705,17 @@ export function ComplaintClassification({
 export function ComplaintResolution({
   values,
   onChange,
+  couponAction,
 }: {
   values: ComplaintValues;
   onChange: (patch: Partial<ComplaintValues>) => void;
+  /**
+   * The "assign a coupon" control, when this ticket exists and can carry one.
+   * Passed in rather than built here because requesting a coupon needs a ticket
+   * id, a contact and the order's branch — none of which this pure field group
+   * knows about.
+   */
+  couponAction?: React.ReactNode;
 }) {
   const { t } = useTranslation();
   const lists = useOptionLists();
@@ -732,6 +740,7 @@ export function ComplaintResolution({
           })}
         />
       </FormField>
+      {couponAction}
       <div className="grid gap-3.5 sm:grid-cols-2">
         <FormField label={t('complaint.compensation', { defaultValue: 'Compensation' })}>
           <Combobox
