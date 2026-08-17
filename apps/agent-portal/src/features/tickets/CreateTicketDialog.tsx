@@ -6,11 +6,13 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Button, cn, FormField, Pill, SelectMenu, Textarea, toast } from '@yiji/ui';
 import {
+  compensationFlag,
   isCouponRequested,
   isNotifyingType,
   manualStoreMatch,
   splitCouponForApproval,
   toStoreSnapshot,
+  type CouponRequestDraft,
   type Priority,
   type StoreMatch,
   type YijiOrder,
@@ -36,6 +38,7 @@ import {
 } from './ComplaintFields.js';
 import { useOrderStore, useStores, toStoreRecord } from './useStoreMatch.js';
 import { useRequestCouponApproval } from '../coupons/api.js';
+import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { useContact } from '../contacts/api.js';
 import { commerce } from '../../lib/commerce-client.js';
 import { clearPinnedOrder, getPinnedOrder } from '../commerce/pinned-order.js';
@@ -168,6 +171,7 @@ export function CreateTicketDialog({
     register,
     handleSubmit,
     control,
+    watch,
     formState: { isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -206,6 +210,13 @@ export function CreateTicketDialog({
   const sessionFiles = useConversationAttachmentIds(conversationId ?? null);
   const sessionFileIds = sessionFiles.data ?? [];
 
+  /* Ticking the box IS the compensation decision; the button is unreachable
+     until it is made. There is no ticket yet, so the coupon is COLLECTED here
+     and raised once the ticket exists — a failed coupon can then never leave a
+     half-created ticket behind. */
+  const [assignCoupon, setAssignCoupon] = useState(false);
+  const [couponOpen, setCouponOpen] = useState(false);
+  const [collectedCoupon, setCollectedCoupon] = useState<CouponRequestDraft | null>(null);
   const [includeOrder, setIncludeOrder] = useState(true);
   const [includeFiles, setIncludeFiles] = useState(true);
   // Seeded lazily with "now": a module-level default would freeze at import
@@ -344,14 +355,41 @@ export function CreateTicketDialog({
       // fails the ticket still stands and the agent is told the coupon did not
       // go anywhere — the alternative is a promise nobody is holding.
       let couponAsked = false;
-      if (coupon.request && created?.id) {
+      const fullCoupon = collectedCoupon
+        ? {
+            coupon_code: collectedCoupon.code,
+            coupon_value:
+              collectedCoupon.discount_category === 'Amount' ? collectedCoupon.max_discount : null,
+            coupon_percent:
+              collectedCoupon.discount_category === 'Percentage'
+                ? collectedCoupon.max_discount
+                : null,
+            compensation: compensationFlag(true),
+            title: collectedCoupon.title,
+            issuing_side: collectedCoupon.issuing_side,
+            delivery_type: collectedCoupon.delivery_type,
+            coupon_type: collectedCoupon.coupon_type,
+            discount_category: collectedCoupon.discount_category,
+            valid_from: collectedCoupon.valid_from,
+            valid_to: collectedCoupon.valid_to,
+            max_discount: collectedCoupon.max_discount,
+            usage_limit: collectedCoupon.usage_limit,
+            brand_id: collectedCoupon.brand_id ?? null,
+            restaurant_id: collectedCoupon.restaurant_id ?? null,
+          }
+        : null;
+      const request = fullCoupon ?? coupon.request;
+      if (request && created?.id) {
         try {
           await requestCoupon.mutateAsync({
-            ...coupon.request,
+            ...request,
             ticket: created.id,
             contact: contactId,
             requested_by: user?.id ?? null,
-            reason: complaint.response_desc.trim() || null,
+            reason:
+              collectedCoupon?.compensation_reason?.trim() ||
+              complaint.response_desc.trim() ||
+              null,
           });
           couponAsked = true;
         } catch {
@@ -615,6 +653,64 @@ export function CreateTicketDialog({
                   </span>
                 </p>
               )}
+              <div className="rounded-2xl bg-primary/[0.05] p-3.5 ring-1 ring-inset ring-primary/15">
+                <label className="flex items-start gap-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={assignCoupon}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setAssignCoupon(on);
+                      if (!on) setCollectedCoupon(null);
+                      // The compensation flag follows the box, so the agent is
+                      // never asked the same thing twice.
+                      setComplaint((c) => ({ ...c, compensation: compensationFlag(on) }));
+                    }}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded accent-primary"
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-medium text-foreground">
+                      {t('coupons.assign', { defaultValue: 'Assign a coupon' })}
+                    </span>
+                    <span className="block text-2xs leading-relaxed text-muted-foreground">
+                      {t('coupons.assignHint', {
+                        defaultValue:
+                          'A supervisor approves it before anything reaches the customer.',
+                      })}
+                    </span>
+                  </span>
+                </label>
+                <div className="mt-3 flex items-center gap-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={!assignCoupon}
+                    onClick={() => setCouponOpen(true)}
+                  >
+                    {t('coupons.create', { defaultValue: 'Create coupon' })}
+                  </Button>
+                  {collectedCoupon && (
+                    <span className="text-2xs font-medium text-success">
+                      {t('coupons.attached', {
+                        code: collectedCoupon.code,
+                        defaultValue: '{{code}} will be sent for approval',
+                      })}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <CouponRequestDialog
+                open={couponOpen}
+                onClose={() => setCouponOpen(false)}
+                ticketId=""
+                contactId={contactId}
+                customerPhone={contact.data?.phone ?? null}
+                description={watch('description') || null}
+                brandId={chosenMatch?.brandName ?? null}
+                restaurantId={storeId || null}
+                requestedBy={user?.id ?? null}
+                onCollect={setCollectedCoupon}
+              />
               <ComplaintResolution
                 values={complaint}
                 onChange={(patch) => setComplaint((c) => ({ ...c, ...patch }))}

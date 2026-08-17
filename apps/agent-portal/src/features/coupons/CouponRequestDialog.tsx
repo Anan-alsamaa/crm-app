@@ -40,6 +40,15 @@ export interface CouponRequestDialogProps {
   restaurantId: string | null;
   requestedBy: string | null;
   onCreated?: () => void;
+  /**
+   * Collect the coupon instead of raising it.
+   *
+   * On the add-ticket form there is no ticket yet, so there is nothing to attach
+   * a request to. In that case the dialog hands the validated draft back and the
+   * ticket-create flow raises the request once the ticket exists — which also
+   * means a failed coupon can never leave a half-created ticket behind.
+   */
+  onCollect?: (draft: CouponRequestDraft) => void;
 }
 
 export function CouponRequestDialog({
@@ -53,6 +62,7 @@ export function CouponRequestDialog({
   restaurantId,
   requestedBy,
   onCreated,
+  onCollect,
 }: CouponRequestDialogProps) {
   const { t } = useTranslation();
   const lists = useOptionLists();
@@ -88,6 +98,12 @@ export function CouponRequestDialog({
   const submit = () => {
     if (!parsed.success) return;
     const d = parsed.data;
+    if (onCollect) {
+      // No ticket to attach to yet — hand it back and let the caller raise it.
+      onCollect(d);
+      onClose();
+      return;
+    }
     create
       .mutateAsync({
         ticket: ticketId,
@@ -166,7 +182,9 @@ export function CouponRequestDialog({
             disabled={!parsed.success}
             onClick={submit}
           >
-            {t('coupons.send', { defaultValue: 'Send for approval' })}
+            {onCollect
+              ? t('coupons.attach', { defaultValue: 'Attach to this ticket' })
+              : t('coupons.send', { defaultValue: 'Send for approval' })}
           </Button>
         </div>
       }
