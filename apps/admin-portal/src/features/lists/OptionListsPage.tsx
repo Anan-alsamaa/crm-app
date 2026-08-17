@@ -20,6 +20,7 @@ import {
   toast,
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
+import { QuickRepliesSection } from './QuickRepliesSection.js';
 
 /**
  * The dropdown lists, editable by the operations team.
@@ -43,6 +44,11 @@ const LIST_KEYS = [
   'complaint_source',
   'communication_method',
   'compensation',
+  // Used by the coupon request — an operations decision, not a deploy.
+  'issuing_side',
+  'delivery_type',
+  'coupon_type',
+  'discount_category',
 ] as const;
 type ListKey = (typeof LIST_KEYS)[number];
 
@@ -126,6 +132,10 @@ export function OptionListsPage() {
     complaint_source: t('lists.complaintSource', { defaultValue: 'Complaint source' }),
     communication_method: t('lists.communicationMethod', { defaultValue: 'Communication method' }),
     compensation: t('lists.compensation', { defaultValue: 'Compensation' }),
+    issuing_side: t('lists.issuingSide', { defaultValue: 'Issuing side' }),
+    delivery_type: t('lists.deliveryType', { defaultValue: 'Delivery type' }),
+    coupon_type: t('lists.couponType', { defaultValue: 'Coupon type' }),
+    discount_category: t('lists.discountCategory', { defaultValue: 'Discount category' }),
   };
 
   const submit = () => {
@@ -373,6 +383,11 @@ export function OptionListsPage() {
               </div>
             </div>
           )}
+
+          {/* Ready replies live here too: same kind of thing, same owner. */}
+          <div className="pt-2">
+            <QuickRepliesSection />
+          </div>
         </div>
       </div>
     </div>
