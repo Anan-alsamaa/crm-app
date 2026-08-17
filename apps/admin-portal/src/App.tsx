@@ -60,6 +60,11 @@ const StoresPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import('./features/reports/ReportsPage.js').then((m) => ({ default: m.ReportsPage })),
 );
+const CouponReportPage = lazy(() =>
+  import('./features/coupon-approvals/CouponReportPage.js').then((m) => ({
+    default: m.CouponReportPage,
+  })),
+);
 const CouponApprovalsPage = lazy(() =>
   import('./features/coupon-approvals/CouponApprovalsPage.js').then((m) => ({
     default: m.CouponApprovalsPage,
@@ -337,6 +342,11 @@ function Shell({ children }: { children: React.ReactNode }) {
           label: t('nav.couponApprovals', { defaultValue: 'Coupon approvals' }),
           icon: ShieldIcon,
         },
+        {
+          to: '/coupon-report',
+          label: t('nav.couponReport', { defaultValue: 'Coupon report' }),
+          icon: ShieldIcon,
+        },
       ],
     },
     {
@@ -585,6 +595,16 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <CouponApprovalsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/coupon-report"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <CouponReportPage />
                 </Shell>
               </ProtectedRoute>
             }

@@ -94,3 +94,14 @@ export {
 } from './xlsx-read.js';
 
 export { buildComplaintsTemplate, type ComplaintsTemplateInput } from './complaints-template.js';
+
+/* Coupon approval outcomes — shared so a supervisor's numbers and an agent's
+   numbers are the same numbers. */
+export {
+  couponOutcomes,
+  couponOutcomesByAgent,
+  couponRate,
+  type CouponAgentRow,
+  type CouponApprovalFact,
+  type CouponOutcome,
+} from './coupon-approvals.js';

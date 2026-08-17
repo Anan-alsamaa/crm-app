@@ -32,7 +32,7 @@ const ADMIN = {
   routes: [
     '/dashboard', '/report-tickets', '/report-complaints', '/report-conversations',
     '/report-agents', '/report-exports', '/reports', '/agent-performance',
-    '/sla', '/sla-reports', '/ticket-ops', '/coupon-approvals', '/users', '/teams',
+    '/sla', '/sla-reports', '/ticket-ops', '/coupon-approvals', '/coupon-report', '/users', '/teams',
     '/roles', '/lists', '/custom-fields', '/stores', '/brands', '/vendors',
     '/store-notifications', '/automation', '/imports', '/ai-config', '/backup',
   ],
