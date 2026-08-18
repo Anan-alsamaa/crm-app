@@ -432,7 +432,7 @@ describe('AgentReportsPage — tickets report', () => {
     const picker = screen.getByRole('button', { name: `Columns ${total}/${total}` });
     expect(picker).toHaveAttribute('aria-expanded', 'false');
     await userEvent.click(picker);
-    expect(screen.getByText('Export columns')).toBeInTheDocument();
+    expect(screen.getByText('Rearrange columns')).toBeInTheDocument();
 
     const subjectBox = screen.getByLabelText('Subject');
     expect(subjectBox).toBeChecked();

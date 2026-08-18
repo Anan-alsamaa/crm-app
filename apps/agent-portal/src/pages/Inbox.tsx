@@ -241,11 +241,14 @@ export function Inbox() {
               value,
               tone,
               onClick,
+              active = false,
             }: {
               label: string;
               value: number;
               tone: 'default' | 'pink' | 'primary';
               onClick?: () => void;
+              /** This tile's filter is the one currently applied. */
+              active?: boolean;
             }) => (
               // Boxed mini-tile with a status dot by the label — the KPI
               // grammar of the reference boards, shrunk to the list header.
@@ -256,7 +259,14 @@ export function Inbox() {
                   'flex flex-1 flex-col gap-0.5 rounded-xl bg-card px-2.5 py-2 text-start ring-1 ring-foreground/[0.06]',
                   'transition-[background-color,box-shadow] duration-fast ease-out',
                   'hover:bg-secondary/60 active:scale-[0.98]',
+                  active && 'bg-primary/[0.08] ring-primary/40',
                 )}
+                aria-pressed={onClick ? active : undefined}
+                title={
+                  active
+                    ? t('inbox.clearFilter', { defaultValue: 'Click again to clear this filter' })
+                    : undefined
+                }
               >
                 <span
                   className={cn(
@@ -290,13 +300,22 @@ export function Inbox() {
                   label={t('inbox.stats.open', { defaultValue: 'open' })}
                   value={openCount}
                   tone="default"
-                  onClick={() => setFilters((f) => ({ ...f, status: 'open' }))}
+                  active={filters.status === 'open'}
+                  onClick={() =>
+                    setFilters((f) => ({ ...f, status: f.status === 'open' ? 'all' : 'open' }))
+                  }
                 />
                 <Stat
                   label={t('inbox.stats.urgent', { defaultValue: 'urgent' })}
                   value={urgentCount}
                   tone="pink"
-                  onClick={() => setFilters((f) => ({ ...f, priority: 'urgent' }))}
+                  active={filters.priority === 'urgent'}
+                  onClick={() =>
+                    setFilters((f) => ({
+                      ...f,
+                      priority: f.priority === 'urgent' ? 'all' : 'urgent',
+                    }))
+                  }
                 />
                 <Stat
                   label={t('inbox.stats.unread', { defaultValue: 'unread' })}

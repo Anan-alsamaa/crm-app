@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Avatar,
   Button,
+  ConfirmDialog,
   cn,
   Drawer,
   EmptyState,
@@ -495,7 +496,7 @@ function TicketsReport({
               <div className="absolute end-0 top-9 z-40 max-h-80 w-64 overflow-auto rounded-xl bg-card p-2 shadow-float ring-1 ring-foreground/10">
                 <div className="flex items-center justify-between px-1.5 pb-1.5">
                   <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                    {t('agentReports.exportColumns', { defaultValue: 'Export columns' })}
+                    {t('agentReports.exportColumns', { defaultValue: 'Rearrange columns' })}
                   </span>
                   <button
                     type="button"
@@ -676,6 +677,9 @@ function ComplaintsReport({
    * and selection is how their team already works.
    */
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /* The row awaiting a delete confirmation — a product dialog, not the
+     browser's own, which carries no voice and looks like a page error. */
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; label: string } | null>(null);
   const [historyOf, setHistoryOf] = useState<{ id: string; label: string } | null>(null);
   const qc = useQueryClient();
   const del = useMutation({
@@ -1183,16 +1187,7 @@ function ComplaintsReport({
               if (!row) return;
               const label =
                 [row.complaintType, row.orderNumber].filter(Boolean).join(' · ') || row.id;
-              if (
-                window.confirm(
-                  t('complaintReport.deleteConfirm', {
-                    label,
-                    defaultValue:
-                      'Delete “{{label}}”? The record is removed; who deleted it stays in the change history.',
-                  }),
-                )
-              )
-                del.mutate(row.id);
+              setConfirmDelete({ id: row.id, label });
             }}
           >
             {t('complaintReport.deleteBtn', { defaultValue: 'Delete' })}
@@ -1372,6 +1367,23 @@ function ComplaintsReport({
           />
         </div>
       </div>
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={() => {
+          if (confirmDelete) del.mutate(confirmDelete.id);
+          setConfirmDelete(null);
+        }}
+        destructive
+        title={t('complaintReport.deleteTitle', { defaultValue: 'Delete this ticket?' })}
+        description={t('complaintReport.deleteConfirm', {
+          label: confirmDelete?.label ?? '',
+          defaultValue:
+            'Delete “{{label}}”? The record is removed; who deleted it stays in the change history.',
+        })}
+        confirmLabel={t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+        cancelLabel={t('actions.cancel', { ns: 'common' })}
+      />
     </div>
   );
 }
