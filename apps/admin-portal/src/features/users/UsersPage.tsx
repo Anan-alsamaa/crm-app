@@ -74,7 +74,7 @@ export function UsersPage() {
     handleSubmit,
     reset,
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, dirtyFields },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
   const openCreate = () => {
@@ -133,7 +133,10 @@ export function UsersPage() {
           team: values.team || null,
           status: values.status ?? 'active',
         };
-        if (values.password) patch.password = values.password;
+        // Dirty, not merely non-empty: a value this form never asked for
+        // must not be able to change somebody's password. Belt and braces
+        // with the autocomplete above — either alone would have prevented it.
+        if (values.password && dirtyFields.password) patch.password = values.password;
         await updateUser.mutateAsync({ id: editing.id, patch });
         toast.success(t('users.updated', { defaultValue: 'User updated.' }));
       } else {
@@ -527,7 +530,14 @@ export function UsersPage() {
             })}
           >
             <FormField label={t('users.email')} error={errors.email?.message}>
-              <Input type="email" invalid={!!errors.email} {...register('email')} />
+              <Input
+                type="email"
+                // Paired with the password field below: left to autofill, the
+                // browser treats the two as a sign-in form and fills both.
+                autoComplete="off"
+                invalid={!!errors.email}
+                {...register('email')}
+              />
             </FormField>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField label={t('users.firstName')}>
@@ -638,7 +648,26 @@ export function UsersPage() {
                   : t('users.passwordHint', { defaultValue: 'At least 6 characters.' })
               }
             >
-              <Input type="password" invalid={!!errors.password} {...register('password')} />
+              <Input
+                type="password"
+                /*
+                 * `new-password`, as every other password field in this app
+                 * already does — and this one was the exception.
+                 *
+                 * This is the agent-login drift. An admin opens a user here to
+                 * change a team or a name; the browser sees a password box in a
+                 * form beside an email box on a host it has a saved credential
+                 * for, and fills BOTH. The admin never sees it, saves the team
+                 * change, and the account they edited quietly takes on someone
+                 * else's password. The audit trail recorded it perfectly the
+                 * whole time — the update rows carry a password key and
+                 * origin=:8092 — but nobody read them, so it looked like the
+                 * password was rotting on its own.
+                 */
+                autoComplete="new-password"
+                invalid={!!errors.password}
+                {...register('password')}
+              />
             </FormField>
             {!editing && (
               <FormField label={t('users.locale')}>

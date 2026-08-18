@@ -9,6 +9,46 @@ const BASE = process.env.E2E_ADMIN_URL ?? 'http://localhost:5174';
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'e.habibi@anan.sa';
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? '123456';
 
+const DIRECTUS = process.env.E2E_DIRECTUS_URL ?? 'http://127.0.0.1:8055';
+
+/**
+ * Remove the agents this spec creates.
+ *
+ * It makes one real-looking user per run and used to leave every one behind: a
+ * Users page carrying six abandoned accounts, all with a working password and a
+ * live Agent role. That is residue in a list an operator is supposed to trust,
+ * and on a shared environment it is six real logins nobody meant to issue.
+ *
+ * Sweeps the whole `zz-` prefix rather than only this run's address, so the
+ * accounts already stranded by earlier runs go too. Best-effort: a cleanup that
+ * fails must not turn a passing test red — it reports and moves on.
+ */
+async function removeTestAgents(): Promise<void> {
+  try {
+    const auth = await fetch(`${DIRECTUS}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
+    });
+    if (!auth.ok) return;
+    const token = ((await auth.json()) as { data: { access_token: string } }).data.access_token;
+    const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+    const found = await fetch(
+      `${DIRECTUS}/users?filter[email][_starts_with]=zz-e2e-agent.&fields=id&limit=-1`,
+      { headers },
+    );
+    if (!found.ok) return;
+    const ids = ((await found.json()) as { data: Array<{ id: string }> }).data.map((u) => u.id);
+    if (ids.length === 0) return;
+    await fetch(`${DIRECTUS}/users`, { method: 'DELETE', headers, body: JSON.stringify(ids) });
+    console.log(`cleaned up ${ids.length} zz-e2e-agent user(s)`);
+  } catch (err) {
+    console.warn('could not clean up test agents:', err);
+  }
+}
+
+test.afterAll(removeTestAgents);
+
 async function login(page: import('@playwright/test').Page) {
   await page.goto(`${BASE}/login`);
   await page.getByLabel(/email/i).fill(ADMIN_EMAIL);
@@ -67,8 +107,8 @@ test('admin creates a team then a user assigned to it', async ({ page }) => {
   await expect(page.getByText(teamName)).toBeVisible();
 
   await gotoWorkspace(page, /^users$/i, /\/users/);
-  // Prefixed so the residue this test leaves is identifiable in the Users
-  // list — it created one real-looking agent per run and never removed it.
+  // Prefixed so `removeTestAgents` above can find every one of these, including
+  // any left behind by a run that was interrupted before its cleanup.
   const email = `zz-e2e-agent.${Date.now()}@example.com`;
   await page
     .getByRole('button', { name: /create user/i })
