@@ -20,6 +20,8 @@ export interface SocketCallbacks {
     conversationId: string;
     branding: unknown;
     agentsOnline: number;
+    /** The vendor the customer is talking to — the "Powered by" line names them. */
+    vendorName?: string | null;
     /** The customer's own name/phone + whether this is their first-ever contact
      *  — lets the widget greet a returning customer by name. */
     contact?: { name: string | null; phone: string | null };
@@ -73,6 +75,7 @@ export function connectWidget(url: string, token: string, cb: SocketCallbacks): 
       conversationId: string;
       branding: unknown;
       agentsOnline?: number;
+      vendorName?: string | null;
       contact?: { name: string | null; phone: string | null };
       isNew?: boolean;
     }) => cb.onReady({ ...info, agentsOnline: info.agentsOnline ?? 0 }),

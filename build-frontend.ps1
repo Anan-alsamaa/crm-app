@@ -2,14 +2,19 @@
 #
 #   pwsh ./build-frontend.ps1
 #
-# Builds agent-portal, admin-portal, chat-widget from crm-app-frontend with the
-# VITE_* baked from crm-app-frontend/.env (root, gitignored), then regenerates
-# the widget host page (dist/index.html) — the lib build doesn't emit one — using
-# the original landing markup + the built IIFE bundle + a JWT minted with
-# YIJI_JWT_SECRET from .env.prod. `serve` picks up new files automatically.
+# Builds agent-portal, admin-portal, chat-widget from THIS repo with the VITE_*
+# baked from .env (root, gitignored), then regenerates the widget host page
+# (dist/index.html) — the lib build doesn't emit one — using the original
+# landing markup + the built IIFE bundle + a JWT minted with YIJI_JWT_SECRET
+# from .env.prod. The yiji-portals nginx bind-mounts apps/*/dist, so it picks
+# up new files automatically.
+#
+# This used to build from a sibling `crm-app-frontend` worktree; that worktree
+# is gone, and the yiji-portals mounts point HERE — building anywhere else
+# would deploy nothing.
 $ErrorActionPreference = 'Stop'
 $infra = $PSScriptRoot
-$fe = Join-Path (Split-Path $infra -Parent) 'crm-app-frontend'
+$fe = $PSScriptRoot
 $widget = Join-Path $fe 'apps\chat-widget'
 
 $env:NODE_OPTIONS = '--max-old-space-size=4096'

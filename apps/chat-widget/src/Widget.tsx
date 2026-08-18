@@ -226,6 +226,10 @@ export function Widget({ config }: { config: WidgetConfig }) {
   const [unread, setUnread] = useState(0);
   const [draft, setDraft] = useState('');
   const [branding, setBranding] = useState<Branding>({});
+  // The vendor the customer is talking to (from `ready`) — the "Powered by"
+  // line names them, not the CRM. Null until known; the footer hides meanwhile
+  // rather than flashing the wrong name.
+  const [vendorName, setVendorName] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   // The customer's own identity from the gateway `ready` event: a returning
   // customer (isNew === false) with a name on file gets greeted by name.
@@ -303,10 +307,18 @@ export function Widget({ config }: { config: WidgetConfig }) {
   useEffect(() => {
     const socket = connectWidget(config.gatewayUrl, config.token, {
       onStatus: setStatus,
-      onReady: ({ conversationId, branding: b, agentsOnline: count, contact, isNew }) => {
+      onReady: ({
+        conversationId,
+        branding: b,
+        agentsOnline: count,
+        vendorName,
+        contact,
+        isNew,
+      }) => {
         convoRef.current = conversationId;
         if (b && typeof b === 'object') setBranding(b as Branding);
         setAgentsOnline(count);
+        if (vendorName?.trim()) setVendorName(vendorName.trim());
         setCustomer({ name: contact?.name ?? null, isNew: isNew ?? true });
         setReady(true);
         broadcastPresenceToHost(count);
@@ -915,9 +927,11 @@ export function Widget({ config }: { config: WidgetConfig }) {
             </>
           )}
 
-          <p className="yiji-footer">
-            <strong>{tr.poweredBy}</strong>
-          </p>
+          {vendorName && (
+            <p className="yiji-footer">
+              <strong>{tr.poweredBy.replace('{vendor}', vendorName)}</strong>
+            </p>
+          )}
         </div>
       )}
       {lightbox && (

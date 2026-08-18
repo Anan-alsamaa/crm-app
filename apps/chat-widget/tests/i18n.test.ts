@@ -6,7 +6,9 @@ describe('i18n: t()', () => {
     const en = t('en');
     expect(en.title).toBe('Support');
     expect(en.send).toBe('Send');
-    expect(en.poweredBy).toBe('Powered by Sara CRM');
+    // {vendor} is filled at render time with the vendor's name from `ready` —
+    // the line names who the customer is talking to, not the CRM.
+    expect(en.poweredBy).toBe('Powered by {vendor}');
     expect(en.offlineCallLabel).toBe('Call us');
   });
 
@@ -14,7 +16,7 @@ describe('i18n: t()', () => {
     const ar = t('ar');
     expect(ar.title).toBe('الدعم');
     expect(ar.send).toBe('إرسال');
-    expect(ar.poweredBy).toBe('مدعوم بواسطة سارة');
+    expect(ar.poweredBy).toBe('مدعوم بواسطة {vendor}');
     expect(ar.offlineCallLabel).toBe('اتصل بنا');
   });
 

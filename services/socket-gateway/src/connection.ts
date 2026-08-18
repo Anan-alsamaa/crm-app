@@ -29,6 +29,7 @@ interface SocketData {
   kind: 'customer' | 'agent';
   vendorId?: string; // CRM vendor UUID
   vendorColors?: unknown;
+  vendorName?: string | null;
   contactId?: string;
   contactName?: string | null;
   contactPhone?: string | null;
@@ -139,6 +140,7 @@ export function registerConnection(deps: ConnectionDeps): void {
       data.kind = 'customer';
       data.vendorId = vendor.id;
       data.vendorColors = vendor.colors;
+      data.vendorName = vendor.name;
       data.contactId = contact.id;
       data.contactName = contact.name;
       data.contactPhone = contact.phone;
@@ -216,6 +218,9 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
   socket.emit('ready', {
     conversationId: data.conversationId,
     branding: data.vendorColors ?? null,
+    // The vendor the customer is actually talking to — the widget's
+    // "Powered by" line names them, not the CRM.
+    vendorName: data.vendorName ?? null,
     agentsOnline: agentPresence.distinctOnline(),
     contact: { name: data.contactName ?? null, phone: data.contactPhone ?? null },
     isNew: data.contactIsNew ?? true,

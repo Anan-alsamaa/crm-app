@@ -32,14 +32,18 @@ export class GatewayDirectus {
   }
 
   /** Resolve the CRM vendor UUID from the Yiji external vendor id (must be active). */
-  async resolveVendor(yijiVendorId: string): Promise<{ id: string; colors: unknown } | null> {
+  async resolveVendor(
+    yijiVendorId: string,
+  ): Promise<{ id: string; name: string | null; colors: unknown } | null> {
     const rows = (await this.client.request(
       readItems('vendors', {
         filter: { yiji_vendor_id: { _eq: yijiVendorId }, status: { _eq: 'active' } },
-        fields: ['id', 'colors'],
+        // `name` rides to the widget: the "Powered by" line names the VENDOR
+        // the customer is talking to, not the CRM behind it.
+        fields: ['id', 'name', 'colors'],
         limit: 1,
       }),
-    )) as Array<{ id: string; colors: unknown }>;
+    )) as Array<{ id: string; name: string | null; colors: unknown }>;
     return rows[0] ?? null;
   }
 

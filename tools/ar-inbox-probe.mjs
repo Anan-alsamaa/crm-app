@@ -12,7 +12,7 @@ import { chromium } from '@playwright/test';
 
 const PORTAL = process.env.PORTAL ?? 'http://localhost:8090';
 const EMAIL = process.env.AGENT_EMAIL ?? 'e2e.agent@example.com';
-const PASSWORD = process.env.AGENT_PASSWORD ?? 'Agent12345!';
+const PASSWORD = process.env.AGENT_PASSWORD ?? '123456';
 const AR = /[\u0600-\u06FF]/u;
 
 /** Share of the LETTERS that are Arabic — digits and names must not sway it. */

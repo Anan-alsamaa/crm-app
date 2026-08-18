@@ -34,7 +34,7 @@ Config lives in `ecosystem.config.cjs`; secrets in `.env.prod` (gitignored).
 ## Credentials & data
 
 - Admin (Directus + admin portal): `e.habibi@anan.sa` / `123456` — **change for real prod.**
-- Agent (agent portal): `e2e.agent@example.com` / `Agent12345!`.
+- Agent (agent portal): `e2e.agent@example.com` / `123456` — the ONE canonical value; every tool and seed must agree with this line.
   Run `pnpm fix:agent-login` if it ever stops working.
 - Demo vendor `demo-vendor` + seeded conversations exist for testing.
 

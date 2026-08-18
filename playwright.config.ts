@@ -9,7 +9,19 @@ export default defineConfig({
   testDir: '.',
   testMatch: ['apps/**/tests/e2e/**/*.spec.ts'],
   globalSetup: './tests/e2e-setup/global-setup.ts',
-  fullyParallel: true,
+  /**
+   * ONE worker, sequential specs — deliberately not parallel.
+   *
+   * Every spec drives the SAME seeded shared inbox: "mark the first
+   * conversation solved", "type a note into the first conversation", "the
+   * widget's message appears first in the list". Run in parallel they mutate
+   * each other's fixtures mid-assertion — a note lands in a conversation
+   * another worker just solved out of the default filter — and the failures
+   * look like product bugs. Serial costs ~1 minute; chasing phantom failures
+   * cost afternoons.
+   */
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   // Per-test cap (default is 30s but make it explicit) and a hard ceiling on

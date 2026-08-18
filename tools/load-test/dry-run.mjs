@@ -41,7 +41,7 @@ async function api(method, path, token, body) {
 
 async function main() {
   const owner = await login('e.habibi@anan.sa', '123456');
-  const agentToken = await login('e2e.agent@example.com', 'Agent12345!');
+  const agentToken = await login(process.env.AGENT_EMAIL ?? 'e2e.agent@example.com', process.env.AGENT_PASSWORD ?? '123456');
   const agentId = (await api('GET', '/users/me?fields=id', agentToken)).data.id;
   const vendorId = (
     await api('GET', '/items/vendors?filter[yiji_vendor_id][_eq]=demo-vendor&fields=id&limit=1', owner)

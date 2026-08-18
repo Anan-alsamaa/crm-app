@@ -18,7 +18,7 @@ const AGENT = {
   name: 'agent',
   url: process.env.AGENT_URL ?? 'http://localhost:8090',
   email: process.env.AGENT_EMAIL ?? 'e2e.agent@example.com',
-  pass: process.env.AGENT_PASSWORD ?? 'Agent12345!',
+  pass: process.env.AGENT_PASSWORD ?? '123456',
   routes: [
     '/', '/tickets', '/new-ticket', '/contacts',
     '/performance', '/compensation', '/compensation-requests', '/preferences',

@@ -372,12 +372,22 @@ export function CouponRequestDialog({
         </div>
         <FormField
           label={t('coupons.itemField', { defaultValue: 'Item (optional)' })}
-          hint={t('coupons.itemHint', {
-            defaultValue:
-              'The order item this compensates — e.g. the one that was missing or wrong.',
-          })}
+          hint={
+            orderItems && orderItems.length > 0
+              ? t('coupons.itemHint', {
+                  defaultValue:
+                    'The order item this compensates — e.g. the one that was missing or wrong.',
+                })
+              : t('coupons.itemHintManual', {
+                  defaultValue:
+                    'No order attached, so type the item — e.g. the one that was missing or wrong.',
+                })
+          }
         >
           {orderItems && orderItems.length > 0 ? (
+            // From the inbox the order is known, so the item is a CHOICE from
+            // its lines — a picked name always matches what was actually
+            // ordered.
             <SelectMenu
               fullWidth
               value={draft.item_name ?? ''}
@@ -393,11 +403,16 @@ export function CouponRequestDialog({
               aria-label={t('coupons.itemField', { defaultValue: 'Item (optional)' })}
             />
           ) : (
-            <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">
-              {t('coupons.itemNoOrder', {
-                defaultValue: 'No order items to pick from — attach an order to the ticket first.',
+            // A manually raised ticket has no order to choose from — the agent
+            // heard the item down a phone line, so they type it.
+            <Input
+              value={draft.item_name ?? ''}
+              onChange={(e) => set('item_name', e.target.value || null)}
+              placeholder={t('coupons.itemPlaceholder', {
+                defaultValue: 'e.g. Vegetable Pasta',
               })}
-            </p>
+              aria-label={t('coupons.itemField', { defaultValue: 'Item (optional)' })}
+            />
           )}
         </FormField>
         {(brandName || branchName) && (

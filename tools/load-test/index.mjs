@@ -26,7 +26,7 @@ const CUSTOMERS = Number(process.env.CUSTOMERS ?? 100);
 const AGENTS = Number(process.env.AGENTS ?? 3);
 const MSGS = Number(process.env.MSGS ?? 3);
 const AGENT_EMAIL = process.env.AGENT_EMAIL ?? 'e2e.agent@example.com';
-const AGENT_PASSWORD = process.env.AGENT_PASSWORD ?? 'Agent12345!';
+const AGENT_PASSWORD = process.env.AGENT_PASSWORD ?? '123456';
 const VENDOR = process.env.VENDOR_ID ?? 'demo-vendor';
 
 if (!SECRET) {

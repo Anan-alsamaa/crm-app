@@ -67,7 +67,9 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     welcomeNamed: 'Welcome {name}, how can we help you?',
     welcomeNew: 'Hey there 👋 How can we help you?',
     greetingNamed: 'Welcome back, {name} 👋',
-    poweredBy: 'Powered by Sara CRM',
+    // {vendor} is the VENDOR the customer is talking to (e.g. "Yiji"), sent by
+    // the gateway — never the CRM's own name.
+    poweredBy: 'Powered by {vendor}',
     csatTitle: 'How was your experience?',
     csatSub: 'Your feedback helps us improve.',
     csatCommentPlaceholder: 'Anything else you want to share? (optional)',
@@ -104,7 +106,7 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     welcomeNamed: 'مرحبًا {name}، كيف يمكننا مساعدتك؟',
     welcomeNew: 'مرحبًا 👋 كيف يمكننا مساعدتك؟',
     greetingNamed: 'مرحبًا بعودتك، {name} 👋',
-    poweredBy: 'مدعوم بواسطة سارة',
+    poweredBy: 'مدعوم بواسطة {vendor}',
     csatTitle: 'كيف كانت تجربتك؟',
     csatSub: 'ملاحظاتك تساعدنا على التحسين.',
     csatCommentPlaceholder: 'هل ترغب بإضافة شيء؟ (اختياري)',
