@@ -30,7 +30,11 @@ export function TableSurface({
         // used to be CLIPPED, so the right-hand columns were unreachable rather
         // than merely cramped. Wide registers (ticket ops, agent reports) now
         // scroll horizontally inside the card instead of losing data.
-        'overflow-x-auto rounded-2xl bg-card shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
+        // No card around it. A table is already a rectangle of rows; wrapping
+        // that in a second rounded, shadowed rectangle is the box inside a box
+        // the whole system is trying to lose. It sits ON the page, and depth
+        // comes from the header band and the row rhythm instead.
+        'overflow-x-auto rounded-xl bg-card',
         className,
       )}
       {...rest}
@@ -71,9 +75,14 @@ export function Th({
   return (
     <th
       className={cn(
-        // Ink header band: the table's own masthead.
-        'sticky top-0 z-10 h-12 whitespace-nowrap bg-ink px-5 text-start align-middle',
-        'text-2xs font-semibold uppercase tracking-[0.12em] text-ink-foreground/75',
+        // A label row, not a slab. Distinct through weight, spacing and a
+        // faint tint — a solid dark band reads as chrome bolted on top of the
+        // data rather than as the data's own heading.
+        'sticky top-0 z-10 h-11 whitespace-nowrap bg-secondary/70 px-5 text-start align-middle',
+        'text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground',
+        'backdrop-blur-sm',
+        // One hairline under the whole band, rather than a border per cell.
+        'shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]',
         className,
       )}
       {...rest}
@@ -94,10 +103,13 @@ export function Tr({
         // Crisp faint hairline dividers + an accent-tinted hover wash. Rows
         // marked aria-selected="true" hold a deeper jade wash so a checked
         // selection stays visible without any per-page styling.
-        'border-b border-foreground/[0.04] last:border-b-0',
+        // No divider. Height, alignment and hover separate the rows; a line
+        // under every one of them is what makes a list look like a spreadsheet.
+        // Zebra striping is deliberately absent too — it fights the hover.
+        'border-0',
         // The hover wash also lifts the row's ink, so a scanned row reads as
         // active rather than merely tinted.
-        'group/row transition-colors duration-fast ease-out hover:bg-primary/[0.06] hover:text-foreground',
+        'group/row transition-colors duration-fast ease-out hover:bg-primary/[0.055] hover:text-foreground',
         '[&[aria-selected=true]]:bg-primary/10',
         // A jade rail on the selected row — the boards' selection idiom, and
         // logical so it lands on the start edge in RTL too.

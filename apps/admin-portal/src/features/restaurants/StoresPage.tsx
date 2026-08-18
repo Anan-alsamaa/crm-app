@@ -508,7 +508,7 @@ export function StoresPage() {
           <div className="mx-auto max-w-6xl overflow-x-auto rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             <table className="w-full min-w-[54rem] border-collapse text-sm">
               <thead>
-                <tr className="tracking-[0.12em] bg-ink text-2xs uppercase tracking-[0.12em] text-ink-foreground/75">
+                <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
                   <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
                     {t('stores.colRestaurantId', { defaultValue: 'Restaurant ID' })}
                   </th>
