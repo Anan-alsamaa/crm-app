@@ -170,6 +170,20 @@ export const collections: CollectionSpec[] = [
        * Indexed because agent performance filters on it by date range.
        */
       { field: 'solved_at', type: 'dateTime', index: true },
+      /**
+       * When this chat was put away, or null while it is still in the inbox.
+       *
+       * A flag rather than a move to a cold table. At the volumes this system
+       * will see, the conversations themselves are small — the cost of an old
+       * chat is that it sits in the working set the inbox scans, not the bytes
+       * it occupies — so excluding it from that scan is the whole win, and it
+       * is reversible by writing null. Moving rows between tables buys nothing
+       * here and risks losing them; that trade only changes past tens of
+       * millions of rows.
+       *
+       * Nothing sets this automatically. See scripts/archive-conversations.mjs.
+       */
+      { field: 'archived_at', type: 'dateTime', index: true },
       { field: 'unread_count_agent', type: 'integer', defaultValue: 0 },
       /**
        * The customer's newest order AT THE TIME THIS CHAT WAS WORKED, stamped

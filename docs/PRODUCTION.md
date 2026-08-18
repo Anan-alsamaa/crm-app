@@ -13,6 +13,7 @@ call, jump to [Operational runbook](#operational-runbook).
 - [CORS & security headers](#cors--security-headers)
 - [Backups & disaster recovery](#backups--disaster-recovery)
 - [Audit-trail retention](#audit-trail-retention)
+- [Archiving finished conversations](#archiving-finished-conversations)
 - [Scaling](#scaling)
 - [Deploy workflow](#deploy-workflow)
 - [Security checklist](#security-checklist)
@@ -417,6 +418,40 @@ protected collections is `KEEP_FOREVER` in the script.
 Deletes run in batches so the lock stays short, and the script vacuums
 afterwards: without a vacuum the space is not returned and the prune looks like
 it did nothing.
+
+## Archiving finished conversations
+
+Old chats are not a storage problem — a message averages 133 bytes — they are a
+working-set problem: every inbox query scans them. Archiving sets `archived_at`
+on a conversation, which removes it from `idx_conversations_active`, the partial
+index the inbox reads. It is a flag, not a move to a cold table: at this size
+moving rows buys nothing and risks losing them, and that trade only changes past
+tens of millions of rows.
+
+```bash
+# Report what would be put away, changing nothing.
+pnpm --filter @yiji/directus-bootstrap archive:conversations
+
+# Archive, with an explicit window.
+pnpm --filter @yiji/directus-bootstrap archive:conversations -- --months=12 --write
+
+# Undo — archiving is reversible, nothing is deleted.
+pnpm --filter @yiji/directus-bootstrap archive:conversations -- --restore --write
+```
+
+Only **solved** chats are eligible, and only ones nobody has touched since: an
+open conversation is somebody's unfinished work however old it looks, and a chat
+reopened last week is live again whatever its age.
+
+Archived chats leave the inbox entirely, including under "All conversations" —
+"all" means everything still being worked, not everything that ever happened.
+There is deliberately no switch to show them, because one would make the working
+set unbounded again, which is the only thing this achieves. They remain readable
+by id, so links into old chats keep working, and reports read the table directly
+and are unaffected.
+
+Turn this on when the inbox is carrying more history than anyone opens. Below
+roughly a hundred thousand conversations it will not be measurable.
 
 ## Scaling
 

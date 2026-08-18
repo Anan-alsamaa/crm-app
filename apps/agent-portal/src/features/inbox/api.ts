@@ -94,6 +94,15 @@ export interface InboxFilters {
 
 function buildFilter(f: InboxFilters): Record<string, unknown> | undefined {
   const and: Array<Record<string, unknown>> = [];
+  /**
+   * Archived chats are out of the inbox, including under "all conversations" —
+   * "all" means everything still being worked, not everything that ever
+   * happened. Unconditional rather than a filter option, because a switch that
+   * reveals them would make the working set unbounded again, which is the one
+   * thing archiving exists to prevent. They are still reachable by id, so a
+   * link into an old chat keeps working, and archiving is reversible.
+   */
+  and.push({ archived_at: { _null: true } });
   if (f.status && f.status !== 'all') and.push({ status: { _eq: f.status } });
   if (f.priority && f.priority !== 'all') and.push({ priority: { _eq: f.priority } });
   if (f.assignment === 'mine' && f.currentUserId) {

@@ -15,7 +15,8 @@
     "seed:restaurants": "tsx src/seed-restaurants.ts",
     "backfill:store-snapshots": "tsx src/backfill-store-snapshots.ts",
     "apply:constraints:docker": "tsx src/constraints-via-docker.ts",
-    "prune:audit": "node scripts/prune-audit.mjs"
+    "prune:audit": "node scripts/prune-audit.mjs",
+    "archive:conversations": "node scripts/archive-conversations.mjs"
   },
   "dependencies": {
     "@directus/sdk": "^17.0.0",

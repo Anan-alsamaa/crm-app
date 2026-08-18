@@ -20,6 +20,13 @@ export const constraintStatements: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at
      ON conversations (last_message_at);`,
 
+  // The inbox reads live chats newest-first and never wants the put-away ones.
+  // A partial index holds only those rows, so the archive costs the inbox
+  // nothing as it grows — which is the entire point of archiving here. Ordered
+  // DESC to match how the list is read.
+  `CREATE INDEX IF NOT EXISTS idx_conversations_active
+     ON conversations (last_message_at DESC) WHERE archived_at IS NULL;`,
+
   // Directus indexes the field itself as well, so the inbox's busiest column
   // carried TWO identical btrees — every arriving message paid to write both.
   // Ours is the one this file guarantees, so the generated twin is the one that
