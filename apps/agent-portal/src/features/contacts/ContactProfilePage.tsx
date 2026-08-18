@@ -271,7 +271,11 @@ export function ContactProfilePage() {
             ) : (
               <>
                 <div className="flex items-baseline gap-2">
-                  <h2 className="text-xl font-semibold tracking-tight text-foreground truncate">
+                  <h2
+                    // A name may be Arabic; the fallbacks are always Latin.
+                    dir="auto"
+                    className="text-xl font-semibold tracking-tight text-foreground truncate"
+                  >
                     {c.name ?? c.phone ?? c.email}
                   </h2>
                   {metaTier && <Pill tone="primary">{metaTier}</Pill>}

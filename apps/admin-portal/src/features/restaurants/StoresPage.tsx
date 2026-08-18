@@ -21,6 +21,7 @@ import {
   Toolbar,
   Pagination,
   ToolbarSpacer,
+  Ltr,
 } from '@yiji/ui';
 import {
   useStores,
@@ -545,9 +546,9 @@ export function StoresPage() {
                   >
                     <td className="whitespace-nowrap px-4 py-3">
                       {s.yiji_restaurant_id ? (
-                        <span className="font-mono text-xs tabular-nums text-foreground">
+                        <Ltr className="font-mono text-xs tabular-nums text-foreground">
                           {s.yiji_restaurant_id}
-                        </span>
+                        </Ltr>
                       ) : (
                         // Blank, not "0" or "—" in the same weight as a real id:
                         // an unmapped store must not read as a mapped one at a glance.

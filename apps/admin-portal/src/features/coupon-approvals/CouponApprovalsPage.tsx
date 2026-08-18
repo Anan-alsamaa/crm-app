@@ -115,7 +115,7 @@ function Row({
           <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('couponApprovals.customer', { defaultValue: 'Customer' })}
           </dt>
-          <dd className="min-w-0 truncate font-medium text-foreground">
+          <dd dir="auto" className="min-w-0 truncate font-medium text-foreground">
             {row.contact?.name ?? row.contact?.phone ?? '—'}
           </dd>
         </div>

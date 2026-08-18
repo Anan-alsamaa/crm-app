@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Avatar, Button, cn, FormField, Input, Spinner } from '@yiji/ui';
+import { Avatar, Button, cn, FormField, Input, Spinner, Ltr } from '@yiji/ui';
 import { useContactSearch, type ContactRow } from '../contacts/api.js';
 
 /**
@@ -47,13 +47,13 @@ export function ContactPicker({
         <div className="flex items-center gap-2.5 rounded-xl bg-secondary px-3 py-2 ring-1 ring-foreground/[0.05]">
           <Avatar name={value.name} email={value.email} phone={value.phone} size="sm" />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium text-foreground">
+            <div dir="auto" className="truncate text-sm font-medium text-foreground">
               {value.name ?? value.phone ?? value.email ?? value.id}
             </div>
             {(value.phone ?? value.email) && (
-              <div className="truncate text-xs text-muted-foreground">
+              <Ltr as="div" className="truncate text-xs text-muted-foreground">
                 {value.phone ?? value.email}
-              </div>
+              </Ltr>
             )}
           </div>
           <Button
@@ -103,13 +103,13 @@ export function ContactPicker({
                       >
                         <Avatar name={c.name} email={c.email} phone={c.phone} size="sm" />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium text-foreground">
+                          <div dir="auto" className="truncate text-sm font-medium text-foreground">
                             {c.name ?? c.phone ?? c.email ?? c.id}
                           </div>
                           {(c.phone ?? c.email) && (
-                            <div className="truncate text-xs text-muted-foreground">
+                            <Ltr as="div" className="truncate text-xs text-muted-foreground">
                               {c.phone ?? c.email}
-                            </div>
+                            </Ltr>
                           )}
                         </div>
                         {!c.vendor && (
