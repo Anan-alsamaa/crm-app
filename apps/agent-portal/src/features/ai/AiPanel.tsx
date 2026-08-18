@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
@@ -71,6 +71,25 @@ export function AiPanel({
   const [chosenLocale, setChosenLocale] = useState<'en' | 'ar' | null>(null);
   const replyLocale = chosenLocale ?? pageLocale;
   const setReplyLocale = setChosenLocale;
+
+  /**
+   * The panel speaks the language it is about to write in.
+   *
+   * `t` follows the portal, which left the toggle half-obeyed: an agent picked
+   * AR, the draft came back in Arabic, and the buttons that produced it stayed
+   * in English. The toggle is the agent saying "I am working in Arabic now", so
+   * this whole panel answers in that language — not just its output.
+   *
+   * Scoped to the panel deliberately. Nothing outside it changes, because the
+   * choice is about this reply, not about the application.
+   */
+  const tl = useMemo(
+    // Guarded: `getFixedT` is part of a full i18next instance, and a caller
+    // that supplies a lighter one should get English labels, not a crash in
+    // the middle of a conversation.
+    () => (typeof i18n.getFixedT === 'function' ? i18n.getFixedT(replyLocale) : t),
+    [i18n, replyLocale, t],
+  );
   const [active, setActive] = useState<ResultKey | null>(null);
   const [query, setQuery] = useState('');
 
@@ -113,43 +132,43 @@ export function AiPanel({
   }> = [
     {
       key: 'summary',
-      label: t('ai.action.summarize', { defaultValue: 'Summarize' }),
+      label: tl('ai.action.summarize', { defaultValue: 'Summarize' }),
       busy: summarize.isPending,
       run: () => summarize.mutate(),
     },
     {
       key: 'reply',
-      label: t('ai.action.suggestReply', { defaultValue: 'Suggest reply' }),
+      label: tl('ai.action.suggestReply', { defaultValue: 'Suggest reply' }),
       busy: suggestReply.isPending,
       run: () => suggestReply.mutate(),
     },
     {
       key: 'sentiment',
-      label: t('ai.action.sentiment', { defaultValue: 'Sentiment' }),
+      label: tl('ai.action.sentiment', { defaultValue: 'Sentiment' }),
       busy: sentiment.isPending,
       run: () => sentiment.mutate(),
     },
     {
       key: 'intent',
-      label: t('ai.action.intent', { defaultValue: 'Intent' }),
+      label: tl('ai.action.intent', { defaultValue: 'Intent' }),
       busy: intent.isPending,
       run: () => intent.mutate(),
     },
     {
       key: 'entities',
-      label: t('ai.action.entities', { defaultValue: 'Entities' }),
+      label: tl('ai.action.entities', { defaultValue: 'Entities' }),
       busy: entities.isPending,
       run: () => entities.mutate(),
     },
     {
       key: 'lead',
-      label: t('ai.action.scoreLead', { defaultValue: 'Score lead' }),
+      label: tl('ai.action.scoreLead', { defaultValue: 'Score lead' }),
       busy: scoreLead.isPending,
       run: () => scoreLead.mutate(),
     },
     {
       key: 'search',
-      label: t('ai.action.search', { defaultValue: 'Search' }),
+      label: tl('ai.action.search', { defaultValue: 'Search' }),
       busy: search.isPending,
       run: () => setActive('search'),
     },
@@ -169,7 +188,7 @@ export function AiPanel({
     >
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          {t('ai.title', { defaultValue: 'AI assistance' })}
+          {tl('ai.title', { defaultValue: 'AI assistance' })}
         </h3>
         {/* Which language a suggested reply comes back in. Sits by the actions
             rather than in settings: the answer changes per customer, not per
@@ -177,7 +196,7 @@ export function AiPanel({
             into the right one. */}
         <div
           role="group"
-          aria-label={t('ai.replyLanguage', { defaultValue: 'Reply language' })}
+          aria-label={tl('ai.replyLanguage', { defaultValue: 'Reply language' })}
           className="flex overflow-hidden rounded-md ring-1 ring-border"
         >
           {(['en', 'ar'] as const).map((code) => (
@@ -216,19 +235,19 @@ export function AiPanel({
 
       {/* Results — one panel per action; whichever was last successful is shown */}
       {active === 'summary' && summarize.data && (
-        <ResultCard label={t('ai.action.summarize', { defaultValue: 'Summarize' })}>
+        <ResultCard label={tl('ai.action.summarize', { defaultValue: 'Summarize' })}>
           <p className="text-sm leading-relaxed text-foreground">{summarize.data.summary}</p>
         </ResultCard>
       )}
       {active === 'reply' && suggestReply.data && (
-        <ResultCard label={t('ai.action.suggestReply', { defaultValue: 'Suggest reply' })}>
+        <ResultCard label={tl('ai.action.suggestReply', { defaultValue: 'Suggest reply' })}>
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
             {suggestReply.data.reply}
           </p>
         </ResultCard>
       )}
       {active === 'sentiment' && sentiment.data && (
-        <ResultCard label={t('ai.action.sentiment', { defaultValue: 'Sentiment' })}>
+        <ResultCard label={tl('ai.action.sentiment', { defaultValue: 'Sentiment' })}>
           <div className="flex items-baseline gap-3">
             <Pill
               tone={
@@ -248,7 +267,7 @@ export function AiPanel({
         </ResultCard>
       )}
       {active === 'intent' && intent.data && (
-        <ResultCard label={t('ai.action.intent', { defaultValue: 'Intent' })}>
+        <ResultCard label={tl('ai.action.intent', { defaultValue: 'Intent' })}>
           <div className="flex items-baseline gap-3">
             <Pill tone="primary">{intent.data.intent}</Pill>
             <span className="text-xs text-muted-foreground tabular-nums">
@@ -258,10 +277,10 @@ export function AiPanel({
         </ResultCard>
       )}
       {active === 'entities' && entities.data && (
-        <ResultCard label={t('ai.action.entities', { defaultValue: 'Entities' })}>
+        <ResultCard label={tl('ai.action.entities', { defaultValue: 'Entities' })}>
           {entities.data.entities.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              {t('ai.noEntities', { defaultValue: 'No entities detected.' })}
+              {tl('ai.noEntities', { defaultValue: 'No entities detected.' })}
             </p>
           ) : (
             <ul className="space-y-1.5">
@@ -278,7 +297,7 @@ export function AiPanel({
         </ResultCard>
       )}
       {active === 'lead' && scoreLead.data && (
-        <ResultCard label={t('ai.action.scoreLead', { defaultValue: 'Score lead' })}>
+        <ResultCard label={tl('ai.action.scoreLead', { defaultValue: 'Score lead' })}>
           <div className="space-y-2">
             <div className="flex items-baseline gap-3">
               <span className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
@@ -302,7 +321,7 @@ export function AiPanel({
       )}
 
       {active === 'search' && (
-        <ResultCard label={t('ai.action.search', { defaultValue: 'Search' })}>
+        <ResultCard label={tl('ai.action.search', { defaultValue: 'Search' })}>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -314,18 +333,18 @@ export function AiPanel({
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              aria-label={t('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
-              placeholder={t('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
+              aria-label={tl('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
+              placeholder={tl('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
               className="block h-8 w-full rounded-md border border-border bg-background/60 px-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none text-start"
             />
             <Button type="submit" size="sm" loading={search.isPending} disabled={!query.trim()}>
-              {t('actions.search', { ns: 'common', defaultValue: 'Search' })}
+              {tl('actions.search', { ns: 'common', defaultValue: 'Search' })}
             </Button>
           </form>
           {search.data &&
             (search.data.results.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                {t('ai.search.empty', { defaultValue: 'No matching conversations.' })}
+                {tl('ai.search.empty', { defaultValue: 'No matching conversations.' })}
               </p>
             ) : (
               <ul className="space-y-1">
@@ -368,7 +387,7 @@ export function AiPanel({
         (m) => m.isPending,
       ) && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Spinner /> {t('ai.running', { defaultValue: 'Working…' })}
+          <Spinner /> {tl('ai.running', { defaultValue: 'Working…' })}
         </div>
       )}
     </div>
