@@ -1304,23 +1304,29 @@ export function ComplaintDashboard() {
                   key={label}
                   style={{ animationDelay: `${i * 60}ms` }}
                   className={cn(
-                    'flex items-center gap-2.5 rounded-2xl px-3.5 py-3 text-display shadow-sm',
-                    'transition-transform duration-base ease-out motion-safe:hover:-translate-y-0.5',
+                    'flex items-center gap-2.5 rounded-xl px-3.5 py-3',
+                    // Tinted surface, coloured numeral. Five saturated fills in
+                    // a row shouted over the KPI cards above them, which are
+                    // the thing the page is actually about.
+                    'bg-card ring-1 ring-inset ring-foreground/[0.05]',
+                    'transition-[background-color] duration-fast ease-out hover:bg-secondary/60',
                     'motion-safe:animate-rise-in',
-                    bg,
                   )}
                 >
                   <span
                     aria-hidden
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-card/45 text-display"
+                    className={cn(
+                      'grid h-8 w-8 shrink-0 place-items-center rounded-lg text-display opacity-90',
+                      bg,
+                    )}
                   >
                     <SparkleIcon size={14} />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-lg font-extrabold leading-none tabular-nums tracking-[-0.02em]">
+                    <span className="block text-lg font-extrabold leading-none tabular-nums tracking-[-0.02em] text-foreground">
                       {value}
                     </span>
-                    <span className="mt-0.5 block truncate text-2xs font-semibold uppercase tracking-[0.1em] opacity-85">
+                    <span className="mt-0.5 block truncate text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
                       {label}
                     </span>
                   </span>
@@ -1616,7 +1622,7 @@ export function ComplaintDashboard() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-foreground/[0.06]">
+                  <tbody className="divide-y-0">
                     {d.agents.map((a) => (
                       <tr
                         key={a.id || 'unassigned'}
@@ -1731,7 +1737,7 @@ export function ComplaintDashboard() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-foreground/[0.06]">
+                  <tbody className="divide-y-0">
                     {d.chatAgents.map((a) => (
                       <tr key={a.id}>
                         <td className="px-3 py-2.5 font-medium text-foreground">{a.name}</td>

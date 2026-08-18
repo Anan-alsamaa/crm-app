@@ -465,7 +465,7 @@ export function AgentPerformancePage() {
                   totals says nothing the tiles above have not. */}
               {!oneAgent && totals.length > 1 && (
                 <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
-                  <header className="flex items-baseline justify-between gap-3 border-b border-foreground/[0.07] px-5 py-4">
+                  <header className="flex items-baseline justify-between gap-3  px-5 py-4">
                     <h2 className="text-sm font-semibold tracking-tight text-foreground">
                       {t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
                     </h2>
@@ -508,7 +508,7 @@ export function AgentPerformancePage() {
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-foreground/[0.06]">
+                      <tbody className="divide-y-0">
                         {totals.map((r) => (
                           <tr
                             key={r.agentId ?? 'unassigned'}
@@ -585,7 +585,7 @@ export function AgentPerformancePage() {
               )}
 
               <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-                <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-foreground/[0.08] px-4 py-3">
+                <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1  px-4 py-3">
                   <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
                     {t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
                   </h2>

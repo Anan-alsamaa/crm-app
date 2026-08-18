@@ -411,7 +411,7 @@ export function StoresPage() {
       <div className="flex-1 overflow-auto px-5 py-4">
         {!stores.isLoading && !stores.isError && list.length > 0 && (
           <div className="mx-auto mb-5 max-w-6xl space-y-5">
-            <div className="border-b border-foreground/10 pb-5">
+            <div className=" pb-5">
               <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t('stores.heroSubtitle', {
                   defaultValue:

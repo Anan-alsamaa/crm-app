@@ -614,7 +614,7 @@ export function AgentPerformancePage() {
               {/* The numbers behind the charts. No row opens anything — this page
               reviews the team, it does not work the queue. */}
               <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
-                <header className="flex items-baseline justify-between gap-3 border-b border-foreground/[0.07] px-5 py-4">
+                <header className="flex items-baseline justify-between gap-3  px-5 py-4">
                   <div>
                     <h2 className="text-sm font-semibold tracking-tight text-foreground">
                       {t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
@@ -665,7 +665,7 @@ export function AgentPerformancePage() {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-foreground/[0.06]">
+                    <tbody className="divide-y-0">
                       {rows.map((r) => (
                         <tr
                           key={r.agentId ?? 'unassigned'}
@@ -751,7 +751,7 @@ export function AgentPerformancePage() {
                   opens the conversation in the agent portal, which is where a
                   supervisor goes to see what was actually said. */}
               <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
-                <header className="flex items-baseline justify-between gap-3 border-b border-foreground/[0.07] px-5 py-4">
+                <header className="flex items-baseline justify-between gap-3  px-5 py-4">
                   <h2 className="text-sm font-semibold tracking-tight text-foreground">
                     {t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
                   </h2>
@@ -786,7 +786,7 @@ export function AgentPerformancePage() {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-foreground/[0.06]">
+                    <tbody className="divide-y-0">
                       {breakdown.map(({ chat, first, solve }) => (
                         <tr
                           key={chat.conversationId}
