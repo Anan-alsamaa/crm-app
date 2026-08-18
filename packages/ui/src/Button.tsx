@@ -40,7 +40,7 @@ const variants: Record<Variant, string> = {
    */
   default:
     'bg-display text-background border border-transparent ' +
-    'shadow-[0_8px_24px_-12px_oklch(var(--primary)/0.5)] hover:bg-foreground ' +
+    'shadow-[0_8px_24px_-12px_oklch(var(--primary)/0.45)] hover:bg-primary-strong ' +
     'hover:shadow-[0_10px_28px_-12px_oklch(var(--primary)/0.6)]',
   // Solid brand fill for secondary brand moments — same jade glow as default.
   brand:

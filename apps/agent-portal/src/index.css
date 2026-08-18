@@ -59,62 +59,61 @@
    */
   --radius: 1.25rem;
 
-  /* Surfaces: tinted air, white content. */
-  --background: 0.985 0.008 195;
-  --canvas: 0.978 0.012 190;
-  --foreground: 0.27 0.008 285;
+  /* Surfaces: a cool near-white page, white content on top of it. */
+  --background: 0.98 0.003 250;
+  --canvas: 0.972 0.004 252;
+  --foreground: 0.25 0.02 260;
   --card: 1 0 0;
-  --card-foreground: 0.27 0.008 285;
+  --card-foreground: 0.25 0.02 260;
   --popover: 1 0 0;
-  --popover-foreground: 0.27 0.008 285;
+  --popover-foreground: 0.25 0.02 260;
 
-  /* Brand teal, deep enough to carry white text (4.6:1). */
-  --primary: 0.5 0.115 192;
-  --primary-strong: 0.45 0.115 192;
+  /* Brand blue. Deep enough to carry white text at 4.5:1, saturated enough to
+     read as a decision rather than a default. */
+  --primary: 0.55 0.2 258;
+  --primary-strong: 0.49 0.2 259;
   --primary-foreground: 1 0 0;
-  --primary-subtle: 0.5 0.115 192 / 0.12;
-  --brand: 0.5 0.115 192;
+  --primary-subtle: 0.55 0.2 258 / 0.1;
+  --brand: 0.55 0.2 258;
 
-  --bubble: 0.965 0.02 195;
-  /* Already-dark canvas: ink lifts slightly instead of vanishing. */
-  --ink: 0.24 0.02 235;
-  --ink-foreground: 0.97 0.005 195;
-  --ink-muted: 0.68 0.02 210;
-  /* Ink: the dark counterweight in a light app — masthead, table headers. */
-  --ink: 0.21 0.018 235;
-  --ink-foreground: 0.98 0.005 195;
-  --ink-muted: 0.72 0.02 210;
+  --bubble: 0.965 0.012 255;
 
-  --secondary: 0.955 0.014 195;
-  --secondary-foreground: 0.27 0.008 285;
-  --muted: 0.955 0.014 195;
-  --muted-foreground: 0.5 0.014 260;
+  /* Ink: the dark counterweight in a light app — masthead, table headers, the
+     nav rail. Navy rather than black, so it belongs to the blue. */
+  --ink: 0.23 0.03 266;
+  --ink-foreground: 0.98 0.004 250;
+  --ink-muted: 0.7 0.02 258;
 
-  --accent: 0.5 0.115 192;
+  --secondary: 0.955 0.006 252;
+  --secondary-foreground: 0.25 0.02 260;
+  --muted: 0.955 0.006 252;
+  --muted-foreground: 0.55 0.02 262;
+
+  --accent: 0.55 0.2 258;
   --accent-foreground: 1 0 0;
 
-  --destructive: 0.58 0.19 22;
+  /* Semantics carry meaning, never decoration. Each is legible on the page and
+     on its own tint. */
+  --destructive: 0.58 0.21 27;
   --destructive-foreground: 1 0 0;
-  /* The reference's green — bright, used as a DATA fill; its ink is dark. */
-  --success: 0.78 0.17 155;
-  --success-foreground: 0.24 0.02 160;
-  /* The reference's yellow — same rule, dark ink on top. */
-  --warning: 0.88 0.13 90;
-  --warning-foreground: 0.3 0.03 80;
+  --success: 0.68 0.16 157;
+  --success-foreground: 0.24 0.04 160;
+  --warning: 0.75 0.16 65;
+  --warning-foreground: 0.3 0.05 70;
 
-  /* Hairlines: barely there. The reference separates by SHADOW and space, not
-     by drawing boxes around everything. */
-  --border: 0.27 0.008 285 / 0.09;
-  --border-strong: 0.27 0.008 285 / 0.16;
-  --input: 0.965 0.014 195;
-  --ring: 0.5 0.115 192;
-  --shadow-color: 0.55 0.05 210;
+  /* Hairlines: barely there. Hierarchy comes from space, weight and surface —
+     a border is the last resort, not the first. */
+  --border: 0.25 0.02 260 / 0.08;
+  --border-strong: 0.25 0.02 260 / 0.14;
+  --input: 0.968 0.005 252;
+  --ring: 0.55 0.2 258;
+  --shadow-color: 0.4 0.06 260;
 
-  /* Rail (mobile drawer only in the top-nav layout) — the ink, not teal. */
-  --rail: 0.27 0.008 285;
-  --rail-deep: 0.22 0.008 285;
-  --rail-foreground: 0.95 0.006 250;
-  --rail-active: 0.5 0.115 192;
+  /* Rail (mobile drawer in the top-nav layout) — the same ink as the masthead. */
+  --rail: 0.23 0.03 266;
+  --rail-deep: 0.19 0.03 266;
+  --rail-foreground: 0.96 0.005 250;
+  --rail-active: 0.55 0.2 258;
   --rail-active-foreground: 1 0 0;
   --rail-border: 1 0 0 / 0.1;
 
@@ -122,7 +121,7 @@
   --secondary-brand-foreground: 1 0 0;
 
   /* Display ink — the reference's #292A2F, used for hero type and solid CTAs. */
-  --display: 0.27 0.008 285;
+  --display: 0.55 0.2 258;
   --violet: 0.55 0.17 285;
   /* The reference's cyan. */
   --sky: 0.78 0.12 205;
@@ -239,19 +238,11 @@
 
 body {
   margin: 0;
-  /*
-   * Soft mesh canvas — same vibe as the host page hero. Mint-teal halo top-left,
-   * coral halo bottom-right, washed near-white in between. Stays subtle enough
-   * that dense content surfaces (list rows, tables) read cleanly on top.
-   */
-  /* Ambient brand wash — the Yiji teal only, no off-brand second hue. */
-  /* The reference's canvas: a soft mint wash that lifts toward the top-left
-     and fades to near-white, so white cards float rather than sit. Fixed
-     attachment keeps it still while content scrolls over it. */
+  /* One quiet lift at the top-left so white surfaces read as floating rather
+     than flush. Fixed, so it stays still while content scrolls over it — and
+     restrained, because a page background is not where personality belongs. */
   background:
-    radial-gradient(ellipse 90% 55% at 8% 0%, oklch(0.955 0.042 190) 0%, transparent 62%),
-    radial-gradient(ellipse 75% 45% at 96% 4%, oklch(0.968 0.03 155) 0%, transparent 58%),
-    radial-gradient(ellipse 65% 45% at 65% 100%, oklch(0.975 0.025 90) 0%, transparent 62%),
+    radial-gradient(ellipse 85% 50% at 6% 0%, oklch(var(--primary) / 0.07) 0%, transparent 60%),
     oklch(var(--background));
   background-attachment: fixed;
   color: oklch(var(--foreground));
