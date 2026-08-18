@@ -305,8 +305,11 @@ function Shell({ children }: { children: React.ReactNode }) {
           icon: ClockIcon,
         },
         {
-          to: '/coupon-report',
-          label: t('nav.couponReport', { defaultValue: 'Compensation' }),
+          // The full record of every coupon — a report, so it sits with the
+          // reports. The approval statistics live beside Coupon approvals,
+          // where the person making those decisions is already working.
+          to: '/compensation',
+          label: t('nav.compensationAll', { defaultValue: 'Compensation' }),
           icon: ClockIcon,
         },
         {
@@ -353,8 +356,8 @@ function Shell({ children }: { children: React.ReactNode }) {
           icon: ShieldIcon,
         },
         {
-          to: '/compensation',
-          label: t('nav.compensationAll', { defaultValue: 'Compensation' }),
+          to: '/coupon-report',
+          label: t('nav.couponReport', { defaultValue: 'Admin statistics' }),
           icon: ShieldIcon,
         },
       ],

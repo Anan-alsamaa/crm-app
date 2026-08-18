@@ -86,7 +86,18 @@ export function fillPlaceholders(
 }
 
 /**
- * Replies in a useful order: the customer's language first, then by label.
+ * Replies in a useful order: the agent's own language first, then the
+ * customer's, then by label.
+ *
+ * The portal language leads because switching it is a deliberate act — an agent
+ * working in Arabic wants the Arabic buttons within reach, and ranking by the
+ * thread instead left them below the fold behind "all 8" on every English
+ * thread. It is the same precedence the reply drafter uses: an explicit choice
+ * by the agent beats what the thread happens to be written in.
+ *
+ * Ordering only. Nothing is hidden — the other language is one click away, so
+ * an agent answering an English customer from an Arabic portal still has the
+ * English wording, just not first.
  *
  * `customerText` is what the CUSTOMER has written — see the note above on why
  * it is not the whole transcript.
@@ -95,13 +106,20 @@ export function rankReplies(
   replies: readonly QuickReply[],
   customerText: string,
   query: string,
+  uiLocale?: string,
 ): QuickReply[] {
   const q = query.trim().toLowerCase();
   const filtered = q
     ? replies.filter((r) => `${r.label} ${r.text}`.toLowerCase().includes(q))
     : [...replies];
   const arabicConversation = AR.test(customerText);
+  const arabicAgent = uiLocale ? uiLocale.toLowerCase().startsWith('ar') : null;
   return filtered.sort((a, b) => {
+    if (arabicAgent !== null) {
+      const ap = (a.lang === 'ar') === arabicAgent;
+      const bp = (b.lang === 'ar') === arabicAgent;
+      if (ap !== bp) return ap ? -1 : 1;
+    }
     const am = (a.lang === 'ar') === arabicConversation;
     const bm = (b.lang === 'ar') === arabicConversation;
     if (am !== bm) return am ? -1 : 1;
@@ -130,13 +148,13 @@ export function QuickReplies({
   onPick: (text: string) => void;
   className?: string;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const replies = useQuickReplies();
   const [showAll, setShowAll] = useState(false);
 
   const ranked = useMemo(
-    () => rankReplies(replies.data ?? [], customerText, query),
-    [replies.data, customerText, query],
+    () => rankReplies(replies.data ?? [], customerText, query, i18n.language),
+    [replies.data, customerText, query, i18n.language],
   );
 
   if (ranked.length === 0) return null;
