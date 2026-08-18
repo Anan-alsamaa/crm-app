@@ -7,6 +7,8 @@ import {
   CouponRequestDraftChecked,
   defaultCouponDates,
   generateCouponCode,
+  parseDeliveryTypes,
+  toggleDeliveryType,
   type CouponRequestDraft,
 } from '@yiji/shared-types';
 import { optionsFor, useOptionLists } from '../tickets/option-lists.js';
@@ -39,6 +41,14 @@ export interface CouponRequestDialogProps {
   /** Resolved from the order, not asked for. */
   brandId: string | null;
   restaurantId: string | null;
+  /** Display names for the resolved brand/branch, shown read-only. */
+  brandName?: string | null;
+  branchName?: string | null;
+  /**
+   * The order's line-item names, offered for the optional Item field so a
+   * coupon can name the specific item it compensates (e.g. the missing one).
+   */
+  orderItems?: string[];
   requestedBy: string | null;
   onCreated?: () => void;
   /**
@@ -61,6 +71,9 @@ export function CouponRequestDialog({
   description,
   brandId,
   restaurantId,
+  brandName,
+  branchName,
+  orderItems,
   requestedBy,
   onCreated,
   onCollect,
@@ -89,7 +102,15 @@ export function CouponRequestDialog({
     compensation_reason: description ?? '',
     brand_id: brandId,
     restaurant_id: restaurantId,
+    item_name: null,
   }));
+  /**
+   * Whether the agent has typed into the reason themselves. Until they do, the
+   * field keeps FOLLOWING the ticket's description — the common flow is to open
+   * this dialog first and write the complaint after, and a reason captured on
+   * the opening edge alone stays empty forever in that order of events.
+   */
+  const [reasonTouched, setReasonTouched] = useState(false);
 
   const set = <K extends keyof CouponRequestDraft>(key: K, value: CouponRequestDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
@@ -104,19 +125,36 @@ export function CouponRequestDialog({
    * asked to type the complaint out a second time.
    *
    * Only on the opening edge, so nothing the agent has typed in here is
-   * overwritten while they are working.
+   * overwritten while they are working. The brand/branch are the exception:
+   * they are not editable here, so they always take the form's CURRENT choice —
+   * an agent who changed the branch after a first look must not attach the
+   * coupon to the branch they moved away from.
    */
   useEffect(() => {
     if (!open) return;
     setDraft((d) => ({
       ...d,
       title: d.title || (customerPhone ?? ''),
-      compensation_reason: d.compensation_reason || (description ?? ''),
-      brand_id: d.brand_id ?? brandId,
-      restaurant_id: d.restaurant_id ?? restaurantId,
+      compensation_reason: reasonTouched ? d.compensation_reason : (description ?? ''),
+      brand_id: brandId,
+      restaurant_id: restaurantId,
     }));
     // Deliberately the opening edge only — see above.
   }, [open]);
+
+  /**
+   * While the dialog is OPEN and the reason untouched, keep it in step with the
+   * description being typed on the ticket form behind it. The moment the agent
+   * edits the reason here, their words win and the following stops.
+   */
+  useEffect(() => {
+    if (!open || reasonTouched) return;
+    setDraft((d) =>
+      d.compensation_reason === (description ?? '')
+        ? d
+        : { ...d, compensation_reason: description ?? '' },
+    );
+  }, [open, reasonTouched, description]);
 
   const parsed = CouponRequestDraftChecked.safeParse(draft);
   /** The first thing wrong, named — not "check the highlighted fields". */
@@ -158,6 +196,7 @@ export function CouponRequestDialog({
         usage_limit: d.usage_limit,
         brand_id: d.brand_id ?? null,
         restaurant_id: d.restaurant_id ?? null,
+        item_name: d.item_name ?? null,
       })
       .then(() => {
         toast.success(
@@ -268,12 +307,48 @@ export function CouponRequestDialog({
               aria-label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}
             />
           </FormField>
-          <FormField label={t('lists.deliveryType', { defaultValue: 'Delivery type' })}>
-            {sel(
-              'delivery_type',
-              'delivery_type',
-              t('lists.deliveryType', { defaultValue: 'Delivery type' }),
-            )}
+          <FormField
+            label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
+            hint={t('coupons.deliveryTypesHint', {
+              defaultValue: 'Pick every channel this coupon works on. "All" covers all of them.',
+            })}
+          >
+            {/* Multi-select as toggle pills: a coupon can be valid on several
+                channels at once, and "All" is shorthand for every one of them —
+                so it never combines with a specific pick. */}
+            <div
+              role="group"
+              aria-label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
+              className="flex flex-wrap gap-1.5"
+            >
+              {optionsFor(lists.data, 'delivery_type').map((v) => {
+                const selected = parseDeliveryTypes(draft.delivery_type).includes(v);
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() =>
+                      set(
+                        'delivery_type',
+                        toggleDeliveryType(
+                          draft.delivery_type,
+                          v,
+                          optionsFor(lists.data, 'delivery_type'),
+                        ),
+                      )
+                    }
+                    className={
+                      selected
+                        ? 'rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors duration-fast ease-out'
+                        : 'rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground'
+                    }
+                  >
+                    {v}
+                  </button>
+                );
+              })}
+            </div>
           </FormField>
           <FormField
             label={t('lists.couponType', { defaultValue: 'Coupon type' })}
@@ -295,6 +370,46 @@ export function CouponRequestDialog({
             )}
           </FormField>
         </div>
+        <FormField
+          label={t('coupons.itemField', { defaultValue: 'Item (optional)' })}
+          hint={t('coupons.itemHint', {
+            defaultValue:
+              'The order item this compensates — e.g. the one that was missing or wrong.',
+          })}
+        >
+          {orderItems && orderItems.length > 0 ? (
+            <SelectMenu
+              fullWidth
+              value={draft.item_name ?? ''}
+              onChange={(v) => set('item_name', v || null)}
+              options={[
+                {
+                  value: '',
+                  label: t('coupons.itemNone', { defaultValue: 'Not about one item' }),
+                },
+                // De-duplicated: an order with 2× the same line offers it once.
+                ...Array.from(new Set(orderItems)).map((name) => ({ value: name, label: name })),
+              ]}
+              aria-label={t('coupons.itemField', { defaultValue: 'Item (optional)' })}
+            />
+          ) : (
+            <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">
+              {t('coupons.itemNoOrder', {
+                defaultValue: 'No order items to pick from — attach an order to the ticket first.',
+              })}
+            </p>
+          )}
+        </FormField>
+        {(brandName || branchName) && (
+          // Where this coupon lands, said rather than assumed: the branch is
+          // resolved from the ticket's order/branch choice and not editable here.
+          <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">
+            {t('coupons.branchContext', { defaultValue: 'For' })}{' '}
+            <span className="font-medium text-foreground">
+              {[brandName, branchName].filter(Boolean).join(' · ')}
+            </span>
+          </p>
+        )}
       </DrawerSection>
 
       <DrawerSection
@@ -391,7 +506,12 @@ export function CouponRequestDialog({
         <FormField label={t('tickets.description', { defaultValue: 'Compensation reason' })}>
           <Input
             value={draft.compensation_reason}
-            onChange={(e) => set('compensation_reason', e.target.value)}
+            onChange={(e) => {
+              // The agent's own words now own this field — stop following the
+              // ticket description.
+              setReasonTouched(true);
+              set('compensation_reason', e.target.value);
+            }}
           />
         </FormField>
       </DrawerSection>

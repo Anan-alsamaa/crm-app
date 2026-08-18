@@ -363,8 +363,16 @@ export class GatewayDirectus {
    * excluding internal notes) for the widget's `messages:history` seed on
    * (re)connect. Attachment ids come from the messages_files junction (there is
    * no alias field on `messages`); a denied junction read fails soft to no chips.
+   *
+   * `since` caps how far back the seed reaches (ISO instant). The WIDGET passes
+   * a 7-day cutoff: the customer sees only their recent week, while every older
+   * message stays in Directus and remains fully visible to agents — the agent
+   * portal reads the thread with its own token and never through this method.
    */
-  async loadConversationMessages(conversationId: string): Promise<
+  async loadConversationMessages(
+    conversationId: string,
+    opts: { since?: string } = {},
+  ): Promise<
     Array<{
       id: string;
       senderType: SenderType;
@@ -375,7 +383,11 @@ export class GatewayDirectus {
   > {
     const msgs = (await this.client.request(
       readItems('messages', {
-        filter: { conversation: { _eq: conversationId }, is_internal_note: { _eq: false } },
+        filter: {
+          conversation: { _eq: conversationId },
+          is_internal_note: { _eq: false },
+          ...(opts.since ? { date_created: { _gte: opts.since } } : {}),
+        },
         fields: ['id', 'sender_type', 'content', 'date_created'],
         sort: ['date_created'],
         limit: 200,

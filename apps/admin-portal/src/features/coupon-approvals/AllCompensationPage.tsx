@@ -56,6 +56,8 @@ interface Row {
   discount_category: string | null;
   brand_id: string | null;
   restaurant_id: string | null;
+  item_name: string | null;
+  ticket: { order_id: string | null } | null;
   requested_by: { id: string; first_name: string | null; email: string | null } | null;
   decided_by: { id: string; first_name: string | null; email: string | null } | null;
   contact: { name: string | null; phone: string | null } | null;
@@ -97,6 +99,8 @@ function useAllCoupons() {
               'discount_category',
               'brand_id',
               'restaurant_id',
+              'item_name',
+              { ticket: ['order_id'] },
               { requested_by: ['id', 'first_name', 'email'] },
               { decided_by: ['id', 'first_name', 'email'] },
               { contact: ['name', 'phone'] },
@@ -185,6 +189,9 @@ export function AllCompensationPage() {
           r.contact?.phone,
           r.brand_id,
           r.restaurant_id,
+          r.item_name,
+          r.ticket?.order_id,
+          r.coupon_type,
           who(r.requested_by),
         ]
           .join(' ')
@@ -247,6 +254,16 @@ export function AllCompensationPage() {
       key: 'store',
       label: t('compensationAll.store', { defaultValue: 'Store' }),
       get: (r) => r.restaurant_id ?? '',
+    },
+    {
+      key: 'order',
+      label: t('compensationAll.order', { defaultValue: 'Order' }),
+      get: (r) => r.ticket?.order_id ?? '',
+    },
+    {
+      key: 'item',
+      label: t('coupons.itemShort', { defaultValue: 'Item' }),
+      get: (r) => r.item_name ?? '',
     },
     {
       key: 'issuing',

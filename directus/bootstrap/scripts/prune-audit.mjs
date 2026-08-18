@@ -36,8 +36,15 @@ const DIRECTUS_DB = {
 const args = process.argv.slice(2);
 const WRITE = args.includes('--write');
 const DAYS = Number((args.find((a) => a.startsWith('--days=')) ?? '--days=90').split('=')[1]);
-/** Collections whose history is a product feature, not bookkeeping. */
-const KEEP_FOREVER = ['tickets'];
+/**
+ * Collections whose history is a product feature, not bookkeeping.
+ *
+ * tickets: field history + "last modified by" are DERIVED from revisions.
+ * coupon_approvals: the money trail — who asked, who amended, who approved —
+ * lives in the revision rows; the CRM is also the long-term store of customer
+ * behaviour (compensation included), so its edit history is data, not noise.
+ */
+const KEEP_FOREVER = ['tickets', 'coupon_approvals'];
 const BATCH = 10_000;
 
 if (!Number.isFinite(DAYS) || DAYS < 1) {

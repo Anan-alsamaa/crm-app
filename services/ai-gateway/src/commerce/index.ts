@@ -217,6 +217,24 @@ export async function registerCommerceRoutes(
     return reply.send({ data: { orders, detail } });
   });
 
+  /**
+   * The order's status timeline for the inbox Tracking view. Derived from the
+   * single-order payload until Yiji provides a history endpoint — the response
+   * says so (`derived: true`) and the panel labels it.
+   */
+  app.get('/commerce/tracking', async (req, reply) => {
+    if (!(await requireAgent(req, reply))) return;
+    const q = req.query as Record<string, string | undefined>;
+    const vendorId = str(q.vendorId);
+    const orderId = str(q.orderId);
+    if (!vendorId || !orderId) return reply.code(400).send({ error: 'missing_params' });
+    return answering(reply, { route: 'tracking', vendorId, orderId }, () =>
+      cached(['tracking', vendorId, orderId], COMMERCE_TTL.order, () =>
+        deps.yiji.getOrderTimeline(vendorId, orderId),
+      ),
+    );
+  });
+
   app.get('/commerce/payment', async (req, reply) => {
     if (!(await requireAgent(req, reply))) return;
     const q = req.query as Record<string, string | undefined>;

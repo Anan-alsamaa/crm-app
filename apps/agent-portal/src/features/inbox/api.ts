@@ -559,7 +559,10 @@ export function useLinkedTickets(conversationId: string | null) {
           filter: { conversation: { _eq: conversationId } },
           fields: ['id', 'subject', 'status', 'priority'],
           sort: ['-date_created'],
-          limit: -1,
+          // Only the newest few, by request: a long-standing customer can have
+          // dozens of tickets, and the sidebar is for what is CURRENT — the
+          // full history stays reachable from the tickets page and reports.
+          limit: 3,
         }),
       ) as Promise<LinkedTicket[]>,
   });

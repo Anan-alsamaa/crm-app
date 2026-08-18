@@ -48,6 +48,37 @@ export interface YijiOrder {
   paymentStatus?: string;
   paymentMode?: string;
   customerPhone?: string;
+  // Cart-level money facts from the single-order endpoint (Yiji `totalPoints`,
+  // `totalCoupons`, `discount`). Present when the API returned them — 0 is a
+  // real answer ("no points were used"), absent means the endpoint did not say.
+  totalPointAmount?: number;
+  totalCouponAmount?: number;
+  totalDiscount?: number;
+}
+
+/** One step in an order's status timeline. */
+export interface YijiOrderTimelineEvent {
+  /** Machine status key, e.g. `in_kitchen`, `payment`, `pos_accepted`. */
+  status: string;
+  /** ISO 8601 instant, when known. */
+  at: string | null;
+}
+
+/**
+ * The order's life so far, step by step.
+ *
+ * Today this is DERIVED from the single-order endpoint (placed → payment →
+ * current status), because Yiji exposes no status-history endpoint yet. When
+ * the client provides one, only the gateway's implementation changes — the
+ * shape here is already what the UI renders.
+ */
+export interface YijiOrderTimeline {
+  orderId: string;
+  /** The order's current status key. */
+  current: string;
+  /** True when this is the derived fallback, not a full upstream history. */
+  derived: boolean;
+  events: YijiOrderTimelineEvent[];
 }
 
 export interface YijiPaymentStatus {
@@ -88,6 +119,11 @@ export interface YijiClient {
   ): Promise<YijiOrder[]>;
   /** Fetch a single order's full data by id. Returns null if not found. */
   getOrder(yijiVendorId: string, orderId: string): Promise<YijiOrder | null>;
+  /**
+   * The order's status timeline. Derived from the order itself until Yiji
+   * provides a history endpoint — see YijiOrderTimeline.derived.
+   */
+  getOrderTimeline(yijiVendorId: string, orderId: string): Promise<YijiOrderTimeline | null>;
   getPaymentStatus(yijiVendorId: string, orderId: string): Promise<YijiPaymentStatus | null>;
   getShipmentTracking(yijiVendorId: string, orderId: string): Promise<YijiShipmentTracking | null>;
   getPurchaseActivity(

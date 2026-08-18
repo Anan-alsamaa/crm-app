@@ -43,6 +43,39 @@ export interface SnippetCorpusOptions {
 
 const clamp = (n: number, lo: number, hi: number): number => Math.min(Math.max(n, lo), hi);
 
+/**
+ * A silence this long between two messages ends a session. Six hours: long
+ * enough that a customer who stepped out for lunch mid-complaint stays in one
+ * session, short enough that "last month's missing burger" never leaks into
+ * today's late delivery.
+ */
+const SESSION_GAP_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Cut a NEWEST-FIRST message list down to the current session and return it in
+ * reading order (oldest → newest).
+ *
+ * Walks back from the latest message and stops at the first idle gap longer
+ * than SESSION_GAP_MS — everything before that silence is a previous case.
+ * Edge cases, resolved toward keeping context rather than losing the current
+ * message: an unparseable or missing timestamp never ends the session (a cut
+ * there could orphan the very message the agent is answering), and a thread
+ * with no long gaps is returned whole (the read is already capped upstream).
+ */
+export function sessionSlice(
+  newestFirst: ConversationContext['messages'],
+): ConversationContext['messages'] {
+  const session: ConversationContext['messages'] = [];
+  let prevTime: number | null = null;
+  for (const m of newestFirst) {
+    const t = Date.parse(m.date_created ?? '');
+    if (prevTime !== null && Number.isFinite(t) && prevTime - t > SESSION_GAP_MS) break;
+    session.push(m);
+    if (Number.isFinite(t)) prevTime = t;
+  }
+  return session.reverse();
+}
+
 export class GatewayDirectus {
   private readonly client: YijiDirectusClient;
   private readonly url: string;
@@ -117,8 +150,21 @@ export class GatewayDirectus {
   }
 
   /**
-   * Fetch the conversation header + recent messages (newest last) so prompts
-   * have the full thread context.
+   * Fetch the conversation header + the CURRENT SESSION's messages (newest
+   * last) so prompts speak to the issue the customer is raising now.
+   *
+   * A conversation here is long-lived — one thread per customer, reused across
+   * visits — so "the conversation" and "the current case" are different sizes.
+   * Feeding the whole thread made suggestions answer February's complaint in
+   * August. Two cuts fix that:
+   *
+   *   1. The read takes the NEWEST messages. It used to sort ascending with a
+   *      limit, which returned the OLDEST fifty — on a long thread the model
+   *      never even saw the message the agent wanted answered.
+   *
+   *   2. `sessionSlice` drops everything before the last long idle gap. A
+   *      support session is a burst of messages; hours of silence in between is
+   *      the customer going away and coming back with a NEW case.
    */
   async getConversation(
     conversationId: string,
@@ -140,16 +186,16 @@ export class GatewayDirectus {
       )) as ConversationContext;
       if (!conv) return null;
 
-      const messages = (await this.client.request(
+      const newestFirst = (await this.client.request(
         readItems('messages', {
           filter: { conversation: { _eq: conversationId } },
-          sort: ['date_created'],
+          sort: ['-date_created'],
           limit: messageLimit,
           fields: ['id', 'sender_type', 'content', 'is_internal_note', 'date_created'],
         }),
       )) as ConversationContext['messages'];
 
-      return { ...conv, messages: messages ?? [] };
+      return { ...conv, messages: sessionSlice(newestFirst ?? []) };
     } catch {
       return null;
     }

@@ -222,8 +222,12 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
   });
   // Seed the existing thread so a returning customer (or a reconnect) sees their
   // history instead of a blank panel. Best-effort: a failure just means no seed.
+  // CUSTOMER-side view is capped to the last 7 days by request: a months-long
+  // relationship stays in the system and fully visible to agents, but the
+  // widget only replays the recent week.
   try {
-    const history = await directus.loadConversationMessages(data.conversationId);
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const history = await directus.loadConversationMessages(data.conversationId, { since });
     if (history.length > 0) {
       socket.emit('messages:history', { conversationId: data.conversationId, messages: history });
     }

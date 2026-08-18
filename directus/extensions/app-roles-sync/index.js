@@ -124,9 +124,10 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       g('tickets_files', 'create'), g('tickets_files', 'read'), g('tickets_files', 'delete'),
       g('directus_files', 'create'),
       // Requesting a coupon is part of raising a ticket; DECIDING one is
-      // approve_coupons. Reads are scoped to the requester's own asks.
+      // approve_coupons. Reads are queue-wide: compensation is worked as a
+      // shared pool, so every agent sees every request (one source of truth).
       g('coupon_approvals', 'create'),
-      g('coupon_approvals', 'read', { requested_by: { _eq: '$CURRENT_USER' } }),
+      g('coupon_approvals', 'read'),
     ],
     edit_tickets: [
       g('tickets', 'update', OWN_TICKET, TICKET_FIELDS_AGENT_WRITABLE),

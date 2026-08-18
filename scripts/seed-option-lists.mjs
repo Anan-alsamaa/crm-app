@@ -23,6 +23,11 @@ const LISTS = {
   ],
   communication_method: ['Comp. WhatsApp', 'Comp. Phone Call', 'Comp.Instgram', 'Comp. Twiter'],
   compensation: ['Initial', 'Compensated', 'Not Compensated'],
+  // The coupon-request dropdowns. "All" means every delivery channel at once.
+  issuing_side: ['Marketing', 'Operations', 'Delivery'],
+  delivery_type: ['All', 'Delivery', 'Pickup', 'Carhop', 'Takeout', 'Dine-in'],
+  coupon_type: ['Private', 'Public'],
+  discount_category: ['Amount', 'Percentage'],
 };
 
 const SETTINGS = {
@@ -71,5 +76,39 @@ for (const b of BUILTINS) {
   if (haveRoles.has(b.name)) continue;
   if (WRITE) await post('/items/app_roles', { ...b, builtin: true, privileges: null, brands: null });
   console.log(`app_roles builtin: ${b.name} ${WRITE ? 'written' : 'would write'}`);
+}
+
+// The standard four-role model (mirroring the ops portal's structure):
+// Admin and Agent are code-defined above; Supervisor and Viewer are ordinary
+// app_roles rows, materialized by the app-roles-sync extension and editable
+// from the Roles page like any custom role. Privilege keys come from the
+// extension's fixed catalog — an unknown key is stripped, never invented.
+const STANDARD_ROLES = [
+  {
+    name: 'Supervisor',
+    description:
+      'Team lead: works the whole inbox and every ticket, decides coupon approvals, reads every report. No user or master-data administration.',
+    privileges: {
+      use_chat: true, view_all_chats: true,
+      view_tickets: true, view_all_tickets: true,
+      create_tickets: true, edit_tickets: true, edit_all_tickets: true,
+      approve_coupons: true,
+      view_dashboard: true, export_data: true,
+    },
+  },
+  {
+    name: 'Viewer',
+    description:
+      'Read-only oversight: sees every chat, ticket, dashboard and report, and can export. Changes nothing.',
+    privileges: {
+      view_all_chats: true, view_tickets: true, view_all_tickets: true,
+      view_dashboard: true, export_data: true,
+    },
+  },
+];
+for (const r of STANDARD_ROLES) {
+  if (haveRoles.has(r.name)) continue;
+  if (WRITE) await post('/items/app_roles', { ...r, builtin: false, brands: null });
+  console.log(`app_roles standard: ${r.name} ${WRITE ? 'written' : 'would write'}`);
 }
 console.log('done');

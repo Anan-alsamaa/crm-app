@@ -15,18 +15,23 @@ import { COUPON_APPROVAL_STATUSES, type CouponApprovalStatus } from '@yiji/share
 import { useMyCouponRequests, type CouponRequestRow } from './api.js';
 
 /**
- * Every coupon this agent has asked for, and what became of it.
+ * Every compensation/coupon request from EVERY agent, and what became of each —
+ * the one shared source of truth for compensation, so an agent answering a
+ * customer can see a colleague's request too.
  *
- * Opens on PENDING rather than on everything: the agent's live question is
- * "what am I still waiting on", and a list that starts with months of settled
- * history answers a question nobody asked.
+ * Opens on PENDING rather than on everything: the live question is "what is
+ * still waiting", and a list that starts with months of settled history answers
+ * a question nobody asked.
  *
  * A rejection shows its reason on the row, not behind a click. An agent told
  * only "no" cannot answer the customer, which is the moment they need it.
  */
-const TONE: Record<CouponApprovalStatus, 'warning' | 'success' | 'destructive'> = {
+// Wider than CouponApprovalStatus on purpose: the push worker moves a row to
+// `assigned` once Yiji actually has the coupon, and that state still renders.
+const TONE: Record<string, 'warning' | 'success' | 'destructive'> = {
   pending: 'warning',
   approved: 'success',
+  assigned: 'success',
   rejected: 'destructive',
 };
 
@@ -50,22 +55,43 @@ export function MyCouponsPage() {
   const navigate = useNavigate();
   const requests = useMyCouponRequests();
   const [view, setView] = useState<CouponApprovalStatus | 'all'>('pending');
+  const [search, setSearch] = useState('');
+
+  // "approved" includes "assigned" (delivered to Yiji) — an approved coupon
+  // must not vanish from the Approved tab once the worker pushes it.
+  const inView = (s: string, v: CouponApprovalStatus | 'all') =>
+    v === 'all' || s === v || (v === 'approved' && s === 'assigned');
 
   const rows = useMemo(() => {
     const all = requests.data ?? [];
-    return view === 'all' ? all : all.filter((r) => r.status === view);
-  }, [requests.data, view]);
+    const byStatus = all.filter((r) => inView(r.status, view));
+    const q = search.trim().toLowerCase();
+    if (!q) return byStatus;
+    // One box over the facts an agent actually holds when a customer calls:
+    // the coupon type/code, the order number, the phone. Name and requester
+    // ride along because excluding them would only surprise.
+    return byStatus.filter((r) =>
+      [
+        r.coupon_type,
+        r.coupon_code,
+        r.discount_category,
+        r.ticket?.order_id,
+        r.contact?.phone,
+        r.contact?.name,
+        r.requested_by?.first_name,
+        r.requested_by?.email,
+      ].some((v) => (v ?? '').toLowerCase().includes(q)),
+    );
+  }, [requests.data, view, search]);
 
   const count = (s: CouponApprovalStatus | 'all') =>
-    s === 'all'
-      ? (requests.data ?? []).length
-      : (requests.data ?? []).filter((r) => r.status === s).length;
+    (requests.data ?? []).filter((r) => inView(r.status, s)).length;
 
   return (
     <div className="flex h-full flex-col">
       <Toolbar>
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('coupons.title', { defaultValue: 'My coupons' })}
+          {t('coupons.titleAll', { defaultValue: 'Compensation requests' })}
         </h1>
         <ToolbarSpacer />
         <span className="text-2xs text-muted-foreground">
@@ -80,6 +106,17 @@ export function MyCouponsPage() {
           the same centered column as the cards below — at 1920px a cluster of
           pills pinned to the far edge belonged to nothing. */}
       <div className="border-b border-border bg-card px-4 py-2.5">
+        <div className="mx-auto mb-2 w-full max-w-3xl">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.currentTarget.value)}
+            placeholder={t('coupons.searchPlaceholder', {
+              defaultValue: 'Search by coupon type, code, order ID or customer phone…',
+            })}
+            aria-label={t('coupons.search', { defaultValue: 'Search compensation requests' })}
+            className="h-9 w-full rounded-xl bg-secondary/60 px-3 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.06] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
+        </div>
         <div className="mx-auto flex w-full max-w-3xl flex-wrap gap-1.5">
           {(
             ['pending', ...COUPON_APPROVAL_STATUSES.filter((s) => s !== 'pending'), 'all'] as const
@@ -123,9 +160,9 @@ export function MyCouponsPage() {
                     ? t('coupons.noneWaiting', { defaultValue: 'Nothing waiting on a supervisor.' })
                     : t('coupons.none', { defaultValue: 'No coupon requests here.' })
                 }
-                description={t('coupons.emptyHint', {
+                description={t('coupons.emptyHintAll', {
                   defaultValue:
-                    'Coupon requests you send from a ticket land here with their approval status.',
+                    'Coupon requests raised from tickets — by any agent — land here with their approval status.',
                 })}
               />
             </div>
@@ -151,7 +188,13 @@ export function MyCouponsPage() {
                         </Pill>
                       </div>
                       <div className="mt-1 truncate text-xs text-muted-foreground">
-                        {[r.contact?.name ?? r.contact?.phone, r.ticket?.subject]
+                        {[
+                          r.contact?.name ?? r.contact?.phone,
+                          r.ticket?.subject,
+                          r.ticket?.order_id ? `#${r.ticket.order_id}` : null,
+                          // Whose ask this is — the queue shows every agent's.
+                          r.requested_by?.first_name?.trim() || r.requested_by?.email || null,
+                        ]
                           .filter(Boolean)
                           .join(' · ')}
                       </div>

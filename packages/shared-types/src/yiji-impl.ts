@@ -2,6 +2,8 @@ import type {
   YijiClient,
   YijiCustomer,
   YijiOrder,
+  YijiOrderTimeline,
+  YijiOrderTimelineEvent,
   YijiPaymentStatus,
   YijiPurchaseActivity,
   YijiShipmentTracking,
@@ -198,6 +200,18 @@ export class MockYijiClient implements YijiClient {
     return this.fixtures.paymentsByOrder.get(key(vendorId, orderId)) ?? null;
   }
 
+  async getOrderTimeline(vendorId: string, orderId: string): Promise<YijiOrderTimeline | null> {
+    const order = await this.getOrder(vendorId, orderId);
+    if (!order) return null;
+    // Same derivation as the live client, from the mapped shape.
+    const events: YijiOrderTimelineEvent[] = [{ status: 'placed', at: order.placedAt || null }];
+    if (order.paymentStatus === 'paid' && order.status !== 'paid') {
+      events.push({ status: 'payment', at: null });
+    }
+    if (order.status !== 'placed') events.push({ status: order.status, at: null });
+    return { orderId: order.orderId, current: order.status, derived: true, events };
+  }
+
   async getShipmentTracking(
     vendorId: string,
     orderId: string,
@@ -299,6 +313,10 @@ interface RawYijiOrder {
   customerPhoneNumber?: string | null;
   customerName?: string | null;
   customerEmail?: string | null;
+  // Cart-level money facts (single-order endpoint; confirmed live field names).
+  totalPoints?: number | null;
+  totalCoupons?: number | null;
+  discount?: number | null;
   deliveryAddress?: { fullAddress?: string | null } | null;
   orderItems?: Array<{
     id?: number;
@@ -344,7 +362,35 @@ function mapYijiOrder(raw: RawYijiOrder): YijiOrder {
         ? (YIJI_PAYMENT_MODE[raw.paymentMode] ?? `mode_${raw.paymentMode}`)
         : undefined,
     customerPhone: raw.customerPhoneNumber ?? undefined,
+    totalPointAmount: raw.totalPoints ?? undefined,
+    totalCouponAmount: raw.totalCoupons ?? undefined,
+    totalDiscount: raw.discount ?? undefined,
   };
+}
+
+/**
+ * The order's life so far, DERIVED from the single-order payload.
+ *
+ * Yiji has no status-history endpoint (confirmed by probing); the order carries
+ * only `creationTime`, `paymentStatus` and the current `orderStatus` with its
+ * `orderStatusDate`. So the honest timeline today is placed → payment → current
+ * status, flagged `derived: true` so the UI can say the middle steps are not
+ * recorded. When the client provides the real history API, only this function
+ * grows — the shape is already what the tracking panel renders.
+ */
+export function deriveOrderTimeline(raw: RawYijiOrder): YijiOrderTimeline {
+  const events: YijiOrderTimelineEvent[] = [{ status: 'placed', at: raw.creationTime ?? null }];
+  const current =
+    raw.orderStatus != null
+      ? (YIJI_ORDER_STATUS[raw.orderStatus] ?? `status_${raw.orderStatus}`)
+      : 'unknown';
+  if (raw.paymentStatus === 1 && current !== 'paid') {
+    events.push({ status: 'payment', at: null });
+  }
+  if (current !== 'placed') {
+    events.push({ status: current, at: raw.orderStatusDate ?? null });
+  }
+  return { orderId: String(raw.id), current, derived: true, events };
 }
 
 /** Newest-first by placed date (ISO strings sort chronologically). */
@@ -437,6 +483,13 @@ export class HttpYijiClient implements YijiClient {
       `/api/Order/GetOrderAsync/${encodeURIComponent(orderId)}`,
     );
     return raw && raw.id != null ? mapYijiOrder(raw) : null;
+  }
+
+  async getOrderTimeline(_vendorId: string, orderId: string): Promise<YijiOrderTimeline | null> {
+    const raw = await this.fetch<RawYijiOrder>(
+      `/api/Order/GetOrderAsync/${encodeURIComponent(orderId)}`,
+    );
+    return raw && raw.id != null ? deriveOrderTimeline(raw) : null;
   }
 
   async getOrders(

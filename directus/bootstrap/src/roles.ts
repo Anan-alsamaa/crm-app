@@ -359,18 +359,16 @@ export const roles: RoleSpec[] = [
       // rewrite what a branch was told.
       ...appendOnly('store_notifications'),
       /**
-       * Coupon approvals: an agent may ASK, and may see what became of their
-       * own asks. They may not update a row at all — not their own, not
-       * anybody's. Deciding is the supervisor's act, and an agent who could
-       * patch `status` would be approving their own coupon, which is the one
-       * thing this whole collection exists to prevent.
+       * Coupon approvals: an agent may ASK, and may read the whole queue —
+       * compensation is worked as a shared pool, and every agent answering a
+       * customer needs to see what any colleague already asked for (one source
+       * of truth, by request). They may not update a row at all — not their
+       * own, not anybody's. Deciding is the supervisor's act, and an agent who
+       * could patch `status` would be approving their own coupon, which is the
+       * one thing this whole collection exists to prevent.
        */
       { collection: 'coupon_approvals', action: 'create' },
-      {
-        collection: 'coupon_approvals',
-        action: 'read',
-        permissions: { requested_by: { _eq: '$CURRENT_USER' } },
-      },
+      { collection: 'coupon_approvals', action: 'read' },
       { collection: 'notifications', action: 'read', permissions: SELF_RECIPIENT },
       {
         collection: 'notifications',

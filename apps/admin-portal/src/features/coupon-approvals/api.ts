@@ -32,12 +32,24 @@ export interface CouponApprovalRow {
   valid_to: string | null;
   max_discount: number | null;
   usage_limit: number | null;
+  /** The specific order item the coupon compensates, when it is about one. */
+  item_name: string | null;
+  brand_id: string | null;
+  restaurant_id: string | null;
   /** True when a supervisor changed those terms before approving. */
   edited_by_admin: boolean | null;
   decided_at: string | null;
   decision_note: string | null;
   date_created: string | null;
-  ticket: { id: string; subject: string | null; complaint_type: string | null } | null;
+  ticket: {
+    id: string;
+    subject: string | null;
+    complaint_type: string | null;
+    description: string | null;
+    order_id: string | null;
+    priority: string | null;
+    status: string | null;
+  } | null;
   contact: { id: string; name: string | null; phone: string | null } | null;
   requested_by: { id: string; first_name: string | null; email: string | null } | null;
   decided_by: { id: string; first_name: string | null; email: string | null } | null;
@@ -74,15 +86,35 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
               'valid_to',
               'max_discount',
               'usage_limit',
+              'item_name',
+              'brand_id',
+              'restaurant_id',
               'edited_by_admin',
-              { ticket: ['id', 'subject', 'complaint_type'] },
+              {
+                ticket: [
+                  'id',
+                  'subject',
+                  'complaint_type',
+                  'description',
+                  'order_id',
+                  'priority',
+                  'status',
+                ],
+              },
               { contact: ['id', 'name', 'phone'] },
               { requested_by: ['id', 'first_name', 'email'] },
               { decided_by: ['id', 'first_name', 'email'] },
             ],
             sort: ['date_created'],
             limit: -1,
-            ...(status === 'all' ? {} : { filter: { status: { _eq: status } } }),
+            // "approved" includes "assigned": delivery to Yiji moves the status
+            // on, and an approved coupon must not vanish from the Approved tab
+            // the moment the worker gets it there.
+            ...(status === 'all'
+              ? {}
+              : status === 'approved'
+                ? { filter: { status: { _in: ['approved', 'assigned'] } } }
+                : { filter: { status: { _eq: status } } }),
           } as never,
         ),
       )) as unknown as CouponApprovalRow[],
@@ -104,22 +136,25 @@ export interface DecideInput {
    * `edited_by_admin` — so the report can tell it apart from a straight
    * approval and an agent can see their number was changed.
    */
-  edits?: Partial<
-    Pick<
-      CouponApprovalRow,
-      | 'title'
-      | 'issuing_side'
-      | 'delivery_type'
-      | 'coupon_type'
-      | 'discount_category'
-      | 'valid_from'
-      | 'valid_to'
-      | 'max_discount'
-      | 'usage_limit'
-      | 'coupon_value'
-      | 'coupon_percent'
-    >
-  >;
+  edits?: Record<string, unknown> &
+    Partial<
+      Pick<
+        CouponApprovalRow,
+        | 'title'
+        | 'issuing_side'
+        | 'delivery_type'
+        | 'coupon_type'
+        | 'discount_category'
+        | 'valid_from'
+        | 'valid_to'
+        | 'max_discount'
+        | 'usage_limit'
+        | 'coupon_value'
+        | 'coupon_percent'
+        | 'item_name'
+        | 'reason'
+      >
+    >;
 }
 
 export function useDecideCoupon() {

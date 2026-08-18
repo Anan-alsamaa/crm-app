@@ -358,11 +358,17 @@ export function CreateTicketDialog({
       const fullCoupon = collectedCoupon
         ? {
             coupon_code: collectedCoupon.code,
+            // The category decides WHICH money field carries the number, and it
+            // carries the value AS ENTERED — this used to send `max_discount`
+            // into both columns, so a 20% coupon was recorded as its cap and a
+            // percentage request read downstream as an amount.
             coupon_value:
-              collectedCoupon.discount_category === 'Amount' ? collectedCoupon.max_discount : null,
+              collectedCoupon.discount_category === 'Percentage'
+                ? null
+                : (collectedCoupon.coupon_value ?? null),
             coupon_percent:
               collectedCoupon.discount_category === 'Percentage'
-                ? collectedCoupon.max_discount
+                ? (collectedCoupon.coupon_percent ?? null)
                 : null,
             compensation: compensationFlag(true),
             title: collectedCoupon.title,
@@ -376,6 +382,7 @@ export function CreateTicketDialog({
             usage_limit: collectedCoupon.usage_limit,
             brand_id: collectedCoupon.brand_id ?? null,
             restaurant_id: collectedCoupon.restaurant_id ?? null,
+            item_name: collectedCoupon.item_name ?? null,
           }
         : null;
       const request = fullCoupon ?? coupon.request;
@@ -708,6 +715,12 @@ export function CreateTicketDialog({
                 description={watch('description') || null}
                 brandId={chosenMatch?.brandName ?? null}
                 restaurantId={storeId || null}
+                brandName={chosenMatch?.brandName ?? null}
+                branchName={chosenMatch?.restaurantName ?? null}
+                // The attached order's line names, for the optional Item field.
+                orderItems={
+                  includeOrder && latestOrder ? latestOrder.items.map((it) => it.name) : []
+                }
                 requestedBy={user?.id ?? null}
                 onCollect={setCollectedCoupon}
               />

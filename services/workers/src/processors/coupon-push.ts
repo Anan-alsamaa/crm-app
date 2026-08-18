@@ -49,6 +49,7 @@ export interface CouponApprovalRow {
   discount_category: string | null;
   brand_id: string | null;
   restaurant_id: string | null;
+  item_name: string | null;
   reason: string | null;
   contact: {
     name: string | null;
@@ -98,6 +99,8 @@ export function yijiCouponPayload(row: CouponApprovalRow): Record<string, unknow
     discount_category: row.discount_category,
     brand_id: row.brand_id,
     restaurant_id: row.restaurant_id,
+    // The specific order item being compensated, when the coupon is about one.
+    item_name: row.item_name,
     customer: {
       phone: row.contact?.phone ?? null,
       name: row.contact?.name ?? null,
@@ -138,6 +141,7 @@ export async function processCouponPushJob(
         'discount_category',
         'brand_id',
         'restaurant_id',
+        'item_name',
         'reason',
         { contact: ['name', 'phone', 'external_customer_id'] },
       ],

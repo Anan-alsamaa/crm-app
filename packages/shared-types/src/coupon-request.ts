@@ -42,7 +42,12 @@ export const CouponRequestDraft = z.object({
   /** Generated, not typed — see `generateCouponCode`. */
   code: z.string().min(4).max(40),
   issuing_side: z.string().min(1, 'Choose an issuing side.'),
-  delivery_type: z.string().min(1, 'Choose a delivery type.'),
+  /**
+   * One or more fulfilment channels, stored comma-joined ("Delivery, Pickup").
+   * "All" stands for every channel at once, so it never combines with others —
+   * see `toggleDeliveryType`.
+   */
+  delivery_type: z.string().min(1, 'Choose at least one delivery type.'),
   coupon_type: z.string().min(1, 'Choose a coupon type.'),
   discount_category: z.string().min(1, 'Choose a discount category.'),
   /** `YYYY-MM-DD`. */
@@ -72,6 +77,12 @@ export const CouponRequestDraft = z.object({
    */
   brand_id: z.string().nullish(),
   restaurant_id: z.string().nullish(),
+  /**
+   * The specific order line the compensation is about (e.g. the missing item),
+   * chosen from the order's item names. Optional — not every complaint is about
+   * one item.
+   */
+  item_name: z.string().nullish(),
 });
 export type CouponRequestDraft = z.infer<typeof CouponRequestDraft>;
 
@@ -146,6 +157,43 @@ export function defaultCouponDates(today: Date): { valid_from: string; valid_to:
   const to = new Date(today);
   to.setUTCMonth(to.getUTCMonth() + 1);
   return { valid_from: iso(today), valid_to: iso(to) };
+}
+
+/**
+ * The delivery types a stored value names, e.g. "Delivery, Pickup" → both.
+ *
+ * The column keeps its comma-joined string shape (older rows hold a single
+ * value, and Directus filters on the column as text), so parsing lives here
+ * rather than in every reader.
+ */
+export function parseDeliveryTypes(stored: string | null | undefined): string[] {
+  return (stored ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Add or remove one delivery type from a comma-joined selection.
+ *
+ * "All" means every channel at once, so it is mutually exclusive with the
+ * specific types: picking it clears them, and picking a specific type clears
+ * it. Order follows the offered list so the stored string is stable.
+ */
+export function toggleDeliveryType(stored: string, value: string, offered: string[]): string {
+  const isAll = (v: string) => v.trim().toLowerCase() === 'all';
+  const current = parseDeliveryTypes(stored);
+  let next: string[];
+  if (current.includes(value)) {
+    next = current.filter((v) => v !== value);
+  } else if (isAll(value)) {
+    next = [value];
+  } else {
+    next = [...current.filter((v) => !isAll(v)), value];
+  }
+  const rank = new Map(offered.map((v, i) => [v, i]));
+  next.sort((a, b) => (rank.get(a) ?? 999) - (rank.get(b) ?? 999));
+  return next.join(', ');
 }
 
 /**

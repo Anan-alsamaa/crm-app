@@ -164,9 +164,127 @@ function TotalsRow({ label, value, strong }: { label: string; value: string; str
   );
 }
 
-/** Full order details — the expanded body. Given a COMPLETE order (with items). */
-function OrderDetails({ order }: { order: YijiOrder }) {
+/**
+ * The Cart view: the order's money composition — points, coupon and discount —
+ * straight off the single-order payload (no extra API call).
+ */
+function CartPanel({ order }: { order: YijiOrder }) {
   const { t } = useTranslation();
+  const rows: Array<[string, number | undefined]> = [
+    [t('commerce.totalPoints', { defaultValue: 'Total point amount' }), order.totalPointAmount],
+    [t('commerce.totalCoupons', { defaultValue: 'Total coupon amount' }), order.totalCouponAmount],
+    [t('commerce.totalDiscount', { defaultValue: 'Total discount' }), order.totalDiscount],
+  ];
+  return (
+    <div className="space-y-1 rounded-xl bg-secondary/50 p-2.5">
+      {rows.map(([label, v]) => (
+        <TotalsRow
+          key={label}
+          label={label}
+          value={
+            v == null
+              ? t('commerce.notReported', { defaultValue: 'Not reported' })
+              : money(v, order.currency)
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The Tracking view: the order's status timeline, step by step with times.
+ *
+ * Today the gateway DERIVES it from the order itself (placed → payment →
+ * current status) because Yiji exposes no status-history endpoint yet; the
+ * response says so and the caption owns up to it rather than presenting three
+ * steps as the whole story.
+ */
+function TrackingPanel({ vendorId, orderId }: { vendorId: string; orderId: string }) {
+  const { t } = useTranslation();
+  const q = useQuery({
+    queryKey: ['yiji-order-timeline', vendorId, orderId],
+    queryFn: () => commerce.getOrderTimeline(vendorId, orderId),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  if (q.isLoading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-2/3" />
+        <Skeleton className="h-4 w-1/2" />
+      </div>
+    );
+  }
+  if (q.isError || !q.data) {
+    return (
+      <p className="text-2xs text-muted-foreground">
+        {t('commerce.trackingUnavailable', { defaultValue: 'Order tracking unavailable.' })}
+      </p>
+    );
+  }
+  const timeline = q.data;
+  return (
+    <div className="space-y-2">
+      <ol className="space-y-0">
+        {timeline.events.map((ev, i) => {
+          const last = i === timeline.events.length - 1;
+          return (
+            <li key={`${ev.status}-${i}`} className="relative flex gap-2.5 pb-3 last:pb-0">
+              {/* The rail: a dot per step, a hairline connecting them. */}
+              <span className="flex flex-col items-center">
+                <span
+                  className={cn(
+                    'mt-1 h-2 w-2 shrink-0 rounded-full',
+                    last ? 'bg-primary' : 'bg-foreground/25',
+                  )}
+                  aria-hidden
+                />
+                {!last && <span className="w-px flex-1 bg-foreground/10" aria-hidden />}
+              </span>
+              <div className="min-w-0 flex-1 pb-0.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span
+                    className={cn(
+                      'text-xs',
+                      last ? 'font-semibold text-foreground' : 'text-foreground/80',
+                    )}
+                  >
+                    {t(`commerce.orderStatuses.${ev.status}`, {
+                      defaultValue: titleize(ev.status),
+                    })}
+                  </span>
+                  <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                    {ev.at
+                      ? fmtDateTime(ev.at)
+                      : t('commerce.timeUnknown', { defaultValue: 'Time not recorded' })}
+                  </span>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {timeline.derived && (
+        <p className="text-2xs leading-relaxed text-muted-foreground">
+          {t('commerce.trackingDerived', {
+            defaultValue:
+              'Built from the order record — the platform does not report the in-between steps yet.',
+          })}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Full order details — the expanded body. Given a COMPLETE order (with items). */
+function OrderDetails({ order, vendorId }: { order: YijiOrder; vendorId: string }) {
+  const { t } = useTranslation();
+  // Cart and Tracking, requested additions to every inbox order card. A view
+  // toggle rather than more rows: the card is already the tallest thing in the
+  // sidebar, and these answer different questions than the line items do.
+  const [view, setView] = useState<'none' | 'cart' | 'tracking'>('none');
   const subtotal = order.items.reduce((sum, it) => sum + it.price * it.qty, 0);
   const showSubtotal = subtotal > 0 && order.total > subtotal + 0.001;
 
@@ -322,6 +440,31 @@ function OrderDetails({ order }: { order: YijiOrder }) {
           </div>
         )}
       </dl>
+
+      {/* Cart & Tracking, beside the payment/status facts they extend. Toggles,
+          so clicking the open one closes it again. */}
+      <div className="flex gap-1.5 border-t border-foreground/[0.06] pt-2.5">
+        {(['cart', 'tracking'] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            aria-pressed={view === v}
+            onClick={() => setView((cur) => (cur === v ? 'none' : v))}
+            className={cn(
+              'rounded-full px-3 py-1 text-2xs font-medium transition-colors duration-fast ease-out',
+              view === v
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-secondary text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {v === 'cart'
+              ? t('commerce.cart', { defaultValue: 'Cart' })
+              : t('commerce.tracking', { defaultValue: 'Tracking' })}
+          </button>
+        ))}
+      </div>
+      {view === 'cart' && <CartPanel order={order} />}
+      {view === 'tracking' && <TrackingPanel vendorId={vendorId} orderId={order.orderId} />}
     </div>
   );
 }
@@ -386,7 +529,7 @@ function ExpandableOrder({
               {t('commerce.detailUnavailable', { defaultValue: 'Order details unavailable.' })}
             </p>
           ) : detail.data ? (
-            <OrderDetails order={detail.data} />
+            <OrderDetails order={detail.data} vendorId={vendorId} />
           ) : null}
         </div>
       )}

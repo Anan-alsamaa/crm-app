@@ -4,13 +4,14 @@ import type { CouponApprovalStatus, CouponFields } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 
 /**
- * Coupons this agent has asked for.
+ * Every compensation/coupon request, from every agent.
  *
- * Read-only from the agent's side, and scoped by Directus itself to their own
- * requests (`requested_by = $CURRENT_USER` in roles.ts). There is deliberately
- * no update hook here: an agent who could PATCH `status` would be approving
- * their own coupon, which is the one thing the collection exists to prevent —
- * so the absence is a control, not an oversight.
+ * Read-only from the agent's side. Reads are queue-wide (roles.ts): the
+ * compensation queue is a shared pool and any agent answering a customer needs
+ * to see what a colleague already asked for. There is deliberately no update
+ * hook here: an agent who could PATCH `status` would be approving their own
+ * coupon, which is the one thing the collection exists to prevent — so the
+ * absence is a control, not an oversight.
  */
 export interface CouponRequestRow {
   id: string;
@@ -29,13 +30,16 @@ export interface CouponRequestRow {
   valid_to: string | null;
   max_discount: number | null;
   usage_limit: number | null;
+  /** The specific order item the coupon compensates, when it is about one. */
+  item_name: string | null;
   /** True when an admin changed the agent's values before approving. */
   edited_by_admin: boolean | null;
   decided_at: string | null;
   decision_note: string | null;
   date_created: string | null;
-  ticket: { id: string; subject: string | null } | null;
+  ticket: { id: string; subject: string | null; order_id: string | null } | null;
   contact: { id: string; name: string | null; phone: string | null } | null;
+  requested_by: { id: string; first_name: string | null; email: string | null } | null;
   decided_by: { id: string; first_name: string | null; email: string | null } | null;
 }
 
@@ -59,12 +63,15 @@ export const COUPON_REQUEST_FIELDS = [
   'valid_to',
   'max_discount',
   'usage_limit',
+  'item_name',
   'edited_by_admin',
-  { ticket: ['id', 'subject'] },
+  { ticket: ['id', 'subject', 'order_id'] },
   { contact: ['id', 'name', 'phone'] },
+  { requested_by: ['id', 'first_name', 'email'] },
   { decided_by: ['id', 'first_name', 'email'] },
 ] as const;
 
+/** The whole queue — every agent's requests, newest first. */
 export function useMyCouponRequests() {
   return useQuery({
     queryKey: ['my-coupon-requests'],
@@ -97,6 +104,8 @@ export interface CreateCouponRequestInput extends CouponFields {
   valid_to?: string;
   max_discount?: number;
   usage_limit?: number;
+  /** The specific order item the coupon compensates, when it is about one. */
+  item_name?: string | null;
   /* Resolved from the ticket's order, never chosen in the form. */
   brand_id?: string | null;
   restaurant_id?: string | null;

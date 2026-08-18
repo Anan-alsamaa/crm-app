@@ -1,5 +1,6 @@
 import type {
   YijiOrder,
+  YijiOrderTimeline,
   YijiPaymentStatus,
   YijiPurchaseActivity,
   YijiShipmentTracking,
@@ -66,6 +67,9 @@ export const commerce = {
     get<YijiOrder | null>('/commerce/order', { vendorId, orderId }),
   getPaymentStatus: (vendorId: string, orderId: string) =>
     get<YijiPaymentStatus | null>('/commerce/payment', { vendorId, orderId }),
+  /** The order's status timeline (derived until Yiji ships a history API). */
+  getOrderTimeline: (vendorId: string, orderId: string) =>
+    get<YijiOrderTimeline | null>('/commerce/tracking', { vendorId, orderId }),
   getShipmentTracking: (vendorId: string, orderId: string) =>
     get<YijiShipmentTracking | null>('/commerce/shipment', { vendorId, orderId }),
 };

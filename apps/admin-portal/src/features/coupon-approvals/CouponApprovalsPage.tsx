@@ -30,9 +30,12 @@ import { useCouponApprovals, useDecideCoupon, type CouponApprovalRow } from './a
  * only "no" cannot answer the customer who is still waiting, and "no" with no
  * reason is the fastest way to make a control like this resented.
  */
-const TONE: Record<CouponApprovalStatus, 'warning' | 'success' | 'destructive'> = {
+// Wider than CouponApprovalStatus on purpose: the push worker moves a row to
+// `assigned` once Yiji has it, and that state still has to render.
+const TONE: Record<string, 'warning' | 'success' | 'destructive'> = {
   pending: 'warning',
   approved: 'success',
+  assigned: 'success',
   rejected: 'destructive',
 };
 
@@ -45,13 +48,153 @@ function money(n: number | null, currency = 'SAR'): string | null {
   }
 }
 
+/** One labelled input in the amend form. */
+function EditField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: 'text' | 'number' | 'date';
+  hint?: string;
+}) {
+  return (
+    <label className="block space-y-1">
+      <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </span>
+      <Input
+        type={type}
+        {...(type === 'number' ? { min: 0, step: '0.01' } : {})}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={label}
+      />
+      {hint && <span className="block text-2xs text-muted-foreground">{hint}</span>}
+    </label>
+  );
+}
+
+/** One coupon term as label over value, for the terms grid on the card. */
+function Term({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </dt>
+      <dd dir="auto" className="mt-0.5 truncate text-xs font-medium text-foreground">
+        {value ?? '—'}
+      </dd>
+    </div>
+  );
+}
+
+/** The full set of terms a supervisor may amend before approving. */
+export interface TermEdits {
+  title: string;
+  issuing_side: string;
+  delivery_type: string;
+  coupon_type: string;
+  discount_category: string;
+  valid_from: string;
+  valid_to: string;
+  amount: string;
+  max_discount: string;
+  usage_limit: string;
+  item_name: string;
+  reason: string;
+}
+
+function seedEdits(row: CouponApprovalRow): TermEdits {
+  const pct = (row.discount_category ?? '').toLowerCase() === 'percentage';
+  return {
+    title: row.title ?? '',
+    issuing_side: row.issuing_side ?? '',
+    delivery_type: row.delivery_type ?? '',
+    coupon_type: row.coupon_type ?? '',
+    discount_category: row.discount_category ?? '',
+    valid_from: row.valid_from?.slice(0, 10) ?? '',
+    valid_to: row.valid_to?.slice(0, 10) ?? '',
+    amount: String((pct ? row.coupon_percent : row.coupon_value) ?? ''),
+    max_discount: String(row.max_discount ?? ''),
+    usage_limit: String(row.usage_limit ?? ''),
+    item_name: row.item_name ?? '',
+    reason: row.reason ?? '',
+  };
+}
+
+/**
+ * The amended terms, as a patch of only what actually changed. Empty object =
+ * nothing changed, so approving records a straight approval, not an amendment.
+ */
+function diffEdits(row: CouponApprovalRow, e: TermEdits): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const str = (k: keyof TermEdits, col: string, cur: string | null) => {
+    if (e[k].trim() !== (cur ?? '')) out[col] = e[k].trim() || null;
+  };
+  str('title', 'title', row.title);
+  str('issuing_side', 'issuing_side', row.issuing_side);
+  str('delivery_type', 'delivery_type', row.delivery_type);
+  str('coupon_type', 'coupon_type', row.coupon_type);
+  str('discount_category', 'discount_category', row.discount_category);
+  str('valid_from', 'valid_from', row.valid_from?.slice(0, 10) ?? null);
+  str('valid_to', 'valid_to', row.valid_to?.slice(0, 10) ?? null);
+  str('item_name', 'item_name', row.item_name);
+  str('reason', 'reason', row.reason);
+
+  // Which money column the amount lands in follows the (possibly amended)
+  // category, and the OTHER column is cleared — an amended percentage must
+  // never arrive as an amount.
+  const category = (out.discount_category as string) ?? row.discount_category ?? '';
+  const pct = category.toLowerCase() === 'percentage';
+  const a = Number(e.amount);
+  const currentAmount = pct ? row.coupon_percent : row.coupon_value;
+  if (
+    e.amount.trim() !== '' &&
+    Number.isFinite(a) &&
+    a >= 0 &&
+    (a !== (currentAmount ?? null) || 'discount_category' in out)
+  ) {
+    if (pct) {
+      out.coupon_percent = a;
+      out.coupon_value = null;
+    } else {
+      out.coupon_value = a;
+      out.coupon_percent = null;
+    }
+  }
+  const cap = Number(e.max_discount);
+  if (
+    e.max_discount.trim() !== '' &&
+    Number.isFinite(cap) &&
+    cap >= 0 &&
+    cap !== (row.max_discount ?? null)
+  ) {
+    out.max_discount = cap;
+  }
+  const u = Number(e.usage_limit);
+  if (
+    e.usage_limit.trim() !== '' &&
+    Number.isInteger(u) &&
+    u > 0 &&
+    u !== (row.usage_limit ?? null)
+  ) {
+    out.usage_limit = u;
+  }
+  return out;
+}
+
 function Row({
   row,
   onDecide,
   busy,
 }: {
   row: CouponApprovalRow;
-  onDecide: (approve: boolean, note: string, edits?: Record<string, number>) => void;
+  onDecide: (approve: boolean, note: string, edits?: Record<string, unknown>) => void;
   busy: boolean;
 }) {
   const { t } = useTranslation();
@@ -63,11 +206,12 @@ function Row({
    * A supervisor who thinks the amount is too high had two options and needed a
    * third: reject it, approve it as asked, or approve a smaller one. The third
    * is what actually happens, and it used to mean rejecting and asking the
-   * agent to start again.
+   * agent to start again. Every term is editable — two lonely number boxes used
+   * to be the whole form, which made "fix the dates" a rejection.
    */
   const [editing, setEditing] = useState(false);
-  const [amount, setAmount] = useState('');
-  const [uses, setUses] = useState('');
+  const [edits, setEdits] = useState<TermEdits>(() => seedEdits(row));
+  const setEdit = (k: keyof TermEdits, v: string) => setEdits((e) => ({ ...e, [k]: v }));
   const pending = row.status === 'pending';
 
   const worth = [
@@ -90,7 +234,7 @@ function Row({
             {worth}
           </span>
         )}
-        <Pill tone={TONE[row.status]} size="sm">
+        <Pill tone={TONE[row.status] ?? 'success'} size="sm">
           {t(`couponApprovals.status.${row.status}`, { defaultValue: row.status })}
         </Pill>
         <span className="ms-auto text-2xs text-muted-foreground">
@@ -124,10 +268,75 @@ function Row({
             {t('couponApprovals.ticket', { defaultValue: 'Ticket' })}
           </dt>
           <dd className="min-w-0 truncate font-medium text-foreground">
-            {row.ticket?.subject ?? '—'}
+            {[
+              row.ticket?.subject,
+              row.ticket?.order_id ? `#${row.ticket.order_id}` : null,
+              row.ticket?.priority,
+              row.ticket?.status,
+            ]
+              .filter(Boolean)
+              .join(' · ') || '—'}
           </dd>
         </div>
       </dl>
+
+      {/* The COMPLETE terms, not the two that fit a summary: a supervisor is
+          signing off on all of them, so all of them are on the card. */}
+      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl bg-secondary/40 p-3 sm:grid-cols-4">
+        <Term label={t('coupons.titleField', { defaultValue: 'Coupon title' })} value={row.title} />
+        <Term
+          label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}
+          value={row.issuing_side}
+        />
+        <Term
+          label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
+          value={row.delivery_type}
+        />
+        <Term
+          label={t('lists.couponType', { defaultValue: 'Coupon type' })}
+          value={row.coupon_type}
+        />
+        <Term
+          label={t('lists.discountCategory', { defaultValue: 'Discount category' })}
+          value={row.discount_category}
+        />
+        <Term
+          label={t('couponApprovals.validity', { defaultValue: 'Valid' })}
+          value={
+            row.valid_from || row.valid_to
+              ? `${row.valid_from?.slice(0, 10) ?? '…'} → ${row.valid_to?.slice(0, 10) ?? '…'}`
+              : null
+          }
+        />
+        <Term
+          label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
+          value={row.max_discount != null ? money(Number(row.max_discount)) : null}
+        />
+        <Term
+          label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
+          value={row.usage_limit}
+        />
+        {row.item_name && (
+          <Term label={t('coupons.itemShort', { defaultValue: 'Item' })} value={row.item_name} />
+        )}
+        {(row.brand_id || row.restaurant_id) && (
+          <Term
+            label={t('couponApprovals.branch', { defaultValue: 'Brand / branch' })}
+            value={[row.brand_id, row.restaurant_id].filter(Boolean).join(' · ')}
+          />
+        )}
+      </dl>
+
+      {row.ticket?.description && (
+        // What the customer actually reported, straight off the ticket — the
+        // supervisor should not have to open the agent portal to read it.
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+          <span className="font-semibold uppercase tracking-[0.12em] text-2xs">
+            {t('couponApprovals.ticketDescription', { defaultValue: 'Ticket description' })}
+          </span>{' '}
+          {row.ticket.description}
+        </p>
+      )}
 
       {row.reason && (
         // The agent's own words about why. A supervisor deciding without this
@@ -178,34 +387,83 @@ function Row({
           ) : (
             <>
               {editing && (
-                <div className="mb-1 grid w-full gap-2 rounded-xl bg-secondary/40 p-3 sm:grid-cols-2">
-                  <label className="block space-y-1">
-                    <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
-                    </span>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      aria-label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
-                    />
-                  </label>
-                  <label className="block space-y-1">
-                    <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
-                    </span>
-                    <Input
-                      type="number"
-                      min={1}
-                      step="1"
-                      value={uses}
-                      onChange={(e) => setUses(e.target.value)}
-                      aria-label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
-                    />
-                  </label>
-                  <p className="text-2xs leading-relaxed text-muted-foreground sm:col-span-2">
+                <div className="mb-1 grid w-full gap-2 rounded-xl bg-secondary/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <EditField
+                    label={t('coupons.titleField', { defaultValue: 'Coupon title' })}
+                    value={edits.title}
+                    onChange={(v) => setEdit('title', v)}
+                  />
+                  <EditField
+                    label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}
+                    value={edits.issuing_side}
+                    onChange={(v) => setEdit('issuing_side', v)}
+                  />
+                  <EditField
+                    label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
+                    value={edits.delivery_type}
+                    onChange={(v) => setEdit('delivery_type', v)}
+                    hint={t('couponApprovals.deliveryEditHint', {
+                      defaultValue: 'Comma-separated, or "All".',
+                    })}
+                  />
+                  <EditField
+                    label={t('lists.couponType', { defaultValue: 'Coupon type' })}
+                    value={edits.coupon_type}
+                    onChange={(v) => setEdit('coupon_type', v)}
+                  />
+                  <EditField
+                    label={t('lists.discountCategory', { defaultValue: 'Discount category' })}
+                    value={edits.discount_category}
+                    onChange={(v) => setEdit('discount_category', v)}
+                    hint={t('couponApprovals.categoryEditHint', {
+                      defaultValue: '"Amount" or "Percentage" — decides what the value means.',
+                    })}
+                  />
+                  <EditField
+                    label={
+                      edits.discount_category.trim().toLowerCase() === 'percentage'
+                        ? t('coupons.couponPercent', { defaultValue: 'Coupon percentage %' })
+                        : t('coupons.couponValue', { defaultValue: 'Coupon value (SAR)' })
+                    }
+                    type="number"
+                    value={edits.amount}
+                    onChange={(v) => setEdit('amount', v)}
+                  />
+                  <EditField
+                    label={t('performance.from', { defaultValue: 'From' })}
+                    type="date"
+                    value={edits.valid_from}
+                    onChange={(v) => setEdit('valid_from', v)}
+                  />
+                  <EditField
+                    label={t('performance.to', { defaultValue: 'To' })}
+                    type="date"
+                    value={edits.valid_to}
+                    onChange={(v) => setEdit('valid_to', v)}
+                  />
+                  <EditField
+                    label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
+                    type="number"
+                    value={edits.max_discount}
+                    onChange={(v) => setEdit('max_discount', v)}
+                  />
+                  <EditField
+                    label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
+                    type="number"
+                    value={edits.usage_limit}
+                    onChange={(v) => setEdit('usage_limit', v)}
+                  />
+                  <EditField
+                    label={t('coupons.itemShort', { defaultValue: 'Item' })}
+                    value={edits.item_name}
+                    onChange={(v) => setEdit('item_name', v)}
+                  />
+                  <EditField
+                    label={t('coupons.why', { defaultValue: 'Why' })}
+                    value={edits.reason}
+                    onChange={(v) => setEdit('reason', v)}
+                  />
+                  <p className="text-2xs leading-relaxed text-muted-foreground sm:col-span-2 lg:col-span-3">
                     {t('couponApprovals.editHint', {
                       defaultValue:
                         'Approving now grants these instead of what was asked for, and is recorded as an amendment.',
@@ -222,19 +480,11 @@ function Row({
                 size="sm"
                 disabled={busy || !row.ticket?.id}
                 onClick={() => {
-                  const edits: Record<string, number> = {};
-                  const a = Number(amount);
-                  if (amount.trim() !== '' && Number.isFinite(a) && a >= 0) {
-                    edits.max_discount = a;
-                    // Only the column the category implies, so an amended
-                    // percentage can never arrive as an amount.
-                    if ((row.discount_category ?? '').toLowerCase() === 'percentage')
-                      edits.coupon_percent = a;
-                    else edits.coupon_value = a;
-                  }
-                  const u = Number(uses);
-                  if (uses.trim() !== '' && Number.isInteger(u) && u > 0) edits.usage_limit = u;
-                  onDecide(true, note, Object.keys(edits).length ? edits : undefined);
+                  // Only what actually changed rides along — untouched fields
+                  // approve as asked, and no change at all is a straight
+                  // approval rather than an amendment.
+                  const patch = editing ? diffEdits(row, edits) : {};
+                  onDecide(true, note, Object.keys(patch).length ? patch : undefined);
                 }}
               >
                 {t('couponApprovals.approve', { defaultValue: 'Approve' })}
@@ -247,9 +497,8 @@ function Row({
                 onClick={() => {
                   setEditing((v) => !v);
                   // Seed from what was asked for, so the supervisor adjusts a
-                  // number rather than recalling it.
-                  setAmount(String(row.max_discount ?? row.coupon_value ?? ''));
-                  setUses(String(row.usage_limit ?? ''));
+                  // value rather than recalling it.
+                  setEdits(seedEdits(row));
                 }}
               >
                 {t('couponApprovals.edit', { defaultValue: 'Edit' })}
@@ -294,7 +543,7 @@ export function CouponApprovalsPage() {
     row: CouponApprovalRow,
     approve: boolean,
     note: string,
-    edits?: Record<string, number>,
+    edits?: Record<string, unknown>,
   ) => {
     decide.mutate(
       { row, approve, note, supervisorId: user?.id ?? null, edits },

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createItem, deleteItem, readItems, updateItem } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
@@ -128,6 +128,18 @@ export function RolesPage() {
   const roles = useAppRoles();
   const brands = useBrands();
   const [draft, setDraft] = useState<Draft>(EMPTY);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * "New role" clears the form — but when nothing was selected the form was
+   * ALREADY blank, so the click looked like it did nothing. Focusing the name
+   * field makes the state change visible and puts the cursor where the admin
+   * is about to type anyway.
+   */
+  const startNewRole = () => {
+    setDraft(EMPTY);
+    requestAnimationFrame(() => nameRef.current?.focus());
+  };
 
   const selected = useMemo(
     () => (roles.data ?? []).find((r) => r.id === draft.id) ?? null,
@@ -230,7 +242,7 @@ export function RolesPage() {
           {t('roles.title', { defaultValue: 'Roles & privileges' })}
         </h1>
         <ToolbarSpacer />
-        <Button size="sm" onClick={() => setDraft(EMPTY)} iconStart={<PlusIcon />}>
+        <Button size="sm" onClick={startNewRole} iconStart={<PlusIcon />}>
           {t('roles.new', { defaultValue: 'New role' })}
         </Button>
       </Toolbar>
@@ -378,6 +390,7 @@ export function RolesPage() {
                       {t('roles.name', { defaultValue: 'Role name' })}
                     </span>
                     <Input
+                      ref={nameRef}
                       value={draft.name}
                       onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
                       placeholder={t('roles.namePlaceholder', {
