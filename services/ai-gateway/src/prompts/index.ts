@@ -81,9 +81,16 @@ export const prompts = {
         'If the thread asks for anything outside customer support for this business ' +
         '(jokes, essays, code, general knowledge), draft a brief reply steering back to ' +
         'the support issue. ' +
-        'ALWAYS reply in the language the CUSTOMER is writing in — an Arabic ' +
-        'thread gets an Arabic reply, whatever language the agent works in. ' +
-        `${locale ? `Only if the thread gives you nothing to judge by, use: ${locale}. ` : ''}` +
+        `${
+          locale
+            ? `WRITE THE REPLY IN THIS LANGUAGE: ${locale}. The agent selected it, so it ` +
+              'overrides everything else — including the language of the thread. ' +
+              (locale.toLowerCase().startsWith('ar')
+                ? 'Write natural Modern Standard Arabic, not transliteration. '
+                : '')
+            : 'Reply in the language the CUSTOMER is writing in — an Arabic thread gets an ' +
+              'Arabic reply. '
+        }` +
         GUARD,
       user:
         `Conversation so far:\n${fence(thread(ctx))}\n\n` +
