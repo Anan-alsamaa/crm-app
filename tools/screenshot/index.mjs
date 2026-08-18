@@ -19,7 +19,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const AGENT = {
   url: process.env.AGENT_URL ?? 'http://127.0.0.1:8090',
   email: 'e2e.agent@example.com',
-  pass: '123456',
+  pass: 'Agent12345!',
   routes: [
     ['agent-inbox', '/'],
     ['agent-tickets', '/tickets'],
@@ -30,7 +30,7 @@ const AGENT = {
 const ADMIN = {
   url: process.env.ADMIN_URL ?? 'http://127.0.0.1:8092',
   email: 'e.habibi@anan.sa',
-  pass: '123456',
+  pass: 'Agent12345!',
   routes: [
     ['admin-dashboard', '/dashboard'],
     ['admin-users', '/users'],

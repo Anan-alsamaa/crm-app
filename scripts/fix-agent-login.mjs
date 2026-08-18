@@ -18,7 +18,7 @@ const DIRECTUS = process.env.DIRECTUS_URL ?? 'http://127.0.0.1:8055';
 const OWNER_EMAIL = process.env.DIRECTUS_ADMIN_EMAIL ?? 'e.habibi@anan.sa';
 const OWNER_PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD ?? '123456';
 const AGENT_EMAIL = process.env.AGENT_EMAIL ?? 'e2e.agent@example.com';
-const AGENT_PASSWORD = process.env.AGENT_PASSWORD ?? '123456';
+const AGENT_PASSWORD = process.env.AGENT_PASSWORD ?? 'Agent12345!';
 
 async function json(res) {
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${await res.text()}`);
