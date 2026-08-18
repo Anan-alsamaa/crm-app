@@ -12,6 +12,7 @@ call, jump to [Operational runbook](#operational-runbook).
 - [Observability](#observability)
 - [CORS & security headers](#cors--security-headers)
 - [Backups & disaster recovery](#backups--disaster-recovery)
+- [Audit-trail retention](#audit-trail-retention)
 - [Scaling](#scaling)
 - [Deploy workflow](#deploy-workflow)
 - [Security checklist](#security-checklist)
@@ -136,7 +137,7 @@ with `openssl rand -hex 32`.
 
 Optional but recommended: `GEMINI_API_KEY`; `OTEL_EXPORTER_OTLP_ENDPOINT`
 (see [Observability](#observability)); `YIJI_API_URL` with `YIJI_API_KEY`
-(switches YijiClient from mock to HTTP commerce lookups); `STORAGE_DRIVER=s3`
+(switches YijiClient from mock to HTTP commerce lookups); `STORAGE_LOCATIONS=s3`
 with `STORAGE_S3_*` (off-host Directus uploads + CSV imports).
 
 ## Secrets management
@@ -378,9 +379,44 @@ is present. Schedule the backup via cron / a k8s CronJob.
 | Asset            | Strategy                                                                                                                |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Postgres         | Nightly `backup-pg.sh` + continuous WAL archiving for PITR. **Test restore quarterly.**                                 |
-| Directus uploads | S3 lifecycle (when `STORAGE_DRIVER=s3`) or FS snapshot of the `directus_uploads` volume.                                |
+| Directus uploads | S3 lifecycle (when `STORAGE_LOCATIONS=s3`) or FS snapshot of the `directus_uploads` volume.                             |
 | Redis            | Ephemeral by design. Lost queue data: the SLA reconcile sweep re-creates timers within 60s; other jobs are best-effort. |
 | Schema drift     | `directus/bootstrap/` is canonical; keep `directus/snapshot/` in sync via `directus schema export`.                     |
+
+## Audit-trail retention
+
+Directus writes a row to `directus_revisions` **and** a row to
+`directus_activity` for every change to a tracked collection — including the
+ones nobody asked for, like the SLA sweep touching a timer or the gateway
+stamping a conversation. Nothing prunes them, and left alone they become the
+database: measured on a development instance, 47,029 revisions and 79,284
+activity rows (43 MB) against 100 messages and 52 conversations (~1 MB). The
+chats are small. The bookkeeping about the chats is not.
+
+```bash
+# Report what would go, changing nothing. Always run this first.
+pnpm --filter @yiji/directus-bootstrap prune:audit
+
+# Delete, with an explicit window.
+pnpm --filter @yiji/directus-bootstrap prune:audit -- --days=90 --write
+```
+
+Schedule it monthly via cron / a k8s CronJob, next to the nightly backup. It
+runs from `directus/bootstrap`, which is the package that already holds direct
+Postgres credentials — `workers` talks to Directus over HTTP only and is not
+given a database client for this.
+
+**Ticket revisions are held regardless of age, and must stay that way.** The
+ticket field history and the "last modified by" line are both _derived from_
+`directus_revisions`: `user_updated` records whichever background job wrote
+last, so the responsible human is recovered from the revision trail instead.
+Pruning those rows empties two features that still look entirely correct in the
+source — a failure that cost a full audit to find once already. The list of
+protected collections is `KEEP_FOREVER` in the script.
+
+Deletes run in batches so the lock stays short, and the script vacuums
+afterwards: without a vacuum the space is not returned and the prune looks like
+it did nothing.
 
 ## Scaling
 
