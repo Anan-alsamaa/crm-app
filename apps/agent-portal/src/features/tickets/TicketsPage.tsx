@@ -85,7 +85,6 @@ import { formatBytes, isImage, isUnknownType } from '../../lib/files.js';
 import { FileGlyph } from '../../components/FileGlyph.js';
 import { useAssetBlobUrl } from '../../lib/useAssetBlobUrl.js';
 
-const STATUSES: TicketStatus[] = ['new', 'open', 'pending', 'resolved', 'closed'];
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 
 type TicketFilter = 'all' | TicketStatus | 'overdue';
@@ -995,35 +994,6 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
             <div className="space-y-2.5">
               <label className="block space-y-1">
                 <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  {t('conversation.status')}
-                </span>
-                <SelectMenu
-                  size="sm"
-                  fullWidth
-                  value={tk.status}
-                  aria-label={t('conversation.status')}
-                  onChange={(next) => {
-                    const extra: Record<string, string> = {};
-                    if (next === 'resolved') extra.resolved_at = new Date().toISOString();
-                    if (next === 'closed') extra.closed_at = new Date().toISOString();
-                    patch({ status: next as TicketStatus, ...extra });
-                  }}
-                  options={STATUSES.map((s) => ({
-                    value: s,
-                    label: t(`status.${s}`, { ns: 'common' }),
-                  }))}
-                />
-                {/* #7 — spell out the two terminal states so the agent knows which
-                    one to pick and that neither is the same as logging a reply. */}
-                <p className="text-2xs leading-relaxed text-muted-foreground">
-                  {t('tickets.statusHelp', {
-                    defaultValue:
-                      'Resolved = work done, awaiting the customer. Closed = finished for good.',
-                  })}
-                </p>
-              </label>
-              <label className="block space-y-1">
-                <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   {t('conversation.priority')}
                 </span>
                 <SelectMenu
@@ -1108,12 +1078,22 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 <WhatsAppReply ticket={tk} />
               </div>
             ) : (
-              <div className="mt-3 flex items-center gap-1.5 text-2xs font-medium text-success">
-                <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
-                {t('tickets.solvedAt', {
-                  defaultValue: 'Solved · {{when}}',
-                  when: formatRelative(tk.resolved_at ?? tk.first_responded_at),
-                })}
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-2xs font-medium text-success">
+                  <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
+                  {t('tickets.solvedAt', {
+                    defaultValue: 'Solved · {{when}}',
+                    when: formatRelative(tk.resolved_at ?? tk.first_responded_at),
+                  })}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => patch({ status: 'open', resolved_at: undefined })}
+                >
+                  {t('tickets.reopen', { defaultValue: 'Reopen' })}
+                </Button>
               </div>
             )}
           </SectionCard>
