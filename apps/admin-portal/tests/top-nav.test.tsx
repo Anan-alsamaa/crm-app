@@ -89,16 +89,16 @@ describe('TopNav (admin, grouped)', () => {
     const trigger = screen.getByRole('button', { name: /Reports/ });
     // The filled pill is how selection reads; a side stripe is banned. The
     // fill is the ink token (AURA LIGHT), not the accent.
-    expect(trigger.className).toContain('bg-display');
-    expect(screen.getByRole('link', { name: /Dashboard/ }).className).not.toContain('bg-display');
+    expect(trigger.className).toContain('bg-primary');
+    expect(screen.getByRole('link', { name: /Dashboard/ }).className).not.toContain('bg-primary');
   });
 
   it('does not confuse sibling prefixes: /sla-reports must not activate /sla', () => {
     renderNav('/sla-reports');
     // The Policies link points at /sla, which is a string prefix of the current
     // path — matching on startsWith alone would light it up incorrectly.
-    expect(screen.getByRole('link', { name: /^SLA$/ }).className).not.toContain('bg-display');
-    expect(screen.getByRole('button', { name: /Reports/ }).className).toContain('bg-display');
+    expect(screen.getByRole('link', { name: /^SLA$/ }).className).not.toContain('bg-primary');
+    expect(screen.getByRole('button', { name: /Reports/ }).className).toContain('bg-primary');
   });
 
   it('selecting a menu item closes the menu', async () => {

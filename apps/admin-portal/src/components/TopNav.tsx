@@ -57,14 +57,22 @@ function tileFor(section: NavSection): string {
  * everything else as quiet text on the canvas — high contrast where you are,
  * nothing where you are not. */
 const TRIGGER_BASE =
-  'group relative flex h-10 items-center gap-1.5 rounded-full px-4 text-sm whitespace-nowrap transition-[background-color,color,box-shadow] duration-base ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:active:scale-[0.97]';
+  'group relative flex h-10 items-center gap-1.5 rounded-full px-4 text-sm whitespace-nowrap transition-[background-color,color,box-shadow,font-weight] duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:active:scale-[0.97]';
 /* The selected pill is a jade wash with a hairline of the same hue — the glow
  * treatment from the reference boards — rather than a solid fill, which on the
  * floating dark bar read as a button, not a location. */
 const TRIGGER_ACTIVE =
-  'bg-display font-semibold text-background shadow-[0_8px_20px_-8px_oklch(var(--display)/0.55)]';
+  'bg-primary font-semibold text-primary-foreground ' +
+  'shadow-[0_6px_18px_-8px_oklch(var(--primary)/0.7)] ' +
+  /* A hairline of the brand at low alpha reads as a lit edge rather than a
+     second border, which is what separates "this is where I am" from "this is
+     a button". */
+  'ring-1 ring-inset ring-primary-foreground/20';
 const TRIGGER_IDLE =
-  'font-medium text-ink-foreground/65 hover:bg-ink-foreground/10 hover:text-ink-foreground';
+  /* Idle sits back, hover comes forward, and the label gains weight on the way
+     — so the row feels responsive without anything moving. */
+  'font-medium text-ink-foreground/60 hover:bg-ink-foreground/[0.12] ' +
+  'hover:font-semibold hover:text-ink-foreground';
 
 /** A section with one item: a plain link, no menu. */
 function DirectLink({ section }: { section: NavSection }) {

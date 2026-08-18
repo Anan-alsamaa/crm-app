@@ -267,12 +267,12 @@ function TopNav({ sections }: { sections: NavSection[] }) {
                 // Solid dark pill for the current destination — see the admin
                 // portal's TopNav for the reasoning.
                 'relative flex h-10 items-center rounded-full px-4 text-sm whitespace-nowrap',
-                'transition-[background-color,color,box-shadow] duration-base ease-out',
+                'transition-[background-color,color,box-shadow,font-weight] duration-fast ease-out',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                 'motion-safe:active:scale-[0.97]',
                 isActive
-                  ? 'bg-display font-semibold text-background shadow-[0_8px_20px_-8px_oklch(var(--display)/0.55)]'
-                  : 'font-medium text-ink-foreground/65 hover:bg-ink-foreground/10 hover:text-ink-foreground',
+                  ? 'bg-primary font-semibold text-primary-foreground shadow-[0_6px_18px_-8px_oklch(var(--primary)/0.7)] ring-1 ring-inset ring-primary-foreground/20'
+                  : 'font-medium text-ink-foreground/60 hover:bg-ink-foreground/[0.12] hover:font-semibold hover:text-ink-foreground',
               )
             }
           >
