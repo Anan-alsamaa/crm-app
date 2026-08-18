@@ -19,7 +19,8 @@
     "done": "Done",
     "toggleLanguage": "Toggle language",
     "retry": "Retry",
-    "clear": "Clear"
+    "clear": "Clear",
+    "saved": "Saved"
   },
   "auth": {
     "signIn": "Sign in",
@@ -34,7 +35,11 @@
     "resolved": "Resolved",
     "closed": "Closed",
     "new": "New",
-    "solved": "Solved"
+    "solved": "Solved",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "edited": "Approved with changes",
+    "assigned": "Assigned"
   },
   "priority": {
     "low": "Low",

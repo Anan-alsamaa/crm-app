@@ -12,6 +12,7 @@ import {
   Toolbar,
   ToolbarSpacer,
   formatRelative,
+  Ltr,
 } from '@yiji/ui';
 import { exportFileName } from '@yiji/shared-config';
 import { directus } from '../../lib/directus.js';
@@ -35,10 +36,11 @@ interface Row {
   id: string;
   title: string | null;
   coupon_code: string | null;
-  coupon_value: number | null;
-  coupon_percent: number | null;
-  max_discount: number | null;
-  usage_limit: number | null;
+  // `numeric` columns arrive as strings — see `money` below.
+  coupon_value: number | string | null;
+  coupon_percent: number | string | null;
+  max_discount: number | string | null;
+  usage_limit: number | string | null;
   status: string | null;
   compensation: string | null;
   reason: string | null;
@@ -118,12 +120,19 @@ const PAGE_SIZE = 25;
 /**
  * A money figure without the database's trailing zeros.
  *
- * Postgres hands a numeric column back as "0.00000", which on screen reads as a
- * precision nobody entered. Two decimals only when there are actually halalas.
+ * Postgres hands a `numeric` column back as the STRING "0.00000" — not a
+ * number, because numeric is arbitrary-precision and JavaScript's float would
+ * lose it. So this takes both: the first version assumed a number, called
+ * `.toFixed` on a string, and took the whole page down with it. On screen the
+ * raw value also reads as a precision nobody entered, hence the trim.
+ *
+ * Two decimals only when there are actually halalas.
  */
-function money(n: number | null | undefined): string {
-  if (n == null) return '';
-  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
+export function money(n: number | string | null | undefined): string {
+  if (n == null || n === '') return '';
+  const v = Number(n);
+  if (!Number.isFinite(v)) return String(n);
+  return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, '');
 }
 
 interface Column {
@@ -192,12 +201,18 @@ export function AllCompensationPage() {
   const current = Math.min(page, pageCount);
   const paged = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
-  const worth = (r: Row) =>
-    r.coupon_percent != null
-      ? `${money(r.coupon_percent)}%`
-      : r.coupon_value != null
-        ? money(r.coupon_value)
-        : '';
+  /**
+   * What the coupon is worth, in whichever of the two forms it was granted.
+   *
+   * Driven by the formatted result rather than a null check on the raw column:
+   * an empty string is as absent as a null here, and testing the column left a
+   * bare "%" in the cell for a percentage coupon that had no percentage on it.
+   */
+  const worth = (r: Row) => {
+    const pct = money(r.coupon_percent);
+    if (pct) return `${pct}%`;
+    return money(r.coupon_value);
+  };
 
   const statusLabel = (r: Row) =>
     t(`status.${r.status ?? 'pending'}`, { ns: 'common', defaultValue: r.status ?? 'pending' });
@@ -269,7 +284,7 @@ export function AllCompensationPage() {
       key: 'uses',
       label: t('coupons.usageLimit', { defaultValue: 'Number of uses' }),
       end: true,
-      get: (r) => (r.usage_limit != null ? String(r.usage_limit) : ''),
+      get: (r) => money(r.usage_limit),
     },
     {
       key: 'validFrom',
@@ -524,11 +539,10 @@ export function AllCompensationPage() {
                             const v = c.get(r);
                             if (c.key === 'code') {
                               return (
-                                <td
-                                  key={c.key}
-                                  className="whitespace-nowrap px-4 py-3 font-mono text-xs font-semibold text-foreground"
-                                >
-                                  {v || '—'}
+                                <td className="whitespace-nowrap px-4 py-3" key={c.key}>
+                                  <Ltr className="font-mono text-xs font-semibold text-foreground">
+                                    {v || '—'}
+                                  </Ltr>
                                 </td>
                               );
                             }
@@ -559,12 +573,28 @@ export function AllCompensationPage() {
                                 </td>
                               );
                             }
+                            // A phone has no language: left-to-right wherever
+                            // the page is going, or the + moves to the far end.
+                            if (c.key === 'phone') {
+                              return (
+                                <td className="whitespace-nowrap px-4 py-3" key={c.key}>
+                                  <Ltr className="tabular-nums text-muted-foreground">
+                                    {v || '—'}
+                                  </Ltr>
+                                </td>
+                              );
+                            }
                             // Free text is capped so one wordy complaint cannot
                             // push the terms off the side of the table.
                             const wide = c.key === 'reason' || c.key === 'note';
                             return (
                               <td
                                 key={c.key}
+                                // Free text, so the browser decides from the
+                                // content: a title is usually the customer's
+                                // phone but may be Arabic prose, and forcing
+                                // either direction gets one of them wrong.
+                                dir="auto"
                                 title={wide && v ? v : undefined}
                                 className={[
                                   'px-4 py-3',

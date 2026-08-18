@@ -19,7 +19,8 @@
     "done": "تم",
     "toggleLanguage": "تبديل اللغة",
     "retry": "إعادة المحاولة",
-    "clear": "مسح"
+    "clear": "مسح",
+    "saved": "تم الحفظ"
   },
   "auth": {
     "signIn": "تسجيل الدخول",
@@ -34,7 +35,11 @@
     "resolved": "تم الحل",
     "closed": "مغلق",
     "new": "جديد",
-    "solved": "تم الحل"
+    "solved": "تم الحل",
+    "approved": "معتمدة",
+    "rejected": "مرفوضة",
+    "edited": "معتمدة مع تعديلات",
+    "assigned": "مُسندة"
   },
   "priority": {
     "low": "منخفض",

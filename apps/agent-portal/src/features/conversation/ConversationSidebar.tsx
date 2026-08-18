@@ -13,6 +13,7 @@ import {
   toast,
   formatRelative,
   useResizable,
+  Ltr,
 } from '@yiji/ui';
 import type { YijiOrder } from '@yiji/shared-types';
 import {
@@ -352,7 +353,9 @@ export function ConversationSidebar({
             {c.contact?.phone && (
               <div className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
                 <dt className="text-muted-foreground">{t('sidebar.phone')}</dt>
-                <dd className="tabular-nums font-medium text-foreground">{c.contact.phone}</dd>
+                <dd className="font-medium text-foreground">
+                  <Ltr className="tabular-nums">{c.contact.phone}</Ltr>
+                </dd>
               </div>
             )}
           </dl>

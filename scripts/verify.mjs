@@ -32,6 +32,7 @@ const steps = [
   { key: 'lint', label: 'Lint (eslint)', cmd: 'pnpm lint' },
   { key: 'types', label: 'Typecheck (all projects)', cmd: 'pnpm typecheck' },
   { key: 'guard', label: 'Security call-site guard', cmd: 'pnpm guard:security-callsites' },
+  { key: 'i18n', label: 'Arabic coverage guard', cmd: 'pnpm guard:i18n' },
   {
     key: 'svc',
     label: 'Unit+coverage: services & packages',

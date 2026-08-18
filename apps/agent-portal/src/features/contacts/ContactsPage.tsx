@@ -13,6 +13,7 @@ import {
   Toolbar,
   ToolbarSpacer,
   UsersIcon,
+  Ltr,
 } from '@yiji/ui';
 import { useContacts, type ContactRow } from './api.js';
 import { exportFileName } from '@yiji/shared-config';
@@ -266,7 +267,7 @@ export function ContactsPage() {
                         )}
                       </div>
                       <span className="hidden truncate text-end text-xs tabular-nums text-muted-foreground sm:block">
-                        {c.phone ?? '—'}
+                        <Ltr>{c.phone ?? '—'}</Ltr>
                       </span>
                       <span className="hidden min-w-0 justify-self-end sm:block">
                         {c.vendor?.name ? (
