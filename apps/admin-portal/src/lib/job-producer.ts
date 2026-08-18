@@ -68,4 +68,14 @@ export const jobProducer = {
   enqueueReport(reportId: string): Promise<EnqueueResult> {
     return post<EnqueueResult>('/jobs/report', { reportId });
   },
+  /**
+   * Tell Yiji about an approved coupon (workers `coupons` queue → CouponPushJob).
+   *
+   * Only the id travels: the worker re-reads the approval with its own token and
+   * refuses anything that is not actually approved, so this cannot be used to
+   * push a coupon nobody granted or terms other than the ones on record.
+   */
+  enqueueCouponPush(couponApprovalId: string): Promise<EnqueueResult> {
+    return post<EnqueueResult>('/jobs/coupon-push', { couponApprovalId });
+  },
 };

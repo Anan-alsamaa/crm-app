@@ -20,7 +20,7 @@ import { createRedis } from '@yiji/shared-config/redis';
 import { Server as SocketServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import pino from 'pino';
-import { ImportJob, ReportJob } from '@yiji/shared-types';
+import { CouponPushJob, ImportJob, ReportJob } from '@yiji/shared-types';
 import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
 import { createHs256Verifier } from './auth/customer-jwt.js';
@@ -341,6 +341,25 @@ async function main(): Promise<void> {
     if (jobId === null)
       return reply.code(503).send({ ok: false, error: 'queue disabled (no Redis)' });
     logger.info({ jobId }, 'admin enqueued report run');
+    return reply.send({ ok: true, jobId });
+  });
+  /**
+   * Admin-triggered: "this coupon is approved — tell Yiji."
+   *
+   * Admin-only, and the body carries only an id: the worker re-reads the
+   * approval with its own service token and refuses anything not actually
+   * approved, so this endpoint cannot be used to push a coupon nobody granted
+   * or to send terms other than the ones on record.
+   */
+  app.post('/jobs/coupon-push', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return reply;
+    const parsed = CouponPushJob.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ ok: false, error: 'invalid coupon push payload' });
+    const jobId = await producer.enqueueCouponPush(parsed.data);
+    if (jobId === null)
+      return reply.code(503).send({ ok: false, error: 'queue disabled (no Redis)' });
+    logger.info({ jobId, couponApprovalId: parsed.data.couponApprovalId }, 'coupon push enqueued');
     return reply.send({ ok: true, jobId });
   });
   // Agent-triggered: "I just assigned this conversation/ticket — tell the

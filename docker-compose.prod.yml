@@ -237,6 +237,8 @@ services:
       redis:
         condition: service_healthy
     environment:
+      YIJI_API_KEY: ${YIJI_API_KEY:-}
+      YIJI_COUPON_URL: ${YIJI_COUPON_URL:-}
       <<: *otel-env
       NODE_ENV: production
       DIRECTUS_INTERNAL_URL: ${DIRECTUS_INTERNAL_URL:-http://directus:8055}

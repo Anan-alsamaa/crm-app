@@ -10,6 +10,7 @@ import {
   type NotificationJob,
   type ReportJob,
   type RoutingJob,
+  CouponPushJob,
 } from '@yiji/shared-types';
 
 /**
@@ -36,6 +37,12 @@ export interface SideEffectProducer {
    * ladder rather than racing several against each other.
    */
   enqueueRouting(job: RoutingJob): Promise<string | null>;
+  /**
+   * Admin-triggered: tell Yiji about an approved coupon. The jobId is the
+   * approval's own id, so a supervisor double-clicking Approve, or the page
+   * retrying, cannot queue the same coupon twice.
+   */
+  enqueueCouponPush(job: CouponPushJob): Promise<string | null>;
   close(): Promise<void>;
 }
 
@@ -63,6 +70,10 @@ class NoopProducer implements SideEffectProducer {
     this.logger.warn('enqueue notification skipped (Redis disabled)');
     return null;
   }
+  async enqueueCouponPush(): Promise<string | null> {
+    this.logger.warn('coupon push skipped (Redis disabled)');
+    return null;
+  }
   async close(): Promise<void> {}
 }
 
@@ -72,6 +83,7 @@ class BullProducer implements SideEffectProducer {
   private readonly reports: Queue;
   private readonly notifications: Queue;
   private readonly routing: Queue;
+  private readonly coupons: Queue;
   private readonly connection: Redis | Cluster;
   /* On a cluster a queue's keys must hash to ONE shard or BullMQ's Lua
    * scripts fail with CROSSSLOT — hence the hash tag. undefined on
@@ -101,6 +113,7 @@ class BullProducer implements SideEffectProducer {
       prefix: this.prefix,
     });
     this.routing = new Queue(QUEUES.routing, { connection: this.connection, prefix: this.prefix });
+    this.coupons = new Queue(QUEUES.coupons, { connection: this.connection, prefix: this.prefix });
   }
   async enqueueImport(job: ImportJob): Promise<string | null> {
     const added = await this.imports.add('import', job, DEFAULT_JOB_OPTIONS);
@@ -112,6 +125,13 @@ class BullProducer implements SideEffectProducer {
   }
   async enqueueNotification(job: NotificationJob, jobId: string): Promise<string | null> {
     const added = await this.notifications.add(job.type, job, { ...DEFAULT_JOB_OPTIONS, jobId });
+    return added.id ?? null;
+  }
+  async enqueueCouponPush(job: CouponPushJob): Promise<string | null> {
+    const added = await this.coupons.add('push', job, {
+      ...DEFAULT_JOB_OPTIONS,
+      jobId: `coupon-push-${job.couponApprovalId}`,
+    });
     return added.id ?? null;
   }
   async enqueueRouting(job: RoutingJob): Promise<string | null> {

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, updateItem } from '@directus/sdk';
 import { approvedCouponPatch, type CouponApprovalStatus } from '@yiji/shared-types';
+import { jobProducer } from '../../lib/job-producer.js';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -150,7 +151,7 @@ export function useDecideCoupon() {
           updateItem('tickets' as never, row.ticket.id, approvedCouponPatch(amended) as never),
         );
       }
-      return directus.request(
+      const decided = await directus.request(
         updateItem('coupon_approvals' as never, row.id, {
           ...(edits ?? {}),
           status: approve ? 'approved' : 'rejected',
@@ -162,6 +163,24 @@ export function useDecideCoupon() {
           decision_note: note.trim() || null,
         } as never),
       );
+
+      /**
+       * Hand the approval to Yiji — after the decision is safely recorded, and
+       * without letting it affect the outcome.
+       *
+       * Deliberately not awaited into the result and deliberately swallowed. A
+       * supervisor's decision is made the moment they make it; if Yiji is down,
+       * or Redis is, the right behaviour is a coupon sitting at `approved` for
+       * the worker to deliver later — not an error telling the supervisor their
+       * approval failed when it did not. The gap between `approved` and
+       * `assigned` is exactly the record of what has not reached Yiji yet.
+       */
+      if (approve) {
+        void jobProducer.enqueueCouponPush(row.id).catch(() => {
+          /* delivery is the worker's promise, not this click's */
+        });
+      }
+      return decided;
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['coupon-approvals'] });

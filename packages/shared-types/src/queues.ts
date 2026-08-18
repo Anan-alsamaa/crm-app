@@ -14,6 +14,7 @@ export const QUEUES = {
   imports: 'imports',
   reports: 'reports',
   routing: 'routing',
+  coupons: 'coupons',
 } as const;
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 
@@ -102,6 +103,26 @@ export type RoutingJob = z.infer<typeof RoutingJob>;
 export const ROUTING_FIRST_WAIT_MS = 60_000;
 /** Still no reply → release to every agent. */
 export const ROUTING_SECOND_WAIT_MS = 30_000;
+
+// --- coupons ---
+/**
+ * "This coupon was approved — tell Yiji about it."
+ *
+ * Queued rather than pushed from the approval itself, and this is the whole
+ * reason the queue exists: Yiji being down, slow, or mid-deploy must never make
+ * a supervisor's approval fail. The decision is recorded in the CRM the moment
+ * they make it; telling Yiji is a separate promise the workers keep, with the
+ * retries and backoff every other job gets.
+ *
+ * Carries only the id. The worker re-reads the approval with its own service
+ * token, so an amended coupon cannot be pushed with the terms the agent
+ * originally asked for, and a request that was reversed between queueing and
+ * delivery is not pushed at all.
+ */
+export const CouponPushJob = z.object({
+  couponApprovalId: z.string().min(1),
+});
+export type CouponPushJob = z.infer<typeof CouponPushJob>;
 
 /** Default BullMQ job options (retries + backoff; dead-letter via failed state). */
 export const DEFAULT_JOB_OPTIONS = {

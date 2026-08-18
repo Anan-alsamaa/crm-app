@@ -10,6 +10,7 @@ import {
   type ImportJob,
   type ReportJob,
   type RoutingJob,
+  type CouponPushJob,
 } from '@yiji/shared-types';
 import type { MailTransport } from '../mail/index.js';
 import type { YijiDirectusClient } from '@yiji/shared-config';
@@ -24,6 +25,7 @@ import {
 } from './automation.js';
 import { processImportJob, type ImportsDeps } from './imports.js';
 import { processReportJob, type ReportsDeps } from './reports.js';
+import { processCouponPushJob } from './coupon-push.js';
 import { handleRouting } from '../routing.js';
 import {
   createTicketRepo,
@@ -147,6 +149,16 @@ export const processors: Record<QueueName, Processor> = {
         });
       },
       log: (msg, extra) => deps.logger.info(extra ?? {}, msg),
+    });
+  },
+  [QUEUES.coupons]: async (job, deps) => {
+    await processCouponPushJob(job as Job<CouponPushJob>, {
+      directus: deps.directus,
+      logger: deps.logger,
+      // Blank disables delivery and leaves the request `approved` — see the
+      // note in coupon-push.ts on why that is not treated as a success.
+      yijiCouponUrl: process.env.YIJI_COUPON_URL ?? '',
+      yijiApiKey: process.env.YIJI_API_KEY ?? '',
     });
   },
 };
