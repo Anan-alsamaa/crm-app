@@ -16,10 +16,12 @@ const OUT = process.env.OUT_DIR ?? './shots';
 const ONLY = process.env.ONLY ?? '';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Passwords follow the docs (`123456`) — every credential source must agree;
+// this tool holding its own value is exactly how the agent-login drift started.
 const AGENT = {
   url: process.env.AGENT_URL ?? 'http://127.0.0.1:8090',
   email: 'e2e.agent@example.com',
-  pass: 'Agent12345!',
+  pass: process.env.AGENT_PASS ?? '123456',
   routes: [
     ['agent-inbox', '/'],
     ['agent-tickets', '/tickets'],
@@ -30,7 +32,7 @@ const AGENT = {
 const ADMIN = {
   url: process.env.ADMIN_URL ?? 'http://127.0.0.1:8092',
   email: 'e.habibi@anan.sa',
-  pass: 'Agent12345!',
+  pass: process.env.ADMIN_PASS ?? '123456',
   routes: [
     ['admin-dashboard', '/dashboard'],
     ['admin-users', '/users'],
