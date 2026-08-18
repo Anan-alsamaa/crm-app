@@ -20,8 +20,8 @@ const AGENT = {
   email: process.env.AGENT_EMAIL ?? 'e2e.agent@example.com',
   pass: process.env.AGENT_PASSWORD ?? 'Agent12345!',
   routes: [
-    '/', '/tickets', '/new-ticket', '/contacts', '/coupons',
-    '/performance', '/compensation', '/preferences',
+    '/', '/tickets', '/new-ticket', '/contacts',
+    '/performance', '/compensation', '/compensation-requests', '/preferences',
   ],
 };
 const ADMIN = {
@@ -32,7 +32,7 @@ const ADMIN = {
   routes: [
     '/dashboard', '/report-tickets', '/report-complaints', '/report-conversations',
     '/report-agents', '/report-exports', '/reports', '/agent-performance',
-    '/sla', '/sla-reports', '/ticket-ops', '/coupon-approvals', '/coupon-report', '/users', '/teams',
+    '/sla', '/sla-reports', '/ticket-ops', '/coupon-approvals', '/coupon-report', '/compensation', '/users', '/teams',
     '/roles', '/lists', '/custom-fields', '/stores', '/brands', '/vendors',
     '/store-notifications', '/automation', '/imports', '/ai-config', '/backup',
   ],

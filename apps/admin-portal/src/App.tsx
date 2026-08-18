@@ -60,6 +60,11 @@ const StoresPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import('./features/reports/ReportsPage.js').then((m) => ({ default: m.ReportsPage })),
 );
+const AllCompensationPage = lazy(() =>
+  import('./features/coupon-approvals/AllCompensationPage.js').then((m) => ({
+    default: m.AllCompensationPage,
+  })),
+);
 const CouponReportPage = lazy(() =>
   import('./features/coupon-approvals/CouponReportPage.js').then((m) => ({
     default: m.CouponReportPage,
@@ -300,6 +305,11 @@ function Shell({ children }: { children: React.ReactNode }) {
           icon: ClockIcon,
         },
         {
+          to: '/coupon-report',
+          label: t('nav.couponReport', { defaultValue: 'Compensation' }),
+          icon: ClockIcon,
+        },
+        {
           // One report. A complaint IS a ticket here — two entries listing the
           // same records under different names only raised the question of
           // which one was authoritative.
@@ -343,8 +353,8 @@ function Shell({ children }: { children: React.ReactNode }) {
           icon: ShieldIcon,
         },
         {
-          to: '/coupon-report',
-          label: t('nav.couponReport', { defaultValue: 'Coupon report' }),
+          to: '/compensation',
+          label: t('nav.compensationAll', { defaultValue: 'Compensation' }),
           icon: ShieldIcon,
         },
       ],
@@ -595,6 +605,16 @@ export function App() {
               <ProtectedRoute>
                 <Shell>
                   <CouponApprovalsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/compensation"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <AllCompensationPage />
                 </Shell>
               </ProtectedRoute>
             }

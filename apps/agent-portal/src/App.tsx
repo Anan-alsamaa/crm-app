@@ -331,11 +331,6 @@ function Shell({ children }: { children: React.ReactNode }) {
           icon: UsersIcon,
         },
         {
-          to: '/coupons',
-          label: t('nav.coupons', { defaultValue: 'My coupons' }),
-          icon: TicketIcon,
-        },
-        {
           to: '/performance',
           label: t('nav.performance', { defaultValue: 'Agent performance' }),
           icon: ClockIcon,
@@ -466,11 +461,11 @@ export function App() {
           {/* Top-level, not /tickets/new: it is its own nav entry, and nested
               under /tickets both items would light up at once. */}
           <Route
-            path="/coupons"
+            path="/compensation-requests"
             element={
               <ProtectedRoute>
                 <Shell>
-                  <MyCouponsPage />
+                  <CompensationPage />
                 </Shell>
               </ProtectedRoute>
             }
@@ -540,13 +535,13 @@ export function App() {
             element={
               <ProtectedRoute>
                 <Shell>
-                  <CompensationPage />
+                  <MyCouponsPage />
                 </Shell>
               </ProtectedRoute>
             }
           />
           <Route
-            path="/compensation/:id"
+            path="/compensation-requests/:id"
             element={
               <ProtectedRoute>
                 <Shell>

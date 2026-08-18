@@ -152,7 +152,7 @@ function RequestQueue() {
         <ul className="space-y-2">
           {rows.map((r) => (
             <li key={r.id}>
-              <QueueCard row={r} onOpen={() => navigate(`/compensation/${r.id}`)} />
+              <QueueCard row={r} onOpen={() => navigate(`/compensation-requests/${r.id}`)} />
             </li>
           ))}
         </ul>
