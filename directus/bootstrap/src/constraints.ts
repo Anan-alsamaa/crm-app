@@ -19,7 +19,20 @@ export const constraintStatements: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts (email);`,
   `CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at
      ON conversations (last_message_at);`,
-  `CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages (conversation);`,
+
+  // Directus indexes the field itself as well, so the inbox's busiest column
+  // carried TWO identical btrees — every arriving message paid to write both.
+  // Ours is the one this file guarantees, so the generated twin is the one that
+  // goes. Dropped on every run because a later schema apply may recreate it.
+  `DROP INDEX IF EXISTS conversations_last_message_at_index;`,
+
+  // Reading a thread means "this conversation, oldest first" — see the message
+  // query in the inbox. The composite serves that in one ordered range scan,
+  // and it answers a bare conversation lookup too, which is why the
+  // single-column index it replaces is dropped rather than kept alongside.
+  `CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
+     ON messages (conversation, date_created);`,
+  `DROP INDEX IF EXISTS idx_messages_conversation;`,
   `CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket ON ticket_events (ticket);`,
   `CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications (recipient);`,
 
