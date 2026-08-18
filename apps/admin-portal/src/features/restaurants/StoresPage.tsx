@@ -527,6 +527,9 @@ export function StoresPage() {
                   <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
                     {t('stores.colChain', { defaultValue: 'Chain manager' })}
                   </th>
+                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
+                    {t('stores.colStatus', { defaultValue: 'Status' })}
+                  </th>
                   <th className="h-11 px-4 text-end align-middle font-semibold" />
                 </tr>
               </thead>
@@ -563,13 +566,6 @@ export function StoresPage() {
                             {s.code}
                           </span>
                         )}
-                        {s.status === 'inactive' && (
-                          <span className="ms-2">
-                            <Pill tone="muted" size="sm">
-                              {t('stores.inactive', { defaultValue: 'Inactive' })}
-                            </Pill>
-                          </span>
-                        )}
                       </button>
                     </td>
                     <td className="px-4 py-3">
@@ -584,6 +580,17 @@ export function StoresPage() {
                     <td className="px-4 py-3 text-muted-foreground">{s.city ?? '—'}</td>
                     <td className="px-4 py-3 text-muted-foreground">{s.area_manager ?? '—'}</td>
                     <td className="px-4 py-3 text-muted-foreground">{s.chain_manager ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      {s.status === 'inactive' ? (
+                        <Pill tone="muted" size="sm">
+                          {t('stores.inactive', { defaultValue: 'Inactive' })}
+                        </Pill>
+                      ) : (
+                        <Pill tone="success" size="sm" dot>
+                          {t('stores.active', { defaultValue: 'Active' })}
+                        </Pill>
+                      )}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 text-end">
                       <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(s)}>
                         {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}

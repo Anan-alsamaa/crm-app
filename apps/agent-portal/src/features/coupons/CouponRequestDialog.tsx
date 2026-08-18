@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Drawer, DrawerSection, FormField, Input, SelectMenu, toast } from '@yiji/ui';
 import {
@@ -93,6 +93,30 @@ export function CouponRequestDialog({
 
   const set = <K extends keyof CouponRequestDraft>(key: K, value: CouponRequestDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
+
+  /**
+   * Seed the form from the ticket each time it opens.
+   *
+   * The state above only runs its initialiser on the first render, and on the
+   * add-ticket page this dialog is mounted from the moment the page is — long
+   * before the agent has typed the complaint. So the reason, the phone and the
+   * branch were captured while all of them were still empty, and the agent was
+   * asked to type the complaint out a second time.
+   *
+   * Only on the opening edge, so nothing the agent has typed in here is
+   * overwritten while they are working.
+   */
+  useEffect(() => {
+    if (!open) return;
+    setDraft((d) => ({
+      ...d,
+      title: d.title || (customerPhone ?? ''),
+      compensation_reason: d.compensation_reason || (description ?? ''),
+      brand_id: d.brand_id ?? brandId,
+      restaurant_id: d.restaurant_id ?? restaurantId,
+    }));
+    // Deliberately the opening edge only — see above.
+  }, [open]);
 
   const parsed = CouponRequestDraftChecked.safeParse(draft);
   /** The first thing wrong, named — not "check the highlighted fields". */

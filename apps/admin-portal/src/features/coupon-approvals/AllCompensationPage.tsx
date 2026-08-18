@@ -3,28 +3,33 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
 import {
+  Button,
   Input,
+  Pagination,
   Pill,
   SelectMenu,
   Skeleton,
-  Table,
-  TableSurface,
-  Td,
-  Th,
   Toolbar,
   ToolbarSpacer,
-  Tr,
   formatRelative,
 } from '@yiji/ui';
+import { exportFileName } from '@yiji/shared-config';
 import { directus } from '../../lib/directus.js';
+import { downloadCsv, toCsv } from '../restaurants/csv.js';
 
 /**
- * Every coupon anyone has asked for, in whatever state it reached.
+ * The master record of every coupon the business has ever issued.
  *
- * Distinct from Coupon approvals on purpose: that page is a queue of decisions
- * still to make, and a supervisor working it should not have to read past a
- * hundred settled rows to find the two waiting on them. This is the record —
- * what was granted, to whom, by whom, and what happened to it.
+ * Distinct from Admin statistics, which answers "what is waiting on me, and how
+ * am I deciding?" for the supervisor working the queue. This answers "what did
+ * we give away, to whom, on whose say-so, and on what terms?" — so it carries
+ * every field a coupon has rather than the handful that fit a summary, and it
+ * exports, because that question is usually asked by finance in a spreadsheet.
+ *
+ * Every column is on screen rather than behind a column picker: an operator
+ * reconciling a coupon against an invoice needs the terms and the dates in one
+ * glance, and hiding half of them by default only means finding the picker
+ * first. The table scrolls sideways instead.
  */
 interface Row {
   id: string;
@@ -32,14 +37,30 @@ interface Row {
   coupon_code: string | null;
   coupon_value: number | null;
   coupon_percent: number | null;
+  max_discount: number | null;
+  usage_limit: number | null;
   status: string | null;
+  compensation: string | null;
+  reason: string | null;
+  decision_note: string | null;
   edited_by_admin: boolean | null;
   date_created: string | null;
+  decided_at: string | null;
   valid_from: string | null;
   valid_to: string | null;
+  issuing_side: string | null;
+  delivery_type: string | null;
+  coupon_type: string | null;
+  discount_category: string | null;
+  brand_id: string | null;
+  restaurant_id: string | null;
   requested_by: { id: string; first_name: string | null; email: string | null } | null;
+  decided_by: { id: string; first_name: string | null; email: string | null } | null;
   contact: { name: string | null; phone: string | null } | null;
 }
+
+/** `||` not `??`: Directus stores an unset name as an empty string. */
+const who = (u: Row['requested_by']) => u?.first_name?.trim() || u?.email || '';
 
 function useAllCoupons() {
   return useQuery({
@@ -57,12 +78,25 @@ function useAllCoupons() {
               'coupon_code',
               'coupon_value',
               'coupon_percent',
+              'max_discount',
+              'usage_limit',
               'status',
+              'compensation',
+              'reason',
+              'decision_note',
               'edited_by_admin',
               'date_created',
+              'decided_at',
               'valid_from',
               'valid_to',
+              'issuing_side',
+              'delivery_type',
+              'coupon_type',
+              'discount_category',
+              'brand_id',
+              'restaurant_id',
               { requested_by: ['id', 'first_name', 'email'] },
+              { decided_by: ['id', 'first_name', 'email'] },
               { contact: ['name', 'phone'] },
             ],
           } as never,
@@ -73,9 +107,31 @@ function useAllCoupons() {
 
 const TONE: Record<string, 'success' | 'destructive' | 'warning' | 'neutral'> = {
   approved: 'success',
+  assigned: 'success',
+  edited: 'success',
   rejected: 'destructive',
   pending: 'warning',
 };
+
+const PAGE_SIZE = 25;
+
+/**
+ * A money figure without the database's trailing zeros.
+ *
+ * Postgres hands a numeric column back as "0.00000", which on screen reads as a
+ * precision nobody entered. Two decimals only when there are actually halalas.
+ */
+function money(n: number | null | undefined): string {
+  if (n == null) return '';
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
+}
+
+interface Column {
+  key: string;
+  label: string;
+  end?: boolean;
+  get: (r: Row) => string;
+}
 
 export function AllCompensationPage() {
   const { t } = useTranslation();
@@ -83,40 +139,215 @@ export function AllCompensationPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [agent, setAgent] = useState('');
+  const [status, setStatus] = useState('');
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
 
-  const list = rows.data ?? [];
+  const list = useMemo(() => rows.data ?? [], [rows.data]);
 
-  /** Who has ever raised one — the filter offers only names that appear. */
+  /** Only names that actually appear — an empty filter option helps nobody. */
   const agents = useMemo(() => {
     const m = new Map<string, string>();
     for (const r of list) {
-      if (!r.requested_by?.id) continue;
-      // `||` not `??`: an unset first name is an empty string.
-      m.set(r.requested_by.id, r.requested_by.first_name?.trim() || r.requested_by.email || '—');
+      if (r.requested_by?.id) m.set(r.requested_by.id, who(r.requested_by) || '—');
     }
     return [...m.entries()].map(([value, label]) => ({ value, label }));
   }, [list]);
 
-  const filtered = useMemo(
-    () =>
-      list.filter((r) => {
-        const day = (r.date_created ?? '').slice(0, 10);
-        if (from && day < from) return false;
-        // Inclusive of the end day: an admin asking for "up to the 17th" means
-        // including the 17th, not up to midnight at its start.
-        if (to && day > to) return false;
-        if (agent && r.requested_by?.id !== agent) return false;
-        return true;
-      }),
-    [list, from, to, agent],
+  const statuses = useMemo(
+    () => [...new Set(list.map((r) => r.status ?? 'pending'))].sort(),
+    [list],
   );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return list.filter((r) => {
+      const day = (r.date_created ?? '').slice(0, 10);
+      if (from && day < from) return false;
+      // Inclusive of the end day: "up to the 17th" means including the 17th.
+      if (to && day > to) return false;
+      if (agent && r.requested_by?.id !== agent) return false;
+      if (status && (r.status ?? 'pending') !== status) return false;
+      if (q) {
+        const hay = [
+          r.coupon_code,
+          r.title,
+          r.contact?.name,
+          r.contact?.phone,
+          r.brand_id,
+          r.restaurant_id,
+          who(r.requested_by),
+        ]
+          .join(' ')
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [list, from, to, agent, status, query]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // Clamped rather than stored: narrowing a filter while on page 9 must not
+  // leave the operator staring at an empty table.
+  const current = Math.min(page, pageCount);
+  const paged = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
   const worth = (r: Row) =>
     r.coupon_percent != null
-      ? `${r.coupon_percent}%`
+      ? `${money(r.coupon_percent)}%`
       : r.coupon_value != null
-        ? `${r.coupon_value}`
-        : '—';
+        ? money(r.coupon_value)
+        : '';
+
+  const statusLabel = (r: Row) =>
+    t(`status.${r.status ?? 'pending'}`, { ns: 'common', defaultValue: r.status ?? 'pending' });
+
+  const columns: Column[] = [
+    {
+      key: 'code',
+      label: t('coupons.code', { defaultValue: 'Coupon code' }),
+      get: (r) => r.coupon_code ?? '',
+    },
+    {
+      key: 'title',
+      label: t('coupons.titleField', { defaultValue: 'Coupon title' }),
+      get: (r) => r.title ?? '',
+    },
+    {
+      key: 'customer',
+      label: t('compensationAll.customer', { defaultValue: 'Customer' }),
+      get: (r) => r.contact?.name ?? '',
+    },
+    {
+      key: 'phone',
+      label: t('compensationAll.phone', { defaultValue: 'Phone' }),
+      get: (r) => r.contact?.phone ?? '',
+    },
+    {
+      key: 'brand',
+      label: t('stores.colBrand', { defaultValue: 'Brand' }),
+      get: (r) => r.brand_id ?? '',
+    },
+    {
+      key: 'store',
+      label: t('compensationAll.store', { defaultValue: 'Store' }),
+      get: (r) => r.restaurant_id ?? '',
+    },
+    {
+      key: 'issuing',
+      label: t('lists.issuingSide', { defaultValue: 'Issuing side' }),
+      get: (r) => r.issuing_side ?? '',
+    },
+    {
+      key: 'delivery',
+      label: t('lists.deliveryType', { defaultValue: 'Delivery type' }),
+      get: (r) => r.delivery_type ?? '',
+    },
+    {
+      key: 'couponType',
+      label: t('lists.couponType', { defaultValue: 'Coupon type' }),
+      get: (r) => r.coupon_type ?? '',
+    },
+    {
+      key: 'category',
+      label: t('lists.discountCategory', { defaultValue: 'Discount category' }),
+      get: (r) => r.discount_category ?? '',
+    },
+    {
+      key: 'worth',
+      label: t('compensationAll.worth', { defaultValue: 'Worth' }),
+      end: true,
+      get: worth,
+    },
+    {
+      key: 'cap',
+      label: t('coupons.maxDiscount', { defaultValue: 'Maximum discount' }),
+      end: true,
+      get: (r) => money(r.max_discount),
+    },
+    {
+      key: 'uses',
+      label: t('coupons.usageLimit', { defaultValue: 'Number of uses' }),
+      end: true,
+      get: (r) => (r.usage_limit != null ? String(r.usage_limit) : ''),
+    },
+    {
+      key: 'validFrom',
+      label: t('performance.from', { defaultValue: 'From' }),
+      get: (r) => r.valid_from?.slice(0, 10) ?? '',
+    },
+    {
+      key: 'validTo',
+      label: t('performance.to', { defaultValue: 'To' }),
+      get: (r) => r.valid_to?.slice(0, 10) ?? '',
+    },
+    {
+      key: 'state',
+      label: t('compensationAll.state', { defaultValue: 'State' }),
+      get: statusLabel,
+    },
+    {
+      key: 'agent',
+      label: t('compensationAll.agent', { defaultValue: 'Assigned by' }),
+      get: (r) => who(r.requested_by),
+    },
+    {
+      key: 'decidedBy',
+      label: t('compensationAll.decidedBy', { defaultValue: 'Decided by' }),
+      get: (r) => who(r.decided_by),
+    },
+    {
+      key: 'raised',
+      label: t('compensationAll.raised', { defaultValue: 'Raised' }),
+      get: (r) => r.date_created?.slice(0, 10) ?? '',
+    },
+    {
+      key: 'decidedAt',
+      label: t('compensationAll.decidedAt', { defaultValue: 'Decided' }),
+      get: (r) => r.decided_at?.slice(0, 10) ?? '',
+    },
+    {
+      key: 'reason',
+      label: t('coupons.why', { defaultValue: 'Why' }),
+      get: (r) => r.reason ?? '',
+    },
+    {
+      key: 'note',
+      label: t('compensationAll.note', { defaultValue: 'Decision note' }),
+      get: (r) => r.decision_note ?? '',
+    },
+  ];
+
+  /** What was filtered, for the file name — see `exportFileName`. */
+  const scope = () => {
+    const bits: string[] = [];
+    if (from || to) bits.push(`${from || 'start'} to ${to || 'today'}`);
+    if (agent) bits.push(agents.find((a) => a.value === agent)?.label ?? 'one agent');
+    if (status) bits.push(status);
+    if (query.trim()) bits.push(`matching ${query.trim()}`);
+    return bits.length ? bits.join(', ') : 'all';
+  };
+
+  const exportCsv = () =>
+    downloadCsv(
+      // The filter is in the name, so two exports sitting in a downloads folder
+      // are never the same file with a difference nobody can remember.
+      exportFileName('Compensation', { scope: scope() }),
+      toCsv(
+        columns.map((c) => c.label),
+        filtered.map((r) => columns.map((c) => c.get(r))),
+      ),
+    );
+
+  const reset = () => {
+    setFrom('');
+    setTo('');
+    setAgent('');
+    setStatus('');
+    setQuery('');
+    setPage(1);
+  };
+  const filtering = Boolean(from || to || agent || status || query.trim());
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -132,20 +363,45 @@ export function AllCompensationPage() {
             total: list.length,
           })}
         </span>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={exportCsv}
+          disabled={filtered.length === 0}
+        >
+          {t('stores.export', { defaultValue: 'Export CSV' })}
+        </Button>
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-4">
-        <div className="mx-auto max-w-6xl space-y-5">
+        <div className="space-y-5">
           <div className="border-b border-foreground/10 pb-5">
-            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
               {t('compensationAll.hint', {
                 defaultValue:
-                  'Every coupon anyone has asked for, whatever state it reached. Coupon approvals is the queue of decisions still to make; this is the record.',
+                  'Every coupon anyone has asked for, whatever state it reached, with the full terms of each. Admin statistics is the supervisor view of those decisions; this is the record.',
               })}
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-[10rem_10rem_minmax(0,14rem)]">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,16rem)_9rem_9rem_minmax(0,12rem)_minmax(0,10rem)_auto]">
+            <label className="block space-y-1">
+              <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('actions.search', { ns: 'common', defaultValue: 'Search' })}
+              </span>
+              <Input
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setPage(1);
+                }}
+                placeholder={t('compensationAll.searchPlaceholder', {
+                  defaultValue: 'Code, customer, phone, brand',
+                })}
+                aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
+              />
+            </label>
             <label className="block space-y-1">
               <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {t('performance.from', { defaultValue: 'From' })}
@@ -153,7 +409,10 @@ export function AllCompensationPage() {
               <Input
                 type="date"
                 value={from}
-                onChange={(e) => setFrom(e.target.value)}
+                onChange={(e) => {
+                  setFrom(e.target.value);
+                  setPage(1);
+                }}
                 aria-label={t('performance.from', { defaultValue: 'From' })}
               />
             </label>
@@ -164,7 +423,10 @@ export function AllCompensationPage() {
               <Input
                 type="date"
                 value={to}
-                onChange={(e) => setTo(e.target.value)}
+                onChange={(e) => {
+                  setTo(e.target.value);
+                  setPage(1);
+                }}
                 aria-label={t('performance.to', { defaultValue: 'To' })}
               />
             </label>
@@ -175,7 +437,10 @@ export function AllCompensationPage() {
               <SelectMenu
                 fullWidth
                 value={agent}
-                onChange={setAgent}
+                onChange={(v) => {
+                  setAgent(v);
+                  setPage(1);
+                }}
                 aria-label={t('compensationAll.agent', { defaultValue: 'Assigned by' })}
                 options={[
                   { value: '', label: t('compensationAll.anyAgent', { defaultValue: 'Anyone' }) },
@@ -183,83 +448,154 @@ export function AllCompensationPage() {
                 ]}
               />
             </label>
+            <label className="block space-y-1">
+              <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('compensationAll.state', { defaultValue: 'State' })}
+              </span>
+              <SelectMenu
+                fullWidth
+                value={status}
+                onChange={(v) => {
+                  setStatus(v);
+                  setPage(1);
+                }}
+                aria-label={t('compensationAll.state', { defaultValue: 'State' })}
+                options={[
+                  { value: '', label: t('agentReports.statusAll', { defaultValue: 'All' }) },
+                  ...statuses.map((s) => ({
+                    value: s,
+                    label: t(`status.${s}`, { ns: 'common', defaultValue: s }),
+                  })),
+                ]}
+              />
+            </label>
+            {filtering && (
+              <div className="flex items-end">
+                <Button type="button" variant="ghost" size="sm" onClick={reset}>
+                  {t('inbox.clearFilters', { defaultValue: 'Clear filters' })}
+                </Button>
+              </div>
+            )}
           </div>
 
           {rows.isLoading ? (
             <Skeleton className="h-64 w-full rounded-2xl" />
           ) : (
-            <TableSurface>
-              <Table>
-                <thead>
-                  <Tr>
-                    <Th>{t('coupons.code', { defaultValue: 'Coupon code' })}</Th>
-                    <Th>{t('compensationAll.customer', { defaultValue: 'Customer' })}</Th>
-                    <Th>{t('compensationAll.agent', { defaultValue: 'Assigned by' })}</Th>
-                    <Th className="text-end">
-                      {t('compensationAll.worth', { defaultValue: 'Worth' })}
-                    </Th>
-                    <Th>{t('compensationAll.state', { defaultValue: 'State' })}</Th>
-                    <Th className="text-end">
-                      {t('compensationAll.raised', { defaultValue: 'Raised' })}
-                    </Th>
-                  </Tr>
-                </thead>
-                <tbody>
-                  {filtered.length === 0 ? (
-                    <Tr>
-                      <Td colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
-                        {list.length === 0
-                          ? t('compensationAll.none', {
-                              defaultValue: 'No coupon has been raised yet.',
-                            })
-                          : t('compensationAll.noMatches', {
-                              defaultValue: 'No coupon matches those filters.',
-                            })}
-                      </Td>
-                    </Tr>
-                  ) : (
-                    filtered.map((r) => (
-                      <Tr key={r.id}>
-                        <Td className="font-mono text-xs font-semibold text-foreground">
-                          {r.coupon_code ?? '—'}
-                        </Td>
-                        <Td>
-                          <span className="block text-sm text-foreground">
-                            {r.contact?.name || r.title || '—'}
-                          </span>
-                          <span className="block text-2xs text-muted-foreground">
-                            {r.contact?.phone ?? ''}
-                          </span>
-                        </Td>
-                        <Td className="text-sm">
-                          {r.requested_by?.first_name?.trim() || r.requested_by?.email || '—'}
-                        </Td>
-                        <Td className="text-end tabular-nums font-semibold">{worth(r)}</Td>
-                        <Td>
-                          <Pill
-                            tone={TONE[(r.status ?? 'pending').toLowerCase()] ?? 'neutral'}
-                            size="sm"
-                          >
-                            {t(`status.${r.status ?? 'pending'}`, {
-                              ns: 'common',
-                              defaultValue: r.status ?? 'pending',
-                            })}
-                          </Pill>
-                          {r.edited_by_admin && (
-                            <span className="ms-1.5 text-2xs text-muted-foreground">
-                              {t('compensationAll.amended', { defaultValue: 'amended' })}
-                            </span>
-                          )}
-                        </Td>
-                        <Td className="text-end text-2xs tabular-nums text-muted-foreground">
-                          {formatRelative(r.date_created)}
-                        </Td>
-                      </Tr>
-                    ))
-                  )}
-                </tbody>
-              </Table>
-            </TableSurface>
+            <div className="rounded-2xl bg-card">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[80rem] border-collapse text-sm">
+                  <thead className="bg-secondary/70 text-2xs uppercase tracking-[0.1em] text-muted-foreground">
+                    <tr>
+                      {columns.map((c) => (
+                        <th
+                          key={c.key}
+                          className={`h-11 whitespace-nowrap px-4 align-middle font-semibold ${
+                            c.end ? 'text-end' : 'text-start'
+                          }`}
+                        >
+                          {c.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paged.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={columns.length}
+                          className="py-10 text-center text-sm text-muted-foreground"
+                        >
+                          {list.length === 0
+                            ? t('compensationAll.none', {
+                                defaultValue: 'No coupon has been raised yet.',
+                              })
+                            : t('compensationAll.noMatches', {
+                                defaultValue: 'No coupon matches those filters.',
+                              })}
+                        </td>
+                      </tr>
+                    ) : (
+                      paged.map((r) => (
+                        <tr
+                          key={r.id}
+                          className="border-t border-foreground/[0.06] transition-colors duration-fast hover:bg-primary/[0.07]"
+                        >
+                          {columns.map((c) => {
+                            const v = c.get(r);
+                            if (c.key === 'code') {
+                              return (
+                                <td
+                                  key={c.key}
+                                  className="whitespace-nowrap px-4 py-3 font-mono text-xs font-semibold text-foreground"
+                                >
+                                  {v || '—'}
+                                </td>
+                              );
+                            }
+                            if (c.key === 'state') {
+                              return (
+                                <td key={c.key} className="whitespace-nowrap px-4 py-3">
+                                  <Pill
+                                    tone={TONE[(r.status ?? 'pending').toLowerCase()] ?? 'neutral'}
+                                    size="sm"
+                                  >
+                                    {v}
+                                  </Pill>
+                                  {r.edited_by_admin && (
+                                    <span className="ms-1.5 text-2xs text-muted-foreground">
+                                      {t('compensationAll.amended', { defaultValue: 'amended' })}
+                                    </span>
+                                  )}
+                                </td>
+                              );
+                            }
+                            if (c.key === 'raised') {
+                              return (
+                                <td
+                                  key={c.key}
+                                  className="whitespace-nowrap px-4 py-3 text-2xs tabular-nums text-muted-foreground"
+                                >
+                                  {formatRelative(r.date_created)}
+                                </td>
+                              );
+                            }
+                            // Free text is capped so one wordy complaint cannot
+                            // push the terms off the side of the table.
+                            const wide = c.key === 'reason' || c.key === 'note';
+                            return (
+                              <td
+                                key={c.key}
+                                title={wide && v ? v : undefined}
+                                className={[
+                                  'px-4 py-3',
+                                  c.end
+                                    ? 'text-end tabular-nums font-semibold text-foreground'
+                                    : 'text-muted-foreground',
+                                  wide ? 'max-w-[18rem] truncate' : 'whitespace-nowrap',
+                                ].join(' ')}
+                              >
+                                {v || '—'}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {pageCount > 1 && (
+                <div className="border-t border-foreground/[0.08] px-2 py-1.5">
+                  <Pagination
+                    page={current}
+                    pageCount={pageCount}
+                    onPage={setPage}
+                    prevLabel={t('pagination.prev', { defaultValue: 'Previous' })}
+                    nextLabel={t('pagination.next', { defaultValue: 'Next' })}
+                  />
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

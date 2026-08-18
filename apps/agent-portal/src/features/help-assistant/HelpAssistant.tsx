@@ -380,7 +380,7 @@ export function HelpAssistant(): JSX.Element {
             Aura on the left under her name, the user on the right: the
             arrangement every messaging app uses, so who said what is readable
             without reading. */}
-        <div className="space-y-4" aria-live="polite">
+        <div className="flex min-h-full flex-col justify-end space-y-4" aria-live="polite">
           {turns.map((turn, i) =>
             turn.role === 'user' ? (
               <div key={i} className="flex flex-col items-end gap-1">
@@ -425,34 +425,38 @@ export function HelpAssistant(): JSX.Element {
           )}
 
           {turns.length === 1 && turns[0]?.welcome && !ask.isPending && (
-            <div className="flex flex-col gap-2 pt-1">
+            <div className="pt-1">
               <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {t('helpAssistant.tryAsking', { defaultValue: 'Try asking' })}
               </p>
-              {STARTERS.map((s) => (
-                <button
-                  key={s.key}
-                  type="button"
-                  onClick={() =>
-                    send(t(`helpAssistant.starter.${s.key}`, { defaultValue: s.text }))
-                  }
-                  className="group flex w-full items-center justify-between gap-3 rounded-xl bg-primary/10 px-4 py-2.5 text-start text-sm font-medium text-foreground ring-1 ring-primary/20 transition-all duration-fast ease-out hover:bg-primary hover:text-primary-foreground hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                >
-                  <span>{t(`helpAssistant.starter.${s.key}`, { defaultValue: s.text })}</span>
-                  <svg
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.75"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-3.5 w-3.5 shrink-0 opacity-40 transition-opacity group-hover:opacity-100"
-                    aria-hidden
+              {/* Two a row: four full-width bars filled the panel with one
+                  repeated shape and pushed everything else out of view. */}
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {STARTERS.map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() =>
+                      send(t(`helpAssistant.starter.${s.key}`, { defaultValue: s.text }))
+                    }
+                    className="group flex h-full w-full flex-col justify-between gap-2 rounded-xl bg-primary/[0.07] p-3 text-start text-xs font-medium leading-snug text-foreground ring-1 ring-primary/15 transition-all duration-fast ease-out hover:-translate-y-0.5 hover:bg-primary hover:text-primary-foreground hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   >
-                    <path d="M6 3l5 5-5 5" />
-                  </svg>
-                </button>
-              ))}
+                    <span>{t(`helpAssistant.starter.${s.key}`, { defaultValue: s.text })}</span>
+                    <svg
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-3.5 w-3.5 shrink-0 self-end opacity-40 transition-opacity group-hover:opacity-100"
+                      aria-hidden
+                    >
+                      <path d="M6 3l5 5-5 5" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           {ask.isPending && (

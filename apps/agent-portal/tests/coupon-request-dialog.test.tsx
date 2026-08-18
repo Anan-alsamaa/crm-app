@@ -194,3 +194,52 @@ describe('the dialog inside its drawer', () => {
     expect(within(dialog).getByRole('button', { name: /cancel/i })).toBeInTheDocument();
   });
 });
+
+describe('opening it from the add-ticket page', () => {
+  it('picks up a complaint typed after the page was mounted', async () => {
+    // The reported bug. On add-ticket this dialog is mounted with the page, so
+    // the initial state was captured while the description was still empty and
+    // the agent was asked to type the complaint a second time.
+    const { rerender } = render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <CouponRequestDialog
+          open={false}
+          onClose={() => {}}
+          ticketId=""
+          contactId="c1"
+          customerPhone={null}
+          description={null}
+          brandId={null}
+          restaurantId={null}
+          requestedBy="u1"
+          onCollect={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+    // The agent fills the ticket in, then ticks the coupon box.
+    rerender(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <CouponRequestDialog
+          open
+          onClose={() => {}}
+          ticketId=""
+          contactId="c1"
+          customerPhone="+966501112233"
+          description="Driver left the order at the wrong gate."
+          brandId="Chick N Dip"
+          restaurantId="store-4"
+          requestedBy="u1"
+          onCollect={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+    expect(
+      await screen.findByDisplayValue('Driver left the order at the wrong gate.'),
+    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue('+966501112233')).toBeInTheDocument();
+  });
+});
