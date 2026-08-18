@@ -98,6 +98,14 @@ export const HelpAssistantRequest = z.object({
    * additionally truncates rather than trusting the client.
    */
   history: z.array(HelpAssistantTurn).max(HELP_HISTORY_MAX_TURNS).optional(),
+  /**
+   * The language the staff member is working in.
+   *
+   * Aura answered in English whatever the interface was set to, because this
+   * never reached the prompt — an Arabic user got an English answer about an
+   * Arabic screen.
+   */
+  locale: Locale.optional(),
 });
 export type HelpAssistantRequest = z.infer<typeof HelpAssistantRequest>;
 

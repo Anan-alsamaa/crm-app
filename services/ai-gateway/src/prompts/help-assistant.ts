@@ -211,6 +211,7 @@ export interface HelpTurn {
 export function helpAssistant(
   question: string,
   history: readonly HelpTurn[] = [],
+  locale?: string,
 ): { system: string; user: string } {
   // Strip the fence delimiter from replayed content so a turn cannot close the
   // quote early and escape into instruction position.
@@ -219,8 +220,19 @@ export function helpAssistant(
     .map((t) => `${t.role === 'user' ? 'Staff' : 'Assistant'}: ${clean(t.content)}`)
     .join('\n');
 
+  // Answer in the language the person is working in. An Arabic interface with
+  // an English answer makes the assistant feel bolted on rather than part of
+  // the product — and it is unusable for staff who do not read English.
+  const inArabic = (locale ?? '').toLowerCase().startsWith('ar');
   return {
-    system: SYSTEM,
+    system:
+      SYSTEM +
+      (inArabic
+        ? '\n\nRESPOND IN ARABIC. The staff member is using the Arabic interface, so ' +
+          'every answer, including the off-topic refusal and any action summary, must be ' +
+          'written in Arabic. Keep product names, coupon codes and field names as they ' +
+          'appear on screen.'
+        : ''),
     // The question is untrusted input and is fenced off from the instructions
     // above so a prompt-injection attempt reads as data, not as a new rule.
     user: transcript

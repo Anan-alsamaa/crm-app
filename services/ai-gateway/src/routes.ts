@@ -598,7 +598,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
       });
     }
 
-    const p = prompts.helpAssistant(question, history);
+    const p = prompts.helpAssistant(question, history, body.data.locale);
     // `action` is validated by the shared contract, so a malformed or
     // unrecognised proposal is dropped here rather than reaching the portal.
     const schema = z.object({

@@ -72,6 +72,15 @@ export function Inbox() {
     sort: 'recent',
     assignment: 'mine',
   });
+  /* Whether ANYTHING is narrowing the list. Used to tell "there are none"
+     apart from "none match", which is the difference between an empty inbox
+     and an inbox that looks broken. */
+  const anyFilterOn =
+    (filters.status ?? 'all') !== 'all' ||
+    (filters.priority ?? 'all') !== 'all' ||
+    (filters.assignment ?? 'all') !== 'all' ||
+    !!filters.search?.trim();
+
   // Managers default to the whole inbox; agents to their own queue.
   useEffect(() => {
     setFilters((f) => ({ ...f, assignment: isManager ? 'all' : 'mine' }));
@@ -656,13 +665,42 @@ export function Inbox() {
               <div className="flex flex-col items-center gap-4 p-6 pt-12 text-center">
                 <InboxEmptyArt size={160} />
                 <div className="space-y-1">
-                  <h3 className="text-md font-semibold text-foreground">{t('inbox.empty')}</h3>
+                  <h3 className="text-md font-semibold text-foreground">
+                    {anyFilterOn
+                      ? t('inbox.emptyFiltered', {
+                          defaultValue: 'Nothing matches these filters.',
+                        })
+                      : t('inbox.empty')}
+                  </h3>
                   <p className="text-xs text-muted-foreground">
-                    {t('inbox.emptyHint', {
-                      defaultValue: 'New conversations from your widget land here in real time.',
-                    })}
+                    {anyFilterOn
+                      ? t('inbox.emptyFilteredHint', {
+                          defaultValue:
+                            'Conversations are hidden, not gone. Clear the filters to see them.',
+                        })
+                      : t('inbox.emptyHint', {
+                          defaultValue:
+                            'New conversations from your widget land here in real time.',
+                        })}
                   </p>
                 </div>
+                {anyFilterOn && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() =>
+                      setFilters((f) => ({
+                        ...f,
+                        status: 'all',
+                        priority: 'all',
+                        assignment: 'all',
+                        query: '',
+                      }))
+                    }
+                  >
+                    {t('inbox.clearFilters', { defaultValue: 'Clear filters' })}
+                  </Button>
+                )}
               </div>
             )}
           </div>

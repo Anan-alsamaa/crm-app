@@ -159,7 +159,7 @@ function SendIcon() {
 }
 
 export function HelpAssistant(): JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const firstName = user?.first_name?.trim() || t('helpAssistant.there', { defaultValue: 'there' });
   const [open, setOpen] = useState(false);
@@ -178,7 +178,7 @@ export function HelpAssistant(): JSX.Element {
    */
   const ask = useMutation({
     mutationFn: (v: { question: string; history: HelpAssistantTurn[] }) =>
-      ai.helpAssistant(caller, v.question, v.history),
+      ai.helpAssistant(caller, v.question, v.history, i18n?.language),
     onSuccess: (res) =>
       setTurns((prev) => [
         ...prev,

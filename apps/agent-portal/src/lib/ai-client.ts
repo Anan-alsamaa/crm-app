@@ -115,10 +115,17 @@ export const ai = {
    * follow-ups resolve. Nothing is persisted anywhere — the transcript lives
    * in component state and dies with the panel.
    */
-  helpAssistant: (c: AiCaller, question: string, history: HelpAssistantTurn[] = []) =>
-    post<HelpAssistantResponse>(
-      c,
-      AI_ENDPOINTS.helpAssistant,
-      history.length ? { question, history } : { question },
-    ),
+  helpAssistant: (
+    c: AiCaller,
+    question: string,
+    history: HelpAssistantTurn[] = [],
+    /* The interface language, so the answer arrives in the language the
+       question was asked in rather than always in English. */
+    locale?: string,
+  ) =>
+    post<HelpAssistantResponse>(c, AI_ENDPOINTS.helpAssistant, {
+      question,
+      ...(history.length ? { history } : {}),
+      ...(locale ? { locale } : {}),
+    }),
 };

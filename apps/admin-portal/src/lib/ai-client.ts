@@ -99,11 +99,18 @@ export const ai = {
     c: CallerHeaders,
     question: string,
     history: HelpAssistantTurn[] = [],
+    /* The interface language, so the answer comes back in the language the
+       question was asked in rather than always in English. */
+    locale?: string,
   ): Promise<HelpAssistantResponse> {
     const res = await fetch(`${GATEWAY_URL}${AI_ENDPOINTS.helpAssistant}`, {
       method: 'POST',
       headers: await authHeaders(c),
-      body: JSON.stringify(history.length ? { question, history } : { question }),
+      body: JSON.stringify({
+        question,
+        ...(history.length ? { history } : {}),
+        ...(locale ? { locale } : {}),
+      }),
     });
     if (!res.ok) {
       let payload: AiErrorPayload = {};

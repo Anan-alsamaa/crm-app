@@ -95,6 +95,7 @@ describe('HelpAssistant (admin portal)', () => {
       { userId: 'admin-1' },
       'How do I reassign a ticket?',
       [],
+      undefined,
     );
   });
 
@@ -222,6 +223,7 @@ describe('HelpAssistant (admin portal)', () => {
         { role: 'user', content: 'How do I reassign a ticket?' },
         { role: 'assistant', content: 'Open the ticket and use the Assignee menu.' },
       ],
+      undefined,
     );
 
     // Both questions stay on screen: it reads as a conversation, not a lookup.
