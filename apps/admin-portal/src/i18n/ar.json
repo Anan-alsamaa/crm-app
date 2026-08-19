@@ -800,7 +800,10 @@
     "colAreaManager": "مدير المنطقة",
     "colChainManager": "مدير السلسلة",
     "colStatus": "الحالة",
-    "export": "تصدير CSV"
+    "export": "تصدير CSV",
+    "allBrands": "كل العلامات",
+    "allBranches": "كل الفروع",
+    "branch": "الفرع"
   },
   "complaintDash": {
     "tableTotal": "الإجمالي",

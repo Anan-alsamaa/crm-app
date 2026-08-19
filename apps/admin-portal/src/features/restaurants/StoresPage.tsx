@@ -15,6 +15,7 @@ import {
   Input,
   Pill,
   Select,
+  SelectMenu,
   Skeleton,
   StatStrip,
   toast,
@@ -311,11 +312,50 @@ export function StoresPage() {
   };
 
   const list = stores.data ?? [];
+
+  /**
+   * Brand, then branch. Typing the name into the search box already worked, but
+   * only if you knew what to type — with 122 branches across four brands, the
+   * question is usually "show me this brand's" rather than "find this string".
+   *
+   * The branch list narrows to the chosen brand, because offering all 122
+   * under a brand that has 2 is how a picker stops being a shortcut. Choosing a
+   * branch whose brand is then changed clears the branch rather than filtering
+   * to nothing — the alternative is an empty table with both controls looking
+   * perfectly reasonable.
+   */
+  const [brandFilter, setBrandFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
+
+  const brandOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const s of list) if (s.brand?.id) seen.set(s.brand.id, s.brand.name ?? s.brand.id);
+    return [...seen].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [list]);
+
+  const branchOptions = useMemo(() => {
+    const inBrand = brandFilter ? list.filter((s) => s.brand?.id === brandFilter) : list;
+    return [...new Set(inBrand.map((s) => s.name).filter(Boolean))].sort((a, b) =>
+      String(a).localeCompare(String(b)),
+    );
+  }, [list, brandFilter]);
+
+  const onBrandFilter = (v: string) => {
+    setBrandFilter(v);
+    setPage(1);
+    // Drop a branch the new brand does not contain — see above.
+    if (branchFilter && v && !list.some((s) => s.brand?.id === v && s.name === branchFilter)) {
+      setBranchFilter('');
+    }
+  };
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((s) =>
-      [
+    return list.filter((s) => {
+      if (brandFilter && s.brand?.id !== brandFilter) return false;
+      if (branchFilter && s.name !== branchFilter) return false;
+      if (!q) return true;
+      return [
         s.yiji_restaurant_id,
         s.code,
         s.name,
@@ -326,9 +366,9 @@ export function StoresPage() {
         s.brand?.code,
       ]
         .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q)),
-    );
-  }, [list, query]);
+        .some((v) => String(v).toLowerCase().includes(q));
+    });
+  }, [list, query, brandFilter, branchFilter]);
 
   /* Long lists page rather than scroll: the same control the ticket report
      uses, so every table in the product behaves the same way. */
@@ -444,13 +484,56 @@ export function StoresPage() {
                 },
               ]}
             />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('stores.search', {
-                defaultValue: 'Search store, code, city, brand or manager…',
-              })}
-            />
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,14rem)_auto]">
+              <Input
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setPage(1);
+                }}
+                placeholder={t('stores.search', {
+                  defaultValue: 'Search store, code, city, brand or manager…',
+                })}
+              />
+              <SelectMenu
+                fullWidth
+                value={brandFilter}
+                onChange={onBrandFilter}
+                aria-label={t('stores.brand', { defaultValue: 'Brand' })}
+                options={[
+                  { value: '', label: t('stores.allBrands', { defaultValue: 'All brands' }) },
+                  ...brandOptions.map(([id, name]) => ({ value: id, label: name })),
+                ]}
+              />
+              <SelectMenu
+                fullWidth
+                value={branchFilter}
+                onChange={(v) => {
+                  setBranchFilter(v);
+                  setPage(1);
+                }}
+                aria-label={t('stores.branch', { defaultValue: 'Branch' })}
+                options={[
+                  { value: '', label: t('stores.allBranches', { defaultValue: 'All branches' }) },
+                  ...branchOptions.map((name) => ({ value: String(name), label: String(name) })),
+                ]}
+              />
+              {(brandFilter || branchFilter || query.trim()) && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setQuery('');
+                    setBrandFilter('');
+                    setBranchFilter('');
+                    setPage(1);
+                  }}
+                >
+                  {t('inbox.clearFilters', { defaultValue: 'Clear filters' })}
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
