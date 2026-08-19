@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn, Pill, Skeleton } from '@yiji/ui';
@@ -161,6 +161,44 @@ function TotalsRow({ label, value, strong }: { label: string; value: string; str
         {value}
       </span>
     </div>
+  );
+}
+
+/* Segment glyphs. Inline and tiny — a 12px mark that says which view without
+   costing a label's worth of width, and with no icon dependency. */
+function RouteIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3 w-3 shrink-0"
+      aria-hidden
+    >
+      <path d="M8 14s4.5-4.2 4.5-7.5A4.5 4.5 0 0 0 3.5 6.5C3.5 9.8 8 14 8 14Z" />
+      <circle cx="8" cy="6.5" r="1.6" />
+    </svg>
+  );
+}
+
+function BagIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3 w-3 shrink-0"
+      aria-hidden
+    >
+      <path d="M3.4 5.5h9.2l-.8 8.1a1 1 0 0 1-1 .9H5.2a1 1 0 0 1-1-.9L3.4 5.5Z" />
+      <path d="M5.9 7V4.6a2.1 2.1 0 0 1 4.2 0V7" />
+    </svg>
   );
 }
 
@@ -450,37 +488,62 @@ function OrderDetails({ order, vendorId }: { order: YijiOrder; vendorId: string 
           read as disabled. The OPEN one deepens to primary-strong, which says
           which panel is showing without demoting the other to furniture. */}
       <div className="border-t border-foreground/[0.06] pt-2.5">
-        {/* ONE control, two segments — not two buttons sitting next to each
-            other. A single continuous pill spans the card, split by a hairline;
-            the open half deepens to primary-strong. Two separated pills read as
-            two unrelated actions, when these are two views of the same order. */}
+        {/* ONE control, two segments — not two buttons side by side.
+
+            A pale field holds a white thumb that SLIDES between the halves, so
+            the state change is something you watch happen rather than something
+            you compare before/after. The blue stays as the tint and the live
+            label instead of a heavy fill, which keeps the card's lightest
+            surface (white) on the thing you are actually reading.
+
+            The corners are deliberately asymmetric — large on one diagonal,
+            tight on the other — so the control reads as designed rather than as
+            the default pill every other chip on this page already uses. The
+            thumb repeats the same geometry one step smaller. */}
         <div
           role="group"
           aria-label={t('commerce.orderViews', { defaultValue: 'Order views' })}
-          className="flex w-full overflow-hidden rounded-full bg-primary text-primary-foreground"
+          // Radius order is TL TR BR BL: fully round on one diagonal, square on
+          // the other. A softened version of this read as an ordinary pill at
+          // 26px tall — the contrast has to be absolute for the shape to
+          // register at all.
+          className="relative flex w-full rounded-[1.15rem_0_1.15rem_0] bg-primary/[0.08] p-1 ring-1 ring-inset ring-primary/15"
         >
-          {(['tracking', 'cart'] as const).map((v, i) => (
-            <Fragment key={v}>
-              {i > 0 && (
-                // The seam: enough to separate the halves, not enough to break
-                // the pill into two objects.
-                <span aria-hidden className="w-px self-stretch bg-primary-foreground/25" />
+          <span
+            aria-hidden
+            className={cn(
+              'pointer-events-none absolute inset-y-1 start-1 w-[calc(50%-0.25rem)]',
+              // Same geometry as the track, one step smaller, so the thumb
+              // seats into whichever corner it slides to instead of fighting it.
+              'rounded-[0.9rem_0_0.9rem_0] bg-card shadow-soft ring-1 ring-inset ring-primary/20',
+              'transition-[transform,opacity] duration-medium ease-out',
+              // Logical, not left/right: in Arabic the second segment sits on
+              // the other side, and a hard-coded translate would slide the
+              // thumb off the control.
+              view === 'cart' && 'translate-x-full rtl:-translate-x-full',
+              // Neither view open — the thumb has nothing to mark, so it goes.
+              view === 'none' && 'opacity-0',
+            )}
+          />
+          {(['tracking', 'cart'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={view === v}
+              onClick={() => setView((cur) => (cur === v ? 'none' : v))}
+              className={cn(
+                'relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1',
+                'text-2xs font-semibold transition-colors duration-fast ease-out',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                'motion-safe:active:scale-[0.97]',
+                view === v ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
               )}
-              <button
-                type="button"
-                aria-pressed={view === v}
-                onClick={() => setView((cur) => (cur === v ? 'none' : v))}
-                className={cn(
-                  'flex-1 px-3 py-1 text-2xs font-medium transition-colors duration-fast ease-out',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-foreground/60',
-                  view === v ? 'bg-primary-strong' : 'hover:bg-primary-strong/60',
-                )}
-              >
-                {v === 'cart'
-                  ? t('commerce.cart', { defaultValue: 'Cart' })
-                  : t('commerce.tracking', { defaultValue: 'Tracking' })}
-              </button>
-            </Fragment>
+            >
+              {v === 'cart' ? <BagIcon /> : <RouteIcon />}
+              {v === 'cart'
+                ? t('commerce.cart', { defaultValue: 'Cart' })
+                : t('commerce.tracking', { defaultValue: 'Tracking' })}
+            </button>
           ))}
         </div>
       </div>
