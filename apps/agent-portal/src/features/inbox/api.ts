@@ -324,6 +324,63 @@ function buildSort(f: InboxFilters): string[] {
   return ['-last_message_at'];
 }
 
+/**
+ * The three numbers above the list: open, urgent, unread.
+ *
+ * They describe the INBOX, not the current view — which is the whole point of
+ * the fix. They used to be counted from the already-filtered list, so clicking
+ * "urgent" filtered the list, recounted over the result, and reported 0 open /
+ * 0 urgent / 0 unread. Every tile read zero, the numbers no longer meant
+ * anything, and because the invisible priority filter stayed on, typing in the
+ * search box returned nothing too — the reported "search stops working".
+ *
+ * Scope follows the ASSIGNMENT choice (my queue vs all conversations), because
+ * the tiles are a glance at the work you are looking at. It deliberately
+ * ignores status, priority and search: those are what the tiles toggle, and a
+ * counter that reacts to its own filter can never be clicked back.
+ */
+export function useInboxCounts(
+  scope: Pick<InboxFilters, 'assignment' | 'currentUserId' | 'currentTeamId'> = {},
+) {
+  // Only the scope matters — a status/priority/search change must not refetch
+  // these, or the numbers would flicker as the agent filters.
+  const base = buildFilter({
+    assignment: scope.assignment,
+    currentUserId: scope.currentUserId,
+    currentTeamId: scope.currentTeamId,
+  });
+  const withBase = (extra: Record<string, unknown>) => ({
+    _and: [...(base ? [base] : []), extra],
+  });
+
+  return useQuery({
+    queryKey: ['inbox-counts', scope.assignment ?? 'all', scope.currentUserId, scope.currentTeamId],
+    staleTime: 15_000,
+    queryFn: async () => {
+      // Three aggregates rather than one fetch of every row: the count must
+      // stay honest on an inbox far larger than any page of it.
+      const count = async (extra: Record<string, unknown>): Promise<number> => {
+        const res = (await directus.request(
+          readItems('conversations', {
+            aggregate: { count: 'id' },
+            filter: withBase(extra),
+          } as never),
+        )) as unknown as Array<{ count: { id: number | string } | number | string }>;
+        const raw = res?.[0]?.count;
+        const n =
+          typeof raw === 'object' && raw !== null ? (raw as { id: number | string }).id : raw;
+        return Number(n ?? 0);
+      };
+      const [open, urgent, unread] = await Promise.all([
+        count({ status: { _eq: 'open' } }),
+        count({ priority: { _eq: 'urgent' } }),
+        count({ unread_count_agent: { _gt: 0 } }),
+      ]);
+      return { open, urgent, unread };
+    },
+  });
+}
+
 export function useConversations(filters: InboxFilters = {}) {
   const filter = buildFilter(filters);
   const sort = buildSort(filters);
@@ -548,6 +605,8 @@ export interface LinkedTicket {
   subject: string;
   status: string;
   priority: string;
+  /** Carried so callers can pick the LATEST without trusting query order. */
+  date_created: string | null;
 }
 export function useLinkedTickets(conversationId: string | null) {
   return useQuery({
@@ -557,7 +616,7 @@ export function useLinkedTickets(conversationId: string | null) {
       directus.request(
         readItems('tickets', {
           filter: { conversation: { _eq: conversationId } },
-          fields: ['id', 'subject', 'status', 'priority'],
+          fields: ['id', 'subject', 'status', 'priority', 'date_created'],
           sort: ['-date_created'],
           // Only the newest few, by request: a long-standing customer can have
           // dozens of tickets, and the sidebar is for what is CURRENT — the

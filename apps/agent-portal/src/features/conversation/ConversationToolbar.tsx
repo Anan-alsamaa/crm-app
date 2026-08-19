@@ -183,10 +183,21 @@ export function ConversationToolbar({
     solved: 'bg-primary',
   };
 
-  // A conversation carries at most one ticket (SC-013). If it already has one we
-  // point at it rather than offering to create a second (which the DB would
-  // reject on the unique constraint).
-  const existingTicket = linkedTickets.data?.[0] ?? null;
+  /**
+   * Which ticket "View ticket" opens: the NEWEST one raised from this chat.
+   *
+   * A conversation was meant to carry at most one ticket (SC-013), but in
+   * practice several can accumulate, and then the button's destination was
+   * whatever the query happened to return first — an agent clicking it could
+   * not say in advance where they would land. It is sorted here as well as in
+   * the query so the answer stays "the latest" even if that query's ordering is
+   * ever changed for another caller.
+   */
+  const existingTicket =
+    [...(linkedTickets.data ?? [])].sort((a, b) =>
+      (b.date_created ?? '').localeCompare(a.date_created ?? ''),
+    )[0] ?? null;
+  const linkedCount = linkedTickets.data?.length ?? 0;
   const canCreateTicket = !!conversation.contact?.id && !!vendorId;
   // Read through the normaliser rather than comparing directly: a database that
   // has not run scripts/migrate-conversation-status.mjs still holds 'resolved'
@@ -363,8 +374,21 @@ export function ConversationToolbar({
               variant="secondary"
               size="sm"
               onClick={() => navigate(`/tickets/${existingTicket.id}`)}
+              // Names the destination, so a chat with several tickets does not
+              // make the button a guess.
+              title={
+                linkedCount > 1
+                  ? t('tickets.viewLatestOf', {
+                      defaultValue: 'Opens the latest of {{n}} tickets: {{subject}}',
+                      n: linkedCount,
+                      subject: existingTicket.subject ?? '',
+                    })
+                  : (existingTicket.subject ?? undefined)
+              }
             >
-              {t('tickets.viewTicket', { defaultValue: 'View ticket' })}
+              {linkedCount > 1
+                ? t('tickets.viewLatestTicket', { defaultValue: 'View latest ticket' })
+                : t('tickets.viewTicket', { defaultValue: 'View ticket' })}
             </Button>
           )}
           <Button

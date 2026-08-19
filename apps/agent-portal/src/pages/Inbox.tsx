@@ -25,6 +25,7 @@ import { SOCKET_EVENTS, type ConversationStatus, type Priority } from '@yiji/sha
 import {
   conversationIdsForOrder,
   useConversations,
+  useInboxCounts,
   useConversationPreviews,
   useUpdateConversation,
   useAddTagToConversation,
@@ -106,6 +107,17 @@ export function Inbox() {
     currentUserId: user?.id,
     // So a chat handed to this agent's SHIFT shows up in "mine", not only in
     // "all conversations" where nobody working a queue is looking.
+    currentTeamId: user?.team ?? null,
+  });
+  /**
+   * The stat tiles read from the INBOX, not from the filtered list. Counting
+   * `conversations.data` meant clicking a tile filtered the list, recounted
+   * over the result and reported zero for all three — after which nothing could
+   * be clicked back and every search looked broken.
+   */
+  const counts = useInboxCounts({
+    assignment: filters.assignment,
+    currentUserId: user?.id,
     currentTeamId: user?.team ?? null,
   });
   const previews = useConversationPreviews((conversations.data ?? []).map((c) => c.id));
@@ -241,10 +253,9 @@ export function Inbox() {
 
           {/* Stats strip — quick glance at what's burning. Clickable to filter. */}
           {(() => {
-            const all = conversations.data ?? [];
-            const openCount = all.filter((c) => c.status === 'open').length;
-            const urgentCount = all.filter((c) => c.priority === 'urgent').length;
-            const unreadCount = all.filter((c) => c.unread_count_agent > 0).length;
+            const openCount = counts.data?.open ?? 0;
+            const urgentCount = counts.data?.urgent ?? 0;
+            const unreadCount = counts.data?.unread ?? 0;
             const Stat = ({
               label,
               value,
@@ -722,9 +733,12 @@ export function Inbox() {
           ) : (
             (() => {
               const all = conversations.data ?? [];
-              const openCount = all.filter((c) => c.status === 'open').length;
-              const urgentCount = all.filter((c) => c.priority === 'urgent').length;
-              const unreadCount = all.filter((c) => c.unread_count_agent > 0).length;
+              // Same inbox-wide counts as the rail: the welcome pane greets the
+              // agent with the state of their inbox, not of whatever filter
+              // happens to be on.
+              const openCount = counts.data?.open ?? 0;
+              const urgentCount = counts.data?.urgent ?? 0;
+              const unreadCount = counts.data?.unread ?? 0;
               const waiting = [...all]
                 .filter((c) => c.status === 'open')
                 .sort((a, b) => (a.last_message_at ?? '').localeCompare(b.last_message_at ?? ''))
