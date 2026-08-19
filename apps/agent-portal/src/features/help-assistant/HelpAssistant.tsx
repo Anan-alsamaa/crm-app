@@ -137,6 +137,8 @@ export function HelpAssistant(): JSX.Element {
   const [question, setQuestion] = useState('');
   /** This session's transcript, oldest first. Never leaves the component. */
   const [turns, setTurns] = useState<Turn[]>([]);
+  /** Nothing has been asked yet — only Aura's own greeting is on screen. */
+  const onlyWelcome = turns.length <= 1 && (turns.length === 0 || !!turns[0]?.welcome);
   const feedRef = useRef<HTMLDivElement | null>(null);
 
   const caller = { userId: user?.id ?? '', vendorId: 'global' };
@@ -380,7 +382,19 @@ export function HelpAssistant(): JSX.Element {
             Aura on the left under her name, the user on the right: the
             arrangement every messaging app uses, so who said what is readable
             without reading. */}
-        <div className="flex min-h-full flex-col justify-end space-y-4" aria-live="polite">
+        <div
+          className={cn(
+            'flex min-h-full flex-col space-y-4',
+            /* Bottom-anchored once a real exchange is underway, so new
+               messages appear at the foot of the panel as in any messenger.
+               NOT on the opening state: with only the greeting present,
+               justify-end dropped Aura's welcome and her starter questions to
+               the floor and opened the panel on a tall empty rectangle — the
+               feature looked broken before it had been used once. */
+            onlyWelcome ? 'justify-start' : 'justify-end',
+          )}
+          aria-live="polite"
+        >
           {turns.map((turn, i) =>
             turn.role === 'user' ? (
               <div key={i} className="flex flex-col items-end gap-1">

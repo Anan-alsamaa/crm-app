@@ -15,14 +15,32 @@
       "intent": "النيّة",
       "entities": "الكيانات",
       "scoreLead": "تقييم العميل المحتمل",
-      "search": "بحث"
+      "search": "بحث",
+      "draftReply": "اكتب رداً",
+      "improveDraft": "حسّن مسودتي",
+      "redraft": "اكتب مرة أخرى",
+      "findSimilar": "ابحث عن محادثة مشابهة"
     },
     "search": {
       "placeholder": "ابحث في المحادثات…",
       "empty": "لا توجد محادثات مطابقة."
     },
     "noEntities": "لم يتم اكتشاف أي كيانات.",
-    "replyLanguage": "لغة الرد"
+    "replyLanguage": "لغة الرد",
+    "insight": {
+      "whatHappened": "ماذا حدث هنا؟",
+      "read": "لخّص لي",
+      "mood": "كيف يشعر العميل؟",
+      "check": "تحقّق",
+      "again": "مرة أخرى"
+    },
+    "mood": {
+      "positive": "إيجابي",
+      "neutral": "محايد",
+      "negative": "سلبي"
+    },
+    "draftPlaced": "أُضيف إلى ردك بالأسفل — راجعه قبل الإرسال.",
+    "confidence": "بثقة {{n}}%"
   },
   "helpAssistant": {
     "launch": "أورا",
