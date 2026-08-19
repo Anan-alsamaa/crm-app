@@ -92,7 +92,7 @@ for (const app of APPS) {
 if (failures > 0) {
   console.error(
     `\n${failures} untranslated key(s). Add each one where the line above says:\n` +
-      "  an app  -> apps/<app>/src/i18n/ar.json\n" +
+      '  an app  -> apps/<app>/src/i18n/ar.json\n' +
       '  common  -> packages/i18n/src/locales/ar/common.json\n' +
       'Every one of these shows an Arabic-speaking user an English control.',
   );

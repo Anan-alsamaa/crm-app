@@ -207,7 +207,7 @@ export function AiPanel({
         >
           <span
             aria-hidden
-            className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[oklch(0.84_0.13_82)]"
+            className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[oklch(0.82_0.13_212)]"
           />
           <span>
             {tl('ai.draftPlaced', {
@@ -290,7 +290,7 @@ export function AiPanel({
               onChange={(e) => setQuery(e.target.value)}
               aria-label={tl('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
               placeholder={tl('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
-              className="block h-8 w-full rounded-md border-0 bg-white/[0.06] px-2.5 text-start text-xs text-[oklch(0.96_0.012_170)] ring-1 ring-inset ring-white/10 placeholder:text-[oklch(0.68_0.02_170)] focus:outline-none focus:ring-2 focus:ring-[oklch(0.84_0.13_82)]/60"
+              className="block h-8 w-full rounded-md border-0 bg-white/[0.06] px-2.5 text-start text-xs text-[oklch(0.97_0.012_262)] ring-1 ring-inset ring-white/10 placeholder:text-[oklch(0.68_0.03_262)] focus:outline-none focus:ring-2 focus:ring-[oklch(0.82_0.13_212)]/60"
             />
             <Button type="submit" size="sm" loading={search.isPending} disabled={!query.trim()}>
               {tl('actions.search', { ns: 'common', defaultValue: 'Search' })}

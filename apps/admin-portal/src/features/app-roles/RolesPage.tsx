@@ -69,12 +69,18 @@ interface AppRole {
   description: string | null;
   privileges: Record<string, boolean> | null;
   brands: string[] | null;
+  stores: string[] | null;
   directus_role: string | null;
   builtin: boolean;
 }
 interface BrandRow {
   id: string;
   name: string;
+}
+interface StoreRow {
+  id: string;
+  name: string;
+  brand: string | null;
 }
 
 const useAppRoles = () =>
@@ -93,12 +99,25 @@ const useAppRoles = () =>
               'description',
               'privileges',
               'brands',
+              'stores',
               'directus_role',
               'builtin',
             ],
           } as never,
         ),
       )) as unknown as AppRole[],
+  });
+
+const useStores = () =>
+  useQuery({
+    queryKey: ['stores-for-roles'],
+    queryFn: async () =>
+      (await directus.request(
+        readItems(
+          'stores' as never,
+          { limit: -1, sort: ['name'], fields: ['id', 'name', 'brand'] } as never,
+        ),
+      )) as unknown as StoreRow[],
   });
 
 const useBrands = () =>
@@ -119,14 +138,24 @@ interface Draft {
   description: string;
   privileges: Record<string, boolean>;
   brands: string[];
+  /** Branch fence. Empty = every branch the brands allow. */
+  stores: string[];
 }
-const EMPTY: Draft = { id: null, name: '', description: '', privileges: {}, brands: [] };
+const EMPTY: Draft = {
+  id: null,
+  name: '',
+  description: '',
+  privileges: {},
+  brands: [],
+  stores: [],
+};
 
 export function RolesPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const roles = useAppRoles();
   const brands = useBrands();
+  const stores = useStores();
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -171,6 +200,7 @@ export function RolesPage() {
         description: d.description.trim() || null,
         privileges: d.privileges,
         brands: d.brands.length ? d.brands : null,
+        stores: d.stores.length ? d.stores : null,
       };
       return d.id
         ? directus.request(updateItem('app_roles' as never, d.id, body as never))
@@ -211,6 +241,7 @@ export function RolesPage() {
       description: selected.description ?? '',
       privileges: { ...(selected.privileges ?? {}) },
       brands: [...(selected.brands ?? [])],
+      stores: [...(selected.stores ?? [])],
     });
   }, [selected]);
 
@@ -221,6 +252,32 @@ export function RolesPage() {
     admin: <ShieldIcon size={15} />,
   };
   const locked = selected?.builtin ?? false;
+  /**
+   * Which branches are offered. Fencing to a brand already implies its
+   * branches, so once brands are picked the branch list narrows to them —
+   * offering all 122 under a brand with two is how a picker stops helping.
+   */
+  const branchChoices = useMemo(() => {
+    const all = stores.data ?? [];
+    const inScope =
+      draft.brands.length > 0 ? all.filter((s) => s.brand && draft.brands.includes(s.brand)) : all;
+    /*
+     * Two brands can trade in the same mall, so "Dhahran Mall" appears more
+     * than once and the chips become a coin toss. Only the AMBIGUOUS ones earn
+     * their brand as a suffix — qualifying every name would make the common
+     * case noisier to fix the rare one.
+     */
+    const seen = new Map<string, number>();
+    for (const s of inScope) seen.set(s.name, (seen.get(s.name) ?? 0) + 1);
+    const brandName = new Map((brands.data ?? []).map((b) => [b.id, b.name]));
+    return inScope.map((s) => ({
+      ...s,
+      label:
+        (seen.get(s.name) ?? 0) > 1 && s.brand
+          ? `${s.name} · ${brandName.get(s.brand) ?? ''}`.trim()
+          : s.name,
+    }));
+  }, [stores.data, draft.brands, brands.data]);
   const GROUPS: Record<string, string> = {
     chat: t('roles.groupChat', { defaultValue: 'Customer chat' }),
     tickets: t('roles.groupTickets', { defaultValue: 'Tickets' }),
@@ -615,6 +672,54 @@ export function RolesPage() {
                       );
                     })}
                   </div>
+                </SectionCard>
+
+                {/* Branch restriction — one level below brand, for the manager
+                    who owns specific restaurants rather than a whole chain. */}
+                <SectionCard
+                  title={t('roles.branches', { defaultValue: 'Branch access' })}
+                  hint={t('roles.branchesHelp', {
+                    defaultValue:
+                      'For a role that owns particular restaurants rather than a whole brand — an area manager. Nothing ticked means every branch the brands above allow. Ticking both narrows to the intersection, and a ticket not yet linked to a branch stays visible either way.',
+                  })}
+                >
+                  {branchChoices.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t('roles.branchesPickBrand', {
+                        defaultValue: 'No branches to choose from yet.',
+                      })}
+                    </p>
+                  ) : (
+                    <div className="flex max-h-56 flex-wrap gap-2 overflow-y-auto">
+                      {branchChoices.map((s) => {
+                        const on = draft.stores.includes(s.id);
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() =>
+                              setDraft((d) => ({
+                                ...d,
+                                stores: on
+                                  ? d.stores.filter((x) => x !== s.id)
+                                  : [...d.stores, s.id],
+                              }))
+                            }
+                            className={cn(
+                              'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast',
+                              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                              on
+                                ? 'bg-sky-tint text-sky ring-1 ring-inset ring-sky/30'
+                                : 'bg-secondary text-muted-foreground hover:text-foreground',
+                            )}
+                          >
+                            {s.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </SectionCard>
 
                 {/* Only the DESTRUCTIVE action lives down here. Save/Create moved

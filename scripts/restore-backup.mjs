@@ -26,13 +26,34 @@ if (!file || file.startsWith('--')) {
 
 /** Parents before children, so FKs land. Anything not listed goes last. */
 const ORDER = [
-  'vendors', 'teams', 'brands', 'stores', 'contacts', 'tags',
-  'sla_policies', 'option_lists', 'app_settings', 'app_roles', 'quick_replies',
-  'conversations', 'messages', 'tickets', 'ticket_events',
-  'conversations_tags', 'contacts_tags', 'tickets_tags',
-  'coupon_approvals', 'store_notify_rules', 'store_notifications',
-  'routing_events', 'csat_responses', 'reports',
-  'custom_fields', 'custom_field_values', 'automation_rules', 'notifications',
+  'vendors',
+  'teams',
+  'brands',
+  'stores',
+  'contacts',
+  'tags',
+  'sla_policies',
+  'option_lists',
+  'app_settings',
+  'app_roles',
+  'quick_replies',
+  'conversations',
+  'messages',
+  'tickets',
+  'ticket_events',
+  'conversations_tags',
+  'contacts_tags',
+  'tickets_tags',
+  'coupon_approvals',
+  'store_notify_rules',
+  'store_notifications',
+  'routing_events',
+  'csat_responses',
+  'reports',
+  'custom_fields',
+  'custom_field_values',
+  'automation_rules',
+  'notifications',
 ];
 
 const backup = JSON.parse(readFileSync(file, 'utf8'));
@@ -43,11 +64,18 @@ if (!backup?.manifest?.version || !backup?.data) {
 console.log(`backup from ${backup.manifest.exportedAt}, version ${backup.manifest.version}`);
 
 const login = await fetch(`${D}/auth/login`, {
-  method: 'POST', headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ email: process.env.DIRECTUS_ADMIN_EMAIL, password: process.env.DIRECTUS_ADMIN_PASSWORD }),
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    email: process.env.DIRECTUS_ADMIN_EMAIL,
+    password: process.env.DIRECTUS_ADMIN_PASSWORD,
+  }),
 });
 const AT = (await login.json()).data?.access_token;
-if (!AT) { console.error('Admin login failed — check DIRECTUS_ADMIN_EMAIL/PASSWORD in env.'); process.exit(1); }
+if (!AT) {
+  console.error('Admin login failed — check DIRECTUS_ADMIN_EMAIL/PASSWORD in env.');
+  process.exit(1);
+}
 const H = { authorization: `Bearer ${AT}`, 'content-type': 'application/json' };
 
 const collections = [
@@ -59,13 +87,18 @@ let totals = { created: 0, updated: 0, failed: 0 };
 for (const collection of collections) {
   const rows = backup.data[collection] ?? [];
   if (rows.length === 0) continue;
-  const existing = await (await fetch(
-    `${D}/items/${collection}?fields=id&limit=-1`, { headers: H },
-  )).json();
+  const existing = await (
+    await fetch(`${D}/items/${collection}?fields=id&limit=-1`, { headers: H })
+  ).json();
   const have = new Set((existing.data ?? []).map((r) => String(r.id)));
-  let created = 0, updated = 0, failed = 0;
+  let created = 0,
+    updated = 0,
+    failed = 0;
   for (const row of rows) {
-    if (!WRITE) { have.has(String(row.id)) ? updated++ : created++; continue; }
+    if (!WRITE) {
+      have.has(String(row.id)) ? updated++ : created++;
+      continue;
+    }
     const isUpdate = have.has(String(row.id));
     const res = await fetch(
       isUpdate ? `${D}/items/${collection}/${row.id}` : `${D}/items/${collection}`,
@@ -74,8 +107,14 @@ for (const collection of collections) {
     if (res.ok) isUpdate ? updated++ : created++;
     else failed++;
   }
-  totals.created += created; totals.updated += updated; totals.failed += failed;
-  console.log(`${collection}: ${created} create, ${updated} update${failed ? `, ${failed} FAILED` : ''}`);
+  totals.created += created;
+  totals.updated += updated;
+  totals.failed += failed;
+  console.log(
+    `${collection}: ${created} create, ${updated} update${failed ? `, ${failed} FAILED` : ''}`,
+  );
 }
-console.log(`\n${WRITE ? 'RESTORED' : 'DRY RUN'} — ${totals.created} created, ${totals.updated} updated, ${totals.failed} failed`);
+console.log(
+  `\n${WRITE ? 'RESTORED' : 'DRY RUN'} — ${totals.created} created, ${totals.updated} updated, ${totals.failed} failed`,
+);
 if (!WRITE) console.log('re-run with --write to apply');

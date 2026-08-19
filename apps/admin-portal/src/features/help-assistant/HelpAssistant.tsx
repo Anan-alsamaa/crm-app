@@ -330,8 +330,8 @@ export function HelpAssistant(): JSX.Element {
                 aria-label={t('helpAssistant.label', { defaultValue: 'Your question' })}
                 className={cn(
                   'min-h-[3rem] flex-1 resize-none rounded-2xl border-0 bg-white/[0.06] ring-1 ring-inset ring-white/10',
-                  'text-[oklch(0.96_0.012_170)] placeholder:text-[oklch(0.68_0.02_170)]',
-                  'focus:ring-2 focus:ring-[oklch(0.84_0.13_82)]/60',
+                  'text-[oklch(0.97_0.012_262)] placeholder:text-[oklch(0.68_0.03_262)]',
+                  'focus:ring-2 focus:ring-[oklch(0.82_0.13_212)]/60',
                 )}
                 rows={2}
                 maxLength={MAX_LENGTH}
@@ -400,13 +400,13 @@ export function HelpAssistant(): JSX.Element {
           <span
             aria-hidden
             className={cn(
-              'grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[oklch(0.84_0.13_82)]/15 ring-1',
+              'grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[oklch(0.82_0.13_212)]/15 ring-1',
               AI_SKIN.accentRing,
             )}
           >
             <svg
               viewBox="0 0 16 16"
-              className="h-4 w-4 text-[oklch(0.84_0.13_82)]"
+              className="h-4 w-4 text-[oklch(0.82_0.13_212)]"
               fill="currentColor"
               aria-hidden
             >
@@ -511,7 +511,7 @@ export function HelpAssistant(): JSX.Element {
                       : cn(
                           AI_SKIN.bubble,
                           AI_SKIN.text,
-                          'border-s-2 border-[oklch(0.84_0.13_82)]/50',
+                          'border-s-2 border-[oklch(0.82_0.13_212)]/50',
                         ),
                   )}
                 >
@@ -537,7 +537,7 @@ export function HelpAssistant(): JSX.Element {
                   className={cn(
                     'group flex w-full items-center justify-between gap-3 rounded-xl px-4 py-2.5',
                     'text-start text-sm font-medium transition-all duration-fast ease-out',
-                    'motion-safe:hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.84_0.13_82)]/50',
+                    'motion-safe:hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.82_0.13_212)]/50',
                     AI_SKIN.glass,
                     AI_SKIN.text,
                   )}

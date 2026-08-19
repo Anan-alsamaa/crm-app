@@ -20,7 +20,11 @@ const PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD ?? '123456';
 
 /** {order} {name} {brand} {restaurant} are filled from the conversation. */
 const REPLIES = [
-  ['افتتاحية', 'ar', 'مرحباً عزيزي، معك خدمة عملاء تطبيق يجي، تواصلنا بخصوص شكواكم على الطلب رقم {order}'],
+  [
+    'افتتاحية',
+    'ar',
+    'مرحباً عزيزي، معك خدمة عملاء تطبيق يجي، تواصلنا بخصوص شكواكم على الطلب رقم {order}',
+  ],
   ['قيد المتابعة', 'ar', 'شكراً لتواصلكم. جاري التحقق مع فرع {restaurant} وسنوافيكم بالرد.'],
   ['تعويض', 'ar', 'نعتذر عن هذه التجربة. تم صرف قسيمة تعويض لحسابكم.'],
   ['إغلاق', 'ar', 'سعدنا بخدمتكم. في حال احتجتم أي مساعدة أخرى لا تترددوا بالتواصل.'],
@@ -39,9 +43,12 @@ if (!login.ok) throw new Error(`login failed: ${login.status}`);
 const token = (await login.json()).data.access_token;
 const H = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
 
-const existing = (
-  await (await fetch(`${DIRECTUS}/items/quick_replies?fields=id,label&limit=-1`, { headers: H })).json()
-).data ?? [];
+const existing =
+  (
+    await (
+      await fetch(`${DIRECTUS}/items/quick_replies?fields=id,label&limit=-1`, { headers: H })
+    ).json()
+  ).data ?? [];
 
 console.log(`${REPLIES.length} ready replies${WRITE ? '' : ' (dry run)'}\n`);
 
@@ -49,7 +56,13 @@ let created = 0;
 let updated = 0;
 for (const [label, lang, text] of REPLIES) {
   const found = existing.find((r) => r.label === label);
-  const payload = { label, lang, text, sort: REPLIES.findIndex((r) => r[0] === label), active: true };
+  const payload = {
+    label,
+    lang,
+    text,
+    sort: REPLIES.findIndex((r) => r[0] === label),
+    active: true,
+  };
   if (WRITE) {
     const res = found
       ? await fetch(`${DIRECTUS}/items/quick_replies/${found.id}`, {

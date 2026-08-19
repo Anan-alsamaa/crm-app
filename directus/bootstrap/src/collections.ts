@@ -364,6 +364,11 @@ export const collections: CollectionSpec[] = [
         note: 'Array of brand ids this role may see. Empty/null = all brands. Baked into the materialized ticket/store permissions as literal filters.',
       },
       {
+        field: 'stores',
+        type: 'json',
+        note: 'Array of branch (store) ids this role may see. Empty/null = every branch its brands allow. INTERSECTS with `brands` rather than competing with it, so an area manager fenced to a brand and three of its branches sees those three. Baked into the materialized permissions as literal filters.',
+      },
+      {
         field: 'directus_role',
         type: 'string',
         note: 'Written back by the extension once materialized. Read-only in spirit.',
