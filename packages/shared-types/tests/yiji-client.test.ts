@@ -204,3 +204,133 @@ describe('HttpYijiClient', () => {
     expect(result[0]?.items[0]?.name).toBe('Pasta');
   });
 });
+
+describe('order status history (admin API)', () => {
+  it('maps rows to a chronological timeline with named statuses', async () => {
+    const { mapStatusHistory } = await import('../src/yiji-impl.js');
+    // The client's real response shape for GetOrderStatusHistoriesByOrderId —
+    // only orderStatus + creationTime matter.
+    const rows = [
+      {
+        id: 1,
+        orderStatus: 0,
+        orderId: 1213775,
+        status: 0,
+        creationTime: '2026-08-19T05:34:48.805721',
+      },
+      {
+        id: 2,
+        orderStatus: 1,
+        orderId: 1213775,
+        status: 0,
+        creationTime: '2026-08-19T05:34:49.069472',
+      },
+      {
+        id: 3,
+        orderStatus: 15,
+        orderId: 1213775,
+        status: 0,
+        creationTime: '2026-08-19T05:35:00.499768',
+      },
+      {
+        id: 4,
+        orderStatus: 16,
+        orderId: 1213775,
+        status: 0,
+        creationTime: '2026-08-19T05:35:02.798787',
+      },
+      {
+        id: 5,
+        orderStatus: 5,
+        orderId: 1213775,
+        status: 0,
+        creationTime: '2026-08-19T05:35:03.110616',
+      },
+      {
+        id: 6,
+        orderStatus: 7,
+        orderId: 1213775,
+        status: 0,
+        creationTime: '2026-08-19T05:58:26.74181',
+      },
+      {
+        id: 7,
+        orderStatus: 13,
+        orderId: 1213775,
+        status: 0,
+        creationTime: '2026-08-19T05:58:35.25172',
+      },
+    ];
+    const t = mapStatusHistory('1213775', rows);
+    expect(t.derived).toBe(false);
+    expect(t.events.map((e) => e.status)).toEqual([
+      'initial',
+      'pending_payment',
+      'paid',
+      'pos_accepted',
+      'in_kitchen',
+      'ready_to_pickup',
+      'force_closed',
+    ]);
+    expect(t.current).toBe('force_closed');
+    expect(t.events[0]?.at).toBe('2026-08-19T05:34:48.805721');
+  });
+
+  it('sorts out-of-order rows and skips rows with no status', async () => {
+    const { mapStatusHistory } = await import('../src/yiji-impl.js');
+    const t = mapStatusHistory('9', [
+      { orderStatus: 9, creationTime: '2026-01-02T00:00:00' },
+      { orderStatus: 0, creationTime: '2026-01-01T00:00:00' },
+      { creationTime: '2026-01-03T00:00:00' },
+      { orderStatus: 999, creationTime: '2026-01-04T00:00:00' },
+    ]);
+    expect(t.events.map((e) => e.status)).toEqual(['initial', 'delivered', 'status_999']);
+    expect(t.current).toBe('status_999');
+  });
+
+  it('getOrderTimeline uses the admin history and falls back to derived when it fails', async () => {
+    const { HttpYijiClient } = await import('../src/yiji-impl.js');
+    const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
+      const u = String(url);
+      if (u.endsWith('/api/Account/login')) {
+        return new Response(JSON.stringify({ token: 'tok' }), { status: 200 });
+      }
+      if (u.includes('/api/OrderStatusHistories/')) {
+        return new Response(
+          JSON.stringify([{ orderStatus: 0, creationTime: '2026-01-01T00:00:00' }]),
+          { status: 200 },
+        );
+      }
+      throw new Error(`unexpected ${u}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new HttpYijiClient({
+      baseUrl: 'https://api.example.com',
+      adminUrl: 'https://admin.example.com',
+      adminEmail: 'svc@example.com',
+      adminPassword: 'pw',
+    });
+    const t = await client.getOrderTimeline('v1', '7');
+    expect(t?.derived).toBe(false);
+    expect(t?.events[0]?.status).toBe('initial');
+
+    // Admin API down → the derived fallback from the single-order endpoint.
+    const fallbackFetch = vi.fn(async (url: RequestInfo | URL) => {
+      const u = String(url);
+      if (u.includes('admin.example.com')) return new Response('down', { status: 503 });
+      return new Response(
+        JSON.stringify({
+          id: 7,
+          orderStatus: 9,
+          paymentStatus: 1,
+          creationTime: '2026-01-01T00:00:00',
+        }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fallbackFetch);
+    const t2 = await client.getOrderTimeline('v1', '7');
+    expect(t2?.derived).toBe(true);
+    expect(t2?.current).toBe('delivered');
+  });
+});

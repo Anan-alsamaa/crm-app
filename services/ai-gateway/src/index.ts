@@ -149,7 +149,13 @@ async function main(): Promise<void> {
   // Commerce client (Yiji order/payment/shipment lookups) — server-side so the
   // Yiji API key never reaches the browser. Empty YIJI_API_URL => mock client.
   // Powers the commerce proxy the agent portal reads order data from.
-  const yiji = createYijiClient({ apiUrl: config.YIJI_API_URL, token: config.YIJI_API_KEY });
+  const yiji = createYijiClient({
+    apiUrl: config.YIJI_API_URL,
+    token: config.YIJI_API_KEY,
+    adminApiUrl: config.YIJI_ADMIN_API_URL,
+    adminEmail: config.YIJI_ADMIN_EMAIL,
+    adminPassword: config.YIJI_ADMIN_PASSWORD,
+  });
 
   await registerAiRoutes(app, {
     provider,

@@ -22,6 +22,16 @@ const schema = z
      */
     YIJI_API_URL: z.string().default(''),
     YIJI_API_KEY: z.string().default(''),
+    /**
+     * Yiji ADMIN API (separate host, e.g. https://admin.yiji-app.com) — the
+     * order status-history endpoint lives there behind its own login. The
+     * gateway signs in with THIS service credential and caches the token; CRM
+     * users never have Yiji logins and no Yiji credential reaches a browser.
+     * All three empty => order tracking falls back to the derived timeline.
+     */
+    YIJI_ADMIN_API_URL: z.string().default(''),
+    YIJI_ADMIN_EMAIL: z.string().default(''),
+    YIJI_ADMIN_PASSWORD: z.string().default(''),
     /** Per-user requests per minute. */
     AI_PER_USER_RPM: numericEnv(20),
     /** Per-IP requests per minute (anti-abuse layer in front of per-user). */

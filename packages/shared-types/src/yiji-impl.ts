@@ -235,6 +235,17 @@ export interface HttpYijiClientOptions {
   token?: string;
   /** Request timeout in ms. Default 6 000. */
   timeoutMs?: number;
+  /**
+   * The Yiji ADMIN API (https://admin.yiji-app.com) — a separate host from the
+   * order API, carrying the status-history endpoint. It requires a login of its
+   * own: CRM users do not have Yiji accounts, so the SERVICE authenticates with
+   * one credential held in the gateway's env, and no Yiji login ever reaches a
+   * browser. All three fields must be set for the real timeline; otherwise
+   * getOrderTimeline falls back to the derived placed→payment→current shape.
+   */
+  adminUrl?: string;
+  adminEmail?: string;
+  adminPassword?: string;
 }
 
 /**
@@ -368,15 +379,44 @@ function mapYijiOrder(raw: RawYijiOrder): YijiOrder {
   };
 }
 
+/** One row of the admin API's GetOrderStatusHistoriesByOrderId response. */
+interface RawYijiStatusHistory {
+  orderStatus?: number | null;
+  creationTime?: string | null;
+}
+
 /**
- * The order's life so far, DERIVED from the single-order payload.
+ * Map the admin API's status-history rows to the timeline the UI renders.
  *
- * Yiji has no status-history endpoint (confirmed by probing); the order carries
- * only `creationTime`, `paymentStatus` and the current `orderStatus` with its
- * `orderStatusDate`. So the honest timeline today is placed → payment → current
- * status, flagged `derived: true` so the UI can say the middle steps are not
- * recorded. When the client provides the real history API, only this function
- * grows — the shape is already what the tracking panel renders.
+ * Only `orderStatus` and `creationTime` matter (per the client's contract);
+ * rows are ordered by time so the steps read in the order they happened, and
+ * the last row is the current status. `derived: false`: this is the REAL
+ * history, so the tracking panel drops its "built from the order record"
+ * caption.
+ */
+export function mapStatusHistory(orderId: string, rows: RawYijiStatusHistory[]): YijiOrderTimeline {
+  const events: YijiOrderTimelineEvent[] = rows
+    .filter((r) => r.orderStatus != null)
+    .map((r) => ({
+      status: YIJI_ORDER_STATUS[r.orderStatus as number] ?? `status_${r.orderStatus}`,
+      at: r.creationTime ?? null,
+    }))
+    .sort((a, b) => ((a.at ?? '') < (b.at ?? '') ? -1 : (a.at ?? '') > (b.at ?? '') ? 1 : 0));
+  return {
+    orderId,
+    current: events[events.length - 1]?.status ?? 'unknown',
+    derived: false,
+    events,
+  };
+}
+
+/**
+ * The order's life so far, DERIVED from the single-order payload — the
+ * FALLBACK when the admin API (which owns the real status history) is not
+ * configured or cannot be reached: the order carries only `creationTime`,
+ * `paymentStatus` and the current `orderStatus` with its `orderStatusDate`, so
+ * the honest fallback timeline is placed → payment → current status, flagged
+ * `derived: true` so the UI can say the middle steps are not recorded.
  */
 export function deriveOrderTimeline(raw: RawYijiOrder): YijiOrderTimeline {
   const events: YijiOrderTimelineEvent[] = [{ status: 'placed', at: raw.creationTime ?? null }];
@@ -426,12 +466,92 @@ export class HttpYijiClient implements YijiClient {
   private readonly baseUrl: string;
   private readonly token?: string;
   private readonly timeoutMs: number;
+  private readonly adminUrl?: string;
+  private readonly adminEmail?: string;
+  private readonly adminPassword?: string;
+  /** Cached admin-API bearer token; refreshed on 401 via re-login. */
+  private adminToken: string | null = null;
 
   constructor(opts: HttpYijiClientOptions) {
     if (!opts.baseUrl) throw new Error('HttpYijiClient: baseUrl is required');
     this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
     this.token = opts.token;
     this.timeoutMs = opts.timeoutMs ?? 6_000;
+    this.adminUrl = opts.adminUrl?.replace(/\/+$/, '') || undefined;
+    this.adminEmail = opts.adminEmail || undefined;
+    this.adminPassword = opts.adminPassword || undefined;
+  }
+
+  private get adminConfigured(): boolean {
+    return !!(this.adminUrl && this.adminEmail && this.adminPassword);
+  }
+
+  /**
+   * Sign into the Yiji ADMIN API with the service credential and cache the
+   * token. CRM logins are not Yiji logins — the CRM's users don't exist there —
+   * so the service authenticates as ITSELF, server-side, and the browser only
+   * ever talks to our own gateway.
+   */
+  private async adminLogin(): Promise<string> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const res = await fetch(`${this.adminUrl}/api/Account/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ email: this.adminEmail, password: this.adminPassword }),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new YijiUnavailableError(`admin login failed (${res.status})`);
+      const body = (await res.json()) as { token?: string };
+      if (!body.token) throw new YijiUnavailableError('admin login returned no token');
+      this.adminToken = body.token;
+      return body.token;
+    } catch (err) {
+      if (err instanceof YijiUnavailableError) throw err;
+      throw new YijiUnavailableError(
+        `admin login: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * GET from the admin API with the cached token; one re-login on 401 so an
+   * expired token costs a round trip, never an outage. 404 = "nothing there".
+   */
+  private async adminFetch<T>(path: string): Promise<T | null> {
+    let token = this.adminToken ?? (await this.adminLogin());
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      try {
+        const res = await fetch(`${this.adminUrl}${path}`, {
+          headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
+          signal: controller.signal,
+        });
+        if (res.status === 401 && attempt === 0) {
+          this.adminToken = null;
+          token = await this.adminLogin();
+          continue;
+        }
+        if (res.status === 404) return null;
+        if (!res.ok) throw new YijiUnavailableError(`admin upstream ${res.status} for ${path}`);
+        return (await res.json()) as T;
+      } catch (err) {
+        if (err instanceof YijiUnavailableError) throw err;
+        const reason =
+          err instanceof Error && err.name === 'AbortError'
+            ? `timed out after ${this.timeoutMs}ms`
+            : `network error: ${err instanceof Error ? err.message : String(err)}`;
+        throw new YijiUnavailableError(`${reason} for admin ${path}`, { cause: err });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    return null;
   }
 
   /**
@@ -486,6 +606,20 @@ export class HttpYijiClient implements YijiClient {
   }
 
   async getOrderTimeline(_vendorId: string, orderId: string): Promise<YijiOrderTimeline | null> {
+    // The REAL history, from the admin API's OrderStatusHistories endpoint —
+    // every status transition with its time (the contract: `orderStatus` +
+    // `creationTime`). Falls back to the derived shape when the admin API is
+    // not configured or cannot be asked, so tracking degrades rather than dies.
+    if (this.adminConfigured) {
+      try {
+        const rows = await this.adminFetch<RawYijiStatusHistory[]>(
+          `/api/OrderStatusHistories/GetOrderStatusHistoriesByOrderId/${encodeURIComponent(orderId)}`,
+        );
+        if (Array.isArray(rows) && rows.length > 0) return mapStatusHistory(orderId, rows);
+      } catch {
+        // Admin API unreachable — fall through to the derived timeline.
+      }
+    }
     const raw = await this.fetch<RawYijiOrder>(
       `/api/Order/GetOrderAsync/${encodeURIComponent(orderId)}`,
     );
@@ -574,6 +708,13 @@ export interface YijiClientEnv {
   apiUrl?: string;
   /** Optional bearer token for HTTP impl. */
   token?: string;
+  /**
+   * The Yiji ADMIN API + its service credential (status history lives there).
+   * Server-side env only — never shipped to a browser.
+   */
+  adminApiUrl?: string;
+  adminEmail?: string;
+  adminPassword?: string;
   /** Override the mock fixtures (tests only). */
   mockFixtures?: MockFixtures;
 }
@@ -584,7 +725,13 @@ export interface YijiClientEnv {
  */
 export function createYijiClient(env: YijiClientEnv = {}): YijiClient {
   if (env.apiUrl && env.apiUrl.trim()) {
-    return new HttpYijiClient({ baseUrl: env.apiUrl, token: env.token });
+    return new HttpYijiClient({
+      baseUrl: env.apiUrl,
+      token: env.token,
+      adminUrl: env.adminApiUrl,
+      adminEmail: env.adminEmail,
+      adminPassword: env.adminPassword,
+    });
   }
   return new MockYijiClient(env.mockFixtures);
 }
