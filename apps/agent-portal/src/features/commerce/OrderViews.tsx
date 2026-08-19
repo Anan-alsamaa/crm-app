@@ -442,19 +442,23 @@ function OrderDetails({ order, vendorId }: { order: YijiOrder; vendorId: string 
       </dl>
 
       {/* Cart & Tracking, beside the payment/status facts they extend. Toggles,
-          so clicking the open one closes it again. */}
+          so clicking the open one closes it again.
+
+          One row split in half across the card — Tracking leads because "where
+          is my order" is the question asked first. Both carry the primary hue
+          rather than only the open one: they are peers, and a greyed-out half
+          read as disabled. The OPEN one deepens to primary-strong, which says
+          which panel is showing without demoting the other to furniture. */}
       <div className="flex gap-1.5 border-t border-foreground/[0.06] pt-2.5">
-        {(['cart', 'tracking'] as const).map((v) => (
+        {(['tracking', 'cart'] as const).map((v) => (
           <button
             key={v}
             type="button"
             aria-pressed={view === v}
             onClick={() => setView((cur) => (cur === v ? 'none' : v))}
             className={cn(
-              'rounded-full px-3 py-1 text-2xs font-medium transition-colors duration-fast ease-out',
-              view === v
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary text-muted-foreground hover:text-foreground',
+              'flex-1 rounded-full px-3 py-1 text-2xs font-medium text-primary-foreground transition-colors duration-fast ease-out',
+              view === v ? 'bg-primary-strong' : 'bg-primary hover:bg-primary-strong',
             )}
           >
             {v === 'cart'
