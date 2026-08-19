@@ -503,20 +503,22 @@ function OrderDetails({ order, vendorId }: { order: YijiOrder; vendorId: string 
         <div
           role="group"
           aria-label={t('commerce.orderViews', { defaultValue: 'Order views' })}
-          // Radius order is TL TR BR BL: fully round on one diagonal, square on
-          // the other. A softened version of this read as an ordinary pill at
-          // 26px tall — the contrast has to be absolute for the shape to
-          // register at all.
-          className="relative flex w-full rounded-[1.15rem_0_1.15rem_0] bg-primary/[0.08] p-1 ring-1 ring-inset ring-primary/15"
+          // No outline ring and no square corners: the tint alone is enough to
+          // read as a field, and a hairline border around a 26px control only
+          // adds a boxy edge. Nested radii follow the real rule — outer 16px
+          // minus the 4px padding leaves 12px inside — so the thumb's curve
+          // stays concentric with the track's instead of merely close to it.
+          className="relative flex w-full rounded-2xl bg-primary/[0.07] p-1"
         >
           <span
             aria-hidden
             className={cn(
               'pointer-events-none absolute inset-y-1 start-1 w-[calc(50%-0.25rem)]',
-              // Same geometry as the track, one step smaller, so the thumb
-              // seats into whichever corner it slides to instead of fighting it.
-              'rounded-[0.9rem_0_0.9rem_0] bg-card shadow-soft ring-1 ring-inset ring-primary/20',
-              'transition-[transform,opacity] duration-medium ease-out',
+              'rounded-xl bg-card shadow-soft',
+              // ease-drawer decelerates hard at the end, so the thumb arrives
+              // rather than coasting — the difference between a control that
+              // feels mechanical and one that feels handled.
+              'transition-[transform,opacity] duration-medium ease-drawer',
               // Logical, not left/right: in Arabic the second segment sits on
               // the other side, and a hard-coded translate would slide the
               // thumb off the control.
@@ -532,14 +534,22 @@ function OrderDetails({ order, vendorId }: { order: YijiOrder; vendorId: string 
               aria-pressed={view === v}
               onClick={() => setView((cur) => (cur === v ? 'none' : v))}
               className={cn(
-                'relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1',
-                'text-2xs font-semibold transition-colors duration-fast ease-out',
+                'group relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-1',
+                'text-2xs font-semibold transition-[background-color,color,transform] duration-fast ease-out',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-                'motion-safe:active:scale-[0.97]',
-                view === v ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+                'motion-safe:active:scale-[0.96]',
+                view === v
+                  ? 'text-primary'
+                  : // Hovering the closed half fills it with the original solid
+                    // blue — the colour that used to sit there permanently now
+                    // answers the pointer instead, so the control previews what
+                    // clicking selects.
+                    'text-muted-foreground hover:bg-primary hover:text-primary-foreground',
               )}
             >
-              {v === 'cart' ? <BagIcon /> : <RouteIcon />}
+              <span className="transition-transform duration-fast ease-out motion-safe:group-hover:scale-110">
+                {v === 'cart' ? <BagIcon /> : <RouteIcon />}
+              </span>
               {v === 'cart'
                 ? t('commerce.cart', { defaultValue: 'Cart' })
                 : t('commerce.tracking', { defaultValue: 'Tracking' })}
