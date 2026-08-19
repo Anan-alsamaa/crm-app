@@ -37,12 +37,12 @@ jobs:
     name: Quality gate (blocks the release)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4.2.0
         with:
           # Pinned to match ci.yml — a different pnpm can reject the lockfile.
           version: 9.15.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: pnpm
@@ -71,7 +71,7 @@ jobs:
           # the services rather than built on the host.
           - { name: bootstrap, dockerfile: directus/bootstrap/Dockerfile }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -161,12 +161,12 @@ jobs:
     needs: gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4.2.0
         with:
           # Pinned to match ci.yml — a different pnpm can reject the lockfile.
           version: 9.15.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: pnpm
@@ -186,7 +186,7 @@ jobs:
             exit 1
           fi
           echo "widget dist:"; ls -1 apps/chat-widget/dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: chat-widget-${{ github.ref_name }}
           path: apps/chat-widget/dist
