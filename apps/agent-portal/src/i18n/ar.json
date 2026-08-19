@@ -225,7 +225,8 @@
     "totalCoupons": "إجمالي مبلغ الكوبونات",
     "totalDiscount": "إجمالي الخصم",
     "trackingDerived": "مبني من سجل الطلب — المنصة لا تُبلغ عن الخطوات الوسيطة بعد.",
-    "trackingUnavailable": "تتبع الطلب غير متاح."
+    "trackingUnavailable": "تتبع الطلب غير متاح.",
+    "orderViews": "عروض الطلب"
   },
   "inbox": {
     "title": "صندوق الوارد المشترك",

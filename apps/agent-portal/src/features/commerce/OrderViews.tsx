@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { Fragment, useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn, Pill, Skeleton } from '@yiji/ui';
@@ -449,23 +449,40 @@ function OrderDetails({ order, vendorId }: { order: YijiOrder; vendorId: string 
           rather than only the open one: they are peers, and a greyed-out half
           read as disabled. The OPEN one deepens to primary-strong, which says
           which panel is showing without demoting the other to furniture. */}
-      <div className="flex gap-1.5 border-t border-foreground/[0.06] pt-2.5">
-        {(['tracking', 'cart'] as const).map((v) => (
-          <button
-            key={v}
-            type="button"
-            aria-pressed={view === v}
-            onClick={() => setView((cur) => (cur === v ? 'none' : v))}
-            className={cn(
-              'flex-1 rounded-full px-3 py-1 text-2xs font-medium text-primary-foreground transition-colors duration-fast ease-out',
-              view === v ? 'bg-primary-strong' : 'bg-primary hover:bg-primary-strong',
-            )}
-          >
-            {v === 'cart'
-              ? t('commerce.cart', { defaultValue: 'Cart' })
-              : t('commerce.tracking', { defaultValue: 'Tracking' })}
-          </button>
-        ))}
+      <div className="border-t border-foreground/[0.06] pt-2.5">
+        {/* ONE control, two segments — not two buttons sitting next to each
+            other. A single continuous pill spans the card, split by a hairline;
+            the open half deepens to primary-strong. Two separated pills read as
+            two unrelated actions, when these are two views of the same order. */}
+        <div
+          role="group"
+          aria-label={t('commerce.orderViews', { defaultValue: 'Order views' })}
+          className="flex w-full overflow-hidden rounded-full bg-primary text-primary-foreground"
+        >
+          {(['tracking', 'cart'] as const).map((v, i) => (
+            <Fragment key={v}>
+              {i > 0 && (
+                // The seam: enough to separate the halves, not enough to break
+                // the pill into two objects.
+                <span aria-hidden className="w-px self-stretch bg-primary-foreground/25" />
+              )}
+              <button
+                type="button"
+                aria-pressed={view === v}
+                onClick={() => setView((cur) => (cur === v ? 'none' : v))}
+                className={cn(
+                  'flex-1 px-3 py-1 text-2xs font-medium transition-colors duration-fast ease-out',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-foreground/60',
+                  view === v ? 'bg-primary-strong' : 'hover:bg-primary-strong/60',
+                )}
+              >
+                {v === 'cart'
+                  ? t('commerce.cart', { defaultValue: 'Cart' })
+                  : t('commerce.tracking', { defaultValue: 'Tracking' })}
+              </button>
+            </Fragment>
+          ))}
+        </div>
       </div>
       {view === 'cart' && <CartPanel order={order} />}
       {view === 'tracking' && <TrackingPanel vendorId={vendorId} orderId={order.orderId} />}
