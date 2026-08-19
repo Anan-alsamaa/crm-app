@@ -5,6 +5,8 @@ import {
   couponWindow,
   defaultCouponDates,
   generateCouponCode,
+  parseDeliveryTypes,
+  toggleDeliveryType,
 } from '../src/coupon-request.js';
 
 const draft = {
@@ -121,5 +123,54 @@ describe('compensationFlag', () => {
   it('follows the checkbox, so the two can never disagree', () => {
     expect(compensationFlag(true)).toBe('Compensated');
     expect(compensationFlag(false)).toBe('Not Compensated');
+  });
+});
+
+/**
+ * A coupon can be valid on several fulfilment channels at once, and "All" is
+ * shorthand for every one of them — so the two can never hold at the same time.
+ * The column stays a comma-joined string, which is why parsing lives in one
+ * place rather than in each reader.
+ */
+describe('delivery types', () => {
+  const OFFERED = ['All', 'Delivery', 'Pickup', 'Carhop', 'Takeout', 'Dine-in'];
+
+  it('reads a stored value, and treats an empty one as nothing selected', () => {
+    expect(parseDeliveryTypes('Delivery, Takeout')).toEqual(['Delivery', 'Takeout']);
+    // Older rows hold a single value — still a valid selection of one.
+    expect(parseDeliveryTypes('Delivery')).toEqual(['Delivery']);
+    expect(parseDeliveryTypes('')).toEqual([]);
+    expect(parseDeliveryTypes(null)).toEqual([]);
+    // Ragged spacing is the human's, not a second value.
+    expect(parseDeliveryTypes(' Delivery ,, Pickup ')).toEqual(['Delivery', 'Pickup']);
+  });
+
+  it('adds and removes a channel', () => {
+    expect(toggleDeliveryType('', 'Delivery', OFFERED)).toBe('Delivery');
+    expect(toggleDeliveryType('Delivery', 'Takeout', OFFERED)).toBe('Delivery, Takeout');
+    expect(toggleDeliveryType('Delivery, Takeout', 'Delivery', OFFERED)).toBe('Takeout');
+    expect(toggleDeliveryType('Delivery', 'Delivery', OFFERED)).toBe('');
+  });
+
+  it('keeps "All" mutually exclusive with the specific channels, in both directions', () => {
+    // Picking All clears the specifics it already covers…
+    expect(toggleDeliveryType('Delivery, Pickup', 'All', OFFERED)).toBe('All');
+    // …and picking a specific one drops All, which would otherwise say both
+    // "every channel" and "this one channel" at once.
+    expect(toggleDeliveryType('All', 'Pickup', OFFERED)).toBe('Pickup');
+  });
+
+  it('stores in the offered order, so the same selection is always the same string', () => {
+    // Ticked back-to-front, stored front-to-back: two agents choosing the same
+    // channels must not produce two different rows.
+    expect(toggleDeliveryType('Dine-in', 'Delivery', OFFERED)).toBe('Delivery, Dine-in');
+    expect(toggleDeliveryType('Takeout, Delivery', 'Pickup', OFFERED)).toBe(
+      'Delivery, Pickup, Takeout',
+    );
+  });
+
+  it('keeps a value the list no longer offers rather than dropping it silently', () => {
+    // A retired channel on an old coupon is history, not a mistake to erase.
+    expect(toggleDeliveryType('Retired', 'Delivery', OFFERED)).toBe('Delivery, Retired');
   });
 });

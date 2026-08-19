@@ -243,3 +243,67 @@ describe('opening it from the add-ticket page', () => {
     expect(screen.getByDisplayValue('+966501112233')).toBeInTheDocument();
   });
 });
+
+/**
+ * The Item field names the order line the coupon is about — the missing or
+ * wrong one. Where the ticket came from decides how it is answered: from the
+ * inbox the order is known, so the agent CHOOSES a real line; raised manually
+ * there is no order to choose from, so they type what the customer said.
+ * Optional either way — not every complaint is about one item.
+ */
+describe('the item a coupon compensates', () => {
+  it('offers the order lines to choose from when the ticket came from an order', async () => {
+    renderDialog({ orderItems: ['Vegetable Pasta', 'Garlic Bread'] });
+    await userEvent.click(screen.getByLabelText(/item/i));
+    expect(await screen.findByRole('button', { name: 'Vegetable Pasta' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Garlic Bread' })).toBeInTheDocument();
+    // Optional: an explicit way to say the coupon is not about one line.
+    expect(screen.getByRole('button', { name: /not about one item/i })).toBeInTheDocument();
+  });
+
+  it('offers the same line once however many were ordered', async () => {
+    // 2x the same dish is one item to compensate, not two identical choices.
+    renderDialog({ orderItems: ['Vegetable Pasta', 'Vegetable Pasta'] });
+    await userEvent.click(screen.getByLabelText(/item/i));
+    await screen.findByRole('button', { name: 'Vegetable Pasta' });
+    expect(screen.getAllByRole('button', { name: 'Vegetable Pasta' })).toHaveLength(1);
+  });
+
+  it('takes a typed item when the ticket was raised by hand', async () => {
+    // No order behind it — the agent heard the item down a phone line.
+    renderDialog({ orderItems: [] });
+    const typed = screen.getByLabelText(/item/i);
+    expect(typed.tagName).toBe('INPUT');
+    await userEvent.type(typed, 'Chicken Shawarma');
+    expect(typed).toHaveValue('Chicken Shawarma');
+  });
+
+  it('sends the chosen line with the request', async () => {
+    const onCollect = vi.fn();
+    renderDialog({ orderItems: ['Vegetable Pasta'], onCollect });
+    await userEvent.click(screen.getByLabelText(/issuing side/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
+    await userEvent.click(screen.getByLabelText(/delivery type/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
+    await userEvent.click(screen.getByLabelText(/item/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Vegetable Pasta' }));
+
+    await userEvent.click(screen.getByRole('button', { name: /attach to this ticket/i }));
+    await waitFor(() => expect(onCollect).toHaveBeenCalled());
+    expect(onCollect.mock.calls[0]![0]).toMatchObject({ item_name: 'Vegetable Pasta' });
+  });
+
+  it('leaves the item null when the complaint is not about one', async () => {
+    const onCollect = vi.fn();
+    renderDialog({ orderItems: ['Vegetable Pasta'], onCollect });
+    await userEvent.click(screen.getByLabelText(/issuing side/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
+    await userEvent.click(screen.getByLabelText(/delivery type/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
+
+    await userEvent.click(screen.getByRole('button', { name: /attach to this ticket/i }));
+    await waitFor(() => expect(onCollect).toHaveBeenCalled());
+    // Not the empty string: "no item" is an absence, and the column is nullable.
+    expect(onCollect.mock.calls[0]![0]!.item_name ?? null).toBeNull();
+  });
+});
