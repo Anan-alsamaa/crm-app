@@ -191,12 +191,27 @@ jobs:
       - name: Install Playwright browsers
         # On a cache hit, install only the OS deps (fast); otherwise download
         # the chromium build too.
+        #
+        # BOUNDED AND RETRIED. This download has hung on the runner and eaten
+        # the job's entire 25-minute budget, so the E2E suite never ran and CI
+        # reported a failure that said nothing about the code. A hang is now
+        # capped at 6 minutes and retried on a fresh connection; only a second
+        # failure fails the job, and it fails in minutes rather than at the
+        # timeout.
+        timeout-minutes: 14
         run: |
-          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
-            pnpm exec playwright install-deps chromium
-          else
-            pnpm exec playwright install --with-deps chromium
-          fi
+          set -u
+          install_browsers() {
+            if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+              timeout 6m pnpm exec playwright install-deps chromium
+            else
+              timeout 6m pnpm exec playwright install --with-deps chromium
+            fi
+          }
+          install_browsers || {
+            echo "::warning::Playwright browser install stalled or failed — retrying once."
+            install_browsers
+          }
 
       - name: Start Directus
         # The Directus container needs the bootstrap extensions (e.g.

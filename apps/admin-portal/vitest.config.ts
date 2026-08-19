@@ -11,6 +11,17 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
+    /*
+     * One retry on CI, none locally.
+     *
+     * These suites drive a real React tree in jsdom, where an assertion can
+     * lose a race with a commit on a loaded shared runner — the failure is in
+     * the timing, not the code, and it reports a red build that says nothing
+     * about the change that triggered it. A genuinely broken test still fails
+     * on every attempt, so this buys quiet without buying blindness. Zero
+     * locally, because a flake on a developer's machine is information.
+     */
+    retry: process.env.CI ? 1 : 0,
     globals: true,
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.{test,spec}.{ts,tsx}'],

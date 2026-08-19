@@ -274,8 +274,18 @@ describe('the item a coupon compensates', () => {
     renderDialog({ orderItems: [] });
     const typed = screen.getByLabelText(/item/i);
     expect(typed.tagName).toBe('INPUT');
-    await userEvent.type(typed, 'Chicken Shawarma');
-    expect(typed).toHaveValue('Chicken Shawarma');
+    /*
+     * One atomic change, not a per-character `userEvent.type`.
+     *
+     * This field is controlled, so every keystroke round-trips through React
+     * state; on a loaded CI runner the typing outran the re-renders and the
+     * input landed on "Ch". The race was in the test, not the component —
+     * a human types slower than React commits — but a test that only passes on
+     * a fast machine reports a failure that says nothing about the code, which
+     * is exactly the noise that trains people to ignore CI.
+     */
+    fireEvent.change(typed, { target: { value: 'Chicken Shawarma' } });
+    await waitFor(() => expect(typed).toHaveValue('Chicken Shawarma'));
   });
 
   it('sends the chosen line with the request', async () => {

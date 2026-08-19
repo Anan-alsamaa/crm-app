@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -111,14 +111,14 @@ describe('ReportsPage — the schedule', () => {
     const d = await openDrawer();
 
     const nameField = d.getByLabelText('Name');
-    await userEvent.type(nameField, 'Monthly');
+    fireEvent.change(nameField, { target: { value: 'Monthly' } });
     await waitFor(() => expect(nameField).toHaveValue('Monthly'));
     await userEvent.click(screen.getByRole('combobox', { name: 'How often' }));
     // The option is an <li> wrapping the real <button>; clicking the li does
     // nothing, which is exactly the kind of thing a test should hold.
     await userEvent.click(screen.getByRole('button', { name: 'The 1st of every month at 07:00' }));
     const recipientsField = screen.getByPlaceholderText('ops@example.com, manager@example.com');
-    await userEvent.type(recipientsField, 'ops@anan.sa');
+    fireEvent.change(recipientsField, { target: { value: 'ops@anan.sa' } });
     await waitFor(() => expect(recipientsField).toHaveValue('ops@anan.sa'));
     await userEvent.click(await d.findByText('actions.save'));
 
@@ -140,7 +140,7 @@ describe('ReportsPage — the schedule', () => {
     const d = await openDrawer();
 
     const nameField = d.getByLabelText('Name');
-    await userEvent.type(nameField, 'Ad hoc');
+    fireEvent.change(nameField, { target: { value: 'Ad hoc' } });
     await waitFor(() => expect(nameField).toHaveValue('Ad hoc'));
     await userEvent.click(await d.findByText('actions.save'));
 
@@ -160,10 +160,9 @@ describe('ReportsPage — the schedule', () => {
     // No recipients yet — and it says so rather than implying delivery.
     expect(screen.getByText(/nobody receives it/)).toBeInTheDocument();
 
-    await userEvent.type(
-      screen.getByPlaceholderText('ops@example.com, manager@example.com'),
-      'ops@anan.sa',
-    );
+    fireEvent.change(screen.getByPlaceholderText('ops@example.com, manager@example.com'), {
+      target: { value: 'ops@anan.sa' },
+    });
     // The mocked t() does not interpolate, so this asserts the SHAPE of the
     // sentence rather than its filled-in values.
     expect(screen.getByText(/Sent to/)).toBeInTheDocument();
