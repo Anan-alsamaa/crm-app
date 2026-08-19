@@ -119,3 +119,4 @@ export type {
   DeltaBadgeProps,
   SectionCardProps,
 } from './Metrics.js';
+export { AI_SKIN } from './aiSkin.js';

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
-import { Button, cn, Pill, Spinner } from '@yiji/ui';
+import { AI_SKIN, Button, cn, Pill, Spinner } from '@yiji/ui';
 import { ai, type AiError } from '../../lib/ai-client.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
@@ -132,12 +132,22 @@ export function AiPanel({
   return (
     <div
       className={cn(
-        'space-y-3 rounded-2xl bg-card/70 px-5 py-4 shadow-soft ring-1 ring-foreground/[0.04]',
+        'space-y-3 rounded-2xl px-5 py-4 shadow-soft ring-1',
+        // The same night Aura wears. An agent should never have to work out
+        // which parts of the screen a model wrote.
+        AI_SKIN.panel,
+        AI_SKIN.text,
         className,
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        <h3
+          className={cn(
+            'flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.14em]',
+            AI_SKIN.accent,
+          )}
+        >
+          <SparkIcon />
           {tl('ai.title', { defaultValue: 'AI assistance' })}
         </h3>
         {/* Which language the draft comes back in. Sits with the action rather
@@ -147,7 +157,7 @@ export function AiPanel({
         <div
           role="group"
           aria-label={tl('ai.replyLanguage', { defaultValue: 'Reply language' })}
-          className="flex overflow-hidden rounded-md ring-1 ring-border"
+          className="flex overflow-hidden rounded-md ring-1 ring-white/15"
         >
           {(['en', 'ar'] as const).map((code) => (
             <button
@@ -157,9 +167,7 @@ export function AiPanel({
               aria-pressed={replyLocale === code}
               className={cn(
                 'px-2 py-0.5 text-2xs font-semibold uppercase tracking-wide transition-colors duration-fast ease-out',
-                replyLocale === code
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-secondary',
+                replyLocale === code ? AI_SKIN.accentBg : cn(AI_SKIN.dim, 'hover:bg-white/10'),
               )}
             >
               {code}
@@ -174,7 +182,7 @@ export function AiPanel({
           what will actually happen, which differs once a draft exists. */}
       <Button
         type="button"
-        className="w-full justify-center"
+        className={cn('w-full justify-center', AI_SKIN.accentBtn)}
         loading={suggestReply.isPending}
         onClick={() => suggestReply.mutate()}
         iconStart={<SparkIcon />}
@@ -190,8 +198,17 @@ export function AiPanel({
         /* The draft is already in the composer, so repeating it in full would
            put the same words on screen twice and leave the agent unsure which
            copy they are about to send. Say where it went instead. */
-        <p className="flex items-start gap-2 rounded-xl bg-primary/[0.07] px-3 py-2 text-xs leading-relaxed text-foreground">
-          <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary" />
+        <p
+          className={cn(
+            'flex items-start gap-2 rounded-xl px-3 py-2 text-xs leading-relaxed',
+            AI_SKIN.bubble,
+            AI_SKIN.text,
+          )}
+        >
+          <span
+            aria-hidden
+            className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[oklch(0.84_0.13_82)]"
+          />
           <span>
             {tl('ai.draftPlaced', {
               defaultValue: 'Added to your reply below — read it before you send it.',
@@ -202,7 +219,7 @@ export function AiPanel({
 
       {/* Questions about the conversation, answered in place. Not commands: an
           agent asks "what happened?", they never ask to "summarize". */}
-      <div className="divide-y divide-foreground/[0.06] border-t border-foreground/[0.06]">
+      <div className="divide-y divide-white/10 border-t border-white/10">
         <InsightRow
           label={tl('ai.insight.whatHappened', { defaultValue: 'What happened here?' })}
           cta={tl('ai.insight.read', { defaultValue: 'Catch me up' })}
@@ -212,7 +229,7 @@ export function AiPanel({
           onRun={() => summarize.mutate()}
         >
           {summarize.data && (
-            <p className="text-sm leading-relaxed text-foreground">{summarize.data.summary}</p>
+            <p className={cn('text-sm leading-relaxed', AI_SKIN.text)}>{summarize.data.summary}</p>
           )}
         </InsightRow>
 
@@ -234,7 +251,7 @@ export function AiPanel({
               >
                 {tl(`ai.mood.${mood}`, { defaultValue: mood })}
               </Pill>
-              <span className="text-2xs tabular-nums text-muted-foreground">
+              <span className={cn('text-2xs tabular-nums', AI_SKIN.dim)}>
                 {tl('ai.confidence', {
                   defaultValue: '{{n}}% confident',
                   n: Math.round(sentiment.data.score * 100),
@@ -251,7 +268,10 @@ export function AiPanel({
         <button
           type="button"
           onClick={() => setSearchOpen(true)}
-          className="text-2xs font-semibold text-primary transition-colors duration-fast hover:text-primary-strong"
+          className={cn(
+            'text-2xs font-semibold transition-colors duration-fast hover:opacity-80',
+            AI_SKIN.accent,
+          )}
         >
           {tl('ai.action.findSimilar', { defaultValue: 'Find a similar conversation' })}
         </button>
@@ -270,7 +290,7 @@ export function AiPanel({
               onChange={(e) => setQuery(e.target.value)}
               aria-label={tl('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
               placeholder={tl('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
-              className="block h-8 w-full rounded-md border border-border bg-background/60 px-2.5 text-start text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+              className="block h-8 w-full rounded-md border-0 bg-white/[0.06] px-2.5 text-start text-xs text-[oklch(0.96_0.012_170)] ring-1 ring-inset ring-white/10 placeholder:text-[oklch(0.68_0.02_170)] focus:outline-none focus:ring-2 focus:ring-[oklch(0.84_0.13_82)]/60"
             />
             <Button type="submit" size="sm" loading={search.isPending} disabled={!query.trim()}>
               {tl('actions.search', { ns: 'common', defaultValue: 'Search' })}
@@ -278,7 +298,7 @@ export function AiPanel({
           </form>
           {search.data &&
             (search.data.results.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
+              <p className={cn('text-xs', AI_SKIN.dim)}>
                 {tl('ai.search.empty', { defaultValue: 'No matching conversations.' })}
               </p>
             ) : (
@@ -288,10 +308,10 @@ export function AiPanel({
                     <button
                       type="button"
                       onClick={() => navigate(`/?conv=${r.conversationId}`)}
-                      className="block w-full rounded-md px-2 py-1.5 text-start transition-colors duration-fast ease-out hover:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      className="block w-full rounded-md px-2 py-1.5 text-start transition-colors duration-fast ease-out hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
                     >
-                      <p className="line-clamp-2 text-xs text-foreground">{r.snippet}</p>
-                      <span className="text-2xs tabular-nums text-muted-foreground">
+                      <p className={cn('line-clamp-2 text-xs', AI_SKIN.text)}>{r.snippet}</p>
+                      <span className={cn('text-2xs tabular-nums', AI_SKIN.dim)}>
                         {(r.score * 100).toFixed(0)}%
                       </span>
                     </button>
@@ -312,7 +332,7 @@ export function AiPanel({
       ))}
 
       {busy && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className={cn('flex items-center gap-2 text-xs', AI_SKIN.dim)}>
           <Spinner /> {tl('ai.running', { defaultValue: 'Working…' })}
         </div>
       )}
@@ -346,13 +366,16 @@ function InsightRow({
   return (
     <div className="py-2.5">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-medium text-foreground">{label}</span>
+        <span className={cn('text-xs font-medium', AI_SKIN.text)}>{label}</span>
         <button
           type="button"
           onClick={onRun}
           disabled={busy}
           aria-label={label}
-          className="shrink-0 text-2xs font-semibold text-primary transition-colors duration-fast hover:text-primary-strong disabled:opacity-50"
+          className={cn(
+            'shrink-0 text-2xs font-semibold transition-colors duration-fast hover:opacity-80 disabled:opacity-50',
+            AI_SKIN.accent,
+          )}
         >
           {busy ? '…' : answered ? again : cta}
         </button>

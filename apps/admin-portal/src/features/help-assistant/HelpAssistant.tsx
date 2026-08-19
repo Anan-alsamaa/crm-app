@@ -2,7 +2,7 @@ import type { JSX } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
-import { Button, cn, Drawer, Pill, Spinner, Textarea, toast } from '@yiji/ui';
+import { AI_SKIN, Button, cn, Drawer, Pill, Spinner, Textarea, toast } from '@yiji/ui';
 import {
   HELP_HISTORY_MAX_TURNS,
   type AuraAction,
@@ -307,31 +307,8 @@ export function HelpAssistant(): JSX.Element {
         open={open}
         onClose={close}
         width="md"
-        /* A lockup, not a word. The panel opened on a bare heading over two
-           lines of body copy, which read as a document rather than as somebody
-           you are about to talk to — the assistant had no presence in its own
-           panel. Mark, name, and what she is, in one line. */
-        title={
-          <div className="flex items-center gap-3">
-            <span
-              aria-hidden
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-ink text-base font-bold text-ink-foreground ring-1 ring-primary/30"
-            >
-              A
-            </span>
-            <span className="min-w-0">
-              <span className="block font-display text-xl font-bold tracking-tight text-foreground">
-                Aura
-              </span>
-              <span className="block text-2xs font-medium uppercase tracking-[0.12em] text-primary">
-                {t('helpAssistant.role', { defaultValue: 'CRM assistant' })}
-              </span>
-            </span>
-          </div>
-        }
-        description={t('helpAssistant.description', {
-          defaultValue: 'Nothing here is saved — the chat clears when you close the panel.',
-        })}
+        hideChrome
+        panelClassName={AI_SKIN.panel}
         // The composer belongs in the STICKY footer, not the scrolling body:
         // trailing the last reply meant it drifted off-screen exactly when the
         // conversation got long enough to want another question.
@@ -341,7 +318,7 @@ export function HelpAssistant(): JSX.Element {
               e.preventDefault();
               submit();
             }}
-            className="w-full space-y-3"
+            className={cn('w-full space-y-2 border-t border-white/10 px-5 py-4', AI_SKIN.text)}
           >
             {/* No field label: the placeholder says what to do, and a labelled
                 form control above a chat composer reads as a form to fill in
@@ -351,7 +328,11 @@ export function HelpAssistant(): JSX.Element {
               <Textarea
                 id="help-assistant-question"
                 aria-label={t('helpAssistant.label', { defaultValue: 'Your question' })}
-                className="min-h-[3rem] flex-1 resize-none rounded-2xl"
+                className={cn(
+                  'min-h-[3rem] flex-1 resize-none rounded-2xl border-0 bg-white/[0.06] ring-1 ring-inset ring-white/10',
+                  'text-[oklch(0.96_0.012_170)] placeholder:text-[oklch(0.68_0.02_170)]',
+                  'focus:ring-2 focus:ring-[oklch(0.84_0.13_82)]/60',
+                )}
                 rows={2}
                 maxLength={MAX_LENGTH}
                 value={question}
@@ -372,7 +353,7 @@ export function HelpAssistant(): JSX.Element {
               <Button
                 type="submit"
                 size="sm"
-                className="h-10 w-10 shrink-0 rounded-2xl p-0"
+                className={cn('h-10 w-10 shrink-0 rounded-2xl p-0', AI_SKIN.accentBtn)}
                 disabled={!canSend}
                 loading={ask.isPending}
                 aria-label={t('helpAssistant.send', { defaultValue: 'Ask' })}
@@ -384,14 +365,14 @@ export function HelpAssistant(): JSX.Element {
             <div className="flex items-center justify-between gap-3">
               {/* The caveat belongs under the box the answer comes from, not in
                   a help page nobody opens. */}
-              <span className="text-2xs text-muted-foreground">
+              <span className={cn('text-2xs', AI_SKIN.accent)}>
                 {t('helpAssistant.caveat', {
                   defaultValue: 'Aura can be wrong — check anything that matters.',
                 })}
               </span>
               <span
                 aria-live="polite"
-                className="shrink-0 text-2xs tabular-nums text-muted-foreground"
+                className={cn('shrink-0 text-2xs tabular-nums', AI_SKIN.dim)}
                 data-testid="help-assistant-counter"
               >
                 {/* `chars`, not `count` — `count` is i18next's plural selector. */}
@@ -409,14 +390,98 @@ export function HelpAssistant(): JSX.Element {
             Aura on the left under her name, the user on the right: the
             arrangement every messaging app uses, so who said what is readable
             without reading. */}
-        <div className="space-y-4" aria-live="polite">
+        {/* The panel's own chrome, since the drawer's is suppressed. */}
+        <div
+          className={cn(
+            'sticky top-0 z-10 flex shrink-0 items-center gap-3 px-5 py-3.5',
+            AI_SKIN.head,
+          )}
+        >
+          <span
+            aria-hidden
+            className={cn(
+              'grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[oklch(0.84_0.13_82)]/15 ring-1',
+              AI_SKIN.accentRing,
+            )}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              className="h-4 w-4 text-[oklch(0.84_0.13_82)]"
+              fill="currentColor"
+              aria-hidden
+            >
+              <path d="M8 1.6 9.4 5.2 13 6.6 9.4 8 8 11.6 6.6 8 3 6.6 6.6 5.2 8 1.6ZM12.6 10.4l.5 1.4 1.4.5-1.4.5-.5 1.4-.5-1.4-1.4-.5 1.4-.5.5-1.4Z" />
+            </svg>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className={cn('block text-sm font-bold tracking-tight', AI_SKIN.text)}>Aura</span>
+            <span
+              className={cn(
+                'block text-2xs font-medium uppercase tracking-[0.12em]',
+                AI_SKIN.accent,
+              )}
+            >
+              {t('helpAssistant.role', { defaultValue: 'CRM assistant' })}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setTurns([])}
+            aria-label={t('helpAssistant.newChat', { defaultValue: 'Start a new chat' })}
+            title={t('helpAssistant.newChat', { defaultValue: 'Start a new chat' })}
+            className={cn(
+              'grid h-8 w-8 place-items-center rounded-lg transition-colors duration-fast hover:bg-white/10',
+              AI_SKIN.dim,
+            )}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              className="h-4 w-4"
+              aria-hidden
+            >
+              <path d="M8 3.5v9M3.5 8h9" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={close}
+            aria-label={t('actions.close', { ns: 'common', defaultValue: 'Close' })}
+            className={cn(
+              'grid h-8 w-8 place-items-center rounded-lg transition-colors duration-fast hover:bg-white/10',
+              AI_SKIN.dim,
+            )}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              className="h-4 w-4"
+              aria-hidden
+            >
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="space-y-4 px-5 py-4" aria-live="polite">
           {turns.map((turn, i) =>
             turn.role === 'user' ? (
               <div key={i} className="flex flex-col items-end gap-1">
-                <span className="pe-1 text-2xs font-medium text-muted-foreground">
+                <span className={cn('pe-1 text-2xs font-medium', AI_SKIN.dim)}>
                   {t('helpAssistant.you', { defaultValue: 'You' })}
                 </span>
-                <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-ee-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.4)]">
+                <p
+                  className={cn(
+                    'max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-ee-md px-4 py-2.5 text-sm leading-relaxed',
+                    AI_SKIN.accentBg,
+                  )}
+                >
                   {turn.content}
                 </p>
               </div>
@@ -429,7 +494,7 @@ export function HelpAssistant(): JSX.Element {
                   >
                     A
                   </span>
-                  <span className="text-2xs font-medium text-muted-foreground">Aura</span>
+                  <span className={cn('text-2xs font-medium', AI_SKIN.dim)}>Aura</span>
                   {/* Off-topic replies are labelled but not hidden, so nobody
                       mistakes a refusal for guidance about this CRM. */}
                   {turn.offTopic && (
@@ -442,8 +507,12 @@ export function HelpAssistant(): JSX.Element {
                   className={cn(
                     'max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-es-md px-4 py-2.5 text-sm leading-relaxed',
                     turn.offTopic
-                      ? 'bg-secondary text-muted-foreground'
-                      : 'bg-card text-foreground shadow-[0_2px_10px_-6px_oklch(var(--shadow-color)/0.45)] ring-1 ring-foreground/[0.05]',
+                      ? cn('bg-white/[0.04] ring-1 ring-white/10', AI_SKIN.dim)
+                      : cn(
+                          AI_SKIN.bubble,
+                          AI_SKIN.text,
+                          'border-s-2 border-[oklch(0.84_0.13_82)]/50',
+                        ),
                   )}
                 >
                   {turn.content}
@@ -455,7 +524,7 @@ export function HelpAssistant(): JSX.Element {
 
           {turns.length === 1 && turns[0]?.welcome && !ask.isPending && (
             <div className="flex flex-col gap-2 pt-1">
-              <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <p className={cn('text-2xs font-semibold uppercase tracking-[0.12em]', AI_SKIN.dim)}>
                 {t('helpAssistant.tryAsking', { defaultValue: 'Try asking' })}
               </p>
               {STARTERS.map((s) => (
@@ -465,7 +534,13 @@ export function HelpAssistant(): JSX.Element {
                   onClick={() =>
                     send(t(`helpAssistant.starter.${s.key}`, { defaultValue: s.text }))
                   }
-                  className="group flex w-full items-center justify-between gap-3 rounded-xl bg-primary/10 px-4 py-2.5 text-start text-sm font-medium text-foreground ring-1 ring-primary/20 transition-all duration-fast ease-out hover:bg-primary hover:text-primary-foreground hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  className={cn(
+                    'group flex w-full items-center justify-between gap-3 rounded-xl px-4 py-2.5',
+                    'text-start text-sm font-medium transition-all duration-fast ease-out',
+                    'motion-safe:hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.84_0.13_82)]/50',
+                    AI_SKIN.glass,
+                    AI_SKIN.text,
+                  )}
                 >
                   <span>{t(`helpAssistant.starter.${s.key}`, { defaultValue: s.text })}</span>
                   <svg
@@ -485,7 +560,7 @@ export function HelpAssistant(): JSX.Element {
             </div>
           )}
           {ask.isPending && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className={cn('flex items-center gap-2 text-xs', AI_SKIN.dim)}>
               <Spinner /> {t('helpAssistant.thinking', { defaultValue: 'Looking that up…' })}
             </div>
           )}

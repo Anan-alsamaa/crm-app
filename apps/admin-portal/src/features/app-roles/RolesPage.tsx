@@ -131,13 +131,21 @@ export function RolesPage() {
   const nameRef = useRef<HTMLInputElement>(null);
 
   /**
-   * "New role" clears the form — but when nothing was selected the form was
-   * ALREADY blank, so the click looked like it did nothing. Focusing the name
-   * field makes the state change visible and puts the cursor where the admin
-   * is about to type anyway.
+   * Creating is a MODE, not the absence of a selection.
+   *
+   * Without it "New role" only cleared a form that was usually already clear,
+   * so the click looked like it did nothing, and the button that actually
+   * created the role sat at the far bottom of a long privilege matrix — the
+   * admin ticked what they wanted, then had to go looking for Create.
+   *
+   * Now the toolbar button IS the action: it opens the draft, then turns into
+   * "Create role" and creates it. One primary action, always in the same
+   * place, saying what it will do.
    */
+  const [creating, setCreating] = useState(false);
   const startNewRole = () => {
     setDraft(EMPTY);
+    setCreating(true);
     requestAnimationFrame(() => nameRef.current?.focus());
   };
 
@@ -172,6 +180,9 @@ export function RolesPage() {
       invalidate();
       const id = (created as { id?: string })?.id ?? draft.id;
       if (id) setDraft((d) => ({ ...d, id }));
+      // The draft is a real role now, so the toolbar goes back to offering a
+      // NEW one rather than continuing to say "Create".
+      setCreating(false);
       toast.success(
         t('roles.saved', {
           defaultValue: 'Saved — the role and its permissions are being applied now.',
@@ -185,6 +196,7 @@ export function RolesPage() {
     onSuccess: () => {
       invalidate();
       setDraft(EMPTY);
+      setCreating(false);
       toast.success(t('roles.deleted', { defaultValue: 'Role deleted' }));
     },
     onError: (err) => toast.error(errText(err)),
@@ -242,9 +254,50 @@ export function RolesPage() {
           {t('roles.title', { defaultValue: 'Roles & privileges' })}
         </h1>
         <ToolbarSpacer />
-        <Button size="sm" onClick={startNewRole} iconStart={<PlusIcon />}>
-          {t('roles.new', { defaultValue: 'New role' })}
-        </Button>
+        {/* One primary action, always in this spot, named after what it does:
+            it opens a draft, becomes Create while that draft is unsaved, and
+            becomes Save once the role exists. A built-in role is code-defined,
+            so there is nothing to save and the button offers a new one. */}
+        {creating ? (
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setCreating(false);
+                setDraft(EMPTY);
+              }}
+            >
+              {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => save.mutate(draft)}
+              disabled={!draft.name.trim() || save.isPending}
+              loading={save.isPending}
+            >
+              {t('roles.create', { defaultValue: 'Create role' })}
+            </Button>
+          </>
+        ) : draft.id && !locked ? (
+          <>
+            <Button size="sm" variant="ghost" onClick={startNewRole} iconStart={<PlusIcon />}>
+              {t('roles.new', { defaultValue: 'New role' })}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => save.mutate(draft)}
+              disabled={!draft.name.trim() || save.isPending}
+              loading={save.isPending}
+            >
+              {t('roles.save', { defaultValue: 'Save role' })}
+            </Button>
+          </>
+        ) : (
+          <Button size="sm" onClick={startNewRole} iconStart={<PlusIcon />}>
+            {t('roles.new', { defaultValue: 'New role' })}
+          </Button>
+        )}
       </Toolbar>
 
       {/* Scroll lives on the page wrapper; the grid inside is capped so the
@@ -280,7 +333,10 @@ export function RolesPage() {
                   {draft.id && (
                     <button
                       type="button"
-                      onClick={() => setDraft(EMPTY)}
+                      onClick={() => {
+                        setCreating(false);
+                        setDraft(EMPTY);
+                      }}
                       className="rounded-md px-1.5 py-0.5 text-2xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/10"
                     >
                       {t('roles.clearSelection', { defaultValue: 'Clear' })}
@@ -292,7 +348,13 @@ export function RolesPage() {
                     <li key={r.id}>
                       <button
                         type="button"
-                        onClick={() => setDraft((d) => ({ ...d, id: r.id }))}
+                        onClick={() => {
+                          // Opening an existing role ends the draft — otherwise
+                          // the toolbar keeps offering to "Create" a role that
+                          // already exists.
+                          setCreating(false);
+                          setDraft((d) => ({ ...d, id: r.id }));
+                        }}
                         className={cn(
                           'min-h-12 w-full px-3.5 py-2.5 text-start transition-colors duration-fast',
                           'focus-visible:outline-none focus-visible:bg-foreground/[0.05]',
@@ -555,15 +617,12 @@ export function RolesPage() {
                   </div>
                 </SectionCard>
 
+                {/* Only the DESTRUCTIVE action lives down here. Save/Create moved
+                    to the toolbar: two buttons that both created a role, one of
+                    them below a fifteen-row privilege matrix, is how an admin
+                    ends up unsure whether their work was kept. Delete stays far
+                    from the primary action on purpose. */}
                 <div className="flex items-center gap-2">
-                  <Button
-                    onClick={() => save.mutate(draft)}
-                    disabled={!draft.name.trim() || save.isPending}
-                  >
-                    {draft.id
-                      ? t('roles.save', { defaultValue: 'Save role' })
-                      : t('roles.create', { defaultValue: 'Create role' })}
-                  </Button>
                   {draft.id && (
                     <Button
                       variant="ghost"

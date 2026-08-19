@@ -22,19 +22,35 @@ import { useFocusTrap } from './useFocusTrap.js';
  * correct from ANY mount point instead of depending on where it is placed.
  */
 
-export interface DrawerProps {
+interface DrawerBase {
   open: boolean;
   onClose: () => void;
-  title: ReactNode;
-  description?: ReactNode;
   /** Drawer width. Defaults to ~480px. */
   width?: 'sm' | 'md' | 'lg';
   children: ReactNode;
   /** Sticky footer actions (Cancel / Save / etc). */
   footer?: ReactNode;
+  /**
+   * Theme the panel itself. The drawer's job is the BEHAVIOUR — portal, focus
+   * trap, Esc, scroll lock, backdrop — and a surface that needs its own skin
+   * (the AI assistant is deliberately dark against a light product) should not
+   * have to reimplement all of that to get it.
+   */
+  panelClassName?: string;
 }
 
-const widthClass: Record<NonNullable<DrawerProps['width']>, string> = {
+/**
+ * A title is required for the built-in header and meaningless without it, so
+ * the type says exactly that instead of asking every themed caller to pass a
+ * heading nothing will ever render.
+ */
+type DrawerChrome =
+  | { hideChrome?: false; title: ReactNode; description?: ReactNode }
+  | { hideChrome: true; title?: ReactNode; description?: ReactNode };
+
+export type DrawerProps = DrawerBase & DrawerChrome;
+
+const widthClass: Record<NonNullable<DrawerBase['width']>, string> = {
   sm: 'w-[26rem]',
   md: 'w-[32rem]',
   lg: 'w-[40rem]',
@@ -48,6 +64,8 @@ export function Drawer({
   width = 'md',
   children,
   footer,
+  panelClassName,
+  hideChrome = false,
 }: DrawerProps): JSX.Element | null {
   // Esc to close + body scroll lock.
   useEffect(() => {
@@ -91,55 +109,72 @@ export function Drawer({
       <div
         ref={panelRef}
         className={cn(
-          'absolute inset-y-3 end-3 flex max-w-[100vw] flex-col rounded-2xl bg-card shadow-xl shadow-black/30 ring-1 ring-border',
+          'absolute inset-y-3 end-3 flex max-w-[100vw] flex-col overflow-hidden rounded-2xl shadow-xl shadow-black/30 ring-1 ring-border',
+          // A themed panel supplies its own ground; the default stays card.
+          panelClassName ? panelClassName : 'bg-card',
           widthClass[width],
           'motion-safe:animate-slide-in-drawer',
         )}
       >
         {/* Close — floats top-end */}
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="absolute end-4 top-4 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground active:scale-[0.94]"
-        >
-          <svg
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-            strokeLinecap="round"
-            className="h-4 w-4"
-            aria-hidden
+        {!hideChrome && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute end-4 top-4 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground active:scale-[0.94]"
           >
-            <path d="M4 4l8 8M12 4l-8 8" />
-          </svg>
-        </button>
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              className="h-4 w-4"
+              aria-hidden
+            >
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        )}
 
         {/* Header — borderless, generous spacing */}
-        <div className="shrink-0 px-8 pt-10 pb-6">
-          <div className="min-w-0">
-            {typeof title === 'string' ? (
-              <h2 className="font-display text-2xl font-bold tracking-tight text-foreground">
-                {title}
-              </h2>
-            ) : (
-              title
-            )}
-            {description && (
-              <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted-foreground">
-                {description}
-              </p>
-            )}
+        {!hideChrome && (
+          <div className="shrink-0 px-8 pt-10 pb-6">
+            <div className="min-w-0">
+              {typeof title === 'string' ? (
+                <h2 className="font-display text-2xl font-bold tracking-tight text-foreground">
+                  {title}
+                </h2>
+              ) : (
+                title
+              )}
+              {description && (
+                <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted-foreground">
+                  {description}
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Body — scrollable */}
-        <div className="flex-1 overflow-y-auto px-8 py-2 space-y-6">{children}</div>
+        {/* Body — scrollable. A themed panel owns its own padding. */}
+        <div
+          className={cn('flex-1 overflow-y-auto', hideChrome ? 'min-h-0' : 'space-y-6 px-8 py-2')}
+        >
+          {children}
+        </div>
 
         {/* Optional sticky footer — borderless, sits on a faded fade */}
         {footer && (
-          <div className="flex shrink-0 items-center justify-end gap-2 px-8 py-5">{footer}</div>
+          <div
+            className={cn(
+              'flex shrink-0 flex-col',
+              hideChrome ? '' : 'items-end justify-end gap-2 px-8 py-5',
+            )}
+          >
+            {footer}
+          </div>
         )}
       </div>
     </div>,
