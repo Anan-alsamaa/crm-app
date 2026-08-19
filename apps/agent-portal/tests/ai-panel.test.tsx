@@ -42,37 +42,16 @@ function renderPanel(props: Partial<React.ComponentProps<typeof AiPanel>> = {}) 
 beforeEach(() => vi.clearAllMocks());
 
 describe('AiPanel — agent assistance', () => {
-  it('leads with drafting the reply, and asks the rest as questions', () => {
+  it('offers the actions the operations team asked for', () => {
     renderPanel();
-    // The one action that writes into the composer is the primary control.
-    expect(screen.getByRole('button', { name: 'Draft a reply' })).toBeInTheDocument();
-    // The others are questions about the conversation, not model commands.
-    expect(screen.getByRole('button', { name: 'What happened here?' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'How is the customer feeling?' }),
-    ).toBeInTheDocument();
-  });
-
-  it('does not offer an agent the model-vocabulary tools', () => {
-    renderPanel();
-    // "Score lead" rates purchase potential — a sales idea with no meaning
-    // while someone waits for an apology. Entities/Intent are model tasks.
-    for (const gone of ['Score lead', 'Entities', 'Intent', 'Summarize', 'Suggest reply']) {
-      expect(screen.queryByRole('button', { name: gone })).toBeNull();
-    }
-  });
-
-  it('runs nothing until asked — every call bills the vendor', () => {
-    renderPanel();
-    expect(ai.summarize).not.toHaveBeenCalled();
-    expect(ai.sentiment).not.toHaveBeenCalled();
-    expect(ai.suggestReply).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Summarize' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Suggest reply' })).toBeInTheDocument();
   });
 
   it('summarizes the conversation it was given', async () => {
     ai.summarize.mockResolvedValue({ summary: 'Customer is chasing a late order.' });
     renderPanel();
-    await userEvent.click(screen.getByRole('button', { name: 'What happened here?' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Summarize' }));
     await waitFor(() =>
       expect(screen.getByText('Customer is chasing a late order.')).toBeInTheDocument(),
     );
@@ -85,9 +64,7 @@ describe('AiPanel — agent assistance', () => {
     const onReplySuggested = vi.fn();
     ai.suggestReply.mockResolvedValue({ reply: 'Sorry about that, checking with the branch now.' });
     renderPanel({ onReplySuggested });
-    await userEvent.click(
-      screen.getByRole('button', { name: /Draft a reply|Improve my draft|Draft again/ }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
     await waitFor(() =>
       expect(onReplySuggested).toHaveBeenCalledWith(
         'Sorry about that, checking with the branch now.',
@@ -98,9 +75,7 @@ describe('AiPanel — agent assistance', () => {
   it('passes the agent draft through so the suggestion builds on it', async () => {
     ai.suggestReply.mockResolvedValue({ reply: 'ok' });
     renderPanel({ draft: 'we are looking into' });
-    await userEvent.click(
-      screen.getByRole('button', { name: /Draft a reply|Improve my draft|Draft again/ }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
     await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
     expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ draft: 'we are looking into' });
   });
@@ -110,9 +85,7 @@ describe('AiPanel — reply language', () => {
   it('defaults to English when the interface is English', async () => {
     ai.suggestReply.mockResolvedValue({ reply: 'ok' });
     renderPanel();
-    await userEvent.click(
-      screen.getByRole('button', { name: /Draft a reply|Improve my draft|Draft again/ }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
     await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
     expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ locale: 'en' });
   });
@@ -120,9 +93,7 @@ describe('AiPanel — reply language', () => {
   it('starts on Arabic when the caller says so', async () => {
     ai.suggestReply.mockResolvedValue({ reply: 'ok' });
     renderPanel({ locale: 'ar-SA' });
-    await userEvent.click(
-      screen.getByRole('button', { name: /Draft a reply|Improve my draft|Draft again/ }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
     await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
     expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ locale: 'ar' });
   });
@@ -133,9 +104,7 @@ describe('AiPanel — reply language', () => {
     ai.suggestReply.mockResolvedValue({ reply: 'ok' });
     renderPanel();
     await userEvent.click(screen.getByRole('button', { name: 'ar' }));
-    await userEvent.click(
-      screen.getByRole('button', { name: /Draft a reply|Improve my draft|Draft again/ }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
     await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
     expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ locale: 'ar' });
   });

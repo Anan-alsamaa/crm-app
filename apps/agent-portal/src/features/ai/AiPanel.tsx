@@ -2,45 +2,25 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
-import { AI_SKIN, Button, cn, Pill, Spinner } from '@yiji/ui';
+import { Button, cn, Pill, Spinner } from '@yiji/ui';
 import { ai, type AiError } from '../../lib/ai-client.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
 /**
- * AI assistance, arranged around what an AGENT is trying to do — not around
- * what the model can do.
+ * AI panel — shows 7 actions per conversation. Each action calls the
+ * gateway via TanStack mutation; result renders inline.
  *
- * It used to be seven equal buttons named after machine-learning tasks:
- * Summarize, Suggest reply, Sentiment, Intent, Entities, Score lead, Search.
- * Three problems with that, and they are the same problem three times:
- *
- *   "Entities", "Intent" and "Score lead" are MODEL vocabulary. An agent
- *   answering a complaint has never wanted to "extract entities", and "score
- *   lead" is a sales idea that means nothing in a complaints CRM — it offered
- *   to rate a customer's purchase potential while they waited for an apology.
- *   Those three are gone from this panel. The endpoints still exist and the
- *   admin console still governs them; what changed is that the agent is no
- *   longer asked to choose between them mid-conversation.
- *
- *   Everything looked equally important, so nothing was. Drafting a reply is
- *   what this panel is FOR — the only action that produces work rather than
- *   information — and it now looks like it.
- *
- *   The rest are not commands, they are QUESTIONS about the conversation
- *   ("what happened here?", "how upset are they?"), so they read as questions
- *   and answer in place.
- *
- * Nothing runs on open. Every call is metered against the vendor's monthly
- * budget, so an insight the agent did not ask for is money spent for them.
+ * Vendor scoping: the contact's vendor is what governs the monthly cap;
+ * we pass it through props from the conversation context.
  */
 
 interface Props {
   conversationId: string;
   vendorId: string;
-  /** Optional draft — the reply is built ON it rather than replacing it blind. */
+  /** Optional draft (for Suggest Reply). */
   draft?: string;
   locale?: string;
-  /** Called when a draft is produced; the parent puts it in the composer. */
+  /** Called when Suggest Reply produces text; lets the parent paste it into the composer. */
   onReplySuggested?: (reply: string) => void;
   className?: string;
 }
@@ -60,14 +40,6 @@ function fmtErr(err: unknown): string {
   return e?.message ?? 'Failed.';
 }
 
-function SparkIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5 shrink-0" aria-hidden>
-      <path d="M8 1.5 9.3 5 12.5 6.2 9.3 7.5 8 11 6.7 7.5 3.5 6.2 6.7 5 8 1.5ZM12.8 10.2l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6.6-1.6Z" />
-    </svg>
-  );
-}
-
 export function AiPanel({
   conversationId,
   vendorId,
@@ -81,15 +53,17 @@ export function AiPanel({
   const { user } = useAuth();
   const caller = { userId: user?.id ?? '', vendorId };
 
+  type ResultKey = 'summary' | 'reply' | 'sentiment' | 'intent' | 'entities' | 'lead' | 'search';
   /**
-   * The language of the DRAFTED REPLY, which is not automatically the language
-   * of the portal: an agent working in English still answers an Arabic
+   * The language of the SUGGESTED REPLY, which is not automatically the
+   * language of the portal: an agent working in English still answers an Arabic
    * customer in Arabic, so the toggle has to stay.
    *
-   * It FOLLOWS the portal language until the agent touches it — switching the
-   * whole app to Arabic and still getting English drafts reads as the feature
-   * ignoring you. Once they pick a side here, that choice is theirs and the
-   * page language stops overriding it.
+   * But it FOLLOWS the portal language until the agent touches it. Switching the
+   * whole app to Arabic and then getting English suggestions reads as the
+   * feature ignoring you — and an agent who has switched the interface is
+   * overwhelmingly about to write Arabic. Once they pick a side here, that
+   * choice is theirs and the page language stops overriding it.
    */
   const pageLocale: 'en' | 'ar' = (locale ?? i18n.language ?? 'en').toLowerCase().startsWith('ar')
     ? 'ar'
@@ -99,65 +73,131 @@ export function AiPanel({
   const setReplyLocale = setChosenLocale;
 
   /**
-   * The panel speaks the language it is about to write in — scoped to this
-   * panel only, because the choice is about this reply, not the application.
+   * The panel speaks the language it is about to write in.
+   *
+   * `t` follows the portal, which left the toggle half-obeyed: an agent picked
+   * AR, the draft came back in Arabic, and the buttons that produced it stayed
+   * in English. The toggle is the agent saying "I am working in Arabic now", so
+   * this whole panel answers in that language — not just its output.
+   *
+   * Scoped to the panel deliberately. Nothing outside it changes, because the
+   * choice is about this reply, not about the application.
    */
   const tl = useMemo(
-    // Guarded: a caller supplying a lighter i18n instance should get English
-    // labels, not a crash in the middle of a conversation.
+    // Guarded: `getFixedT` is part of a full i18next instance, and a caller
+    // that supplies a lighter one should get English labels, not a crash in
+    // the middle of a conversation.
     () => (typeof i18n.getFixedT === 'function' ? i18n.getFixedT(replyLocale) : t),
     [i18n, replyLocale, t],
   );
-
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [active, setActive] = useState<ResultKey | null>(null);
   const [query, setQuery] = useState('');
 
+  const summarize = useMutation({
+    mutationFn: () => ai.summarize(caller, conversationId),
+    onSuccess: () => setActive('summary'),
+  });
   const suggestReply = useMutation({
     mutationFn: () => ai.suggestReply(caller, conversationId, { draft, locale: replyLocale }),
-    onSuccess: (data) => onReplySuggested?.(data.reply),
+    onSuccess: (data) => {
+      setActive('reply');
+      onReplySuggested?.(data.reply);
+    },
   });
-  const summarize = useMutation({ mutationFn: () => ai.summarize(caller, conversationId) });
-  const sentiment = useMutation({ mutationFn: () => ai.sentiment(caller, conversationId) });
-  const search = useMutation({ mutationFn: (q: string) => ai.search(caller, q) });
+  const sentiment = useMutation({
+    mutationFn: () => ai.sentiment(caller, conversationId),
+    onSuccess: () => setActive('sentiment'),
+  });
+  const intent = useMutation({
+    mutationFn: () => ai.intent(caller, conversationId),
+    onSuccess: () => setActive('intent'),
+  });
+  const entities = useMutation({
+    mutationFn: () => ai.entities(caller, conversationId),
+    onSuccess: () => setActive('entities'),
+  });
+  const scoreLead = useMutation({
+    mutationFn: () => ai.scoreLead(caller, conversationId),
+    onSuccess: () => setActive('lead'),
+  });
+  const search = useMutation({
+    mutationFn: (q: string) => ai.search(caller, q),
+  });
+
+  const actions: Array<{
+    key: ResultKey;
+    label: string;
+    busy: boolean;
+    run: () => void;
+  }> = [
+    {
+      key: 'summary',
+      label: tl('ai.action.summarize', { defaultValue: 'Summarize' }),
+      busy: summarize.isPending,
+      run: () => summarize.mutate(),
+    },
+    {
+      key: 'reply',
+      label: tl('ai.action.suggestReply', { defaultValue: 'Suggest reply' }),
+      busy: suggestReply.isPending,
+      run: () => suggestReply.mutate(),
+    },
+    {
+      key: 'sentiment',
+      label: tl('ai.action.sentiment', { defaultValue: 'Sentiment' }),
+      busy: sentiment.isPending,
+      run: () => sentiment.mutate(),
+    },
+    {
+      key: 'intent',
+      label: tl('ai.action.intent', { defaultValue: 'Intent' }),
+      busy: intent.isPending,
+      run: () => intent.mutate(),
+    },
+    {
+      key: 'entities',
+      label: tl('ai.action.entities', { defaultValue: 'Entities' }),
+      busy: entities.isPending,
+      run: () => entities.mutate(),
+    },
+    {
+      key: 'lead',
+      label: tl('ai.action.scoreLead', { defaultValue: 'Score lead' }),
+      busy: scoreLead.isPending,
+      run: () => scoreLead.mutate(),
+    },
+    {
+      key: 'search',
+      label: tl('ai.action.search', { defaultValue: 'Search' }),
+      busy: search.isPending,
+      run: () => setActive('search'),
+    },
+  ];
 
   const runSearch = () => {
     const q = query.trim();
     if (q) search.mutate(q);
   };
 
-  const mood = sentiment.data?.label;
-  const busy = [suggestReply, summarize, sentiment, search].some((m) => m.isPending);
-  const lastError = [suggestReply, summarize, sentiment, search].filter((m) => m.isError).slice(-1);
-
   return (
     <div
       className={cn(
-        'space-y-3 rounded-2xl px-5 py-4 shadow-soft ring-1',
-        // The same night Aura wears. An agent should never have to work out
-        // which parts of the screen a model wrote.
-        AI_SKIN.panel,
-        AI_SKIN.text,
+        'rounded-2xl bg-card/70 px-5 py-4 shadow-soft ring-1 ring-foreground/[0.04] space-y-4',
         className,
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <h3
-          className={cn(
-            'flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.14em]',
-            AI_SKIN.accent,
-          )}
-        >
-          <SparkIcon />
+        <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {tl('ai.title', { defaultValue: 'AI assistance' })}
         </h3>
-        {/* Which language the draft comes back in. Sits with the action rather
-            than in settings: the answer changes per CUSTOMER, not per agent,
-            and a reply drafted in the wrong language is not editable into the
-            right one. */}
+        {/* Which language a suggested reply comes back in. Sits by the actions
+            rather than in settings: the answer changes per customer, not per
+            agent, and a reply drafted in the wrong language is not editable
+            into the right one. */}
         <div
           role="group"
           aria-label={tl('ai.replyLanguage', { defaultValue: 'Reply language' })}
-          className="flex overflow-hidden rounded-md ring-1 ring-white/15"
+          className="flex overflow-hidden rounded-md ring-1 ring-border"
         >
           {(['en', 'ar'] as const).map((code) => (
             <button
@@ -167,7 +207,9 @@ export function AiPanel({
               aria-pressed={replyLocale === code}
               className={cn(
                 'px-2 py-0.5 text-2xs font-semibold uppercase tracking-wide transition-colors duration-fast ease-out',
-                replyLocale === code ? AI_SKIN.accentBg : cn(AI_SKIN.dim, 'hover:bg-white/10'),
+                replyLocale === code
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-secondary',
               )}
             >
               {code}
@@ -176,107 +218,110 @@ export function AiPanel({
         </div>
       </div>
 
-      {/* THE action. Full width and primary because it is the only one here
-          that produces work rather than information — everything else tells
-          the agent something; this one writes their reply. Its label names
-          what will actually happen, which differs once a draft exists. */}
-      <Button
-        type="button"
-        className={cn('w-full justify-center', AI_SKIN.accentBtn)}
-        loading={suggestReply.isPending}
-        onClick={() => suggestReply.mutate()}
-        iconStart={<SparkIcon />}
-      >
-        {suggestReply.data
-          ? tl('ai.action.redraft', { defaultValue: 'Draft again' })
-          : draft?.trim()
-            ? tl('ai.action.improveDraft', { defaultValue: 'Improve my draft' })
-            : tl('ai.action.draftReply', { defaultValue: 'Draft a reply' })}
-      </Button>
-
-      {suggestReply.data && (
-        /* The draft is already in the composer, so repeating it in full would
-           put the same words on screen twice and leave the agent unsure which
-           copy they are about to send. Say where it went instead. */
-        <p
-          className={cn(
-            'flex items-start gap-2 rounded-xl px-3 py-2 text-xs leading-relaxed',
-            AI_SKIN.bubble,
-            AI_SKIN.text,
-          )}
-        >
-          <span
-            aria-hidden
-            className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[oklch(0.82_0.13_212)]"
-          />
-          <span>
-            {tl('ai.draftPlaced', {
-              defaultValue: 'Added to your reply below — read it before you send it.',
-            })}
-          </span>
-        </p>
-      )}
-
-      {/* Questions about the conversation, answered in place. Not commands: an
-          agent asks "what happened?", they never ask to "summarize". */}
-      <div className="divide-y divide-white/10 border-t border-white/10">
-        <InsightRow
-          label={tl('ai.insight.whatHappened', { defaultValue: 'What happened here?' })}
-          cta={tl('ai.insight.read', { defaultValue: 'Catch me up' })}
-          again={tl('ai.insight.again', { defaultValue: 'Again' })}
-          busy={summarize.isPending}
-          answered={!!summarize.data}
-          onRun={() => summarize.mutate()}
-        >
-          {summarize.data && (
-            <p className={cn('text-sm leading-relaxed', AI_SKIN.text)}>{summarize.data.summary}</p>
-          )}
-        </InsightRow>
-
-        <InsightRow
-          label={tl('ai.insight.mood', { defaultValue: 'How is the customer feeling?' })}
-          cta={tl('ai.insight.check', { defaultValue: 'Check' })}
-          again={tl('ai.insight.again', { defaultValue: 'Again' })}
-          busy={sentiment.isPending}
-          answered={!!sentiment.data}
-          onRun={() => sentiment.mutate()}
-        >
-          {sentiment.data && (
-            <div className="flex items-baseline gap-2.5">
-              <Pill
-                tone={
-                  mood === 'positive' ? 'success' : mood === 'negative' ? 'destructive' : 'neutral'
-                }
-                dot
-              >
-                {tl(`ai.mood.${mood}`, { defaultValue: mood })}
-              </Pill>
-              <span className={cn('text-2xs tabular-nums', AI_SKIN.dim)}>
-                {tl('ai.confidence', {
-                  defaultValue: '{{n}}% confident',
-                  n: Math.round(sentiment.data.score * 100),
-                })}
-              </span>
-            </div>
-          )}
-        </InsightRow>
+      <div className="flex flex-wrap gap-1.5">
+        {actions.map((a) => (
+          <Button
+            key={a.key}
+            type="button"
+            variant="outline"
+            size="sm"
+            loading={a.busy}
+            onClick={a.run}
+          >
+            {a.label}
+          </Button>
+        ))}
       </div>
 
-      {/* Finding a past case is a different job from answering this one, so it
-          stays a quiet link rather than a peer of the draft button. */}
-      {!searchOpen ? (
-        <button
-          type="button"
-          onClick={() => setSearchOpen(true)}
-          className={cn(
-            'text-2xs font-semibold transition-colors duration-fast hover:opacity-80',
-            AI_SKIN.accent,
+      {/* Results — one panel per action; whichever was last successful is shown */}
+      {active === 'summary' && summarize.data && (
+        <ResultCard label={tl('ai.action.summarize', { defaultValue: 'Summarize' })}>
+          <p className="text-sm leading-relaxed text-foreground">{summarize.data.summary}</p>
+        </ResultCard>
+      )}
+      {active === 'reply' && suggestReply.data && (
+        <ResultCard label={tl('ai.action.suggestReply', { defaultValue: 'Suggest reply' })}>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+            {suggestReply.data.reply}
+          </p>
+        </ResultCard>
+      )}
+      {active === 'sentiment' && sentiment.data && (
+        <ResultCard label={tl('ai.action.sentiment', { defaultValue: 'Sentiment' })}>
+          <div className="flex items-baseline gap-3">
+            <Pill
+              tone={
+                sentiment.data.label === 'positive'
+                  ? 'success'
+                  : sentiment.data.label === 'negative'
+                    ? 'destructive'
+                    : 'neutral'
+              }
+            >
+              {sentiment.data.label}
+            </Pill>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              score: {sentiment.data.score.toFixed(2)}
+            </span>
+          </div>
+        </ResultCard>
+      )}
+      {active === 'intent' && intent.data && (
+        <ResultCard label={tl('ai.action.intent', { defaultValue: 'Intent' })}>
+          <div className="flex items-baseline gap-3">
+            <Pill tone="primary">{intent.data.intent}</Pill>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              confidence: {intent.data.confidence.toFixed(2)}
+            </span>
+          </div>
+        </ResultCard>
+      )}
+      {active === 'entities' && entities.data && (
+        <ResultCard label={tl('ai.action.entities', { defaultValue: 'Entities' })}>
+          {entities.data.entities.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {tl('ai.noEntities', { defaultValue: 'No entities detected.' })}
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
+              {entities.data.entities.map((e, i) => (
+                <li key={i} className="flex items-baseline gap-2 text-sm">
+                  <Pill tone="muted" size="sm">
+                    {e.type}
+                  </Pill>
+                  <span className="text-foreground">{e.value}</span>
+                </li>
+              ))}
+            </ul>
           )}
-        >
-          {tl('ai.action.findSimilar', { defaultValue: 'Find a similar conversation' })}
-        </button>
-      ) : (
-        <div className="space-y-2">
+        </ResultCard>
+      )}
+      {active === 'lead' && scoreLead.data && (
+        <ResultCard label={tl('ai.action.scoreLead', { defaultValue: 'Score lead' })}>
+          <div className="space-y-2">
+            <div className="flex items-baseline gap-3">
+              <span className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+                {scoreLead.data.score}
+              </span>
+              <span className="text-xs text-muted-foreground">/ 100</span>
+            </div>
+            {scoreLead.data.signals.length > 0 && (
+              <ul className="flex flex-wrap gap-1.5">
+                {scoreLead.data.signals.map((s, i) => (
+                  <li key={i}>
+                    <Pill tone="muted" size="sm">
+                      {s}
+                    </Pill>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </ResultCard>
+      )}
+
+      {active === 'search' && (
+        <ResultCard label={tl('ai.action.search', { defaultValue: 'Search' })}>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -290,7 +335,7 @@ export function AiPanel({
               onChange={(e) => setQuery(e.target.value)}
               aria-label={tl('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
               placeholder={tl('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
-              className="block h-8 w-full rounded-md border-0 bg-white/[0.06] px-2.5 text-start text-xs text-[oklch(0.97_0.012_262)] ring-1 ring-inset ring-white/10 placeholder:text-[oklch(0.68_0.03_262)] focus:outline-none focus:ring-2 focus:ring-[oklch(0.82_0.13_212)]/60"
+              className="block h-8 w-full rounded-md border border-border bg-background/60 px-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none text-start"
             />
             <Button type="submit" size="sm" loading={search.isPending} disabled={!query.trim()}>
               {tl('actions.search', { ns: 'common', defaultValue: 'Search' })}
@@ -298,7 +343,7 @@ export function AiPanel({
           </form>
           {search.data &&
             (search.data.results.length === 0 ? (
-              <p className={cn('text-xs', AI_SKIN.dim)}>
+              <p className="text-xs text-muted-foreground">
                 {tl('ai.search.empty', { defaultValue: 'No matching conversations.' })}
               </p>
             ) : (
@@ -308,10 +353,10 @@ export function AiPanel({
                     <button
                       type="button"
                       onClick={() => navigate(`/?conv=${r.conversationId}`)}
-                      className="block w-full rounded-md px-2 py-1.5 text-start transition-colors duration-fast ease-out hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                      className="block w-full rounded-md px-2 py-1.5 text-start transition-colors duration-fast ease-out hover:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                     >
-                      <p className={cn('line-clamp-2 text-xs', AI_SKIN.text)}>{r.snippet}</p>
-                      <span className={cn('text-2xs tabular-nums', AI_SKIN.dim)}>
+                      <p className="line-clamp-2 text-xs text-foreground">{r.snippet}</p>
+                      <span className="text-2xs tabular-nums text-muted-foreground">
                         {(r.score * 100).toFixed(0)}%
                       </span>
                     </button>
@@ -319,20 +364,29 @@ export function AiPanel({
                 ))}
               </ul>
             ))}
-        </div>
+        </ResultCard>
       )}
 
-      {lastError.map((m, i) => (
-        <p
-          key={i}
-          className="flex items-center gap-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive ring-1 ring-destructive/20"
-        >
-          <span aria-hidden>•</span> {fmtErr(m.error)}
-        </p>
-      ))}
+      {/* Errors — show last failed mutation */}
+      {[summarize, suggestReply, sentiment, intent, entities, scoreLead, search]
+        .filter((m) => m.isError)
+        .slice(-1)
+        .map((m, i) => (
+          <p
+            key={i}
+            className={cn(
+              'flex items-center gap-2 rounded-xl bg-destructive/10 ring-1 ring-destructive/20 px-3 py-2',
+              'text-xs text-destructive',
+            )}
+          >
+            <span aria-hidden>•</span> {fmtErr(m.error)}
+          </p>
+        ))}
 
-      {busy && (
-        <div className={cn('flex items-center gap-2 text-xs', AI_SKIN.dim)}>
+      {[summarize, suggestReply, sentiment, intent, entities, scoreLead, search].some(
+        (m) => m.isPending,
+      ) && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner /> {tl('ai.running', { defaultValue: 'Working…' })}
         </div>
       )}
@@ -340,47 +394,13 @@ export function AiPanel({
   );
 }
 
-/**
- * One question about the conversation. Unanswered it is a row with a quiet
- * verb; answered it keeps its label and puts the answer underneath, so the
- * panel grows into a briefing instead of swapping one result card for another
- * and losing what the agent just read.
- */
-function InsightRow({
-  label,
-  cta,
-  again,
-  busy,
-  answered,
-  onRun,
-  children,
-}: {
-  label: string;
-  cta: string;
-  again: string;
-  busy: boolean;
-  answered: boolean;
-  onRun: () => void;
-  children?: React.ReactNode;
-}) {
+function ResultCard({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="py-2.5">
-      <div className="flex items-center justify-between gap-3">
-        <span className={cn('text-xs font-medium', AI_SKIN.text)}>{label}</span>
-        <button
-          type="button"
-          onClick={onRun}
-          disabled={busy}
-          aria-label={label}
-          className={cn(
-            'shrink-0 text-2xs font-semibold transition-colors duration-fast hover:opacity-80 disabled:opacity-50',
-            AI_SKIN.accent,
-          )}
-        >
-          {busy ? '…' : answered ? again : cta}
-        </button>
+    <div className="rounded-xl bg-secondary/40 px-4 py-3 space-y-2">
+      <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
       </div>
-      {children && <div className="mt-1.5">{children}</div>}
+      {children}
     </div>
   );
 }
