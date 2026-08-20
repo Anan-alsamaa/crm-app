@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { AGENT_URL } from '../../../../tests/e2e-setup/urls';
 
 /**
  * US3 (T057) — shared inbox management.
@@ -11,7 +12,7 @@ const AGENT_EMAIL = process.env.E2E_AGENT_EMAIL!;
 const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD!;
 
 test('agent changes case state and priority then sees them persist', async ({ page }) => {
-  await page.goto('http://localhost:5173/login');
+  await page.goto(`${AGENT_URL}/login`);
   await page.getByLabel(/email/i).fill(AGENT_EMAIL);
   await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
@@ -47,7 +48,7 @@ test('agent changes case state and priority then sees them persist', async ({ pa
 });
 
 test('agent toggles internal note mode and sees the amber styling', async ({ page }) => {
-  await page.goto('http://localhost:5173/login');
+  await page.goto(`${AGENT_URL}/login`);
   await page.getByLabel(/email/i).fill(AGENT_EMAIL);
   await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
@@ -63,7 +64,7 @@ test('agent toggles internal note mode and sees the amber styling', async ({ pag
 });
 
 test('bulk selecting multiple conversations enables the bulk toolbar', async ({ page }) => {
-  await page.goto('http://localhost:5173/login');
+  await page.goto(`${AGENT_URL}/login`);
   await page.getByLabel(/email/i).fill(AGENT_EMAIL);
   await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();

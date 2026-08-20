@@ -14,6 +14,8 @@ vi.mock('react-i18next', () => ({
 const teamsApi = vi.hoisted(() => ({
   useTeams: vi.fn(),
   useCreateTeam: vi.fn(),
+  useUpdateTeam: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+  useDeleteTeam: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
 }));
 vi.mock('../src/features/teams/api.js', () => teamsApi);
 vi.mock('../src/features/users/api.js', () => ({
@@ -49,6 +51,21 @@ describe('TeamsPage', () => {
     renderPage();
     expect(screen.getByText('Sales')).toBeInTheDocument();
     expect(screen.getByText('Sells things')).toBeInTheDocument();
+  });
+
+  it('opens a team for editing when its row is clicked', async () => {
+    // The row was a <button> with hover styling and NO handler: it looked
+    // interactive and did nothing, and there was no way to rename or remove a
+    // team once it existed.
+    teamsApi.useTeams.mockReturnValue({
+      data: [{ id: 't1', name: 'Sales', description: 'Sells things' }],
+      isLoading: false,
+    });
+    renderPage();
+    await userEvent.click(screen.getByRole('button', { name: /Sales/ }));
+    expect(await screen.findByText('Edit team')).toBeInTheDocument();
+    // Delete is only offered on an existing team, never while creating one.
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
   });
 
   it('opens the create drawer', async () => {

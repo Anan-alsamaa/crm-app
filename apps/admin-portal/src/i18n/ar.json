@@ -475,7 +475,12 @@
     "statUnassignedCap": "غير مُعيَّن",
     "noMembers": "بلا أعضاء",
     "memberOne": "عضو",
-    "memberOther": "أعضاء"
+    "memberOther": "أعضاء",
+    "edit": "تعديل الفريق",
+    "editHint": "تعديل هذا الفريق",
+    "updated": "تم حفظ الفريق.",
+    "deleted": "تم حذف الفريق. موظفوه الآن بلا فريق.",
+    "deleteError": "تعذّر حذف هذا الفريق."
   },
   "cmd": {
     "pages": "الصفحات",

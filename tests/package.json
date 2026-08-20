@@ -1,0 +1,6 @@
+{
+  "//": "The spec files live inside apps that declare \"type\": \"module\", but the repo root does not — so anything they import from this folder was loaded as CommonJS and every named import failed with 'Named export not found'. Declaring the module type here, rather than at the root, keeps the change to the only folder that needs it.",
+  "name": "@yiji/e2e-support",
+  "private": true,
+  "type": "module"
+}

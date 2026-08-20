@@ -24,7 +24,7 @@ import {
   UsersIcon,
   ZapIcon,
 } from '@yiji/ui';
-import { useTeams, useCreateTeam } from './api.js';
+import { useTeams, useCreateTeam, useUpdateTeam, useDeleteTeam, type Team } from './api.js';
 import { useUsers } from '../users/api.js';
 
 const schema = z.object({ name: z.string().min(1), description: z.string().optional() });
@@ -51,7 +51,16 @@ export function TeamsPage() {
   const teams = useTeams();
   const users = useUsers();
   const createTeam = useCreateTeam();
+  const updateTeam = useUpdateTeam();
+  const deleteTeam = useDeleteTeam();
   const [open, setOpen] = useState(false);
+  /**
+   * The team being edited, or null when the drawer is creating a new one.
+   *
+   * One drawer serves both: the fields are identical, and a second copy would
+   * be one more place for the two to drift apart.
+   */
+  const [editing, setEditing] = useState<Team | null>(null);
   const {
     register,
     handleSubmit,
@@ -59,16 +68,50 @@ export function TeamsPage() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
+  const openCreate = () => {
+    setEditing(null);
+    reset({ name: '', description: '' });
+    setOpen(true);
+  };
+
+  const openEdit = (tm: Team) => {
+    setEditing(tm);
+    reset({ name: tm.name, description: tm.description ?? '' });
+    setOpen(true);
+  };
+
   const onSubmit = handleSubmit(async (values) => {
     try {
-      await createTeam.mutateAsync(values);
+      if (editing) {
+        await updateTeam.mutateAsync({ id: editing.id, ...values });
+        toast.success(t('teams.updated', { defaultValue: 'Team saved.' }));
+      } else {
+        await createTeam.mutateAsync(values);
+        toast.success(t('teams.created'));
+      }
       reset();
       setOpen(false);
-      toast.success(t('teams.created'));
+      setEditing(null);
     } catch {
       toast.error(t('teams.createError'));
     }
   });
+
+  const onDelete = async () => {
+    if (!editing) return;
+    try {
+      await deleteTeam.mutateAsync(editing.id);
+      // Said plainly, because it is the part people do not expect: the team
+      // goes, the agents do not.
+      toast.success(
+        t('teams.deleted', { defaultValue: 'Team deleted. Its agents are now unassigned.' }),
+      );
+      setOpen(false);
+      setEditing(null);
+    } catch {
+      toast.error(t('teams.deleteError', { defaultValue: 'Could not delete that team.' }));
+    }
+  };
 
   const teamCount = teams.data?.length ?? 0;
   const userCount = users.data?.length ?? 0;
@@ -104,7 +147,7 @@ export function TeamsPage() {
           )}
         </span>
         <ToolbarSpacer />
-        <Button type="button" size="sm" onClick={() => setOpen(true)} iconStart={<PlusIcon />}>
+        <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
           {t('teams.create')}
         </Button>
       </Toolbar>
@@ -189,7 +232,7 @@ export function TeamsPage() {
               defaultValue: 'Create your first team to start routing conversations.',
             })}
             action={
-              <Button type="button" onClick={() => setOpen(true)} iconStart={<PlusIcon />}>
+              <Button type="button" onClick={openCreate} iconStart={<PlusIcon />}>
                 {t('teams.create')}
               </Button>
             }
@@ -207,6 +250,8 @@ export function TeamsPage() {
                   <li key={tm.id}>
                     <button
                       type="button"
+                      onClick={() => openEdit(tm)}
+                      title={t('teams.editHint', { defaultValue: 'Edit this team' })}
                       className={cn(
                         'group flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-start',
                         'transition-colors duration-fast ease-out hover:bg-foreground/[0.03]',
@@ -289,19 +334,44 @@ export function TeamsPage() {
 
       <Drawer
         open={open}
-        onClose={() => setOpen(false)}
-        title={t('teams.create')}
+        onClose={() => {
+          setOpen(false);
+          setEditing(null);
+        }}
+        title={editing ? t('teams.edit', { defaultValue: 'Edit team' }) : t('teams.create')}
         description={t('teams.createHint', {
           defaultValue:
             'Teams group agents so conversations and tickets route to the right people.',
         })}
         footer={
           <>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+            {/* Delete sits apart, on the far side of the footer — a destructive
+                action next to Save is a mis-click waiting to happen. */}
+            {editing && (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={onDelete}
+                loading={deleteTeam.isPending}
+              >
+                {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+              </Button>
+            )}
+            <ToolbarSpacer />
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setOpen(false);
+                setEditing(null);
+              }}
+            >
               {t('actions.cancel', { ns: 'common' })}
             </Button>
             <Button type="submit" form="create-team-form" loading={isSubmitting}>
-              {t('teams.create')}
+              {editing
+                ? t('actions.save', { ns: 'common', defaultValue: 'Save' })
+                : t('teams.create')}
             </Button>
           </>
         }
@@ -329,7 +399,7 @@ export function TeamsPage() {
           <DrawerSection
             title={t('teams.sectionMembers', { defaultValue: 'Members' })}
             description={t('teams.sectionMembersHint', {
-              defaultValue: 'Assign members from the Users page after creating the team.',
+              defaultValue: 'Members are assigned from the Users page.',
             })}
           >
             {/* Composed note panel — the same quiet-surface treatment the

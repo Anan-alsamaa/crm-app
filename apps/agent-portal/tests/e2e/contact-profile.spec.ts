@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { AGENT_URL } from '../../../../tests/e2e-setup/urls';
 
 /**
  * US6 (T094) — contact profile + commerce side panel.
@@ -31,7 +32,7 @@ const FULL_STACK = process.env.E2E_FULL_STACK === '1';
 const COMMERCE_FIXTURES = process.env.E2E_COMMERCE === '1';
 
 async function signIn(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('http://localhost:5173/login');
+  await page.goto(`${AGENT_URL}/login`);
   await page.locator('#email').fill(AGENT_EMAIL);
   await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
@@ -126,13 +127,13 @@ test.describe('US6 — contact profile + commerce panel', () => {
         status: 200,
         contentType: 'application/json',
         headers: {
-          'access-control-allow-origin': 'http://localhost:5173',
+          'access-control-allow-origin': AGENT_URL,
           'access-control-allow-credentials': 'true',
         },
         body: JSON.stringify(body),
       });
     });
-    await page.goto('http://localhost:5173/contacts/00000000-0000-0000-0000-000000000001');
+    await page.goto(`${AGENT_URL}/contacts/00000000-0000-0000-0000-000000000001`);
     // A hard navigation drops the in-memory access token; the app restores it
     // from the refresh cookie and only then renders. Landing back on /login
     // means that restore lost the race, so wait it out rather than asserting

@@ -31,7 +31,7 @@ export default defineConfig({
   globalTimeout: 12 * 60_000,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5173',
+    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:8090',
     trace: 'on-first-retry',
     /*
      * Run every spec as a reduced-motion user.

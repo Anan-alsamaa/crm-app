@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { AGENT_URL } from '../../../../tests/e2e-setup/urls';
 
 /**
  * US1 (T025) — agent login + role-scoped inbox access.
@@ -8,12 +9,12 @@ const AGENT_EMAIL = process.env.E2E_AGENT_EMAIL!;
 const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD!;
 
 test('unauthenticated visitor is redirected to login', async ({ page }) => {
-  await page.goto('http://localhost:5173/');
+  await page.goto(`${AGENT_URL}/`);
   await expect(page.getByRole('heading')).toContainText(/sign in/i);
 });
 
 test('agent signs in and reaches the inbox', async ({ page }) => {
-  await page.goto('http://localhost:5173/login');
+  await page.goto(`${AGENT_URL}/login`);
   await page.getByLabel(/email/i).fill(AGENT_EMAIL);
   await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();

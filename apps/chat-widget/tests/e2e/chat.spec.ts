@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { AGENT_URL, WIDGET_URL } from '../../../../tests/e2e-setup/urls';
 
 /**
  * US2 (T042) — widget ↔ agent realtime round-trip.
@@ -12,7 +13,7 @@ const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD!;
 test('customer message reaches the agent and the agent reply returns', async ({ browser }) => {
   // 1. Customer opens the widget demo (mints its own JWT) and sends a message.
   const customer = await browser.newPage();
-  await customer.goto('http://localhost:5175/');
+  await customer.goto(`${WIDGET_URL}/`);
   // The demo host page mounts with `autoOpen: true`, so the panel is already
   // open. Do NOT click the launcher here — it is a toggle that stays mounted
   // while open, so clicking it would CLOSE the panel. That also detaches
@@ -28,7 +29,7 @@ test('customer message reaches the agent and the agent reply returns', async ({ 
 
   // 2. Agent signs into the portal via the UI (seeded by globalSetup).
   const agent = await browser.newPage();
-  await agent.goto('http://localhost:5173/login');
+  await agent.goto(`${AGENT_URL}/login`);
   await agent.getByLabel(/email/i).fill(AGENT_EMAIL);
   await agent.locator('#password').fill(AGENT_PASSWORD);
   await agent.getByRole('button', { name: /sign in/i }).click();

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { AGENT_URL } from '../../../../tests/e2e-setup/urls';
 
 /**
  * US7 (T104) — custom fields render dynamically in the agent portal and
@@ -22,7 +23,7 @@ const FULL_STACK = process.env.E2E_FULL_STACK === '1';
 test.describe('US7 — custom fields', () => {
   test('custom-fields section mounts in conversation sidebar', async ({ page }) => {
     test.skip(!FULL_STACK, 'requires E2E_FULL_STACK=1 (needs a seeded conversation)');
-    await page.goto('http://localhost:5173/login');
+    await page.goto(`${AGENT_URL}/login`);
     await page.locator('#email').fill(AGENT_EMAIL);
     await page.locator('#password').fill(AGENT_PASSWORD);
     await page.getByRole('button', { name: /sign in/i }).click();

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { AGENT_URL } from '../../../../tests/e2e-setup/urls';
 
 /**
  * US4 (T070) — ticket create from a conversation → workflow + history.
@@ -16,7 +17,7 @@ const AGENT_EMAIL = process.env.E2E_AGENT_EMAIL!;
 const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD!;
 
 async function signInAgent(page: import('@playwright/test').Page) {
-  await page.goto('http://localhost:5173/login');
+  await page.goto(`${AGENT_URL}/login`);
   await page.getByLabel(/email/i).fill(AGENT_EMAIL);
   await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();

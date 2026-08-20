@@ -1,11 +1,12 @@
 import { test, expect, type Page } from '@playwright/test';
+import { ADMIN_URL } from '../../../../tests/e2e-setup/urls';
 
 /**
  * US1 — admin login + create team + create user (T026).
- * Requires the admin portal dev server (http://localhost:5174) and Directus.
+ * Requires the admin portal (see tests/e2e-setup/urls.ts) and Directus.
  * Uses the project-owner admin creds by default (override via env).
  */
-const BASE = process.env.E2E_ADMIN_URL ?? 'http://localhost:5174';
+const BASE = ADMIN_URL;
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'e.habibi@anan.sa';
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? '123456';
 
