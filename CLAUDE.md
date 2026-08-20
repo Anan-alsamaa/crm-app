@@ -14,6 +14,19 @@ swappable provider); React 18 + Vite portals + Preact widget; Tailwind, TanStack
 RHF + Zod, i18next (EN/AR RTL). Delivered in 6 phases.
 <!-- SPECKIT END -->
 
+## When something says "failed to fetch"
+
+Run `pwsh ./check-stack.ps1` FIRST. It checks Docker, PM2, every port and the
+health endpoints, repairs what it can, and names anything still down.
+
+PM2 on Windows loses its **entire process list** when its daemon dies — a
+reboot, a wedged Docker, or the box running out of memory during a build. The
+portals keep working, because nginx serves the built files from disk and has no
+idea the services are gone. Only the things that call a gateway break: the AI
+panel and the order lookup, both with "failed to fetch". That symptom has been
+diagnosed from scratch more than once; the script is the diagnosis, and it runs
+`pm2 save` on the way out so the next daemon death is one command to undo.
+
 ## How changes & fixes happen (working model)
 
 This project is maintained through chat with Claude — you describe an error or a

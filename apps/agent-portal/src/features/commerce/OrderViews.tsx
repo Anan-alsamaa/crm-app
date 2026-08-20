@@ -809,9 +809,11 @@ export function LatestOrder({
     () => [] as readonly YijiOrder[],
   );
 
-  // With no linked customer there is nothing to look up automatically, but the
-  // agent can still find an order by number — that is the whole point of the
-  // manual path, so render it rather than bailing out.
+  // No VENDOR means there is no commerce system to ask at all — not even by
+  // order number, since every lookup is scoped to one. That is different from
+  // an unlinked CUSTOMER, which is precisely when the manual lookup matters and
+  // is why this checks the vendor and not `customerId`. The sidebar gates on
+  // the same thing before rendering; this is the guard for every other caller.
   if (!vendorId) return null;
 
   // The last 2 orders (list is already newest-first from the client). An order
