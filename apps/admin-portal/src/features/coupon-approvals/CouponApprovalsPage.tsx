@@ -251,6 +251,8 @@ function Row({
    */
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
+  /** Why the terms are being changed. Required before Save will commit. */
+  const [editReason, setEditReason] = useState('');
   const [edits, setEdits] = useState<TermEdits>(() => seedEdits(row));
   const setEdit = (k: keyof TermEdits, v: string) => setEdits((e) => ({ ...e, [k]: v }));
   const saveTerms = useSaveCouponTerms();
@@ -700,6 +702,33 @@ function Row({
                         value={edits.reason}
                         onChange={(v) => setEdit('reason', v)}
                       />
+                      {/* WHY the terms were changed, and it is required.
+                          
+                          Changing what an agent asked for without saying why
+                          leaves them looking at a different number with no
+                          explanation, and leaves whoever audits it later with
+                          a changed record and no account of the change. The
+                          reject flow already demands a reason for the same
+                          reason. */}
+                      <div className="sm:col-span-2 lg:col-span-3">
+                        <label
+                          htmlFor={`edit-reason-${row.id}`}
+                          className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
+                        >
+                          {t('couponApprovals.editReason', {
+                            defaultValue: 'Reason for the change',
+                          })}
+                        </label>
+                        <Input
+                          id={`edit-reason-${row.id}`}
+                          value={editReason}
+                          onChange={(e) => setEditReason(e.target.value)}
+                          placeholder={t('couponApprovals.editReasonPlaceholder', {
+                            defaultValue: 'Why are these terms different from what was asked for?',
+                          })}
+                          className="mt-1 h-9 w-full"
+                        />
+                      </div>
                       <p className="text-2xs leading-relaxed text-muted-foreground sm:col-span-2 lg:col-span-3">
                         {t('couponApprovals.editHint', {
                           defaultValue:
@@ -764,8 +793,26 @@ function Row({
                       type="button"
                       size="sm"
                       variant="secondary"
-                      disabled={busy || saveTerms.isPending || termsProblems.length > 0}
-                      title={termsProblems[0]?.message}
+                      disabled={
+                        busy ||
+                        saveTerms.isPending ||
+                        termsProblems.length > 0 ||
+                        !editReason.trim()
+                      }
+                      title={
+                        termsProblems[0]?.message ??
+                        (editReason.trim()
+                          ? undefined
+                          : t('couponApprovals.editReasonRequired', {
+                              defaultValue: 'Give a reason for the change first.',
+                            }))
+                      }
+                      // Turns the colour of Approve under the cursor: this is
+                      // the button that commits, and it should say so at the
+                      // moment somebody is about to press it. `!` because `cn`
+                      // is a joiner, not tailwind-merge — without it the
+                      // variant's own hover wins on specificity order.
+                      className="hover:!bg-primary hover:!text-primary-foreground"
                       onClick={() => {
                         const patch = diffEdits(row, edits);
                         if (Object.keys(patch).length === 0) {
@@ -777,14 +824,24 @@ function Row({
                           return;
                         }
                         saveTerms.mutate(
-                          { id: row.id, edits: patch },
+                          // The reason rides WITH the change, in one write. Two
+                          // writes could leave amended terms on record with no
+                          // account of why if the second one failed.
+                          { id: row.id, edits: { ...patch, decision_note: editReason.trim() } },
                           {
-                            onSuccess: () =>
+                            onSuccess: () => {
                               toast.success(
                                 t('couponApprovals.termsSaved', {
                                   defaultValue: 'Terms saved. Still waiting on a decision.',
                                 }),
-                              ),
+                              );
+                              // Saved terms are no longer a draft, so the form
+                              // closes and Save goes with it. Leaving an open
+                              // editor behind invites a second press that would
+                              // find nothing changed.
+                              setEditing(false);
+                              setEditReason('');
+                            },
                             onError: () =>
                               toast.error(
                                 t('couponApprovals.termsSaveFailed', {

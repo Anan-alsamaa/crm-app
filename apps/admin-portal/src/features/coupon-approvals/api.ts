@@ -208,7 +208,11 @@ export function useDecideCoupon() {
           edited_by_admin: approve && !!edits && Object.keys(edits).length > 0,
           decided_at: new Date().toISOString(),
           decided_by: supervisorId,
-          decision_note: note.trim() || null,
+          // Only overwritten when something was actually typed. A supervisor
+          // who saved amended terms wrote their REASON here; approving
+          // afterwards without typing anything used to null it, deleting the
+          // only account of why the numbers had changed.
+          ...(note.trim() ? { decision_note: note.trim() } : {}),
         } as never),
       );
 

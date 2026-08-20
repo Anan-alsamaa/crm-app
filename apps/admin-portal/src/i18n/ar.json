@@ -1087,7 +1087,10 @@
     "requestedAt": "تاريخ الطلب",
     "termsSaved": "تم حفظ الشروط. ما زال الطلب بانتظار القرار.",
     "termsSaveFailed": "تعذّر حفظ هذه الشروط.",
-    "nothingChanged": "لا يوجد تغيير."
+    "nothingChanged": "لا يوجد تغيير.",
+    "editReason": "سبب التعديل",
+    "editReasonPlaceholder": "لماذا تختلف هذه الشروط عمّا طُلب؟",
+    "editReasonRequired": "اذكر سبب التعديل أولاً."
   },
   "complaintReport": {
     "any": "الكل",

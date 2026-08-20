@@ -177,6 +177,44 @@ describe('CouponApprovalsPage', () => {
     ).toBeInTheDocument();
   });
 
+  it('will not save amended terms without a reason for the change', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+
+    // Changing what an agent asked for silently leaves them with a different
+    // number and no explanation, and leaves an auditor with a changed record
+    // and no account of the change.
+    const save = screen.getByRole('button', { name: 'Save' });
+    expect(save).toBeDisabled();
+
+    await user.type(
+      screen.getByLabelText(/reason for the change/i),
+      'Above the limit for one item.',
+    );
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+  });
+
+  it('closes the editor once the terms are saved, so Save cannot be pressed twice', async () => {
+    const saveMutate = vi.fn((_input, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+    api.useSaveCouponTerms.mockReturnValue({ mutate: saveMutate, isPending: false });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.type(screen.getByLabelText(/reason for the change/i), 'Reduced to the standard.');
+
+    // Change something, or there is nothing to save.
+    const amount = screen.getByLabelText(/coupon value/i);
+    await user.clear(amount);
+    await user.type(amount, '10');
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(saveMutate).toHaveBeenCalled();
+    // The reason rides WITH the change, in one write.
+    expect(saveMutate.mock.calls[0]![0].edits.decision_note).toBe('Reduced to the standard.');
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+  });
+
   it('says the queue is clear rather than showing an empty box', () => {
     api.useCouponApprovals.mockReturnValue({ data: [], isLoading: false });
     renderPage();
