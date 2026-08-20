@@ -49,7 +49,11 @@ export interface CouponRequestDialogProps {
    * The order's line-item names, offered for the optional Item field so a
    * coupon can name the specific item it compensates (e.g. the missing one).
    */
-  orderItems?: string[];
+  /**
+   * The order's lines. Carries the PRICE as well as the name so that choosing
+   * an item can fill the coupon value with what that item actually cost.
+   */
+  orderItems?: Array<{ name: string; price?: number | null }>;
   requestedBy: string | null;
   onCreated?: () => void;
   /**
@@ -91,7 +95,10 @@ export function CouponRequestDialog({
     title: customerPhone ?? '',
     code: generateCouponCode(),
     issuing_side: '',
-    delivery_type: '',
+    // Every channel by default: a compensation coupon is nearly always meant
+    // to work however the customer next orders, and an agent who wanted it
+    // narrower can still narrow it.
+    delivery_type: 'All',
     coupon_type: 'Private',
     discount_category: 'Amount',
     valid_from: dates.valid_from,
@@ -311,7 +318,13 @@ export function CouponRequestDialog({
             <Button
               type="button"
               variant="secondary"
-              onClick={() => set('code', generateCouponCode())}
+              // The prefix belongs to the issuing side, so a REGENERATED code
+              // has to carry it too. Without this the button handed back a
+              // SARA- code on an Operations coupon, and the prefix is how
+              // anyone reading a code aloud knows who issued it.
+              onClick={() =>
+                set('code', generateCouponCode(Math.random, couponPrefix(draft.issuing_side)))
+              }
             >
               {t('coupons.regenerate', { defaultValue: 'New code' })}
             </Button>
@@ -414,14 +427,30 @@ export function CouponRequestDialog({
             <SelectMenu
               fullWidth
               value={draft.item_name ?? ''}
-              onChange={(v) => set('item_name', v || null)}
+              onChange={(v) => {
+                set('item_name', v || null);
+                // Compensating for one item means compensating what that item
+                // cost, so the amount follows the choice. It stays editable —
+                // this is the agent's starting point, not the answer, and a
+                // supervisor can still amend it on the way through.
+                const price = orderItems?.find((it) => it.name === v)?.price;
+                if (v && typeof price === 'number' && price > 0) set('coupon_value', price);
+              }}
               options={[
                 {
                   value: '',
                   label: t('coupons.itemNone', { defaultValue: 'Not about one item' }),
                 },
                 // De-duplicated: an order with 2× the same line offers it once.
-                ...Array.from(new Set(orderItems)).map((name) => ({ value: name, label: name })),
+                ...Array.from(new Map(orderItems.map((it) => [it.name, it])).values()).map(
+                  (it) => ({
+                    value: it.name,
+                    label:
+                      typeof it.price === 'number' && it.price > 0
+                        ? `${it.name} · ${it.price}`
+                        : it.name,
+                  }),
+                ),
               ]}
               aria-label={t('coupons.itemField', { defaultValue: 'Item (optional)' })}
             />

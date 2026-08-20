@@ -24,7 +24,11 @@ vi.mock('../src/lib/auth/AuthContext.js', () => ({
   useAuth: () => ({ user: { id: 'sup-1', first_name: 'Nadia' } }),
 }));
 
-const api = vi.hoisted(() => ({ useCouponApprovals: vi.fn(), useDecideCoupon: vi.fn() }));
+const api = vi.hoisted(() => ({
+  useCouponApprovals: vi.fn(),
+  useDecideCoupon: vi.fn(),
+  useSaveCouponTerms: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+}));
 vi.mock('../src/features/coupon-approvals/api.js', () => api);
 
 import { CouponApprovalsPage } from '../src/features/coupon-approvals/CouponApprovalsPage.js';
@@ -75,7 +79,10 @@ describe('CouponApprovalsPage', () => {
     expect(screen.getByText('SORRY10')).toBeInTheDocument();
     expect(screen.getByText(/25/)).toBeInTheDocument();
     expect(screen.getByText('Sara')).toBeInTheDocument();
-    expect(screen.getByText('Saad Al-Harbi')).toBeInTheDocument();
+    // Name AND phone now, so a supervisor can read the number back on a call
+    // without opening the ticket.
+    expect(screen.getByText(/Saad Al-Harbi/)).toBeInTheDocument();
+    expect(screen.getByText(/\+9665/)).toBeInTheDocument();
     // The agent's own words. Deciding without them is guessing.
     expect(screen.getByText(/Two items missing/)).toBeInTheDocument();
   });
@@ -109,7 +116,8 @@ describe('CouponApprovalsPage', () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(screen.getByRole('button', { name: 'Reject' }));
-    await user.type(screen.getByRole('textbox'), 'Value exceeds the order total.');
+    // Named, not "the textbox": the page has a search field of its own now.
+    await user.type(screen.getByPlaceholderText(/why/i), 'Value exceeds the order total.');
     await user.click(screen.getByRole('button', { name: 'Reject' }));
     expect(mutate).toHaveBeenCalledWith(
       expect.objectContaining({ approve: false, note: 'Value exceeds the order total.' }),

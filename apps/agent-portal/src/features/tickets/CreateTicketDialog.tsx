@@ -727,9 +727,13 @@ export function CreateTicketDialog({
                 restaurantId={chosenMatch?.store?.yijiRestaurantId || null}
                 brandName={chosenMatch?.brandName ?? null}
                 branchName={chosenMatch?.restaurantName ?? null}
-                // The attached order's line names, for the optional Item field.
+                // The attached order's lines, for the optional Item field. The
+                // price rides along so picking an item can fill the coupon with
+                // what that item actually cost.
                 orderItems={
-                  includeOrder && latestOrder ? latestOrder.items.map((it) => it.name) : []
+                  includeOrder && latestOrder
+                    ? latestOrder.items.map((it) => ({ name: it.name, price: it.price ?? null }))
+                    : []
                 }
                 requestedBy={user?.id ?? null}
                 onCollect={setCollectedCoupon}

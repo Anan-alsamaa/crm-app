@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -170,7 +170,23 @@ describe('SlaReportsPage', () => {
     // SLA pill states rendered.
     expect(screen.getAllByText('Met').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Breached').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Pending')).toBeInTheDocument();
+    // "Pending" was the FIRST-RESPONSE state, and that column is gone: a
+    // ticket is raised out of a conversation that was already answered, so
+    // judging its first response re-judged a reply made before it existed.
+    // Only resolution is measured for tickets now.
+    expect(screen.queryByText('Pending')).toBeNull();
+  });
+
+  it('narrows to an explicit date range, which beats the rolling window', async () => {
+    api.useSlaReports.mockReturnValue({ isLoading: false, data: fullReport });
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText(/^from$/i), { target: { value: '2026-08-01' } });
+    fireEvent.change(screen.getByLabelText(/^to$/i), { target: { value: '2026-08-14' } });
+    expect(api.useSlaReports).toHaveBeenLastCalledWith(30, {
+      from: '2026-08-01',
+      to: '2026-08-14',
+    });
   });
 
   it('changes the date range through the SelectMenu combobox', async () => {
@@ -179,7 +195,8 @@ describe('SlaReportsPage', () => {
 
     await userEvent.click(screen.getByRole('combobox', { name: 'Date range' }));
     await userEvent.click(screen.getByText('Last 7 days'));
-    expect(api.useSlaReports).toHaveBeenLastCalledWith(7);
+    // The explicit from/to now rides alongside the rolling window.
+    expect(api.useSlaReports).toHaveBeenLastCalledWith(7, { from: '', to: '' });
   });
 
   it('exports the agent-view CSV', async () => {

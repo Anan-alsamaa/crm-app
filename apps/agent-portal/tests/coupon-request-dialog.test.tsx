@@ -133,8 +133,7 @@ describe('CouponRequestDialog', () => {
     renderDialog();
     await userEvent.click(screen.getByLabelText(/issuing side/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
-    await userEvent.click(screen.getByLabelText(/delivery type/i));
-    await userEvent.click(await screen.findByRole('button', { name: 'All' }));
+    // "All" is selected by default now — clicking it would turn it off.
     await userEvent.click(screen.getByLabelText(/discount category/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Percentage' }));
 
@@ -161,8 +160,7 @@ describe('CouponRequestDialog', () => {
     renderDialog();
     await userEvent.click(screen.getByLabelText(/issuing side/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
-    await userEvent.click(screen.getByLabelText(/delivery type/i));
-    await userEvent.click(await screen.findByRole('button', { name: 'All' }));
+    // "All" is selected by default now — clicking it would turn it off.
 
     // A coupon needs an amount before it can be sent — see couponTermsProblems.
     const amount = screen.getByLabelText(/coupon value/i);
@@ -182,14 +180,33 @@ describe('CouponRequestDialog', () => {
     expect(screen.getByText(/end date cannot be before the start date/i)).toBeInTheDocument();
   });
 
+  it('starts with every delivery channel selected', async () => {
+    // A compensation coupon is nearly always meant to work however the
+    // customer next orders, so the common case needs no clicks at all.
+    renderDialog();
+    expect(screen.getByLabelText(/delivery type/i)).toHaveTextContent(/all/i);
+  });
+
+  it('keeps the issuing-side prefix when the code is regenerated', async () => {
+    // The button handed back a SARA- code on an Operations coupon: the prefix
+    // is how anyone reading a code down a phone knows who issued it.
+    renderDialog();
+    await userEvent.click(screen.getByLabelText(/issuing side/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
+    const code = screen.getByLabelText(/coupon code/i) as HTMLInputElement;
+    await waitFor(() => expect(code.value.startsWith('OPS-')).toBe(true));
+
+    await userEvent.click(screen.getByRole('button', { name: /new code/i }));
+    await waitFor(() => expect(code.value.startsWith('OPS-')).toBe(true));
+  });
+
   it('will not send a coupon worth nothing, and says which field is wrong', async () => {
     // One was approved worth 0 SAR because the form let it through. The amount
     // now has to be present and positive before the request can leave.
     renderDialog();
     await userEvent.click(screen.getByLabelText(/issuing side/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
-    await userEvent.click(screen.getByLabelText(/delivery type/i));
-    await userEvent.click(await screen.findByRole('button', { name: 'All' }));
+    // "All" is selected by default now — clicking it would turn it off.
 
     const amount = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(amount);
@@ -216,8 +233,7 @@ describe('CouponRequestDialog', () => {
     renderDialog({ brandId: null, restaurantId: null, customerPhone: null, description: null });
     await userEvent.click(screen.getByLabelText(/issuing side/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
-    await userEvent.click(screen.getByLabelText(/delivery type/i));
-    await userEvent.click(await screen.findByRole('button', { name: 'All' }));
+    // "All" is selected by default now — clicking it would turn it off.
     // The title is the only thing that must be filled by hand in that case.
     const title = screen.getByLabelText(/coupon title/i);
     await userEvent.type(title, 'Walk-in customer');
@@ -300,20 +316,44 @@ describe('opening it from the add-ticket page', () => {
  */
 describe('the item a coupon compensates', () => {
   it('offers the order lines to choose from when the ticket came from an order', async () => {
-    renderDialog({ orderItems: ['Vegetable Pasta', 'Garlic Bread'] });
+    renderDialog({
+      orderItems: [
+        { name: 'Vegetable Pasta', price: 26 },
+        { name: 'Garlic Bread', price: 26 },
+      ],
+    });
     await userEvent.click(screen.getByLabelText(/item/i));
-    expect(await screen.findByRole('button', { name: 'Vegetable Pasta' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Garlic Bread' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Vegetable Pasta/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Garlic Bread/ })).toBeInTheDocument();
     // Optional: an explicit way to say the coupon is not about one line.
     expect(screen.getByRole('button', { name: /not about one item/i })).toBeInTheDocument();
   });
 
+  it('fills the coupon with what the chosen item cost, still editable', async () => {
+    renderDialog({ orderItems: [{ name: 'Vegetable Pasta', price: 26 }] });
+    await userEvent.click(screen.getByLabelText(/item/i));
+    await userEvent.click(await screen.findByRole('button', { name: /Vegetable Pasta/ }));
+
+    const amount = screen.getByLabelText(/coupon value/i) as HTMLInputElement;
+    await waitFor(() => expect(amount.value).toBe('26'));
+
+    // A starting point, not the answer — the agent can still change it.
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '15');
+    await waitFor(() => expect(amount.value).toBe('15'));
+  });
+
   it('offers the same line once however many were ordered', async () => {
     // 2x the same dish is one item to compensate, not two identical choices.
-    renderDialog({ orderItems: ['Vegetable Pasta', 'Vegetable Pasta'] });
+    renderDialog({
+      orderItems: [
+        { name: 'Vegetable Pasta', price: 26 },
+        { name: 'Vegetable Pasta', price: 26 },
+      ],
+    });
     await userEvent.click(screen.getByLabelText(/item/i));
-    await screen.findByRole('button', { name: 'Vegetable Pasta' });
-    expect(screen.getAllByRole('button', { name: 'Vegetable Pasta' })).toHaveLength(1);
+    await screen.findByRole('button', { name: /Vegetable Pasta/ });
+    expect(screen.getAllByRole('button', { name: /Vegetable Pasta/ })).toHaveLength(1);
   });
 
   it('takes a typed item when the ticket was raised by hand', async () => {
@@ -337,13 +377,13 @@ describe('the item a coupon compensates', () => {
 
   it('sends the chosen line with the request', async () => {
     const onCollect = vi.fn();
-    renderDialog({ orderItems: ['Vegetable Pasta'], onCollect });
+    renderDialog({ orderItems: [{ name: 'Vegetable Pasta', price: 26 }], onCollect });
     await userEvent.click(screen.getByLabelText(/issuing side/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
     await userEvent.click(screen.getByLabelText(/delivery type/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
     await userEvent.click(screen.getByLabelText(/item/i));
-    await userEvent.click(await screen.findByRole('button', { name: 'Vegetable Pasta' }));
+    await userEvent.click(await screen.findByRole('button', { name: /Vegetable Pasta/ }));
 
     // A coupon needs an amount before it can be sent — see couponTermsProblems.
     const amount = screen.getByLabelText(/coupon value/i);
@@ -357,7 +397,7 @@ describe('the item a coupon compensates', () => {
 
   it('leaves the item null when the complaint is not about one', async () => {
     const onCollect = vi.fn();
-    renderDialog({ orderItems: ['Vegetable Pasta'], onCollect });
+    renderDialog({ orderItems: [{ name: 'Vegetable Pasta', price: 26 }], onCollect });
     await userEvent.click(screen.getByLabelText(/issuing side/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
     await userEvent.click(screen.getByLabelText(/delivery type/i));

@@ -11,6 +11,7 @@ import {
   Toolbar,
   cn,
   formatRelative,
+  formatDateTime,
   toast,
 } from '@yiji/ui';
 import {
@@ -20,7 +21,12 @@ import {
   type CouponApprovalStatus,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
-import { useCouponApprovals, useDecideCoupon, type CouponApprovalRow } from './api.js';
+import {
+  useCouponApprovals,
+  useDecideCoupon,
+  useSaveCouponTerms,
+  type CouponApprovalRow,
+} from './api.js';
 
 /**
  * The supervisor's queue: every coupon an agent wants to give away, decided one
@@ -224,6 +230,7 @@ function Row({
   const [editing, setEditing] = useState(false);
   const [edits, setEdits] = useState<TermEdits>(() => seedEdits(row));
   const setEdit = (k: keyof TermEdits, v: string) => setEdits((e) => ({ ...e, [k]: v }));
+  const saveTerms = useSaveCouponTerms();
   const pending = row.status === 'pending';
 
   /**
@@ -300,7 +307,37 @@ function Row({
             {t('couponApprovals.customer', { defaultValue: 'Customer' })}
           </dt>
           <dd dir="auto" className="min-w-0 truncate font-medium text-foreground">
-            {row.contact?.name ?? row.contact?.phone ?? '—'}
+            {/* Both, when both are known: the name is who it is, the phone is
+                what a supervisor searches by and reads back on a call. */}
+            {[row.contact?.name, row.contact?.phone].filter(Boolean).join(' · ') || '—'}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            {t('couponApprovals.requestedAt', { defaultValue: 'Requested' })}
+          </dt>
+          {/* Date AND time. "2 hours ago" answers how long they have waited;
+              the timestamp is what gets quoted in an audit. */}
+          <dd className="min-w-0 truncate font-medium tabular-nums text-foreground">
+            {row.date_created ? formatDateTime(row.date_created) : '—'}
+          </dd>
+        </div>
+        <div className="flex min-w-0 items-baseline gap-2">
+          <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            {t('couponApprovals.branch', { defaultValue: 'Branch' })}
+          </dt>
+          <dd dir="auto" className="min-w-0 truncate font-medium text-foreground">
+            {/* The readable branch, from the ticket's store. The coupon's own
+                restaurant_id is Yiji's identifier — correct to send, useless
+                to read. */}
+            {[
+              row.ticket?.store?.brand?.name,
+              row.ticket?.store?.code,
+              row.ticket?.store?.name,
+              row.ticket?.store?.city,
+            ]
+              .filter(Boolean)
+              .join(' · ') || '—'}
           </dd>
         </div>
         <div className="flex w-full min-w-0 items-baseline gap-2">
@@ -503,12 +540,55 @@ function Row({
                     value={edits.reason}
                     onChange={(v) => setEdit('reason', v)}
                   />
-                  <p className="text-2xs leading-relaxed text-muted-foreground sm:col-span-2 lg:col-span-3">
-                    {t('couponApprovals.editHint', {
-                      defaultValue:
-                        'Approving now grants these instead of what was asked for, and is recorded as an amendment.',
-                    })}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-3">
+                    {/* Saving without deciding. Editing used to be inseparable
+                        from approving, so a supervisor who wanted to correct a
+                        date and come back had to approve early or lose the
+                        change. */}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={busy || saveTerms.isPending || termsProblems.length > 0}
+                      title={termsProblems[0]?.message}
+                      onClick={() => {
+                        const patch = diffEdits(row, edits);
+                        if (Object.keys(patch).length === 0) {
+                          toast.success(
+                            t('couponApprovals.nothingChanged', {
+                              defaultValue: 'Nothing changed.',
+                            }),
+                          );
+                          return;
+                        }
+                        saveTerms.mutate(
+                          { id: row.id, edits: patch },
+                          {
+                            onSuccess: () =>
+                              toast.success(
+                                t('couponApprovals.termsSaved', {
+                                  defaultValue: 'Terms saved. Still waiting on a decision.',
+                                }),
+                              ),
+                            onError: () =>
+                              toast.error(
+                                t('couponApprovals.termsSaveFailed', {
+                                  defaultValue: 'Could not save those terms.',
+                                }),
+                              ),
+                          },
+                        );
+                      }}
+                    >
+                      {t('actions.save', { ns: 'common', defaultValue: 'Save' })}
+                    </Button>
+                    <p className="text-2xs leading-relaxed text-muted-foreground">
+                      {t('couponApprovals.editHint', {
+                        defaultValue:
+                          'Save keeps these terms and leaves the request waiting. Approving now grants them instead of what was asked for, and is recorded as an amendment.',
+                      })}
+                    </p>
+                  </div>
                 </div>
               )}
               {/* No ticket, nowhere to put the coupon. Approving used to
@@ -582,7 +662,41 @@ export function CouponApprovalsPage() {
   const approvals = useCouponApprovals(view);
   const decide = useDecideCoupon();
 
-  const rows = approvals.data ?? [];
+  const all = approvals.data ?? [];
+  const [query, setQuery] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+
+  /**
+   * Filtered in the browser, not the query.
+   *
+   * The whole queue is already loaded — it is one supervisor's working set, not
+   * a table scan — so searching it here answers instantly and keeps the status
+   * tabs honest: the counts above never disagree with the list below because
+   * both come from the same array.
+   *
+   * Order id, phone and coupon code are what a supervisor is holding when they
+   * come to this page: a customer on the phone, or a code somebody queried.
+   */
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return all.filter((r) => {
+      if (from && (r.date_created ?? '') < `${from}T00:00:00`) return false;
+      if (to && (r.date_created ?? '') > `${to}T23:59:59`) return false;
+      if (!q) return true;
+      return [
+        r.coupon_code,
+        r.ticket?.order_id,
+        r.contact?.phone,
+        r.contact?.name,
+        r.title,
+        r.ticket?.store?.name,
+        r.ticket?.store?.code,
+      ]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q));
+    });
+  }, [all, query, from, to]);
 
   const onDecide = (
     row: CouponApprovalRow,
@@ -661,6 +775,65 @@ export function CouponApprovalsPage() {
                 {t(`couponApprovals.status.${s}`, { defaultValue: s })}
               </button>
             ))}
+          </div>
+
+          {/* Search and period. Both narrow the list the tabs above produced,
+              so a supervisor can hold a status AND a date range at once. */}
+          <div className="flex flex-wrap items-end gap-2">
+            <Input
+              className="h-9 min-w-[16rem] flex-1"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label={t('couponApprovals.search', {
+                defaultValue: 'Order ID, phone, or coupon code',
+              })}
+              placeholder={t('couponApprovals.search', {
+                defaultValue: 'Order ID, phone, or coupon code',
+              })}
+            />
+            <label className="flex flex-col gap-1">
+              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('complaintDash.from', { defaultValue: 'From' })}
+              </span>
+              <Input
+                type="date"
+                className="h-9 w-[9.5rem]"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('complaintDash.to', { defaultValue: 'To' })}
+              </span>
+              <Input
+                type="date"
+                className="h-9 w-[9.5rem]"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+              />
+            </label>
+            {(query || from || to) && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setQuery('');
+                  setFrom('');
+                  setTo('');
+                }}
+              >
+                {t('complaintDash.clear', { defaultValue: 'Clear' })}
+              </Button>
+            )}
+            <span className="ms-auto self-center text-xs tabular-nums text-muted-foreground">
+              {t('couponApprovals.showing', {
+                shown: rows.length,
+                total: all.length,
+                defaultValue: '{{shown}} of {{total}}',
+              })}
+            </span>
           </div>
 
           {approvals.isLoading ? (

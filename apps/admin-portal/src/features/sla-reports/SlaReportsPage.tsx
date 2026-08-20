@@ -6,6 +6,7 @@ import {
   ClockIcon,
   cn,
   EmptyState,
+  Input,
   type MetricTone,
   Pill,
   ProgressRing,
@@ -205,8 +206,11 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
 export function SlaReportsPage() {
   const { t } = useTranslation();
   const [days, setDays] = useState(30);
+  // Explicit dates beat the rolling window — see useSlaReports.
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [agentFilter, setAgentFilter] = useState<{ id: string | null; name: string } | null>(null);
-  const report = useSlaReports(days);
+  const report = useSlaReports(days, { from, to });
 
   const ticketsShown = useMemo(() => {
     const all = report.data?.tickets ?? [];
@@ -224,23 +228,13 @@ export function SlaReportsPage() {
     if (!report.data) return;
     {
       const rows: (string | number)[][] = [
-        [
-          'ticket_id',
-          'subject',
-          'priority',
-          'status',
-          'agent',
-          'first_response',
-          'resolution',
-          'first_reply_min',
-        ],
+        ['ticket_id', 'subject', 'priority', 'status', 'agent', 'resolution', 'first_reply_min'],
         ...ticketsShown.map((tk) => [
           tk.id,
           tk.subject,
           tk.priority,
           tk.status,
           tk.agentName,
-          tk.firstResponse.state,
           tk.resolution.state,
           tk.responseMinutes == null ? '' : Math.round(tk.responseMinutes),
         ]),
@@ -282,6 +276,37 @@ export function SlaReportsPage() {
             }))}
           />
         </div>
+        <label className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          {t('complaintDash.from', { defaultValue: 'From' })}
+          <Input
+            type="date"
+            className="h-9 w-[9.5rem]"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+        </label>
+        <label className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          {t('complaintDash.to', { defaultValue: 'To' })}
+          <Input
+            type="date"
+            className="h-9 w-[9.5rem]"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
+        </label>
+        {(from || to) && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setFrom('');
+              setTo('');
+            }}
+          >
+            {t('complaintDash.clear', { defaultValue: 'Clear' })}
+          </Button>
+        )}
         <Button type="button" size="sm" variant="ghost" onClick={exportCsv} disabled={!report.data}>
           {t('slaReports.exportCsv', { defaultValue: 'Export CSV' })}
         </Button>
@@ -422,7 +447,12 @@ function TicketTable({
               <Th>{t('slaReports.colPriority', { defaultValue: 'Priority' })}</Th>
               <Th>{t('slaReports.colStatus', { defaultValue: 'Status' })}</Th>
               {!agentFilter && <Th>{t('slaReports.colAgent', { defaultValue: 'Agent' })}</Th>}
-              <Th>{t('slaReports.colFirstResponse', { defaultValue: 'First response' })}</Th>
+              {/* No first-response column for TICKETS. A ticket is raised out
+                  of a conversation that has already been answered, so a
+                  first-response deadline here re-judges a reply that happened
+                  before the ticket existed — and reads as a breach nobody
+                  could have prevented. Chats keep both measures, where the
+                  first reply IS the promise. */}
               <Th>{t('slaReports.colResolution', { defaultValue: 'Resolution' })}</Th>
               <Th className="text-end">
                 {t('slaReports.colReplyTime', { defaultValue: '1st reply' })}
@@ -455,9 +485,6 @@ function TicketTable({
                     </span>
                   </Td>
                 )}
-                <Td>
-                  <SlaPill cell={tk.firstResponse} />
-                </Td>
                 <Td>
                   <SlaPill cell={tk.resolution} />
                 </Td>

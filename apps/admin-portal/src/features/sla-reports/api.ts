@@ -86,18 +86,32 @@ function classify(dueAt: string | null, doneAt: string | null, now: number): Sla
   return { state: new Date(dueAt).getTime() < now ? 'breached' : 'pending', dueAt, doneAt: null };
 }
 
-export function useSlaReports(days: number) {
+/**
+ * @param days   rolling window, used when no explicit dates are given.
+ * @param range  explicit `from`/`to` (yyyy-mm-dd). Wins over `days` — a person
+ *               who has typed two dates has asked a more specific question than
+ *               "the last 30 days", and answering the vaguer one would ignore
+ *               what they typed.
+ */
+export function useSlaReports(days: number, range?: { from?: string; to?: string }) {
+  const from = range?.from?.trim() || '';
+  const to = range?.to?.trim() || '';
   return useQuery({
-    queryKey: ['sla-reports', days],
+    queryKey: ['sla-reports', days, from, to],
     staleTime: 60_000,
     queryFn: async (): Promise<SlaReport> => {
-      const since = new Date(Date.now() - days * 86_400_000).toISOString();
+      const since = from
+        ? `${from}T00:00:00`
+        : new Date(Date.now() - days * 86_400_000).toISOString();
       const now = Date.now();
+      // Inclusive `to`: a range ending on the 31st contains the 31st.
+      const dateFilter: Record<string, unknown> = { _gte: since };
+      if (to) dateFilter._lte = `${to}T23:59:59`;
 
       const [tickets, users] = await Promise.all([
         directus.request(
           readItems('tickets', {
-            filter: { date_created: { _gte: since } },
+            filter: { date_created: dateFilter },
             fields: [
               'id',
               'subject',

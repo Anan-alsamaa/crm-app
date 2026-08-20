@@ -11,7 +11,7 @@ export { NewVersionBanner } from './NewVersionBanner.js';
 export { SavedTick } from './SavedTick.js';
 export { Ltr } from './Ltr.js';
 export type { LtrProps } from './Ltr.js';
-export { formatRelative } from './time.js';
+export { formatRelative, formatDate, formatDateTime } from './time.js';
 export { Avatar } from './Avatar.js';
 export type { AvatarProps } from './Avatar.js';
 export {

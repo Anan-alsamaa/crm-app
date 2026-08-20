@@ -13,6 +13,7 @@ import {
   Toolbar,
   ToolbarSpacer,
   formatRelative,
+  formatDate,
   Ltr,
 } from '@yiji/ui';
 import { exportFileName } from '@yiji/shared-config';
@@ -307,12 +308,12 @@ export function AllCompensationPage() {
     {
       key: 'validFrom',
       label: t('performance.from', { defaultValue: 'From' }),
-      get: (r) => r.valid_from?.slice(0, 10) ?? '',
+      get: (r) => formatDate(r.valid_from),
     },
     {
       key: 'validTo',
       label: t('performance.to', { defaultValue: 'To' }),
-      get: (r) => r.valid_to?.slice(0, 10) ?? '',
+      get: (r) => formatDate(r.valid_to),
     },
     {
       key: 'state',
@@ -326,18 +327,18 @@ export function AllCompensationPage() {
     },
     {
       key: 'decidedBy',
-      label: t('compensationAll.decidedBy', { defaultValue: 'Decided by' }),
+      label: t('compensationAll.decidedBy', { defaultValue: 'Approved by' }),
       get: (r) => who(r.decided_by),
     },
     {
       key: 'raised',
       label: t('compensationAll.raised', { defaultValue: 'Raised' }),
-      get: (r) => r.date_created?.slice(0, 10) ?? '',
+      get: (r) => formatDate(r.date_created),
     },
     {
       key: 'decidedAt',
-      label: t('compensationAll.decidedAt', { defaultValue: 'Decided' }),
-      get: (r) => r.decided_at?.slice(0, 10) ?? '',
+      label: t('compensationAll.decidedAt', { defaultValue: 'Date' }),
+      get: (r) => formatDate(r.decided_at),
     },
     {
       key: 'reason',
@@ -346,7 +347,7 @@ export function AllCompensationPage() {
     },
     {
       key: 'note',
-      label: t('compensationAll.note', { defaultValue: 'Decision note' }),
+      label: t('compensationAll.note', { defaultValue: 'Note' }),
       get: (r) => r.decision_note ?? '',
     },
   ];
@@ -444,7 +445,7 @@ export function AllCompensationPage() {
                   setPage(1);
                 }}
                 placeholder={t('compensationAll.searchPlaceholder', {
-                  defaultValue: 'Code, customer, phone, brand',
+                  defaultValue: 'Order ID, code, customer, phone, brand',
                 })}
                 aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
               />

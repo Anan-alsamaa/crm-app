@@ -49,6 +49,13 @@ export interface CouponApprovalRow {
     order_id: string | null;
     priority: string | null;
     status: string | null;
+    store: {
+      id: string;
+      code: string | null;
+      name: string | null;
+      city: string | null;
+      brand: { name: string | null } | null;
+    } | null;
   } | null;
   contact: { id: string; name: string | null; phone: string | null } | null;
   requested_by: { id: string; first_name: string | null; email: string | null } | null;
@@ -99,13 +106,19 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
                   'order_id',
                   'priority',
                   'status',
+                  // The branch this complaint was about. The coupon's own
+                  // `restaurant_id` is Yiji's identifier — right for the push,
+                  // useless to read — so the readable name comes from here.
+                  { store: ['id', 'code', 'name', 'city', { brand: ['name'] }] },
                 ],
               },
               { contact: ['id', 'name', 'phone'] },
               { requested_by: ['id', 'first_name', 'email'] },
               { decided_by: ['id', 'first_name', 'email'] },
             ],
-            sort: ['date_created'],
+            // Newest first: a queue is worked from the top, and the request
+            // that just came in is the one somebody is waiting on.
+            sort: ['-date_created'],
             limit: -1,
             // "approved" includes "assigned": delivery to Yiji moves the status
             // on, and an approved coupon must not vanish from the Approved tab
@@ -220,5 +233,27 @@ export function useDecideCoupon() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['coupon-approvals'] });
     },
+  });
+}
+
+/**
+ * Save amended terms WITHOUT deciding.
+ *
+ * Editing used to be inseparable from approving: the only way to keep a change
+ * was to press Approve, so a supervisor who wanted to correct a date and come
+ * back to the decision had to either approve early or lose the edit. This
+ * writes the terms and leaves the request exactly where it was in the queue.
+ *
+ * Deliberately does NOT set `edited_by_admin`. That flag means "approved on
+ * different terms than were asked for", which is a statement about a DECISION;
+ * a pending request that has been tidied has not been decided yet, and the
+ * coupon report counts amendments as an outcome.
+ */
+export function useSaveCouponTerms() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; edits: Record<string, unknown> }) =>
+      directus.request(updateItem('coupon_approvals' as never, input.id, input.edits as never)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['coupon-approvals'] }),
   });
 }
