@@ -61,6 +61,18 @@ const LIST_KEYS = [
 ] as const;
 type ListKey = (typeof LIST_KEYS)[number];
 
+/**
+ * Ready replies are not an option list — they are their own collection with
+ * their own editor — but they belong to the same person doing the same job, so
+ * they are reached the same way: one more entry in the picker.
+ *
+ * They used to render UNDER whichever list was selected, which made them look
+ * like part of every list in turn. A section that appears beneath "Complaint
+ * type" and again beneath "Delivery type" reads as belonging to neither.
+ */
+const QUICK_REPLIES = 'quick_replies';
+type PageKey = ListKey | typeof QUICK_REPLIES;
+
 interface OptionRow {
   id: string;
   list: string;
@@ -90,7 +102,11 @@ export function OptionListsPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const rows = useOptionRows();
-  const [listKey, setListKey] = useState<ListKey>('complaint_type');
+  const [page, setPage] = useState<PageKey>('complaint_type');
+  // Every option-list query below is scoped to a real list; on the ready-replies
+  // page there is none, and `complaint_type` simply keeps those hooks pointed at
+  // something valid while their UI is not rendered.
+  const listKey: ListKey = page === QUICK_REPLIES ? 'complaint_type' : page;
   const [draft, setDraft] = useState('');
   /** The value currently being dragged, so the row it left can dim. */
   const [dragId, setDragId] = useState<string | null>(null);
@@ -145,7 +161,7 @@ export function OptionListsPage() {
     delivery_type: t('lists.deliveryType', { defaultValue: 'Delivery type' }),
     coupon_type: t('lists.couponType', { defaultValue: 'Coupon type' }),
     discount_category: t('lists.discountCategory', { defaultValue: 'Discount category' }),
-    ai_action: t('lists.aiAction', { defaultValue: 'AI assistance actions' }),
+    ai_action: t('lists.aiAction', { defaultValue: 'Inbox options' }),
   };
 
   const submit = () => {
@@ -206,10 +222,16 @@ export function OptionListsPage() {
         <SelectMenu
           size="sm"
           className="w-[14rem]"
-          value={listKey}
-          onChange={(v) => setListKey(v as ListKey)}
+          value={page}
+          onChange={(v) => setPage(v as PageKey)}
           aria-label={t('lists.pickList', { defaultValue: 'List' })}
-          options={LIST_KEYS.map((k) => ({ value: k, label: LIST_LABELS[k] }))}
+          options={[
+            ...LIST_KEYS.map((k) => ({ value: k, label: LIST_LABELS[k] })),
+            {
+              value: QUICK_REPLIES,
+              label: t('replies.title', { defaultValue: 'Ready replies' }),
+            },
+          ]}
         />
       </Toolbar>
 
@@ -219,196 +241,204 @@ export function OptionListsPage() {
               page, so the suite reads as one product. */}
           <div className="border-b border-foreground/10 pb-5">
             <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              {t('lists.heroSubtitle', {
-                defaultValue:
-                  'Every dropdown the ticket form offers, editable live. Pick a list, then add, reorder, retire, or restore its values.',
-              })}
+              {page === QUICK_REPLIES
+                ? t('replies.hint', {
+                    defaultValue:
+                      'The buttons above the reply box in the inbox. The button is what the agent sees; the text is what gets inserted. Drag to reorder.',
+                  })
+                : t('lists.heroSubtitle', {
+                    defaultValue:
+                      'Every dropdown the ticket form offers, editable live. Pick a list, then add, reorder, retire, or restore its values.',
+                  })}
             </p>
           </div>
-          {/* The board card header carries the list's name and the one rule an
-              operator must know before touching it. */}
-          {/* The count lives in the board card's footer band below — a bare
-              numeral floating beside the header read as debris. */}
-          <SectionCard
-            title={LIST_LABELS[listKey]}
-            hint={
-              // The AI list is not a dropdown and nothing in history carries
-              // its values, so the "reports group by these spellings" warning
-              // would be false there — and a warning that does not apply is
-              // how people learn to skip reading them.
-              listKey === 'ai_action'
-                ? t('lists.helpAiAction', {
-                    defaultValue:
-                      'Which buttons the AI panel offers agents in the inbox, in this order. Retire one to stop offering it. These are action keys, not labels — the labels are translated. Retire them all and the panel falls back to offering everything.',
-                  })
-                : t('lists.help', {
-                    defaultValue:
-                      'These values feed the complaint form live — no deploy needed. Retire a value to stop offering it; tickets that already carry it keep displaying it. The exact spellings are what reports group by, so a corrected spelling is a new value, not an edit.',
-                  })
-            }
-          >
-            <div className="flex gap-2">
-              <Input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') submit();
-                }}
-                placeholder={t('lists.addPlaceholder', {
-                  defaultValue: 'New value for this list…',
-                })}
-                aria-label={t('lists.addLabel', { defaultValue: 'New value' })}
-              />
-              <Button onClick={submit} disabled={!draft.trim() || add.isPending}>
-                {t('lists.add', { defaultValue: 'Add' })}
-              </Button>
-            </div>
-          </SectionCard>
-
-          {rows.isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-11 w-full rounded-xl" />
-              ))}
-            </div>
+          {page === QUICK_REPLIES ? (
+            <QuickRepliesSection />
           ) : (
-            /* Rows flush inside one board card — hairline separators, then a
+            <>
+              {/* The board card header carries the list's name and the one rule an
+              operator must know before touching it. */}
+              {/* The count lives in the board card's footer band below — a bare
+              numeral floating beside the header read as debris. */}
+              <SectionCard
+                title={LIST_LABELS[listKey]}
+                hint={
+                  // The AI list is not a dropdown and nothing in history carries
+                  // its values, so the "reports group by these spellings" warning
+                  // would be false there — and a warning that does not apply is
+                  // how people learn to skip reading them.
+                  listKey === 'ai_action'
+                    ? t('lists.helpAiAction', {
+                        defaultValue:
+                          'Which options the AI assistant offers agents in the inbox, in this order. Retire one to stop offering it. These are action keys, not labels — the labels are translated. Retire them all and the assistant falls back to offering everything.',
+                      })
+                    : t('lists.help', {
+                        defaultValue:
+                          'These values feed the complaint form live — no deploy needed. Retire a value to stop offering it; tickets that already carry it keep displaying it. The exact spellings are what reports group by, so a corrected spelling is a new value, not an edit.',
+                      })
+                }
+              >
+                <div className="flex gap-2">
+                  <Input
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') submit();
+                    }}
+                    placeholder={t('lists.addPlaceholder', {
+                      defaultValue: 'New value for this list…',
+                    })}
+                    aria-label={t('lists.addLabel', { defaultValue: 'New value' })}
+                  />
+                  <Button onClick={submit} disabled={!draft.trim() || add.isPending}>
+                    {t('lists.add', { defaultValue: 'Add' })}
+                  </Button>
+                </div>
+              </SectionCard>
+
+              {rows.isLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} className="h-11 w-full rounded-xl" />
+                  ))}
+                </div>
+              ) : (
+                /* Rows flush inside one board card — hairline separators, then a
                footer aggregate band, per the boards' table anatomy. */
-            <div className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-              <ul className="divide-y divide-foreground/[0.06]">
-                {current.map((row, i) => (
-                  <li
-                    key={row.id}
-                    draggable
-                    onDragStart={(e) => {
-                      setDragId(row.id);
-                      e.dataTransfer.effectAllowed = 'move';
-                    }}
-                    onDragEnd={() => setDragId(null)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      if (dragId) moveTo(dragId, row.id);
-                      setDragId(null);
-                    }}
-                    className={cn(
-                      'flex cursor-grab items-center gap-2 px-4 py-2.5 active:cursor-grabbing',
-                      'transition-colors duration-fast ease-out hover:bg-secondary/40',
-                      !row.active && 'opacity-60',
-                      dragId === row.id && 'opacity-40',
-                    )}
-                  >
-                    {/* Grip, then rank. Arranging a long list two rows at a time
+                <div className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+                  <ul className="divide-y divide-foreground/[0.06]">
+                    {current.map((row, i) => (
+                      <li
+                        key={row.id}
+                        draggable
+                        onDragStart={(e) => {
+                          setDragId(row.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragEnd={() => setDragId(null)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (dragId) moveTo(dragId, row.id);
+                          setDragId(null);
+                        }}
+                        className={cn(
+                          'flex cursor-grab items-center gap-2 px-4 py-2.5 active:cursor-grabbing',
+                          'transition-colors duration-fast ease-out hover:bg-secondary/40',
+                          !row.active && 'opacity-60',
+                          dragId === row.id && 'opacity-40',
+                        )}
+                      >
+                        {/* Grip, then rank. Arranging a long list two rows at a time
                         with arrows was the complaint; the arrows stay for
                         keyboard users, who cannot drag. */}
-                    <span
-                      aria-hidden
-                      className="shrink-0 select-none text-xs leading-none text-muted-foreground/50"
-                    >
-                      ⠿
-                    </span>
-                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-secondary text-2xs font-semibold tabular-nums text-muted-foreground">
-                      {i + 1}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                      {row.value}
-                    </span>
-                    {!row.active && (
-                      <Pill tone="neutral" size="sm">
-                        {t('lists.retired', { defaultValue: 'Retired' })}
-                      </Pill>
-                    )}
-                    <IconButton
-                      size="sm"
-                      variant="ghost"
-                      disabled={i === 0}
-                      onClick={() => move(row, -1)}
-                      aria-label={t('lists.moveUp', {
-                        value: row.value,
-                        defaultValue: 'Move {{value}} up',
-                      })}
-                    >
-                      <ChevronDownIcon size={14} className="rotate-180" />
-                    </IconButton>
-                    <IconButton
-                      size="sm"
-                      variant="ghost"
-                      disabled={i === current.length - 1}
-                      onClick={() => move(row, 1)}
-                      aria-label={t('lists.moveDown', {
-                        value: row.value,
-                        defaultValue: 'Move {{value}} down',
-                      })}
-                    >
-                      <ChevronDownIcon size={14} />
-                    </IconButton>
-                    {/* Hairline divider groups the reorder pair apart from the
+                        <span
+                          aria-hidden
+                          className="shrink-0 select-none text-xs leading-none text-muted-foreground/50"
+                        >
+                          ⠿
+                        </span>
+                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-secondary text-2xs font-semibold tabular-nums text-muted-foreground">
+                          {i + 1}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                          {row.value}
+                        </span>
+                        {!row.active && (
+                          <Pill tone="neutral" size="sm">
+                            {t('lists.retired', { defaultValue: 'Retired' })}
+                          </Pill>
+                        )}
+                        <IconButton
+                          size="sm"
+                          variant="ghost"
+                          disabled={i === 0}
+                          onClick={() => move(row, -1)}
+                          aria-label={t('lists.moveUp', {
+                            value: row.value,
+                            defaultValue: 'Move {{value}} up',
+                          })}
+                        >
+                          <ChevronDownIcon size={14} className="rotate-180" />
+                        </IconButton>
+                        <IconButton
+                          size="sm"
+                          variant="ghost"
+                          disabled={i === current.length - 1}
+                          onClick={() => move(row, 1)}
+                          aria-label={t('lists.moveDown', {
+                            value: row.value,
+                            defaultValue: 'Move {{value}} down',
+                          })}
+                        >
+                          <ChevronDownIcon size={14} />
+                        </IconButton>
+                        {/* Hairline divider groups the reorder pair apart from the
                         lifecycle actions, so the cluster reads as two verbs. */}
-                    <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-foreground/[0.08]" />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => patch.mutate({ id: row.id, body: { active: !row.active } })}
-                    >
-                      {row.active
-                        ? t('lists.retire', { defaultValue: 'Retire' })
-                        : t('lists.restore', { defaultValue: 'Restore' })}
-                    </Button>
-                    {/* Hard delete is for typos caught immediately — quiet on
+                        <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-foreground/[0.08]" />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            patch.mutate({ id: row.id, body: { active: !row.active } })
+                          }
+                        >
+                          {row.active
+                            ? t('lists.retire', { defaultValue: 'Retire' })
+                            : t('lists.restore', { defaultValue: 'Restore' })}
+                        </Button>
+                        {/* Hard delete is for typos caught immediately — quiet on
                         purpose, since Retire is almost always the right call. */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            t('lists.deleteConfirm', {
-                              value: row.value,
-                              defaultValue:
-                                'Delete “{{value}}” outright? Retiring is safer — tickets already carrying it keep displaying it either way.',
-                            }),
-                          )
-                        )
-                          remove.mutate(row.id);
-                      }}
-                      aria-label={t('lists.delete', {
-                        value: row.value,
-                        defaultValue: 'Delete {{value}}',
-                      })}
-                      className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                    >
-                      <CloseIcon size={14} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              {current.length === 0 && (
-                /* Composed empty state — an icon chip and a real title, never
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                t('lists.deleteConfirm', {
+                                  value: row.value,
+                                  defaultValue:
+                                    'Delete “{{value}}” outright? Retiring is safer — tickets already carrying it keep displaying it either way.',
+                                }),
+                              )
+                            )
+                              remove.mutate(row.id);
+                          }}
+                          aria-label={t('lists.delete', {
+                            value: row.value,
+                            defaultValue: 'Delete {{value}}',
+                          })}
+                          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                        >
+                          <CloseIcon size={14} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {current.length === 0 && (
+                    /* Composed empty state — an icon chip and a real title, never
                    a bare text line floating in dead space. */
-                <EmptyState
-                  icon={<SettingsIcon size={20} />}
-                  title={t('lists.empty', { defaultValue: 'This list has no values yet.' })}
-                  description={t('lists.emptyHint', {
-                    defaultValue:
-                      'Add the first value above — the form offers it as soon as it saves.',
-                  })}
-                />
+                    <EmptyState
+                      icon={<SettingsIcon size={20} />}
+                      title={t('lists.empty', { defaultValue: 'This list has no values yet.' })}
+                      description={t('lists.emptyHint', {
+                        defaultValue:
+                          'Add the first value above — the form offers it as soon as it saves.',
+                      })}
+                    />
+                  )}
+                  {/* Footer aggregate band — the boards' table anatomy. */}
+                  <div className="flex items-center justify-between gap-3 border-t border-foreground/[0.06] bg-secondary/30 px-4 py-2.5">
+                    <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      {t('lists.valuesCap', { defaultValue: 'values' })}
+                    </span>
+                    <span className="text-sm font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
+                      {current.length}
+                    </span>
+                  </div>
+                </div>
               )}
-              {/* Footer aggregate band — the boards' table anatomy. */}
-              <div className="flex items-center justify-between gap-3 border-t border-foreground/[0.06] bg-secondary/30 px-4 py-2.5">
-                <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  {t('lists.valuesCap', { defaultValue: 'values' })}
-                </span>
-                <span className="text-sm font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
-                  {current.length}
-                </span>
-              </div>
-            </div>
+            </>
           )}
-
-          {/* Ready replies live here too: same kind of thing, same owner. */}
-          <div className="pt-2">
-            <QuickRepliesSection />
-          </div>
         </div>
       </div>
     </div>
