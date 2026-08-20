@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { ChevronDownIcon, cn } from '@yiji/ui';
 import type { NavSection } from '../nav.js';
@@ -217,40 +217,55 @@ function MenuGroup({ section }: { section: NavSection }) {
           )}
         >
           {section.items.map((it, i) => (
-            <NavLink
-              key={it.to}
-              to={it.to}
-              role="menuitem"
-              ref={(el) => {
-                itemRefs.current[i] = el;
-              }}
-              onClick={() => close(false)}
-              onKeyDown={(e) => onItemKeyDown(e, i)}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm',
-                  'transition-colors duration-fast ease-out',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                  isActive
-                    ? 'bg-primary-subtle font-semibold text-foreground'
-                    : 'font-medium text-foreground hover:bg-secondary',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <span
-                    className={cn(
-                      'grid h-6 w-6 shrink-0 place-items-center rounded-md',
-                      isActive ? 'bg-primary text-primary-foreground' : tile,
-                    )}
-                  >
-                    <it.icon size={14} />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-start">{it.label}</span>
-                </>
+            <Fragment key={it.to}>
+              {/* The third level: a heading whenever the group changes, so
+                  Reports reads as two named sets rather than one long list.
+                  Compared against the PREVIOUS item, so consecutive entries
+                  sharing a group print their heading once. */}
+              {it.group && it.group !== section.items[i - 1]?.group && (
+                <div
+                  className={cn(
+                    'px-2 pb-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground',
+                    i > 0 && 'mt-2 border-t border-border pt-2.5',
+                  )}
+                >
+                  {it.group}
+                </div>
               )}
-            </NavLink>
+              <NavLink
+                to={it.to}
+                role="menuitem"
+                ref={(el) => {
+                  itemRefs.current[i] = el;
+                }}
+                onClick={() => close(false)}
+                onKeyDown={(e) => onItemKeyDown(e, i)}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm',
+                    'transition-colors duration-fast ease-out',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                    isActive
+                      ? 'bg-primary-subtle font-semibold text-foreground'
+                      : 'font-medium text-foreground hover:bg-secondary',
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <span
+                      className={cn(
+                        'grid h-6 w-6 shrink-0 place-items-center rounded-md',
+                        isActive ? 'bg-primary text-primary-foreground' : tile,
+                      )}
+                    >
+                      <it.icon size={14} />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-start">{it.label}</span>
+                  </>
+                )}
+              </NavLink>
+            </Fragment>
           ))}
         </div>
       )}

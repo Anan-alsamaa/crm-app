@@ -128,3 +128,33 @@ export function useRequestCouponApproval() {
     },
   });
 }
+
+/**
+ * The coupons raised against ONE ticket.
+ *
+ * The ticket already carries a code, a value and a percent as plain columns —
+ * enough to say a coupon exists, not enough to answer the questions an agent
+ * is actually asked on the phone: has it been approved, what does it cover,
+ * until when, and did a supervisor change the amount. Those live on the
+ * request, so the ticket reads them from here rather than growing a dozen more
+ * columns that would then have to be kept in step.
+ */
+export function useTicketCoupons(ticketId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['ticket-coupons', ticketId],
+    enabled: !!ticketId,
+    staleTime: 30_000,
+    queryFn: async (): Promise<CouponRequestRow[]> =>
+      (await directus.request(
+        readItems(
+          'coupon_approvals' as never,
+          {
+            filter: { ticket: { _eq: ticketId } },
+            fields: COUPON_REQUEST_FIELDS as never,
+            sort: ['-date_created'],
+            limit: -1,
+          } as never,
+        ),
+      )) as unknown as CouponRequestRow[],
+  });
+}

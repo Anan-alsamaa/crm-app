@@ -732,7 +732,8 @@
     },
     "whatHappenedHint": "الشكوى كما ذكرها العميل",
     "resolutionHint": "اختياري — ما تم عمله بشأنها",
-    "savedCouponPending": "تم الحفظ. القسيمة بانتظار مشرف."
+    "savedCouponPending": "تم الحفظ. القسيمة بانتظار مشرف.",
+    "couponsAssigned": "القسيمة الممنوحة"
   },
   "complaints": {
     "title": "شكاواي",
@@ -892,7 +893,10 @@
     "searchPlaceholder": "ابحث بنوع الكوبون أو الرمز أو رقم الطلب أو جوال العميل…",
     "titleAll": "طلبات التعويض",
     "itemHintManual": "لا يوجد طلب مرفق، لذا اكتب اسم الصنف — مثل الصنف الناقص أو الخاطئ.",
-    "itemPlaceholder": "مثال: باستا بالخضار"
+    "itemPlaceholder": "مثال: باستا بالخضار",
+    "amended": "مُعدَّلة",
+    "itemShort": "الصنف",
+    "validity": "صالحة"
   },
   "quickReplies": {
     "filtering": "مطابقة",
@@ -908,5 +912,9 @@
   "stores": {
     "brand": "العلامة التجارية",
     "city": "المدينة"
+  },
+  "couponApprovals": {
+    "decidedBy": "اعتمدها",
+    "requestedAt": "تاريخ الطلب"
   }
 }

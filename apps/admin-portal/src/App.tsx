@@ -298,19 +298,42 @@ function Shell({ children }: { children: React.ReactNode }) {
     },
     {
       heading: t('nav.reportsGroup', { defaultValue: 'Reports' }),
+      /**
+       * Two named sets, not one list of seven.
+       *
+       * AGENT KPI measures the people; OPERATIONAL KPI measures the business.
+       * Every report answers one of those two questions, and which one it is
+       * was the thing a flat list never said — so someone after "how is the
+       * Riyadh branch doing" had to read all seven names to find out none of
+       * the agent ones were it.
+       *
+       * Scheduled reports sits under neither: it configures DELIVERY of a
+       * report rather than showing one, which is an automation job.
+       */
       items: [
+        {
+          to: '/report-agents',
+          label: t('nav.reportAgents', { defaultValue: 'Agent KPI' }),
+          icon: DownloadIcon,
+          group: t('nav.agentKpiGroup', { defaultValue: 'Agent KPI' }),
+        },
+        {
+          to: '/agent-performance',
+          label: t('nav.agentPerformance', { defaultValue: 'Agent performance' }),
+          icon: ClockIcon,
+          group: t('nav.agentKpiGroup', { defaultValue: 'Agent KPI' }),
+        },
         {
           to: '/sla-reports',
           label: t('nav.slaReports', { defaultValue: 'SLA performance' }),
           icon: ClockIcon,
+          group: t('nav.agentKpiGroup', { defaultValue: 'Agent KPI' }),
         },
         {
-          // The full record of every coupon — a report, so it sits with the
-          // reports. The approval statistics live beside Coupon approvals,
-          // where the person making those decisions is already working.
-          to: '/compensation',
-          label: t('nav.compensationAll', { defaultValue: 'Compensation' }),
-          icon: ClockIcon,
+          to: '/report-conversations',
+          label: t('nav.reportConversations', { defaultValue: 'Conversation status' }),
+          icon: DownloadIcon,
+          group: t('nav.agentKpiGroup', { defaultValue: 'Agent KPI' }),
         },
         {
           // One report. A complaint IS a ticket here — two entries listing the
@@ -319,31 +342,22 @@ function Shell({ children }: { children: React.ReactNode }) {
           to: '/report-tickets',
           label: t('nav.reportTickets', { defaultValue: 'Tickets' }),
           icon: DownloadIcon,
+          group: t('nav.opsKpiGroup', { defaultValue: 'Operational KPI' }),
         },
         {
-          to: '/report-agents',
-          label: t('nav.reportAgents', { defaultValue: 'Agent KPI' }),
-          icon: DownloadIcon,
-        },
-        {
-          to: '/report-conversations',
-          label: t('nav.reportConversations', { defaultValue: 'Conversation status' }),
-          icon: DownloadIcon,
+          // The full record of every coupon — a report, so it sits with the
+          // reports. The approval statistics live beside Coupon approvals,
+          // where the person making those decisions is already working.
+          to: '/compensation',
+          label: t('nav.compensationAll', { defaultValue: 'Compensation' }),
+          icon: ClockIcon,
+          group: t('nav.opsKpiGroup', { defaultValue: 'Operational KPI' }),
         },
         {
           to: '/reports',
           label: t('nav.reports', { defaultValue: 'Scheduled reports' }),
           icon: CalendarIcon,
-        },
-      ],
-    },
-    {
-      heading: t('nav.agentPerformanceGroup', { defaultValue: 'Agent performance' }),
-      items: [
-        {
-          to: '/agent-performance',
-          label: t('nav.agentPerformance', { defaultValue: 'Agent performance' }),
-          icon: ClockIcon,
+          group: t('nav.automationGroup', { defaultValue: 'Automation' }),
         },
       ],
     },

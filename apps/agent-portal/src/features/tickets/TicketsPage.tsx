@@ -20,6 +20,7 @@ import {
   ToolbarSpacer,
   cn,
   formatRelative,
+  formatDate,
   toast,
   useIsDesktop,
 } from '@yiji/ui';
@@ -77,7 +78,7 @@ import {
 import { useContact } from '../contacts/api.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 import { resolveMentions } from '../conversation/mentions.js';
-import { useRequestCouponApproval } from '../coupons/api.js';
+import { useRequestCouponApproval, useTicketCoupons } from '../coupons/api.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { formatBytes, isImage, isUnknownType } from '../../lib/files.js';
 import { FileGlyph } from '../../components/FileGlyph.js';
@@ -1638,9 +1639,112 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
               {stored.response_desc}
             </p>
           )}
+          <TicketCoupons ticketId={ticket.id} />
         </div>
       )}
     </SectionCard>
+  );
+}
+
+/**
+ * The coupons actually raised against this ticket.
+ *
+ * The three coupon COLUMNS above say a coupon exists. They cannot say whether
+ * it was approved, what it covers, how long it runs, or whether a supervisor
+ * changed the amount on the way through — and those are the questions an agent
+ * gets asked while the customer is still on the line. Those answers live on the
+ * request, so they are read from there rather than copied onto the ticket,
+ * where the two would eventually disagree.
+ *
+ * Silent when there are none: a ticket with no compensation should not grow an
+ * empty panel explaining that it has none.
+ */
+function TicketCoupons({ ticketId }: { ticketId: string }) {
+  const { t } = useTranslation();
+  const coupons = useTicketCoupons(ticketId);
+  const rows = coupons.data ?? [];
+  if (rows.length === 0) return null;
+
+  const TONE: Record<string, 'success' | 'destructive' | 'warning' | 'neutral'> = {
+    approved: 'success',
+    assigned: 'success',
+    rejected: 'destructive',
+    pending: 'warning',
+  };
+
+  return (
+    <div className="space-y-2">
+      <h4 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {t('complaint.couponsAssigned', { defaultValue: 'Coupon assigned' })}
+      </h4>
+      <ul className="space-y-2">
+        {rows.map((c) => (
+          <li
+            key={c.id}
+            className="rounded-xl bg-secondary/50 px-4 py-3 ring-1 ring-inset ring-foreground/[0.06]"
+          >
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="font-mono text-sm font-semibold text-foreground">
+                {c.coupon_code ?? '—'}
+              </span>
+              <span className="text-sm font-semibold tabular-nums text-foreground">
+                {c.coupon_percent != null ? `${c.coupon_percent}%` : `${c.coupon_value ?? 0} SAR`}
+              </span>
+              <Pill tone={TONE[c.status] ?? 'neutral'} size="sm">
+                {t(`coupons.status.${c.status}`, { defaultValue: c.status })}
+              </Pill>
+              {/* An amended approval is still an approval, but the agent asked
+                  for a different number and should be told so before they
+                  quote the original one back to the customer. */}
+              {c.edited_by_admin && (
+                <Pill tone="warning" size="sm">
+                  {t('coupons.amended', { defaultValue: 'Amended' })}
+                </Pill>
+              )}
+            </div>
+            <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+              {[
+                [t('coupons.itemShort', { defaultValue: 'Item' }), c.item_name],
+                [t('lists.issuingSide', { defaultValue: 'Issuing side' }), c.issuing_side],
+                [t('lists.deliveryType', { defaultValue: 'Delivery type' }), c.delivery_type],
+                [
+                  t('coupons.validity', { defaultValue: 'Valid' }),
+                  c.valid_from && c.valid_to
+                    ? `${formatDate(c.valid_from)} – ${formatDate(c.valid_to)}`
+                    : null,
+                ],
+                [
+                  t('coupons.usageLimit', { defaultValue: 'Number of uses' }),
+                  c.usage_limit == null ? null : String(c.usage_limit),
+                ],
+                [
+                  t('couponApprovals.decidedBy', { defaultValue: 'Approved by' }),
+                  c.decided_by?.first_name?.trim() || c.decided_by?.email || null,
+                ],
+                [
+                  t('couponApprovals.requestedAt', { defaultValue: 'Requested' }),
+                  formatDate(c.date_created) || null,
+                ],
+              ]
+                .filter((r): r is [string, string] => !!r[1])
+                .map(([label, value]) => (
+                  <div key={label} className="flex items-baseline gap-1.5">
+                    <dt className="font-semibold uppercase tracking-[0.1em]">{label}</dt>
+                    <dd dir="auto" className="text-foreground">
+                      {value}
+                    </dd>
+                  </div>
+                ))}
+            </dl>
+            {c.decision_note && (
+              <p dir="auto" className="mt-2 text-xs italic text-muted-foreground">
+                {c.decision_note}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

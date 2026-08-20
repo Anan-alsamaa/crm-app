@@ -64,7 +64,10 @@
     "backup": "النسخ الاحتياطي",
     "couponReport": "إحصاءات الإدارة",
     "compensationAll": "التعويضات",
-    "ticketReport": "تقرير التذاكر"
+    "ticketReport": "تقرير التذاكر",
+    "agentKpiGroup": "مؤشرات الموظفين",
+    "opsKpiGroup": "مؤشرات التشغيل",
+    "automationGroup": "الأتمتة"
   },
   "dashboard": {
     "title": "نظرة عامة",
