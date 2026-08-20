@@ -2,14 +2,28 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
-import { Card, MeterBar, Skeleton, Table, TableSurface, Td, Th, Toolbar, Tr } from '@yiji/ui';
+import {
+  Button,
+  Card,
+  MeterBar,
+  Skeleton,
+  Table,
+  TableSurface,
+  Td,
+  Th,
+  Toolbar,
+  ToolbarSpacer,
+  Tr,
+} from '@yiji/ui';
 import {
   couponOutcomes,
   couponOutcomesByAgent,
   couponRate,
   type CouponApprovalFact,
 } from '@yiji/reports';
+import { exportFileName } from '@yiji/shared-config';
 import { directus } from '../../lib/directus.js';
+import { downloadCsv, toCsv } from '../restaurants/csv.js';
 
 /**
  * What happens to the coupons agents ask for.
@@ -98,12 +112,64 @@ export function CouponReportPage() {
     [facts.data, t],
   );
 
+  /**
+   * The per-agent table, as a file.
+   *
+   * The TOTAL row goes out too, and it goes out FIRST: the per-agent rows
+   * include an "unknown agent" bucket precisely so the parts add up to the
+   * whole, and an export that dropped the total would throw that away.
+   * Approved-as-asked and approved-with-changes stay in separate columns here
+   * for the same reason they are separate on screen — collapsing them into one
+   * "approved" number hides the finding the report exists to surface.
+   */
+  const exportCsv = () => {
+    const header = [
+      t('couponReport.agent', { defaultValue: 'Agent' }),
+      t('couponReport.requested', { defaultValue: 'Requested' }),
+      t('couponReport.asAsked', { defaultValue: 'Approved as asked' }),
+      t('couponReport.withChanges', { defaultValue: 'Approved with changes' }),
+      t('couponReport.approvedTotal', { defaultValue: 'Approved (total)' }),
+      t('couponReport.rejected', { defaultValue: 'Rejected' }),
+      t('couponReport.pending', { defaultValue: 'Waiting on a decision' }),
+      t('couponReport.approvedRatePct', { defaultValue: 'Approved rate (% of decided)' }),
+    ];
+    const line = (name: string, r: typeof total) => {
+      const rate = couponRate(r.approvedTotal, r);
+      return [
+        name,
+        r.requested,
+        r.approvedAsAsked,
+        r.approvedWithChanges,
+        r.approvedTotal,
+        r.rejected,
+        r.pending,
+        // Blank, not 0, when nothing has been decided — 0% would read as "we approve nothing".
+        rate === null ? '' : Math.round(rate),
+      ];
+    };
+    const body = [
+      line(t('couponReport.allAgents', { defaultValue: 'All agents' }), total),
+      ...rows.map((r) => line(r.agentName, r)),
+    ];
+    downloadCsv(exportFileName('Coupon approvals', {}), toCsv(header, body));
+  };
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Toolbar>
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
           {t('couponReport.title', { defaultValue: 'Coupon approvals' })}
         </h1>
+        <ToolbarSpacer />
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={exportCsv}
+          disabled={total.requested === 0}
+        >
+          {t('stores.export', { defaultValue: 'Export CSV' })}
+        </Button>
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-4">

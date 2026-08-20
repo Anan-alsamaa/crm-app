@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Avatar,
   BellIcon,
+  Button,
   ChartIcon,
   ClockIcon,
   EmptyState,
@@ -18,6 +19,7 @@ import {
   SelectMenu,
   Skeleton,
   Toolbar,
+  ToolbarSpacer,
   TrendChart,
   UsersIcon,
   ZapIcon,
@@ -38,6 +40,8 @@ import {
   type ChatTiming,
 } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
+import { downloadCsv, toCsv } from '../restaurants/csv.js';
+import { exportFileName } from '@yiji/shared-config';
 
 /**
  * Agent performance for the admin console.
@@ -329,6 +333,48 @@ export function AgentPerformancePage() {
   const trend = useMemo(() => dailyTrend(chats), [chats]);
   /** The full numbers per agent — this page's drill-down, since no row opens a chat. */
   const rows = useMemo(() => agentPerformance(chats), [chats]);
+
+  /**
+   * Export what is on screen, not a second query: the CSV is built from the
+   * same `rows` the table renders, so a filtered view exports the filtered
+   * numbers and the file can never disagree with the page that produced it.
+   *
+   * Durations leave as SECONDS. A spreadsheet can average a number; it cannot
+   * average "5h 6m", and an export exists to be calculated with.
+   */
+  const exportCsv = () => {
+    const header = [
+      t('performance.agent', { defaultValue: 'Agent' }),
+      t('performance.chats', { defaultValue: 'Chats' }),
+      t('performance.answered', { defaultValue: 'Answered' }),
+      t('performance.unanswered', { defaultValue: 'No reply yet' }),
+      t('performance.solved', { defaultValue: 'Solved' }),
+      t('performance.commonChats', { defaultValue: 'Common chats taken' }),
+      t('performance.avgFirstSec', { defaultValue: 'First response (seconds, avg)' }),
+      t('performance.medFirstSec', { defaultValue: 'First response (seconds, median)' }),
+      t('performance.avgSolveSec', { defaultValue: 'Time to solve (seconds, avg)' }),
+      t('performance.medSolveSec', { defaultValue: 'Time to solve (seconds, median)' }),
+    ];
+    const body = rows.map((r) => [
+      r.agentName,
+      r.chats,
+      r.answered,
+      r.unanswered,
+      r.solved,
+      r.commonChats,
+      r.avgFirstResponseSec ?? '',
+      r.medianFirstResponseSec ?? '',
+      r.avgTimeToSolveSec ?? '',
+      r.medianTimeToSolveSec ?? '',
+    ]);
+    // Name the file after the window it covers, so two exports taken on the
+    // same day from different date filters cannot be mistaken for each other.
+    const scope =
+      filters.from || filters.to
+        ? `${filters.from ?? 'start'} to ${filters.to ?? 'today'}`
+        : 'all time';
+    downloadCsv(exportFileName('Agent performance', { scope }), toCsv(header, body));
+  };
   /* CSAT joined onto the same chats the rest of the page measures, so the
      rating can never describe a different population than the timings beside
      it. `null` where nobody rated — an unrated agent is not a zero. */
@@ -384,6 +430,16 @@ export function AgentPerformancePage() {
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
           {t('performance.title', { defaultValue: 'Agent performance' })}
         </h1>
+        <ToolbarSpacer />
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={exportCsv}
+          disabled={rows.length === 0}
+        >
+          {t('stores.export', { defaultValue: 'Export CSV' })}
+        </Button>
       </Toolbar>
 
       {/* The shell's <main> is overflow-hidden by design — every page owns its

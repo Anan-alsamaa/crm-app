@@ -925,7 +925,29 @@
     "trendMoney": "{{total}} إجمالي المدفوع في النطاق.",
     "perMonthHint3": "قراءتان على نفس الأشهر: عدد الشكاوى المسجّلة، وما تم دفعه. لكل منهما مقياسه الخاص لأن الوحدتين مختلفتان.",
     "notRatedYet": "لا تقييمات بعد",
-    "ratedNone": "لم يقيّم العملاء هذه بعد"
+    "ratedNone": "لم يقيّم العملاء هذه بعد",
+    "csvKpis": "الأرقام الرئيسية",
+    "csvMeasure": "المؤشر",
+    "csvValue": "القيمة",
+    "csvClosed": "مغلقة",
+    "csvRated": "تم تقييمها",
+    "csvCompensated": "تم تعويضها",
+    "csvCompensation": "إجمالي التعويضات",
+    "csvRange": "الفترة المشمولة",
+    "csvMonths": "حسب الشهر",
+    "csvMonth": "الشهر",
+    "csvCount": "الشكاوى",
+    "csvName": "الاسم",
+    "csvShare": "النسبة من الإجمالي (%)",
+    "csvAgents": "أداء الموظفين",
+    "csvAgent": "الموظف",
+    "csvLogged": "المسجَّلة",
+    "csvSolved": "المحلولة",
+    "csvSolvedPct": "نسبة الحل (%)",
+    "csvOpen": "ما زالت مفتوحة",
+    "csvAvgHours": "متوسط ساعات الإغلاق",
+    "csvAllTime": "كل الفترات",
+    "exportSummary": "تصدير الملخص"
   },
   "performance": {
     "title": "أداء الموظف",
@@ -978,7 +1000,13 @@
     "noSubject": "محادثة (بلا تذكرة)",
     "unknownCustomer": "عميل",
     "avgOverAnswered": "متوسط على {{n}} محادثة مُجاب عليها",
-    "avgOverSolved": "متوسط على {{n}} محادثة محلولة"
+    "avgOverSolved": "متوسط على {{n}} محادثة محلولة",
+    "answered": "تم الرد عليها",
+    "unanswered": "بلا رد حتى الآن",
+    "avgFirstSec": "أول رد (بالثواني، المتوسط)",
+    "medFirstSec": "أول رد (بالثواني، الوسيط)",
+    "avgSolveSec": "زمن الحل (بالثواني، المتوسط)",
+    "medSolveSec": "زمن الحل (بالثواني، الوسيط)"
   },
   "storeNotify": {
     "rulesTitle": "الشكاوى التي يُبلَّغ بها الفرع",
@@ -1254,7 +1282,10 @@
     "rejected": "مرفوضة",
     "pending": "منتظرة",
     "agent": "الوكيل",
-    "none": "لا توجد طلبات قسائم بعد."
+    "none": "لا توجد طلبات قسائم بعد.",
+    "allAgents": "جميع الموظفين",
+    "approvedTotal": "المعتمدة (الإجمالي)",
+    "approvedRatePct": "نسبة الاعتماد (% من المحسومة)"
   },
   "replies": {
     "duplicate": "يوجد رد بهذا الزر بالفعل.",

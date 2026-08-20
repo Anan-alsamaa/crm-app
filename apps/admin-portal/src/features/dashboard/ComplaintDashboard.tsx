@@ -28,6 +28,8 @@ import {
   type Cut,
   type MonthPoint,
 } from './complaints-api.js';
+import { exportFileName } from '@yiji/shared-config';
+import { downloadCsv, toCsv } from '../restaurants/csv.js';
 
 /**
  * The operations manager's Dashboard, rebuilt on our data.
@@ -890,6 +892,114 @@ export function ComplaintDashboard() {
   const m = useComplaintMetrics(applied);
   const d = m.data;
 
+  /**
+   * The whole board as one sectioned CSV.
+   *
+   * Row-level complaints are already exportable from the tickets report, so
+   * exporting them again here would just be a slower copy. What is NOT
+   * available anywhere else is the summary a manager reads on this page — the
+   * KPIs, the monthly series, and every "By X" cut — so that is what goes out.
+   *
+   * Each cut carries its own "top N of M" line. The bars on screen are capped
+   * at 8–12 rows; a file that dropped the cap notice would read as the complete
+   * list and quietly understate every long tail on the page.
+   */
+  const exportSummary = () => {
+    if (!d) return;
+    const rows: Array<Array<string | number>> = [];
+    const section = (title: string) => {
+      if (rows.length) rows.push([]);
+      rows.push([title]);
+    };
+    const cut = (title: string, c: Cut) => {
+      section(
+        c.rows.length < c.distinct
+          ? `${title} — ${t('complaintDash.topOf', { n: c.rows.length, m: c.distinct, defaultValue: 'top {{n}} of {{m}}' })}`
+          : title,
+      );
+      rows.push([
+        t('complaintDash.csvName', { defaultValue: 'Name' }),
+        t('complaintDash.csvCount', { defaultValue: 'Complaints' }),
+        t('complaintDash.csvShare', { defaultValue: 'Share of total (%)' }),
+      ]);
+      for (const r of c.rows) {
+        rows.push([r.label, r.count, d.total ? Math.round((r.count / d.total) * 100) : 0]);
+      }
+    };
+
+    section(t('complaintDash.csvKpis', { defaultValue: 'Key figures' }));
+    rows.push([
+      t('complaintDash.csvMeasure', { defaultValue: 'Measure' }),
+      t('complaintDash.csvValue', { defaultValue: 'Value' }),
+    ]);
+    rows.push([t('complaintDash.kpiTotal', { defaultValue: 'Complaints' }), d.total]);
+    rows.push([t('complaintDash.kpiOpen', { defaultValue: 'Open / in progress' }), d.open]);
+    rows.push([t('complaintDash.kpiOverdue', { defaultValue: 'Overdue' }), d.overdue]);
+    rows.push([t('complaintDash.csvClosed', { defaultValue: 'Closed' }), d.closed]);
+    rows.push([t('complaintDash.csvRated', { defaultValue: 'Rated' }), d.rated]);
+    rows.push([t('complaintDash.kpiSatisfied', { defaultValue: 'Rated satisfied' }), d.satisfied]);
+    rows.push([t('complaintDash.csvCompensated', { defaultValue: 'Compensated' }), d.compensated]);
+    rows.push([
+      t('complaintDash.csvCompensation', { defaultValue: 'Compensation total' }),
+      d.compensation,
+    ]);
+    rows.push([
+      t('complaintDash.csvRange', { defaultValue: 'Range covered' }),
+      [d.firstDate, d.lastDate].filter(Boolean).join(' → '),
+    ]);
+
+    section(t('complaintDash.csvMonths', { defaultValue: 'By month' }));
+    rows.push([
+      t('complaintDash.csvMonth', { defaultValue: 'Month' }),
+      t('complaintDash.csvCount', { defaultValue: 'Complaints' }),
+      t('complaintDash.csvCompensation', { defaultValue: 'Compensation total' }),
+    ]);
+    for (const pt of d.months) rows.push([pt.month, pt.count, pt.compensation]);
+
+    cut(t('complaintDash.byType', { defaultValue: 'By complaint type' }), d.byType);
+    cut(t('complaintDash.byBrand', { defaultValue: 'By brand' }), d.byBrand);
+    cut(t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' }), d.byRestaurant);
+    cut(t('complaintDash.byArea', { defaultValue: 'By area' }), d.byArea);
+    cut(t('complaintDash.byCity', { defaultValue: 'By city' }), d.byCity);
+    cut(t('complaintDash.byStatus', { defaultValue: 'By status' }), d.byStatus);
+    cut(t('complaintDash.byServiceType', { defaultValue: 'By service type' }), d.byServiceType);
+    cut(t('complaintDash.bySource', { defaultValue: 'By source' }), d.bySource);
+    cut(t('complaintDash.byAgent', { defaultValue: 'By agent' }), d.byAgent);
+
+    section(t('complaintDash.csvAgents', { defaultValue: 'Agent performance' }));
+    rows.push([
+      t('complaintDash.csvAgent', { defaultValue: 'Agent' }),
+      t('complaintDash.csvLogged', { defaultValue: 'Logged' }),
+      t('complaintDash.csvSolved', { defaultValue: 'Solved' }),
+      t('complaintDash.csvSolvedPct', { defaultValue: 'Solved (%)' }),
+      t('complaintDash.csvOpen', { defaultValue: 'Still open' }),
+      t('complaintDash.csvAvgHours', { defaultValue: 'Avg hours to close' }),
+      t('complaintDash.csvCompensation', { defaultValue: 'Compensation total' }),
+    ]);
+    for (const a of d.agents) {
+      rows.push([
+        a.name,
+        a.logged,
+        a.solved,
+        // Blank rather than 0 when nothing has been closed — see the KPI cards.
+        a.solvedPct === null ? '' : Math.round(a.solvedPct),
+        a.open,
+        a.avgHoursToClose === null ? '' : Math.round(a.avgHoursToClose * 10) / 10,
+        a.compensation,
+      ]);
+    }
+
+    // The filters ARE the question this file answers, so they go in its name.
+    const scope =
+      [applied.from, applied.to].filter(Boolean).join(' to ') ||
+      t('complaintDash.csvAllTime', { defaultValue: 'all time' });
+    // `toCsv` writes its header first; this file's first line IS its first
+    // section title, so hand that over as the header rather than an empty
+    // array — an empty header emits a blank leading line that Excel keeps.
+    const [first = [], ...rest] = rows;
+    downloadCsv(exportFileName('Dashboard summary', { scope }), toCsv(first.map(String), rest));
+  };
+
   // Which slice of the numbers the reader clicked into.
   const [drill, setDrill] = useState<{ title: string; rows: ComplaintRow[] } | null>(null);
 
@@ -1075,6 +1185,15 @@ export function ComplaintDashboard() {
             }}
           >
             {t('complaintDash.clear', { defaultValue: 'Clear' })}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={!d || d.total === 0}
+            onClick={exportSummary}
+          >
+            {t('complaintDash.exportSummary', { defaultValue: 'Export summary' })}
           </Button>
         </div>
       </div>

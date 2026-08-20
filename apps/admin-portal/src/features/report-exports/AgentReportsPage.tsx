@@ -1854,7 +1854,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-4">
-        {/* The tickets report is a 27-column operations sheet and gets the whole
+        {/* The tickets report is a 29-column operations sheet and gets the whole
             monitor; the other three are read-and-move-on summaries and stay
             narrow, because a KPI strip stretched across 1920px is four numbers
             with a metre of white between them. Agent KPI gets one step more
