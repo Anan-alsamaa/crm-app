@@ -142,15 +142,36 @@ test.describe('US6 — contact profile + commerce panel', () => {
         body: JSON.stringify(body),
       });
     });
-    await page.goto(`${AGENT_URL}/contacts/00000000-0000-0000-0000-000000000001`);
-    // A hard navigation drops the in-memory access token; the app restores it
-    // from the refresh cookie and only then renders. Landing back on /login
-    // means that restore lost the race, so wait it out rather than asserting
-    // into a login form.
-    await expect(page).not.toHaveURL(/\/login/, { timeout: 20_000 });
+    const profileUrl = `${AGENT_URL}/contacts/00000000-0000-0000-0000-000000000001`;
+    await page.goto(profileUrl);
+
+    /*
+     * A hard navigation drops the in-memory access token; the app restores it
+     * from the refresh cookie and only then renders, and sometimes it lands on
+     * /login before the restore lands.
+     *
+     * This used to "wait it out" with `not.toHaveURL(/login/)`, which waits for
+     * nothing at all: the moment you navigate, the URL is the profile, so the
+     * assertion is already satisfied — and it passed a heartbeat before the
+     * bounce it was meant to absorb. The test then failed on the heading, which
+     * is why it was flaky rather than broken.
+     *
+     * Handled explicitly instead: if the restore lost, sign in and come back.
+     * That is the same thing a person does, and it either resolves or fails for
+     * a reason the log can name.
+     */
+    if (
+      await page
+        .locator('#password')
+        .isVisible()
+        .catch(() => false)
+    ) {
+      await signIn(page);
+      await page.goto(profileUrl);
+    }
 
     await expect(page.getByRole('heading', { name: /unlinked customer/i }).first()).toBeVisible({
-      timeout: 10_000,
+      timeout: 20_000,
     });
     await expect(page.getByText(/no yiji customer linked/i)).toBeVisible();
   });

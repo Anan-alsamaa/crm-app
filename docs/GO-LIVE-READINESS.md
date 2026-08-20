@@ -1,4 +1,4 @@
-# Go-live readiness — 2026-06-21
+# Go-live readiness — 2026-08-21
 
 A current-state assessment to run **before scheduling a production cutover**. The
 timeless "how to deploy/operate" reference is [`PRODUCTION.md`](./PRODUCTION.md)
@@ -9,15 +9,27 @@ This file is the _snapshot_: what's verified today and what still blocks go-live
 
 Run from the repo root (`pnpm -r --workspace-concurrency=1 …` on RAM-constrained hosts):
 
-| Gate                               | Result                               |
-| ---------------------------------- | ------------------------------------ |
-| `pnpm typecheck`                   | ✅ 11/11 packages                    |
-| `pnpm lint`                        | ✅ clean                             |
-| unit tests (agent + admin portals) | ✅ 134 + 71 pass                     |
-| `pnpm build`                       | ✅ all 11 packages emit prod bundles |
+| Gate                            | Result                                       |
+| ------------------------------- | -------------------------------------------- |
+| `pnpm verify` (the 9-step gate) | ✅ all 9 steps                               |
+| `pnpm typecheck`                | ✅ every package                             |
+| `pnpm lint`                     | ✅ clean                                     |
+| unit — services + packages      | ✅ 733 pass · 81.1% lines                    |
+| unit — agent portal             | ✅ 470 pass · 62.9% lines                    |
+| unit — admin portal             | ✅ 390 pass · 69.6% lines                    |
+| unit — chat widget              | ✅ 81 pass · 76.6% lines                     |
+| `pnpm test:e2e`                 | ✅ 13 pass, 1 opt-in skip (`E2E_COMMERCE=1`) |
+| `pnpm build`                    | ✅ every package emits a prod bundle         |
+| `pnpm check:advisories`         | ✅ every locked version outside its range    |
 
-> Services + shared packages are additionally typechecked/tested in CI
-> (`.github/workflows/ci.yml`).
+> CI runs the same gates on every push to `main`
+> (`.github/workflows/ci.yml`) and is **green**. The e2e job blocks the run —
+> it is deliberately NOT `continue-on-error`, which is how three specs once
+> rotted for weeks behind a green tick.
+>
+> CI serves the portals from `vite dev`, this machine serves them built behind
+> nginx, so the job declares its own URLs (`E2E_BASE_URL`, `E2E_ADMIN_URL`,
+> `E2E_WIDGET_URL`). Any new environment has to do the same.
 
 ## 2. Production infra — present and matches the runbook
 
@@ -82,6 +94,21 @@ the high-risk items to not miss:
 
 Each of these gates a feature that will _appear_ to work while doing nothing —
 none of them fail loudly, so verify them explicitly.
+
+- [ ] **Staff sign-in by employee ID needs the bootstrap.** `apply.ts` adds
+      `directus_users.login_name` and `.contact_email`. Without them the Users
+      form cannot save a login name and NOBODY CREATED AFTER THE CUTOVER CAN
+      SIGN IN — the identity is minted from a field that does not exist.
+- [ ] **Move existing staff across**: `node scripts/migrate-staff-logins.mjs`
+      (dry-run first). It gives each agent account a login name and rewrites its
+      identity to `<login>@staff.example.com`, leaving passwords, the
+      administrator, the service accounts and the e2e runner untouched. Skip it
+      and those people keep signing in with their old email address, which
+      works but is not what anyone was told to expect.
+- [ ] **Seed the option lists**: `node scripts/seed-option-lists.mjs --write`.
+      Adds the `ai_action` list ("Inbox: AI assistance"). An unreadable or empty
+      list falls back to offering every action, so this fails soft — but the
+      operator cannot turn any of them off until it is seeded.
 
 - [ ] **Re-run the Directus bootstrap** (`pnpm --filter directus-bootstrap apply`).
       Adds `tickets.order_snapshot` (JSON), grants `tickets: read` to the
