@@ -85,7 +85,7 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
   const lists = useOptionLists();
 
   const summarize = useMutation({
-    mutationFn: () => ai.summarize(caller, conversationId),
+    mutationFn: () => ai.summarize(caller, conversationId, uiLocale),
     onSuccess: () => setActive('summary'),
   });
   const suggestReply = useMutation({
@@ -109,7 +109,7 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
     onSuccess: () => setActive('intent'),
   });
   const entities = useMutation({
-    mutationFn: () => ai.entities(caller, conversationId),
+    mutationFn: () => ai.entities(caller, conversationId, uiLocale),
     onSuccess: () => setActive('entities'),
   });
 
@@ -255,10 +255,13 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
                     : 'neutral'
               }
             >
-              {sentiment.data.label}
+              {/* A closed set of three, so it is translated HERE rather than
+                  asked of the model — a label the code branches on must not
+                  come back as a different word each time. */}
+              {tl(`ai.mood.${sentiment.data.label}`, { defaultValue: sentiment.data.label })}
             </Pill>
             <span className="text-xs text-muted-foreground tabular-nums">
-              score: {sentiment.data.score.toFixed(2)}
+              {tl('ai.score', { defaultValue: 'score' })}: {sentiment.data.score.toFixed(2)}
             </span>
           </div>
         </ResultCard>
@@ -268,7 +271,8 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
           <div className="flex items-baseline gap-3">
             <Pill tone="primary">{intent.data.intent}</Pill>
             <span className="text-xs text-muted-foreground tabular-nums">
-              confidence: {intent.data.confidence.toFixed(2)}
+              {tl('ai.confidence', { defaultValue: 'confidence' })}:{' '}
+              {intent.data.confidence.toFixed(2)}
             </span>
           </div>
         </ResultCard>

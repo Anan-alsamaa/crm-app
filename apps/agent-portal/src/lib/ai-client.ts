@@ -87,8 +87,8 @@ async function post<T>(c: AiCaller, path: string, body: unknown): Promise<T> {
 }
 
 export const ai = {
-  summarize: (c: AiCaller, conversationId: string) =>
-    post<SummaryResponse>(c, AI_ENDPOINTS.summarizeConversation, { conversationId }),
+  summarize: (c: AiCaller, conversationId: string, locale?: string) =>
+    post<SummaryResponse>(c, AI_ENDPOINTS.summarizeConversation, { conversationId, locale }),
   suggestReply: (
     c: AiCaller,
     conversationId: string,
@@ -108,8 +108,8 @@ export const ai = {
    */
   intent: (c: AiCaller, conversationId: string, candidates?: string[]) =>
     post<IntentResponse>(c, AI_ENDPOINTS.detectIntent, { conversationId, candidates }),
-  entities: (c: AiCaller, conversationId: string) =>
-    post<EntitiesResponse>(c, AI_ENDPOINTS.extractEntities, { conversationId }),
+  entities: (c: AiCaller, conversationId: string, locale?: string) =>
+    post<EntitiesResponse>(c, AI_ENDPOINTS.extractEntities, { conversationId, locale }),
   search: (c: AiCaller, query: string, limit = 10) =>
     post<SemanticSearchResponse>(c, AI_ENDPOINTS.semanticSearch, { query, limit }),
   scoreLead: (c: AiCaller, conversationId: string) =>

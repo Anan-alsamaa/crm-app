@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -48,6 +49,78 @@ const STATUS_TONE: Record<ConversationStatus, 'success' | 'primary'> = {
 async function broadcast(conversationId: string): Promise<void> {
   const socket = await getSocket();
   socket.emit(SOCKET_EVENTS.conversationUpdated, { conversationId });
+}
+
+/**
+ * One of the three tiles above the conversation list.
+ *
+ * Declared at module scope ON PURPOSE. It used to be defined inside the page's
+ * render, which makes it a NEW component type on every render — so React could
+ * not match it to the previous tree and tore all three tiles down and rebuilt
+ * them on every click. The press animation restarted mid-press, focus was lost,
+ * and the strip visibly flickered while filtering. Nothing about the markup was
+ * wrong; where it was declared was.
+ */
+function InboxStat({
+  label,
+  value,
+  tone,
+  onClick,
+  active = false,
+  t,
+}: {
+  label: string;
+  value: number;
+  tone: 'default' | 'pink' | 'primary';
+  onClick?: () => void;
+  /** This tile's filter is the one currently applied. */
+  active?: boolean;
+  /** Injected: this lives outside the page, so it cannot close over `t`. */
+  t: TFunction;
+}) {
+  return (
+    // Boxed mini-tile with a status dot by the label — the KPI
+    // grammar of the reference boards, shrunk to the list header.
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex flex-1 flex-col gap-0.5 rounded-xl bg-card px-2.5 py-2 text-start ring-1 ring-foreground/[0.06]',
+        'transition-[background-color,box-shadow] duration-fast ease-out',
+        'hover:bg-secondary/60 active:scale-[0.98]',
+        active && 'bg-primary/[0.08] ring-primary/40',
+      )}
+      aria-pressed={onClick ? active : undefined}
+      title={
+        active
+          ? t('inbox.clearFilter', { defaultValue: 'Click again to clear this filter' })
+          : undefined
+      }
+    >
+      <span
+        className={cn(
+          'text-lg font-extrabold tabular-nums tracking-[-0.03em]',
+          tone === 'pink' && 'text-magenta',
+          tone === 'primary' && 'text-primary',
+          tone === 'default' && 'text-foreground',
+        )}
+      >
+        {value}
+      </span>
+      <span className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <span
+          aria-hidden
+          className={cn(
+            'h-1.5 w-1.5 shrink-0 rounded-full',
+            tone === 'pink' && 'bg-magenta',
+            tone === 'primary' && 'bg-primary',
+            tone === 'default' && 'bg-success',
+          )}
+        />
+        <span className="truncate">{label}</span>
+      </span>
+    </button>
+  );
 }
 
 export function Inbox() {
@@ -256,67 +329,12 @@ export function Inbox() {
             const openCount = counts.data?.open ?? 0;
             const urgentCount = counts.data?.urgent ?? 0;
             const unreadCount = counts.data?.unread ?? 0;
-            const Stat = ({
-              label,
-              value,
-              tone,
-              onClick,
-              active = false,
-            }: {
-              label: string;
-              value: number;
-              tone: 'default' | 'pink' | 'primary';
-              onClick?: () => void;
-              /** This tile's filter is the one currently applied. */
-              active?: boolean;
-            }) => (
-              // Boxed mini-tile with a status dot by the label — the KPI
-              // grammar of the reference boards, shrunk to the list header.
-              <button
-                type="button"
-                onClick={onClick}
-                className={cn(
-                  'flex flex-1 flex-col gap-0.5 rounded-xl bg-card px-2.5 py-2 text-start ring-1 ring-foreground/[0.06]',
-                  'transition-[background-color,box-shadow] duration-fast ease-out',
-                  'hover:bg-secondary/60 active:scale-[0.98]',
-                  active && 'bg-primary/[0.08] ring-primary/40',
-                )}
-                aria-pressed={onClick ? active : undefined}
-                title={
-                  active
-                    ? t('inbox.clearFilter', { defaultValue: 'Click again to clear this filter' })
-                    : undefined
-                }
-              >
-                <span
-                  className={cn(
-                    'text-lg font-extrabold tabular-nums tracking-[-0.03em]',
-                    tone === 'pink' && 'text-magenta',
-                    tone === 'primary' && 'text-primary',
-                    tone === 'default' && 'text-foreground',
-                  )}
-                >
-                  {value}
-                </span>
-                <span className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'h-1.5 w-1.5 shrink-0 rounded-full',
-                      tone === 'pink' && 'bg-magenta',
-                      tone === 'primary' && 'bg-primary',
-                      tone === 'default' && 'bg-success',
-                    )}
-                  />
-                  <span className="truncate">{label}</span>
-                </span>
-              </button>
-            );
             return (
               // px-4 so the tile rings share a start edge with the search field
               // below — three different left edges read as clutter in a 340px rail.
               <div className="mt-3 flex gap-1.5 px-4">
-                <Stat
+                <InboxStat
+                  t={t}
                   label={t('inbox.stats.open', { defaultValue: 'open' })}
                   value={openCount}
                   tone="default"
@@ -325,7 +343,8 @@ export function Inbox() {
                     setFilters((f) => ({ ...f, status: f.status === 'open' ? 'all' : 'open' }))
                   }
                 />
-                <Stat
+                <InboxStat
+                  t={t}
                   label={t('inbox.stats.urgent', { defaultValue: 'urgent' })}
                   value={urgentCount}
                   tone="pink"
@@ -337,10 +356,16 @@ export function Inbox() {
                     }))
                   }
                 />
-                <Stat
+                {/* Unread was the odd one out: a button that looked identical
+                    to its two neighbours and did nothing at all when clicked.
+                    It now filters on the same column it counts. */}
+                <InboxStat
+                  t={t}
                   label={t('inbox.stats.unread', { defaultValue: 'unread' })}
                   value={unreadCount}
                   tone="primary"
+                  active={filters.unread === true}
+                  onClick={() => setFilters((f) => ({ ...f, unread: !f.unread }))}
                 />
               </div>
             );

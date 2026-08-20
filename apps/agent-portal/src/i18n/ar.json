@@ -16,7 +16,14 @@
       "entities": "تفاصيل أساسية"
     },
     "noEntities": "لا توجد تفاصيل بعد — لا رقم طلب ولا فرع ولا صنف في هذه المحادثة.",
-    "replyLanguage": "لغة المساعد"
+    "replyLanguage": "لغة المساعد",
+    "score": "الدرجة",
+    "confidence": "الثقة",
+    "mood": {
+      "positive": "إيجابي",
+      "neutral": "محايد",
+      "negative": "سلبي"
+    }
   },
   "helpAssistant": {
     "launch": "أورا",

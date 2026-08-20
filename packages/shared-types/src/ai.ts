@@ -21,6 +21,24 @@ export type AiEndpoint = (typeof AI_ENDPOINTS)[keyof typeof AI_ENDPOINTS];
 export const ConversationRef = z.object({ conversationId: z.string().uuid() });
 export type ConversationRef = z.infer<typeof ConversationRef>;
 
+/**
+ * A conversation plus the language to ANSWER ABOUT it in.
+ *
+ * Every endpoint that returns prose needs this, not just the one that drafts a
+ * reply. An agent who has put the assistant into Arabic and then reads an
+ * English summary has been told the setting does not work — and they are right,
+ * because for that button it did not.
+ *
+ * Endpoints returning a value from a fixed set (a sentiment label, a complaint
+ * type off the operator's own list) deliberately do NOT take it: those are data
+ * the caller renders or matches, and translating them server-side would break
+ * the match to the ticket form.
+ */
+export const LocalizedConversationRef = ConversationRef.extend({
+  locale: z.string().max(10).optional(),
+});
+export type LocalizedConversationRef = z.infer<typeof LocalizedConversationRef>;
+
 export const SummaryResponse = z.object({ summary: z.string(), cached: z.boolean().optional() });
 export type SummaryResponse = z.infer<typeof SummaryResponse>;
 

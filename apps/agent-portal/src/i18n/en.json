@@ -124,7 +124,14 @@
       "entities": "Key details"
     },
     "noEntities": "Nothing stated yet — no order number, branch or item in this chat.",
-    "replyLanguage": "Assistant language"
+    "replyLanguage": "Assistant language",
+    "score": "score",
+    "confidence": "confidence",
+    "mood": {
+      "positive": "positive",
+      "neutral": "neutral",
+      "negative": "negative"
+    }
   },
   "helpAssistant": {
     "launch": "Aura",

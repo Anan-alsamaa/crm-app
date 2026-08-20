@@ -59,7 +59,10 @@ describe('AiPanel — agent assistance', () => {
     await waitFor(() =>
       expect(screen.getByText('Customer is chasing a late order.')).toBeInTheDocument(),
     );
-    expect(ai.summarize).toHaveBeenCalledWith({ userId: 'agent-1', vendorId: 'v1' }, 'c1');
+    // The language rides along with EVERY action now, not only the reply —
+    // an Arabic assistant that answers with an English summary has told the
+    // agent the setting does not work.
+    expect(ai.summarize).toHaveBeenCalledWith({ userId: 'agent-1', vendorId: 'v1' }, 'c1', 'en');
   });
 
   it('hands a suggested reply to the composer rather than the customer', async () => {
@@ -86,6 +89,15 @@ describe('AiPanel — agent assistance', () => {
 });
 
 describe('AiPanel — reply language', () => {
+  it('summarises in the panel language, not the language of the chat', async () => {
+    ai.summarize.mockResolvedValue({ summary: 'ملخص' });
+    ui.language = 'ar';
+    renderPanel();
+    await userEvent.click(screen.getByRole('button', { name: 'Summarize' }));
+    await waitFor(() => expect(ai.summarize).toHaveBeenCalled());
+    expect(ai.summarize.mock.calls[0]![2]).toBe('ar');
+  });
+
   it('follows the portal language when the agent has not chosen one', async () => {
     ai.suggestReply.mockResolvedValue({ reply: 'ok' });
     ui.language = 'ar-SA';

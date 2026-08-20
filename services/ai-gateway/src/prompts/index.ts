@@ -50,13 +50,32 @@ function thread(ctx: ConversationContext): string {
     .join('\n');
 }
 
+/**
+ * The one sentence that tells the model which language to WRITE in.
+ *
+ * Shared so every endpoint phrases it identically. Naming the language rather
+ * than passing the raw code ("ar") is deliberate: the code is an identifier,
+ * the name is an instruction, and models follow instructions more reliably.
+ */
+function writeIn(locale: string | undefined): string {
+  if (!locale) return '';
+  const ar = locale.toLowerCase().startsWith('ar');
+  return (
+    `WRITE YOUR ANSWER IN ${ar ? 'ARABIC' : 'ENGLISH'}. ` +
+    (ar ? 'Natural Modern Standard Arabic, not transliteration. ' : '') +
+    'This applies even when the conversation itself is in another language — ' +
+    'you are writing FOR THE AGENT, who has chosen this language. '
+  );
+}
+
 export const prompts = {
-  summarize(ctx: ConversationContext): { system: string; user: string } {
+  summarize(ctx: ConversationContext, locale?: string): { system: string; user: string } {
     return {
       system:
         'You write tight customer-support conversation summaries. ' +
         'Three short sentences max: what the customer asked, what was done, what is outstanding. ' +
         'No greetings, no preamble. Plain text. ' +
+        writeIn(locale) +
         GUARD,
       user: `Summarize this conversation:\n\n${fence(thread(ctx))}`,
     };
@@ -134,7 +153,7 @@ export const prompts = {
     };
   },
 
-  extractEntities(ctx: ConversationContext): { system: string; user: string } {
+  extractEntities(ctx: ConversationContext, locale?: string): { system: string; user: string } {
     return {
       system:
         'You pull out the facts an agent has to copy into a complaint ticket. ' +
@@ -147,6 +166,14 @@ export const prompts = {
         'or correct one: an order number half-remembered is worse than an absent one. ' +
         'Only include what is actually stated. Return an empty list if nothing is. ' +
         'No prose, no markdown. ' +
+        // The TYPE is a label the agent reads, so it follows their language.
+        // The VALUE is evidence — an order number, a branch name as the customer
+        // wrote it — and translated evidence is useless for filling a ticket.
+        (locale?.toLowerCase().startsWith('ar')
+          ? 'Write each "type" label in ARABIC. '
+          : 'Write each "type" label in ENGLISH. ') +
+        'Leave every "value" EXACTLY as it appears in the chat, in its original ' +
+        'language and script. ' +
         GUARD,
       user: fence(thread(ctx)),
     };

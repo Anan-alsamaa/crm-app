@@ -161,7 +161,7 @@ export function OptionListsPage() {
     delivery_type: t('lists.deliveryType', { defaultValue: 'Delivery type' }),
     coupon_type: t('lists.couponType', { defaultValue: 'Coupon type' }),
     discount_category: t('lists.discountCategory', { defaultValue: 'Discount category' }),
-    ai_action: t('lists.aiAction', { defaultValue: 'Inbox options' }),
+    ai_action: t('lists.aiAction', { defaultValue: 'Inbox: AI assistance' }),
   };
 
   const submit = () => {
@@ -229,7 +229,7 @@ export function OptionListsPage() {
             ...LIST_KEYS.map((k) => ({ value: k, label: LIST_LABELS[k] })),
             {
               value: QUICK_REPLIES,
-              label: t('replies.title', { defaultValue: 'Ready replies' }),
+              label: t('replies.title', { defaultValue: 'Inbox: ready replies' }),
             },
           ]}
         />

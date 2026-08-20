@@ -111,7 +111,7 @@ export function QuickRepliesSection() {
       <div className="flex items-center justify-between gap-3 border-b border-foreground/10 pb-4">
         <div>
           <h2 className="text-sm font-semibold tracking-tight text-foreground">
-            {t('replies.title', { defaultValue: 'Ready replies' })}
+            {t('replies.title', { defaultValue: 'Inbox: ready replies' })}
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
             {t('replies.hint', {

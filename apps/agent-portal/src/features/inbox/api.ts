@@ -68,6 +68,8 @@ export interface ConversationMessage {
 export interface InboxFilters {
   status?: ConversationStatus | 'all';
   priority?: Priority | 'all';
+  /** Only chats with messages the agent has not read yet. */
+  unread?: boolean;
   search?: string;
   /**
    * Conversation ids whose ticket is about an order matching the search term,
@@ -105,6 +107,10 @@ function buildFilter(f: InboxFilters): Record<string, unknown> | undefined {
   and.push({ archived_at: { _null: true } });
   if (f.status && f.status !== 'all') and.push({ status: { _eq: f.status } });
   if (f.priority && f.priority !== 'all') and.push({ priority: { _eq: f.priority } });
+  // Same column the unread TILE counts, so clicking it lands on exactly the
+  // chats it was counting — a tile whose filter disagrees with its own number
+  // is worse than a tile that does nothing.
+  if (f.unread) and.push({ unread_count_agent: { _gt: 0 } });
   if (f.assignment === 'mine' && f.currentUserId) {
     // Mine, nobody's, or MY TEAM's.
     //
