@@ -506,19 +506,32 @@ export function AgentPerformancePage() {
                     )
                   }
                 />
+                {/* Each average names the population it was taken over.
+                    They are DISJOINT — first response averages the answered
+                    chats, time to solve averages the solved ones — so without
+                    the denominators the pair reads as a contradiction: a
+                    17-second solve beside a 5-hour first response looks like
+                    chats being solved before anyone replies, when it is simply
+                    two different handfuls of chats. */}
                 <Tile
                   icon={<ClockIcon size={17} />}
                   chip="sky"
                   label={t('performance.avgFirst', { defaultValue: 'First response' })}
                   value={formatDuration(summary.avgFirstResponseSec) ?? '—'}
-                  hint={t('performance.average', { defaultValue: 'average' })}
+                  hint={t('performance.avgOverAnswered', {
+                    defaultValue: 'average over {{n}} answered',
+                    n: summary.answered,
+                  })}
                 />
                 <Tile
                   icon={<ChartIcon size={17} />}
                   chip="violet"
                   label={t('performance.avgSolve', { defaultValue: 'Time to solve' })}
                   value={formatDuration(summary.avgTimeToSolveSec) ?? '—'}
-                  hint={t('performance.average', { defaultValue: 'average' })}
+                  hint={t('performance.avgOverSolved', {
+                    defaultValue: 'average over {{n}} solved',
+                    n: summary.solved,
+                  })}
                 />
                 <Tile
                   icon={<UsersIcon size={17} />}
@@ -532,9 +545,15 @@ export function AgentPerformancePage() {
               {!filters.agentId && (
                 <section className="grid gap-4 lg:grid-cols-2">
                   <Card
-                    title={t('performance.whoTitle', { defaultValue: 'Who handled the chats' })}
+                    // "Who handled" was a promise the chart could not keep:
+                    // its biggest bar is routinely "Unassigned", which is
+                    // nobody handling anything. The title now says what the
+                    // bars actually measure, and the help line names the
+                    // unassigned row for what it is — a backlog, not a person.
+                    title={t('performance.whoTitle', { defaultValue: 'Where the chats sat' })}
                     help={t('performance.whoHelp', {
-                      defaultValue: 'Chats assigned in this range',
+                      defaultValue:
+                        'Chats assigned in this range. “Unassigned” is work nobody picked up — it is counted, not hidden.',
                     })}
                   >
                     <HBarChart

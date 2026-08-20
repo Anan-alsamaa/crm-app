@@ -111,10 +111,10 @@ describe('admin AgentPerformancePage', () => {
 
   it('charts the work by volume and by speed, never on one shared axis', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByText('Who handled the chats')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Where the chats sat')).toBeInTheDocument());
     // A count and an average in seconds sharing a scale would draw "3 chats"
     // as an invisible sliver next to "10m 30s".
-    const volume = screen.getByText('Who handled the chats').closest('section')!;
+    const volume = screen.getByText('Where the chats sat').closest('section')!;
     expect(within(volume).getByText('Sara')).toBeInTheDocument();
     expect(screen.getByText('How fast they replied')).toBeInTheDocument();
     expect(screen.getByText('Chats per day')).toBeInTheDocument();
