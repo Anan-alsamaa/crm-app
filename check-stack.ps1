@@ -85,8 +85,22 @@ if ($missing.Count -gt 0 -and $repair) {
 
 foreach ($name in $expected) {
   $up = $online -contains $name
-  Report $up $name ''
+  $proc = $procs | Where-Object { $_.name -eq $name } | Select-Object -First 1
+  $restarts = if ($proc) { [int]$proc.pm2_env.restart_time } else { 0 }
+  # A CRASH LOOP reads as "online", because PM2 keeps restarting it and catches
+  # it in the moment it is up. socket-gateway once sat at 4,477 restarts while
+  # every check said online: an orphaned copy from a dead PM2 daemon still held
+  # :8080, so the supervised one could never bind. Uptime is the tell.
+  $uptimeSec = if ($proc -and $proc.pm2_env.pm_uptime) {
+    [int](([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - [int64]$proc.pm2_env.pm_uptime) / 1000)
+  }
+  else { 999 }
+  $looping = $up -and $uptimeSec -lt 20
+  Report ($up -and -not $looping) $name $(if ($looping) { "CRASH LOOPING - $restarts restarts, up $uptimeSec s" } elseif ($restarts -gt 50) { "$restarts restarts" } else { '' })
   if (-not $up) { $problems += "pm2 process $name is not online" }
+  elseif ($looping) {
+    $problems += "pm2 process $name is crash-looping ($restarts restarts). Something else may already hold its port - find it with: Get-NetTCPConnection -LocalPort <port> -State Listen, then Stop-Process on the owning PID."
+  }
 }
 
 # ── Ports: what actually answers ──────────────────────────────────────────
@@ -97,7 +111,12 @@ $ports = @(
   @{ p = 5434; what = 'postgres' },
   @{ p = 6380; what = 'redis' },
   @{ p = 8055; what = 'directus' },
-  @{ p = 8080; what = 'socket-gateway' },
+  @{ p = 8080; what = 'socket-gateway  <- live chat' },
+  # The gateway serves socket.io on PORT and its health/metrics on PORT+1.
+  # This script used to probe 8080/health and pass, because a STALE orphan
+  # answered there while the real one crash-looped — the wrong probe on the
+  # wrong port, agreeing with itself.
+  @{ p = 8081; what = 'socket-gateway health' },
   @{ p = 8083; what = 'workers' },
   @{ p = 8085; what = 'ai-gateway  <- AI panel + order lookup' },
   @{ p = 8090; what = 'agent portal' },
@@ -112,7 +131,12 @@ foreach ($e in $ports) {
 
 # ── The two endpoints whose absence is invisible from the portals ─────────
 Write-Host "`nEndpoints" -ForegroundColor Cyan
-foreach ($u in @('http://localhost:8085/health', 'http://localhost:8080/health',
+# /health is not enough on its own: a STALE process answers it perfectly while
+# serving none of the routes anything actually uses. Each entry here is a route
+# the product depends on, not just a liveness ping.
+foreach ($u in @('http://localhost:8085/health',
+    'http://localhost:8081/health',
+    'http://localhost:8080/socket.io/?EIO=4&transport=polling',
     'http://localhost:8090/', 'http://localhost:8092/')) {
   try {
     $r = Invoke-WebRequest $u -UseBasicParsing -TimeoutSec 8
