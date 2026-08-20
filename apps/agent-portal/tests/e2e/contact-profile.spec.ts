@@ -20,7 +20,16 @@ import { AGENT_URL } from '../../../../tests/e2e-setup/urls';
 
 const AGENT_EMAIL = process.env.E2E_AGENT_EMAIL!;
 const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD!;
-const FULL_STACK = process.env.E2E_FULL_STACK === '1';
+/**
+ * On unless explicitly switched off.
+ *
+ * These used to require E2E_FULL_STACK=1, which nothing ever set — so three
+ * specs sat permanently skipped, looking like known-broken tests when they
+ * pass perfectly well. Everything else in the suite already needs Directus and
+ * a running portal, and global-setup seeds the very contact and conversation
+ * they ask for, so "the full stack is up" was never really optional.
+ */
+const FULL_STACK = process.env.E2E_FULL_STACK !== '0';
 /*
  * Separate from FULL_STACK: this file has one test that asserts on fixture
  * ORDERS (`O-5921`), which only exist when the ai-gateway falls back to
@@ -42,7 +51,7 @@ async function signIn(page: import('@playwright/test').Page): Promise<void> {
 
 test.describe('US6 — contact profile + commerce panel', () => {
   test('contact list page shows demo contact and exports CSV', async ({ page }) => {
-    test.skip(!FULL_STACK, 'requires E2E_FULL_STACK=1 (needs a seeded demo contact)');
+    test.skip(!FULL_STACK, 'set E2E_FULL_STACK=0 to skip (needs a seeded demo contact)');
     await signIn(page);
     // Navigate via the in-app Contacts link (client-side route) — a full
     // page.goto() reloads, dropping the in-memory access token and forcing a
@@ -65,7 +74,7 @@ test.describe('US6 — contact profile + commerce panel', () => {
   });
 
   test('profile shows identity + commerce panel with seeded order data', async ({ page }) => {
-    test.skip(!FULL_STACK, 'requires E2E_FULL_STACK=1');
+    test.skip(!FULL_STACK, 'set E2E_FULL_STACK=0 to skip');
     test.skip(!COMMERCE_FIXTURES, 'requires E2E_COMMERCE=1 (asserts MockYijiClient fixtures)');
     await signIn(page);
     // Navigate via the in-app Contacts link (client-side route) rather than a
@@ -99,7 +108,7 @@ test.describe('US6 — contact profile + commerce panel', () => {
   });
 
   test('commerce panel degrades gracefully when there is no external link', async ({ page }) => {
-    test.skip(!FULL_STACK, 'requires E2E_FULL_STACK=1');
+    test.skip(!FULL_STACK, 'set E2E_FULL_STACK=0 to skip');
     await signIn(page);
 
     // Hit the profile route directly with an id that has no external_customer_id

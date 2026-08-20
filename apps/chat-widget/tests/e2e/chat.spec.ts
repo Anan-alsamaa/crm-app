@@ -38,10 +38,19 @@ test('customer message reaches the agent and the agent reply returns', async ({ 
   });
 
   // 3. The conversation appears in the inbox; open it and see the customer's message.
-  const firstConvo = agent.locator('aside li button').first();
-  await firstConvo.waitFor({ timeout: 15_000 });
-  await firstConvo.click();
-  await expect(agent.getByText(text)).toBeVisible({ timeout: 15_000 });
+  //
+  // Widen to ALL conversations first, and find the chat by its own text rather
+  // than clicking whatever happens to be at the top. Auto-assignment routes a
+  // new chat to whichever agent it picks — on a seeded machine that is rarely
+  // the one this test signs in as — so "the first row of my queue" was asserting
+  // something the product never promised, and failing for a reason that had
+  // nothing to do with delivery.
+  await agent.getByLabel(/all conversations/i).click();
+  await agent.getByRole('option', { name: /all conversations/i }).click();
+  const convo = agent.locator('aside li button').filter({ hasText: text });
+  await convo.first().waitFor({ timeout: 15_000 });
+  await convo.first().click();
+  await expect(agent.getByText(text).first()).toBeVisible({ timeout: 15_000 });
 
   // 4. Agent replies and the customer widget receives it in realtime.
   const reply = `On it ${Date.now()}`;

@@ -18,11 +18,20 @@ import { AGENT_URL } from '../../../../tests/e2e-setup/urls';
 
 const AGENT_EMAIL = process.env.E2E_AGENT_EMAIL!;
 const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD!;
-const FULL_STACK = process.env.E2E_FULL_STACK === '1';
+/**
+ * On unless explicitly switched off.
+ *
+ * These used to require E2E_FULL_STACK=1, which nothing ever set — so three
+ * specs sat permanently skipped, looking like known-broken tests when they
+ * pass perfectly well. Everything else in the suite already needs Directus and
+ * a running portal, and global-setup seeds the very contact and conversation
+ * they ask for, so "the full stack is up" was never really optional.
+ */
+const FULL_STACK = process.env.E2E_FULL_STACK !== '0';
 
 test.describe('US7 — custom fields', () => {
   test('custom-fields section mounts in conversation sidebar', async ({ page }) => {
-    test.skip(!FULL_STACK, 'requires E2E_FULL_STACK=1 (needs a seeded conversation)');
+    test.skip(!FULL_STACK, 'set E2E_FULL_STACK=0 to skip (needs a seeded conversation)');
     await page.goto(`${AGENT_URL}/login`);
     await page.locator('#email').fill(AGENT_EMAIL);
     await page.locator('#password').fill(AGENT_PASSWORD);
