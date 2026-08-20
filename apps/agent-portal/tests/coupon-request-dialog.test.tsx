@@ -143,6 +143,13 @@ describe('CouponRequestDialog', () => {
     await userEvent.type(pct, '10');
     await waitFor(() => expect((pct as HTMLInputElement).value).toBe('10'));
 
+    // A percentage needs a ceiling: 10% of an unbounded order is an unbounded
+    // payout, and the cap is the only thing bounding it.
+    const cap = screen.getByLabelText(/maximum discount/i);
+    await userEvent.clear(cap);
+    await userEvent.type(cap, '50');
+    await waitFor(() => expect((cap as HTMLInputElement).value).toBe('50'));
+
     await userEvent.click(screen.getByRole('button', { name: /send for approval/i }));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     const sent = mutateAsync.mock.calls[0]![0];
@@ -156,6 +163,11 @@ describe('CouponRequestDialog', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
     await userEvent.click(screen.getByLabelText(/delivery type/i));
     await userEvent.click(await screen.findByRole('button', { name: 'All' }));
+
+    // A coupon needs an amount before it can be sent — see couponTermsProblems.
+    const amount = screen.getByLabelText(/coupon value/i);
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '25');
     // Sendable at this point — so what follows tests the dates and nothing else.
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /send for approval/i })).toBeEnabled(),
@@ -170,6 +182,36 @@ describe('CouponRequestDialog', () => {
     expect(screen.getByText(/end date cannot be before the start date/i)).toBeInTheDocument();
   });
 
+  it('will not send a coupon worth nothing, and says which field is wrong', async () => {
+    // One was approved worth 0 SAR because the form let it through. The amount
+    // now has to be present and positive before the request can leave.
+    renderDialog();
+    await userEvent.click(screen.getByLabelText(/issuing side/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
+    await userEvent.click(screen.getByLabelText(/delivery type/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'All' }));
+
+    const amount = screen.getByLabelText(/coupon value/i);
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '0');
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /send for approval/i })).toBeDisabled(),
+    );
+    expect(screen.getByText(/coupon worth 0 is not a coupon/i)).toBeInTheDocument();
+  });
+
+  it('does not ask for a ceiling on a flat amount — the amount IS the ceiling', async () => {
+    // Asking twice is how 568 came to be approved with a 55 cap. The field is
+    // only shown for a percentage, where a ceiling is a real question.
+    renderDialog();
+    expect(screen.queryByLabelText(/maximum discount/i)).toBeNull();
+
+    await userEvent.click(screen.getByLabelText(/discount category/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Percentage' }));
+    expect(screen.getByLabelText(/maximum discount/i)).toBeInTheDocument();
+  });
+
   it('still works for a complaint with no order behind it', async () => {
     renderDialog({ brandId: null, restaurantId: null, customerPhone: null, description: null });
     await userEvent.click(screen.getByLabelText(/issuing side/i));
@@ -179,6 +221,11 @@ describe('CouponRequestDialog', () => {
     // The title is the only thing that must be filled by hand in that case.
     const title = screen.getByLabelText(/coupon title/i);
     await userEvent.type(title, 'Walk-in customer');
+
+    // A coupon needs an amount before it can be sent — see couponTermsProblems.
+    const amount = screen.getByLabelText(/coupon value/i);
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '25');
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /send for approval/i })).toBeEnabled(),
     );
@@ -298,6 +345,11 @@ describe('the item a coupon compensates', () => {
     await userEvent.click(screen.getByLabelText(/item/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Vegetable Pasta' }));
 
+    // A coupon needs an amount before it can be sent — see couponTermsProblems.
+    const amount = screen.getByLabelText(/coupon value/i);
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '25');
+
     await userEvent.click(screen.getByRole('button', { name: /attach to this ticket/i }));
     await waitFor(() => expect(onCollect).toHaveBeenCalled());
     expect(onCollect.mock.calls[0]![0]).toMatchObject({ item_name: 'Vegetable Pasta' });
@@ -310,6 +362,11 @@ describe('the item a coupon compensates', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
     await userEvent.click(screen.getByLabelText(/delivery type/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
+
+    // A coupon needs an amount before it can be sent — see couponTermsProblems.
+    const amount = screen.getByLabelText(/coupon value/i);
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '25');
 
     await userEvent.click(screen.getByRole('button', { name: /attach to this ticket/i }));
     await waitFor(() => expect(onCollect).toHaveBeenCalled());

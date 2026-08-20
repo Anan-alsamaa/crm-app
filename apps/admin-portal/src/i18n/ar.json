@@ -630,7 +630,9 @@
     "col.firstResponseAvg": "متوسط أول رد",
     "col.timeToSolve": "متوسط زمن الحل",
     "col.commonTaken": "محادثات مشتركة تم تولّيها",
-    "statusAll": "الكل"
+    "statusAll": "الكل",
+    "exportFiltered": "تصدير {{count}} بعد التصفية",
+    "exportAllRows": "تصدير الكل ({{count}})"
   },
   "ticketOps": {
     "title": "تقرير التذاكر",
@@ -804,7 +806,9 @@
     "export": "تصدير CSV",
     "allBrands": "كل العلامات",
     "allBranches": "كل الفروع",
-    "branch": "الفرع"
+    "branch": "الفرع",
+    "exportFiltered": "تصدير {{count}} المعروضة",
+    "exportAll": "تصدير الكل ({{count}})"
   },
   "complaintDash": {
     "tableTotal": "الإجمالي",
@@ -947,7 +951,12 @@
     "csvOpen": "ما زالت مفتوحة",
     "csvAvgHours": "متوسط ساعات الإغلاق",
     "csvAllTime": "كل الفترات",
-    "exportSummary": "تصدير الملخص"
+    "exportSummary": "تصدير الملخص",
+    "year": "السنة",
+    "allYears": "الكل",
+    "csvEverything": "كل المجموعات",
+    "exportShown": "تصدير المعروض ({{n}})",
+    "exportEvery": "تصدير الكل ({{n}})"
   },
   "performance": {
     "title": "أداء الموظف",
@@ -1254,7 +1263,9 @@
     "phone": "الهاتف",
     "searchPlaceholder": "الرمز أو العميل أو الهاتف أو العلامة",
     "store": "المتجر",
-    "order": "الطلب"
+    "order": "الطلب",
+    "exportFiltered": "تصدير {{count}} المعروضة",
+    "exportAll": "تصدير الكل ({{count}})"
   },
   "coupons": {
     "code": "رمز القسيمة",

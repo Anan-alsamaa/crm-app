@@ -17,6 +17,9 @@ vi.mock('react-i18next', () => ({
 
 const api = vi.hoisted(() => ({
   useComplaintMetrics: vi.fn(),
+  useComplaintYears: vi.fn(() => ({ data: [2026], isLoading: false })),
+  yearBounds: (y: number) => ({ from: `${y}-01-01`, to: `${y}-12-31` }),
+  selectedYear: () => null,
   emptyComplaintFilters: { from: '', to: '', brand: '', area: '', city: '', store: '' },
 }));
 vi.mock('../src/features/dashboard/complaints-api.js', () => api);
@@ -25,7 +28,13 @@ import { ComplaintDashboard } from '../src/features/dashboard/ComplaintDashboard
 
 const bd = (label: string, count: number) => ({ key: label, label, count });
 /** A cut whose `distinct` exceeds what is shown, so the "top N of M" note renders. */
-const cut = (rows: ReturnType<typeof bd>[], distinct = rows.length) => ({ rows, distinct });
+const cut = (rows: ReturnType<typeof bd>[], distinct = rows.length) => ({
+  rows,
+  distinct,
+  // The uncapped list the export reads. Same rows here — a fixture that shows
+  // everything is not hiding a tail to carry.
+  all: rows,
+});
 
 const METRICS = {
   total: 10,

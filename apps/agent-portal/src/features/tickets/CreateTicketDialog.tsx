@@ -713,8 +713,18 @@ export function CreateTicketDialog({
                 contactId={contactId}
                 customerPhone={contact.data?.phone ?? null}
                 description={watch('description') || null}
-                brandId={chosenMatch?.brandName ?? null}
-                restaurantId={storeId || null}
+                // YIJI'S identifiers, not ours. These two fields are sent
+                // straight to Yiji when the coupon is pushed, and Yiji does not
+                // know our store UUID or, for the one brand where the names
+                // differ, our display name: we say "Casa Pasta" where they say
+                // "La Casa Pasta". A coupon addressed with our internal ids
+                // would be issued against a brand and branch Yiji cannot
+                // resolve. Falls back to what we call it only when the mapping
+                // is missing, which is at least a name a human can act on.
+                brandId={
+                  chosenMatch?.store?.brandYijiName?.trim() || chosenMatch?.brandName || null
+                }
+                restaurantId={chosenMatch?.store?.yijiRestaurantId || null}
                 brandName={chosenMatch?.brandName ?? null}
                 branchName={chosenMatch?.restaurantName ?? null}
                 // The attached order's line names, for the optional Item field.

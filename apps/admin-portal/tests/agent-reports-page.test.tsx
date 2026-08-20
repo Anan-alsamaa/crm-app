@@ -750,8 +750,23 @@ describe('AgentReportsPage — complaints report', () => {
 
     await user.type(screen.getByLabelText(/Search by phone/), 'Panorama');
     // One row left after the filter, and the button says so — which is how a
-    // reader knows it will not quietly export all 2.
-    await user.click(screen.getByText('Export 1 rows'));
+    // reader knows it will not quietly export all 2. The moment a filter hides
+    // rows the control splits in two, so BOTH answers are reachable and each
+    // one carries its own count rather than relying on the wording.
+    expect(screen.getByText('Export all 2')).toBeTruthy();
+    await user.click(screen.getByText('Export 1 filtered'));
+    expect(dl.blobs).toHaveLength(1);
+    dl.restore();
+  });
+
+  it('offers the unfiltered set too, without making anyone clear the filter', async () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    const dl = captureDownloads();
+    renderPage('complaints');
+
+    await user.type(screen.getByLabelText(/Search by phone/), 'Panorama');
+    await user.click(screen.getByText('Export all 2'));
     expect(dl.blobs).toHaveLength(1);
     dl.restore();
   });

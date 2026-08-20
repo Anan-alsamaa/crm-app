@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
 import {
   Button,
+  ExportButtons,
   Input,
   Pagination,
   Pill,
@@ -360,14 +361,22 @@ export function AllCompensationPage() {
     return bits.length ? bits.join(', ') : 'all';
   };
 
-  const exportCsv = () =>
+  /**
+   * The filtered view, or every compensation on record.
+   *
+   * This page is the single source of truth for what agents have asked for, so
+   * "give me the lot" is a real request — usually for a month-end review, where
+   * whichever filter happened to be set is exactly what should NOT decide the
+   * contents.
+   */
+  const exportCsv = (which: 'view' | 'all') =>
     downloadCsv(
       // The filter is in the name, so two exports sitting in a downloads folder
       // are never the same file with a difference nobody can remember.
-      exportFileName('Compensation', { scope: scope() }),
+      exportFileName('Compensation', { scope: which === 'all' ? 'all' : scope() }),
       toCsv(
         columns.map((c) => c.label),
-        filtered.map((r) => columns.map((c) => c.get(r))),
+        (which === 'all' ? (rows.data ?? []) : filtered).map((r) => columns.map((c) => c.get(r))),
       ),
     );
 
@@ -395,15 +404,21 @@ export function AllCompensationPage() {
             total: list.length,
           })}
         </span>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={exportCsv}
-          disabled={filtered.length === 0}
-        >
-          {t('stores.export', { defaultValue: 'Export CSV' })}
-        </Button>
+        <ExportButtons
+          visibleCount={filtered.length}
+          totalCount={rows.data?.length ?? 0}
+          onExportView={() => exportCsv('view')}
+          onExportAll={() => exportCsv('all')}
+          labelPlain={t('stores.export', { defaultValue: 'Export CSV' })}
+          labelView={t('compensationAll.exportFiltered', {
+            count: filtered.length,
+            defaultValue: 'Export {{count}} shown',
+          })}
+          labelAll={t('compensationAll.exportAll', {
+            count: rows.data?.length ?? 0,
+            defaultValue: 'Export all {{count}}',
+          })}
+        />
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-4">

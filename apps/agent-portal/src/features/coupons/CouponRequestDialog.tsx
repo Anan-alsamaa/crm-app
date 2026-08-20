@@ -7,6 +7,7 @@ import {
   CouponRequestDraftChecked,
   defaultCouponDates,
   generateCouponCode,
+  isPercentageCategory,
   parseDeliveryTypes,
   toggleDeliveryType,
   type CouponRequestDraft,
@@ -95,7 +96,7 @@ export function CouponRequestDialog({
     discount_category: 'Amount',
     valid_from: dates.valid_from,
     valid_to: dates.valid_to,
-    coupon_value: 0,
+    coupon_value: null,
     coupon_percent: null,
     max_discount: 0,
     usage_limit: 1,
@@ -112,8 +113,30 @@ export function CouponRequestDialog({
    */
   const [reasonTouched, setReasonTouched] = useState(false);
 
+  /**
+   * One setter, because three of these fields move together.
+   *
+   * For a flat AMOUNT the ceiling IS the amount, so writing the value writes
+   * the cap and the two can never disagree. Switching category clears the money
+   * field that no longer applies: carrying the number across would silently
+   * turn "50 SAR off" into "50% off", which is a different promise to the
+   * customer and a much more expensive one.
+   *
+   * This lives in the setter rather than an effect so the draft is never
+   * briefly inconsistent — the validator reads it on every render.
+   */
   const set = <K extends keyof CouponRequestDraft>(key: K, value: CouponRequestDraft[K]) =>
-    setDraft((d) => ({ ...d, [key]: value }));
+    setDraft((d) => {
+      const next = { ...d, [key]: value } as CouponRequestDraft;
+      if (key === 'discount_category') {
+        if (isPercentageCategory(next.discount_category)) next.coupon_value = null;
+        else next.coupon_percent = null;
+      }
+      if (!isPercentageCategory(next.discount_category)) {
+        next.max_discount = next.coupon_value ?? 0;
+      }
+      return next;
+    });
 
   /**
    * Seed the form from the ticket each time it opens.
@@ -481,20 +504,27 @@ export function CouponRequestDialog({
               />
             </FormField>
           )}
-          <FormField
-            label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
-            hint={t('coupons.maxDiscountHint', {
-              defaultValue: 'The most this coupon can ever be worth.',
-            })}
-          >
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              value={String(draft.max_discount)}
-              onChange={(e) => set('max_discount', Number(e.target.value))}
-            />
-          </FormField>
+          {/* The cap is only a question for a PERCENTAGE. For a flat amount the
+              most it can ever be worth IS the amount, so asking again invites
+              the two to disagree — and they did: an amount of 568 was approved
+              with a 55 cap, and whichever number the customer was promised, one
+              of them was a lie. Here it is derived instead of asked. */}
+          {draft.discount_category === 'Percentage' ? (
+            <FormField
+              label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
+              hint={t('coupons.maxDiscountHint', {
+                defaultValue: 'The most this coupon can ever be worth.',
+              })}
+            >
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={String(draft.max_discount)}
+                onChange={(e) => set('max_discount', Number(e.target.value))}
+              />
+            </FormField>
+          ) : null}
           <FormField
             label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
             hint={t('coupons.usageLimitHint', {

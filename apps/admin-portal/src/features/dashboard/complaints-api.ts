@@ -60,6 +60,13 @@ export interface Breakdown {
 export interface Cut {
   rows: Breakdown[];
   distinct: number;
+  /**
+   * Every group, uncapped — `rows` is this list cut to what the chart can draw.
+   * The bars stay readable at 8–12; an export has no such limit and should not
+   * inherit one, so the two are kept apart rather than the cap being applied
+   * once and the tail thrown away.
+   */
+  all: Breakdown[];
 }
 
 export interface AgentPerformance {
@@ -256,18 +263,79 @@ interface StoreRecordRow {
   brand: { id: string; code: string; name: string; yiji_brand_name?: string | null } | null;
 }
 
-/** Sort a count map into his "biggest first, top N" bar list. */
+/**
+ * Sort a count map into his "biggest first, top N" bar list.
+ *
+ * `all` carries the UNCAPPED list. It costs nothing — the full array had to be
+ * built and sorted to find the top N anyway — and it is what lets an export
+ * offer the whole tail rather than only the handful the chart had room to draw.
+ */
 function topN(counts: Map<string, number>, n: number, label?: Map<string, string>): Cut {
   const rows = Array.from(counts.entries())
     .map(([key, count]) => ({ key, label: label?.get(key) ?? key, count }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  return { rows: rows.slice(0, n), distinct: rows.length };
+  return { rows: rows.slice(0, n), distinct: rows.length, all: rows };
 }
 
 const bump = (m: Map<string, number>, key: string | null | undefined) => {
   const k = (key ?? '').trim();
   if (k) m.set(k, (m.get(k) ?? 0) + 1);
 };
+
+/** The whole-day bounds of one calendar year, as the filter bar stores dates. */
+export function yearBounds(year: number): { from: string; to: string } {
+  return { from: `${year}-01-01`, to: `${year}-12-31` };
+}
+
+/** Which year a set of filters is showing, or null when it is not a whole year. */
+export function selectedYear(filters: ComplaintFilters): number | null {
+  if (!filters.from || !filters.to) return null;
+  const y = Number(filters.from.slice(0, 4));
+  if (!Number.isFinite(y)) return null;
+  const b = yearBounds(y);
+  return filters.from === b.from && filters.to === b.to ? y : null;
+}
+
+/**
+ * Every year that has complaints in it, newest first.
+ *
+ * Deliberately IGNORES the current filters. If this narrowed with the
+ * selection, picking 2025 would drop 2026 out of the list and there would be no
+ * way back to it — a filter control that eats its own options.
+ *
+ * Two aggregates rather than reading the dates: the oldest and newest complaint
+ * are all that is needed to know which years exist, and pulling 80,000 rows to
+ * work that out would cost more than the dashboard it decorates.
+ */
+export function useComplaintYears() {
+  return useQuery({
+    queryKey: ['complaint-years'],
+    // Years change once a year. There is no cheaper thing to cache.
+    staleTime: 60 * 60_000,
+    queryFn: async (): Promise<number[]> => {
+      const rows = (await directus.request(
+        aggregate(
+          'tickets' as never,
+          {
+            aggregate: { min: 'date_created', max: 'date_created' } as never,
+          } as never,
+        ),
+      )) as unknown as Array<{
+        min?: { date_created?: string | null };
+        max?: { date_created?: string | null };
+      }>;
+      const first = rows[0]?.min?.date_created ?? null;
+      const last = rows[0]?.max?.date_created ?? null;
+      const now = new Date().getUTCFullYear();
+      const lo = first ? new Date(first).getUTCFullYear() : now;
+      const hi = last ? new Date(last).getUTCFullYear() : now;
+      if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi < lo) return [now];
+      const out: number[] = [];
+      for (let y = hi; y >= lo; y--) out.push(y);
+      return out;
+    },
+  });
+}
 
 export function useComplaintMetrics(filters: ComplaintFilters) {
   return useQuery({

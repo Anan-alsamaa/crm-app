@@ -10,6 +10,7 @@ import {
   Drawer,
   DrawerSection,
   EmptyState,
+  ExportButtons,
   ErrorState,
   FormField,
   Input,
@@ -90,23 +91,6 @@ function UploadIcon() {
       aria-hidden
     >
       <path d="M8 11V3M5 6l3-3 3 3M3 11v2h10v-2" />
-    </svg>
-  );
-}
-
-function DownloadIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-3.5 w-3.5"
-      aria-hidden
-    >
-      <path d="M8 3v8M5 8l3 3 3-3M3 13h10" />
     </svg>
   );
 }
@@ -377,7 +361,16 @@ export function StoresPage() {
   const current = Math.min(page, pageCount);
   const paged = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
-  const exportCsv = () => {
+  /**
+   * The filtered view, or the whole store master.
+   *
+   * Both are wanted often enough to be worth asking about: the filtered list
+   * answers "which branches in Riyadh", the full one is the master file people
+   * send to operations. Only offered as a choice while a filter is actually
+   * hiding branches — see ExportButtons.
+   */
+  const exportCsv = (scope: 'view' | 'all') => {
+    const out = scope === 'all' ? list : filtered;
     const header = [
       t('stores.colRestaurantId', { defaultValue: 'Restaurant ID' }),
       t('stores.colCode', { defaultValue: 'Code' }),
@@ -388,7 +381,7 @@ export function StoresPage() {
       t('stores.colChainManager', { defaultValue: 'Chain manager' }),
       t('stores.colStatus', { defaultValue: 'Status' }),
     ];
-    const rows = filtered.map((s) => [
+    const rows = out.map((s) => [
       s.yiji_restaurant_id,
       s.code,
       s.name,
@@ -399,7 +392,14 @@ export function StoresPage() {
       t(`status.${s.status}`, { ns: 'common', defaultValue: s.status }),
     ]);
     downloadCsv(
-      exportFileName('Stores', { scope: query.trim() ? `matching ${query.trim()}` : 'all' }),
+      exportFileName('Stores', {
+        scope:
+          scope === 'all'
+            ? 'all'
+            : [query.trim() && `matching ${query.trim()}`, brandFilter, branchFilter]
+                .filter(Boolean)
+                .join(' ') || 'all',
+      }),
       toCsv(header, rows),
     );
   };
@@ -434,16 +434,21 @@ export function StoresPage() {
         >
           {t('stores.import', { defaultValue: 'Import CSV' })}
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={filtered.length === 0}
-          onClick={exportCsv}
-          iconStart={<DownloadIcon />}
-        >
-          {t('stores.export', { defaultValue: 'Export CSV' })}
-        </Button>
+        <ExportButtons
+          visibleCount={filtered.length}
+          totalCount={list.length}
+          onExportView={() => exportCsv('view')}
+          onExportAll={() => exportCsv('all')}
+          labelPlain={t('stores.export', { defaultValue: 'Export CSV' })}
+          labelView={t('stores.exportFiltered', {
+            count: filtered.length,
+            defaultValue: 'Export {{count}} shown',
+          })}
+          labelAll={t('stores.exportAll', {
+            count: list.length,
+            defaultValue: 'Export all {{count}}',
+          })}
+        />
         <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
           {t('stores.create', { defaultValue: 'Add store' })}
         </Button>

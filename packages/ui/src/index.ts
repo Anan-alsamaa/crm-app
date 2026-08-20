@@ -69,6 +69,8 @@ export { Pill } from './Pill.js';
 export type { PillProps } from './Pill.js';
 export { EmptyState } from './EmptyState.js';
 export type { EmptyStateProps } from './EmptyState.js';
+export { ExportButtons } from './ExportButtons.js';
+export type { ExportButtonsProps } from './ExportButtons.js';
 export { ErrorState } from './ErrorState.js';
 export type { ErrorStateProps } from './ErrorState.js';
 export { ErrorBoundary } from './ErrorBoundary.js';

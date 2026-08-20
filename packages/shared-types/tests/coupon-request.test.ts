@@ -4,7 +4,9 @@ import {
   compensationFlag,
   couponWindow,
   defaultCouponDates,
+  couponTermsProblems,
   generateCouponCode,
+  isPercentageCategory,
   parseDeliveryTypes,
   toggleDeliveryType,
 } from '../src/coupon-request.js';
@@ -18,6 +20,7 @@ const draft = {
   discount_category: 'Amount',
   valid_from: '2026-08-17',
   valid_to: '2026-09-17',
+  coupon_value: 50,
   max_discount: 50,
   usage_limit: 1,
   compensation_reason: 'Order arrived cold.',
@@ -91,9 +94,72 @@ describe('CouponRequestDraft', () => {
     expect(CouponRequestDraftChecked.safeParse({ ...draft, usage_limit: 0 }).success).toBe(false);
   });
 
-  it('allows a zero maximum discount but not a negative one', () => {
+  it('allows a zero maximum discount on an amount but not a negative one', () => {
+    // Zero means "no separate ceiling"; on an amount coupon the amount is the
+    // ceiling, so there is nothing to contradict.
     expect(CouponRequestDraftChecked.safeParse({ ...draft, max_discount: 0 }).success).toBe(true);
     expect(CouponRequestDraftChecked.safeParse({ ...draft, max_discount: -1 }).success).toBe(false);
+  });
+
+  it('refuses an amount coupon with no amount — this shipped, and one was approved worth 0', () => {
+    const { coupon_value: _omitted, ...noAmount } = draft;
+    expect(CouponRequestDraftChecked.safeParse(noAmount).success).toBe(false);
+    expect(CouponRequestDraftChecked.safeParse({ ...draft, coupon_value: 0 }).success).toBe(false);
+  });
+
+  it('refuses a cap below the amount — one of the two numbers would be a lie', () => {
+    // The shape of the row that reached production: 568 off, capped at 55.
+    const r = CouponRequestDraftChecked.safeParse({
+      ...draft,
+      coupon_value: 568,
+      max_discount: 55,
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0]?.path).toEqual(['max_discount']);
+  });
+
+  it('refuses a percentage with no ceiling — an uncapped percentage is an open cheque', () => {
+    const pct = {
+      ...draft,
+      discount_category: 'Percentage',
+      coupon_value: null,
+      coupon_percent: 20,
+    };
+    expect(CouponRequestDraftChecked.safeParse({ ...pct, max_discount: 0 }).success).toBe(false);
+    expect(CouponRequestDraftChecked.safeParse({ ...pct, max_discount: 50 }).success).toBe(true);
+  });
+
+  it('refuses a percentage of zero', () => {
+    const r = CouponRequestDraftChecked.safeParse({
+      ...draft,
+      discount_category: 'Percentage',
+      coupon_value: null,
+      coupon_percent: 0,
+    });
+    expect(r.success).toBe(false);
+  });
+});
+
+describe('couponTermsProblems', () => {
+  it('names the field that owns each problem, so a form can point at it', () => {
+    const problems = couponTermsProblems({
+      discount_category: 'Amount',
+      coupon_value: null,
+      coupon_percent: null,
+      max_discount: 0,
+    });
+    expect(problems.map((p) => p.field)).toEqual(['coupon_value']);
+  });
+
+  it('reads the category loosely, because operations edit that list', () => {
+    // The stored value is whatever the option list says. "percentage",
+    // "Percentage Discount" and "PERCENT" all mean the same shape of coupon,
+    // and pinning the exact string here would break the day someone renames it.
+    expect(isPercentageCategory('Percentage')).toBe(true);
+    expect(isPercentageCategory('percentage discount')).toBe(true);
+    expect(isPercentageCategory('PERCENT')).toBe(true);
+    expect(isPercentageCategory('Amount')).toBe(false);
+    expect(isPercentageCategory(null)).toBe(false);
   });
 
   it('does not pin the dropdown values, which operations edit without a deploy', () => {

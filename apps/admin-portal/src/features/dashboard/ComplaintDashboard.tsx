@@ -13,6 +13,7 @@ import {
   MeterBar,
   ProgressRing,
   SectionCard,
+  ExportButtons,
   SelectMenu,
   Skeleton,
   SparkleIcon,
@@ -21,7 +22,10 @@ import {
 } from '@yiji/ui';
 import {
   emptyComplaintFilters,
+  selectedYear,
   useComplaintMetrics,
+  useComplaintYears,
+  yearBounds,
   type Breakdown,
   type ComplaintFilters,
   type ComplaintRow,
@@ -891,6 +895,36 @@ export function ComplaintDashboard() {
   const [applied, setApplied] = useState<ComplaintFilters>(emptyComplaintFilters);
   const m = useComplaintMetrics(applied);
   const d = m.data;
+  const years = useComplaintYears();
+  /** Which year pill is lit — null when the range is not exactly one year. */
+  const activeYear = selectedYear(applied);
+
+  /**
+   * How many breakdown groups the page is drawing versus how many exist.
+   *
+   * This is what decides whether the export offers a choice at all: if every
+   * cut fits under its cap, the view already IS everything and a second button
+   * would be a decision with one answer.
+   */
+  const { shownGroups, totalGroups } = useMemo(() => {
+    const cuts = d
+      ? [
+          d.byType,
+          d.byBrand,
+          d.byRestaurant,
+          d.byArea,
+          d.byCity,
+          d.byStatus,
+          d.byServiceType,
+          d.bySource,
+          d.byAgent,
+        ]
+      : [];
+    return {
+      shownGroups: cuts.reduce((n, c) => n + c.rows.length, 0),
+      totalGroups: cuts.reduce((n, c) => n + c.distinct, 0),
+    };
+  }, [d]);
 
   /**
    * The whole board as one sectioned CSV.
@@ -904,17 +938,22 @@ export function ComplaintDashboard() {
    * at 8–12 rows; a file that dropped the cap notice would read as the complete
    * list and quietly understate every long tail on the page.
    */
-  const exportSummary = () => {
+  const exportSummary = (scope: 'view' | 'all') => {
     if (!d) return;
+    const whole = scope === 'all';
     const rows: Array<Array<string | number>> = [];
     const section = (title: string) => {
       if (rows.length) rows.push([]);
       rows.push([title]);
     };
     const cut = (title: string, c: Cut) => {
+      // "Everything" means the uncapped list; the view means what the chart
+      // drew. Only the capped one needs the "top N of M" admission — the full
+      // list is not hiding anything to admit to.
+      const list = whole ? c.all : c.rows;
       section(
-        c.rows.length < c.distinct
-          ? `${title} — ${t('complaintDash.topOf', { n: c.rows.length, m: c.distinct, defaultValue: 'top {{n}} of {{m}}' })}`
+        list.length < c.distinct
+          ? `${title} — ${t('complaintDash.topOf', { n: list.length, m: c.distinct, defaultValue: 'top {{n}} of {{m}}' })}`
           : title,
       );
       rows.push([
@@ -922,7 +961,7 @@ export function ComplaintDashboard() {
         t('complaintDash.csvCount', { defaultValue: 'Complaints' }),
         t('complaintDash.csvShare', { defaultValue: 'Share of total (%)' }),
       ]);
-      for (const r of c.rows) {
+      for (const r of list) {
         rows.push([r.label, r.count, d.total ? Math.round((r.count / d.total) * 100) : 0]);
       }
     };
@@ -989,15 +1028,20 @@ export function ComplaintDashboard() {
       ]);
     }
 
-    // The filters ARE the question this file answers, so they go in its name.
-    const scope =
-      [applied.from, applied.to].filter(Boolean).join(' to ') ||
-      t('complaintDash.csvAllTime', { defaultValue: 'all time' });
+    // The filters ARE the question this file answers, so they go in its name —
+    // and a full export says so, since its numbers are NOT the ones on screen.
+    const scopeLabel = whole
+      ? t('complaintDash.csvEverything', { defaultValue: 'all groups' })
+      : [applied.from, applied.to].filter(Boolean).join(' to ') ||
+        t('complaintDash.csvAllTime', { defaultValue: 'all time' });
     // `toCsv` writes its header first; this file's first line IS its first
     // section title, so hand that over as the header rather than an empty
     // array — an empty header emits a blank leading line that Excel keeps.
     const [first = [], ...rest] = rows;
-    downloadCsv(exportFileName('Dashboard summary', { scope }), toCsv(first.map(String), rest));
+    downloadCsv(
+      exportFileName('Dashboard summary', { scope: scopeLabel }),
+      toCsv(first.map(String), rest),
+    );
   };
 
   // Which slice of the numbers the reader clicked into.
@@ -1088,6 +1132,55 @@ export function ComplaintDashboard() {
           Same surface as every SectionCard on the page; the fields inside
           carry the shared Input/SelectMenu styling on their own. */}
       <div className="flex flex-wrap items-end gap-x-3 gap-y-3 rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
+        {/* Year first, because it is the filter people actually reach for.
+            Typing two dates to see "last year" is four interactions for a
+            question asked constantly; this is one. The list comes from the
+            data, so a second year of history adds its own button and nothing
+            here needs changing when it does. It APPLIES immediately rather
+            than filling the draft — a year is a whole answer, not the start of
+            one, and the dates below stay in step so the two never disagree. */}
+        <div className="flex flex-col gap-1">
+          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            {t('complaintDash.year', { defaultValue: 'Year' })}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                const next = { ...applied, from: '', to: '' };
+                setDraft(next);
+                setApplied(next);
+              }}
+              className={cn(
+                'h-9 rounded-full px-3 text-xs font-semibold transition',
+                !applied.from && !applied.to
+                  ? 'bg-primary text-primary-foreground shadow-soft'
+                  : 'bg-foreground/[0.04] text-muted-foreground hover:bg-foreground/[0.08]',
+              )}
+            >
+              {t('complaintDash.allYears', { defaultValue: 'All' })}
+            </button>
+            {(years.data ?? []).map((y) => (
+              <button
+                key={y}
+                type="button"
+                onClick={() => {
+                  const next = { ...applied, ...yearBounds(y) };
+                  setDraft(next);
+                  setApplied(next);
+                }}
+                className={cn(
+                  'h-9 rounded-full px-3 text-xs font-semibold tabular-nums transition',
+                  activeYear === y
+                    ? 'bg-primary text-primary-foreground shadow-soft'
+                    : 'bg-foreground/[0.04] text-muted-foreground hover:bg-foreground/[0.08]',
+                )}
+              >
+                {y}
+              </button>
+            ))}
+          </div>
+        </div>
         <label className="flex flex-col gap-1">
           <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('complaintDash.from', { defaultValue: 'From' })}
@@ -1186,15 +1279,24 @@ export function ComplaintDashboard() {
           >
             {t('complaintDash.clear', { defaultValue: 'Clear' })}
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
+          {/* Two buttons only when the charts are actually hiding groups —
+              see ExportButtons for why the choice is not offered otherwise. */}
+          <ExportButtons
             disabled={!d || d.total === 0}
-            onClick={exportSummary}
-          >
-            {t('complaintDash.exportSummary', { defaultValue: 'Export summary' })}
-          </Button>
+            visibleCount={shownGroups}
+            totalCount={totalGroups}
+            onExportView={() => exportSummary('view')}
+            onExportAll={() => exportSummary('all')}
+            labelPlain={t('complaintDash.exportSummary', { defaultValue: 'Export summary' })}
+            labelView={t('complaintDash.exportShown', {
+              defaultValue: 'Export shown ({{n}})',
+              n: shownGroups,
+            })}
+            labelAll={t('complaintDash.exportEvery', {
+              defaultValue: 'Export all ({{n}})',
+              n: totalGroups,
+            })}
+          />
         </div>
       </div>
 

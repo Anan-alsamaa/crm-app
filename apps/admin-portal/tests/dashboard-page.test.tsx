@@ -14,6 +14,9 @@ vi.mock('react-i18next', () => ({
 // is covered by complaint-dashboard-*.test.tsx, so it is stubbed here.
 const complaintsApi = vi.hoisted(() => ({
   useComplaintMetrics: vi.fn(() => ({ isLoading: true, isError: false, data: undefined })),
+  useComplaintYears: vi.fn(() => ({ data: [2026], isLoading: false })),
+  yearBounds: (y: number) => ({ from: `${y}-01-01`, to: `${y}-12-31` }),
+  selectedYear: () => null,
   emptyComplaintFilters: { from: '', to: '', brand: '', city: '', store: '' },
 }));
 vi.mock('../src/features/dashboard/complaints-api.js', () => complaintsApi);

@@ -11,6 +11,7 @@ import {
   cn,
   Drawer,
   EmptyState,
+  ExportButtons,
   InboxIcon,
   Input,
   MeterBar,
@@ -780,20 +781,31 @@ function ComplaintsReport({
       return next;
     });
 
-  const onExport = () => {
-    if (visible.length === 0) {
+  /**
+   * Export the filtered view, or everything in the date range.
+   *
+   * The view is the default and stays the default: the filter is part of the
+   * question being asked, and a file quietly containing rows the person
+   * filtered out is how a "your report is wrong" argument starts. But someone
+   * who narrowed to one brand to READ it often wants the whole set to SEND on,
+   * and re-clearing six filters to get there is tedious and easy to half-do.
+   *
+   * The chosen columns follow in both cases — a column somebody turned off is
+   * not data they filtered out, it is data they said they did not want to see.
+   */
+  const onExport = (scope: 'view' | 'all') => {
+    const rowsOut = scope === 'all' ? joined : visible;
+    if (rowsOut.length === 0) {
       toast.error(t('agentReports.nothingToExport', { defaultValue: 'Nothing to export.' }));
       return;
     }
     downloadWorkbook(
       reportFilename('Tickets', days),
-      // Export what is on screen: the filter is part of the question being
-      // asked, so exporting the unfiltered set would answer a different one.
-      buildComplaintsSheets(visible, tr, chosenColumns),
+      buildComplaintsSheets(rowsOut, tr, chosenColumns),
     );
     toast.success(
       t('agentReports.exported', {
-        count: visible.length,
+        count: rowsOut.length,
         defaultValue: 'Exported {{count}} rows.',
       }),
     );
@@ -1152,12 +1164,24 @@ function ComplaintsReport({
               page in front of them. It never has — it has always exported the
               whole filtered set — but a promise that has to be trusted is one
               that gets re-tested by hand every single time. */}
-          <Button size="sm" onClick={onExport}>
-            {t('agentReports.exportExcelCount', {
+          <ExportButtons
+            visibleCount={visible.length}
+            totalCount={joined.length}
+            onExportView={() => onExport('view')}
+            onExportAll={() => onExport('all')}
+            labelPlain={t('agentReports.exportExcelCount', {
               count: visible.length,
               defaultValue: 'Export {{count}} rows',
             })}
-          </Button>
+            labelView={t('agentReports.exportFiltered', {
+              count: visible.length,
+              defaultValue: 'Export {{count}} filtered',
+            })}
+            labelAll={t('agentReports.exportAllRows', {
+              count: joined.length,
+              defaultValue: 'Export all {{count}}',
+            })}
+          />
           {/* Selection-driven actions, ops-portal style: pick a row, then act
               from here. Disabled — not hidden — without a selection, so the
               affordance teaches its own precondition. */}

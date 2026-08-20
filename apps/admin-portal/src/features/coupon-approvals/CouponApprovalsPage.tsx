@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
@@ -13,7 +13,12 @@ import {
   formatRelative,
   toast,
 } from '@yiji/ui';
-import { COUPON_APPROVAL_STATUSES, type CouponApprovalStatus } from '@yiji/shared-types';
+import {
+  COUPON_APPROVAL_STATUSES,
+  couponTermsProblems,
+  isPercentageCategory,
+  type CouponApprovalStatus,
+} from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useCouponApprovals, useDecideCoupon, type CouponApprovalRow } from './api.js';
 
@@ -150,13 +155,13 @@ function diffEdits(row: CouponApprovalRow, e: TermEdits): Record<string, unknown
   // category, and the OTHER column is cleared — an amended percentage must
   // never arrive as an amount.
   const category = (out.discount_category as string) ?? row.discount_category ?? '';
-  const pct = category.toLowerCase() === 'percentage';
+  const pct = isPercentageCategory(category);
   const a = Number(e.amount);
   const currentAmount = pct ? row.coupon_percent : row.coupon_value;
   if (
     e.amount.trim() !== '' &&
     Number.isFinite(a) &&
-    a >= 0 &&
+    a > 0 &&
     (a !== (currentAmount ?? null) || 'discount_category' in out)
   ) {
     if (pct) {
@@ -175,6 +180,13 @@ function diffEdits(row: CouponApprovalRow, e: TermEdits): Record<string, unknown
     cap !== (row.max_discount ?? null)
   ) {
     out.max_discount = cap;
+  }
+  // For a flat amount the ceiling is the amount. A supervisor who raises the
+  // value must not leave the old, lower cap behind it — that is how 568 came to
+  // be approved with a 55 cap, and only one of those two numbers could have
+  // been what the customer was told.
+  if (!pct && typeof out.coupon_value === 'number') {
+    out.max_discount = out.coupon_value;
   }
   const u = Number(e.usage_limit);
   if (
@@ -213,6 +225,34 @@ function Row({
   const [edits, setEdits] = useState<TermEdits>(() => seedEdits(row));
   const setEdit = (k: keyof TermEdits, v: string) => setEdits((e) => ({ ...e, [k]: v }));
   const pending = row.status === 'pending';
+
+  /**
+   * What is wrong with the numbers as they now stand — the amended terms while
+   * editing, the requested ones otherwise. Same rules as the agent's form, from
+   * the same function, because both write the same two columns and a rule
+   * enforced on one side only is not a rule.
+   */
+  const termsProblems = useMemo(() => {
+    if (!editing) {
+      return couponTermsProblems({
+        discount_category: row.discount_category,
+        coupon_value: row.coupon_value,
+        coupon_percent: row.coupon_percent,
+        max_discount: row.max_discount,
+      });
+    }
+    const pctNow = isPercentageCategory(edits.discount_category);
+    const amount = edits.amount.trim() === '' ? null : Number(edits.amount);
+    const cap = edits.max_discount.trim() === '' ? null : Number(edits.max_discount);
+    return couponTermsProblems({
+      discount_category: edits.discount_category,
+      coupon_value: pctNow ? null : amount,
+      coupon_percent: pctNow ? amount : null,
+      // An amount's ceiling is derived on save, so judge it the same way here
+      // rather than warning about a cap the supervisor is not being asked for.
+      max_discount: pctNow ? cap : amount,
+    });
+  }, [editing, edits, row]);
 
   const worth = [
     money(row.coupon_value),
@@ -475,10 +515,15 @@ function Row({
                   succeed silently and write nothing, so the supervisor believed
                   they had issued money that did not exist. Rejecting stays
                   available — turning something down needs no destination. */}
+              {/* A supervisor approving is the last gate before a customer is
+                  promised money, so the same rules the agent's form enforces
+                  are checked again HERE against the terms as they now stand.
+                  Both rows already in the system failed one of them. */}
               <Button
                 type="button"
                 size="sm"
-                disabled={busy || !row.ticket?.id}
+                disabled={busy || !row.ticket?.id || termsProblems.length > 0}
+                title={termsProblems[0]?.message}
                 onClick={() => {
                   // Only what actually changed rides along — untouched fields
                   // approve as asked, and no change at all is a straight

@@ -86,11 +86,98 @@ export const CouponRequestDraft = z.object({
 });
 export type CouponRequestDraft = z.infer<typeof CouponRequestDraft>;
 
-/** `valid_to` cannot precede `valid_from`. */
-export const CouponRequestDraftChecked = CouponRequestDraft.refine(
-  (v) => v.valid_to >= v.valid_from,
-  { path: ['valid_to'], message: 'The end date cannot be before the start date.' },
-);
+/** Is this category a percentage discount? The list is editable, the shape is not. */
+export function isPercentageCategory(category: string | null | undefined): boolean {
+  return (category ?? '').trim().toLowerCase().startsWith('percent');
+}
+
+/** The money side of a coupon, as any surface holds it mid-edit. */
+export interface CouponTerms {
+  discount_category?: string | null;
+  /** Absent and zero mean the same thing here: no amount was given. */
+  coupon_value?: number | null;
+  coupon_percent?: number | null;
+  max_discount?: number | null;
+}
+
+/** One problem with a coupon's numbers: what is wrong, and which field owns it. */
+export interface CouponTermsProblem {
+  field: 'coupon_value' | 'coupon_percent' | 'max_discount';
+  message: string;
+}
+
+/**
+ * The rules that make a coupon's numbers mean something.
+ *
+ * Shared by the agent's request form, the schema below, and the supervisor's
+ * amend-and-approve form, because all three write the same two money columns
+ * and a rule enforced in only one of them is not a rule. Every clause here
+ * exists because the data already went wrong that way:
+ *
+ *  - An "Amount" coupon with NO amount validated, and one was approved worth
+ *    0 SAR. A coupon nobody can spend is not a coupon, the same way a usage
+ *    limit of zero is not a coupon.
+ *  - An amount of 568 was approved with a 55 cap. Whichever number the customer
+ *    was promised, one of the two was a lie. For an amount, the cap IS the
+ *    amount, so it can never contradict it.
+ *  - A percentage with no cap is an open cheque: 20% of an unbounded order is
+ *    an unbounded liability, and the cap is the only thing bounding it.
+ */
+export function couponTermsProblems(terms: CouponTerms): CouponTermsProblem[] {
+  const out: CouponTermsProblem[] = [];
+  const pct = isPercentageCategory(terms.discount_category);
+  const value = terms.coupon_value ?? null;
+  const percent = terms.coupon_percent ?? null;
+  const cap = terms.max_discount ?? null;
+
+  if (pct) {
+    if (percent === null || !(percent > 0)) {
+      out.push({
+        field: 'coupon_percent',
+        message: 'Enter the percentage that comes off — a 0% coupon is worth nothing.',
+      });
+    }
+    if (cap === null || !(cap > 0)) {
+      // Not a style preference: without a ceiling, the payout is whatever the
+      // order happened to be worth.
+      out.push({
+        field: 'max_discount',
+        message: 'A percentage coupon needs a maximum discount, or it has no ceiling.',
+      });
+    }
+  } else {
+    if (value === null || !(value > 0)) {
+      out.push({
+        field: 'coupon_value',
+        message: 'Enter the amount that comes off — a coupon worth 0 is not a coupon.',
+      });
+    }
+    if (value !== null && cap !== null && cap > 0 && cap < value) {
+      out.push({
+        field: 'max_discount',
+        message: 'The maximum discount is below the coupon value, so one of the two is wrong.',
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * `valid_to` cannot precede `valid_from`, and the numbers have to add up —
+ * see `couponTermsProblems` for why each of those clauses exists.
+ */
+export const CouponRequestDraftChecked = CouponRequestDraft.superRefine((v, ctx) => {
+  if (v.valid_to < v.valid_from) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['valid_to'],
+      message: 'The end date cannot be before the start date.',
+    });
+  }
+  for (const p of couponTermsProblems(v)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [p.field], message: p.message });
+  }
+});
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
