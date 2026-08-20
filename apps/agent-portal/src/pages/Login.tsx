@@ -5,12 +5,22 @@ import { z } from 'zod';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button, cn, FormField, Input, toast, Toaster, YijiLogo } from '@yiji/ui';
+import { loginIdentity } from '@yiji/shared-types';
 import { useAuth } from '../lib/auth/AuthContext.js';
 import { LanguageToggle } from '../components/LanguageToggle.js';
 import { RESET_PASSWORD_PATH } from './ResetPassword.js';
 
+/**
+ * Staff sign in with an EMPLOYEE ID, so this field is no longer an email.
+ *
+ * It still accepts one — `loginIdentity` passes anything containing `@`
+ * through untouched — because every account that predates employee-id login,
+ * the administrator's included, has a real address as its identity and must
+ * keep working. Validating as an email would have locked those people out on
+ * the way to letting everyone else in.
+ */
 const schema = z.object({
-  email: z.string().email(),
+  email: z.string().min(1),
   password: z.string().min(1),
 });
 type FormValues = z.infer<typeof schema>;
@@ -100,7 +110,10 @@ export function Login() {
   const onSubmit = handleSubmit(async (values) => {
     setAuthError(null);
     try {
-      await login(values.email, values.password);
+      // Employee id -> the identity Directus authenticates. A deterministic
+      // rule, not a lookup: a lookup endpoint would also answer "does this
+      // employee id exist?" for anyone who asked.
+      await login(loginIdentity(values.email) ?? values.email, values.password);
       navigate('/');
     } catch {
       setAuthError(t('login.error'));
@@ -183,16 +196,21 @@ export function Login() {
             {view === 'signin' && (
               <form onSubmit={onSubmit} className="space-y-4 px-8 py-7" noValidate>
                 <FormField
-                  label={t('auth.email', { ns: 'common' })}
+                  label={t('login.loginName', { defaultValue: 'Login name' })}
                   htmlFor="email"
                   error={errors.email?.message}
                 >
                   <Input
                     id="email"
-                    type="email"
+                    // Not type="email": the browser would refuse "4417" as
+                    // malformed and the field would never submit.
+                    type="text"
+                    inputMode="text"
                     autoComplete="username"
                     autoFocus
-                    placeholder={t('login.emailPlaceholder')}
+                    placeholder={t('login.loginNamePlaceholder', {
+                      defaultValue: 'Employee ID',
+                    })}
                     invalid={!!errors.email}
                     {...register('email')}
                   />

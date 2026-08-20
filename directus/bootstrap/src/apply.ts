@@ -341,6 +341,64 @@ async function applyUserFields(client: AnyClient): Promise<void> {
       } as never),
     ),
   );
+
+  /**
+   * `login_name` — the employee ID staff actually sign in with.
+   *
+   * Directus authenticates by email and that does not change. What changes is
+   * that a staff account's email is DERIVED from this: `4417` becomes
+   * `4417@staff.example.com`, which the login form builds itself. That keeps sign-in
+   * a pure client-side mapping — no lookup endpoint, and therefore nothing
+   * unauthenticated that will tell a stranger whether an employee ID exists.
+   *
+   * Real email addresses move to `contact_email`, which is optional, because
+   * for most staff there is no work address to give and requiring one meant
+   * inventing them.
+   */
+  await idempotent('directus_users.login_name', () =>
+    client.request(
+      createField('directus_users', {
+        field: 'login_name',
+        type: 'string',
+        meta: {
+          interface: 'input',
+          note: 'Employee ID. What staff type to sign in; the Directus email is derived from it.',
+        },
+        schema: { is_nullable: true, is_unique: true },
+      } as never),
+    ),
+  );
+
+  /**
+   * `display_name` — the name shown wherever a person appears.
+   *
+   * Separate from first/last because the name a rota is written against is
+   * often not the name a passport carries, and joining two fields produced a
+   * blank for anyone with neither. Falls back to first+last, then to the login
+   * name: a person must never render as an empty string.
+   */
+  await idempotent('directus_users.display_name', () =>
+    client.request(
+      createField('directus_users', {
+        field: 'display_name',
+        type: 'string',
+        meta: { interface: 'input', note: 'The name shown in the portals.' },
+        schema: { is_nullable: true },
+      } as never),
+    ),
+  );
+
+  /** A real address for contacting this person. Never used to sign in. */
+  await idempotent('directus_users.contact_email', () =>
+    client.request(
+      createField('directus_users', {
+        field: 'contact_email',
+        type: 'string',
+        meta: { interface: 'input', note: 'Optional real email. Not the sign-in identity.' },
+        schema: { is_nullable: true },
+      } as never),
+    ),
+  );
 }
 
 async function applyRoles(client: AnyClient): Promise<void> {

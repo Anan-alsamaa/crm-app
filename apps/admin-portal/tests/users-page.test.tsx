@@ -74,6 +74,13 @@ describe('UsersPage', () => {
     usersApi.useUsers.mockReturnValue({ data: [], isLoading: false });
     renderPage();
     await userEvent.click(screen.getAllByText('users.create')[0]!);
-    expect(screen.getByText('users.email')).toBeInTheDocument();
+    // The identity field is the LOGIN NAME now — an employee id, not an email.
+    // Email moved to `contact_email`, which is optional, because most staff
+    // have no work address and requiring one only meant inventing them.
+    // The mock returns a key's defaultValue when it has one, so these assert
+    // the visible label rather than the key.
+    expect(screen.getByText('Login name (employee ID)')).toBeInTheDocument();
+    expect(screen.getByText('Display name')).toBeInTheDocument();
+    expect(screen.getByText('Email (optional)')).toBeInTheDocument();
   });
 });

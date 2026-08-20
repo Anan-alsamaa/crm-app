@@ -35,7 +35,7 @@ async function removeTestAgents(): Promise<void> {
     const token = ((await auth.json()) as { data: { access_token: string } }).data.access_token;
     const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
     const found = await fetch(
-      `${DIRECTUS}/users?filter[email][_starts_with]=zz-e2e-agent.&fields=id&limit=-1`,
+      `${DIRECTUS}/users?filter[login_name][_starts_with]=zz-e2e-agent.&fields=id&limit=-1`,
       { headers },
     );
     if (!found.ok) return;
@@ -110,13 +110,16 @@ test('admin creates a team then a user assigned to it', async ({ page }) => {
   await gotoWorkspace(page, /^users$/i, /\/users/);
   // Prefixed so `removeTestAgents` above can find every one of these, including
   // any left behind by a run that was interrupted before its cleanup.
-  const email = `zz-e2e-agent.${Date.now()}@example.com`;
+  // A LOGIN NAME now, not an email: staff sign in with an employee id and the
+  // Directus identity is minted from it. Still prefixed so `removeTestAgents`
+  // finds every one of these, including any a killed run left behind.
+  const loginName = `zz-e2e-agent.${Date.now()}`;
   await page
     .getByRole('button', { name: /create user/i })
     .first()
     .click();
   const userDrawer = page.getByRole('dialog');
-  await userDrawer.locator('input[name="email"]').fill(email);
+  await userDrawer.locator('input[name="login_name"]').fill(loginName);
   await userDrawer.locator('input[name="password"]').fill('password123');
   // Role/Team are custom comboboxes (SelectMenu), not native <select>s. Open the
   // combobox (scoped to the drawer) and click the option (rendered in a portal
@@ -128,5 +131,5 @@ test('admin creates a team then a user assigned to it', async ({ page }) => {
   await userDrawer.getByRole('button', { name: /create user/i }).click();
   // Wait for the success notice, then for the row to appear in the refetched table.
   await expect(page.getByText(/user created/i)).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText(email)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(loginName)).toBeVisible({ timeout: 10_000 });
 });

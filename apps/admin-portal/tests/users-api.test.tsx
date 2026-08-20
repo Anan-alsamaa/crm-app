@@ -51,7 +51,9 @@ describe('users api', () => {
     request.mockResolvedValueOnce({ id: 'u9' });
     const { result } = renderHook(() => useCreateUser(), { wrapper: wrapper() });
     await result.current.mutateAsync({
-      email: 'x@y.com',
+      // Minted from the employee id, never typed — see `loginIdentity`.
+      email: '4417@staff.example.com',
+      login_name: '4417',
       password: 'pw',
       role: 'r1',
       team: '',

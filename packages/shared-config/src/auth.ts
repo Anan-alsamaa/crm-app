@@ -24,6 +24,10 @@ import {
 export interface AuthUser {
   id: string;
   email: string | null;
+  /** The employee id this person signs in with. Null on legacy email accounts. */
+  login_name: string | null;
+  /** The name to show for them — see `staffDisplayName`. */
+  display_name: string | null;
   first_name: string | null;
   last_name: string | null;
   status: string;
@@ -52,6 +56,8 @@ interface PolicyLink {
 interface RawMe {
   id: string;
   email: string | null;
+  login_name?: string | null;
+  display_name?: string | null;
   first_name: string | null;
   last_name: string | null;
   status: string;
@@ -96,6 +102,8 @@ export function createAuthClient({ url, storage }: AuthClientOptions) {
           fields: [
             'id',
             'email',
+            'login_name',
+            'display_name',
             'first_name',
             'last_name',
             'status',
@@ -128,6 +136,8 @@ export function createAuthClient({ url, storage }: AuthClientOptions) {
     return {
       id: raw.id,
       email: raw.email,
+      login_name: raw.login_name ?? null,
+      display_name: raw.display_name ?? null,
       first_name: raw.first_name,
       last_name: raw.last_name,
       status: raw.status,

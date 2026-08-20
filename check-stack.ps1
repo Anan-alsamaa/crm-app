@@ -123,8 +123,26 @@ $ports = @(
   @{ p = 8092; what = 'admin portal' },
   @{ p = 5175; what = 'chat widget' }
 )
+# Sampled with a short WAIT, not once.
+#
+# A single instantaneous sample taken right after the repair above reported four
+# services as down while their own health endpoints were answering HTTP 200 in
+# the same run — they had been restarted a second earlier and had not rebound
+# yet. A check that contradicts itself sends someone hunting a problem that does
+# not exist, which is worse than not checking.
+function WaitForPort([int]$port, [int]$seconds = 15) {
+  $deadline = (Get-Date).AddSeconds($seconds)
+  do {
+    if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) { return $true }
+    Start-Sleep -Milliseconds 500
+  } while ((Get-Date) -lt $deadline)
+  return $false
+}
+
 foreach ($e in $ports) {
-  $listening = [bool](Get-NetTCPConnection -LocalPort $e.p -State Listen -ErrorAction SilentlyContinue)
+  # Only wait when something was just repaired; an untouched stack answers on
+  # the first sample and should not cost 15 seconds per dead port.
+  $listening = WaitForPort $e.p $(if ($repaired.Count -gt 0) { 15 } else { 2 })
   Report $listening ":$($e.p)" $e.what
   if (-not $listening) { $problems += "nothing is listening on :$($e.p) ($($e.what))" }
 }

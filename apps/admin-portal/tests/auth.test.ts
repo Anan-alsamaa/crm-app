@@ -7,6 +7,8 @@ import { NotificationType } from '@yiji/shared-types';
 const base: Omit<AuthUser, 'role'> = {
   id: '1',
   email: 'x@y.com',
+  login_name: null,
+  display_name: null,
   first_name: null,
   last_name: null,
   status: 'active',

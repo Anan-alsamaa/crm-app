@@ -1,0 +1,57 @@
+assign coupon, coupon code also could bve set manually. 
+
+in the assign coupon, if i generate a new code by clicking the button, the prefix rule doesnt apply, for eg: if the issuing side is operations, but the new code is sara- xxx
+
+Logibn for agents: based on company id.
+email and last name to be optional when creating a user. 
+login name employee id.
+display name actual name. 
+
+login using login name.
+
+compensation to be able to searched using the order id from user portal.
+
+admin portal coupon approval search using order id or phone numbe and coupon code. 
+
+admin portal after edit there should be a save.
+
+
+Coupon approval: All period. date filter. date column in table.
+
+
+compensation reports: decided by to be replaced with approved by. 
+replace decided by date, decision note by note
+
+all date filters in reports to be of format d/mm/yyyy.
+
+sla perf report:
+need date filter
+no first response for ticket. only reolution time.
+for chat, keepb both. 
+
+
+in reports there will be only 2 typwes agent kpi and operations kpi. pages under both.
+
+inbox, pe-ready button to be abled to comnfigure the values from admin->workspace->dropdown values. create a new section for this in the dropdown values page.
+
+Ai asistance inbox reply in arabic.
+
+For assign coupon configuration, the delivery types, all should be selected by default.
+
+in assign coupon, if item is selected, the coupon value should be equal to item price and should be editable.
+
+Number of uses default value 1 but should be editable.
+
+add date to coupon approvals.
+the most recent should be on top.
+should show complete branch name, time, and everything to be displayed to track it properly. 
+
+in the user tickets, the coupon code and coupon dewtail which is created/assigned should be present 
+
+
+if a customer reaches a store and wants to send a message to the agent, they should scan a qr code  enter their phone number in the format 05xxxxxxxx, with 10 digits including 0. and then redirect to the 5175 page. 
+
+
+when thwe attachment moves from chat to icket, there should be an option to select/remove and select required attachment only or upload custom as well. 
+by default only the hats an agent had with a customer only in that session should be attached to the ticket. not all the historical attachments.
+

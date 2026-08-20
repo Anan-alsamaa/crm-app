@@ -30,7 +30,7 @@ test('customer message reaches the agent and the agent reply returns', async ({ 
   // 2. Agent signs into the portal via the UI (seeded by globalSetup).
   const agent = await browser.newPage();
   await agent.goto(`${AGENT_URL}/login`);
-  await agent.getByLabel(/email/i).fill(AGENT_EMAIL);
+  await agent.locator('#email').fill(AGENT_EMAIL);
   await agent.locator('#password').fill(AGENT_PASSWORD);
   await agent.getByRole('button', { name: /sign in/i }).click();
   await expect(agent.getByRole('heading', { name: /shared inbox/i })).toBeVisible({

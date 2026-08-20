@@ -448,7 +448,14 @@
     "noTeamShort": "بلا فريق",
     "statActiveCap": "نشط",
     "statAdminCap": "مشرف",
-    "statNoTeamCap": "بلا فريق"
+    "statNoTeamCap": "بلا فريق",
+    "loginName": "اسم الدخول (الرقم الوظيفي)",
+    "loginNameHint": "ما يكتبه الموظف لتسجيل الدخول. لا حاجة لبريد إلكتروني.",
+    "displayName": "الاسم المعروض",
+    "displayNameHint": "الاسم الظاهر في البوابات.",
+    "lastNameOptional": "اسم العائلة (اختياري)",
+    "contactEmail": "البريد الإلكتروني (اختياري)",
+    "contactEmailHint": "للتواصل فقط. لا يُستخدم لتسجيل الدخول."
   },
   "teams": {
     "title": "الفرق",

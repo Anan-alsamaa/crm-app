@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom';
+import { staffDisplayName } from '@yiji/shared-types';
 import { useTranslation } from 'react-i18next';
 import {
   AppShell,
@@ -124,7 +125,7 @@ const NAV_TILES = [
 function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSection[] }) {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
-  const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || '';
+  const name = staffDisplayName(user, '');
   const isCollapsed = ctx.collapsed;
 
   return (
@@ -274,8 +275,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const location = useLocation();
   const { user, logout } = useAuth();
-  const displayName =
-    [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || 'Admin';
+  const displayName = staffDisplayName(user, 'Admin');
   // Command-palette open state is lifted here so the top-bar search trigger and
   // the Cmd/Ctrl+K shortcut both drive the one palette instance below.
   const [paletteOpen, setPaletteOpen] = useState(false);

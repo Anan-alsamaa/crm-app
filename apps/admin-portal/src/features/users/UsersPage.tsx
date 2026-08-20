@@ -37,10 +37,35 @@ import {
   type AdminUser,
 } from './api.js';
 import { useTeams } from '../teams/api.js';
+import {
+  loginIdentity,
+  loginNameFromIdentity,
+  normalizeLoginName,
+  staffDisplayName,
+} from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
 const schema = z.object({
-  email: z.string().email(),
+  /**
+   * The employee id. This is what staff type to sign in, and the Directus
+   * identity is derived from it — see `loginIdentity`.
+   *
+   * Letters, digits, dots, dashes and underscores only: it becomes the local
+   * part of an address, and a space or an `@` in there produces an identity
+   * nobody can authenticate as.
+   */
+  login_name: z
+    .string()
+    .min(1)
+    .regex(/^[A-Za-z0-9._-]+$/, 'Letters, numbers, dot, dash and underscore only.'),
+  /** The name shown wherever this person appears. */
+  display_name: z.string().optional(),
+  /**
+   * A real address for contacting them. OPTIONAL, and never the sign-in
+   * identity: most staff have no work address, and requiring one only meant
+   * inventing them.
+   */
+  contact_email: z.string().email().optional().or(z.literal('')),
   // Optional so editing doesn't force a password reset; required-on-create is
   // enforced in onSubmit.
   password: z.string().min(6).optional().or(z.literal('')),
@@ -84,7 +109,9 @@ export function UsersPage() {
     // no Agent role exists (forcing an explicit pick).
     const agentRole = (roles.data ?? []).find((r) => r.name.toLowerCase() === 'agent');
     reset({
-      email: '',
+      login_name: '',
+      display_name: '',
+      contact_email: '',
       password: '',
       first_name: '',
       last_name: '',
@@ -97,7 +124,12 @@ export function UsersPage() {
   const openEdit = (u: AdminUser) => {
     setEditing(u);
     reset({
-      email: u.email ?? '',
+      // Existing accounts may carry a real address as their identity — those
+      // predate employee-id login and keep it. `loginNameFromIdentity` returns
+      // null for one, so the field shows what they actually sign in with.
+      login_name: u.login_name ?? loginNameFromIdentity(u.email) ?? u.email ?? '',
+      display_name: u.display_name ?? '',
+      contact_email: u.contact_email ?? '',
       password: '',
       first_name: u.first_name ?? '',
       last_name: u.last_name ?? '',
@@ -126,7 +158,20 @@ export function UsersPage() {
     try {
       if (editing) {
         const patch: Record<string, unknown> = {
-          email: values.email,
+          login_name: normalizeLoginName(values.login_name),
+          display_name: values.display_name || null,
+          contact_email: values.contact_email || null,
+          // The identity follows the login name WHENEVER IT CHANGES.
+          //
+          // The first version of this left a real-email account's identity
+          // alone, which meant an admin could type a new employee id, press
+          // Save, see it stored — and the person would still have to sign in
+          // with the old address. A field that accepts a value and then does
+          // not honour it is worse than one that refuses it.
+          //
+          // Untouched login name, untouched identity: nobody's sign-in changes
+          // as a side effect of editing their team.
+          ...(dirtyFields.login_name ? { email: loginIdentity(values.login_name) } : {}),
           first_name: values.first_name || null,
           last_name: values.last_name || null,
           role: values.role,
@@ -145,7 +190,12 @@ export function UsersPage() {
           return;
         }
         await createUser.mutateAsync({
-          email: values.email,
+          // Minted, never typed: nobody has to invent an address for a person
+          // who does not have one.
+          email: loginIdentity(values.login_name) ?? '',
+          login_name: normalizeLoginName(values.login_name),
+          display_name: values.display_name || null,
+          contact_email: values.contact_email || null,
           password: values.password,
           first_name: values.first_name,
           last_name: values.last_name,
@@ -183,9 +233,13 @@ export function UsersPage() {
   const filtered = (users.data ?? []).filter((u) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
-    const full = [u.first_name, u.last_name].filter(Boolean).join(' ').toLowerCase();
+    const full = staffDisplayName(u, '').toLowerCase();
     return (
       (u.email ?? '').toLowerCase().includes(q) ||
+      // The employee id is what a supervisor is holding when they come looking
+      // for somebody — more often than a name, and always more exactly.
+      (u.login_name ?? '').toLowerCase().includes(q) ||
+      (u.contact_email ?? '').toLowerCase().includes(q) ||
       full.includes(q) ||
       (u.role?.name ?? '').toLowerCase().includes(q) ||
       (u.team?.name ?? '').toLowerCase().includes(q)
@@ -383,7 +437,8 @@ export function UsersPage() {
             </div>
             <ul className="divide-y divide-foreground/[0.06]">
               {paged.map((u) => {
-                const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
+                const fullName = staffDisplayName(u, '');
+                const identifier = u.login_name ?? loginNameFromIdentity(u.email) ?? u.email;
                 const isAdmin = u.role?.name?.toLowerCase() === 'administrator';
                 return (
                   <li key={u.id}>
@@ -402,7 +457,7 @@ export function UsersPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="truncate text-sm font-semibold text-foreground">
-                            {fullName || u.email}
+                            {fullName || identifier}
                           </span>
                           {u.status !== 'active' && (
                             <Pill tone="muted" size="sm" dot className="shrink-0">
@@ -410,8 +465,16 @@ export function UsersPage() {
                             </Pill>
                           )}
                         </div>
-                        {fullName && (
-                          <div className="truncate text-xs text-muted-foreground">{u.email}</div>
+                        {/* The employee id, not the minted address: `4417` is
+                            what this person types and what a colleague would
+                            quote back.
+                            
+                            Suppressed when it is ALREADY the line above. A user
+                            with no name falls back to their employee id for the
+                            title, and printing it again underneath rendered the
+                            same string twice. */}
+                        {identifier && identifier !== fullName && (
+                          <div className="truncate text-xs text-muted-foreground">{identifier}</div>
                         )}
                       </div>
                       {/* Fixed-width column so pills line up under the ROLE
@@ -529,24 +592,53 @@ export function UsersPage() {
               defaultValue: 'Who they are. Name is optional; email is the unique handle.',
             })}
           >
-            <FormField label={t('users.email')} error={errors.email?.message}>
+            <FormField
+              label={t('users.loginName', { defaultValue: 'Login name (employee ID)' })}
+              hint={t('users.loginNameHint', {
+                defaultValue: 'What this person types to sign in. No email needed.',
+              })}
+              error={errors.login_name?.message}
+            >
               <Input
-                type="email"
                 // Paired with the password field below: left to autofill, the
                 // browser treats the two as a sign-in form and fills both.
                 autoComplete="off"
-                invalid={!!errors.email}
-                {...register('email')}
+                invalid={!!errors.login_name}
+                {...register('login_name')}
               />
+            </FormField>
+            <FormField
+              label={t('users.displayName', { defaultValue: 'Display name' })}
+              hint={t('users.displayNameHint', {
+                defaultValue: 'The name shown across the portals.',
+              })}
+            >
+              <Input {...register('display_name')} />
             </FormField>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField label={t('users.firstName')}>
                 <Input {...register('first_name')} />
               </FormField>
-              <FormField label={t('users.lastName')}>
+              <FormField
+                label={t('users.lastNameOptional', { defaultValue: 'Last name (optional)' })}
+              >
                 <Input {...register('last_name')} />
               </FormField>
             </div>
+            <FormField
+              label={t('users.contactEmail', { defaultValue: 'Email (optional)' })}
+              hint={t('users.contactEmailHint', {
+                defaultValue: 'For contacting them. Not used to sign in.',
+              })}
+              error={errors.contact_email?.message}
+            >
+              <Input
+                type="email"
+                autoComplete="off"
+                invalid={!!errors.contact_email}
+                {...register('contact_email')}
+              />
+            </FormField>
           </DrawerSection>
 
           <DrawerSection

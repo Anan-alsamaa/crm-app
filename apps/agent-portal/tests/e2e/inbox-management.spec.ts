@@ -13,7 +13,7 @@ const AGENT_PASSWORD = process.env.E2E_AGENT_PASSWORD!;
 
 test('agent changes case state and priority then sees them persist', async ({ page }) => {
   await page.goto(`${AGENT_URL}/login`);
-  await page.getByLabel(/email/i).fill(AGENT_EMAIL);
+  await page.locator('#email').fill(AGENT_EMAIL);
   await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page.getByRole('heading', { name: /shared inbox/i })).toBeVisible({
@@ -49,7 +49,7 @@ test('agent changes case state and priority then sees them persist', async ({ pa
 
 test('agent toggles internal note mode and sees the amber styling', async ({ page }) => {
   await page.goto(`${AGENT_URL}/login`);
-  await page.getByLabel(/email/i).fill(AGENT_EMAIL);
+  await page.locator('#email').fill(AGENT_EMAIL);
   await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   await page.locator('aside li button').first().waitFor({ timeout: 15_000 });
@@ -65,7 +65,7 @@ test('agent toggles internal note mode and sees the amber styling', async ({ pag
 
 test('bulk selecting multiple conversations enables the bulk toolbar', async ({ page }) => {
   await page.goto(`${AGENT_URL}/login`);
-  await page.getByLabel(/email/i).fill(AGENT_EMAIL);
+  await page.locator('#email').fill(AGENT_EMAIL);
   await page.locator('#password').fill(AGENT_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   await page.locator('aside li button').first().waitFor({ timeout: 15_000 });

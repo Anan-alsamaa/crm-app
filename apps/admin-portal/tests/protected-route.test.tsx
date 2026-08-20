@@ -35,6 +35,8 @@ function renderGuard() {
 const base: Omit<AuthUser, 'role'> = {
   id: '1',
   email: 'a@b.com',
+  login_name: null,
+  display_name: null,
   first_name: null,
   last_name: null,
   status: 'active',
