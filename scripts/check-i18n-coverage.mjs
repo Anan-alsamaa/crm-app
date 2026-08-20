@@ -41,7 +41,15 @@ const COMMON_AR = 'packages/i18n/src/locales/ar/common.json';
  * `t('key', { ...options })` — the options object is matched loosely enough to
  * survive nested `{{interpolation}}`, which a naive brace match trips over.
  */
-const CALL = /\bt\(\s*(['"])([\w.]+)\1\s*(?:,\s*\{((?:[^{}]|\{\{[^}]*\}\})*)\})?/gs;
+/*
+ * `tl` is matched as well as `t`. It is the `i18n.getFixedT(locale)` alias the
+ * AI panel uses so that panel speaks the language it is about to WRITE in
+ * rather than the language of the portal. `t(` never matched it — there is
+ * no `t(` at a word boundary inside `tl(` — so a dozen strings shipped with no
+ * Arabic while this guard reported full coverage. A guard that misses an alias
+ * is worse than no guard: it turns an unchecked file into a confirmed-clean one.
+ */
+const CALL = /\b(?:t|tl)\(\s*(['"])([\w.]+)\1\s*(?:,\s*\{((?:[^{}]|\{\{[^}]*\}\})*)\})?/gs;
 const DEFAULT_VALUE = /defaultValue:\s*(['"])(.*?)\1/s;
 
 function lookup(tree, dotted) {

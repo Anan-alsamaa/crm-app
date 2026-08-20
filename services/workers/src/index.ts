@@ -148,6 +148,23 @@ async function main(): Promise<void> {
   // (unlike retries) — it just lets a worker process several jobs at once instead
   // of strictly one at a time (BullMQ's default). Tune via WORKER_CONCURRENCY.
   const workerConcurrency = Number(process.env.WORKER_CONCURRENCY ?? 5);
+  /**
+   * How long a job may hold its lock before BullMQ calls it stalled.
+   *
+   * The default is 30 SECONDS, and the SLA reconcile blows straight through it:
+   * it walks every open ticket and PATCHes Directus per ticket, sequentially,
+   * with a 15s ceiling on each request. When the lock lapses BullMQ re-runs the
+   * job as stalled while the original is still working — so the sweep ran twice
+   * over the same tickets and then failed to finish either copy
+   * ("could not renew lock", "Missing lock … moveToFinished"). That pair filled
+   * the error log with a quarter of a million lines and made every genuine
+   * failure unfindable.
+   *
+   * Five minutes is chosen against the work, not the symptom: it is far longer
+   * than a healthy sweep and still short enough that a genuinely dead worker is
+   * reclaimed promptly.
+   */
+  const lockDuration = Number(process.env.WORKER_LOCK_MS ?? 300_000);
   const workers = queueNames.map(
     (queue) =>
       new Worker(
@@ -156,7 +173,15 @@ async function main(): Promise<void> {
           const processor = processors[queue];
           await processor(job, deps);
         },
-        { connection, concurrency: workerConcurrency, prefix: bullPrefixValue },
+        {
+          connection,
+          concurrency: workerConcurrency,
+          prefix: bullPrefixValue,
+          lockDuration,
+          // Check for stalled jobs on the same cadence rather than the 30s
+          // default, so a long healthy job is not repeatedly inspected.
+          stalledInterval: lockDuration,
+        },
       ),
   );
   for (const w of workers) {
