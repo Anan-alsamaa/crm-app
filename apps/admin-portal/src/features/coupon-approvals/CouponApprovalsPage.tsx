@@ -301,20 +301,11 @@ function Row({
     <li className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
       {/*
         THE SUMMARY LINE, always visible.
-        
+
         Every request used to render at full height, so a queue of twenty was a
-        page of twenty tall cards and comparing two of them meant scrolling
-        between them. This is what a supervisor triages on — what it is, what it
-        costs, where it went, who asked and when — with everything else one
-        click away.
-        
-        A <button> wrapping the summary, not an onClick on the <li>: this is the
-        control that opens the detail, so it has to be reachable by keyboard and
-        announce its expanded state. The action buttons sit OUTSIDE it, because
-        a button inside a button is invalid and the browser will not nest them.
-      */}
-      {/*
-        THE SUMMARY LINE, always visible.
+        page of twenty tall cards and comparing two meant scrolling between
+        them. This is what a supervisor triages on — what it is, what it costs,
+        where it went, who asked and when — with everything else one click away.
 
         The toggle is a STRETCHED OVERLAY sitting under the content, not a
         <button> wrapped around it. Wrapping was the first attempt and it was

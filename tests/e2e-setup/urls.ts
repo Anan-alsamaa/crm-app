@@ -9,8 +9,14 @@
  *
  * The defaults are the SERVED portals (the nginx container the local stack
  * runs), not the vite dev ports, because those are the ones `check-stack.ps1`
- * guarantees and the ones a demo actually uses. Override per surface to point
- * at a dev server while working on it.
+ * guarantees and the ones a demo actually uses.
+ *
+ * ANY ENVIRONMENT THAT SERVES THEM ELSEWHERE MUST SAY SO. CI runs `vite dev` on
+ * 5173/5174/5175 and sets these three variables in `.github/workflows/ci.yml`;
+ * when it did not, every spec hit a closed port and the suite failed with
+ * ERR_CONNECTION_REFUSED while nothing was actually broken. A default that is
+ * right on one machine is a trap on another unless the other one declares
+ * itself.
  */
 export const AGENT_URL = (process.env.E2E_BASE_URL ?? 'http://localhost:8090').replace(/\/$/, '');
 export const ADMIN_URL = (process.env.E2E_ADMIN_URL ?? 'http://localhost:8092').replace(/\/$/, '');

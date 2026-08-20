@@ -159,6 +159,17 @@ jobs:
       # defaults) so both the seeding and the specs use the same credentials.
       E2E_AGENT_EMAIL: e2e.agent@example.com
       E2E_AGENT_PASSWORD: E2eAgentPass1!
+      # WHERE THE PORTALS ARE, stated by the job that starts them.
+      #
+      # tests/e2e-setup/urls.ts defaults to the built portals behind nginx
+      # (8090/8092), which is how a developer machine and a demo serve them.
+      # This job serves them from `vite dev` on 5173/5174/5175 instead, so it
+      # has to say so — without these every spec hit a closed port and the
+      # whole suite failed with ERR_CONNECTION_REFUSED while nothing was
+      # actually broken.
+      E2E_BASE_URL: http://localhost:5173
+      E2E_ADMIN_URL: http://localhost:5174
+      E2E_WIDGET_URL: http://localhost:5175
 
     steps:
       - uses: actions/checkout@v5
