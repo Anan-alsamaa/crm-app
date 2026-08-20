@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { Skeleton, StoreIcon } from '@yiji/ui';
+import { Skeleton, StoreIcon, formatDate } from '@yiji/ui';
 import type { YijiPurchaseActivity } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
 import { CustomerOrders } from '../commerce/OrderViews.js';
@@ -105,9 +105,7 @@ function ActivitySummary({ data }: { data: YijiPurchaseActivity }) {
         {data.lastOrderAt && (
           <span>
             {t('commerce.lastOrder', { defaultValue: 'last order' })}:{' '}
-            <strong className="font-medium text-foreground">
-              {new Date(data.lastOrderAt).toLocaleDateString()}
-            </strong>
+            <strong className="font-medium text-foreground">{formatDate(data.lastOrderAt)}</strong>
           </span>
         )}
       </div>

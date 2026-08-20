@@ -24,6 +24,7 @@ import {
   UsersIcon,
   ZapIcon,
   cn,
+  formatDateTime,
   type ChartSeries,
 } from '@yiji/ui';
 import { normaliseConversationStatus } from '@yiji/shared-types';
@@ -889,7 +890,7 @@ export function AgentPerformancePage() {
                             </span>
                           </td>
                           <td className="px-5 py-3 tabular-nums text-muted-foreground">
-                            {chat.startedAt ? new Date(chat.startedAt).toLocaleString() : dash}
+                            {chat.startedAt ? formatDateTime(chat.startedAt) : dash}
                           </td>
                           {/* "No reply" rather than a dash: the worst outcome
                               on the page must not read as missing data. */}

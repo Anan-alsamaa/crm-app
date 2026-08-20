@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import {
   ArrowLeftIcon,
   Button,
-  cn,
   EmptyState,
   ErrorState,
   FormField,
@@ -14,6 +13,8 @@ import {
   Select,
   Skeleton,
   Textarea,
+  cn,
+  formatDateTime,
   toast,
 } from '@yiji/ui';
 import {
@@ -64,7 +65,7 @@ function money(n: number | null | undefined): string {
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? '—' : formatDateTime(iso);
 }
 
 function StatusPill({ status }: { status: CompensationStatus }) {

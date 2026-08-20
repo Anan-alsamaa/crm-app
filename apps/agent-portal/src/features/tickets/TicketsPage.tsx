@@ -19,8 +19,9 @@ import {
   Toolbar,
   ToolbarSpacer,
   cn,
-  formatRelative,
   formatDate,
+  formatDateTime,
+  formatRelative,
   toast,
   useIsDesktop,
 } from '@yiji/ui';
@@ -897,7 +898,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                     {t('tickets.metaOpened', { defaultValue: 'Opened' })}
                   </div>
                   <div className="mt-0.5 text-xs font-semibold tabular-nums text-foreground">
-                    {new Date(tk.date_created).toLocaleDateString()}
+                    {formatDate(tk.date_created)}
                   </div>
                 </div>
               )}
@@ -1319,7 +1320,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                                 })}
                           </span>
                           <span className="text-2xs tabular-nums text-muted-foreground">
-                            {ev.date_created ? new Date(ev.date_created).toLocaleString() : ''}
+                            {formatDateTime(ev.date_created)}
                           </span>
                         </div>
                         {commentText && (
@@ -1824,7 +1825,7 @@ function LastTouchedCard({
       </div>
       {at && (
         <div className="mt-1 text-2xs tabular-nums text-muted-foreground">
-          {new Date(at).toLocaleString()} · {formatRelative(at)}
+          {formatDateTime(at)} · {formatRelative(at)}
         </div>
       )}
     </div>
@@ -1870,13 +1871,13 @@ function SlaCard({
           dueClass(iso),
         )}
       >
-        {iso ? new Date(iso).toLocaleString() : '—'}
+        {iso ? formatDateTime(iso) : '—'}
       </div>
       {spent !== null && <MeterBar value={spent} tone={meterTone} className="mt-2.5" />}
       {metAt && (
         <div className="mt-2 inline-flex items-center gap-1.5 text-2xs font-medium text-success">
           <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
-          {metLabel} {new Date(metAt).toLocaleString()}
+          {metLabel} {formatDateTime(metAt)}
         </div>
       )}
     </div>

@@ -9,6 +9,9 @@ import {
   Pagination,
   Pill,
   SelectMenu,
+  Table,
+  TableSurface,
+  Th,
   Skeleton,
   Toolbar,
   ToolbarSpacer,
@@ -529,124 +532,120 @@ export function AllCompensationPage() {
           {rows.isLoading ? (
             <Skeleton className="h-64 w-full rounded-2xl" />
           ) : (
-            <div className="rounded-2xl bg-card">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[80rem] border-collapse text-sm">
-                  <thead className="bg-secondary/70 text-2xs uppercase tracking-[0.1em] text-muted-foreground">
+            /* The shared table shell, like every other report: one rounded
+               surface, one scroll container, and a sticky header row. This page
+               hand-rolled its own, so its header scrolled away and a reader
+               thirty rows down had to scroll back up to learn which column
+               they were looking at. */
+            <TableSurface>
+              <Table className="min-w-[80rem]">
+                <thead>
+                  <tr>
+                    {columns.map((c) => (
+                      <Th key={c.key} className={c.end ? 'text-end' : 'text-start'}>
+                        {c.label}
+                      </Th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paged.length === 0 ? (
                     <tr>
-                      {columns.map((c) => (
-                        <th
-                          key={c.key}
-                          className={`h-11 whitespace-nowrap px-4 align-middle font-semibold ${
-                            c.end ? 'text-end' : 'text-start'
-                          }`}
-                        >
-                          {c.label}
-                        </th>
-                      ))}
+                      <td
+                        colSpan={columns.length}
+                        className="py-10 text-center text-sm text-muted-foreground"
+                      >
+                        {list.length === 0
+                          ? t('compensationAll.none', {
+                              defaultValue: 'No coupon has been raised yet.',
+                            })
+                          : t('compensationAll.noMatches', {
+                              defaultValue: 'No coupon matches those filters.',
+                            })}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {paged.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={columns.length}
-                          className="py-10 text-center text-sm text-muted-foreground"
-                        >
-                          {list.length === 0
-                            ? t('compensationAll.none', {
-                                defaultValue: 'No coupon has been raised yet.',
-                              })
-                            : t('compensationAll.noMatches', {
-                                defaultValue: 'No coupon matches those filters.',
-                              })}
-                        </td>
-                      </tr>
-                    ) : (
-                      paged.map((r) => (
-                        <tr
-                          key={r.id}
-                          className="border-t border-foreground/[0.06] transition-colors duration-fast hover:bg-primary/[0.07]"
-                        >
-                          {columns.map((c) => {
-                            const v = c.get(r);
-                            if (c.key === 'code') {
-                              return (
-                                <td className="whitespace-nowrap px-4 py-3" key={c.key}>
-                                  <Ltr className="font-mono text-xs font-semibold text-foreground">
-                                    {v || '—'}
-                                  </Ltr>
-                                </td>
-                              );
-                            }
-                            if (c.key === 'state') {
-                              return (
-                                <td key={c.key} className="whitespace-nowrap px-4 py-3">
-                                  <Pill
-                                    tone={TONE[(r.status ?? 'pending').toLowerCase()] ?? 'neutral'}
-                                    size="sm"
-                                  >
-                                    {v}
-                                  </Pill>
-                                  {r.edited_by_admin && (
-                                    <span className="ms-1.5 text-2xs text-muted-foreground">
-                                      {t('compensationAll.amended', { defaultValue: 'amended' })}
-                                    </span>
-                                  )}
-                                </td>
-                              );
-                            }
-                            if (c.key === 'raised') {
-                              return (
-                                <td
-                                  key={c.key}
-                                  className="whitespace-nowrap px-4 py-3 text-2xs tabular-nums text-muted-foreground"
+                  ) : (
+                    paged.map((r) => (
+                      <tr
+                        key={r.id}
+                        className="border-t border-foreground/[0.06] transition-colors duration-fast hover:bg-primary/[0.07]"
+                      >
+                        {columns.map((c) => {
+                          const v = c.get(r);
+                          if (c.key === 'code') {
+                            return (
+                              <td className="whitespace-nowrap px-4 py-3" key={c.key}>
+                                <Ltr className="font-mono text-xs font-semibold text-foreground">
+                                  {v || '—'}
+                                </Ltr>
+                              </td>
+                            );
+                          }
+                          if (c.key === 'state') {
+                            return (
+                              <td key={c.key} className="whitespace-nowrap px-4 py-3">
+                                <Pill
+                                  tone={TONE[(r.status ?? 'pending').toLowerCase()] ?? 'neutral'}
+                                  size="sm"
                                 >
-                                  {formatRelative(r.date_created)}
-                                </td>
-                              );
-                            }
-                            // A phone has no language: left-to-right wherever
-                            // the page is going, or the + moves to the far end.
-                            if (c.key === 'phone') {
-                              return (
-                                <td className="whitespace-nowrap px-4 py-3" key={c.key}>
-                                  <Ltr className="tabular-nums text-muted-foreground">
-                                    {v || '—'}
-                                  </Ltr>
-                                </td>
-                              );
-                            }
-                            // Free text is capped so one wordy complaint cannot
-                            // push the terms off the side of the table.
-                            const wide = c.key === 'reason' || c.key === 'note';
+                                  {v}
+                                </Pill>
+                                {r.edited_by_admin && (
+                                  <span className="ms-1.5 text-2xs text-muted-foreground">
+                                    {t('compensationAll.amended', { defaultValue: 'amended' })}
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          }
+                          if (c.key === 'raised') {
                             return (
                               <td
                                 key={c.key}
-                                // Free text, so the browser decides from the
-                                // content: a title is usually the customer's
-                                // phone but may be Arabic prose, and forcing
-                                // either direction gets one of them wrong.
-                                dir="auto"
-                                title={wide && v ? v : undefined}
-                                className={[
-                                  'px-4 py-3',
-                                  c.end
-                                    ? 'text-end tabular-nums font-semibold text-foreground'
-                                    : 'text-muted-foreground',
-                                  wide ? 'max-w-[18rem] truncate' : 'whitespace-nowrap',
-                                ].join(' ')}
+                                className="whitespace-nowrap px-4 py-3 text-2xs tabular-nums text-muted-foreground"
                               >
-                                {v || '—'}
+                                {formatRelative(r.date_created)}
                               </td>
                             );
-                          })}
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                          }
+                          // A phone has no language: left-to-right wherever
+                          // the page is going, or the + moves to the far end.
+                          if (c.key === 'phone') {
+                            return (
+                              <td className="whitespace-nowrap px-4 py-3" key={c.key}>
+                                <Ltr className="tabular-nums text-muted-foreground">{v || '—'}</Ltr>
+                              </td>
+                            );
+                          }
+                          // Free text is capped so one wordy complaint cannot
+                          // push the terms off the side of the table.
+                          const wide = c.key === 'reason' || c.key === 'note';
+                          return (
+                            <td
+                              key={c.key}
+                              // Free text, so the browser decides from the
+                              // content: a title is usually the customer's
+                              // phone but may be Arabic prose, and forcing
+                              // either direction gets one of them wrong.
+                              dir="auto"
+                              title={wide && v ? v : undefined}
+                              className={[
+                                'px-4 py-3',
+                                c.end
+                                  ? 'text-end tabular-nums font-semibold text-foreground'
+                                  : 'text-muted-foreground',
+                                wide ? 'max-w-[18rem] truncate' : 'whitespace-nowrap',
+                              ].join(' ')}
+                            >
+                              {v || '—'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </Table>
               {pageCount > 1 && (
                 <div className="border-t border-foreground/[0.08] px-2 py-1.5">
                   <Pagination
@@ -658,7 +657,7 @@ export function AllCompensationPage() {
                   />
                 </div>
               )}
-            </div>
+            </TableSurface>
           )}
         </div>
       </div>

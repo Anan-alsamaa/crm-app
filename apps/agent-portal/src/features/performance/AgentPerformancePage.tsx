@@ -16,6 +16,7 @@ import {
   ToolbarSpacer,
   TrendChart,
   cn,
+  formatDateTime,
   type ChartSeries,
 } from '@yiji/ui';
 import {
@@ -657,7 +658,7 @@ export function AgentPerformancePage() {
                             <td className="px-4 py-2.5 text-muted-foreground">{chat.agentName}</td>
                           )}
                           <td className="px-4 py-2.5 tabular-nums text-muted-foreground">
-                            {chat.startedAt ? new Date(chat.startedAt).toLocaleString() : '—'}
+                            {chat.startedAt ? formatDateTime(chat.startedAt) : '—'}
                           </td>
                           {/* "No reply" rather than a dash: the worst outcome on
                               the page must not read as missing data. */}

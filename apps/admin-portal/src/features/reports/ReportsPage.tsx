@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import {
   Button,
-  cn,
   ConfirmDialog,
   Drawer,
   DrawerSection,
@@ -13,9 +12,11 @@ import {
   Input,
   SelectMenu,
   Skeleton,
-  toast,
   Toolbar,
   ToolbarSpacer,
+  cn,
+  formatDateTime,
+  toast,
 } from '@yiji/ui';
 import {
   useReports,
@@ -643,7 +644,7 @@ function ReportCard({
             )}
           />
           {r.last_run_at
-            ? `${t('reports.lastRun', { defaultValue: 'Last run' })}: ${new Date(r.last_run_at).toLocaleString()}`
+            ? `${t('reports.lastRun', { defaultValue: 'Last run' })}: ${formatDateTime(r.last_run_at)}`
             : t('reports.neverRun', { defaultValue: 'Never run' })}
         </span>
         {(r.schedule?.email?.length ?? 0) > 0 && (

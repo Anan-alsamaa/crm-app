@@ -4,10 +4,8 @@ import {
   Avatar,
   Button,
   ClockIcon,
-  cn,
   EmptyState,
   Input,
-  type MetricTone,
   Pill,
   ProgressRing,
   SelectMenu,
@@ -23,6 +21,9 @@ import {
   ToolbarSpacer,
   Tr,
   ZapIcon,
+  cn,
+  formatDateTime,
+  type MetricTone,
 } from '@yiji/ui';
 import { useSlaReports, type SlaCell, type TicketSla } from './api.js';
 import { reportFilename } from '@yiji/reports';
@@ -70,8 +71,8 @@ function SlaPill({ cell }: { cell: SlaCell }) {
   };
   const { tone, label } = map[cell.state];
   const title = [
-    cell.dueAt && `due ${new Date(cell.dueAt).toLocaleString()}`,
-    cell.doneAt && `done ${new Date(cell.doneAt).toLocaleString()}`,
+    cell.dueAt && `due ${formatDateTime(cell.dueAt)}`,
+    cell.doneAt && `done ${formatDateTime(cell.doneAt)}`,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -307,7 +308,16 @@ export function SlaReportsPage() {
             {t('complaintDash.clear', { defaultValue: 'Clear' })}
           </Button>
         )}
-        <Button type="button" size="sm" variant="ghost" onClick={exportCsv} disabled={!report.data}>
+        {/* Secondary, like the export on every other report. It was `ghost`
+            here, so the same action looked like a different weight of thing
+            depending on which report you were standing in. */}
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={exportCsv}
+          disabled={!report.data}
+        >
           {t('slaReports.exportCsv', { defaultValue: 'Export CSV' })}
         </Button>
       </Toolbar>

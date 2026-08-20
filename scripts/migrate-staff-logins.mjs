@@ -18,8 +18,8 @@
  *     type anything.
  *   - The E2E runner: left alone. The test suite signs in as it by address.
  *
- * `display_name` is backfilled for EVERY human from first + last, so the name
- * on screen is exactly what it was before this ran.
+ * Names are untouched: the name shown in the portal is a person's FIRST name,
+ * which every account already has.
  *
  * Dry-run by default.
  *   node scripts/migrate-staff-logins.mjs           # say what it would do
@@ -50,7 +50,7 @@ const H = { authorization: `Bearer ${AT}`, 'content-type': 'application/json' };
 const users = (
   await (
     await fetch(
-      `${D}/users?fields=id,email,first_name,last_name,login_name,display_name&limit=-1`,
+      `${D}/users?fields=id,email,first_name,last_name,login_name&limit=-1`,
       {
         headers: H,
       },
@@ -59,21 +59,10 @@ const users = (
 ).data;
 
 let moved = 0;
-let named = 0;
 
 for (const u of users) {
   const email = u.email ?? '';
   const patch = {};
-
-  // The name on screen, unchanged from what it was — this is a backfill, not
-  // a rename.
-  if (!u.display_name) {
-    const full = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
-    if (full) {
-      patch.display_name = full;
-      named++;
-    }
-  }
 
   const keep = KEEP.some((re) => re.test(email));
   const already = email.toLowerCase().endsWith(`@${STAFF_DOMAIN}`);
@@ -98,6 +87,6 @@ for (const u of users) {
 
 console.log(
   WRITE
-    ? `Moved ${moved} account(s) to employee-ID sign-in; named ${named}. Passwords unchanged.`
-    : `Dry run: would move ${moved} account(s) and name ${named}. Add --write to apply.`,
+    ? `Moved ${moved} account(s) to employee-ID sign-in. Passwords unchanged.`
+    : `Dry run: would move ${moved} account(s). Add --write to apply.`,
 );

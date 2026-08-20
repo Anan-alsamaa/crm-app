@@ -369,25 +369,6 @@ async function applyUserFields(client: AnyClient): Promise<void> {
     ),
   );
 
-  /**
-   * `display_name` — the name shown wherever a person appears.
-   *
-   * Separate from first/last because the name a rota is written against is
-   * often not the name a passport carries, and joining two fields produced a
-   * blank for anyone with neither. Falls back to first+last, then to the login
-   * name: a person must never render as an empty string.
-   */
-  await idempotent('directus_users.display_name', () =>
-    client.request(
-      createField('directus_users', {
-        field: 'display_name',
-        type: 'string',
-        meta: { interface: 'input', note: 'The name shown in the portals.' },
-        schema: { is_nullable: true },
-      } as never),
-    ),
-  );
-
   /** A real address for contacting this person. Never used to sign in. */
   await idempotent('directus_users.contact_email', () =>
     client.request(

@@ -5,6 +5,7 @@ import {
   loginNameFromIdentity,
   normalizeLoginName,
   staffDisplayName,
+  staffFullName,
 } from '../src/staff-identity.js';
 
 describe('loginIdentity', () => {
@@ -37,20 +38,15 @@ describe('loginIdentity', () => {
 });
 
 describe('staffDisplayName', () => {
-  it('prefers the name the person chose to be called', () => {
-    expect(
-      staffDisplayName({ display_name: 'Abu Khalid', first_name: 'Ali', last_name: 'Hassan' }),
-    ).toBe('Abu Khalid');
-  });
-
-  it('falls back to first + last, which is the old behaviour', () => {
-    expect(staffDisplayName({ first_name: 'Ali', last_name: 'Hassan' })).toBe('Ali Hassan');
-    expect(staffDisplayName({ first_name: 'Ali' })).toBe('Ali');
+  it('is the FIRST name — there is no separate display-name field', () => {
+    // One was tried and removed: it asked an admin to type a third name for
+    // somebody whose first name was already on the form, and the two drifted.
+    expect(staffDisplayName({ first_name: 'Ali', last_name: 'Hassan' })).toBe('Ali');
   });
 
   it('shows the employee id before it ever shows a minted address', () => {
-    // "4417" identifies a real person; "4417@staff.example.com" is an id wearing a
-    // domain nobody typed and nobody can email.
+    // "4417" identifies a real person; "4417@staff.example.com" is an id
+    // wearing a domain nobody typed and nobody can email.
     expect(staffDisplayName({ login_name: '4417', email: '4417@staff.example.com' })).toBe('4417');
     expect(staffDisplayName({ email: '4417@staff.example.com' })).toBe('4417');
   });
@@ -60,6 +56,18 @@ describe('staffDisplayName', () => {
     // NAME is missing rather than the person.
     expect(staffDisplayName({})).toBe('Unknown');
     expect(staffDisplayName(null)).toBe('Unknown');
-    expect(staffDisplayName({ display_name: '   ' })).toBe('Unknown');
+    expect(staffDisplayName({ first_name: '   ' })).toBe('Unknown');
+  });
+});
+
+describe('staffFullName', () => {
+  it('keeps two people with the same first name apart', () => {
+    expect(staffFullName({ first_name: 'Ali', last_name: 'Hassan' })).toBe('Ali Hassan');
+    expect(staffFullName({ first_name: 'Ali', last_name: 'Otaibi' })).toBe('Ali Otaibi');
+  });
+
+  it('falls back to whatever identifies the person when there is no name', () => {
+    expect(staffFullName({ login_name: '4417' })).toBe('4417');
+    expect(staffFullName({ first_name: 'Ali' })).toBe('Ali');
   });
 });

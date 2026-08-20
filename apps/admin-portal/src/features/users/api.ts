@@ -17,8 +17,6 @@ export interface AdminUser {
   email: string | null;
   /** The employee id this person signs in with. */
   login_name: string | null;
-  /** The name shown wherever they appear. */
-  display_name: string | null;
   /** A real address for contacting them. Never the sign-in identity. */
   contact_email: string | null;
   first_name: string | null;
@@ -51,7 +49,6 @@ export function useUsers() {
               'id',
               'email',
               'login_name',
-              'display_name',
               'contact_email',
               'first_name',
               'last_name',
@@ -84,7 +81,6 @@ export interface CreateUserInput {
   /** Minted from `login_name` — see `loginIdentity`. Never typed by hand. */
   email: string;
   login_name: string;
-  display_name?: string | null;
   contact_email?: string | null;
   password: string;
   first_name?: string;
@@ -113,7 +109,6 @@ export function useCreateUser() {
 export interface UpdateUserPatch {
   email?: string | null;
   login_name?: string | null;
-  display_name?: string | null;
   contact_email?: string | null;
   first_name?: string | null;
   last_name?: string | null;

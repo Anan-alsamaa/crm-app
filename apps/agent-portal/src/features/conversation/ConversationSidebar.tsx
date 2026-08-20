@@ -4,16 +4,17 @@ import { useTranslation } from 'react-i18next';
 import {
   Avatar,
   Button,
-  cn,
   Input,
+  Ltr,
   Pill,
   ResizeHandle,
   Spinner,
   StatCard,
-  toast,
+  cn,
+  formatDate,
   formatRelative,
+  toast,
   useResizable,
-  Ltr,
 } from '@yiji/ui';
 import type { YijiOrder } from '@yiji/shared-types';
 import {
@@ -404,9 +405,9 @@ export function ConversationSidebar({
                     </Pill>
                     <span className="truncate text-2xs tabular-nums text-muted-foreground">
                       {h.last_message_at
-                        ? new Date(h.last_message_at).toLocaleDateString()
+                        ? formatDate(h.last_message_at)
                         : h.date_created
-                          ? new Date(h.date_created).toLocaleDateString()
+                          ? formatDate(h.date_created)
                           : ''}
                     </span>
                   </div>

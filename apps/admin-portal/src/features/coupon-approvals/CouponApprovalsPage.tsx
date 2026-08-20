@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
+  ChevronDownIcon,
   EmptyState,
   InboxIcon,
   Input,
@@ -10,7 +11,6 @@ import {
   SparkleIcon,
   Toolbar,
   cn,
-  formatRelative,
   formatDateTime,
   toast,
 } from '@yiji/ui';
@@ -91,13 +91,28 @@ function EditField({
 }
 
 /** One coupon term as label over value, for the terms grid on the card. */
-function Term({ label, value }: { label: string; value: React.ReactNode }) {
+function Term({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: React.ReactNode;
+  /** For values read aloud character by character — a coupon code. */
+  mono?: boolean;
+}) {
   return (
     <div className="min-w-0">
       <dt className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </dt>
-      <dd dir="auto" className="mt-0.5 truncate text-xs font-medium text-foreground">
+      <dd
+        dir="auto"
+        className={cn(
+          'mt-0.5 truncate text-xs font-medium text-foreground',
+          mono && 'font-mono font-semibold',
+        )}
+      >
         {value ?? '—'}
       </dd>
     </div>
@@ -227,6 +242,14 @@ function Row({
    * agent to start again. Every term is editable — two lonely number boxes used
    * to be the whole form, which made "fix the dates" a rejection.
    */
+  /**
+   * Collapsed until asked for.
+   *
+   * A queue of twenty full-height cards is a page nobody can compare across.
+   * Opening one is a click; deciding on one usually is not — the summary line
+   * carries enough to say yes.
+   */
+  const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [edits, setEdits] = useState<TermEdits>(() => seedEdits(row));
   const setEdit = (k: keyof TermEdits, v: string) => setEdits((e) => ({ ...e, [k]: v }));
@@ -268,283 +291,450 @@ function Row({
     .filter(Boolean)
     .join(' · ');
 
+  /** The branch, as a person would say it. */
+  const branch =
+    [row.ticket?.store?.brand?.name, row.ticket?.store?.name].filter(Boolean).join(' · ') || null;
+
   return (
-    <li className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
-        {/* The code as a chip, the worth as the hero numeral — a supervisor
-            scans the money first, the code second. */}
-        <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-xs font-semibold text-foreground ring-1 ring-inset ring-foreground/[0.06]">
-          {row.coupon_code ?? t('couponApprovals.noCode', { defaultValue: 'no code' })}
-        </span>
-        {worth && (
-          <span className="text-xl font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
-            {worth}
+    <li className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+      {/*
+        THE SUMMARY LINE, always visible.
+        
+        Every request used to render at full height, so a queue of twenty was a
+        page of twenty tall cards and comparing two of them meant scrolling
+        between them. This is what a supervisor triages on — what it is, what it
+        costs, where it went, who asked and when — with everything else one
+        click away.
+        
+        A <button> wrapping the summary, not an onClick on the <li>: this is the
+        control that opens the detail, so it has to be reachable by keyboard and
+        announce its expanded state. The action buttons sit OUTSIDE it, because
+        a button inside a button is invalid and the browser will not nest them.
+      */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 p-4">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className={cn(
+            'flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl px-1 py-1 text-start',
+            'transition-colors duration-fast ease-out hover:bg-secondary/50',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+          )}
+        >
+          <ChevronDownIcon
+            size={14}
+            className={cn(
+              'shrink-0 text-muted-foreground transition-transform duration-fast',
+              expanded && 'rotate-180',
+            )}
+          />
+          {/* The ticket is what the request is ABOUT, so it leads. */}
+          <span className="min-w-0 max-w-[16rem] truncate text-sm font-semibold text-foreground">
+            {row.ticket?.subject ??
+              row.title ??
+              t('couponApprovals.noTicket', { defaultValue: 'No ticket' })}
           </span>
+          {worth && (
+            <span className="shrink-0 text-base font-extrabold tabular-nums tracking-[-0.02em] text-foreground">
+              {worth}
+            </span>
+          )}
+          <Pill tone={TONE[row.status] ?? 'success'} size="sm">
+            {t(`couponApprovals.status.${row.status}`, { defaultValue: row.status })}
+          </Pill>
+          {row.ticket?.order_id && (
+            <span className="shrink-0 font-mono text-2xs text-muted-foreground">
+              #{row.ticket.order_id}
+            </span>
+          )}
+          {branch && (
+            <span className="min-w-0 max-w-[14rem] truncate text-2xs text-muted-foreground">
+              {branch}
+            </span>
+          )}
+          <span className="shrink-0 text-2xs text-muted-foreground">
+            {row.requested_by?.first_name?.trim() || row.requested_by?.email?.trim() || '—'}
+          </span>
+          <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+            {formatDateTime(row.date_created)}
+          </span>
+        </button>
+        {/* Decide without opening anything: the summary carries enough to say
+            yes, and the ones that need more are the ones worth expanding. */}
+        {pending && !rejecting && !expanded && (
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={busy || !row.ticket?.id || termsProblems.length > 0}
+              title={termsProblems[0]?.message}
+              onClick={() => onDecide(true, note)}
+            >
+              {t('couponApprovals.approve', { defaultValue: 'Approve' })}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => {
+                setExpanded(true);
+                setEditing(true);
+                setEdits(seedEdits(row));
+              }}
+            >
+              {t('couponApprovals.edit', { defaultValue: 'Edit' })}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => {
+                setExpanded(true);
+                setRejecting(true);
+              }}
+            >
+              {t('couponApprovals.reject', { defaultValue: 'Reject' })}
+            </Button>
+          </div>
         )}
-        <Pill tone={TONE[row.status] ?? 'success'} size="sm">
-          {t(`couponApprovals.status.${row.status}`, { defaultValue: row.status })}
-        </Pill>
-        <span className="ms-auto text-2xs text-muted-foreground">
-          {formatRelative(row.decided_at ?? row.date_created)}
-        </span>
       </div>
 
-      {/* Meta pairs flow from the start edge rather than sitting on a rigid
+      {expanded && (
+        <div className="border-t border-border/60 px-5 pb-5 pt-4">
+          {/* Meta pairs flow from the start edge rather than sitting on a rigid
           half-width grid — a short "Asked by" used to strand "Customer" in the
           middle of the card. The ticket line keeps a row to itself because
           subjects run long. */}
-      <dl className="mt-3 flex flex-wrap items-baseline gap-x-8 gap-y-1.5 text-xs">
-        <div className="flex items-baseline gap-2">
-          <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {t('couponApprovals.agent', { defaultValue: 'Asked by' })}
-          </dt>
-          <dd className="min-w-0 truncate font-medium text-foreground">
-            {row.requested_by?.first_name?.trim() || row.requested_by?.email?.trim() || '—'}
-          </dd>
-        </div>
-        <div className="flex min-w-0 items-baseline gap-2">
-          <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {t('couponApprovals.customer', { defaultValue: 'Customer' })}
-          </dt>
-          <dd dir="auto" className="min-w-0 truncate font-medium text-foreground">
-            {/* Both, when both are known: the name is who it is, the phone is
+          <dl className="mt-3 flex flex-wrap items-baseline gap-x-8 gap-y-1.5 text-xs">
+            <div className="flex items-baseline gap-2">
+              <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('couponApprovals.agent', { defaultValue: 'Asked by' })}
+              </dt>
+              <dd className="min-w-0 truncate font-medium text-foreground">
+                {row.requested_by?.first_name?.trim() || row.requested_by?.email?.trim() || '—'}
+              </dd>
+            </div>
+            <div className="flex min-w-0 items-baseline gap-2">
+              <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('couponApprovals.customer', { defaultValue: 'Customer' })}
+              </dt>
+              <dd dir="auto" className="min-w-0 truncate font-medium text-foreground">
+                {/* Both, when both are known: the name is who it is, the phone is
                 what a supervisor searches by and reads back on a call. */}
-            {[row.contact?.name, row.contact?.phone].filter(Boolean).join(' · ') || '—'}
-          </dd>
-        </div>
-        <div className="flex items-baseline gap-2">
-          <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {t('couponApprovals.requestedAt', { defaultValue: 'Requested' })}
-          </dt>
-          {/* Date AND time. "2 hours ago" answers how long they have waited;
+                {[row.contact?.name, row.contact?.phone].filter(Boolean).join(' · ') || '—'}
+              </dd>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('couponApprovals.requestedAt', { defaultValue: 'Requested' })}
+              </dt>
+              {/* Date AND time. "2 hours ago" answers how long they have waited;
               the timestamp is what gets quoted in an audit. */}
-          <dd className="min-w-0 truncate font-medium tabular-nums text-foreground">
-            {row.date_created ? formatDateTime(row.date_created) : '—'}
-          </dd>
-        </div>
-        <div className="flex min-w-0 items-baseline gap-2">
-          <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {t('couponApprovals.branch', { defaultValue: 'Branch' })}
-          </dt>
-          <dd dir="auto" className="min-w-0 truncate font-medium text-foreground">
-            {/* The readable branch, from the ticket's store. The coupon's own
+              <dd className="min-w-0 truncate font-medium tabular-nums text-foreground">
+                {row.date_created ? formatDateTime(row.date_created) : '—'}
+              </dd>
+            </div>
+            <div className="flex min-w-0 items-baseline gap-2">
+              <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('couponApprovals.branch', { defaultValue: 'Branch' })}
+              </dt>
+              <dd dir="auto" className="min-w-0 truncate font-medium text-foreground">
+                {/* The readable branch, from the ticket's store. The coupon's own
                 restaurant_id is Yiji's identifier — correct to send, useless
                 to read. */}
-            {[
-              row.ticket?.store?.brand?.name,
-              row.ticket?.store?.code,
-              row.ticket?.store?.name,
-              row.ticket?.store?.city,
-            ]
-              .filter(Boolean)
-              .join(' · ') || '—'}
-          </dd>
-        </div>
-        <div className="flex w-full min-w-0 items-baseline gap-2">
-          <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {t('couponApprovals.ticket', { defaultValue: 'Ticket' })}
-          </dt>
-          <dd className="min-w-0 truncate font-medium text-foreground">
-            {[
-              row.ticket?.subject,
-              row.ticket?.order_id ? `#${row.ticket.order_id}` : null,
-              row.ticket?.priority,
-              row.ticket?.status,
-            ]
-              .filter(Boolean)
-              .join(' · ') || '—'}
-          </dd>
-        </div>
-      </dl>
+                {[
+                  row.ticket?.store?.brand?.name,
+                  row.ticket?.store?.code,
+                  row.ticket?.store?.name,
+                  row.ticket?.store?.city,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || '—'}
+              </dd>
+            </div>
+            <div className="flex w-full min-w-0 items-baseline gap-2">
+              <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('couponApprovals.ticket', { defaultValue: 'Ticket' })}
+              </dt>
+              <dd className="min-w-0 truncate font-medium text-foreground">
+                {[
+                  row.ticket?.subject,
+                  row.ticket?.order_id ? `#${row.ticket.order_id}` : null,
+                  row.ticket?.priority,
+                  row.ticket?.status,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || '—'}
+              </dd>
+            </div>
+          </dl>
 
-      {/* The COMPLETE terms, not the two that fit a summary: a supervisor is
+          {/* The COMPLETE terms, not the two that fit a summary: a supervisor is
           signing off on all of them, so all of them are on the card. */}
-      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl bg-secondary/40 p-3 sm:grid-cols-4">
-        <Term label={t('coupons.titleField', { defaultValue: 'Coupon title' })} value={row.title} />
-        <Term
-          label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}
-          value={row.issuing_side}
-        />
-        <Term
-          label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
-          value={row.delivery_type}
-        />
-        <Term
-          label={t('lists.couponType', { defaultValue: 'Coupon type' })}
-          value={row.coupon_type}
-        />
-        <Term
-          label={t('lists.discountCategory', { defaultValue: 'Discount category' })}
-          value={row.discount_category}
-        />
-        <Term
-          label={t('couponApprovals.validity', { defaultValue: 'Valid' })}
-          value={
-            row.valid_from || row.valid_to
-              ? `${row.valid_from?.slice(0, 10) ?? '…'} → ${row.valid_to?.slice(0, 10) ?? '…'}`
-              : null
-          }
-        />
-        <Term
-          label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
-          value={row.max_discount != null ? money(Number(row.max_discount)) : null}
-        />
-        <Term
-          label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
-          value={row.usage_limit}
-        />
-        {row.item_name && (
-          <Term label={t('coupons.itemShort', { defaultValue: 'Item' })} value={row.item_name} />
-        )}
-        {(row.brand_id || row.restaurant_id) && (
-          <Term
-            label={t('couponApprovals.branch', { defaultValue: 'Brand / branch' })}
-            value={[row.brand_id, row.restaurant_id].filter(Boolean).join(' · ')}
-          />
-        )}
-      </dl>
-
-      {row.ticket?.description && (
-        // What the customer actually reported, straight off the ticket — the
-        // supervisor should not have to open the agent portal to read it.
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          <span className="font-semibold uppercase tracking-[0.12em] text-2xs">
-            {t('couponApprovals.ticketDescription', { defaultValue: 'Ticket description' })}
-          </span>{' '}
-          {row.ticket.description}
-        </p>
-      )}
-
-      {row.reason && (
-        // The agent's own words about why. A supervisor deciding without this
-        // is guessing, and guessing quickly is worse than deciding slowly.
-        <p className="mt-2.5 rounded-lg bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-foreground/[0.04]">
-          {row.reason}
-        </p>
-      )}
-
-      {row.status !== 'pending' && row.decision_note && (
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          {t('couponApprovals.decidedBy', {
-            defaultValue: 'Decided by {{who}}: {{note}}',
-            who: row.decided_by?.first_name?.trim() || row.decided_by?.email?.trim() || '—',
-            note: row.decision_note,
-          })}
-        </p>
-      )}
-
-      {pending && (
-        // The decision strip sits on its own hairline band — the card's footer,
-        // so the actions read as one place rather than a loose button cluster.
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
-          {rejecting ? (
-            <>
-              <Input
-                autoFocus
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder={t('couponApprovals.reasonPlaceholder', {
-                  defaultValue: 'Why not? The agent has to tell the customer something.',
-                })}
-                className="h-9 min-w-[16rem] flex-1"
+          <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl bg-secondary/40 p-3 sm:grid-cols-4">
+            {/* The CODE leads the detail. It is the one value a customer reads
+                back down a phone, and the summary line above deliberately does
+                not carry it — a queue is triaged on what a request costs and
+                who it is for, not on a string nobody can scan. */}
+            <Term
+              label={t('coupons.code', { defaultValue: 'Coupon code' })}
+              value={row.coupon_code}
+              mono
+            />
+            <Term
+              label={t('coupons.titleField', { defaultValue: 'Coupon title' })}
+              value={row.title}
+            />
+            <Term
+              label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}
+              value={row.issuing_side}
+            />
+            <Term
+              label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
+              value={row.delivery_type}
+            />
+            <Term
+              label={t('lists.couponType', { defaultValue: 'Coupon type' })}
+              value={row.coupon_type}
+            />
+            <Term
+              label={t('lists.discountCategory', { defaultValue: 'Discount category' })}
+              value={row.discount_category}
+            />
+            <Term
+              label={t('couponApprovals.validity', { defaultValue: 'Valid' })}
+              value={
+                row.valid_from || row.valid_to
+                  ? `${row.valid_from?.slice(0, 10) ?? '…'} → ${row.valid_to?.slice(0, 10) ?? '…'}`
+                  : null
+              }
+            />
+            <Term
+              label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
+              value={row.max_discount != null ? money(Number(row.max_discount)) : null}
+            />
+            <Term
+              label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
+              value={row.usage_limit}
+            />
+            {row.item_name && (
+              <Term
+                label={t('coupons.itemShort', { defaultValue: 'Item' })}
+                value={row.item_name}
               />
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                disabled={busy || !note.trim()}
-                onClick={() => onDecide(false, note)}
-              >
-                {t('couponApprovals.confirmReject', { defaultValue: 'Reject' })}
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setRejecting(false)}>
-                {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
-              </Button>
-            </>
-          ) : (
-            <>
-              {editing && (
-                <div className="mb-1 grid w-full gap-2 rounded-xl bg-secondary/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <EditField
-                    label={t('coupons.titleField', { defaultValue: 'Coupon title' })}
-                    value={edits.title}
-                    onChange={(v) => setEdit('title', v)}
-                  />
-                  <EditField
-                    label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}
-                    value={edits.issuing_side}
-                    onChange={(v) => setEdit('issuing_side', v)}
-                  />
-                  <EditField
-                    label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
-                    value={edits.delivery_type}
-                    onChange={(v) => setEdit('delivery_type', v)}
-                    hint={t('couponApprovals.deliveryEditHint', {
-                      defaultValue: 'Comma-separated, or "All".',
+            )}
+            {(row.brand_id || row.restaurant_id) && (
+              <Term
+                label={t('couponApprovals.branch', { defaultValue: 'Brand / branch' })}
+                value={[row.brand_id, row.restaurant_id].filter(Boolean).join(' · ')}
+              />
+            )}
+          </dl>
+
+          {row.ticket?.description && (
+            // What the customer actually reported, straight off the ticket — the
+            // supervisor should not have to open the agent portal to read it.
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              <span className="font-semibold uppercase tracking-[0.12em] text-2xs">
+                {t('couponApprovals.ticketDescription', { defaultValue: 'Ticket description' })}
+              </span>{' '}
+              {row.ticket.description}
+            </p>
+          )}
+
+          {row.reason && (
+            // The agent's own words about why. A supervisor deciding without this
+            // is guessing, and guessing quickly is worse than deciding slowly.
+            <p className="mt-2.5 rounded-lg bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-foreground/[0.04]">
+              {row.reason}
+            </p>
+          )}
+
+          {row.status !== 'pending' && row.decision_note && (
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              {t('couponApprovals.decidedBy', {
+                defaultValue: 'Decided by {{who}}: {{note}}',
+                who: row.decided_by?.first_name?.trim() || row.decided_by?.email?.trim() || '—',
+                note: row.decision_note,
+              })}
+            </p>
+          )}
+
+          {pending && (
+            // The decision strip sits on its own hairline band — the card's footer,
+            // so the actions read as one place rather than a loose button cluster.
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+              {rejecting ? (
+                <>
+                  <Input
+                    autoFocus
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder={t('couponApprovals.reasonPlaceholder', {
+                      defaultValue: 'Why not? The agent has to tell the customer something.',
                     })}
+                    className="h-9 min-w-[16rem] flex-1"
                   />
-                  <EditField
-                    label={t('lists.couponType', { defaultValue: 'Coupon type' })}
-                    value={edits.coupon_type}
-                    onChange={(v) => setEdit('coupon_type', v)}
-                  />
-                  <EditField
-                    label={t('lists.discountCategory', { defaultValue: 'Discount category' })}
-                    value={edits.discount_category}
-                    onChange={(v) => setEdit('discount_category', v)}
-                    hint={t('couponApprovals.categoryEditHint', {
-                      defaultValue: '"Amount" or "Percentage" — decides what the value means.',
-                    })}
-                  />
-                  <EditField
-                    label={
-                      edits.discount_category.trim().toLowerCase() === 'percentage'
-                        ? t('coupons.couponPercent', { defaultValue: 'Coupon percentage %' })
-                        : t('coupons.couponValue', { defaultValue: 'Coupon value (SAR)' })
-                    }
-                    type="number"
-                    value={edits.amount}
-                    onChange={(v) => setEdit('amount', v)}
-                  />
-                  <EditField
-                    label={t('performance.from', { defaultValue: 'From' })}
-                    type="date"
-                    value={edits.valid_from}
-                    onChange={(v) => setEdit('valid_from', v)}
-                  />
-                  <EditField
-                    label={t('performance.to', { defaultValue: 'To' })}
-                    type="date"
-                    value={edits.valid_to}
-                    onChange={(v) => setEdit('valid_to', v)}
-                  />
-                  <EditField
-                    label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
-                    type="number"
-                    value={edits.max_discount}
-                    onChange={(v) => setEdit('max_discount', v)}
-                  />
-                  <EditField
-                    label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
-                    type="number"
-                    value={edits.usage_limit}
-                    onChange={(v) => setEdit('usage_limit', v)}
-                  />
-                  <EditField
-                    label={t('coupons.itemShort', { defaultValue: 'Item' })}
-                    value={edits.item_name}
-                    onChange={(v) => setEdit('item_name', v)}
-                  />
-                  <EditField
-                    label={t('coupons.why', { defaultValue: 'Why' })}
-                    value={edits.reason}
-                    onChange={(v) => setEdit('reason', v)}
-                  />
-                  <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-3">
-                    {/* Saving without deciding. Editing used to be inseparable
-                        from approving, so a supervisor who wanted to correct a
-                        date and come back had to approve early or lose the
-                        change. */}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={busy || !note.trim()}
+                    onClick={() => onDecide(false, note)}
+                  >
+                    {t('couponApprovals.confirmReject', { defaultValue: 'Reject' })}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setRejecting(false)}
+                  >
+                    {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {editing && (
+                    <div className="mb-1 grid w-full gap-2 rounded-xl bg-secondary/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <EditField
+                        label={t('coupons.titleField', { defaultValue: 'Coupon title' })}
+                        value={edits.title}
+                        onChange={(v) => setEdit('title', v)}
+                      />
+                      <EditField
+                        label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}
+                        value={edits.issuing_side}
+                        onChange={(v) => setEdit('issuing_side', v)}
+                      />
+                      <EditField
+                        label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
+                        value={edits.delivery_type}
+                        onChange={(v) => setEdit('delivery_type', v)}
+                        hint={t('couponApprovals.deliveryEditHint', {
+                          defaultValue: 'Comma-separated, or "All".',
+                        })}
+                      />
+                      <EditField
+                        label={t('lists.couponType', { defaultValue: 'Coupon type' })}
+                        value={edits.coupon_type}
+                        onChange={(v) => setEdit('coupon_type', v)}
+                      />
+                      <EditField
+                        label={t('lists.discountCategory', { defaultValue: 'Discount category' })}
+                        value={edits.discount_category}
+                        onChange={(v) => setEdit('discount_category', v)}
+                        hint={t('couponApprovals.categoryEditHint', {
+                          defaultValue: '"Amount" or "Percentage" — decides what the value means.',
+                        })}
+                      />
+                      <EditField
+                        label={
+                          edits.discount_category.trim().toLowerCase() === 'percentage'
+                            ? t('coupons.couponPercent', { defaultValue: 'Coupon percentage %' })
+                            : t('coupons.couponValue', { defaultValue: 'Coupon value (SAR)' })
+                        }
+                        type="number"
+                        value={edits.amount}
+                        onChange={(v) => setEdit('amount', v)}
+                      />
+                      <EditField
+                        label={t('performance.from', { defaultValue: 'From' })}
+                        type="date"
+                        value={edits.valid_from}
+                        onChange={(v) => setEdit('valid_from', v)}
+                      />
+                      <EditField
+                        label={t('performance.to', { defaultValue: 'To' })}
+                        type="date"
+                        value={edits.valid_to}
+                        onChange={(v) => setEdit('valid_to', v)}
+                      />
+                      <EditField
+                        label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
+                        type="number"
+                        value={edits.max_discount}
+                        onChange={(v) => setEdit('max_discount', v)}
+                      />
+                      <EditField
+                        label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
+                        type="number"
+                        value={edits.usage_limit}
+                        onChange={(v) => setEdit('usage_limit', v)}
+                      />
+                      <EditField
+                        label={t('coupons.itemShort', { defaultValue: 'Item' })}
+                        value={edits.item_name}
+                        onChange={(v) => setEdit('item_name', v)}
+                      />
+                      <EditField
+                        label={t('coupons.why', { defaultValue: 'Why' })}
+                        value={edits.reason}
+                        onChange={(v) => setEdit('reason', v)}
+                      />
+                      <p className="text-2xs leading-relaxed text-muted-foreground sm:col-span-2 lg:col-span-3">
+                        {t('couponApprovals.editHint', {
+                          defaultValue:
+                            'Save keeps these terms and leaves the request waiting. Approving now grants them instead of what was asked for, and is recorded as an amendment.',
+                        })}
+                      </p>
+                    </div>
+                  )}
+                  {/* No ticket, nowhere to put the coupon. Approving used to
+                  succeed silently and write nothing, so the supervisor believed
+                  they had issued money that did not exist. Rejecting stays
+                  available — turning something down needs no destination. */}
+                  {/* A supervisor approving is the last gate before a customer is
+                  promised money, so the same rules the agent's form enforces
+                  are checked again HERE against the terms as they now stand.
+                  Both rows already in the system failed one of them. */}
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={busy || !row.ticket?.id || termsProblems.length > 0}
+                    title={termsProblems[0]?.message}
+                    onClick={() => {
+                      // Only what actually changed rides along — untouched fields
+                      // approve as asked, and no change at all is a straight
+                      // approval rather than an amendment.
+                      const patch = editing ? diffEdits(row, edits) : {};
+                      onDecide(true, note, Object.keys(patch).length ? patch : undefined);
+                    }}
+                  >
+                    {t('couponApprovals.approve', { defaultValue: 'Approve' })}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => {
+                      setEditing((v) => !v);
+                      // Seed from what was asked for, so the supervisor adjusts a
+                      // value rather than recalling it.
+                      setEdits(seedEdits(row));
+                    }}
+                  >
+                    {t('couponApprovals.edit', { defaultValue: 'Edit' })}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() => setRejecting(true)}
+                  >
+                    {t('couponApprovals.reject', { defaultValue: 'Reject' })}
+                  </Button>
+                  {/* SAVE sits at the end of the decision row, after Approve, Edit
+                  and Reject — the last thing in the strip, and only while
+                  editing. It used to sit inside the edit grid above, which put
+                  the one control that commits a change nowhere near the
+                  controls that commit every other one. */}
+                  {editing && (
                     <Button
                       type="button"
                       size="sm"
@@ -582,72 +772,20 @@ function Row({
                     >
                       {t('actions.save', { ns: 'common', defaultValue: 'Save' })}
                     </Button>
-                    <p className="text-2xs leading-relaxed text-muted-foreground">
-                      {t('couponApprovals.editHint', {
-                        defaultValue:
-                          'Save keeps these terms and leaves the request waiting. Approving now grants them instead of what was asked for, and is recorded as an amendment.',
-                      })}
-                    </p>
-                  </div>
-                </div>
+                  )}
+                  <span className="text-2xs text-muted-foreground">
+                    {row.ticket?.id
+                      ? t('couponApprovals.approveHint', {
+                          defaultValue: 'Approving puts the coupon on the ticket.',
+                        })
+                      : t('couponApprovals.noTicketHint', {
+                          defaultValue:
+                            'No ticket on this request — there is nowhere to put the coupon.',
+                        })}
+                  </span>
+                </>
               )}
-              {/* No ticket, nowhere to put the coupon. Approving used to
-                  succeed silently and write nothing, so the supervisor believed
-                  they had issued money that did not exist. Rejecting stays
-                  available — turning something down needs no destination. */}
-              {/* A supervisor approving is the last gate before a customer is
-                  promised money, so the same rules the agent's form enforces
-                  are checked again HERE against the terms as they now stand.
-                  Both rows already in the system failed one of them. */}
-              <Button
-                type="button"
-                size="sm"
-                disabled={busy || !row.ticket?.id || termsProblems.length > 0}
-                title={termsProblems[0]?.message}
-                onClick={() => {
-                  // Only what actually changed rides along — untouched fields
-                  // approve as asked, and no change at all is a straight
-                  // approval rather than an amendment.
-                  const patch = editing ? diffEdits(row, edits) : {};
-                  onDecide(true, note, Object.keys(patch).length ? patch : undefined);
-                }}
-              >
-                {t('couponApprovals.approve', { defaultValue: 'Approve' })}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                disabled={busy}
-                onClick={() => {
-                  setEditing((v) => !v);
-                  // Seed from what was asked for, so the supervisor adjusts a
-                  // value rather than recalling it.
-                  setEdits(seedEdits(row));
-                }}
-              >
-                {t('couponApprovals.edit', { defaultValue: 'Edit' })}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                onClick={() => setRejecting(true)}
-              >
-                {t('couponApprovals.reject', { defaultValue: 'Reject' })}
-              </Button>
-              <span className="text-2xs text-muted-foreground">
-                {row.ticket?.id
-                  ? t('couponApprovals.approveHint', {
-                      defaultValue: 'Approving puts the coupon on the ticket.',
-                    })
-                  : t('couponApprovals.noTicketHint', {
-                      defaultValue:
-                        'No ticket on this request — there is nowhere to put the coupon.',
-                    })}
-              </span>
-            </>
+            </div>
           )}
         </div>
       )}

@@ -41,7 +41,7 @@ import {
   loginIdentity,
   loginNameFromIdentity,
   normalizeLoginName,
-  staffDisplayName,
+  staffFullName,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
@@ -58,8 +58,6 @@ const schema = z.object({
     .string()
     .min(1)
     .regex(/^[A-Za-z0-9._-]+$/, 'Letters, numbers, dot, dash and underscore only.'),
-  /** The name shown wherever this person appears. */
-  display_name: z.string().optional(),
   /**
    * A real address for contacting them. OPTIONAL, and never the sign-in
    * identity: most staff have no work address, and requiring one only meant
@@ -110,7 +108,6 @@ export function UsersPage() {
     const agentRole = (roles.data ?? []).find((r) => r.name.toLowerCase() === 'agent');
     reset({
       login_name: '',
-      display_name: '',
       contact_email: '',
       password: '',
       first_name: '',
@@ -128,7 +125,6 @@ export function UsersPage() {
       // predate employee-id login and keep it. `loginNameFromIdentity` returns
       // null for one, so the field shows what they actually sign in with.
       login_name: u.login_name ?? loginNameFromIdentity(u.email) ?? u.email ?? '',
-      display_name: u.display_name ?? '',
       contact_email: u.contact_email ?? '',
       password: '',
       first_name: u.first_name ?? '',
@@ -159,7 +155,6 @@ export function UsersPage() {
       if (editing) {
         const patch: Record<string, unknown> = {
           login_name: normalizeLoginName(values.login_name),
-          display_name: values.display_name || null,
           contact_email: values.contact_email || null,
           // The identity follows the login name WHENEVER IT CHANGES.
           //
@@ -194,7 +189,6 @@ export function UsersPage() {
           // who does not have one.
           email: loginIdentity(values.login_name) ?? '',
           login_name: normalizeLoginName(values.login_name),
-          display_name: values.display_name || null,
           contact_email: values.contact_email || null,
           password: values.password,
           first_name: values.first_name,
@@ -233,7 +227,7 @@ export function UsersPage() {
   const filtered = (users.data ?? []).filter((u) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
-    const full = staffDisplayName(u, '').toLowerCase();
+    const full = staffFullName(u, '').toLowerCase();
     return (
       (u.email ?? '').toLowerCase().includes(q) ||
       // The employee id is what a supervisor is holding when they come looking
@@ -437,7 +431,7 @@ export function UsersPage() {
             </div>
             <ul className="divide-y divide-foreground/[0.06]">
               {paged.map((u) => {
-                const fullName = staffDisplayName(u, '');
+                const fullName = staffFullName(u, '');
                 const identifier = u.login_name ?? loginNameFromIdentity(u.email) ?? u.email;
                 const isAdmin = u.role?.name?.toLowerCase() === 'administrator';
                 return (
@@ -607,16 +601,13 @@ export function UsersPage() {
                 {...register('login_name')}
               />
             </FormField>
-            <FormField
-              label={t('users.displayName', { defaultValue: 'Display name' })}
-              hint={t('users.displayNameHint', {
-                defaultValue: 'The name shown across the portals.',
-              })}
-            >
-              <Input {...register('display_name')} />
-            </FormField>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <FormField label={t('users.firstName')}>
+              <FormField
+                label={t('users.firstName')}
+                hint={t('users.firstNameHint', {
+                  defaultValue: 'Shown in the portal after they sign in.',
+                })}
+              >
                 <Input {...register('first_name')} />
               </FormField>
               <FormField

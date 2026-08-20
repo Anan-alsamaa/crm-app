@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { readRevisions, readUsers } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
-import { Skeleton, cn } from '@yiji/ui';
+import { Skeleton, cn, formatDateTime } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -159,9 +159,7 @@ export function ChangeHistory({ ticketId }: { ticketId: string }) {
                 ? t('tickets.historyCreated', { defaultValue: 'created the ticket' })
                 : t('tickets.historyEdited', { defaultValue: 'edited' })}
             </span>
-            {e.timestamp && (
-              <span className="tabular-nums">{new Date(e.timestamp).toLocaleString()}</span>
-            )}
+            {e.timestamp && <span className="tabular-nums">{formatDateTime(e.timestamp)}</span>}
           </div>
           {e.action === 'update' && (
             <ul className="space-y-1">

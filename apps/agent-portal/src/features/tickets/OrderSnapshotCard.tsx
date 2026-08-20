@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { cn, Pill, Skeleton } from '@yiji/ui';
+import { Pill, Skeleton, cn, formatDateTime } from '@yiji/ui';
 import type { YijiOrder } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
 import { useOrderStore } from './useStoreMatch.js';
@@ -176,15 +176,7 @@ function titleize(s: string): string {
 function fmtDateTime(iso: string | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? ''
-    : d.toLocaleString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+  return Number.isNaN(d.getTime()) ? '' : formatDateTime(iso);
 }
 
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {

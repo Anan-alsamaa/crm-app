@@ -66,6 +66,18 @@ beforeEach(() => {
   api.useDecideCoupon.mockReturnValue({ mutate, isPending: false });
 });
 
+/**
+ * Open a request's detail.
+ *
+ * Requests render COLLAPSED — a queue of twenty full-height cards was a page
+ * nobody could compare across — so anything below the summary line has to be
+ * asked for. The summary itself is the toggle.
+ */
+async function expandFirst(user: ReturnType<typeof userEvent.setup>) {
+  // The summary line IS the toggle, and it is named after the ticket.
+  await user.click(screen.getByRole('button', { name: /Missing item/ }));
+}
+
 describe('CouponApprovalsPage', () => {
   it('opens on what is still waiting, not on settled history', () => {
     renderPage();
@@ -74,17 +86,32 @@ describe('CouponApprovalsPage', () => {
     expect(screen.getByRole('button', { name: 'pending' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('shows everything needed to decide without leaving the row', () => {
+  it('summarises every request in one line, before anything is opened', () => {
     renderPage();
+    // What a supervisor triages on: what it is, what it costs, where it went,
+    // who asked and when.
+    expect(screen.getByText('Missing item')).toBeInTheDocument();
+    expect(screen.getByText(/25/)).toBeInTheDocument();
+    // Two: the status pill on the row, and the filter tab above it.
+    expect(screen.getAllByText('pending').length).toBeGreaterThan(0);
+    // The full terms stay behind the click.
+    expect(screen.queryByText('SORRY10')).toBeNull();
+  });
+
+  it('shows everything needed to decide once the row is opened', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
     expect(screen.getByText('SORRY10')).toBeInTheDocument();
     expect(screen.getByText(/25/)).toBeInTheDocument();
-    expect(screen.getByText('Sara')).toBeInTheDocument();
+    // Twice now: the requester on the summary line, and again in the detail.
+    expect(screen.getAllByText('Sara').length).toBeGreaterThan(0);
     // Name AND phone now, so a supervisor can read the number back on a call
     // without opening the ticket.
     expect(screen.getByText(/Saad Al-Harbi/)).toBeInTheDocument();
     expect(screen.getByText(/\+9665/)).toBeInTheDocument();
     // The agent's own words. Deciding without them is guessing.
-    expect(screen.getByText(/Two items missing/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Two items missing/).length).toBeGreaterThan(0);
   });
 
   it('approves in a single click', async () => {
@@ -97,8 +124,10 @@ describe('CouponApprovalsPage', () => {
     );
   });
 
-  it('says out loud that approving issues the coupon', () => {
+  it('says out loud that approving issues the coupon', async () => {
+    const user = userEvent.setup();
     renderPage();
+    await expandFirst(user);
     expect(screen.getByText('Approving puts the coupon on the ticket.')).toBeInTheDocument();
   });
 
@@ -125,7 +154,7 @@ describe('CouponApprovalsPage', () => {
     );
   });
 
-  it('offers no decision on a request already settled', () => {
+  it('offers no decision on a request already settled', async () => {
     api.useCouponApprovals.mockReturnValue({
       data: [
         {
@@ -138,9 +167,11 @@ describe('CouponApprovalsPage', () => {
       ],
       isLoading: false,
     });
+    const user = userEvent.setup();
     renderPage();
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     // ...and shows who decided and why, so it stays answerable.
+    await expandFirst(user);
     expect(
       screen.getByText(/Decided by Nadia: Value exceeds the order total./),
     ).toBeInTheDocument();

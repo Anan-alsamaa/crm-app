@@ -80,7 +80,9 @@ describe('UsersPage', () => {
     // The mock returns a key's defaultValue when it has one, so these assert
     // the visible label rather than the key.
     expect(screen.getByText('Login name (employee ID)')).toBeInTheDocument();
-    expect(screen.getByText('Display name')).toBeInTheDocument();
+    // No separate display-name field: the name shown in the portal IS the
+    // first name, so asking for a third name was asking twice.
+    expect(screen.queryByText('Display name')).toBeNull();
     expect(screen.getByText('Email (optional)')).toBeInTheDocument();
   });
 });

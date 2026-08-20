@@ -68,7 +68,6 @@ export function loginNameFromIdentity(email: string | null | undefined): string 
 
 /** The fields any surface needs to render a person's name. */
 export interface StaffNameFields {
-  display_name?: string | null;
   first_name?: string | null;
   last_name?: string | null;
   login_name?: string | null;
@@ -76,29 +75,44 @@ export interface StaffNameFields {
 }
 
 /**
- * The name to show for a person, in one place.
+ * What a person is CALLED — their first name.
  *
- * The order is deliberate. `display_name` is what someone chose to be called.
- * First+last is the old behaviour and still right when nobody has set one. The
- * login name comes next because an employee id identifies a real person, and
- * the email last because a minted `4417@staff.example.com` is the least human
- * here.
+ * There is no separate "display name" field. One was tried and removed: it
+ * asked an administrator to type a third name for somebody whose first name
+ * was already on the form, and the two then drifted. The first name is the
+ * name people are addressed by here, so it is the one shown.
  *
- * Never returns an empty string: a row rendering as a blank cannot be acted on,
- * and "Unknown" at least says the name is missing rather than the person.
+ * The fallbacks matter more than they look. An employee id identifies a real
+ * person and is the next best thing to a name; a minted `4417@staff.example.com`
+ * is an id wearing a domain and comes last. Never returns an empty string — a
+ * row rendering as a blank cannot be acted on, and "Unknown" at least says the
+ * NAME is missing rather than the person.
  */
 export function staffDisplayName(
   user: StaffNameFields | null | undefined,
   fallback = 'Unknown',
 ): string {
   if (!user) return fallback;
-  const chosen = user.display_name?.trim();
-  if (chosen) return chosen;
-  const full = [user.first_name?.trim(), user.last_name?.trim()].filter(Boolean).join(' ');
-  if (full) return full;
+  const first = user.first_name?.trim();
+  if (first) return first;
   const login = user.login_name?.trim();
   if (login) return login;
-  // A minted identity is an employee id wearing a domain — show the id.
   const fromEmail = loginNameFromIdentity(user.email) ?? user.email?.trim();
   return fromEmail || fallback;
+}
+
+/**
+ * First and last together, for lists where people have to be told apart.
+ *
+ * An admin scanning a user list needs "Ali Hassan" and "Ali Otaibi" to be two
+ * rows, not two Alis. Everywhere else — a greeting, an author byline — the
+ * first name is what a colleague would say out loud, so `staffDisplayName` is
+ * the right call there.
+ */
+export function staffFullName(
+  user: StaffNameFields | null | undefined,
+  fallback = 'Unknown',
+): string {
+  const both = [user?.first_name?.trim(), user?.last_name?.trim()].filter(Boolean).join(' ');
+  return both || staffDisplayName(user, fallback);
 }
