@@ -34,7 +34,7 @@ import type { NavSection } from '../nav.js';
  */
 const GROUP_TILES: Record<string, string> = {
   '/dashboard': 'bg-sky-tint text-sky',
-  '/sla-reports': 'bg-violet-tint text-violet',
+  '/reports/agent-kpi': 'bg-violet-tint text-violet',
   '/users': 'bg-success-tint text-success',
   '/brands': 'bg-primary-tint text-primary',
 };

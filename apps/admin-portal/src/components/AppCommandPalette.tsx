@@ -141,7 +141,7 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
           label: t('nav.slaReports', { defaultValue: 'SLA performance' }),
           icon: <ClockIcon size={16} />,
           keywords: ['breaches', 'first response', 'resolution', 'report'],
-          onSelect: () => navigate('/sla-reports'),
+          onSelect: () => navigate('/reports/agent-kpi/sla'),
         },
         {
           id: 'go-reports',
@@ -155,21 +155,21 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
           label: t('nav.reportTickets', { defaultValue: 'Tickets' }),
           icon: <DownloadIcon size={16} />,
           keywords: ['xlsx', 'excel', 'download', 'export', 'orders', 'tickets', 'report'],
-          onSelect: () => navigate('/report-tickets'),
+          onSelect: () => navigate('/reports/operational-kpi/tickets'),
         },
         {
           id: 'go-report-agents',
           label: t('nav.reportAgents', { defaultValue: 'Agent KPI' }),
           icon: <DownloadIcon size={16} />,
           keywords: ['xlsx', 'excel', 'download', 'export', 'agent', 'kpi', 'csat', 'report'],
-          onSelect: () => navigate('/report-agents'),
+          onSelect: () => navigate('/reports/agent-kpi/tickets'),
         },
         {
           id: 'go-report-conversations',
           label: t('nav.reportConversations', { defaultValue: 'Conversation status' }),
           icon: <DownloadIcon size={16} />,
           keywords: ['xlsx', 'excel', 'download', 'export', 'conversation', 'status', 'report'],
-          onSelect: () => navigate('/report-conversations'),
+          onSelect: () => navigate('/reports/agent-kpi/conversations'),
         },
         {
           id: 'go-ai-config',

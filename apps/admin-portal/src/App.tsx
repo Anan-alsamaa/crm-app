@@ -110,7 +110,9 @@ const AiConfigPage = lazy(() =>
   import('./features/ai-config/AiConfigPage.js').then((m) => ({ default: m.AiConfigPage })),
 );
 
+import type { TFunction } from 'i18next';
 import type { NavSection } from './nav.js';
+import { ReportGroupTabs } from './components/ReportGroupTabs.js';
 
 /* Colorful nav: each item's icon sits in its own vivid tinted tile that pops
  * against the dark navy rail. */
@@ -299,65 +301,45 @@ function Shell({ children }: { children: React.ReactNode }) {
     {
       heading: t('nav.reportsGroup', { defaultValue: 'Reports' }),
       /**
-       * Two named sets, not one list of seven.
+       * Three destinations, not seven.
        *
-       * AGENT KPI measures the people; OPERATIONAL KPI measures the business.
-       * Every report answers one of those two questions, and which one it is
-       * was the thing a flat list never said — so someone after "how is the
-       * Riyadh branch doing" had to read all seven names to find out none of
-       * the agent ones were it.
-       *
-       * Scheduled reports sits under neither: it configures DELIVERY of a
-       * report rather than showing one, which is an automation job.
+       * Each one is a PAGE that carries its own strip of report tabs beneath
+       * the masthead — see ReportGroupTabs. The previous shape put all seven
+       * reports in this dropdown under two headings, which meant the whole
+       * menu had to be read before any of it could be dismissed, and the only
+       * thing saying which half you were in was a heading inside a menu that
+       * closes.
        */
       items: [
         {
-          to: '/report-agents',
-          label: t('nav.reportAgents', { defaultValue: 'Agent KPI' }),
+          to: '/reports/agent-kpi',
+          label: t('nav.agentKpiGroup', { defaultValue: 'Agent KPI' }),
           icon: DownloadIcon,
-          group: t('nav.agentKpiGroup', { defaultValue: 'Agent KPI' }),
         },
+        {
+          to: '/reports/operational-kpi',
+          label: t('nav.opsKpiGroup', { defaultValue: 'Operational KPI' }),
+          icon: DownloadIcon,
+        },
+        {
+          // NOT `/reports`: that is now the parent of the two KPI pages, so a
+          // link to it would light up alongside whichever one is open.
+          to: '/reports/scheduled',
+          label: t('nav.reports', { defaultValue: 'Scheduled reports' }),
+          icon: CalendarIcon,
+        },
+      ],
+    },
+    {
+      // Its own destination, not folded into Reports: it is the page an
+      // operations lead opens daily, and burying a daily page two clicks deep
+      // to tidy a menu is a bad trade.
+      heading: t('nav.agentPerformanceGroup', { defaultValue: 'Agent performance' }),
+      items: [
         {
           to: '/agent-performance',
           label: t('nav.agentPerformance', { defaultValue: 'Agent performance' }),
           icon: ClockIcon,
-          group: t('nav.agentKpiGroup', { defaultValue: 'Agent KPI' }),
-        },
-        {
-          to: '/sla-reports',
-          label: t('nav.slaReports', { defaultValue: 'SLA performance' }),
-          icon: ClockIcon,
-          group: t('nav.agentKpiGroup', { defaultValue: 'Agent KPI' }),
-        },
-        {
-          to: '/report-conversations',
-          label: t('nav.reportConversations', { defaultValue: 'Conversation status' }),
-          icon: DownloadIcon,
-          group: t('nav.agentKpiGroup', { defaultValue: 'Agent KPI' }),
-        },
-        {
-          // One report. A complaint IS a ticket here — two entries listing the
-          // same records under different names only raised the question of
-          // which one was authoritative.
-          to: '/report-tickets',
-          label: t('nav.reportTickets', { defaultValue: 'Tickets' }),
-          icon: DownloadIcon,
-          group: t('nav.opsKpiGroup', { defaultValue: 'Operational KPI' }),
-        },
-        {
-          // The full record of every coupon — a report, so it sits with the
-          // reports. The approval statistics live beside Coupon approvals,
-          // where the person making those decisions is already working.
-          to: '/compensation',
-          label: t('nav.compensationAll', { defaultValue: 'Compensation' }),
-          icon: ClockIcon,
-          group: t('nav.opsKpiGroup', { defaultValue: 'Operational KPI' }),
-        },
-        {
-          to: '/reports',
-          label: t('nav.reports', { defaultValue: 'Scheduled reports' }),
-          icon: CalendarIcon,
-          group: t('nav.automationGroup', { defaultValue: 'Automation' }),
         },
       ],
     },
@@ -505,7 +487,35 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * The second level, one strip per KPI group.
+ *
+ * Paths are RELATIVE to the group route, so the strip does not have to know
+ * where its group is mounted and moving a group is one edit.
+ *
+ * Built from `t` at render rather than frozen at import, so switching language
+ * relabels the tabs like everything else.
+ */
+function reportTabs(t: TFunction) {
+  return {
+    agentKpi: [
+      { to: 'tickets', label: t('nav.reportAgents', { defaultValue: 'Agent KPI' }) },
+      { to: 'sla', label: t('nav.slaReports', { defaultValue: 'SLA performance' }) },
+      {
+        to: 'conversations',
+        label: t('nav.reportConversations', { defaultValue: 'Conversation status' }),
+      },
+    ],
+    opsKpi: [
+      { to: 'tickets', label: t('nav.reportTickets', { defaultValue: 'Tickets' }) },
+      { to: 'compensation', label: t('nav.compensationAll', { defaultValue: 'Compensation' }) },
+    ],
+  };
+}
+
 export function App() {
+  const { t } = useTranslation();
+  const tabs = reportTabs(t);
   return (
     <AuthProvider>
       <BrowserRouter>
@@ -593,8 +603,12 @@ export function App() {
               </ProtectedRoute>
             }
           />
+          {/* ── Reports: three destinations, each with its own tab strip ──
+              Every report keeps a real URL, so a bookmark or a link in an
+              email still lands on the report itself rather than on a menu. */}
+          <Route path="/reports" element={<Navigate to="/reports/agent-kpi" replace />} />
           <Route
-            path="/reports"
+            path="/reports/scheduled"
             element={
               <ProtectedRoute>
                 <Shell>
@@ -603,18 +617,41 @@ export function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/reports/agent-kpi"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <ReportGroupTabs tabs={tabs.agentKpi} />
+                </Shell>
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="tickets" replace />} />
+            <Route path="tickets" element={<ReportExportsPage report="agents" />} />
+            <Route path="sla" element={<SlaReportsPage />} />
+            <Route path="conversations" element={<ReportExportsPage report="conversations" />} />
+          </Route>
+          <Route
+            path="/reports/operational-kpi"
+            element={
+              <ProtectedRoute>
+                <Shell>
+                  <ReportGroupTabs tabs={tabs.opsKpi} />
+                </Shell>
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="tickets" replace />} />
+            <Route path="tickets" element={<ReportExportsPage report="complaints" />} />
+            <Route path="compensation" element={<AllCompensationPage />} />
+          </Route>
           {/* The Complaints report was merged into Tickets — same records,
               one page. Redirect so existing links and bookmarks still land. */}
           <Route path="/report-complaints" element={<Navigate to="/report-tickets" replace />} />
           <Route
             path="/report-tickets"
-            element={
-              <ProtectedRoute>
-                <Shell>
-                  <ReportExportsPage report="complaints" />
-                </Shell>
-              </ProtectedRoute>
-            }
+            element={<Navigate to="/reports/operational-kpi/tickets" replace />}
           />
           <Route
             path="/coupon-approvals"
@@ -628,13 +665,7 @@ export function App() {
           />
           <Route
             path="/compensation"
-            element={
-              <ProtectedRoute>
-                <Shell>
-                  <AllCompensationPage />
-                </Shell>
-              </ProtectedRoute>
-            }
+            element={<Navigate to="/reports/operational-kpi/compensation" replace />}
           />
           <Route
             path="/coupon-report"
@@ -668,23 +699,11 @@ export function App() {
           />
           <Route
             path="/report-agents"
-            element={
-              <ProtectedRoute>
-                <Shell>
-                  <ReportExportsPage report="agents" />
-                </Shell>
-              </ProtectedRoute>
-            }
+            element={<Navigate to="/reports/agent-kpi/tickets" replace />}
           />
           <Route
             path="/report-conversations"
-            element={
-              <ProtectedRoute>
-                <Shell>
-                  <ReportExportsPage report="conversations" />
-                </Shell>
-              </ProtectedRoute>
-            }
+            element={<Navigate to="/reports/agent-kpi/conversations" replace />}
           />
           {/* Old combined route → first individual report. */}
           <Route path="/report-exports" element={<Navigate to="/report-tickets" replace />} />
@@ -695,16 +714,7 @@ export function App() {
           {/* Ticket report was merged away: analytics -> dashboard, register ->
               Tickets, workload -> Agent KPI. Redirect rather than 404. */}
           <Route path="/ticket-ops" element={<Navigate to="/dashboard" replace />} />
-          <Route
-            path="/sla-reports"
-            element={
-              <ProtectedRoute>
-                <Shell>
-                  <SlaReportsPage />
-                </Shell>
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/sla-reports" element={<Navigate to="/reports/agent-kpi/sla" replace />} />
           <Route
             path="/lists"
             element={
