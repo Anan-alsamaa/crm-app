@@ -22,7 +22,9 @@
       "empty": "لا توجد محادثات مطابقة."
     },
     "noEntities": "لم يتم اكتشاف أي كيانات.",
-    "replyLanguage": "لغة الرد"
+    "replyLanguage": "لغة الرد",
+    "replyLanguageAuto": "تلقائي",
+    "replyLanguageAutoHint": "بلغة العميل نفسها"
   },
   "helpAssistant": {
     "launch": "أورا",

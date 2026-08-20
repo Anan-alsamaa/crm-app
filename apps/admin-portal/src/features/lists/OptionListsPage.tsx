@@ -49,6 +49,15 @@ const LIST_KEYS = [
   'delivery_type',
   'coupon_type',
   'discount_category',
+  /**
+   * Which AI actions the agent inbox offers, and in what order.
+   *
+   * Values are the panel's action KEYS, not their labels: the labels are
+   * translated, so editing them in Arabic would switch the feature off for
+   * everyone reading English. Retiring a row hides that button; an empty list
+   * means "all of them", because a panel with no buttons reads as broken.
+   */
+  'ai_action',
 ] as const;
 type ListKey = (typeof LIST_KEYS)[number];
 
@@ -136,6 +145,7 @@ export function OptionListsPage() {
     delivery_type: t('lists.deliveryType', { defaultValue: 'Delivery type' }),
     coupon_type: t('lists.couponType', { defaultValue: 'Coupon type' }),
     discount_category: t('lists.discountCategory', { defaultValue: 'Discount category' }),
+    ai_action: t('lists.aiAction', { defaultValue: 'AI assistance actions' }),
   };
 
   const submit = () => {
@@ -221,10 +231,21 @@ export function OptionListsPage() {
               numeral floating beside the header read as debris. */}
           <SectionCard
             title={LIST_LABELS[listKey]}
-            hint={t('lists.help', {
-              defaultValue:
-                'These values feed the complaint form live — no deploy needed. Retire a value to stop offering it; tickets that already carry it keep displaying it. The exact spellings are what reports group by, so a corrected spelling is a new value, not an edit.',
-            })}
+            hint={
+              // The AI list is not a dropdown and nothing in history carries
+              // its values, so the "reports group by these spellings" warning
+              // would be false there — and a warning that does not apply is
+              // how people learn to skip reading them.
+              listKey === 'ai_action'
+                ? t('lists.helpAiAction', {
+                    defaultValue:
+                      'Which buttons the AI panel offers agents in the inbox, in this order. Retire one to stop offering it. These are action keys, not labels — the labels are translated. Retire them all and the panel falls back to offering everything.',
+                  })
+                : t('lists.help', {
+                    defaultValue:
+                      'These values feed the complaint form live — no deploy needed. Retire a value to stop offering it; tickets that already carry it keep displaying it. The exact spellings are what reports group by, so a corrected spelling is a new value, not an edit.',
+                  })
+            }
           >
             <div className="flex gap-2">
               <Input

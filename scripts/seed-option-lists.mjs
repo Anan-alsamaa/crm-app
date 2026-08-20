@@ -43,6 +43,12 @@ const LISTS = {
   // The coupon-request dropdowns. "All" means every delivery channel at once.
   issuing_side: ['Marketing', 'Operations', 'Delivery'],
   delivery_type: ['All', 'Delivery', 'Pickup', 'Carhop', 'Takeout', 'Dine-in'],
+  // Which AI actions the inbox panel offers, in this order. Action KEYS, not
+  // labels — the labels are translated and editing one in Arabic would switch
+  // the button off for everyone reading English. Semantic search is absent on
+  // purpose: agents search from the inbox's own search box, and a second
+  // search that only found conversations was the odd one out on the panel.
+  ai_action: ['summary', 'reply', 'sentiment', 'intent', 'entities', 'lead'],
   coupon_type: ['Private', 'Public'],
   discount_category: ['Amount', 'Percentage'],
 };

@@ -6,10 +6,11 @@ import type { ReactNode } from 'react';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 
+const ui = vi.hoisted(() => ({ language: 'en' }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (k: string, o?: { defaultValue?: string }) => o?.defaultValue ?? k,
-    i18n: { language: 'en' },
+    i18n: ui,
   }),
 }));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
@@ -39,7 +40,10 @@ function renderPanel(props: Partial<React.ComponentProps<typeof AiPanel>> = {}) 
   return render(<AiPanel conversationId="c1" vendorId="v1" {...props} />, { wrapper });
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  ui.language = 'en';
+});
 
 describe('AiPanel — agent assistance', () => {
   it('offers the actions the operations team asked for', () => {
@@ -82,20 +86,38 @@ describe('AiPanel — agent assistance', () => {
 });
 
 describe('AiPanel — reply language', () => {
-  it('defaults to English when the interface is English', async () => {
+  it('sends NO locale by default, so the gateway matches the customer', async () => {
+    // The bug this replaces: the default followed the PORTAL, so an English
+    // interface told the model to write English to a customer writing Arabic —
+    // and the instruction to follow the agent's choice overrides the thread, so
+    // the customer's own language lost. An absent locale is what makes the
+    // gateway read the thread instead.
     ai.suggestReply.mockResolvedValue({ reply: 'ok' });
     renderPanel();
     await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
     await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
-    expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ locale: 'en' });
+    expect(ai.suggestReply.mock.calls[0]![2]).not.toHaveProperty('locale');
   });
 
-  it('starts on Arabic when the caller says so', async () => {
+  it('still sends no locale when the interface is Arabic', async () => {
+    // An Arabic interface does not mean the customer writes Arabic — it means
+    // the AGENT reads Arabic. Only the thread says what the customer reads.
     ai.suggestReply.mockResolvedValue({ reply: 'ok' });
-    renderPanel({ locale: 'ar-SA' });
+    ui.language = 'ar-SA';
+    renderPanel();
     await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
     await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
-    expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ locale: 'ar' });
+    expect(ai.suggestReply.mock.calls[0]![2]).not.toHaveProperty('locale');
+  });
+
+  it('returns to auto when the active override is clicked again', async () => {
+    ai.suggestReply.mockResolvedValue({ reply: 'ok' });
+    renderPanel();
+    await userEvent.click(screen.getByRole('button', { name: 'ar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'ar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
+    await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
+    expect(ai.suggestReply.mock.calls[0]![2]).not.toHaveProperty('locale');
   });
 
   it('lets the agent switch to Arabic for one customer', async () => {
@@ -109,9 +131,20 @@ describe('AiPanel — reply language', () => {
     expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ locale: 'ar' });
   });
 
-  it('marks the active language for assistive tech, not just visually', () => {
+  it('marks the active language for assistive tech, not just visually', async () => {
     renderPanel();
-    expect(screen.getByRole('button', { name: 'en' })).toHaveAttribute('aria-pressed', 'true');
+    // Auto is the default, so neither override is pressed to begin with.
+    expect(screen.getByRole('button', { name: 'Auto' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'en' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: 'ar' })).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(screen.getByRole('button', { name: 'ar' }));
+    expect(screen.getByRole('button', { name: 'ar' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Auto' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('no longer offers conversation search — the inbox has its own', () => {
+    renderPanel();
+    expect(screen.queryByRole('button', { name: 'Search' })).toBeNull();
   });
 });

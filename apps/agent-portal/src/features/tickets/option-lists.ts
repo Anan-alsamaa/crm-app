@@ -35,6 +35,17 @@ const FALLBACK: Record<string, readonly string[]> = {
   delivery_type: ['All', 'Delivery', 'Pickup', 'Carhop', 'Takeout', 'Dine-in'],
   coupon_type: ['Private', 'Public'],
   discount_category: ['Amount', 'Percentage'],
+  /**
+   * Which AI actions the inbox panel offers, and in what order.
+   *
+   * Stored as the panel's own action keys rather than their labels: the labels
+   * are translated, so an operator editing them in Arabic would switch the
+   * feature off for everyone reading English. The key is the stable thing.
+   *
+   * The fallback is every action, which is what the panel showed before this
+   * list existed — an unreadable list must not empty the panel.
+   */
+  ai_action: ['summary', 'reply', 'sentiment', 'intent', 'entities', 'lead'],
 };
 
 interface OptionRow {

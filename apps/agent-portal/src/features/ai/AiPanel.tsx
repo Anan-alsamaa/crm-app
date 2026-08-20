@@ -1,14 +1,19 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import { Button, cn, Pill, Spinner } from '@yiji/ui';
 import { ai, type AiError } from '../../lib/ai-client.js';
+import { optionsFor, useOptionLists } from '../tickets/option-lists.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
 /**
- * AI panel — shows 7 actions per conversation. Each action calls the
- * gateway via TanStack mutation; result renders inline.
+ * AI panel — the per-conversation actions. Each calls the gateway via a
+ * TanStack mutation and renders its result inline.
+ *
+ * WHICH actions appear is an operations decision, not a deploy: the panel
+ * offers what the `ai_action` list in the admin portal has switched on, in the
+ * order set there. The catalogue below is the full set the gateway can serve;
+ * the list decides which of them an agent sees.
  *
  * Vendor scoping: the contact's vendor is what governs the monthly cap;
  * we pass it through props from the conversation context.
@@ -19,7 +24,6 @@ interface Props {
   vendorId: string;
   /** Optional draft (for Suggest Reply). */
   draft?: string;
-  locale?: string;
   /** Called when Suggest Reply produces text; lets the parent paste it into the composer. */
   onReplySuggested?: (reply: string) => void;
   className?: string;
@@ -40,20 +44,12 @@ function fmtErr(err: unknown): string {
   return e?.message ?? 'Failed.';
 }
 
-export function AiPanel({
-  conversationId,
-  vendorId,
-  draft,
-  locale,
-  onReplySuggested,
-  className,
-}: Props) {
+export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, className }: Props) {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
   const { user } = useAuth();
   const caller = { userId: user?.id ?? '', vendorId };
 
-  type ResultKey = 'summary' | 'reply' | 'sentiment' | 'intent' | 'entities' | 'lead' | 'search';
+  type ResultKey = 'summary' | 'reply' | 'sentiment' | 'intent' | 'entities' | 'lead';
   /**
    * The language of the SUGGESTED REPLY, which is not automatically the
    * language of the portal: an agent working in English still answers an Arabic
@@ -65,11 +61,21 @@ export function AiPanel({
    * overwhelmingly about to write Arabic. Once they pick a side here, that
    * choice is theirs and the page language stops overriding it.
    */
-  const pageLocale: 'en' | 'ar' = (locale ?? i18n.language ?? 'en').toLowerCase().startsWith('ar')
-    ? 'ar'
-    : 'en';
+  /**
+   * `null` is AUTO, and auto is the default.
+   *
+   * It used to default to the PORTAL's language, which is the wrong thing to
+   * follow: an agent working in an English interface still answers an Arabic
+   * customer in Arabic, and an Arabic interface does not mean the customer
+   * writes Arabic. Forcing either way produced replies in a language the
+   * customer had not used — and a reply in the wrong language cannot be edited
+   * into the right one, it has to be rewritten.
+   *
+   * On auto no locale is sent at all, and the gateway matches the language of
+   * the THREAD, which is the only evidence of what the customer actually reads.
+   * The two explicit buttons stay for the case the agent knows better.
+   */
   const [chosenLocale, setChosenLocale] = useState<'en' | 'ar' | null>(null);
-  const replyLocale = chosenLocale ?? pageLocale;
   const setReplyLocale = setChosenLocale;
 
   /**
@@ -87,18 +93,24 @@ export function AiPanel({
     // Guarded: `getFixedT` is part of a full i18next instance, and a caller
     // that supplies a lighter one should get English labels, not a crash in
     // the middle of a conversation.
-    () => (typeof i18n.getFixedT === 'function' ? i18n.getFixedT(replyLocale) : t),
-    [i18n, replyLocale, t],
+    () => (chosenLocale && typeof i18n.getFixedT === 'function' ? i18n.getFixedT(chosenLocale) : t),
+    [i18n, chosenLocale, t],
   );
   const [active, setActive] = useState<ResultKey | null>(null);
-  const [query, setQuery] = useState('');
+  const lists = useOptionLists();
 
   const summarize = useMutation({
     mutationFn: () => ai.summarize(caller, conversationId),
     onSuccess: () => setActive('summary'),
   });
   const suggestReply = useMutation({
-    mutationFn: () => ai.suggestReply(caller, conversationId, { draft, locale: replyLocale }),
+    // No locale on auto — an absent locale is what tells the gateway to match
+    // the customer's own language rather than being told one.
+    mutationFn: () =>
+      ai.suggestReply(caller, conversationId, {
+        draft,
+        ...(chosenLocale ? { locale: chosenLocale } : {}),
+      }),
     onSuccess: (data) => {
       setActive('reply');
       onReplySuggested?.(data.reply);
@@ -120,11 +132,12 @@ export function AiPanel({
     mutationFn: () => ai.scoreLead(caller, conversationId),
     onSuccess: () => setActive('lead'),
   });
-  const search = useMutation({
-    mutationFn: (q: string) => ai.search(caller, q),
-  });
 
-  const actions: Array<{
+  /**
+   * Everything the gateway can do, in its natural order. What an agent
+   * actually sees is this filtered by the `ai_action` list — see below.
+   */
+  const catalogue: Array<{
     key: ResultKey;
     label: string;
     busy: boolean;
@@ -166,18 +179,25 @@ export function AiPanel({
       busy: scoreLead.isPending,
       run: () => scoreLead.mutate(),
     },
-    {
-      key: 'search',
-      label: tl('ai.action.search', { defaultValue: 'Search' }),
-      busy: search.isPending,
-      run: () => setActive('search'),
-    },
   ];
 
-  const runSearch = () => {
-    const q = query.trim();
-    if (q) search.mutate(q);
-  };
+  /**
+   * The actions operations have switched on, in the order they set.
+   *
+   * Driven by the admin portal's `ai_action` list so turning one off is a row
+   * edit rather than a release. Two deliberate choices:
+   *
+   *   - Unknown values are IGNORED rather than rendered. The list is free text,
+   *     and a typo must not put a dead button in front of an agent.
+   *   - An empty or unreadable list falls back to the whole catalogue, because
+   *     a panel with no buttons reads as a broken feature, and the fallback in
+   *     `optionsFor` already encodes exactly that intent.
+   */
+  const byKey = new Map(catalogue.map((a) => [a.key, a]));
+  const picked = optionsFor(lists.data, 'ai_action')
+    .map((k) => byKey.get(k as ResultKey))
+    .filter((a): a is (typeof catalogue)[number] => !!a);
+  const actions = picked.length > 0 ? picked : catalogue;
 
   return (
     <div
@@ -199,20 +219,29 @@ export function AiPanel({
           aria-label={tl('ai.replyLanguage', { defaultValue: 'Reply language' })}
           className="flex overflow-hidden rounded-md ring-1 ring-border"
         >
-          {(['en', 'ar'] as const).map((code) => (
+          {([null, 'en', 'ar'] as const).map((code) => (
             <button
-              key={code}
+              key={code ?? 'auto'}
               type="button"
-              onClick={() => setReplyLocale(code)}
-              aria-pressed={replyLocale === code}
+              // Clicking the active override returns to auto, so there is a way
+              // back without reloading the conversation.
+              onClick={() => setReplyLocale(chosenLocale === code ? null : code)}
+              aria-pressed={chosenLocale === code}
+              title={
+                code === null
+                  ? tl('ai.replyLanguageAutoHint', {
+                      defaultValue: "Match the customer's language",
+                    })
+                  : undefined
+              }
               className={cn(
                 'px-2 py-0.5 text-2xs font-semibold uppercase tracking-wide transition-colors duration-fast ease-out',
-                replyLocale === code
+                chosenLocale === code
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:bg-secondary',
               )}
             >
-              {code}
+              {code ?? tl('ai.replyLanguageAuto', { defaultValue: 'Auto' })}
             </button>
           ))}
         </div>
@@ -320,55 +349,8 @@ export function AiPanel({
         </ResultCard>
       )}
 
-      {active === 'search' && (
-        <ResultCard label={tl('ai.action.search', { defaultValue: 'Search' })}>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              runSearch();
-            }}
-            className="flex items-center gap-2"
-          >
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              aria-label={tl('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
-              placeholder={tl('ai.search.placeholder', { defaultValue: 'Search conversations…' })}
-              className="block h-8 w-full rounded-md border border-border bg-background/60 px-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none text-start"
-            />
-            <Button type="submit" size="sm" loading={search.isPending} disabled={!query.trim()}>
-              {tl('actions.search', { ns: 'common', defaultValue: 'Search' })}
-            </Button>
-          </form>
-          {search.data &&
-            (search.data.results.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {tl('ai.search.empty', { defaultValue: 'No matching conversations.' })}
-              </p>
-            ) : (
-              <ul className="space-y-1">
-                {search.data.results.map((r) => (
-                  <li key={r.conversationId}>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/?conv=${r.conversationId}`)}
-                      className="block w-full rounded-md px-2 py-1.5 text-start transition-colors duration-fast ease-out hover:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                    >
-                      <p className="line-clamp-2 text-xs text-foreground">{r.snippet}</p>
-                      <span className="text-2xs tabular-nums text-muted-foreground">
-                        {(r.score * 100).toFixed(0)}%
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ))}
-        </ResultCard>
-      )}
-
       {/* Errors — show last failed mutation */}
-      {[summarize, suggestReply, sentiment, intent, entities, scoreLead, search]
+      {[summarize, suggestReply, sentiment, intent, entities, scoreLead]
         .filter((m) => m.isError)
         .slice(-1)
         .map((m, i) => (
@@ -383,7 +365,7 @@ export function AiPanel({
           </p>
         ))}
 
-      {[summarize, suggestReply, sentiment, intent, entities, scoreLead, search].some(
+      {[summarize, suggestReply, sentiment, intent, entities, scoreLead].some(
         (m) => m.isPending,
       ) && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
