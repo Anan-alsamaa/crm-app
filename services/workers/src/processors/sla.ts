@@ -26,8 +26,31 @@ export interface SlaDeps {
   logger: Logger;
 }
 
+/**
+ * The policy that governs this ticket, or none.
+ *
+ * `applies_to_priority` is NULLABLE and in practice often null: the
+ * compensation clone ships five active policies that carry no priorities at
+ * all. Dereferencing it unguarded threw `TypeError: Cannot read properties of
+ * null` inside `Array.find`, which does not skip to the next candidate — it
+ * propagates, so the whole reconcile sweep died before it reached the one
+ * policy that DID match. The visible symptom was the entire SLA feature
+ * reporting nothing: no ticket was ever stamped with a policy or a deadline,
+ * so "SLA performance" showed a dash in every row and zero breaches forever,
+ * while the sweep looked like it was running fine.
+ *
+ * A policy that names no priorities governs nothing, which is the honest
+ * reading of an empty list and now the coded one.
+ */
 function pickPolicy(ticket: TicketRow, policies: SlaPolicyRow[]): SlaPolicyRow | null {
-  return policies.find((p) => p.active && p.applies_to_priority.includes(ticket.priority)) ?? null;
+  return (
+    policies.find(
+      (p) =>
+        p.active &&
+        Array.isArray(p.applies_to_priority) &&
+        p.applies_to_priority.includes(ticket.priority),
+    ) ?? null
+  );
 }
 
 function isDone(t: TicketRow): boolean {

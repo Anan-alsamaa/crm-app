@@ -93,6 +93,37 @@ const baseTicket: TicketRow = {
 };
 
 describe('runReconcile (T067)', () => {
+  it('survives an active policy that names no priorities', async () => {
+    /*
+     * The compensation clone ships active policies with a NULL
+     * applies_to_priority. `Array.find` does not skip a predicate that throws —
+     * it propagates — so dereferencing that null killed the whole sweep before
+     * it reached the policy that matched, and NO ticket was ever stamped. The
+     * visible damage was the entire SLA report showing a dash in every row and
+     * zero breaches, while the sweep appeared to run normally.
+     */
+    const nullPriorities = {
+      ...POLICY,
+      id: 'p-null',
+      name: 'Compensation clone',
+      applies_to_priority: null,
+    } as unknown as SlaPolicyRow;
+    // Listed FIRST, so the broken one is reached before the good one.
+    const { repo, patched } = makeRepo([{ ...baseTicket }], [nullPriorities, POLICY]);
+    const q = makeQueues();
+
+    await runReconcile({
+      tickets: repo,
+      slaQueue: q.slaQueue,
+      notificationsQueue: q.notificationsQueue,
+      logger,
+    });
+
+    // The usable policy still wins, and the deadlines still get written.
+    expect(patched[0]?.patch.sla_policy).toBe('p1');
+    expect(patched.some((p) => p.patch.first_response_due_at)).toBe(true);
+  });
+
   it('assigns SLA policy by priority + computes due dates + schedules 4 jobs', async () => {
     const { repo, patched } = makeRepo([{ ...baseTicket }], [POLICY]);
     const q = makeQueues();
