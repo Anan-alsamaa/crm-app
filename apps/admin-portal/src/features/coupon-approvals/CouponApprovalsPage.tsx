@@ -311,17 +311,42 @@ function Row({
         announce its expanded state. The action buttons sit OUTSIDE it, because
         a button inside a button is invalid and the browser will not nest them.
       */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 p-4">
+      {/*
+        THE SUMMARY LINE, always visible.
+
+        The toggle is a STRETCHED OVERLAY sitting under the content, not a
+        <button> wrapped around it. Wrapping was the first attempt and it was
+        wrong twice over: only the part of the row it covered responded, so the
+        hover lit a fragment of the box rather than the box, and the action
+        buttons could not live inside it because a button inside a button is
+        invalid. As an overlay the WHOLE row highlights and the whole row
+        clicks, while Approve/Edit/Reject sit above it and keep their own
+        clicks. Same pattern the order cards in the agent portal use.
+      */}
+      <div
+        className={cn(
+          'relative flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl p-4',
+          'transition-colors duration-fast ease-out hover:bg-secondary/40',
+          expanded && 'rounded-b-none bg-secondary/25',
+        )}
+      >
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className={cn(
-            'flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl px-1 py-1 text-start',
-            'transition-colors duration-fast ease-out hover:bg-secondary/50',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
-          )}
-        >
+          aria-label={
+            row.ticket?.subject ??
+            row.title ??
+            t('couponApprovals.noTicket', { defaultValue: 'No ticket' })
+          }
+          className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
+        />
+        {/*
+          The summary text sits ABOVE the overlay so it renders, but passes its
+          clicks straight through — otherwise the text would be a dead patch in
+          the middle of a clickable row.
+        */}
+        <div className="pointer-events-none relative flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
           <ChevronDownIcon
             size={14}
             className={cn(
@@ -359,11 +384,11 @@ function Row({
           <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
             {formatDateTime(row.date_created)}
           </span>
-        </button>
-        {/* Decide without opening anything: the summary carries enough to say
-            yes, and the ones that need more are the ones worth expanding. */}
+        </div>
+        {/* Above the overlay AND clickable: deciding must not be a side effect
+            of trying to expand, nor the other way round. */}
         {pending && !rejecting && !expanded && (
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="relative flex shrink-0 items-center gap-2">
             <Button
               type="button"
               size="sm"
