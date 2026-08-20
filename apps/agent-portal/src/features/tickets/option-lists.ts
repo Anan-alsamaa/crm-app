@@ -45,7 +45,7 @@ const FALLBACK: Record<string, readonly string[]> = {
    * The fallback is every action, which is what the panel showed before this
    * list existed — an unreadable list must not empty the panel.
    */
-  ai_action: ['summary', 'reply', 'sentiment', 'intent', 'entities', 'lead'],
+  ai_action: ['summary', 'reply', 'intent', 'entities', 'sentiment'],
 };
 
 interface OptionRow {

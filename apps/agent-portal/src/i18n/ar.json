@@ -11,20 +11,12 @@
     "action": {
       "summarize": "تلخيص",
       "suggestReply": "اقتراح ردّ",
-      "sentiment": "المشاعر",
-      "intent": "النيّة",
-      "entities": "الكيانات",
-      "scoreLead": "تقييم العميل المحتمل",
-      "search": "بحث"
+      "sentiment": "حالة العميل",
+      "intent": "نوع الشكوى",
+      "entities": "تفاصيل أساسية"
     },
-    "search": {
-      "placeholder": "ابحث في المحادثات…",
-      "empty": "لا توجد محادثات مطابقة."
-    },
-    "noEntities": "لم يتم اكتشاف أي كيانات.",
-    "replyLanguage": "لغة الرد",
-    "replyLanguageAuto": "تلقائي",
-    "replyLanguageAutoHint": "بلغة العميل نفسها"
+    "noEntities": "لا توجد تفاصيل بعد — لا رقم طلب ولا فرع ولا صنف في هذه المحادثة.",
+    "replyLanguage": "لغة المساعد"
   },
   "helpAssistant": {
     "launch": "أورا",

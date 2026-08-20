@@ -109,12 +109,25 @@ export const prompts = {
     };
   },
 
-  detectIntent(ctx: ConversationContext): { system: string; user: string } {
+  detectIntent(
+    ctx: ConversationContext,
+    candidates: string[] | undefined,
+  ): { system: string; user: string } {
+    // Answer in the operator's OWN vocabulary when we know it. A tag the ticket
+    // form does not offer is a translation job handed back to the agent, which
+    // is most of the work the classifier was supposed to save.
+    const list = candidates?.filter((c) => c.trim()).slice(0, 60) ?? [];
     return {
       system:
-        "You detect the customer's primary intent in a support conversation. " +
-        'Respond with EXACTLY one JSON object: {"intent":"<short lowercase tag>","confidence":0..1}. ' +
-        'Use generic intents (refund, shipping_issue, account_access, product_question, billing, complaint, other). ' +
+        'You classify a customer-support chat by what the customer is complaining about. ' +
+        'Respond with EXACTLY one JSON object: {"intent":"<one value>","confidence":0..1}. ' +
+        (list.length
+          ? `Choose the intent from EXACTLY this list, copied verbatim including its spelling and casing: ${JSON.stringify(list)}. ` +
+            'Pick the single closest one. If genuinely none of them fit, answer with the ' +
+            'closest anyway and give it a low confidence — never invent a value outside the list. '
+          : 'Use a short lowercase tag (late_order, missing_item, wrong_order, quality, ' +
+            'driver_conduct, refund, billing, other). ') +
+        'Confidence is how sure you are, not how bad the complaint is. ' +
         'No prose. ' +
         GUARD,
       user: fence(thread(ctx)),
@@ -124,8 +137,15 @@ export const prompts = {
   extractEntities(ctx: ConversationContext): { system: string; user: string } {
     return {
       system:
-        'You extract structured entities from a conversation. ' +
-        'Respond with EXACTLY one JSON object: {"entities":[{"type":"<order|product|date|amount|tracking|other>","value":"<raw text>"}, ...]}. ' +
+        'You pull out the facts an agent has to copy into a complaint ticket. ' +
+        'Respond with EXACTLY one JSON object: ' +
+        '{"entities":[{"type":"<order number|branch|item|amount|phone|when|driver|other>","value":"<as written>"}, ...]}. ' +
+        // The value is what the agent will paste into a ticket field, so a
+        // tidied-up or inferred version is worse than useless — it is wrong
+        // data that looks deliberate.
+        'Copy each value EXACTLY as it appears in the chat. Never guess, complete ' +
+        'or correct one: an order number half-remembered is worse than an absent one. ' +
+        'Only include what is actually stated. Return an empty list if nothing is. ' +
         'No prose, no markdown. ' +
         GUARD,
       user: fence(thread(ctx)),

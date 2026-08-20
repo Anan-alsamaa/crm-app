@@ -86,44 +86,20 @@ describe('AiPanel — agent assistance', () => {
 });
 
 describe('AiPanel — reply language', () => {
-  it('sends NO locale by default, so the gateway matches the customer', async () => {
-    // The bug this replaces: the default followed the PORTAL, so an English
-    // interface told the model to write English to a customer writing Arabic —
-    // and the instruction to follow the agent's choice overrides the thread, so
-    // the customer's own language lost. An absent locale is what makes the
-    // gateway read the thread instead.
-    ai.suggestReply.mockResolvedValue({ reply: 'ok' });
-    renderPanel();
-    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
-    await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
-    expect(ai.suggestReply.mock.calls[0]![2]).not.toHaveProperty('locale');
-  });
-
-  it('still sends no locale when the interface is Arabic', async () => {
-    // An Arabic interface does not mean the customer writes Arabic — it means
-    // the AGENT reads Arabic. Only the thread says what the customer reads.
+  it('follows the portal language when the agent has not chosen one', async () => {
     ai.suggestReply.mockResolvedValue({ reply: 'ok' });
     ui.language = 'ar-SA';
     renderPanel();
     await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
     await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
-    expect(ai.suggestReply.mock.calls[0]![2]).not.toHaveProperty('locale');
+    expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ locale: 'ar' });
   });
 
-  it('returns to auto when the active override is clicked again', async () => {
+  it('lets the panel selector BEAT an English portal', async () => {
+    // AR here, EN portal -> Arabic. The selector is the more specific
+    // statement: it is about this customer, the portal is about the agent.
     ai.suggestReply.mockResolvedValue({ reply: 'ok' });
-    renderPanel();
-    await userEvent.click(screen.getByRole('button', { name: 'ar' }));
-    await userEvent.click(screen.getByRole('button', { name: 'ar' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
-    await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
-    expect(ai.suggestReply.mock.calls[0]![2]).not.toHaveProperty('locale');
-  });
-
-  it('lets the agent switch to Arabic for one customer', async () => {
-    // An agent working in an English portal answers an Arabic customer in
-    // Arabic. The choice belongs to the conversation, not to the interface.
-    ai.suggestReply.mockResolvedValue({ reply: 'ok' });
+    ui.language = 'en';
     renderPanel();
     await userEvent.click(screen.getByRole('button', { name: 'ar' }));
     await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
@@ -131,20 +107,45 @@ describe('AiPanel — reply language', () => {
     expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ locale: 'ar' });
   });
 
-  it('marks the active language for assistive tech, not just visually', async () => {
+  it('lets the panel selector BEAT an Arabic portal', async () => {
+    // The other direction, which is the one that gets forgotten: EN here with
+    // an Arabic portal must produce English, not Arabic.
+    ai.suggestReply.mockResolvedValue({ reply: 'ok' });
+    ui.language = 'ar';
     renderPanel();
-    // Auto is the default, so neither override is pressed to begin with.
-    expect(screen.getByRole('button', { name: 'Auto' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'en' })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByRole('button', { name: 'ar' })).toHaveAttribute('aria-pressed', 'false');
-
-    await userEvent.click(screen.getByRole('button', { name: 'ar' }));
-    expect(screen.getByRole('button', { name: 'ar' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Auto' })).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(screen.getByRole('button', { name: 'en' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
+    await waitFor(() => expect(ai.suggestReply).toHaveBeenCalled());
+    expect(ai.suggestReply.mock.calls[0]![2]).toMatchObject({ locale: 'en' });
   });
 
-  it('no longer offers conversation search — the inbox has its own', () => {
+  it('marks the effective language for assistive tech, before anyone picks one', () => {
+    ui.language = 'ar-SA';
+    renderPanel();
+    // Pressed without a click: the control shows which language the panel is
+    // in, not merely which button was last used.
+    expect(screen.getByRole('button', { name: 'ar' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'en' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('offers only actions that act on THIS chat', () => {
+    // Search did not act on the conversation in front of the agent, and the
+    // inbox has its own. Lead scoring is a sales idea with no meaning in a
+    // complaints inbox — there are no leads, only complaints.
     renderPanel();
     expect(screen.queryByRole('button', { name: 'Search' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Score lead' })).toBeNull();
+  });
+
+  it('classifies against the complaint types the ticket form offers', async () => {
+    // A generic tag like "shipping_issue" is a translation job handed back to
+    // the agent; the point is an answer they can use as-is.
+    ai.intent.mockResolvedValue({ intent: 'Late order', confidence: 0.9 });
+    renderPanel();
+    await userEvent.click(screen.getByRole('button', { name: 'Complaint type' }));
+    await waitFor(() => expect(ai.intent).toHaveBeenCalled());
+    const candidates = ai.intent.mock.calls[0]![2];
+    expect(Array.isArray(candidates)).toBe(true);
+    expect(candidates).toContain('Late order');
   });
 });

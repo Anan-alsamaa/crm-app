@@ -48,7 +48,7 @@ const LISTS = {
   // the button off for everyone reading English. Semantic search is absent on
   // purpose: agents search from the inbox's own search box, and a second
   // search that only found conversations was the odd one out on the panel.
-  ai_action: ['summary', 'reply', 'sentiment', 'intent', 'entities', 'lead'],
+  ai_action: ['summary', 'reply', 'intent', 'entities', 'sentiment'],
   coupon_type: ['Private', 'Public'],
   discount_category: ['Amount', 'Percentage'],
 };

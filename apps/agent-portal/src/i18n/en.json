@@ -119,17 +119,12 @@
     "action": {
       "summarize": "Summarize",
       "suggestReply": "Suggest reply",
-      "sentiment": "Sentiment",
-      "intent": "Intent",
-      "entities": "Entities",
-      "scoreLead": "Score lead",
-      "search": "Search"
+      "sentiment": "Customer mood",
+      "intent": "Complaint type",
+      "entities": "Key details"
     },
-    "search": {
-      "placeholder": "Search conversations…",
-      "empty": "No matching conversations."
-    },
-    "noEntities": "No entities detected."
+    "noEntities": "Nothing stated yet — no order number, branch or item in this chat.",
+    "replyLanguage": "Assistant language"
   },
   "helpAssistant": {
     "launch": "Aura",

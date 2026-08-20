@@ -101,8 +101,13 @@ export const ai = {
     }),
   sentiment: (c: AiCaller, conversationId: string) =>
     post<SentimentResponse>(c, AI_ENDPOINTS.analyzeSentiment, { conversationId }),
-  intent: (c: AiCaller, conversationId: string) =>
-    post<IntentResponse>(c, AI_ENDPOINTS.detectIntent, { conversationId }),
+  /**
+   * `candidates` are the live complaint types. Sent from here rather than
+   * known by the gateway so the classifier always answers in whatever
+   * vocabulary operations are using today.
+   */
+  intent: (c: AiCaller, conversationId: string, candidates?: string[]) =>
+    post<IntentResponse>(c, AI_ENDPOINTS.detectIntent, { conversationId, candidates }),
   entities: (c: AiCaller, conversationId: string) =>
     post<EntitiesResponse>(c, AI_ENDPOINTS.extractEntities, { conversationId }),
   search: (c: AiCaller, query: string, limit = 10) =>

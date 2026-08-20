@@ -39,6 +39,21 @@ export const SentimentResponse = z.object({
 });
 export type SentimentResponse = z.infer<typeof SentimentResponse>;
 
+/**
+ * Classify a chat into ONE of the business's own complaint types.
+ *
+ * `candidates` is the live `complaint_type` list, sent by the caller rather
+ * than hard-coded here: operations edit that list in the admin portal without a
+ * deploy, and a classifier answering from a stale set of generic tags
+ * ("shipping_issue", "billing") gives an agent something they then have to
+ * translate into the type the ticket form actually offers. Absent = let the
+ * model answer freely, which is the old behaviour.
+ */
+export const IntentRequest = ConversationRef.extend({
+  candidates: z.array(z.string()).max(60).optional(),
+});
+export type IntentRequest = z.infer<typeof IntentRequest>;
+
 export const IntentResponse = z.object({ intent: z.string(), confidence: z.number() });
 export type IntentResponse = z.infer<typeof IntentResponse>;
 

@@ -49,52 +49,37 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
   const { user } = useAuth();
   const caller = { userId: user?.id ?? '', vendorId };
 
-  type ResultKey = 'summary' | 'reply' | 'sentiment' | 'intent' | 'entities' | 'lead';
+  type ResultKey = 'summary' | 'reply' | 'sentiment' | 'intent' | 'entities';
   /**
-   * The language of the SUGGESTED REPLY, which is not automatically the
-   * language of the portal: an agent working in English still answers an Arabic
-   * customer in Arabic, so the toggle has to stay.
+   * ONE language for this panel, from two places, with a fixed priority.
    *
-   * But it FOLLOWS the portal language until the agent touches it. Switching the
-   * whole app to Arabic and then getting English suggestions reads as the
-   * feature ignoring you — and an agent who has switched the interface is
-   * overwhelmingly about to write Arabic. Once they pick a side here, that
-   * choice is theirs and the page language stops overriding it.
+   *   1. The selector in this panel, when the agent has used it.
+   *   2. Otherwise the portal language.
+   *
+   * The selector wins. AR here with an English portal means Arabic; EN here
+   * with an Arabic portal means English. That is the whole rule, and it is
+   * worth stating plainly because the two settings genuinely can disagree and
+   * "which one is in charge" is the first thing anyone asks.
+   *
+   * The chosen language drives BOTH halves of the panel — the buttons and
+   * result headings the agent reads, and the language the suggested reply is
+   * written in. Splitting them is what made the feature feel broken: the agent
+   * picked AR, the draft came back in Arabic, and the buttons that produced it
+   * stayed in English.
    */
-  /**
-   * `null` is AUTO, and auto is the default.
-   *
-   * It used to default to the PORTAL's language, which is the wrong thing to
-   * follow: an agent working in an English interface still answers an Arabic
-   * customer in Arabic, and an Arabic interface does not mean the customer
-   * writes Arabic. Forcing either way produced replies in a language the
-   * customer had not used — and a reply in the wrong language cannot be edited
-   * into the right one, it has to be rewritten.
-   *
-   * On auto no locale is sent at all, and the gateway matches the language of
-   * the THREAD, which is the only evidence of what the customer actually reads.
-   * The two explicit buttons stay for the case the agent knows better.
-   */
+  const portalLocale: 'en' | 'ar' = (i18n.language ?? 'en').toLowerCase().startsWith('ar')
+    ? 'ar'
+    : 'en';
   const [chosenLocale, setChosenLocale] = useState<'en' | 'ar' | null>(null);
+  const uiLocale: 'en' | 'ar' = chosenLocale ?? portalLocale;
   const setReplyLocale = setChosenLocale;
 
-  /**
-   * The panel speaks the language it is about to write in.
-   *
-   * `t` follows the portal, which left the toggle half-obeyed: an agent picked
-   * AR, the draft came back in Arabic, and the buttons that produced it stayed
-   * in English. The toggle is the agent saying "I am working in Arabic now", so
-   * this whole panel answers in that language — not just its output.
-   *
-   * Scoped to the panel deliberately. Nothing outside it changes, because the
-   * choice is about this reply, not about the application.
-   */
   const tl = useMemo(
     // Guarded: `getFixedT` is part of a full i18next instance, and a caller
     // that supplies a lighter one should get English labels, not a crash in
     // the middle of a conversation.
-    () => (chosenLocale && typeof i18n.getFixedT === 'function' ? i18n.getFixedT(chosenLocale) : t),
-    [i18n, chosenLocale, t],
+    () => (typeof i18n.getFixedT === 'function' ? i18n.getFixedT(uiLocale) : t),
+    [i18n, uiLocale, t],
   );
   const [active, setActive] = useState<ResultKey | null>(null);
   const lists = useOptionLists();
@@ -104,13 +89,10 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
     onSuccess: () => setActive('summary'),
   });
   const suggestReply = useMutation({
-    // No locale on auto — an absent locale is what tells the gateway to match
-    // the customer's own language rather than being told one.
-    mutationFn: () =>
-      ai.suggestReply(caller, conversationId, {
-        draft,
-        ...(chosenLocale ? { locale: chosenLocale } : {}),
-      }),
+    // Always explicit. The gateway treats a stated locale as overriding the
+    // language of the thread, which is exactly what is wanted here: the agent
+    // (or their portal) has said which language this customer is answered in.
+    mutationFn: () => ai.suggestReply(caller, conversationId, { draft, locale: uiLocale }),
     onSuccess: (data) => {
       setActive('reply');
       onReplySuggested?.(data.reply);
@@ -121,16 +103,14 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
     onSuccess: () => setActive('sentiment'),
   });
   const intent = useMutation({
-    mutationFn: () => ai.intent(caller, conversationId),
+    // Answer in the vocabulary the ticket form offers, so the result can be
+    // used as-is instead of being translated by the agent.
+    mutationFn: () => ai.intent(caller, conversationId, optionsFor(lists.data, 'complaint_type')),
     onSuccess: () => setActive('intent'),
   });
   const entities = useMutation({
     mutationFn: () => ai.entities(caller, conversationId),
     onSuccess: () => setActive('entities'),
-  });
-  const scoreLead = useMutation({
-    mutationFn: () => ai.scoreLead(caller, conversationId),
-    onSuccess: () => setActive('lead'),
   });
 
   /**
@@ -157,27 +137,21 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
     },
     {
       key: 'sentiment',
-      label: tl('ai.action.sentiment', { defaultValue: 'Sentiment' }),
+      label: tl('ai.action.sentiment', { defaultValue: 'Customer mood' }),
       busy: sentiment.isPending,
       run: () => sentiment.mutate(),
     },
     {
       key: 'intent',
-      label: tl('ai.action.intent', { defaultValue: 'Intent' }),
+      label: tl('ai.action.intent', { defaultValue: 'Complaint type' }),
       busy: intent.isPending,
       run: () => intent.mutate(),
     },
     {
       key: 'entities',
-      label: tl('ai.action.entities', { defaultValue: 'Entities' }),
+      label: tl('ai.action.entities', { defaultValue: 'Key details' }),
       busy: entities.isPending,
       run: () => entities.mutate(),
-    },
-    {
-      key: 'lead',
-      label: tl('ai.action.scoreLead', { defaultValue: 'Score lead' }),
-      busy: scoreLead.isPending,
-      run: () => scoreLead.mutate(),
     },
   ];
 
@@ -216,32 +190,26 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
             into the right one. */}
         <div
           role="group"
-          aria-label={tl('ai.replyLanguage', { defaultValue: 'Reply language' })}
+          aria-label={tl('ai.replyLanguage', { defaultValue: 'Assistant language' })}
           className="flex overflow-hidden rounded-md ring-1 ring-border"
         >
-          {([null, 'en', 'ar'] as const).map((code) => (
+          {(['en', 'ar'] as const).map((code) => (
             <button
-              key={code ?? 'auto'}
+              key={code}
               type="button"
-              // Clicking the active override returns to auto, so there is a way
-              // back without reloading the conversation.
-              onClick={() => setReplyLocale(chosenLocale === code ? null : code)}
-              aria-pressed={chosenLocale === code}
-              title={
-                code === null
-                  ? tl('ai.replyLanguageAutoHint', {
-                      defaultValue: "Match the customer's language",
-                    })
-                  : undefined
-              }
+              onClick={() => setReplyLocale(code)}
+              // Reflects the EFFECTIVE language, not just an explicit pick, so
+              // the control always shows which language the panel is in —
+              // including before anyone has touched it.
+              aria-pressed={uiLocale === code}
               className={cn(
                 'px-2 py-0.5 text-2xs font-semibold uppercase tracking-wide transition-colors duration-fast ease-out',
-                chosenLocale === code
+                uiLocale === code
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:bg-secondary',
               )}
             >
-              {code ?? tl('ai.replyLanguageAuto', { defaultValue: 'Auto' })}
+              {code}
             </button>
           ))}
         </div>
@@ -276,7 +244,7 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
         </ResultCard>
       )}
       {active === 'sentiment' && sentiment.data && (
-        <ResultCard label={tl('ai.action.sentiment', { defaultValue: 'Sentiment' })}>
+        <ResultCard label={tl('ai.action.sentiment', { defaultValue: 'Customer mood' })}>
           <div className="flex items-baseline gap-3">
             <Pill
               tone={
@@ -296,7 +264,7 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
         </ResultCard>
       )}
       {active === 'intent' && intent.data && (
-        <ResultCard label={tl('ai.action.intent', { defaultValue: 'Intent' })}>
+        <ResultCard label={tl('ai.action.intent', { defaultValue: 'Complaint type' })}>
           <div className="flex items-baseline gap-3">
             <Pill tone="primary">{intent.data.intent}</Pill>
             <span className="text-xs text-muted-foreground tabular-nums">
@@ -306,10 +274,12 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
         </ResultCard>
       )}
       {active === 'entities' && entities.data && (
-        <ResultCard label={tl('ai.action.entities', { defaultValue: 'Entities' })}>
+        <ResultCard label={tl('ai.action.entities', { defaultValue: 'Key details' })}>
           {entities.data.entities.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              {tl('ai.noEntities', { defaultValue: 'No entities detected.' })}
+              {tl('ai.noEntities', {
+                defaultValue: 'Nothing stated yet — no order number, branch or item in this chat.',
+              })}
             </p>
           ) : (
             <ul className="space-y-1.5">
@@ -325,32 +295,8 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
           )}
         </ResultCard>
       )}
-      {active === 'lead' && scoreLead.data && (
-        <ResultCard label={tl('ai.action.scoreLead', { defaultValue: 'Score lead' })}>
-          <div className="space-y-2">
-            <div className="flex items-baseline gap-3">
-              <span className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-                {scoreLead.data.score}
-              </span>
-              <span className="text-xs text-muted-foreground">/ 100</span>
-            </div>
-            {scoreLead.data.signals.length > 0 && (
-              <ul className="flex flex-wrap gap-1.5">
-                {scoreLead.data.signals.map((s, i) => (
-                  <li key={i}>
-                    <Pill tone="muted" size="sm">
-                      {s}
-                    </Pill>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </ResultCard>
-      )}
-
       {/* Errors — show last failed mutation */}
-      {[summarize, suggestReply, sentiment, intent, entities, scoreLead]
+      {[summarize, suggestReply, sentiment, intent, entities]
         .filter((m) => m.isError)
         .slice(-1)
         .map((m, i) => (
@@ -365,9 +311,7 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
           </p>
         ))}
 
-      {[summarize, suggestReply, sentiment, intent, entities, scoreLead].some(
-        (m) => m.isPending,
-      ) && (
+      {[summarize, suggestReply, sentiment, intent, entities].some((m) => m.isPending) && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner /> {tl('ai.running', { defaultValue: 'Working…' })}
         </div>

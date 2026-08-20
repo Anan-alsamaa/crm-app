@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   AI_ENDPOINTS,
   ConversationRef,
+  IntentRequest,
   SuggestReplyRequest,
   SemanticSearchRequest,
   HelpAssistantRequest,
@@ -323,17 +324,19 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
   app.post(AI_ENDPOINTS.detectIntent, async (req, reply) => {
     const caller = await authOrReply(req, reply);
     if (!caller) return;
-    const body = ConversationRef.safeParse(req.body);
+    const body = IntentRequest.safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
     const ctx = await deps.directus.getConversation(body.data.conversationId);
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
 
-    const cacheKey = `intent:${body.data.conversationId}:${ctx.messages.length}`;
+    // The candidate list is part of the question, so it is part of the key —
+    // editing the complaint types must not keep serving the old answer.
+    const cacheKey = `intent:${body.data.conversationId}:${ctx.messages.length}:${(body.data.candidates ?? []).join('|')}`;
     const gateRes = await gate(caller, reply, AI_ENDPOINTS.detectIntent, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as IntentResponse);
 
-    const p = prompts.detectIntent(ctx);
+    const p = prompts.detectIntent(ctx, body.data.candidates);
     const schema = z.object({ intent: z.string(), confidence: z.number() });
     try {
       const result: IntentResponse = await runWith(
