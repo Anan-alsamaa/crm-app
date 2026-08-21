@@ -287,19 +287,29 @@ function TopNav({ sections }: { sections: NavSection[] }) {
 function MobileBrand() {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-col items-start gap-1 leading-none">
+    <div className="flex flex-col items-start gap-0.5 leading-none">
       {/* The supplied tile artwork rather than a traced lockup — it already
           carries the wordmark, so nothing beside it repeats the name. A raster
           is fine at one known masthead size, unlike the favicon which has to
           hold from 16px to 180px.
 
-          STACKED, not side by side. The tile plus a label on one line is wider
-          than the lockup it replaced, and the masthead shares its row with the
-          primary nav — enough to push "Agent performance" into an ellipsis at
-          1440px. Stacked, the block is narrower than what was there before. */}
-      <img src="/sara-crm-icon.png" alt="Sara CRM" className="h-7 w-7 shrink-0 rounded-md" />
-      <span className="min-w-0 leading-tight">
-        <span className="block text-2xs text-ink-muted">
+          STACKED, and that is what pays for the SIZE. The masthead shares its
+          row with the primary nav and there is no slack in it — a tile beside
+          the label pushed "Agent performance" into an ellipsis at 1440px. With
+          the label UNDER the tile, the block is only as wide as its widest
+          part, and the label is 71px, so every pixel of tile up to that is
+          free. 56px is the largest square that still leaves the label room
+          inside the 80px bar: twice the size, at no cost to the nav. */}
+      <img
+        src="/sara-crm-icon.png"
+        alt="Sara CRM"
+        /* No `rounded-*`: the artwork's corners are already cut, and its own
+           radius is transparent — rounding the element again clips the
+           corners a second time and shaves the tile. */
+        className="h-14 w-14 shrink-0"
+      />
+      <span className="min-w-0 leading-none">
+        <span className="block text-2xs leading-none text-ink-muted">
           {t('app.workspace', { defaultValue: 'Agent workspace' })}
         </span>
       </span>

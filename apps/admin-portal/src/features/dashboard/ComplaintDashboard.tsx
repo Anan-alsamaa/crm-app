@@ -31,6 +31,7 @@ import {
   type Cut,
   type MonthPoint,
 } from './complaints-api.js';
+import { CouponSpend } from './CouponSpend.js';
 
 /**
  * The operations manager's Dashboard, rebuilt on our data.
@@ -1321,6 +1322,11 @@ export function ComplaintDashboard() {
               })}
             </p>
           )}
+
+          {/* What compensation is costing, for the roles allowed to see it.
+              Sits above the ops snapshot because it is the one number on this
+              page with money attached. */}
+          <CouponSpend from={applied.from} to={applied.to} />
 
           {/* ── Ops snapshot ─────────────────────────────────────────────
               The reference dashboard's snapshot band: a titled card whose

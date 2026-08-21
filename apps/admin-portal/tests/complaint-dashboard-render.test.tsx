@@ -24,6 +24,21 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/dashboard/complaints-api.js', () => api);
 
+/*
+ * The coupon spend card is stubbed here, not exercised.
+ *
+ * It reads the signed-in user (to decide whether the role may see payout
+ * money) and runs its own query, so it needs an AuthProvider and a
+ * QueryClientProvider that these tests deliberately do not build — they assert
+ * the dashboard's OWN sections against a mocked data layer. Its arithmetic is
+ * covered directly in packages/reports (`couponWorth`), and its gate in
+ * `canSeeCouponMoney`, which are better places to test both than through a
+ * rendered dashboard.
+ */
+vi.mock('../src/features/dashboard/CouponSpend.js', () => ({
+  CouponSpend: () => null,
+}));
+
 import { ComplaintDashboard } from '../src/features/dashboard/ComplaintDashboard.js';
 
 const bd = (label: string, count: number) => ({ key: label, label, count });

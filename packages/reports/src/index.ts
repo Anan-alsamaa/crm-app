@@ -106,3 +106,5 @@ export {
   type CouponApprovalFact,
   type CouponOutcome,
 } from './coupon-approvals.js';
+export { couponSar, couponWorth } from './coupon-value.js';
+export type { CouponValueFact, CouponWorth, CouponSideTotal } from './coupon-value.js';

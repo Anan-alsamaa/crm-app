@@ -85,3 +85,28 @@ export function isAdmin(user: AuthUser | null): boolean {
   if (!user) return false;
   return user.admin_access || (!!user.role && ADMIN_ROLES.includes(user.role.name));
 }
+
+/**
+ * Roles allowed to see COUPON MONEY — the riyal totals on the dashboard.
+ *
+ * Narrower than `isAdmin` on purpose. Compensation spend is a commercial
+ * figure: it says what the operation is paying out to keep customers, which is
+ * not something every person who can open this portal needs, and it is the
+ * kind of number that gets screenshotted. Default deny, and widen it when
+ * somebody asks.
+ */
+export const COUPON_MONEY_ROLES = ['Administrator', 'Admin', 'Supervisor'];
+
+/**
+ * Whether to render the coupon spend figures.
+ *
+ * The UI check is NOT the security boundary — Directus decides what a session
+ * may read from `coupon_approvals`, and a role without that permission gets
+ * nothing back however the page is styled. This exists so a role that CAN read
+ * the rows for its own work is not shown the aggregate payout across the whole
+ * operation as a headline number.
+ */
+export function canSeeCouponMoney(user: AuthUser | null): boolean {
+  if (!user) return false;
+  return !!user.role && COUPON_MONEY_ROLES.includes(user.role.name);
+}
