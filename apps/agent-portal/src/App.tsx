@@ -16,7 +16,7 @@ import {
   TicketIcon,
   Toaster,
   UsersIcon,
-  YijiLogo,
+  SaraLogo,
   cn,
   type AppShellRailContext,
 } from '@yiji/ui';
@@ -125,7 +125,7 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
           isCollapsed ? 'justify-center px-2' : 'px-3.5',
         )}
       >
-        <YijiLogo variant="tile" size={32} className="bg-background/95 shadow-sm shrink-0" />
+        <SaraLogo variant="mark" size={22} title="" className="shrink-0 text-ink-foreground" />
         {!isCollapsed && (
           <div className="min-w-0 leading-tight">
             <div
@@ -291,7 +291,7 @@ function MobileBrand() {
   const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2.5">
-      <YijiLogo variant="tile" size={34} className="shrink-0 bg-rail shadow-sm" />
+      <SaraLogo variant="mark" size={24} title="" className="shrink-0 text-ink-foreground" />
       {/* The masthead names the product AND which portal you are in — the
           lockup used to be a bare word, which told a supervisor with both
           portals open nothing about which one they were looking at. */}
@@ -375,6 +375,10 @@ function Shell({ children }: { children: React.ReactNode }) {
                 to search already has its own field, and a second one competed
                 with them. The command palette is still one Cmd/Ctrl+K away. */}
             <div className="flex items-center gap-0.5 rounded-full bg-ink-foreground/10 p-1 ring-1 ring-ink-foreground/15">
+              {/* Desktop lives in `topBar`; `topBarActions` above is the MOBILE
+                  header only, so a control placed there alone is invisible to
+                  everyone on a laptop. */}
+              <PageRefresh />
               <NotificationBell />
               <HelpAssistant />
               <SoundToggle />

@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Button, cn, FormField, Input, toast, Toaster, YijiLogo } from '@yiji/ui';
+import { Button, cn, FormField, Input, toast, Toaster, SaraLogo } from '@yiji/ui';
 import { loginIdentity } from '@yiji/shared-types';
 import { useAuth } from '../lib/auth/AuthContext.js';
 import { LanguageToggle } from '../components/LanguageToggle.js';
@@ -159,21 +159,19 @@ export function Login() {
       </div>
 
       {/* Top-start wordmark */}
-      <div className="absolute start-6 top-5 z-10 flex items-center gap-2">
-        <YijiLogo size={28} />
-        <span className="text-[15px] font-semibold tracking-[-0.015em] text-display">Sara CRM</span>
+      <div className="absolute start-6 top-5 z-10 flex items-center">
+        <SaraLogo size={22} className="text-primary" />
       </div>
 
       {/* Centered board card — elevated surface, hairline ring, deep shadow. */}
       <div className="relative z-10 w-full max-w-[420px] animate-fade-in">
         <div className="overflow-hidden rounded-2xl bg-card shadow-xl shadow-black/40 ring-1 ring-foreground/[0.06]">
           <div className="overflow-hidden rounded-2xl bg-card">
-            {/* Top brand panel inside the card — the logo sits in a tinted tile
-                chip, the board's icon-chip move at welcome scale. */}
+            {/* Top brand panel inside the card. No tile chip: the lockup is
+                WIDE, and a square frame either crops it or pads it into a
+                stamp. It stands on the card the way it stands anywhere else. */}
             <div className="flex flex-col items-center gap-4 px-8 pb-2 pt-8 text-center">
-              <span className="grid h-16 w-16 place-items-center rounded-2xl bg-secondary/70 ring-1 ring-foreground/[0.06]">
-                <YijiLogo size={44} />
-              </span>
+              <SaraLogo size={30} className="text-primary" />
               <div className="space-y-1.5">
                 <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
                   {view === 'signin'

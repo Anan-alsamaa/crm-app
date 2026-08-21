@@ -57,7 +57,7 @@ function tileFor(section: NavSection): string {
  * everything else as quiet text on the canvas — high contrast where you are,
  * nothing where you are not. */
 const TRIGGER_BASE =
-  'group relative flex h-10 items-center gap-1.5 rounded-full px-4 text-sm whitespace-nowrap transition-[background-color,color,box-shadow,font-weight] duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:active:scale-[0.97]';
+  'group relative flex h-10 min-w-0 items-center gap-1.5 rounded-full px-4 text-sm transition-[background-color,color,box-shadow,font-weight] duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:active:scale-[0.97]';
 /* The selected pill is a jade wash with a hairline of the same hue — the glow
  * treatment from the reference boards — rather than a solid fill, which on the
  * floating dark bar read as a button, not a location. */
@@ -276,15 +276,17 @@ function MenuGroup({ section }: { section: NavSection }) {
 export function TopNav({ sections }: { sections: NavSection[] }) {
   return (
     // No overflow scroll here: a scroll container would clip the absolutely
-    // positioned dropdown panels. If the row is ever too tight the pills
-    // truncate; below lg the drawer takes over anyway.
+    // positioned dropdown panels. When the row is too tight the pills TRUNCATE
+    // instead — which needs `min-w-0` all the way down, or a flex child refuses
+    // to shrink below its content and the row silently slides underneath the
+    // utilities at the end of the masthead instead of compressing.
     <ul className="flex min-w-0 items-center gap-1">
       {sections.map((section, i) => {
         // Divider before the rarely-touched setup groups, so the bar keeps the
         // "daily work / occasional setup" split the rail headings gave it.
         const startsSetup = section.items.length === 1 && sections[i - 1]?.items.length !== 1;
         return (
-          <li key={section.heading ?? section.items[0].to} className="flex items-center">
+          <li key={section.heading ?? section.items[0].to} className="flex min-w-0 items-center">
             {i > 0 && startsSetup && (
               <span aria-hidden className="mx-1.5 h-5 w-px shrink-0 bg-border" />
             )}

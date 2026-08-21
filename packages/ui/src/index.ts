@@ -71,6 +71,8 @@ export { EmptyState } from './EmptyState.js';
 export type { EmptyStateProps } from './EmptyState.js';
 export { ExportButtons } from './ExportButtons.js';
 export { RefreshButton } from './RefreshButton.js';
+export { SaraLogo } from './SaraLogo.js';
+export type { SaraLogoProps } from './SaraLogo.js';
 export type { RefreshButtonProps } from './RefreshButton.js';
 export type { ExportButtonsProps } from './ExportButtons.js';
 export { ErrorState } from './ErrorState.js';
