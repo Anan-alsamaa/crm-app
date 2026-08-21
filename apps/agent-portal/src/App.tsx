@@ -16,7 +16,7 @@ import {
   TicketIcon,
   Toaster,
   UsersIcon,
-  SaraLogo,
+  YijiLogo,
   cn,
   type AppShellRailContext,
 } from '@yiji/ui';
@@ -125,7 +125,7 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
           isCollapsed ? 'justify-center px-2' : 'px-3.5',
         )}
       >
-        <SaraLogo variant="mark" size={22} title="" className="shrink-0 text-ink-foreground" />
+        <YijiLogo variant="tile" size={32} className="bg-background/95 shadow-sm shrink-0" />
         {!isCollapsed && (
           <div className="min-w-0 leading-tight">
             <div
@@ -291,7 +291,7 @@ function MobileBrand() {
   const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2.5">
-      <SaraLogo variant="mark" size={24} title="" className="shrink-0 text-ink-foreground" />
+      <YijiLogo variant="tile" size={34} className="shrink-0 bg-rail shadow-sm" />
       {/* The masthead names the product AND which portal you are in — the
           lockup used to be a bare word, which told a supervisor with both
           portals open nothing about which one they were looking at. */}

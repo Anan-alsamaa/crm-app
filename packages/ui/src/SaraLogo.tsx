@@ -4,6 +4,9 @@ import { cn } from './cn.js';
 /**
  * The SARA mark, in the family of SARA Connect and SARA POS.
  *
+ * NOT RENDERED ANYWHERE YET — deliberately. The brand colour is the owner's
+ * call and it has not been made, so this waits, unplaced, until it has.
+ *
  * Six slanted bars: one slit into three segments, one long descender that runs
  * past the baseline, one full-height, and three short. Traced from the official
  * SARA Connect artwork rather than eyeballed — bar width 140, pitch 211, slant

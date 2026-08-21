@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Button, FormField, Input, SaraLogo } from '@yiji/ui';
+import { Button, FormField, Input, YijiLogo } from '@yiji/ui';
 import { useAuth } from '../lib/auth/AuthContext.js';
 import { LanguageToggle } from '../components/LanguageToggle.js';
 
@@ -82,17 +82,18 @@ export function ResetPassword() {
       <div className="absolute end-5 top-5 z-10">
         <LanguageToggle />
       </div>
-      <div className="absolute start-6 top-5 z-10 flex items-center">
-        {/* The lockup names the product. The text beside it used to read
-            "Yiji Sara CRM" — the old brand and the new one, side by side. */}
-        <SaraLogo size={22} className="text-primary" />
+      <div className="absolute start-6 top-5 z-10 flex items-center gap-2">
+        <YijiLogo size={28} />
+        <span className="text-[15px] font-semibold tracking-[-0.015em] text-display">
+          Yiji <span className="text-muted-foreground font-normal">Sara CRM</span>
+        </span>
       </div>
 
       <div className="relative z-10 w-full max-w-[420px] animate-fade-in">
         <div className="overflow-hidden rounded-2xl bg-card shadow-2xl shadow-black/40 ring-1 ring-foreground/[0.08]">
           <div className="overflow-hidden rounded-2xl bg-card">
             <div className="flex flex-col items-center gap-4 px-8 pb-2 pt-8 text-center">
-              <SaraLogo size={30} className="text-primary" />
+              <YijiLogo size={72} />
               <div className="space-y-1.5">
                 <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
                   {t('reset.title', { defaultValue: 'Choose a new password' })}
