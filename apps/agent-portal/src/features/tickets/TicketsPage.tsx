@@ -7,6 +7,11 @@ import {
   Button,
   ChevronDownIcon,
   CloseIcon,
+  cn,
+  DateField,
+  formatDate,
+  formatDateTime,
+  formatRelative,
   Input,
   MeterBar,
   Pill,
@@ -16,13 +21,9 @@ import {
   Skeleton,
   Spinner,
   TicketEmptyArt,
+  toast,
   Toolbar,
   ToolbarSpacer,
-  cn,
-  formatDate,
-  formatDateTime,
-  formatRelative,
-  toast,
   useIsDesktop,
 } from '@yiji/ui';
 import {
@@ -310,24 +311,24 @@ export function TicketsPage() {
                       <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                         {t('performance.from', { defaultValue: 'From' })}
                       </span>
-                      <Input
-                        type="date"
+                      <DateField
+                        size="sm"
                         value={criteria.from ?? ''}
-                        onChange={(e) => setCriteria((c) => ({ ...c, from: e.target.value }))}
+                        onChange={(v) => setCriteria((c) => ({ ...c, from: v }))}
                         aria-label={t('performance.from', { defaultValue: 'From' })}
-                        className="h-8 w-full text-xs"
+                        className="w-full"
                       />
                     </label>
                     <label className="block space-y-1">
                       <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                         {t('performance.to', { defaultValue: 'To' })}
                       </span>
-                      <Input
-                        type="date"
+                      <DateField
+                        size="sm"
                         value={criteria.to ?? ''}
-                        onChange={(e) => setCriteria((c) => ({ ...c, to: e.target.value }))}
+                        onChange={(v) => setCriteria((c) => ({ ...c, to: v }))}
                         aria-label={t('performance.to', { defaultValue: 'To' })}
-                        className="h-8 w-full text-xs"
+                        className="w-full"
                       />
                     </label>
                   </div>

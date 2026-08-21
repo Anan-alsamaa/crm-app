@@ -4,20 +4,21 @@ import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
 import {
   Button,
+  DateField,
   ExportButtons,
+  formatDate,
+  formatRelative,
   Input,
+  Ltr,
   Pagination,
   Pill,
   SelectMenu,
+  Skeleton,
   Table,
   TableSurface,
   Th,
-  Skeleton,
   Toolbar,
   ToolbarSpacer,
-  formatRelative,
-  formatDate,
-  Ltr,
 } from '@yiji/ui';
 import { exportFileName } from '@yiji/shared-config';
 import { directus } from '../../lib/directus.js';
@@ -457,11 +458,10 @@ export function AllCompensationPage() {
               <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {t('performance.from', { defaultValue: 'From' })}
               </span>
-              <Input
-                type="date"
+              <DateField
                 value={from}
-                onChange={(e) => {
-                  setFrom(e.target.value);
+                onChange={(v) => {
+                  setFrom(v);
                   setPage(1);
                 }}
                 aria-label={t('performance.from', { defaultValue: 'From' })}
@@ -471,11 +471,10 @@ export function AllCompensationPage() {
               <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {t('performance.to', { defaultValue: 'To' })}
               </span>
-              <Input
-                type="date"
+              <DateField
                 value={to}
-                onChange={(e) => {
-                  setTo(e.target.value);
+                onChange={(v) => {
+                  setTo(v);
                   setPage(1);
                 }}
                 aria-label={t('performance.to', { defaultValue: 'To' })}

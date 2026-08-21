@@ -4,8 +4,10 @@ import {
   Avatar,
   Button,
   ClockIcon,
+  cn,
+  DateField,
   EmptyState,
-  Input,
+  formatDateTime,
   Pill,
   ProgressRing,
   SelectMenu,
@@ -20,10 +22,8 @@ import {
   Toolbar,
   ToolbarSpacer,
   Tr,
-  ZapIcon,
-  cn,
-  formatDateTime,
   type MetricTone,
+  ZapIcon,
 } from '@yiji/ui';
 import { useSlaReports, type SlaCell, type TicketSla } from './api.js';
 import { reportFilename } from '@yiji/reports';
@@ -279,21 +279,11 @@ export function SlaReportsPage() {
         </div>
         <label className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           {t('complaintDash.from', { defaultValue: 'From' })}
-          <Input
-            type="date"
-            className="h-9 w-[9.5rem]"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
+          <DateField size="md" className="w-[9.5rem]" value={from} onChange={(v) => setFrom(v)} />
         </label>
         <label className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           {t('complaintDash.to', { defaultValue: 'To' })}
-          <Input
-            type="date"
-            className="h-9 w-[9.5rem]"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
+          <DateField size="md" className="w-[9.5rem]" value={to} onChange={(v) => setTo(v)} />
         </label>
         {(from || to) && (
           <Button

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
-import { Button, cn, Pill, Spinner } from '@yiji/ui';
+import { AI_SKIN, Button, cn, Pill, Spinner } from '@yiji/ui';
 import { ai, type AiError } from '../../lib/ai-client.js';
 import { optionsFor, useOptionLists } from '../tickets/option-lists.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
@@ -176,14 +176,33 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
   return (
     <div
       className={cn(
-        'rounded-2xl bg-card/70 px-5 py-4 shadow-soft ring-1 ring-foreground/[0.04] space-y-4',
+        'overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.08]',
         className,
       )}
     >
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          {tl('ai.title', { defaultValue: 'AI assistance' })}
-        </h3>
+      {/* Same identity as the Aura drawer — an indigo band with the mark. The
+          two AI surfaces used to look like unrelated features; carrying one
+          treatment across both is what makes them read as one assistant. */}
+      <div
+        className={cn(
+          'flex items-center justify-between gap-2 px-4 py-2.5',
+          AI_SKIN.head,
+          AI_SKIN.headText,
+        )}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <span
+            aria-hidden
+            className={cn('grid h-6 w-6 shrink-0 place-items-center rounded-lg', AI_SKIN.headChip)}
+          >
+            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor" aria-hidden>
+              <path d="M8 1.6 9.4 5.2 13 6.6 9.4 8 8 11.6 6.6 8 3 6.6 6.6 5.2 8 1.6ZM12.6 10.4l.5 1.4 1.4.5-1.4.5-.5 1.4-.5-1.4-1.4-.5 1.4-.5.5-1.4Z" />
+            </svg>
+          </span>
+          <h3 className="truncate text-2xs font-bold uppercase tracking-[0.14em]">
+            {tl('ai.title', { defaultValue: 'AI assistance' })}
+          </h3>
+        </span>
         {/* Which language a suggested reply comes back in. Sits by the actions
             rather than in settings: the answer changes per customer, not per
             agent, and a reply drafted in the wrong language is not editable
@@ -191,7 +210,7 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
         <div
           role="group"
           aria-label={tl('ai.replyLanguage', { defaultValue: 'Assistant language' })}
-          className="flex overflow-hidden rounded-md ring-1 ring-border"
+          className="flex shrink-0 overflow-hidden rounded-md ring-1 ring-white/30"
         >
           {(['en', 'ar'] as const).map((code) => (
             <button
@@ -204,9 +223,7 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
               aria-pressed={uiLocale === code}
               className={cn(
                 'px-2 py-0.5 text-2xs font-semibold uppercase tracking-wide transition-colors duration-fast ease-out',
-                uiLocale === code
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-secondary',
+                uiLocale === code ? 'bg-white text-primary' : 'text-white/75 hover:bg-white/15',
               )}
             >
               {code}
@@ -215,121 +232,122 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {actions.map((a) => (
-          <Button
-            key={a.key}
-            type="button"
-            variant="outline"
-            size="sm"
-            loading={a.busy}
-            onClick={a.run}
-          >
-            {a.label}
-          </Button>
-        ))}
-      </div>
-
-      {/* Results — one panel per action; whichever was last successful is shown */}
-      {active === 'summary' && summarize.data && (
-        <ResultCard label={tl('ai.action.summarize', { defaultValue: 'Summarize' })}>
-          <p className="text-sm leading-relaxed text-foreground">{summarize.data.summary}</p>
-        </ResultCard>
-      )}
-      {active === 'reply' && suggestReply.data && (
-        <ResultCard label={tl('ai.action.suggestReply', { defaultValue: 'Suggest reply' })}>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-            {suggestReply.data.reply}
-          </p>
-        </ResultCard>
-      )}
-      {active === 'sentiment' && sentiment.data && (
-        <ResultCard label={tl('ai.action.sentiment', { defaultValue: 'Customer mood' })}>
-          <div className="flex items-baseline gap-3">
-            <Pill
-              tone={
-                sentiment.data.label === 'positive'
-                  ? 'success'
-                  : sentiment.data.label === 'negative'
-                    ? 'destructive'
-                    : 'neutral'
-              }
+      <div className="space-y-3 px-4 py-3.5">
+        <div className="flex flex-wrap gap-1.5">
+          {actions.map((a) => (
+            <Button
+              key={a.key}
+              type="button"
+              variant="outline"
+              size="sm"
+              loading={a.busy}
+              onClick={a.run}
             >
-              {/* A closed set of three, so it is translated HERE rather than
+              {a.label}
+            </Button>
+          ))}
+        </div>
+
+        {/* Results — one panel per action; whichever was last successful is shown */}
+        {active === 'summary' && summarize.data && (
+          <ResultCard label={tl('ai.action.summarize', { defaultValue: 'Summarize' })}>
+            <p className="text-sm leading-relaxed text-foreground">{summarize.data.summary}</p>
+          </ResultCard>
+        )}
+        {active === 'reply' && suggestReply.data && (
+          <ResultCard label={tl('ai.action.suggestReply', { defaultValue: 'Suggest reply' })}>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+              {suggestReply.data.reply}
+            </p>
+          </ResultCard>
+        )}
+        {active === 'sentiment' && sentiment.data && (
+          <ResultCard label={tl('ai.action.sentiment', { defaultValue: 'Customer mood' })}>
+            <div className="flex items-baseline gap-3">
+              <Pill
+                tone={
+                  sentiment.data.label === 'positive'
+                    ? 'success'
+                    : sentiment.data.label === 'negative'
+                      ? 'destructive'
+                      : 'neutral'
+                }
+              >
+                {/* A closed set of three, so it is translated HERE rather than
                   asked of the model — a label the code branches on must not
                   come back as a different word each time. */}
-              {tl(`ai.mood.${sentiment.data.label}`, { defaultValue: sentiment.data.label })}
-            </Pill>
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {tl('ai.score', { defaultValue: 'score' })}: {sentiment.data.score.toFixed(2)}
-            </span>
-          </div>
-        </ResultCard>
-      )}
-      {active === 'intent' && intent.data && (
-        <ResultCard label={tl('ai.action.intent', { defaultValue: 'Complaint type' })}>
-          <div className="flex items-baseline gap-3">
-            <Pill tone="primary">{intent.data.intent}</Pill>
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {tl('ai.confidence', { defaultValue: 'confidence' })}:{' '}
-              {intent.data.confidence.toFixed(2)}
-            </span>
-          </div>
-        </ResultCard>
-      )}
-      {active === 'entities' && entities.data && (
-        <ResultCard label={tl('ai.action.entities', { defaultValue: 'Key details' })}>
-          {entities.data.entities.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              {tl('ai.noEntities', {
-                defaultValue: 'Nothing stated yet — no order number, branch or item in this chat.',
-              })}
-            </p>
-          ) : (
-            <ul className="space-y-1.5">
-              {entities.data.entities.map((e, i) => (
-                <li key={i} className="flex items-baseline gap-2 text-sm">
-                  <Pill tone="muted" size="sm">
-                    {e.type}
-                  </Pill>
-                  <span className="text-foreground">{e.value}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </ResultCard>
-      )}
-      {/* Errors — show last failed mutation */}
-      {[summarize, suggestReply, sentiment, intent, entities]
-        .filter((m) => m.isError)
-        .slice(-1)
-        .map((m, i) => (
-          <p
-            key={i}
-            className={cn(
-              'flex items-center gap-2 rounded-xl bg-destructive/10 ring-1 ring-destructive/20 px-3 py-2',
-              'text-xs text-destructive',
+                {tl(`ai.mood.${sentiment.data.label}`, { defaultValue: sentiment.data.label })}
+              </Pill>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {tl('ai.score', { defaultValue: 'score' })}: {sentiment.data.score.toFixed(2)}
+              </span>
+            </div>
+          </ResultCard>
+        )}
+        {active === 'intent' && intent.data && (
+          <ResultCard label={tl('ai.action.intent', { defaultValue: 'Complaint type' })}>
+            <div className="flex items-baseline gap-3">
+              <Pill tone="primary">{intent.data.intent}</Pill>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {tl('ai.confidence', { defaultValue: 'confidence' })}:{' '}
+                {intent.data.confidence.toFixed(2)}
+              </span>
+            </div>
+          </ResultCard>
+        )}
+        {active === 'entities' && entities.data && (
+          <ResultCard label={tl('ai.action.entities', { defaultValue: 'Key details' })}>
+            {entities.data.entities.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {tl('ai.noEntities', {
+                  defaultValue:
+                    'Nothing stated yet — no order number, branch or item in this chat.',
+                })}
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {entities.data.entities.map((e, i) => (
+                  <li key={i} className="flex items-baseline gap-2 text-sm">
+                    <Pill tone="muted" size="sm">
+                      {e.type}
+                    </Pill>
+                    <span className="text-foreground">{e.value}</span>
+                  </li>
+                ))}
+              </ul>
             )}
-          >
-            <span aria-hidden>•</span> {fmtErr(m.error)}
-          </p>
-        ))}
+          </ResultCard>
+        )}
+        {/* Errors — show last failed mutation */}
+        {[summarize, suggestReply, sentiment, intent, entities]
+          .filter((m) => m.isError)
+          .slice(-1)
+          .map((m, i) => (
+            <p
+              key={i}
+              className={cn(
+                'flex items-center gap-2 rounded-xl bg-destructive/10 ring-1 ring-destructive/20 px-3 py-2',
+                'text-xs text-destructive',
+              )}
+            >
+              <span aria-hidden>•</span> {fmtErr(m.error)}
+            </p>
+          ))}
 
-      {[summarize, suggestReply, sentiment, intent, entities].some((m) => m.isPending) && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Spinner /> {tl('ai.running', { defaultValue: 'Working…' })}
-        </div>
-      )}
+        {[summarize, suggestReply, sentiment, intent, entities].some((m) => m.isPending) && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Spinner /> {tl('ai.running', { defaultValue: 'Working…' })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function ResultCard({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl bg-secondary/40 px-4 py-3 space-y-2">
-      <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {label}
-      </div>
+    <div className="space-y-2 rounded-xl border-s-2 border-primary/40 bg-primary-tint/40 px-4 py-3 ring-1 ring-primary/10">
+      <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-primary">{label}</div>
       {children}
     </div>
   );

@@ -5,15 +5,14 @@ import {
   ChartIcon,
   ClockIcon,
   cn,
+  DateField,
   DeltaBadge,
   Drawer,
   ErrorState,
   InboxIcon,
-  Input,
   MeterBar,
   ProgressRing,
   SectionCard,
-  ExportButtons,
   SelectMenu,
   Skeleton,
   SparkleIcon,
@@ -32,8 +31,6 @@ import {
   type Cut,
   type MonthPoint,
 } from './complaints-api.js';
-import { exportFileName } from '@yiji/shared-config';
-import { downloadCsv, toCsv } from '../restaurants/csv.js';
 
 /**
  * The operations manager's Dashboard, rebuilt on our data.
@@ -904,151 +901,6 @@ export function ComplaintDashboard() {
   /** Which year pill is lit — null when the range is not exactly one year. */
   const activeYear = selectedYear(applied);
 
-  /**
-   * How many breakdown groups the page is drawing versus how many exist.
-   *
-   * This is what decides whether the export offers a choice at all: if every
-   * cut fits under its cap, the view already IS everything and a second button
-   * would be a decision with one answer.
-   */
-  const { shownGroups, totalGroups } = useMemo(() => {
-    const cuts = d
-      ? [
-          d.byType,
-          d.byBrand,
-          d.byRestaurant,
-          d.byArea,
-          d.byCity,
-          d.byStatus,
-          d.byServiceType,
-          d.bySource,
-          d.byAgent,
-        ]
-      : [];
-    return {
-      shownGroups: cuts.reduce((n, c) => n + c.rows.length, 0),
-      totalGroups: cuts.reduce((n, c) => n + c.distinct, 0),
-    };
-  }, [d]);
-
-  /**
-   * The whole board as one sectioned CSV.
-   *
-   * Row-level complaints are already exportable from the tickets report, so
-   * exporting them again here would just be a slower copy. What is NOT
-   * available anywhere else is the summary a manager reads on this page — the
-   * KPIs, the monthly series, and every "By X" cut — so that is what goes out.
-   *
-   * Each cut carries its own "top N of M" line. The bars on screen are capped
-   * at 8–12 rows; a file that dropped the cap notice would read as the complete
-   * list and quietly understate every long tail on the page.
-   */
-  const exportSummary = (scope: 'view' | 'all') => {
-    if (!d) return;
-    const whole = scope === 'all';
-    const rows: Array<Array<string | number>> = [];
-    const section = (title: string) => {
-      if (rows.length) rows.push([]);
-      rows.push([title]);
-    };
-    const cut = (title: string, c: Cut) => {
-      // "Everything" means the uncapped list; the view means what the chart
-      // drew. Only the capped one needs the "top N of M" admission — the full
-      // list is not hiding anything to admit to.
-      const list = whole ? c.all : c.rows;
-      section(
-        list.length < c.distinct
-          ? `${title} — ${t('complaintDash.topOf', { n: list.length, m: c.distinct, defaultValue: 'top {{n}} of {{m}}' })}`
-          : title,
-      );
-      rows.push([
-        t('complaintDash.csvName', { defaultValue: 'Name' }),
-        t('complaintDash.csvCount', { defaultValue: 'Complaints' }),
-        t('complaintDash.csvShare', { defaultValue: 'Share of total (%)' }),
-      ]);
-      for (const r of list) {
-        rows.push([r.label, r.count, d.total ? Math.round((r.count / d.total) * 100) : 0]);
-      }
-    };
-
-    section(t('complaintDash.csvKpis', { defaultValue: 'Key figures' }));
-    rows.push([
-      t('complaintDash.csvMeasure', { defaultValue: 'Measure' }),
-      t('complaintDash.csvValue', { defaultValue: 'Value' }),
-    ]);
-    rows.push([t('complaintDash.kpiTotal', { defaultValue: 'Complaints' }), d.total]);
-    rows.push([t('complaintDash.kpiOpen', { defaultValue: 'Open / in progress' }), d.open]);
-    rows.push([t('complaintDash.kpiOverdue', { defaultValue: 'Overdue' }), d.overdue]);
-    rows.push([t('complaintDash.csvClosed', { defaultValue: 'Closed' }), d.closed]);
-    rows.push([t('complaintDash.csvRated', { defaultValue: 'Rated' }), d.rated]);
-    rows.push([t('complaintDash.kpiSatisfied', { defaultValue: 'Rated satisfied' }), d.satisfied]);
-    rows.push([t('complaintDash.csvCompensated', { defaultValue: 'Compensated' }), d.compensated]);
-    rows.push([
-      t('complaintDash.csvCompensation', { defaultValue: 'Compensation total' }),
-      d.compensation,
-    ]);
-    rows.push([
-      t('complaintDash.csvRange', { defaultValue: 'Range covered' }),
-      [d.firstDate, d.lastDate].filter(Boolean).join(' → '),
-    ]);
-
-    section(t('complaintDash.csvMonths', { defaultValue: 'By month' }));
-    rows.push([
-      t('complaintDash.csvMonth', { defaultValue: 'Month' }),
-      t('complaintDash.csvCount', { defaultValue: 'Complaints' }),
-      t('complaintDash.csvCompensation', { defaultValue: 'Compensation total' }),
-    ]);
-    for (const pt of d.months) rows.push([pt.month, pt.count, pt.compensation]);
-
-    cut(t('complaintDash.byType', { defaultValue: 'By complaint type' }), d.byType);
-    cut(t('complaintDash.byBrand', { defaultValue: 'By brand' }), d.byBrand);
-    cut(t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' }), d.byRestaurant);
-    cut(t('complaintDash.byArea', { defaultValue: 'By area' }), d.byArea);
-    cut(t('complaintDash.byCity', { defaultValue: 'By city' }), d.byCity);
-    cut(t('complaintDash.byStatus', { defaultValue: 'By status' }), d.byStatus);
-    cut(t('complaintDash.byServiceType', { defaultValue: 'By service type' }), d.byServiceType);
-    cut(t('complaintDash.bySource', { defaultValue: 'By source' }), d.bySource);
-    cut(t('complaintDash.byAgent', { defaultValue: 'By agent' }), d.byAgent);
-
-    section(t('complaintDash.csvAgents', { defaultValue: 'Agent performance' }));
-    rows.push([
-      t('complaintDash.csvAgent', { defaultValue: 'Agent' }),
-      t('complaintDash.csvLogged', { defaultValue: 'Logged' }),
-      t('complaintDash.csvSolved', { defaultValue: 'Solved' }),
-      t('complaintDash.csvSolvedPct', { defaultValue: 'Solved (%)' }),
-      t('complaintDash.csvOpen', { defaultValue: 'Still open' }),
-      t('complaintDash.csvAvgHours', { defaultValue: 'Avg hours to close' }),
-      t('complaintDash.csvCompensation', { defaultValue: 'Compensation total' }),
-    ]);
-    for (const a of d.agents) {
-      rows.push([
-        a.name,
-        a.logged,
-        a.solved,
-        // Blank rather than 0 when nothing has been closed — see the KPI cards.
-        a.solvedPct === null ? '' : Math.round(a.solvedPct),
-        a.open,
-        a.avgHoursToClose === null ? '' : Math.round(a.avgHoursToClose * 10) / 10,
-        a.compensation,
-      ]);
-    }
-
-    // The filters ARE the question this file answers, so they go in its name —
-    // and a full export says so, since its numbers are NOT the ones on screen.
-    const scopeLabel = whole
-      ? t('complaintDash.csvEverything', { defaultValue: 'all groups' })
-      : [applied.from, applied.to].filter(Boolean).join(' to ') ||
-        t('complaintDash.csvAllTime', { defaultValue: 'all time' });
-    // `toCsv` writes its header first; this file's first line IS its first
-    // section title, so hand that over as the header rather than an empty
-    // array — an empty header emits a blank leading line that Excel keeps.
-    const [first = [], ...rest] = rows;
-    downloadCsv(
-      exportFileName('Dashboard summary', { scope: scopeLabel }),
-      toCsv(first.map(String), rest),
-    );
-  };
-
   // Which slice of the numbers the reader clicked into.
   const [drill, setDrill] = useState<{ title: string; rows: ComplaintRow[] } | null>(null);
 
@@ -1190,22 +1042,22 @@ export function ComplaintDashboard() {
           <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('complaintDash.from', { defaultValue: 'From' })}
           </span>
-          <Input
-            type="date"
-            className="h-9 w-[9.5rem]"
+          <DateField
+            size="md"
+            className="w-[9.5rem]"
             value={draft.from}
-            onChange={(e) => setDraft((f) => ({ ...f, from: e.target.value }))}
+            onChange={(v) => setDraft((f) => ({ ...f, from: v }))}
           />
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('complaintDash.to', { defaultValue: 'To' })}
           </span>
-          <Input
-            type="date"
-            className="h-9 w-[9.5rem]"
+          <DateField
+            size="md"
+            className="w-[9.5rem]"
             value={draft.to}
-            onChange={(e) => setDraft((f) => ({ ...f, to: e.target.value }))}
+            onChange={(v) => setDraft((f) => ({ ...f, to: v }))}
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -1268,7 +1120,10 @@ export function ComplaintDashboard() {
             options={storeChoices}
           />
         </label>
-        <div className="flex items-center gap-2 pb-px">
+        {/* `ms-auto` pins the actions to the END of the filter row rather than
+            letting them wrap to a new line at the start. They read as what you
+            do TO the filters, so they belong beside them, not under them. */}
+        <div className="ms-auto flex items-center gap-2 pb-px">
           <Button type="button" size="sm" disabled={!dirty} onClick={() => setApplied(draft)}>
             {t('complaintDash.apply', { defaultValue: 'Apply' })}
           </Button>
@@ -1284,24 +1139,6 @@ export function ComplaintDashboard() {
           >
             {t('complaintDash.clear', { defaultValue: 'Clear' })}
           </Button>
-          {/* Two buttons only when the charts are actually hiding groups —
-              see ExportButtons for why the choice is not offered otherwise. */}
-          <ExportButtons
-            disabled={!d || d.total === 0}
-            visibleCount={shownGroups}
-            totalCount={totalGroups}
-            onExportView={() => exportSummary('view')}
-            onExportAll={() => exportSummary('all')}
-            labelPlain={t('complaintDash.exportSummary', { defaultValue: 'Export summary' })}
-            labelView={t('complaintDash.exportShown', {
-              defaultValue: 'Export shown ({{n}})',
-              n: shownGroups,
-            })}
-            labelAll={t('complaintDash.exportEvery', {
-              defaultValue: 'Export all ({{n}})',
-              n: totalGroups,
-            })}
-          />
         </div>
       </div>
 

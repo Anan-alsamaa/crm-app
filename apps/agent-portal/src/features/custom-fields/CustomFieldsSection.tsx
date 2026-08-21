@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { readItems, createItem, updateItem } from '@directus/sdk';
-import { Button, FormField, Input, SelectMenu, Skeleton, toast } from '@yiji/ui';
+import { Button, DateField, FormField, Input, SelectMenu, Skeleton, toast } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -177,11 +177,7 @@ function FieldInput({
     case 'date':
       return (
         <FormField label={label}>
-          <Input
-            type="date"
-            value={(value as string) ?? ''}
-            onChange={(e) => onChange(e.target.value)}
-          />
+          <DateField value={(value as string) ?? ''} onChange={(v) => onChange(v)} />
         </FormField>
       );
     case 'boolean':

@@ -318,7 +318,7 @@ export function HelpAssistant(): JSX.Element {
               e.preventDefault();
               submit();
             }}
-            className={cn('w-full space-y-2 border-t border-white/10 px-5 py-4', AI_SKIN.text)}
+            className={cn('w-full space-y-2 border-t px-5 py-4', AI_SKIN.rule, AI_SKIN.text)}
           >
             {/* No field label: the placeholder says what to do, and a labelled
                 form control above a chat composer reads as a form to fill in
@@ -329,9 +329,8 @@ export function HelpAssistant(): JSX.Element {
                 id="help-assistant-question"
                 aria-label={t('helpAssistant.label', { defaultValue: 'Your question' })}
                 className={cn(
-                  'min-h-[3rem] flex-1 resize-none rounded-2xl border-0 bg-white/[0.06] ring-1 ring-inset ring-white/10',
-                  'text-[oklch(0.97_0.012_262)] placeholder:text-[oklch(0.68_0.03_262)]',
-                  'focus:ring-2 focus:ring-[oklch(0.82_0.13_212)]/60',
+                  'min-h-[3rem] flex-1 resize-none rounded-2xl border-0',
+                  AI_SKIN.field,
                 )}
                 rows={2}
                 maxLength={MAX_LENGTH}
@@ -399,26 +398,20 @@ export function HelpAssistant(): JSX.Element {
         >
           <span
             aria-hidden
-            className={cn(
-              'grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[oklch(0.82_0.13_212)]/15 ring-1',
-              AI_SKIN.accentRing,
-            )}
+            className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl', AI_SKIN.headChip)}
           >
-            <svg
-              viewBox="0 0 16 16"
-              className="h-4 w-4 text-[oklch(0.82_0.13_212)]"
-              fill="currentColor"
-              aria-hidden
-            >
+            <svg viewBox="0 0 16 16" className="h-4 w-4" fill="currentColor" aria-hidden>
               <path d="M8 1.6 9.4 5.2 13 6.6 9.4 8 8 11.6 6.6 8 3 6.6 6.6 5.2 8 1.6ZM12.6 10.4l.5 1.4 1.4.5-1.4.5-.5 1.4-.5-1.4-1.4-.5 1.4-.5.5-1.4Z" />
             </svg>
           </span>
           <span className="min-w-0 flex-1">
-            <span className={cn('block text-sm font-bold tracking-tight', AI_SKIN.text)}>Aura</span>
+            <span className={cn('block text-sm font-bold tracking-tight', AI_SKIN.headText)}>
+              Aura
+            </span>
             <span
               className={cn(
                 'block text-2xs font-medium uppercase tracking-[0.12em]',
-                AI_SKIN.accent,
+                AI_SKIN.headDim,
               )}
             >
               {t('helpAssistant.role', { defaultValue: 'CRM assistant' })}
@@ -430,8 +423,9 @@ export function HelpAssistant(): JSX.Element {
             aria-label={t('helpAssistant.newChat', { defaultValue: 'Start a new chat' })}
             title={t('helpAssistant.newChat', { defaultValue: 'Start a new chat' })}
             className={cn(
-              'grid h-8 w-8 place-items-center rounded-lg transition-colors duration-fast hover:bg-white/10',
-              AI_SKIN.dim,
+              'grid h-8 w-8 place-items-center rounded-lg transition-colors duration-fast',
+              AI_SKIN.headHover,
+              AI_SKIN.headDim,
             )}
           >
             <svg
@@ -451,8 +445,9 @@ export function HelpAssistant(): JSX.Element {
             onClick={close}
             aria-label={t('actions.close', { ns: 'common', defaultValue: 'Close' })}
             className={cn(
-              'grid h-8 w-8 place-items-center rounded-lg transition-colors duration-fast hover:bg-white/10',
-              AI_SKIN.dim,
+              'grid h-8 w-8 place-items-center rounded-lg transition-colors duration-fast',
+              AI_SKIN.headHover,
+              AI_SKIN.headDim,
             )}
           >
             <svg
@@ -479,7 +474,7 @@ export function HelpAssistant(): JSX.Element {
                 <p
                   className={cn(
                     'max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-ee-md px-4 py-2.5 text-sm leading-relaxed',
-                    AI_SKIN.accentBg,
+                    AI_SKIN.userBubble,
                   )}
                 >
                   {turn.content}
@@ -507,12 +502,8 @@ export function HelpAssistant(): JSX.Element {
                   className={cn(
                     'max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-es-md px-4 py-2.5 text-sm leading-relaxed',
                     turn.offTopic
-                      ? cn('bg-white/[0.04] ring-1 ring-white/10', AI_SKIN.dim)
-                      : cn(
-                          AI_SKIN.bubble,
-                          AI_SKIN.text,
-                          'border-s-2 border-[oklch(0.82_0.13_212)]/50',
-                        ),
+                      ? cn('bg-secondary ring-1 ring-foreground/[0.06]', AI_SKIN.dim)
+                      : cn(AI_SKIN.bubble, AI_SKIN.text, 'border-s-2 border-primary/40'),
                   )}
                 >
                   {turn.content}
@@ -537,7 +528,7 @@ export function HelpAssistant(): JSX.Element {
                   className={cn(
                     'group flex w-full items-center justify-between gap-3 rounded-xl px-4 py-2.5',
                     'text-start text-sm font-medium transition-all duration-fast ease-out',
-                    'motion-safe:hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.82_0.13_212)]/50',
+                    'motion-safe:hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
                     AI_SKIN.glass,
                     AI_SKIN.text,
                   )}

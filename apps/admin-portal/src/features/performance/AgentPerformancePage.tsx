@@ -8,7 +8,10 @@ import {
   Button,
   ChartIcon,
   ClockIcon,
+  cn,
+  DateField,
   EmptyState,
+  formatDateTime,
   HBarChart,
   InboxIcon,
   Input,
@@ -21,11 +24,9 @@ import {
   Toolbar,
   ToolbarSpacer,
   TrendChart,
+  type ChartSeries,
   UsersIcon,
   ZapIcon,
-  cn,
-  formatDateTime,
-  type ChartSeries,
 } from '@yiji/ui';
 import { normaliseConversationStatus } from '@yiji/shared-types';
 import {
@@ -472,23 +473,21 @@ export function AgentPerformancePage() {
               not merge Tailwind classes, so a width passed through className is
               not reliably the winner. */}
               <span className="block w-[9.5rem]">
-                <Input
-                  type="date"
-                  className="h-8"
+                <DateField
+                  size="sm"
                   aria-label={t('performance.from', { defaultValue: 'From' })}
                   value={filters.from ?? ''}
-                  onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
+                  onChange={(v) => setFilters((f) => ({ ...f, from: v }))}
                 />
               </span>
             </Field>
             <Field label={t('performance.to', { defaultValue: 'To' })}>
               <span className="block w-[9.5rem]">
-                <Input
-                  type="date"
-                  className="h-8"
+                <DateField
+                  size="sm"
                   aria-label={t('performance.to', { defaultValue: 'To' })}
                   value={filters.to ?? ''}
-                  onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
+                  onChange={(v) => setFilters((f) => ({ ...f, to: v }))}
                 />
               </span>
             </Field>

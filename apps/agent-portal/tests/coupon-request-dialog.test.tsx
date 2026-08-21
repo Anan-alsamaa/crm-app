@@ -171,7 +171,9 @@ describe('CouponRequestDialog', () => {
       expect(screen.getByRole('button', { name: /send for approval/i })).toBeEnabled(),
     );
 
-    fireEvent.change(screen.getByLabelText(/^from$/i), { target: { value: '2026-12-31' } });
+    // dd/mm/yyyy is what the field takes now; the value it hands upstream is
+    // still ISO, which is what the validation below reads.
+    fireEvent.change(screen.getByLabelText(/^from$/i), { target: { value: '31/12/2026' } });
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /send for approval/i })).toBeDisabled(),

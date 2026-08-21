@@ -24,8 +24,8 @@
 /*
  * CRM — single brand palette.
  *
- * Brand color: #4B3BD5 — the indigo of the SARA CRM mark. Translates to
- * OKLCH `0.477 0.223 278`. This is the ONE accent that carries identity
+ * Brand color: #4338CA — the indigo of the SARA CRM mark. Translates to
+ * OKLCH `0.457 0.215 277`. This is the ONE accent that carries identity
  * across the system: the rail surface, the logo, the primary subtle fill,
  * the focus ring, the brand-accent word in display headlines.
  *
@@ -73,31 +73,31 @@
   --popover: 1 0 0;
   --popover-foreground: 0.25 0.02 260;
 
-  /* THE BRAND INDIGO — taken from the SARA CRM logo (#4B3BD5).
+  /* THE BRAND INDIGO — taken from the SARA CRM logo (#4338CA).
      Every accent in both themes derives from this one hue, so the mark and the
      interface cannot drift apart. Deep enough to carry white text at 7.3:1,
      which is AA with room to spare. */
-  --primary: 0.477 0.223 278;
-  --primary-strong: 0.42 0.223 278;
+  --primary: 0.457 0.215 277;
+  --primary-strong: 0.4 0.215 277;
   --primary-foreground: 1 0 0;
-  --primary-subtle: 0.477 0.223 278 / 0.1;
-  --brand: 0.477 0.223 278;
+  --primary-subtle: 0.457 0.215 277 / 0.1;
+  --brand: 0.457 0.215 277;
 
   --bubble: 0.965 0.012 255;
 
   /* Ink: the dark counterweight in a light app — masthead, table headers, the
      nav rail. Sits on the brand hue rather than a neighbouring navy, so the
      masthead reads as the same family as the mark on it. */
-  --ink: 0.23 0.035 278;
+  --ink: 0.23 0.035 277;
   --ink-foreground: 0.98 0.004 250;
-  --ink-muted: 0.7 0.02 278;
+  --ink-muted: 0.7 0.02 277;
 
   --secondary: 0.955 0.006 252;
   --secondary-foreground: 0.25 0.02 260;
   --muted: 0.955 0.006 252;
   --muted-foreground: 0.55 0.02 262;
 
-  --accent: 0.55 0.2 278;
+  --accent: 0.55 0.2 277;
   --accent-foreground: 1 0 0;
 
   /* Semantics carry meaning, never decoration. Each is legible on the page and
@@ -114,14 +114,14 @@
   --border: 0.25 0.02 260 / 0.08;
   --border-strong: 0.25 0.02 260 / 0.14;
   --input: 0.968 0.005 252;
-  --ring: 0.477 0.223 278;
-  --shadow-color: 0.4 0.06 278;
+  --ring: 0.457 0.215 277;
+  --shadow-color: 0.4 0.06 277;
 
   /* Rail (mobile drawer in the top-nav layout) — the same ink as the masthead. */
-  --rail: 0.23 0.035 278;
-  --rail-deep: 0.19 0.035 278;
+  --rail: 0.23 0.035 277;
+  --rail-deep: 0.19 0.035 277;
   --rail-foreground: 0.96 0.005 250;
-  --rail-active: 0.55 0.2 278;
+  --rail-active: 0.55 0.2 277;
   --rail-active-foreground: 1 0 0;
   --rail-border: 1 0 0 / 0.1;
 
@@ -129,7 +129,7 @@
   --secondary-brand-foreground: 1 0 0;
 
   /* Display ink — the reference's #292A2F, used for hero type and solid CTAs. */
-  --display: 0.477 0.223 278;
+  --display: 0.457 0.215 277;
   --violet: 0.55 0.17 285;
   /* The blue that carries the brand indigo toward daylight — same family,
      not a separate cyan. Its tint below must stay on this hue. */
@@ -138,7 +138,7 @@
 
   /* TINT RAMP — saturated pastel fills for coloured surfaces. Separate tokens,
      never an alpha of the accent (an alpha of a dark hue reads grey). */
-  --primary-tint: 0.93 0.055 278;
+  --primary-tint: 0.93 0.055 277;
   --success-tint: 0.93 0.08 155;
   --destructive-tint: 0.94 0.05 22;
   --warning-tint: 0.95 0.07 90;
@@ -159,7 +159,7 @@
  */
 :root[data-theme='dark'] {
   /* Hue washes for dark surfaces — the light theme's pastels would blind here. */
-  --primary-tint: 0.29 0.07 278;
+  --primary-tint: 0.29 0.07 277;
   --success-tint: 0.27 0.05 160;
   --destructive-tint: 0.27 0.05 27;
   --warning-tint: 0.3 0.055 75;
@@ -180,17 +180,17 @@
   /* The same brand indigo, lifted for a dark ground.
      This was a TEAL while the light theme was blue — the two themes were not
      the same product. One hue now, both themes. */
-  --primary: 0.72 0.16 278;
-  --primary-strong: 0.78 0.15 278;
-  --primary-foreground: 0.16 0.03 278;
-  --primary-subtle: 0.72 0.16 278 / 0.18;
-  --brand: 0.72 0.16 278;
+  --primary: 0.72 0.16 277;
+  --primary-strong: 0.78 0.15 277;
+  --primary-foreground: 0.16 0.03 277;
+  --primary-subtle: 0.72 0.16 277 / 0.18;
+  --brand: 0.72 0.16 277;
   --bubble: 0.26 0.014 258;
   --secondary: 0.24 0.012 258;
   --secondary-foreground: 0.96 0.005 250;
   --muted: 0.24 0.012 258;
   --muted-foreground: 0.68 0.01 250;
-  --accent: 0.68 0.14 278;
+  --accent: 0.68 0.14 277;
   --accent-foreground: 0.16 0.02 200;
   --destructive: 0.66 0.225 22;
   --destructive-foreground: 1 0 0;
@@ -201,13 +201,13 @@
   --border: 1 0 0 / 0.08;
   --border-strong: 1 0 0 / 0.14;
   --input: 0.235 0.012 258;
-  --ring: 0.72 0.16 278;
+  --ring: 0.72 0.16 277;
   --shadow-color: 0.05 0.02 220;
   /* Flat full-height sidebar, one step darker than the canvas. */
-  --rail-deep: 0.105 0.014 278;
-  --rail: 0.125 0.014 278;
+  --rail-deep: 0.105 0.014 277;
+  --rail: 0.125 0.014 277;
   --rail-foreground: 0.9 0.008 250;
-  --rail-active: 0.72 0.16 278;
+  --rail-active: 0.72 0.16 277;
   --rail-active-foreground: 0.98 0.005 250;
   --rail-border: 1 0 0 / 0.08;
   --secondary-brand: 0.66 0.22 16;

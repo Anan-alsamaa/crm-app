@@ -169,7 +169,8 @@ describe('admin AgentPerformancePage', () => {
       expect(screen.getByRole('table', { name: 'Totals per agent' })).toBeInTheDocument(),
     );
     const before = sdk.request.mock.calls.length;
-    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-08-01' } });
+    // dd/mm/yyyy in, ISO out — see the SLA report test for why.
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '01/08/2026' } });
     await waitFor(() => expect(sdk.request.mock.calls.length).toBeGreaterThan(before));
     const call = sdk.request.mock.calls
       .reverse()

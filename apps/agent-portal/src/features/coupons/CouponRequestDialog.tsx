@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Drawer, DrawerSection, FormField, Input, SelectMenu, toast } from '@yiji/ui';
+import {
+  Button,
+  DateField,
+  Drawer,
+  DrawerSection,
+  FormField,
+  Input,
+  SelectMenu,
+  toast,
+} from '@yiji/ui';
 import {
   compensationFlag,
   couponPrefix,
@@ -488,18 +497,10 @@ export function CouponRequestDialog({
       >
         <div className="grid gap-3 sm:grid-cols-2">
           <FormField label={t('performance.from', { defaultValue: 'From' })}>
-            <Input
-              type="date"
-              value={draft.valid_from}
-              onChange={(e) => set('valid_from', e.target.value)}
-            />
+            <DateField value={draft.valid_from} onChange={(v) => set('valid_from', v)} />
           </FormField>
           <FormField label={t('performance.to', { defaultValue: 'To' })}>
-            <Input
-              type="date"
-              value={draft.valid_to}
-              onChange={(e) => set('valid_to', e.target.value)}
-            />
+            <DateField value={draft.valid_to} onChange={(v) => set('valid_to', v)} />
           </FormField>
           {draft.discount_category === 'Percentage' ? (
             <FormField

@@ -3,20 +3,21 @@ import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import {
   Button,
+  cn,
   ConfirmDialog,
+  DateField,
   Drawer,
   DrawerSection,
   EmptyState,
   ErrorState,
+  formatDateTime,
   FormField,
   Input,
   SelectMenu,
   Skeleton,
+  toast,
   Toolbar,
   ToolbarSpacer,
-  cn,
-  formatDateTime,
-  toast,
 } from '@yiji/ui';
 import {
   useReports,
@@ -459,18 +460,10 @@ export function ReportsPage() {
           >
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField label={t('reports.from', { defaultValue: 'From' })}>
-                <Input
-                  type="date"
-                  value={draft.from}
-                  onChange={(e) => setDraft({ ...draft, from: e.target.value })}
-                />
+                <DateField value={draft.from} onChange={(v) => setDraft({ ...draft, from: v })} />
               </FormField>
               <FormField label={t('reports.to', { defaultValue: 'To' })}>
-                <Input
-                  type="date"
-                  value={draft.to}
-                  onChange={(e) => setDraft({ ...draft, to: e.target.value })}
-                />
+                <DateField value={draft.to} onChange={(v) => setDraft({ ...draft, to: v })} />
               </FormField>
             </div>
             <FormField label={t('reports.vendor', { defaultValue: 'Vendor (optional)' })}>

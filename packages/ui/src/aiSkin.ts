@@ -1,50 +1,79 @@
 /**
- * The skin every AI surface wears — the product's own blue, after dark.
+ * The skin every AI surface wears.
  *
- * The product is AURA LIGHT: mint canvas, white cards. The AI surfaces are
- * deliberately NOT that. Anything a model writes carries a risk the rest of
- * the interface does not — it can be fluent and wrong — so it gets a surface
- * nobody can mistake for the application's own chrome: dark, self-contained,
- * unmistakably a place where a machine is talking. The warm accent is the one
- * hot colour in the product and marks only what the human drives: send, and
- * the questions offered to ask.
+ * PREVIOUSLY THIS WAS DARK, on the argument that anything a model writes should
+ * sit on a surface nobody mistakes for the app's own chrome — it can be fluent
+ * and wrong. The argument was reasonable; the result was not. A near-black
+ * panel with a cyan accent, dropped into a light indigo product, read as a
+ * different application embedded in this one — and it still carried the cyan
+ * from a brand the product no longer uses.
  *
- * The hues are the PAGE's, not a borrowed palette: the panel is the primary
- * blue (hue ~262) taken down to near-black, and the accent is the sky already
- * used across the product, lifted bright enough to carry dark text. A teal
- * night with a gold accent looked well made and belonged to somewhere else —
- * the surface has to read as this application at night, not as a different
- * product embedded in it.
+ * So identity now comes from the BRAND rather than from darkness: an indigo
+ * header band, indigo accents, and the same white cards and hairline rings the
+ * rest of the product is built from. The panel is recognisably Aura because of
+ * its colour and its masthead, not because the lights are off.
  *
- * Literal OKLCH rather than theme tokens on purpose. These belong to this
- * surface; promoting them to the theme would invite reuse somewhere the
- * darkness would simply look like a bug.
+ * What replaced the "this is a machine" signal is more useful than a dark
+ * background anyway: the assistant's words sit in a bubble that is visibly a
+ * quotation — a card on a tinted ground — and the footer says plainly that
+ * Aura can be wrong.
+ *
+ * Header keys are SEPARATE from body keys (`headText` vs `text`). They were one
+ * set while everything was dark and every surface wanted the same near-white
+ * ink; with an indigo band over a light body they need opposite values, and
+ * sharing them is what would put white text on a white panel.
+ *
+ * Values lean on theme tokens rather than literals wherever one exists, so the
+ * panel follows the brand automatically the next time `--primary` moves.
  */
 export const AI_SKIN = {
-  /** Panel ground — a diagonal fall from teal into near-black green. */
-  panel:
-    'bg-[linear-gradient(157deg,oklch(0.28_0.075_264)_0%,oklch(0.22_0.065_268)_46%,oklch(0.15_0.04_266)_100%)] ring-white/10',
-  /** Header / footer bands: a lift off the panel, never a hard rule. */
-  head: 'border-b border-white/10 bg-white/[0.04]',
-  text: 'text-[oklch(0.97_0.012_262)]',
-  dim: 'text-[oklch(0.75_0.03_262)]',
-  accent: 'text-[oklch(0.82_0.13_212)]',
-  /** The one hot fill: send buttons and the customer's own words. */
-  accentBg: 'bg-[oklch(0.82_0.13_212)] text-[oklch(0.20_0.05_255)]',
-  accentRing: 'ring-[oklch(0.82_0.13_212)]/40',
   /**
-   * The same accent, for overriding a <Button>'s own variant.
+   * Drawer panel — a soft indigo ground, NOT `--canvas`.
    *
-   * `cn` here is plain concatenation, NOT tailwind-merge: a variant's
-   * `bg-display` and a caller's `bg-[…]` both survive into the class list and
-   * the stylesheet's order decides the winner — which is how the primary
-   * action stayed product-blue on a panel that had gone dark. `!` settles it
-   * rather than leaving the outcome to CSS ordering.
+   * Canvas sits at L 0.972 and a white bubble at L 1.0, which is under 3%
+   * apart: the cards dissolved into the panel and the transcript read as loose
+   * text. Tinting the ground toward the brand buys the separation that makes a
+   * bubble look like a bubble, and ties the body to the header band.
+   */
+  panel: 'bg-[oklch(0.966_0.016_277)] ring-foreground/[0.08]',
+
+  /** Header band — the one saturated surface, and the panel's whole identity. */
+  head: 'bg-[linear-gradient(135deg,oklch(var(--primary))_0%,oklch(var(--violet))_100%)]',
+  /** Ink ON the header band. White, because the band is always saturated. */
+  headText: 'text-white',
+  headDim: 'text-white/70',
+  headHover: 'hover:bg-white/20',
+  /** The mark chip in the header — a lift off the band, never a hard outline. */
+  headChip: 'bg-white/20 ring-1 ring-white/30 text-white',
+
+  /** Ink on the light body. */
+  text: 'text-foreground',
+  dim: 'text-muted-foreground',
+  accent: 'text-primary',
+
+  accentBg: 'bg-primary text-primary-foreground',
+  accentRing: 'ring-primary/30',
+  /**
+   * The brand fill, for overriding a <Button>'s own variant.
+   *
+   * `cn` here is plain concatenation, NOT tailwind-merge: a variant's own
+   * background and a caller's both survive into the class list and the
+   * stylesheet's order decides the winner. `!` settles it rather than leaving
+   * the outcome to CSS ordering.
    */
   accentBtn:
-    '!bg-[oklch(0.82_0.13_212)] !text-[oklch(0.20_0.05_255)] hover:!bg-[oklch(0.87_0.13_212)] !border-transparent !shadow-none',
-  /** Anything the model said. */
-  bubble: 'bg-white/[0.07] ring-1 ring-white/10',
-  /** Anything the human may press. */
-  glass: 'bg-white/[0.05] ring-1 ring-white/10 hover:bg-white/[0.10]',
+    '!bg-primary !text-primary-foreground hover:!bg-primary-strong !border-transparent !shadow-none',
+
+  /** Anything the model said — a white card, quoted onto the tinted ground. */
+  bubble: 'bg-card ring-1 ring-foreground/[0.07] shadow-soft',
+  /** Anything the HUMAN said — the brand fill, so a glance reads the pattern. */
+  userBubble: 'bg-primary text-primary-foreground shadow-soft',
+  /** Anything the human may press — lifts toward the brand on hover. */
+  glass:
+    'bg-card ring-1 ring-foreground/[0.09] shadow-soft hover:bg-primary-tint/60 hover:ring-primary/40 transition-colors duration-fast ease-out',
+  /** The composer field. */
+  field:
+    'bg-card ring-1 ring-inset ring-foreground/[0.1] text-foreground placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-primary/50',
+  /** Hairline between the body and the composer. */
+  rule: 'border-foreground/[0.08]',
 } as const;

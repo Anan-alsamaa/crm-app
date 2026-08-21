@@ -3,16 +3,17 @@ import { useTranslation } from 'react-i18next';
 import {
   Button,
   ChevronDownIcon,
+  cn,
+  DateField,
   EmptyState,
+  formatDateTime,
   InboxIcon,
   Input,
   Pill,
   Skeleton,
   SparkleIcon,
-  Toolbar,
-  cn,
-  formatDateTime,
   toast,
+  Toolbar,
 } from '@yiji/ui';
 import {
   COUPON_APPROVAL_STATUSES,
@@ -78,13 +79,20 @@ function EditField({
       <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </span>
-      <Input
-        type={type}
-        {...(type === 'number' ? { min: 0, step: '0.01' } : {})}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label={label}
-      />
+      {/* Dates get the dd/mm/yyyy field rather than the native control, which
+          Chrome renders in its own locale regardless of what the page asks
+          for. Same ISO value either way, so nothing downstream changes. */}
+      {type === 'date' ? (
+        <DateField value={value} onChange={onChange} aria-label={label} />
+      ) : (
+        <Input
+          type={type}
+          {...(type === 'number' ? { min: 0, step: '0.01' } : {})}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={label}
+        />
+      )}
       {hint && <span className="block text-2xs text-muted-foreground">{hint}</span>}
     </label>
   );
@@ -1006,23 +1014,18 @@ export function CouponApprovalsPage() {
               <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {t('complaintDash.from', { defaultValue: 'From' })}
               </span>
-              <Input
-                type="date"
-                className="h-9 w-[9.5rem]"
+              <DateField
+                size="md"
+                className="w-[9.5rem]"
                 value={from}
-                onChange={(e) => setFrom(e.target.value)}
+                onChange={(v) => setFrom(v)}
               />
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {t('complaintDash.to', { defaultValue: 'To' })}
               </span>
-              <Input
-                type="date"
-                className="h-9 w-[9.5rem]"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-              />
+              <DateField size="md" className="w-[9.5rem]" value={to} onChange={(v) => setTo(v)} />
             </label>
             {(query || from || to) && (
               <Button

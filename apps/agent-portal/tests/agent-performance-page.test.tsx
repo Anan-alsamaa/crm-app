@@ -161,7 +161,8 @@ describe('AgentPerformancePage', () => {
 
   it('passes the filters through to the query rather than filtering after the fact', () => {
     renderPage();
-    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-08-01' } });
+    // dd/mm/yyyy in, ISO out.
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '01/08/2026' } });
     const last = perf.useChatTimings.mock.calls.at(-1)!;
     expect(last[0]).toMatchObject({ from: '2026-08-01' });
   });

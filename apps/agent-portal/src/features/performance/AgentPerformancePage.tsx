@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Avatar,
+  cn,
+  DateField,
   EmptyState,
+  formatDateTime,
   HBarChart,
   InboxIcon,
   Input,
@@ -15,8 +18,6 @@ import {
   Toolbar,
   ToolbarSpacer,
   TrendChart,
-  cn,
-  formatDateTime,
   type ChartSeries,
 } from '@yiji/ui';
 import {
@@ -232,21 +233,19 @@ export function AgentPerformancePage() {
             without this the date fields ate the toolbar and the target box
             collapsed to a dot. */}
         <div className="w-[8.75rem] shrink-0">
-          <Input
-            type="date"
-            className="h-8"
+          <DateField
+            size="sm"
             aria-label={t('performance.from', { defaultValue: 'From' })}
             value={filters.from ?? ''}
-            onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
+            onChange={(v) => setFilters((f) => ({ ...f, from: v }))}
           />
         </div>
         <div className="w-[8.75rem] shrink-0">
-          <Input
-            type="date"
-            className="h-8"
+          <DateField
+            size="sm"
             aria-label={t('performance.to', { defaultValue: 'To' })}
             value={filters.to ?? ''}
-            onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
+            onChange={(v) => setFilters((f) => ({ ...f, to: v }))}
           />
         </div>
         <label className="flex shrink-0 items-center gap-1.5 text-2xs text-muted-foreground">

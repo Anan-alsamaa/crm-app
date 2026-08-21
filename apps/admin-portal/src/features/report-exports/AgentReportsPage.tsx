@@ -7,15 +7,15 @@ import { useTranslation } from 'react-i18next';
 import {
   Avatar,
   Button,
-  ConfirmDialog,
   cn,
+  ConfirmDialog,
+  DateField,
   Drawer,
   EmptyState,
   ExportButtons,
   InboxIcon,
   Input,
   MeterBar,
-  type MetricTone,
   Pagination,
   Pill,
   SelectMenu,
@@ -32,6 +32,7 @@ import {
   Toolbar,
   ToolbarSpacer,
   Tr,
+  type MetricTone,
   UsersIcon,
   useTableSort,
 } from '@yiji/ui';
@@ -887,22 +888,22 @@ function ComplaintsReport({
             <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               {t('performance.from', { defaultValue: 'From' })}
             </span>
-            <Input
-              type="date"
-              className="h-8 w-[9rem]"
+            <DateField
+              size="sm"
+              className="w-[9rem]"
               value={criteria.from ?? ''}
-              onChange={(e) => setCriterion({ from: e.target.value })}
+              onChange={(v) => setCriterion({ from: v })}
             />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               {t('performance.to', { defaultValue: 'To' })}
             </span>
-            <Input
-              type="date"
-              className="h-8 w-[9rem]"
+            <DateField
+              size="sm"
+              className="w-[9rem]"
               value={criteria.to ?? ''}
-              onChange={(e) => setCriterion({ to: e.target.value })}
+              onChange={(v) => setCriterion({ to: v })}
             />
           </label>
         </div>

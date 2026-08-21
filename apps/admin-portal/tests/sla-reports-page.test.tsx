@@ -181,8 +181,12 @@ describe('SlaReportsPage', () => {
     api.useSlaReports.mockReturnValue({ isLoading: false, data: fullReport });
     renderPage();
 
-    fireEvent.change(screen.getByLabelText(/^from$/i), { target: { value: '2026-08-01' } });
-    fireEvent.change(screen.getByLabelText(/^to$/i), { target: { value: '2026-08-14' } });
+    // Typed the way a person types it. The fields are dd/mm/yyyy now (Chrome
+    // renders a native date input in its own locale regardless of the page),
+    // while the value handed upstream is still ISO — which is what the
+    // assertion below is really about.
+    fireEvent.change(screen.getByLabelText(/^from$/i), { target: { value: '01/08/2026' } });
+    fireEvent.change(screen.getByLabelText(/^to$/i), { target: { value: '14/08/2026' } });
     expect(api.useSlaReports).toHaveBeenLastCalledWith(30, {
       from: '2026-08-01',
       to: '2026-08-14',

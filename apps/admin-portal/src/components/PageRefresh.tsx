@@ -1,25 +1,32 @@
 import type { JSX } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { RefreshButton } from '@yiji/ui';
 
 /**
- * Refetch everything the current page is showing.
+ * Reload the current page, properly.
  *
- * `refetchType: 'active'` on purpose: only queries something is currently
- * MOUNTED against. Refetching the whole cache would also pull data for pages
- * nobody is looking at, which costs the same requests and answers nothing.
+ * `location.reload()` and nothing else. The point of this control is the case
+ * where the page is WEDGED — a component in a bad state, a stale bundle after
+ * a deploy, a route that will not settle — and none of those survive a real
+ * reload. A cache refetch, which is what this used to do, fixes none of them
+ * while looking from the outside like the button did nothing.
  *
- * Invalidating with no key matches every query, so this works on every page
- * without the button needing to know which page it is on.
+ * `reload()` re-requests the document, so an in-flight mutation is abandoned
+ * exactly as it would be by F5. That is the accepted cost of the button people
+ * reach for when the page is already not working.
  */
 export function PageRefresh(): JSX.Element {
-  const qc = useQueryClient();
   const { t } = useTranslation();
   return (
     <RefreshButton
-      label={t('actions.refreshPage', { ns: 'common', defaultValue: 'Refresh this page' })}
-      onRefresh={() => qc.invalidateQueries({ refetchType: 'active' })}
+      label={t('actions.refresh', { ns: 'common', defaultValue: 'Refresh' })}
+      busyLabel={t('actions.refreshing', { ns: 'common', defaultValue: 'Refreshing' })}
+      onRefresh={() => {
+        window.location.reload();
+        // The document is being replaced; resolving would only flip the button
+        // out of its busy state for the frames before it disappears.
+        return new Promise<never>(() => {});
+      }}
     />
   );
 }
