@@ -616,7 +616,9 @@ describe('AgentReportsPage — complaints report', () => {
     api.useAgentReportData.mockReturnValue(ok);
     renderPage('complaints');
     expect(screen.getAllByText('Tickets').length).toBeGreaterThan(0);
-    expect(screen.getByText('2026-03-14')).toBeInTheDocument();
+    // The row still carries ISO; the CELL renders the product's one date
+    // format. Asserting the rendered form is the point of the column.
+    expect(screen.getByText('14/03/2026')).toBeInTheDocument();
     expect(screen.getByText('19:11')).toBeInTheDocument();
   });
 

@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { buildStoreIndex, toStoreSnapshot, matchStore } from '@yiji/shared-types';
 import {
   buildComplaintsSheets,
+  compensationLabel,
+  complaintCell,
+  toComplaintDate,
   COMPLAINT_COLUMN_KEYS,
   countUnmappedComplaints,
   joinComplaintStores,
@@ -87,7 +90,9 @@ describe('the complaint column set', () => {
 
     const picked = buildComplaintsSheets([row()], t, ['date', 'agent'])[0]!;
     expect(picked.columns.map((c) => c.header)).toEqual(['Date', 'Agent']);
-    expect(picked.rows[0]).toEqual(['2026-08-01', 'Sara']);
+    // dd/mm/yyyy in the cell, ISO on the row — the product has one date
+    // format and the export is not exempt from it.
+    expect(picked.rows[0]).toEqual(['01/08/2026', 'Sara']);
   });
 
   it('writes the mobile as text so Excel keeps a leading + or zero', () => {
@@ -326,5 +331,69 @@ describe('moveColumn / reconcileColumnOrder', () => {
 
   it('drops a saved column that no longer exists', () => {
     expect(reconcileColumnOrder(['gone', 'date'], ['date', 'agent'])).toEqual(['date', 'agent']);
+  });
+});
+
+describe('compensationLabel', () => {
+  const t = (_k: string, o?: { defaultValue: string }) => o?.defaultValue ?? '';
+  const row = (over: Partial<Parameters<typeof compensationLabel>[0]> = {}) => ({
+    compensation: '',
+    couponCode: '',
+    couponValue: null,
+    couponPercent: null,
+    ...over,
+  });
+
+  it('reads the stated value when there is one', () => {
+    expect(compensationLabel(row({ compensation: 'Compensated' }), t)).toBe('Compensated');
+    expect(compensationLabel(row({ compensation: 'Not Compensated' }), t)).toBe('Not compensated');
+  });
+
+  it('is case-insensitive, because the stored values are hand-entered', () => {
+    // "Not Compensated" with a capital C is in the live data today.
+    expect(compensationLabel(row({ compensation: 'COMPENSATED' }), t)).toBe('Compensated');
+    expect(compensationLabel(row({ compensation: '  compensated  ' }), t)).toBe('Compensated');
+  });
+
+  it('never returns blank — an empty field means not compensated', () => {
+    // The column used to render nothing for these, which reads as "unknown".
+    // Measured against the data, empty rows carry zero coupons.
+    expect(compensationLabel(row(), t)).toBe('Not compensated');
+  });
+
+  it('treats a coupon as evidence when the field was never ticked', () => {
+    expect(compensationLabel(row({ couponCode: 'OPS-1234' }), t)).toBe('Compensated');
+    expect(compensationLabel(row({ couponValue: 25 }), t)).toBe('Compensated');
+    expect(compensationLabel(row({ couponPercent: 10 }), t)).toBe('Compensated');
+  });
+
+  it('lets an explicit "not compensated" stand even if a coupon is attached', () => {
+    // Someone said so on purpose; a stale coupon field must not overrule them.
+    expect(compensationLabel(row({ compensation: 'Not Compensated', couponValue: 25 }), t)).toBe(
+      'Not compensated',
+    );
+  });
+});
+
+describe('the Date column', () => {
+  const t = (_k: string, o?: { defaultValue: string }) => o?.defaultValue ?? '';
+
+  it('renders dd/mm/yyyy, not the ISO stored on the row', () => {
+    const row = { date: '2026-08-21' } as Parameters<typeof complaintCell>[0];
+    expect(complaintCell(row, 'date', t)).toBe('21/08/2026');
+  });
+
+  it('round-trips through the importer, which is why this is safe to change', () => {
+    // toComplaintDate accepts both forms; an export read back in still lands
+    // on the same instant.
+    const iso = toComplaintDate('21/08/2026', '09:30');
+    expect(iso).not.toBeNull();
+    expect(new Date(iso!).getDate()).toBe(21);
+    expect(new Date(iso!).getMonth()).toBe(7); // August
+  });
+
+  it('passes anything unparseable through rather than blanking it', () => {
+    const row = { date: '' } as Parameters<typeof complaintCell>[0];
+    expect(complaintCell(row, 'date', t)).toBe('');
   });
 });

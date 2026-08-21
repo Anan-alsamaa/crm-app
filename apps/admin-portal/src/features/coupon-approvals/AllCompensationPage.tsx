@@ -321,7 +321,7 @@ export function AllCompensationPage() {
     },
     {
       key: 'state',
-      label: t('compensationAll.state', { defaultValue: 'State' }),
+      label: t('compensationAll.state', { defaultValue: 'Status' }),
       get: statusLabel,
     },
     {
@@ -500,7 +500,7 @@ export function AllCompensationPage() {
             </label>
             <label className="block space-y-1">
               <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('compensationAll.state', { defaultValue: 'State' })}
+                {t('compensationAll.state', { defaultValue: 'Status' })}
               </span>
               <SelectMenu
                 fullWidth
@@ -509,7 +509,7 @@ export function AllCompensationPage() {
                   setStatus(v);
                   setPage(1);
                 }}
-                aria-label={t('compensationAll.state', { defaultValue: 'State' })}
+                aria-label={t('compensationAll.state', { defaultValue: 'Status' })}
                 options={[
                   { value: '', label: t('agentReports.statusAll', { defaultValue: 'All' }) },
                   ...statuses.map((s) => ({

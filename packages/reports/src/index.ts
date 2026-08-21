@@ -27,6 +27,7 @@ export {
   type ComplaintColumnLayout,
   type ComplaintReportRow,
   type Translate,
+  compensationLabel,
 } from './complaints.js';
 export {
   buildWorkbook,

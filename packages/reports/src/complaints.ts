@@ -263,7 +263,13 @@ export function complaintCell(
   t: Translate,
 ): CellValue {
   const value: Record<ComplaintColumnKey, (r: ComplaintReportRow) => CellValue> = {
-    date: (r) => r.date,
+    // dd/mm/yyyy for the reader, ISO on the row. The stored value stays
+    // sortable and is what filtering compares against; only the rendered cell
+    // changes. Safe for the Excel round-trip because the importer already
+    // accepts both forms — see `toComplaintDate`. Pivoting is unaffected: the
+    // Year/Month/Week/Day columns beside this one are numbers precisely so
+    // that nothing has to parse this string.
+    date: (r) => isoToDmy(r.date),
     year: (r) => r.year ?? '',
     month: (r) => r.month ?? '',
     week: (r) => r.week ?? '',
@@ -293,7 +299,7 @@ export function complaintCell(
     complaintStatus: (r) => common(`status.${r.complaintStatus}`, r.complaintStatus, t),
     restaurantManagerId: () => '',
     agent: (r) => r.agent,
-    compensation: (r) => r.compensation,
+    compensation: (r) => compensationLabel(r, t),
     lastModifiedBy: (r) => r.lastModifiedBy,
     lastModifiedAt: (r) => r.lastModifiedAt,
   };
@@ -557,3 +563,39 @@ export function saveColumnOrder<T extends string>(storageKey: string, order: rea
 
 /** Storage key for the ticket report's column arrangement, shared by both portals. */
 export const TICKET_REPORT_ORDER_KEY = 'yiji.ticketReport.columnOrder';
+
+/**
+ * The compensation column reads "Compensated" or "Not compensated", always —
+ * never blank.
+ *
+ * The stored field already carried those two words, but only on tickets an
+ * agent had explicitly set: 47 of 99 rows were empty and the column simply
+ * showed nothing, which reads as "unknown" when it is not. Measured against
+ * the data, the empty rows carry ZERO coupons while every "Compensated" row
+ * carries one — so an empty field means uncompensated, and saying so is the
+ * accurate answer rather than a guess.
+ *
+ * The coupon is treated as evidence in its own right so a ticket that was
+ * compensated but never had the field ticked still reports honestly. The
+ * comparison is case-insensitive because the stored values are hand-entered
+ * ("Not Compensated" with a capital C is in the data today).
+ */
+export function compensationLabel(
+  row: Pick<ComplaintReportRow, 'compensation' | 'couponCode' | 'couponValue' | 'couponPercent'>,
+  t: Translate,
+): string {
+  const stated = (row.compensation ?? '').trim().toLowerCase();
+  const compensated =
+    stated === 'compensated' ||
+    (stated === '' &&
+      (!!row.couponCode.trim() || (row.couponValue ?? 0) > 0 || (row.couponPercent ?? 0) > 0));
+  return compensated
+    ? common('compensation.yes', 'Compensated', t)
+    : common('compensation.no', 'Not compensated', t);
+}
+
+/** `2026-08-21` → `21/08/2026`. Anything else is passed through untouched. */
+function isoToDmy(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+}

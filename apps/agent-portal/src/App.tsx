@@ -16,7 +16,6 @@ import {
   TicketIcon,
   Toaster,
   UsersIcon,
-  SaraLogo,
   cn,
   type AppShellRailContext,
 } from '@yiji/ui';
@@ -125,15 +124,14 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
           isCollapsed ? 'justify-center px-2' : 'px-3.5',
         )}
       >
-        {/* The lockup NAMES the product, so the word beside it went — it was
-            the same two words twice. What stays is which portal you are in,
-            which the logo cannot tell you. */}
+        {/* The tile NAMES the product, so nothing beside it repeats it. What
+            stays is which portal you are in, which the logo cannot tell you. */}
         {isCollapsed ? (
-          <SaraLogo variant="mark" size={20} className="shrink-0 text-rail-foreground" />
+          <img src="/sara-crm-icon.png" alt="Sara CRM" className="h-8 w-8 shrink-0 rounded-lg" />
         ) : (
-          <div className="min-w-0 leading-tight">
-            <SaraLogo size={17} className="text-rail-foreground" />
-            <div className="text-2xs text-rail-foreground/75 mt-1">
+          <div className="flex min-w-0 items-center gap-2.5 leading-tight">
+            <img src="/sara-crm-icon.png" alt="Sara CRM" className="h-9 w-9 shrink-0 rounded-lg" />
+            <div className="min-w-0 truncate text-2xs text-rail-foreground/75">
               {t('app.workspace', { defaultValue: 'User workspace' })}
             </div>
           </div>
@@ -289,12 +287,19 @@ function TopNav({ sections }: { sections: NavSection[] }) {
 function MobileBrand() {
   const { t } = useTranslation();
   return (
-    <div className="flex items-center gap-2.5">
-      {/* The lockup carries the name; the line under it carries which portal
-          you are in, which a supervisor with both open actually needs. */}
+    <div className="flex flex-col items-start gap-1 leading-none">
+      {/* The supplied tile artwork rather than a traced lockup — it already
+          carries the wordmark, so nothing beside it repeats the name. A raster
+          is fine at one known masthead size, unlike the favicon which has to
+          hold from 16px to 180px.
+
+          STACKED, not side by side. The tile plus a label on one line is wider
+          than the lockup it replaced, and the masthead shares its row with the
+          primary nav — enough to push "Agent performance" into an ellipsis at
+          1440px. Stacked, the block is narrower than what was there before. */}
+      <img src="/sara-crm-icon.png" alt="Sara CRM" className="h-7 w-7 shrink-0 rounded-md" />
       <span className="min-w-0 leading-tight">
-        <SaraLogo size={18} className="text-ink-foreground" />
-        <span className="mt-1 block text-2xs text-ink-muted">
+        <span className="block text-2xs text-ink-muted">
           {t('app.workspace', { defaultValue: 'Agent workspace' })}
         </span>
       </span>
