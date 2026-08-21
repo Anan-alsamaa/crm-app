@@ -118,43 +118,50 @@ export function CouponSpend({ from, to, className }: Props): JSX.Element | null 
   return (
     <div
       className={cn(
-        'rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in',
+        'rounded-2xl bg-card px-5 py-4 shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in',
         className,
       )}
     >
-      <div className="mb-3 flex items-baseline justify-between gap-3">
+      <div className="mb-2.5 flex items-baseline justify-between gap-3">
         <h3 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('couponSpend.title', { defaultValue: 'Coupons issued' })}
+          {t('couponSpend.title', { defaultValue: 'Coupons approved here' })}
         </h3>
         <span className="text-2xs text-muted-foreground">
-          {t('couponSpend.rangeNote', { defaultValue: 'Approved, in the selected range' })}
+          {t('couponSpend.rangeNote', {
+            defaultValue: 'Raised and approved in this CRM, in the selected range',
+          })}
         </span>
       </div>
 
       {!w ? (
         <div className="h-16 animate-pulse rounded-xl bg-secondary/60" />
       ) : (
-        <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
           {/* The headline: what was actually paid out. */}
-          <div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-3xl font-extrabold leading-none tracking-[-0.03em] tabular-nums text-primary">
-                {SAR.format(w.sar)}
-              </span>
-              <span className="text-xs font-semibold text-muted-foreground">
-                {t('couponSpend.sar', { defaultValue: 'SAR' })}
-              </span>
-            </div>
-            <div className="mt-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {t('couponSpend.issued', {
-                defaultValue: '{{n}} coupons issued',
-                n: w.count,
-              })}
-            </div>
+          <div className="flex items-baseline gap-2.5">
+            <span className="text-3xl font-extrabold leading-none tracking-[-0.03em] tabular-nums text-primary">
+              {SAR.format(w.sar)}
+            </span>
+            <span className="text-xs font-semibold text-muted-foreground">
+              {t('couponSpend.sar', { defaultValue: 'SAR' })}
+            </span>
+            {/* The count rides the same baseline rather than sitting under the
+                number. Stacked, a lone caption under a lone figure left the
+                card looking half-filled. */}
+            <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('couponSpend.issued', { defaultValue: '{{n}} coupons issued', n: w.count })}
+            </span>
           </div>
 
-          {/* By issuing side — the whole reason this is not one number. */}
-          {w.bySide.length > 0 && (
+          {/*
+            By issuing side — but ONLY when there is more than one.
+            With a single side the chip restates the headline exactly ("254"
+            beside "254 SAR"), which reads as a mistake rather than a
+            breakdown. The split appears by itself the moment a second issuing
+            side is used, which is the point at which it starts saying
+            something.
+          */}
+          {w.bySide.length > 1 && (
             <div className="flex flex-wrap gap-2">
               {w.bySide.map((s) => (
                 <span
@@ -170,18 +177,6 @@ export function CouponSpend({ from, to, className }: Props): JSX.Element | null 
                   <span className="text-2xs text-muted-foreground tabular-nums">×{s.count}</span>
                 </span>
               ))}
-            </div>
-          )}
-
-          {/* Money that is asked for but not yet committed. Kept out of the
-              headline — pending is not spend. */}
-          {w.pendingCount > 0 && (
-            <div className="text-2xs text-muted-foreground">
-              {t('couponSpend.pending', {
-                defaultValue: '{{sar}} SAR awaiting approval ({{n}})',
-                sar: SAR.format(w.pendingSar),
-                n: w.pendingCount,
-              })}
             </div>
           )}
 

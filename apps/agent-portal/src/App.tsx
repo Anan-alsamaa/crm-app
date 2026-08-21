@@ -283,37 +283,35 @@ function TopNav({ sections }: { sections: NavSection[] }) {
   );
 }
 
-/** Compact brand lockup for the mobile top bar. */
+/** The masthead brand: the logo tile, and nothing else. */
 function MobileBrand() {
-  const { t } = useTranslation();
   return (
-    <div className="flex flex-col items-start gap-0.5 leading-none">
-      {/* The supplied tile artwork rather than a traced lockup — it already
-          carries the wordmark, so nothing beside it repeats the name. A raster
-          is fine at one known masthead size, unlike the favicon which has to
-          hold from 16px to 180px.
-
-          STACKED, and that is what pays for the SIZE. The masthead shares its
-          row with the primary nav and there is no slack in it — a tile beside
-          the label pushed "Agent performance" into an ellipsis at 1440px. With
-          the label UNDER the tile, the block is only as wide as its widest
-          part, and the label is 71px, so every pixel of tile up to that is
-          free. 56px is the largest square that still leaves the label room
-          inside the 80px bar: twice the size, at no cost to the nav. */}
-      <img
-        src="/sara-crm-icon.png"
-        alt="Sara CRM"
-        /* No `rounded-*`: the artwork's corners are already cut, and its own
-           radius is transparent — rounding the element again clips the
-           corners a second time and shaves the tile. */
-        className="h-14 w-14 shrink-0"
-      />
-      <span className="min-w-0 leading-none">
-        <span className="block text-2xs leading-none text-ink-muted">
-          {t('app.workspace', { defaultValue: 'Agent workspace' })}
-        </span>
-      </span>
-    </div>
+    /*
+     * THE TILE ALONE, centred in the bar.
+     *
+     * There was a caption under it ("Admin console" / "User workspace") and it
+     * was the thing that made this corner look unfinished: at 71px it was
+     * WIDER than the 56px tile, so the block had a ragged right edge, and the
+     * two together stood 69px tall in an 80px bar with nothing to breathe.
+     *
+     * It was also redundant. The masthead already names the portal on the
+     * other side — the account chip reads "Admin" — and the browser tab says
+     * "Sara CRM · Admin". Three statements of the same fact, and the worst-
+     * looking one was load-bearing for nothing.
+     *
+     * Removing it settles the size question too. The caption was what defined
+     * the block's width, so the tile can now be as large as the bar allows —
+     * 64px in an 80px header, leaving an even 8px above and below — and the
+     * block is still NARROWER than it was, which gives the nav back a few
+     * pixels rather than taking any.
+     */
+    <img
+      src="/sara-crm-icon.png"
+      alt="Sara CRM"
+      /* No `rounded-*`: the artwork's corners are already cut and its radius is
+         transparent, so rounding the element clips them a second time. */
+      className="h-16 w-16 shrink-0"
+    />
   );
 }
 
