@@ -24,10 +24,15 @@
 /*
  * CRM — single brand palette.
  *
- * Brand color: #0F8D8F — a deep, calm teal. Translates to OKLCH ≈
- * `0.58 0.097 196`. This is the ONE accent that carries identity across
- * the system: the rail surface, the brand wordmark, the primary subtle
- * fill, the focus ring, the brand-accent word in display headlines.
+ * Brand color: #4B3BD5 — the indigo of the SARA CRM mark. Translates to
+ * OKLCH `0.477 0.223 278`. This is the ONE accent that carries identity
+ * across the system: the rail surface, the logo, the primary subtle fill,
+ * the focus ring, the brand-accent word in display headlines.
+ *
+ * It is taken FROM the logo, not chosen next to it — which is why every
+ * other hue here (violet 285, sky 250) sits within 35° of it. A hue that
+ * drifts further reads as a second brand, and the teal that used to live
+ * at 196 is exactly what that looked like.
  *
  * CTAs default to near-black (the host-page discipline). Coral
  * `--secondary-brand` carries "new / eyebrow" moments alongside.
@@ -43,7 +48,7 @@
   /* ── AURA LIGHT (2026-08-16, owner-directed from the monday-CRM reference) ──
    *
    * The product's default look. A soft mint-to-white canvas, PURE WHITE cards
-   * floating on it with generous radii, and a vivid trio — cyan, green, yellow —
+   * floating on it with generous radii, and a vivid trio — indigo, green, yellow —
    * carrying the data. Ink is #292A2F rather than black, which is what keeps a
    * bright interface from feeling harsh.
    *
@@ -68,21 +73,24 @@
   --popover: 1 0 0;
   --popover-foreground: 0.25 0.02 260;
 
-  /* Brand blue. Deep enough to carry white text at 4.5:1, saturated enough to
-     read as a decision rather than a default. */
-  --primary: 0.55 0.2 258;
-  --primary-strong: 0.49 0.2 259;
+  /* THE BRAND INDIGO — taken from the SARA CRM logo (#4B3BD5).
+     Every accent in both themes derives from this one hue, so the mark and the
+     interface cannot drift apart. Deep enough to carry white text at 7.3:1,
+     which is AA with room to spare. */
+  --primary: 0.477 0.223 278;
+  --primary-strong: 0.42 0.223 278;
   --primary-foreground: 1 0 0;
-  --primary-subtle: 0.55 0.2 258 / 0.1;
-  --brand: 0.55 0.2 258;
+  --primary-subtle: 0.477 0.223 278 / 0.1;
+  --brand: 0.477 0.223 278;
 
   --bubble: 0.965 0.012 255;
 
   /* Ink: the dark counterweight in a light app — masthead, table headers, the
-     nav rail. Navy rather than black, so it belongs to the blue. */
-  --ink: 0.23 0.03 266;
+     nav rail. Sits on the brand hue rather than a neighbouring navy, so the
+     masthead reads as the same family as the mark on it. */
+  --ink: 0.23 0.035 278;
   --ink-foreground: 0.98 0.004 250;
-  --ink-muted: 0.7 0.02 258;
+  --ink-muted: 0.7 0.02 278;
 
   --secondary: 0.955 0.006 252;
   --secondary-foreground: 0.25 0.02 260;
@@ -106,8 +114,8 @@
   --border: 0.25 0.02 260 / 0.08;
   --border-strong: 0.25 0.02 260 / 0.14;
   --input: 0.968 0.005 252;
-  --ring: 0.55 0.2 258;
-  --shadow-color: 0.4 0.06 260;
+  --ring: 0.477 0.223 278;
+  --shadow-color: 0.4 0.06 278;
 
   /* Rail (mobile drawer in the top-nav layout) — the same ink as the masthead. */
   --rail: 0.23 0.03 266;
@@ -121,25 +129,26 @@
   --secondary-brand-foreground: 1 0 0;
 
   /* Display ink — the reference's #292A2F, used for hero type and solid CTAs. */
-  --display: 0.55 0.2 258;
+  --display: 0.477 0.223 278;
   --violet: 0.55 0.17 285;
-  /* The reference's cyan. */
-  --sky: 0.78 0.12 205;
+  /* The blue that carries the brand indigo toward daylight — same family,
+     not a separate cyan. Its tint below must stay on this hue. */
+  --sky: 0.72 0.14 250;
   --magenta: 0.6 0.19 10;
 
   /* TINT RAMP — saturated pastel fills for coloured surfaces. Separate tokens,
      never an alpha of the accent (an alpha of a dark hue reads grey). */
-  --primary-tint: 0.93 0.06 192;
+  --primary-tint: 0.93 0.055 278;
   --success-tint: 0.93 0.08 155;
   --destructive-tint: 0.94 0.05 22;
   --warning-tint: 0.95 0.07 90;
-  --sky-tint: 0.93 0.06 205;
+  --sky-tint: 0.93 0.06 250;
   --violet-tint: 0.94 0.05 285;
 }
 
 /*
  * DEFAULT THEME — "midnight ink". Deep indigo-cast surfaces, vivid
- * cyan-teal primary, coral second brand. Light stays available via
+ * indigo primary, coral second brand. Light stays available via
  * <html data-theme="light">.
  */
 /*
@@ -150,11 +159,11 @@
  */
 :root[data-theme='dark'] {
   /* Hue washes for dark surfaces — the light theme's pastels would blind here. */
-  --primary-tint: 0.28 0.045 190;
+  --primary-tint: 0.29 0.07 278;
   --success-tint: 0.27 0.05 160;
   --destructive-tint: 0.27 0.05 27;
   --warning-tint: 0.3 0.055 75;
-  --sky-tint: 0.27 0.045 245;
+  --sky-tint: 0.27 0.045 250;
   --violet-tint: 0.27 0.045 285;
 
   --radius: 0.875rem;
@@ -167,13 +176,15 @@
   --card-foreground: 0.955 0.005 250;
   --popover: 0.225 0.012 258;
   --popover-foreground: 0.955 0.005 250;
-  /* Bright cyan-teal — the Yiji brand at full luminance for dark ink. */
-  /* Brand teal, lifted for dark ink. */
-  --primary: 0.75 0.115 185;
-  --primary-strong: 0.8 0.115 185;
-  --primary-foreground: 0.15 0.02 200;
-  --primary-subtle: 0.68 0.11 196 / 0.18;
-  --brand: 0.75 0.115 185;
+  /* The brand indigo lifted to full luminance so it glows on dark ink. */
+  /* The same brand indigo, lifted for a dark ground.
+     This was a TEAL while the light theme was blue — the two themes were not
+     the same product. One hue now, both themes. */
+  --primary: 0.72 0.16 278;
+  --primary-strong: 0.78 0.15 278;
+  --primary-foreground: 0.16 0.03 278;
+  --primary-subtle: 0.72 0.16 278 / 0.18;
+  --brand: 0.72 0.16 278;
   --bubble: 0.26 0.014 258;
   --secondary: 0.24 0.012 258;
   --secondary-foreground: 0.96 0.005 250;
@@ -190,7 +201,7 @@
   --border: 1 0 0 / 0.08;
   --border-strong: 1 0 0 / 0.14;
   --input: 0.235 0.012 258;
-  --ring: 0.75 0.115 185;
+  --ring: 0.72 0.16 278;
   --shadow-color: 0.05 0.02 220;
   /* Flat full-height sidebar, one step darker than the canvas. */
   --rail-deep: 0.105 0.014 264;
@@ -202,15 +213,15 @@
   --secondary-brand: 0.66 0.22 16;
   --secondary-brand-foreground: 1 0 0;
   --display: 0.97 0.005 250;
-  /* Aurora companions to the cyan primary — violet + magenta carry the
+  /* Aurora companions to the indigo primary — violet + magenta carry the
    * gradient system (CTAs, hero numbers, glows). */
   --violet: 0.62 0.2 285;
-  --sky: 0.7 0.17 242;
+  --sky: 0.7 0.16 250;
   --magenta: 0.62 0.19 20;
 }
 
 /*
- * Aurora workspace wash — three drifting glows (cyan / violet / magenta)
+ * Aurora workspace wash — three drifting glows (indigo / violet / magenta)
  * over the ink surface. The global reduced-motion guard freezes it.
  */
 .app-aurora {

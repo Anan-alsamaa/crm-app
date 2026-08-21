@@ -94,9 +94,14 @@ const KPI_SURFACES = {
   destructive: 'bg-gradient-to-br from-destructive-tint/70 to-card ring-destructive/15',
 } as const;
 
+/* The numeral is the one place a hue is written as a literal instead of a
+ * token. `--sky` and `--success` are tuned to fill a chip, and at that
+ * lightness a 44px numeral on white misses 4.5:1 — so these are the same
+ * hues darkened until they pass. Keep the HUE in step with the token when
+ * the brand moves; only the lightness is meant to differ. */
 const KPI_NUMERALS = {
   neutral: 'text-foreground',
-  sky: 'text-[oklch(0.48_0.13_215)]',
+  sky: 'text-[oklch(0.48_0.16_255)]',
   violet: 'text-violet',
   success: 'text-[oklch(0.45_0.13_155)]',
   primary: 'text-primary',

@@ -178,7 +178,7 @@ const SURFACE_TONE: Record<Tone, string> = {
   amber: 'bg-gradient-to-br from-warning-tint/70 to-card',
 };
 const NUMERAL_TONE: Record<Tone, string> = {
-  blue: 'text-[oklch(0.48_0.13_215)]',
+  blue: 'text-[oklch(0.48_0.16_255)]',
   violet: 'text-violet',
   green: 'text-[oklch(0.45_0.13_155)]',
   amber: 'text-[oklch(0.5_0.13_75)]',

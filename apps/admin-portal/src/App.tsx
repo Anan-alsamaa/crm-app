@@ -21,7 +21,7 @@ import {
   Toaster,
   UploadIcon,
   UsersIcon,
-  YijiLogo,
+  SaraLogo,
   cn,
   type AppShellRailContext,
 } from '@yiji/ui';
@@ -140,16 +140,15 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
           isCollapsed ? 'justify-center px-2' : 'px-3.5',
         )}
       >
-        <YijiLogo variant="tile" size={32} className="bg-background/95 shadow-sm shrink-0" />
-        {!isCollapsed && (
+        {/* The lockup NAMES the product, so the word beside it went — it was
+            the same two words twice. What stays is which portal you are in,
+            which the logo cannot tell you. */}
+        {isCollapsed ? (
+          <SaraLogo variant="mark" size={20} className="shrink-0 text-rail-foreground" />
+        ) : (
           <div className="min-w-0 leading-tight">
-            <div
-              dir="ltr"
-              className="flex items-baseline gap-1.5 text-[15px] font-semibold tracking-[-0.015em] text-rail-active-foreground"
-            >
-              <span className="text-rail-foreground/70 font-normal">Sara CRM</span>
-            </div>
-            <div className="text-2xs text-rail-foreground/75 mt-0.5">
+            <SaraLogo size={17} className="text-rail-foreground" />
+            <div className="text-2xs text-rail-foreground/75 mt-1">
               {t('app.console', { defaultValue: 'Admin console' })}
             </div>
           </div>
@@ -258,15 +257,11 @@ function MobileBrand() {
   const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2.5">
-      <YijiLogo variant="tile" size={34} className="shrink-0 bg-rail shadow-sm" />
-      {/* The masthead names the product AND which portal you are in — the
-          lockup used to be a bare word, which told a supervisor with both
-          portals open nothing about which one they were looking at. */}
+      {/* The lockup carries the name; the line under it carries which portal
+          you are in, which a supervisor with both open actually needs. */}
       <span className="min-w-0 leading-tight">
-        <span className="block text-[15px] font-bold tracking-[-0.015em] text-ink-foreground">
-          Sara CRM
-        </span>
-        <span className="block text-2xs text-ink-muted">
+        <SaraLogo size={18} className="text-ink-foreground" />
+        <span className="mt-1 block text-2xs text-ink-muted">
           {t('app.console', { defaultValue: 'Admin console' })}
         </span>
       </span>

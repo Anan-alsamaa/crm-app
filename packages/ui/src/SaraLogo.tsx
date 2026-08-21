@@ -2,10 +2,7 @@ import type { JSX } from 'react';
 import { cn } from './cn.js';
 
 /**
- * The SARA mark, in the family of SARA Connect and SARA POS.
- *
- * NOT RENDERED ANYWHERE YET — deliberately. The brand colour is the owner's
- * call and it has not been made, so this waits, unplaced, until it has.
+ * The SARA CRM logo — the mark plus its wordmark.
  *
  * Six slanted bars: one slit into three segments, one long descender that runs
  * past the baseline, one full-height, and three short. Traced from the official
@@ -15,10 +12,15 @@ import { cn } from './cn.js';
  * and no way to recolour it per theme.
  *
  * Colour is `currentColor` throughout and is NOT set here. That is the whole
- * point: the logo is whatever the surface it sits on says it is — brand blue on
- * a card, white on the ink masthead — so it matches the product by construction
- * instead of by somebody remembering to update a second hex. Callers set it,
- * because only the caller knows what it is standing on.
+ * point: the logo is whatever the surface it sits on says it is — brand indigo
+ * on a card, white on the ink masthead — so it matches the product by
+ * construction instead of by somebody remembering to update a second hex.
+ * Callers set it, because only the caller knows what it is standing on.
+ *
+ * The supplied artwork stacks the wordmark under the bars, in the notch the
+ * descender cuts. That is right at poster size and unreadable in a 56px
+ * masthead, so the UI lockup sets the two side by side. Same parts, same
+ * proportions, arranged for the size they are actually rendered at.
  */
 
 /** One parallelogram, in the traced coordinate space. */
@@ -84,15 +86,16 @@ export function SaraLogo({
         two that drift apart — and it stays legible at the 12px the masthead
         actually renders it at, which outlined letterforms do not.
 
-        `SARA` regular, the product word heavy: the family is the constant and
-        the product is what changes, so the product is what carries the weight.
+        Both words carry the SAME weight, as the artwork does. An earlier pass
+        set SARA lighter than the product word, which invented a hierarchy the
+        logo does not have.
       */}
       <span
         aria-hidden
-        className="text-[0.95em] font-semibold uppercase leading-none tracking-[0.14em] whitespace-nowrap"
-        style={{ fontSize: Math.max(11, Math.round(size * 0.46)) }}
+        className="font-extrabold uppercase leading-none tracking-[0.02em] whitespace-nowrap"
+        style={{ fontSize: Math.max(11, Math.round(size * 0.52)) }}
       >
-        SARA<span className="font-extrabold tracking-[0.1em]"> {product}</span>
+        SARA {product}
       </span>
     </span>
   );
