@@ -113,7 +113,9 @@ export function AgentPerformancePage() {
   );
 
   const volumeSeries: ChartSeries[] = [
-    { key: 'chats', label: t('performance.chats', { defaultValue: 'Chats' }), tone: 'sky' },
+    // The headline series carries the BRAND, not a neighbouring data hue —
+    // --sky at L 0.72 read pale beside an indigo interface.
+    { key: 'chats', label: t('performance.chats', { defaultValue: 'Chats' }), tone: 'primary' },
   ];
   const commonSeries: ChartSeries[] = [
     {
@@ -761,7 +763,21 @@ function Tile({
   meter?: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl bg-card px-4 py-3.5 shadow-soft ring-1 ring-foreground/[0.06]">
+    /* The surface carries the tone as well as the numeral. Unlike the hue-coded
+       KPI cards elsewhere, `tone` here means "is this metric healthy" — so a
+       tinted surface is information, not decoration, and it pulls the eye to
+       the two tiles that need attention instead of leaving seven identical
+       white boxes to be read one at a time. */
+    <div
+      className={cn(
+        'rounded-2xl px-4 py-3.5 shadow-soft ring-1',
+        tone === 'bad'
+          ? 'bg-gradient-to-br from-destructive-tint/70 to-card ring-destructive/15'
+          : tone === 'good'
+            ? 'bg-gradient-to-br from-success-tint/70 to-card ring-success/15'
+            : 'bg-card ring-foreground/[0.06]',
+      )}
+    >
       <div
         className={cn(
           'text-2xl font-extrabold leading-none tracking-[-0.03em] tabular-nums',

@@ -302,7 +302,9 @@ export function AgentPerformancePage() {
   );
 
   const volumeSeries: ChartSeries[] = [
-    { key: 'chats', label: t('performance.chats', { defaultValue: 'Chats' }), tone: 'sky' },
+    // The headline series carries the BRAND, not a neighbouring data hue —
+    // --sky at L 0.72 read pale beside an indigo interface.
+    { key: 'chats', label: t('performance.chats', { defaultValue: 'Chats' }), tone: 'primary' },
   ];
   const commonSeries: ChartSeries[] = [
     {
