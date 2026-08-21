@@ -20,7 +20,8 @@
     "toggleLanguage": "Toggle language",
     "retry": "Retry",
     "clear": "Clear",
-    "saved": "Saved"
+    "saved": "Saved",
+    "refreshPage": "Refresh this page"
   },
   "auth": {
     "signIn": "Sign in",

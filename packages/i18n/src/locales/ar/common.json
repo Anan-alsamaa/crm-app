@@ -20,7 +20,8 @@
     "toggleLanguage": "تبديل اللغة",
     "retry": "إعادة المحاولة",
     "clear": "مسح",
-    "saved": "تم الحفظ"
+    "saved": "تم الحفظ",
+    "refreshPage": "تحديث الصفحة"
   },
   "auth": {
     "signIn": "تسجيل الدخول",

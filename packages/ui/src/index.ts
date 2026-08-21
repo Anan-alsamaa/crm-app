@@ -70,6 +70,8 @@ export type { PillProps } from './Pill.js';
 export { EmptyState } from './EmptyState.js';
 export type { EmptyStateProps } from './EmptyState.js';
 export { ExportButtons } from './ExportButtons.js';
+export { RefreshButton } from './RefreshButton.js';
+export type { RefreshButtonProps } from './RefreshButton.js';
 export type { ExportButtonsProps } from './ExportButtons.js';
 export { ErrorState } from './ErrorState.js';
 export type { ErrorStateProps } from './ErrorState.js';

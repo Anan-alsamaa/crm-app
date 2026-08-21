@@ -32,6 +32,7 @@ import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
 import { ResetPassword, RESET_PASSWORD_PATH } from './pages/ResetPassword.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
+import { PageRefresh } from './components/PageRefresh.js';
 import { HelpAssistant } from './features/help-assistant/HelpAssistant.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
 import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
@@ -432,6 +433,10 @@ function Shell({ children }: { children: React.ReactNode }) {
             {/* The bar is a card surface now, so the utility triggers read
                 correctly with their own tokens — no rebinding needed. */}
             <div className="flex items-center gap-0.5 rounded-full bg-ink-foreground/10 p-1 ring-1 ring-ink-foreground/15">
+              {/* In the masthead, so it is on every page without thirty copies
+                  of it — thirty chances for one to be wired to the wrong
+                  thing. */}
+              <PageRefresh />
               <HelpAssistant />
               <LanguageToggle />
             </div>

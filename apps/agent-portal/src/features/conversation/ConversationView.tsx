@@ -217,20 +217,23 @@ export function ConversationView({
       };
       const onNoteNew = (n: NoteNew) => {
         if (n.conversationId !== conversationId) return;
-        setLive((prev) =>
-          prev.some((m) => m.id === n.id)
-            ? prev
-            : [
-                ...prev,
-                {
-                  id: n.id,
-                  sender_type: 'agent',
-                  content: n.content,
-                  is_internal_note: true,
-                  date_created: n.createdAt,
-                },
-              ],
-        );
+        const confirmed: ConversationMessage = {
+          id: n.id,
+          sender_type: 'agent',
+          content: n.content,
+          is_internal_note: true,
+          date_created: n.createdAt,
+        };
+        setLive((prev) => {
+          // Reconcile our own optimistic note, exactly as replies do. The
+          // gateway has always echoed `clientMsgId` on note:new; notes simply
+          // never used it, so the optimistic copy and the confirmed one would
+          // have shown as two notes.
+          if (n.clientMsgId && prev.some((m) => m.id === n.clientMsgId)) {
+            return prev.map((m) => (m.id === n.clientMsgId ? confirmed : m));
+          }
+          return prev.some((m) => m.id === n.id) ? prev : [...prev, confirmed];
+        });
       };
       const onTyping = (e: { conversationId: string; who: string; isTyping: boolean }) => {
         if (e.conversationId === conversationId && e.who === 'customer')
@@ -367,8 +370,19 @@ export function ConversationView({
     const content = draft.trim();
     const attachmentIds = pending.map((p) => p.id);
     // A reply needs text OR at least one attachment; internal notes are text-only.
-    if (!socketRef.current) return;
     if (internalNote ? !content : !content && attachmentIds.length === 0) return;
+    if (!socketRef.current) {
+      // Pressing send with no socket used to do NOTHING — no message, no
+      // error, the text just sat there. The draft is deliberately left intact
+      // so nothing is lost, but the person has to be told why their note went
+      // nowhere, or they press Enter harder.
+      toast.error(
+        t('conversation.notConnected', {
+          defaultValue: 'Not connected yet — your text is safe, try again in a moment.',
+        }),
+      );
+      return;
+    }
     noteSelfSend(); // don't beep on the echo of our own message
     const cmid = clientId();
     if (internalNote) {
@@ -379,6 +393,21 @@ export function ConversationView({
         mentions,
         clientMsgId: cmid,
       });
+      // Optimistic, like a reply. Without this a note only appeared once the
+      // server echoed it back, so on a slow connection pressing Enter looked
+      // like it had done nothing at all — and a note is exactly the thing an
+      // agent types quickly and moves on from.
+      setLive((prev) => [
+        ...prev,
+        {
+          id: cmid,
+          sender_type: 'agent',
+          content,
+          is_internal_note: true,
+          date_created: new Date().toISOString(),
+          pending: true,
+        },
+      ]);
     } else {
       socketRef.current.emit(SOCKET_EVENTS.messageSend, {
         conversationId,

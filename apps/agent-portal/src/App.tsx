@@ -28,6 +28,7 @@ import { ResetPassword, RESET_PASSWORD_PATH } from './pages/ResetPassword.js';
 import { NotificationBell } from './features/notifications/NotificationBell.js';
 import { HelpAssistant } from './features/help-assistant/HelpAssistant.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
+import { PageRefresh } from './components/PageRefresh.js';
 import { SoundToggle } from './components/SoundToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
 import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
@@ -357,6 +358,10 @@ function Shell({ children }: { children: React.ReactNode }) {
         topBarBrand={<MobileBrand />}
         topBarActions={
           <div className="flex items-center gap-1.5 text-muted-foreground">
+            {/* In the masthead, so it is on every page without thirty copies
+                of it — thirty chances for one to be wired to the wrong
+                thing. */}
+            <PageRefresh />
             <NotificationBell />
             <HelpAssistant />
             <SoundToggle />
