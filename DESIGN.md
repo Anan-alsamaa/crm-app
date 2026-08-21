@@ -31,10 +31,30 @@ match that ambient light; dark mode is available via `[data-theme='dark']` on
 OKLCH throughout. Token names follow shadcn semantic slots so primitives map
 1:1 to community patterns.
 
-**Brand color**: YIJI teal, vivid step — `oklch(0.58 0.125 192)` (derived
-from house `#0F8D8F` by raising chroma at the same lightness, so contrast
-math is unchanged). This is the tenant default referenced as `--primary`
-everywhere. Per-tenant override via `--brand-primary` on `<html>`.
+**Brand color (2026-08-21): SARA CRM indigo — `oklch(0.477 0.223 278)`,
+i.e. `#4B3BD5`.** Taken FROM the logo, not chosen beside it. The mark is the
+fixed point and `--primary` is derived from it, which is what stops the two
+from drifting apart the next time either is touched.
+
+The rule that follows from this: **every hue in the CRM's own palette stays
+within ~35° of 278.** `--violet` 285, `--sky` 250, and the ink/rail neutrals
+all sit inside that band. A hue further out stops reading as an accent and
+starts reading as a second brand — the teal at 192 that used to be `--primary`
+is exactly what that looked like once the indigo mark sat on top of it.
+
+Two carve-outs, both deliberate:
+
+- **Semantic hues** (`--success`, `--warning`, `--destructive`) are exempt.
+  They mean something, and pulling them toward the brand would cost the
+  meaning. Green stays green.
+- **The chat widget** is exempt entirely. It wears the TENANT's brand via
+  `--brand-primary`, so on a Yiji deployment it is still teal `#0F8D8F` with
+  the Yiji mark. `VendorsPage`'s `#0F8D8F` default is the vendor's colour,
+  not ours — do not "fix" it to indigo.
+
+_Superseded:_ **Brand color**: YIJI teal, vivid step — `oklch(0.58 0.125 192)`
+(derived from house `#0F8D8F`). Correct while the product was Yiji-branded;
+the CRM is Sara CRM now and carries its own mark.
 
 **Color strategy (revised 2026-08-13, owner's direction): OBSIDIAN + JADE.**
 A flagship register: ONE refined accent (jade, `oklch(0.50 0.115 190)` — the
@@ -140,34 +160,57 @@ dividers) — enough to define an edge without drawing a box.
 
 ### Light tokens (default)
 
-| Token                  | OKLCH                   | Role                                                              |
-| ---------------------- | ----------------------- | ----------------------------------------------------------------- |
-| `--background`         | `0.965 0.004 230`       | App canvas — tinted so white cards visibly float (mesh over this) |
-| `--foreground`         | `0.20 0.005 250`        | Body text, charcoal with slight cool — also the default CTA fill  |
-| `--card`               | `1 0 0`                 | White surface that floats above the tinted canvas                 |
-| `--popover`            | `1 0 0`                 | Dropdowns, dialogs                                                |
-| `--primary`            | `0.58 0.125 192`        | YIJI teal, vivid (or vendor `--brand-primary`)                    |
-| `--primary-foreground` | `1 0 0`                 | Text on primary fills                                             |
-| `--primary-subtle`     | `0.58 0.125 192 / 0.12` | Selected row, unread pill bg, brand-accent fills                  |
-| `--bubble`             | `0.945 0.02 255`        | Incoming chat bubble — cool periwinkle vs the teal outgoing       |
-| `--secondary`          | `0.935 0.006 230`       | Hover surface, ghost-button bg, soft tints                        |
-| `--muted`              | `0.935 0.006 230`       | Same as secondary for impeccable-product simplicity               |
-| `--muted-foreground`   | `0.46 0.010 250`        | Meta text, labels                                                 |
-| `--destructive`        | `0.56 0.22 25`          | Error states, overdue SLA                                         |
-| `--success`            | `0.58 0.15 155`         | Resolved status, responded marker                                 |
-| `--warning`            | `0.70 0.16 70`          | Pending status, SLA warning                                       |
-| `--border`             | `0.22 0.005 250 / 0.14` | Hairline at 14% opacity                                           |
-| `--border-strong`      | `0.22 0.005 250 / 0.24` | Form fields, dividers under hover                                 |
-| `--ring`               | `0.58 0.125 192`        | Focus ring — same as primary                                      |
-| `--secondary-brand`    | `0.66 0.22 0`           | Coral pink — eyebrow pills, "new" badges, urgent priority         |
-| `--display`            | `0.16 0.01 250`         | Punchier ink for hero typography (h1/h2 in PageHeader)            |
-| `--rail`               | `0.22 0.045 196`        | Dark YIJI teal — the rail / nav sidebar                           |
-| `--rail-foreground`    | `0.92 0.03 196`         | Off-white icons on the rail                                       |
-| `--rail-active`        | `0.28 0.07 196`         | Rail hover/active bg — lighter step of the same hue               |
+Generated from `apps/agent-portal/src/index.css`, which is the source of truth
+— the admin portal mirrors it. This table drifted badly once (it still named
+the teal brand two brand changes later), so treat any disagreement between it
+and the stylesheet as the table being wrong.
+
+| Token                  | OKLCH                   | Role                                                            |
+| ---------------------- | ----------------------- | --------------------------------------------------------------- |
+| `--background`         | `0.98 0.003 250`        | App canvas — tinted so white cards visibly float                |
+| `--canvas`             | `0.972 0.004 252`       | The step below background, for inset wells                      |
+| `--foreground`         | `0.25 0.02 260`         | Body text — charcoal with a slight cool bias                    |
+| `--card`               | `1 0 0`                 | White surface floating above the canvas                         |
+| `--primary`            | `0.477 0.223 278`       | **SARA CRM indigo (`#4B3BD5`)** — 7.28:1 on white               |
+| `--primary-strong`     | `0.42 0.223 278`        | Pressed/hover step of primary                                   |
+| `--primary-foreground` | `1 0 0`                 | Text on primary fills                                           |
+| `--primary-subtle`     | `0.477 0.223 278 / 0.1` | Selected row, unread pill bg, brand-accent fills                |
+| `--brand`              | `0.477 0.223 278`       | The logo's own colour — same value, named for intent            |
+| `--ink`                | `0.23 0.035 278`        | Masthead / table headers — on the brand hue, not a stray navy   |
+| `--ink-muted`          | `0.7 0.02 278`          | Secondary text on ink surfaces                                  |
+| `--secondary`          | `0.955 0.006 252`       | Hover surface, ghost-button bg                                  |
+| `--muted-foreground`   | `0.55 0.02 262`         | Meta text, labels                                               |
+| `--destructive`        | `0.58 0.21 27`          | Error states, overdue SLA (semantic — exempt from the hue band) |
+| `--success`            | `0.68 0.16 157`         | Resolved status (semantic — exempt)                             |
+| `--warning`            | `0.75 0.16 65`          | Pending status, SLA warning (semantic — exempt)                 |
+| `--border`             | `0.25 0.02 260 / 0.08`  | Hairline at 8% opacity                                          |
+| `--ring`               | `0.477 0.223 278`       | Focus ring — same as primary                                    |
+| `--rail`               | `0.23 0.035 278`        | The nav rail — same value as `--ink`                            |
+| `--rail-deep`          | `0.19 0.035 278`        | Rail's darker step                                              |
+| `--rail-active`        | `0.55 0.2 278`          | Rail hover/active fill — 5.19:1 with white                      |
+| `--display`            | `0.477 0.223 278`       | Hero typography — the brand indigo, not ink                     |
+| `--violet`             | `0.55 0.17 285`         | Data hue, 7° off brand                                          |
+| `--sky`                | `0.72 0.14 250`         | Data hue, 28° off brand                                         |
+| `--secondary-brand`    | `0.6 0.19 20`           | Coral — eyebrow pills, "new" badges                             |
+
+**TINT RAMP** — `--primary-tint` `0.93 0.055 278`, `--sky-tint` `0.93 0.06 250`,
+`--violet-tint` `0.94 0.05 285`, plus the three semantic tints. These are
+separate tokens, never an alpha of the accent (an alpha of a dark hue reads
+grey). **Each tint sits on its own accent's hue** — when `--sky` moved to 250
+and its tint was left behind at 205, one KPI card silently stayed teal through
+a whole rebrand.
+
+**Numerals are the exception to the token rule.** `KPI_NUMERALS` in
+`ComplaintDashboard.tsx` hardcodes `oklch(...)` literals because the chip hues
+are tuned to fill a chip and miss 4.5:1 as a 44px numeral. Only the LIGHTNESS
+is meant to differ from the token — keep the hue in step when the brand moves.
 
 Tenant brand override: `--brand-primary` CSS variable on `<html>` (set at
-runtime from vendor record) replaces `--primary` for that tenant. `#0F8D8F`
-is the YIJI house default.
+runtime from the vendor record) replaces `--primary` for that tenant. `#0F8D8F`
+is the YIJI house default. This applies to the **chat widget only** — the
+customer-facing surface wears the tenant's brand. The two staff portals are
+Sara CRM's own product and always carry the indigo above; they are not
+tenant-themable.
 
 ### Contrast verification
 

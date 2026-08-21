@@ -102,7 +102,7 @@ const KPI_SURFACES = {
 const KPI_NUMERALS = {
   neutral: 'text-foreground',
   sky: 'text-[oklch(0.48_0.16_255)]',
-  violet: 'text-violet',
+  violet: 'text-[oklch(0.48_0.19_285)]',
   success: 'text-[oklch(0.45_0.13_155)]',
   primary: 'text-primary',
   destructive: 'text-destructive',

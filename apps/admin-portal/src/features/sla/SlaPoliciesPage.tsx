@@ -467,12 +467,25 @@ function PlusIcon() {
    reference dashboards. */
 type KpiTone = 'blue' | 'violet' | 'green' | 'amber';
 const NUM_TONE: Record<KpiTone, string> = {
-  blue: 'text-sky',
-  violet: 'text-violet',
-  green: 'text-success',
+  // Literals, not tokens, for the same reason as the dashboard's KPI_NUMERALS:
+  // --sky and --success are tuned to fill a chip and miss 4.5:1 as a numeral.
+  // Same hue, darkened until it passes — keep the hue in step with the token.
+  blue: 'text-[oklch(0.48_0.16_255)]',
+  violet: 'text-[oklch(0.48_0.19_285)]',
+  green: 'text-[oklch(0.45_0.13_155)]',
   // Warning is a light token — its ink flips per theme — so the amber numeral
   // stays in foreground ink and the dot alone carries the hue.
   amber: 'text-foreground',
+};
+
+/* The card surface carries the hue too, matching the KPI cards on the dashboard
+   and the report pages. Without this the SLA tiles were the only plain-white
+   stat tiles in the admin portal. */
+const SURFACE_TONE: Record<KpiTone, string> = {
+  blue: 'bg-gradient-to-br from-sky-tint/70 to-card ring-sky/15',
+  violet: 'bg-gradient-to-br from-violet-tint/70 to-card ring-violet/15',
+  green: 'bg-gradient-to-br from-success-tint/70 to-card ring-success/15',
+  amber: 'bg-gradient-to-br from-warning-tint/70 to-card ring-warning/15',
 };
 const DOT_TONE: Record<KpiTone, string> = {
   blue: 'bg-sky',
@@ -483,7 +496,7 @@ const DOT_TONE: Record<KpiTone, string> = {
 
 function KpiTile({ label, value, tone }: { label: string; value: string | number; tone: KpiTone }) {
   return (
-    <div className="rounded-2xl bg-card px-4 py-3.5 shadow-soft ring-1 ring-foreground/[0.06]">
+    <div className={cn('rounded-2xl px-4 py-3.5 shadow-soft ring-1', SURFACE_TONE[tone])}>
       <div
         className={cn(
           'text-3xl font-extrabold tabular-nums leading-none tracking-[-0.03em]',
