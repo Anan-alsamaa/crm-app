@@ -1326,7 +1326,7 @@ export function ComplaintDashboard() {
           {/* What compensation is costing, for the roles allowed to see it.
               Sits above the ops snapshot because it is the one number on this
               page with money attached. */}
-          <CouponSpend from={applied.from} to={applied.to} />
+          <CouponSpend from={applied.from} to={applied.to} ticketCompensationSar={d.compensation} />
 
           {/* ── Ops snapshot ─────────────────────────────────────────────
               The reference dashboard's snapshot band: a titled card whose

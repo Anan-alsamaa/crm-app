@@ -145,6 +145,7 @@ describe('couponWorth', () => {
       rejectedSar: 0,
       rejectedCount: 0,
       askedSar: 0,
+      trend: [],
     });
   });
 });
@@ -179,5 +180,36 @@ describe('askedSar', () => {
     expect(w.askedSar).toBe(100);
     // The ring on the dashboard divides spend by this, so the two must agree.
     expect(w.sar / w.askedSar).toBeCloseTo(0.2);
+  });
+});
+
+describe('trend', () => {
+  it('buckets approved riyals by day, oldest first', () => {
+    const w = couponWorth([
+      fact({ couponValue: 10, createdAt: '2026-08-02T10:00:00Z' }),
+      fact({ couponValue: 5, createdAt: '2026-08-02T18:00:00Z' }),
+      fact({ couponValue: 40, createdAt: '2026-08-04T09:00:00Z' }),
+    ]);
+    expect(w.trend.map((d) => [d.day, d.sar])).toEqual([
+      ['2026-08-02', 15],
+      // The quiet day is PRESENT at zero — a line drawn only through the days
+      // that had coupons would compress a quiet stretch to nothing.
+      ['2026-08-03', 0],
+      ['2026-08-04', 40],
+    ]);
+  });
+
+  it('leaves rejected and pending out of the trend', () => {
+    const w = couponWorth([
+      fact({ status: 'approved', couponValue: 10, createdAt: '2026-08-02T10:00:00Z' }),
+      fact({ status: 'rejected', couponValue: 999, createdAt: '2026-08-02T11:00:00Z' }),
+      fact({ status: 'pending', couponValue: 50, createdAt: '2026-08-02T12:00:00Z' }),
+    ]);
+    expect(w.trend).toEqual([{ day: '2026-08-02', sar: 10, count: 1 }]);
+  });
+
+  it('is empty when nothing carries a date', () => {
+    const w = couponWorth([fact({ couponValue: 10 })]);
+    expect(w.trend).toEqual([]);
   });
 });

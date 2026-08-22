@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { readItems } from '@directus/sdk';
 import { couponWorth, type CouponValueFact } from '@yiji/reports';
-import { cn, HBarChart, ProgressRing, SplitBar } from '@yiji/ui';
+import { cn, formatDate, HBarChart, ProgressRing, SplitBar, TrendChart } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { canSeeCouponMoney, useAuth } from '../../lib/auth/AuthContext.js';
 
@@ -35,6 +35,13 @@ interface Props {
   /** ISO `yyyy-mm-dd`, from the dashboard's applied filter. Empty = no bound. */
   from: string;
   to: string;
+  /**
+   * Total compensation on the TICKETS in the same range — the "Compensation
+   * SAR" KPI above. Passed in so this card can state how it relates to that
+   * number instead of leaving two money figures on one page to be compared by
+   * eye. See the reconciliation line below.
+   */
+  ticketCompensationSar?: number;
   className?: string;
 }
 
@@ -45,6 +52,7 @@ interface CouponRow {
   coupon_value: number | null;
   coupon_percent: number | null;
   max_discount: number | string | null;
+  date_created: string | null;
 }
 
 /** `max_discount` is numeric(10,5) — the driver hands those back as strings. */
@@ -94,6 +102,7 @@ function useCouponSpend(from: string, to: string, enabled: boolean) {
         couponValue: num(r.coupon_value),
         couponPercent: num(r.coupon_percent),
         maxDiscount: num(r.max_discount),
+        createdAt: r.date_created,
       }));
     },
   });
@@ -101,7 +110,12 @@ function useCouponSpend(from: string, to: string, enabled: boolean) {
 
 const SAR = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 
-export function CouponSpend({ from, to, className }: Props): JSX.Element | null {
+export function CouponSpend({
+  from,
+  to,
+  ticketCompensationSar,
+  className,
+}: Props): JSX.Element | null {
   const { t } = useTranslation();
   const { user } = useAuth();
   const allowed = canSeeCouponMoney(user);
@@ -226,6 +240,50 @@ export function CouponSpend({ from, to, className }: Props): JSX.Element | null 
                   emptyLabel=""
                 />
               </div>
+            )}
+
+            {/* ── The shape over time ────────────────────────────────────
+                Approved riyals per day. Drawn only with three days or more:
+                a two-point line is a slope, not a trend, and reads as more
+                certainty than two days of data can carry. */}
+            {w.trend.length >= 3 && (
+              <div>
+                <div className="mb-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {t('couponSpend.trend', { defaultValue: 'Approved per day' })}
+                </div>
+                <TrendChart
+                  points={w.trend.map((d) => ({
+                    label: formatDate(d.day),
+                    values: { sar: d.sar },
+                  }))}
+                  series={[
+                    {
+                      key: 'sar',
+                      label: t('couponSpend.sar', { defaultValue: 'SAR' }),
+                      tone: 'primary',
+                    },
+                  ]}
+                  height={110}
+                  format={(n) => SAR.format(n)}
+                />
+              </div>
+            )}
+
+            {/* ── How this relates to the KPI above ──────────────────────
+                Two money figures on one page look like a contradiction until
+                somebody explains them, and nobody was. They answer different
+                questions: the KPI sums what every COMPLAINT ended up costing,
+                however the coupon was raised; this card sums what went through
+                the CRM's own approval queue. The difference is compensation
+                that reached a ticket without being approved here. */}
+            {ticketCompensationSar != null && ticketCompensationSar > 0 && (
+              <p className="text-2xs text-muted-foreground">
+                {t('couponSpend.ofTicketTotal', {
+                  defaultValue:
+                    'Of {{total}} SAR total compensation on complaints in this range — the rest reached a ticket without an approval here.',
+                  total: SAR.format(ticketCompensationSar),
+                })}
+              </p>
             )}
 
             {/* Said out loud rather than folded into the total — see couponSar. */}

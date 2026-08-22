@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Button, cn, FormField, Input, toast, Toaster, SaraLogo } from '@yiji/ui';
+import { Button, cn, FormField, Input, toast, Toaster } from '@yiji/ui';
 import { useAuth, isAdmin } from '../lib/auth/AuthContext.js';
 import { LanguageToggle } from '../components/LanguageToggle.js';
 import { RESET_PASSWORD_PATH } from './ResetPassword.js';
@@ -146,7 +146,9 @@ export function Login() {
         <LanguageToggle />
       </div>
       <div className="absolute start-6 top-5 z-10 flex items-center">
-        <SaraLogo size={20} className="text-primary" />
+        {/* The supplied lockup. A real asset rather than the traced vector: the
+            auth pages have room for the full artwork, so they show it. */}
+        <img src="/sara-crm-lockup.png" alt="Sara CRM" className="h-8 w-auto" />
       </div>
 
       {/* Centered board card — elevated surface, hairline ring, deep shadow. */}
@@ -156,7 +158,7 @@ export function Login() {
             {/* Top brand panel inside the card — the logo sits in a tinted tile
                 chip, the board's icon-chip move at welcome scale. */}
             <div className="flex flex-col items-center gap-3 px-8 pb-2 pt-8 text-center">
-              <SaraLogo size={26} className="text-primary" />
+              <img src="/sara-crm-lockup.png" alt="Sara CRM" className="h-12 w-auto" />
               <div className="space-y-1.5">
                 <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
                   {view === 'signin'

@@ -16,6 +16,8 @@ export interface CouponValueFact {
   couponPercent: number | null;
   /** The ceiling a percentage coupon can cost. */
   maxDiscount: number | null;
+  /** ISO timestamp the coupon was raised. Optional — only the trend needs it. */
+  createdAt?: string | null;
 }
 
 export interface CouponSideTotal {
@@ -52,6 +54,21 @@ export interface CouponWorth {
    * than added up at the call site so the parts and the whole can never drift.
    */
   askedSar: number;
+  /**
+   * Approved riyals per DAY, oldest first, with empty days filled in.
+   *
+   * Filled rather than sparse because a line drawn through only the days that
+   * had coupons compresses a quiet fortnight into the same width as a busy
+   * one, which is the opposite of what a trend is for.
+   */
+  trend: CouponDayTotal[];
+}
+
+export interface CouponDayTotal {
+  /** Local `YYYY-MM-DD`. */
+  day: string;
+  sar: number;
+  count: number;
 }
 
 /**
@@ -101,6 +118,7 @@ export function couponWorth(facts: readonly CouponValueFact[]): CouponWorth {
   let rejectedSar = 0;
   let rejectedCount = 0;
   const sides = new Map<string, { count: number; sar: number }>();
+  const days = new Map<string, { sar: number; count: number }>();
 
   for (const f of facts) {
     const status = (f.status ?? '').trim().toLowerCase();
@@ -134,6 +152,14 @@ export function couponWorth(facts: readonly CouponValueFact[]): CouponWorth {
     acc.count += 1;
     acc.sar += value ?? 0;
     sides.set(side, acc);
+
+    const day = (f.createdAt ?? '').slice(0, 10);
+    if (day) {
+      const d = days.get(day) ?? { sar: 0, count: 0 };
+      d.sar += value ?? 0;
+      d.count += 1;
+      days.set(day, d);
+    }
   }
 
   const bySide = [...sides.entries()]
@@ -151,10 +177,29 @@ export function couponWorth(facts: readonly CouponValueFact[]): CouponWorth {
     rejectedSar: round2(rejectedSar),
     rejectedCount,
     askedSar: round2(sar + pendingSar + rejectedSar),
+    trend: fillDays(days),
   };
 }
 
 /** Riyals to 2dp without float dust — 0.1 + 0.2 must not surface as 0.30000000000000004. */
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** Sparse day buckets to a continuous oldest-first series, zeroes included. */
+function fillDays(days: Map<string, { sar: number; count: number }>): CouponDayTotal[] {
+  const keys = [...days.keys()].sort();
+  if (keys.length === 0) return [];
+  const out: CouponDayTotal[] = [];
+  const cursor = new Date(`${keys[0]}T00:00:00Z`);
+  const last = new Date(`${keys[keys.length - 1]}T00:00:00Z`);
+  // Guard against a nonsense range producing an unbounded loop: a year of
+  // daily points is already far more than the card can draw.
+  for (let i = 0; cursor <= last && i < 400; i += 1) {
+    const key = cursor.toISOString().slice(0, 10);
+    const hit = days.get(key);
+    out.push({ day: key, sar: round2(hit?.sar ?? 0), count: hit?.count ?? 0 });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return out;
 }

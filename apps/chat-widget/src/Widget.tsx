@@ -15,6 +15,20 @@ export interface WidgetConfig {
    */
   autoOpen?: boolean;
   /**
+   * Where the CLOSE button should send the customer, instead of collapsing
+   * the panel back to a launcher.
+   *
+   * Set when the chat is opened FROM the mobile app (see the walk-in page):
+   * the customer believes they are still inside the app, so a close that
+   * leaves a floating bubble on a blank web page breaks that belief and
+   * strands them. The app registers a scheme — `closeapp://` — and navigating
+   * to it hands control back to the app that launched us.
+   *
+   * Left unset on the ordinary embedded widget, where closing SHOULD just
+   * collapse the panel and leave the host page alone.
+   */
+  closeUrl?: string;
+  /**
    * Fallback contact details surfaced when no support agent is online.
    * Host pages can override per vendor; defaults match the Yiji CS desk.
    */
@@ -629,7 +643,25 @@ export function Widget({ config }: { config: WidgetConfig }) {
                   <p className="yiji-header-sub">{tr.subtitle}</p>
                 </div>
               </div>
-              <button className="yiji-close" onClick={() => setOpen(false)} aria-label={tr.close}>
+              <button
+                className="yiji-close"
+                onClick={() => {
+                  // In app mode the close button is a way OUT, not a way to
+                  // minimise. `assign` rather than `href =` so the attempt is
+                  // a navigation the app can intercept; if nothing handles the
+                  // scheme we still collapse, so the button is never dead.
+                  if (config.closeUrl) {
+                    try {
+                      window.location.assign(config.closeUrl);
+                      return;
+                    } catch {
+                      /* unhandled scheme — fall through to collapsing */
+                    }
+                  }
+                  setOpen(false);
+                }}
+                aria-label={tr.close}
+              >
                 <CloseIcon />
               </button>
             </div>

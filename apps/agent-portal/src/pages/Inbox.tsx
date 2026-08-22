@@ -511,8 +511,15 @@ export function Inbox() {
             </div>
           )}
 
-          {/* List — no borders between rows; hover bg + active bg do the work. */}
-          <div className="flex-1 overflow-auto">
+          {/* List — no borders between rows; hover bg + active bg do the work.
+
+              `overflow-y-auto overflow-x-hidden`, NOT `overflow-auto`. The
+              panel runs about 4px wider than its own box at some widths — a
+              ring/shadow artifact, not content — and `overflow-auto` turned
+              those 4px into a horizontal scroll that slid the whole list
+              sideways to reveal nothing, cutting names off at the start. There
+              is nothing to see across; rows truncate rather than extend. */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden">
             {conversations.isError ? (
               <ErrorState
                 title={t('inbox.loadError', { defaultValue: 'Could not load conversations' })}
