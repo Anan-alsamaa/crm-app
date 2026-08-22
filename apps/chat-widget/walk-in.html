@@ -131,9 +131,12 @@
       <form id="walk-in-form" novalidate>
         <label for="phone">Mobile number</label>
         <!--
-          type=tel + inputmode=numeric: opens the phone keypad rather than a
-          full keyboard. autocomplete=tel lets the phone fill its own number,
-          which is most of the typing removed at a counter.
+          Starts at 05 and stays there — see holdPrefix(). Every Saudi mobile
+          begins with it, so typing it is wasted taps, and deleting it produces
+          a number the gateway cannot match.
+
+          type=tel + inputmode=tel opens the phone keypad rather than a full
+          keyboard; autocomplete=tel lets the handset fill its own number.
         -->
         <input
           id="phone"
@@ -141,7 +144,8 @@
           type="tel"
           inputmode="tel"
           autocomplete="tel"
-          placeholder="05X XXX XXXX"
+          value="05"
+          placeholder="05XXXXXXXX"
           dir="ltr"
         />
         <button id="walk-in-submit" type="submit">Start chat</button>

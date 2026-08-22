@@ -119,8 +119,53 @@ const identity = resolveIdentity();
 if (new URL(window.location.href).searchParams.get('debug') === '1') {
   renderIdentityCard(identity);
 }
-void mintDevToken(identity).then((token) => {
-  // autoOpen: the support page opens straight into the chat — the customer
-  // followed a "Chat with us" link, so no extra launcher click is needed.
-  YijiChat.init({ gatewayUrl: GATEWAY_URL, token, locale: 'en', autoOpen: true });
-});
+/*
+ * A WALK-IN handoff, if there is one.
+ *
+ * The QR page collects a phone number, asks the GATEWAY for a token, stashes
+ * it, and sends the customer here — so this page is the one chat surface,
+ * whether somebody arrived from the app or from a code printed in a shop.
+ *
+ * sessionStorage rather than a query string: the token authenticates a
+ * customer, and a URL carrying one ends up in history, in referrers, and in
+ * any screenshot of the address bar. Same origin, so the stash survives the
+ * redirect and nothing else can read it.
+ *
+ * Read once and REMOVED, so a refresh or a back-navigation later cannot
+ * resurrect a session the customer thought they had closed.
+ */
+const WALK_IN_TOKEN_KEY = 'yiji.walkInToken';
+const WALK_IN_CLOSE_KEY = 'yiji.walkInCloseUrl';
+
+function takeWalkInSession(): { token: string; closeUrl?: string } | null {
+  try {
+    const token = sessionStorage.getItem(WALK_IN_TOKEN_KEY);
+    if (!token) return null;
+    const closeUrl = sessionStorage.getItem(WALK_IN_CLOSE_KEY) ?? undefined;
+    sessionStorage.removeItem(WALK_IN_TOKEN_KEY);
+    sessionStorage.removeItem(WALK_IN_CLOSE_KEY);
+    return { token, closeUrl };
+  } catch {
+    // Private mode / storage disabled — no handoff, fall through to the demo
+    // identity rather than failing to open a chat at all.
+    return null;
+  }
+}
+
+const walkIn = takeWalkInSession();
+if (walkIn) {
+  // The token is already signed by the gateway; nothing is minted here.
+  YijiChat.init({
+    gatewayUrl: GATEWAY_URL,
+    token: walkIn.token,
+    locale: 'en',
+    autoOpen: true,
+    ...(walkIn.closeUrl ? { closeUrl: walkIn.closeUrl } : {}),
+  });
+} else {
+  void mintDevToken(identity).then((token) => {
+    // autoOpen: the support page opens straight into the chat — the customer
+    // followed a "Chat with us" link, so no extra launcher click is needed.
+    YijiChat.init({ gatewayUrl: GATEWAY_URL, token, locale: 'en', autoOpen: true });
+  });
+}

@@ -20,7 +20,14 @@ import { createRedis } from '@yiji/shared-config/redis';
 import { Server as SocketServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import pino from 'pino';
-import { CouponPushJob, ImportJob, ReportJob, WalkInSessionRequest } from '@yiji/shared-types';
+import {
+  CouponPushJob,
+  ImportJob,
+  normalizePhone,
+  phoneCustomerId,
+  ReportJob,
+  WalkInSessionRequest,
+} from '@yiji/shared-types';
 import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
 import { createHs256Verifier } from './auth/customer-jwt.js';
@@ -493,16 +500,21 @@ async function main(): Promise<void> {
     if (!vendor) return reply.code(404).send({ ok: false, error: 'unknown or inactive vendor' });
 
     /*
-     * A stable per-phone customer id, matching what the demo host derives, so a
-     * walk-in and a later in-app session for the same number land on ONE
-     * contact rather than two. The contact is shared; the conversation is not.
+     * NORMALISE before anything is derived from it.
+     *
+     * Contacts are matched by exact phone equality, and the Yiji app sends
+     * `+9665XXXXXXXX` while somebody at a counter types `05XXXXXXXX`. Signing
+     * the raw string produced a SECOND contact for a customer who already
+     * existed — so a registered customer arriving by QR code got no order
+     * history, which defeats the point of asking for the number. Caught by
+     * reading the contacts table after a walk-in, not from the code.
      */
-    const digits = phone.replace(/\D/g, '');
+    const normalized = normalizePhone(phone);
     const token = jwt.sign(
       {
         vendor_id: vendorId,
-        customer_id: `cust-${digits}`,
-        phone,
+        customer_id: phoneCustomerId(normalized),
+        phone: normalized,
         walk_in: true,
       },
       config.YIJI_JWT_SECRET,
