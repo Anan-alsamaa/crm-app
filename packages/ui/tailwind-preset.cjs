@@ -103,6 +103,8 @@ module.exports = {
         display: 'oklch(var(--display) / <alpha-value>)',
         // Aurora gradient companions to the primary.
         violet: 'oklch(var(--violet) / <alpha-value>)',
+        // The welcome hero's bright end — see --brand-glow in each portal's css.
+        'brand-glow': 'oklch(var(--brand-glow) / <alpha-value>)',
         'violet-tint': 'oklch(var(--violet-tint) / <alpha-value>)',
         sky: 'oklch(var(--sky) / <alpha-value>)',
         'rail-deep': 'oklch(var(--rail-deep) / <alpha-value>)',

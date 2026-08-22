@@ -100,7 +100,7 @@ const KPI_SURFACES = {
  * the brand moves; only the lightness is meant to differ. */
 const KPI_NUMERALS = {
   neutral: 'text-foreground',
-  sky: 'text-[oklch(0.48_0.16_255)]',
+  sky: 'text-[oklch(0.48_0.16_264)]',
   violet: 'text-[oklch(0.48_0.19_285)]',
   success: 'text-[oklch(0.45_0.13_155)]',
   primary: 'text-primary',

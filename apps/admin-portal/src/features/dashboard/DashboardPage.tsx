@@ -38,7 +38,7 @@ export function DashboardPage() {
             with the greeting and the two jumps an admin makes first. White ink
             on purpose — the fill is saturated in BOTH themes, and the theme
             tokens would flip to unreadable here. */}
-        <div className="relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-violet to-sky p-6 shadow-float">
+        <div className="relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-violet to-brand-glow p-6 shadow-float">
           <div
             aria-hidden
             className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.25),transparent_60%)]"

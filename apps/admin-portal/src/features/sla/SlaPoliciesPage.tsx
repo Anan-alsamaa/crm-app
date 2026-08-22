@@ -470,7 +470,7 @@ const NUM_TONE: Record<KpiTone, string> = {
   // Literals, not tokens, for the same reason as the dashboard's KPI_NUMERALS:
   // --sky and --success are tuned to fill a chip and miss 4.5:1 as a numeral.
   // Same hue, darkened until it passes — keep the hue in step with the token.
-  blue: 'text-[oklch(0.48_0.16_255)]',
+  blue: 'text-[oklch(0.48_0.16_264)]',
   violet: 'text-[oklch(0.48_0.19_285)]',
   green: 'text-[oklch(0.45_0.13_155)]',
   // Warning is a light token — its ink flips per theme — so the amber numeral

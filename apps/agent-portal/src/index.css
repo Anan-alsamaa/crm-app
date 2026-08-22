@@ -133,8 +133,18 @@
   --violet: 0.55 0.17 285;
   /* The blue that carries the brand indigo toward daylight — same family,
      not a separate cyan. Its tint below must stay on this hue. */
-  --sky: 0.72 0.14 250;
+  /* Pulled off true sky-blue (was 250). At 250 this read as a different
+     brand sitting next to the indigo — the page looked blue rather than
+     indigo, which is exactly what it was told. 264 still separates from
+     --primary 277 and --violet 285 well enough to tell data series apart. */
+  --sky: 0.72 0.14 264;
   --magenta: 0.6 0.19 10;
+  /* The bright end of the welcome hero. The hero is the largest coloured
+     surface in the product and it used to finish on --sky, sweeping out of
+     the brand into a pale blue — measured at #B1D0F9, 35 degrees of hue from
+     the mark. A lighter, brighter VIOLET gives the gradient the same travel
+     without leaving the family. */
+  --brand-glow: 0.64 0.19 288;
 
   /* TINT RAMP — saturated pastel fills for coloured surfaces. Separate tokens,
      never an alpha of the accent (an alpha of a dark hue reads grey). */
@@ -142,7 +152,7 @@
   --success-tint: 0.93 0.08 155;
   --destructive-tint: 0.94 0.05 22;
   --warning-tint: 0.95 0.07 90;
-  --sky-tint: 0.93 0.06 250;
+  --sky-tint: 0.93 0.06 264;
   --violet-tint: 0.94 0.05 285;
 }
 
@@ -163,7 +173,7 @@
   --success-tint: 0.27 0.05 160;
   --destructive-tint: 0.27 0.05 27;
   --warning-tint: 0.3 0.055 75;
-  --sky-tint: 0.27 0.045 250;
+  --sky-tint: 0.27 0.045 264;
   --violet-tint: 0.27 0.045 285;
 
   --radius: 0.875rem;
@@ -216,7 +226,7 @@
   /* Aurora companions to the indigo primary — violet + magenta carry the
    * gradient system (CTAs, hero numbers, glows). */
   --violet: 0.62 0.2 285;
-  --sky: 0.7 0.16 250;
+  --sky: 0.7 0.16 264;
   --magenta: 0.62 0.19 20;
 }
 
