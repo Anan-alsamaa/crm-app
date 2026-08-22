@@ -20,6 +20,7 @@ import {
   toast,
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
+import { BranchPicker } from './BranchPicker.js';
 
 /**
  * Roles & privileges, the way the ops portal does it: a named role is a set of
@@ -690,35 +691,13 @@ export function RolesPage() {
                       })}
                     </p>
                   ) : (
-                    <div className="flex max-h-56 flex-wrap gap-2 overflow-y-auto">
-                      {branchChoices.map((s) => {
-                        const on = draft.stores.includes(s.id);
-                        return (
-                          <button
-                            key={s.id}
-                            type="button"
-                            aria-pressed={on}
-                            onClick={() =>
-                              setDraft((d) => ({
-                                ...d,
-                                stores: on
-                                  ? d.stores.filter((x) => x !== s.id)
-                                  : [...d.stores, s.id],
-                              }))
-                            }
-                            className={cn(
-                              'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast',
-                              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-                              on
-                                ? 'bg-sky-tint text-sky ring-1 ring-inset ring-sky/30'
-                                : 'bg-secondary text-muted-foreground hover:text-foreground',
-                            )}
-                          >
-                            {s.label}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    /* A SEARCH, not 122 chips. See BranchPicker for why the
+                       chosen set and the searchable set are separated. */
+                    <BranchPicker
+                      options={branchChoices}
+                      selected={draft.stores}
+                      onChange={(stores) => setDraft((d) => ({ ...d, stores }))}
+                    />
                   )}
                 </SectionCard>
 
