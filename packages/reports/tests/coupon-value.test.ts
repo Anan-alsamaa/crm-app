@@ -142,6 +142,42 @@ describe('couponWorth', () => {
       unpriced: 0,
       pendingSar: 0,
       pendingCount: 0,
+      rejectedSar: 0,
+      rejectedCount: 0,
+      askedSar: 0,
     });
+  });
+});
+
+describe('rejected coupons', () => {
+  it('are totalled separately and never counted as spend', () => {
+    // Nothing left the business — but the pipeline reads wrong without them.
+    // "13 approved" means something different next to 2 rejected than 200.
+    const w = couponWorth([
+      fact({ status: 'approved', couponValue: 20 }),
+      fact({ status: 'rejected', couponValue: 500 }),
+      fact({ status: 'rejected', couponValue: 30 }),
+    ]);
+    expect(w.sar).toBe(20);
+    expect(w.rejectedSar).toBe(530);
+    expect(w.rejectedCount).toBe(2);
+  });
+
+  it('keeps a rejected coupon out of the issuing-side split', () => {
+    const w = couponWorth([fact({ status: 'rejected', issuingSide: 'Sara', couponValue: 99 })]);
+    expect(w.bySide).toEqual([]);
+  });
+});
+
+describe('askedSar', () => {
+  it('is every riyal requested — approved plus awaiting plus refused', () => {
+    const w = couponWorth([
+      fact({ status: 'approved', couponValue: 20 }),
+      fact({ status: 'pending', couponValue: 5 }),
+      fact({ status: 'rejected', couponValue: 75 }),
+    ]);
+    expect(w.askedSar).toBe(100);
+    // The ring on the dashboard divides spend by this, so the two must agree.
+    expect(w.sar / w.askedSar).toBeCloseTo(0.2);
   });
 });

@@ -36,6 +36,22 @@ export interface CouponWorth {
   /** Riyals sitting in the pending queue, i.e. not yet committed. */
   pendingSar: number;
   pendingCount: number;
+  /**
+   * Riyals REFUSED. Not spend — nothing left the business — but the pipeline
+   * reads wrong without it: "13 approved" means something different next to
+   * 2 rejected than next to 200, and a split bar drawn from approved and
+   * pending alone would quietly imply everything asked for was granted.
+   */
+  rejectedSar: number;
+  rejectedCount: number;
+  /**
+   * Every riyal that was ASKED for — approved plus awaiting plus refused.
+   *
+   * The denominator for "how freely is compensation being granted", which is
+   * the question a spend figure on its own cannot answer. Kept here rather
+   * than added up at the call site so the parts and the whole can never drift.
+   */
+  askedSar: number;
 }
 
 /**
@@ -73,6 +89,7 @@ export function couponSar(f: CouponValueFact): number | null {
 
 const APPROVED = 'approved';
 const PENDING = 'pending';
+const REJECTED = 'rejected';
 
 /** Total approved riyals, plus the same split by issuing side. */
 export function couponWorth(facts: readonly CouponValueFact[]): CouponWorth {
@@ -81,6 +98,8 @@ export function couponWorth(facts: readonly CouponValueFact[]): CouponWorth {
   let unpriced = 0;
   let pendingSar = 0;
   let pendingCount = 0;
+  let rejectedSar = 0;
+  let rejectedCount = 0;
   const sides = new Map<string, { count: number; sar: number }>();
 
   for (const f of facts) {
@@ -92,8 +111,13 @@ export function couponWorth(facts: readonly CouponValueFact[]): CouponWorth {
       pendingSar += value ?? 0;
       continue;
     }
+    if (status === REJECTED) {
+      rejectedCount += 1;
+      rejectedSar += value ?? 0;
+      continue;
+    }
     // Rejected coupons cost nothing — they were never issued. Only approved
-    // money is counted, which is what "issued" means.
+    // money counts toward `sar`, which is what "issued" means.
     if (status !== APPROVED) continue;
 
     count += 1;
@@ -124,6 +148,9 @@ export function couponWorth(facts: readonly CouponValueFact[]): CouponWorth {
     unpriced,
     pendingSar: round2(pendingSar),
     pendingCount,
+    rejectedSar: round2(rejectedSar),
+    rejectedCount,
+    askedSar: round2(sar + pendingSar + rejectedSar),
   };
 }
 

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { readItems } from '@directus/sdk';
 import { couponWorth, type CouponValueFact } from '@yiji/reports';
-import { cn } from '@yiji/ui';
+import { cn, HBarChart, ProgressRing, SplitBar } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { canSeeCouponMoney, useAuth } from '../../lib/auth/AuthContext.js';
 
@@ -114,6 +114,7 @@ export function CouponSpend({ from, to, className }: Props): JSX.Element | null 
   if (!allowed || q.isError) return null;
 
   const w = q.data ? couponWorth(q.data) : null;
+  const approvedPct = w && w.askedSar > 0 ? (w.sar / w.askedSar) * 100 : 0;
 
   return (
     <div
@@ -134,61 +135,109 @@ export function CouponSpend({ from, to, className }: Props): JSX.Element | null 
       </div>
 
       {!w ? (
-        <div className="h-16 animate-pulse rounded-xl bg-secondary/60" />
+        <div className="h-28 animate-pulse rounded-xl bg-secondary/60" />
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
-          {/* The headline: what was actually paid out. */}
-          <div className="flex items-baseline gap-2.5">
-            <span className="text-3xl font-extrabold leading-none tracking-[-0.03em] tabular-nums text-primary">
-              {SAR.format(w.sar)}
-            </span>
-            <span className="text-xs font-semibold text-muted-foreground">
-              {t('couponSpend.sar', { defaultValue: 'SAR' })}
-            </span>
-            {/* The count rides the same baseline rather than sitting under the
-                number. Stacked, a lone caption under a lone figure left the
-                card looking half-filled. */}
-            <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {t('couponSpend.issued', { defaultValue: '{{n}} coupons issued', n: w.count })}
-            </span>
+        <div className="grid gap-5 lg:grid-cols-[auto_1fr]">
+          {/* ── The headline, with the ring carrying the same fact ──────────
+              The ring is the APPROVAL RATE by money: of every riyal that was
+              asked for, how much was granted. That is the reading a manager
+              actually wants beside a spend figure — a big number alone says
+              what was paid, not whether it was paid out freely. */}
+          <div className="flex items-center gap-4">
+            {/* `label` is the ring's VISIBLE centre text, not just its
+                accessible name — so it takes the percentage. The sentence
+                explaining what the percentage means goes underneath, where it
+                has room; passed into the ring it rendered as a paragraph on
+                top of the arc. */}
+            <ProgressRing
+              value={approvedPct}
+              size={72}
+              stroke={7}
+              tone="primary"
+              label={`${Math.round(approvedPct)}%`}
+            />
+            <div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-3xl font-extrabold leading-none tracking-[-0.03em] tabular-nums text-primary">
+                  {SAR.format(w.sar)}
+                </span>
+                <span className="text-xs font-semibold text-muted-foreground">
+                  {t('couponSpend.sar', { defaultValue: 'SAR' })}
+                </span>
+              </div>
+              <div className="mt-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('couponSpend.issued', { defaultValue: '{{n}} coupons issued', n: w.count })}
+              </div>
+              <div className="mt-1 text-2xs text-muted-foreground">
+                {t('couponSpend.ringLabel', { defaultValue: 'of requested riyals approved' })}
+              </div>
+            </div>
           </div>
 
-          {/*
-            By issuing side — but ONLY when there is more than one.
-            With a single side the chip restates the headline exactly ("254"
-            beside "254 SAR"), which reads as a mistake rather than a
-            breakdown. The split appears by itself the moment a second issuing
-            side is used, which is the point at which it starts saying
-            something.
-          */}
-          {w.bySide.length > 1 && (
-            <div className="flex flex-wrap gap-2">
-              {w.bySide.map((s) => (
-                <span
-                  key={s.side}
-                  className="inline-flex items-baseline gap-2 rounded-xl bg-primary-tint/60 px-3 py-2 ring-1 ring-primary/15"
-                >
-                  <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-primary">
-                    {s.side}
-                  </span>
-                  <span className="text-sm font-bold tabular-nums text-foreground">
-                    {SAR.format(s.sar)}
-                  </span>
-                  <span className="text-2xs text-muted-foreground tabular-nums">×{s.count}</span>
-                </span>
-              ))}
-            </div>
-          )}
+          {/* ── The pipeline, as one bar ────────────────────────────────────
+              Approved / pending / refused by MONEY rather than by count, so a
+              single large refusal reads as the event it is instead of one
+              tick among many. SplitBar draws nothing when every part is zero,
+              which is the correct empty state. */}
+          <div className="min-w-0 space-y-4">
+            <SplitBar
+              parts={[
+                {
+                  label: t('couponSpend.approved', { defaultValue: 'Approved' }),
+                  value: w.sar,
+                  tone: 'success',
+                },
+                {
+                  label: t('couponSpend.pendingPart', { defaultValue: 'Awaiting' }),
+                  value: w.pendingSar,
+                  tone: 'warning',
+                },
+                {
+                  label: t('couponSpend.rejectedPart', { defaultValue: 'Refused' }),
+                  value: w.rejectedSar,
+                  tone: 'destructive',
+                },
+              ]}
+            />
 
-          {/* Said out loud rather than folded into the total — see couponSar. */}
-          {w.unpriced > 0 && (
-            <div className="text-2xs text-warning-foreground">
-              {t('couponSpend.unpriced', {
-                defaultValue: '{{n}} uncapped % coupons not counted',
-                n: w.unpriced,
-              })}
-            </div>
-          )}
+            {/* ── Where it went ──────────────────────────────────────────────
+                Bars, not chips. Drawn only when there is more than one issuing
+                side: a single full-width bar next to a single total is a
+                picture of nothing. It appears by itself when a second side is
+                used. */}
+            {w.bySide.length > 1 && (
+              <div>
+                <div className="mb-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {t('couponSpend.bySide', { defaultValue: 'By issuing side' })}
+                </div>
+                <HBarChart
+                  rows={w.bySide.map((side) => ({
+                    label: side.side,
+                    values: { sar: side.sar },
+                  }))}
+                  series={[
+                    {
+                      key: 'sar',
+                      label: t('couponSpend.sar', { defaultValue: 'SAR' }),
+                      tone: 'primary',
+                    },
+                  ]}
+                  format={(n) => SAR.format(n)}
+                  emptyLabel=""
+                />
+              </div>
+            )}
+
+            {/* Said out loud rather than folded into the total — see couponSar. */}
+            {w.unpriced > 0 && (
+              <p className="text-2xs text-muted-foreground">
+                {t('couponSpend.unpriced', {
+                  defaultValue: '{{n}} uncapped % coupons not counted',
+                  n: w.unpriced,
+                })}
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>
