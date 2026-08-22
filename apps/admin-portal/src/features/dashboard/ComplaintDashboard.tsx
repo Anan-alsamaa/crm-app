@@ -32,6 +32,7 @@ import {
   type MonthPoint,
 } from './complaints-api.js';
 import { CouponSpend } from './CouponSpend.js';
+import { CustomerReach } from './CustomerReach.js';
 
 /**
  * The operations manager's Dashboard, rebuilt on our data.
@@ -1327,6 +1328,11 @@ export function ComplaintDashboard() {
               Sits above the ops snapshot because it is the one number on this
               page with money attached. */}
           <CouponSpend from={applied.from} to={applied.to} ticketCompensationSar={d.compensation} />
+
+          {/* How much of the customer base the app actually reaches —
+              the difference between a lookup that resolves itself and one
+              an agent has to do by hand. */}
+          <CustomerReach />
 
           {/* ── Ops snapshot ─────────────────────────────────────────────
               The reference dashboard's snapshot band: a titled card whose

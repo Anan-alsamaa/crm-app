@@ -39,6 +39,14 @@ vi.mock('../src/features/dashboard/CouponSpend.js', () => ({
   CouponSpend: () => null,
 }));
 
+/* Same reasoning for the customer-reach card: it runs its own query, and these
+   tests build no QueryClientProvider. Its arithmetic is two counts and a
+   subtraction against a live Directus filter, which a mounted dashboard is the
+   wrong place to assert. */
+vi.mock('../src/features/dashboard/CustomerReach.js', () => ({
+  CustomerReach: () => null,
+}));
+
 import { ComplaintDashboard } from '../src/features/dashboard/ComplaintDashboard.js';
 
 const bd = (label: string, count: number) => ({ key: label, label, count });
