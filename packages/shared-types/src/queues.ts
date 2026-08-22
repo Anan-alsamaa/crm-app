@@ -15,6 +15,7 @@ export const QUEUES = {
   reports: 'reports',
   routing: 'routing',
   coupons: 'coupons',
+  customerPush: 'customer-push',
 } as const;
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 
@@ -151,3 +152,31 @@ export const WalkInSessionRequest = z.object({
   vendorId: z.string().min(1),
 });
 export type WalkInSessionRequest = z.infer<typeof WalkInSessionRequest>;
+
+// --- customer-push ---
+/**
+ * Tell a customer's PHONE that an agent replied while they were away.
+ *
+ * The widget already says "we will get back to you" when nobody is online. The
+ * gap is the other half: the reply lands hours later in a chat the customer
+ * closed, and nothing tells them. Only the Yiji mobile app can raise a
+ * notification on their handset, so this job carries what the app needs to
+ * find the customer and show something useful.
+ *
+ * The message PREVIEW is included deliberately but is the agent's own words,
+ * truncated — not a summary and not the whole thread. A notification that says
+ * only "you have a reply" makes people open the app to find out whether it
+ * mattered; one that quotes the entire conversation leaks it to a lock screen.
+ */
+export const CustomerPushJob = z.object({
+  conversationId: z.string(),
+  /** E.164, the same canonical form contacts are stored in. */
+  phone: z.string().nullable(),
+  /** The Yiji customer id when we have one — the app's own key. */
+  externalCustomerId: z.string().nullable(),
+  /** First line of the agent's reply, for the notification body. */
+  preview: z.string(),
+  /** When the reply was sent, so a delayed push can say so. */
+  sentAt: z.string(),
+});
+export type CustomerPushJob = z.infer<typeof CustomerPushJob>;

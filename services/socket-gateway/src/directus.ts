@@ -216,6 +216,34 @@ export class GatewayDirectus {
     return { id: created.id, created: true };
   }
 
+  /**
+   * The contact behind a conversation — just enough to notify their phone.
+   *
+   * Read at push time rather than carried on the socket, because the identity
+   * that matters is the CURRENT one: an agent may have saved the customer's
+   * real name or the contact may have been linked to a Yiji id since the
+   * session opened, and a notification should use what is true now.
+   */
+  async loadConversationContact(
+    conversationId: string,
+  ): Promise<{ phone: string | null; externalCustomerId: string | null } | null> {
+    const rows = (await this.client.request(
+      readItems('conversations', {
+        filter: { id: { _eq: conversationId } },
+        fields: ['contact.phone', 'contact.external_customer_id'],
+        limit: 1,
+      }),
+    )) as Array<{
+      contact?: { phone?: string | null; external_customer_id?: string | null } | null;
+    }>;
+    const contact = rows[0]?.contact;
+    if (!contact) return null;
+    return {
+      phone: contact.phone ?? null,
+      externalCustomerId: contact.external_customer_id ?? null,
+    };
+  }
+
   /** Persist a message and bump conversation activity. Returns the new message. */
   async persistMessage(input: {
     conversationId: string;

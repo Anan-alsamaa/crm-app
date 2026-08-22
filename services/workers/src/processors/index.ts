@@ -11,6 +11,7 @@ import {
   type ReportJob,
   type RoutingJob,
   type CouponPushJob,
+  type CustomerPushJob,
 } from '@yiji/shared-types';
 import type { MailTransport } from '../mail/index.js';
 import type { YijiDirectusClient } from '@yiji/shared-config';
@@ -26,6 +27,7 @@ import {
 import { processImportJob, type ImportsDeps } from './imports.js';
 import { processReportJob, type ReportsDeps } from './reports.js';
 import { processCouponPushJob } from './coupon-push.js';
+import { processCustomerPushJob } from './customer-push.js';
 import { handleRouting } from '../routing.js';
 import {
   createTicketRepo,
@@ -158,6 +160,15 @@ export const processors: Record<QueueName, Processor> = {
       // Blank disables delivery and leaves the request `approved` — see the
       // note in coupon-push.ts on why that is not treated as a success.
       yijiCouponUrl: process.env.YIJI_COUPON_URL ?? '',
+      yijiApiKey: process.env.YIJI_API_KEY ?? '',
+    });
+  },
+  [QUEUES.customerPush]: async (job, deps) => {
+    await processCustomerPushJob(job as Job<CustomerPushJob>, {
+      logger: deps.logger,
+      // Blank disables delivery and logs the payload — the concrete thing to
+      // hand the mobile developer when agreeing the contract.
+      yijiNotifyUrl: process.env.YIJI_NOTIFY_URL ?? '',
       yijiApiKey: process.env.YIJI_API_KEY ?? '',
     });
   },

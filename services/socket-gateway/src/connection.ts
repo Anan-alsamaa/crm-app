@@ -394,6 +394,45 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       if (senderType === 'agent' && data.agentId) {
         void deps.presenceStore?.touch(data.agentId).catch(() => undefined);
       }
+
+      /*
+       * An agent replied — does the customer have any way of knowing?
+       *
+       * The widget already promises "we will get back to you" when nobody is
+       * online. The other half of that promise is this: the reply lands hours
+       * later in a chat the customer closed, and only their phone can tell
+       * them. Enqueued for the mobile app to deliver.
+       *
+       * ONLY when no customer socket is in the conversation. Somebody watching
+       * the thread is already reading the message; notifying them as well is
+       * how a chat app becomes something people mute. `fetchSockets` is
+       * adapter-aware, so this stays correct across multiple gateway instances
+       * rather than only seeing the sockets on this one.
+       */
+      if (senderType === 'agent') {
+        void (async () => {
+          try {
+            const inRoom = await io.in(rooms.conversation(conversationId)).fetchSockets();
+            const customerWatching = inRoom.some(
+              (sock) => (sock.data as SocketData).kind === 'customer',
+            );
+            if (customerWatching) return;
+            const contact = await directus.loadConversationContact(conversationId);
+            await producer.enqueueCustomerPush({
+              conversationId,
+              phone: contact?.phone ?? null,
+              externalCustomerId: contact?.externalCustomerId ?? null,
+              // One line, not the thread — see CustomerPushJob.
+              preview: content.replace(/\s+/g, ' ').trim().slice(0, 140),
+              sentAt: saved.createdAt,
+            });
+          } catch (err) {
+            // A missed notification must never fail the send. The message is
+            // already persisted and delivered to every agent surface.
+            logger.warn({ err, conversationId }, 'customer push enqueue failed');
+          }
+        })();
+      }
     } catch (err) {
       logger.error({ err }, 'message:send failed');
       socket.emit(SOCKET_EVENTS.error, {

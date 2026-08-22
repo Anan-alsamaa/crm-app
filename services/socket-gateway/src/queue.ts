@@ -10,6 +10,7 @@ import {
   type NotificationJob,
   type ReportJob,
   type RoutingJob,
+  type CustomerPushJob,
   CouponPushJob,
 } from '@yiji/shared-types';
 
@@ -43,6 +44,12 @@ export interface SideEffectProducer {
    * retrying, cannot queue the same coupon twice.
    */
   enqueueCouponPush(job: CouponPushJob): Promise<string | null>;
+  /**
+   * Tell a customer's phone an agent replied while they were away. Enqueued
+   * only when no customer socket is in the conversation — somebody watching
+   * the chat does not need a notification about the message on their screen.
+   */
+  enqueueCustomerPush(job: CustomerPushJob): Promise<string | null>;
   close(): Promise<void>;
 }
 
@@ -74,6 +81,10 @@ class NoopProducer implements SideEffectProducer {
     this.logger.warn('coupon push skipped (Redis disabled)');
     return null;
   }
+  async enqueueCustomerPush(): Promise<string | null> {
+    this.logger.warn('customer push skipped (Redis disabled)');
+    return null;
+  }
   async close(): Promise<void> {}
 }
 
@@ -84,6 +95,7 @@ class BullProducer implements SideEffectProducer {
   private readonly notifications: Queue;
   private readonly routing: Queue;
   private readonly coupons: Queue;
+  private readonly customerPush: Queue;
   private readonly connection: Redis | Cluster;
   /* On a cluster a queue's keys must hash to ONE shard or BullMQ's Lua
    * scripts fail with CROSSSLOT — hence the hash tag. undefined on
@@ -114,6 +126,10 @@ class BullProducer implements SideEffectProducer {
     });
     this.routing = new Queue(QUEUES.routing, { connection: this.connection, prefix: this.prefix });
     this.coupons = new Queue(QUEUES.coupons, { connection: this.connection, prefix: this.prefix });
+    this.customerPush = new Queue(QUEUES.customerPush, {
+      connection: this.connection,
+      prefix: this.prefix,
+    });
   }
   async enqueueImport(job: ImportJob): Promise<string | null> {
     const added = await this.imports.add('import', job, DEFAULT_JOB_OPTIONS);
@@ -131,6 +147,20 @@ class BullProducer implements SideEffectProducer {
     const added = await this.coupons.add('push', job, {
       ...DEFAULT_JOB_OPTIONS,
       jobId: `coupon-push-${job.couponApprovalId}`,
+    });
+    return added.id ?? null;
+  }
+  async enqueueCustomerPush(job: CustomerPushJob): Promise<string | null> {
+    /*
+     * Deduped per MESSAGE, not per conversation: an agent sending three lines
+     * in a row while the customer is away is one conversation but three
+     * distinct things they have not seen. The job id keys on the send time so
+     * a retry of the same send cannot double-notify, while a genuinely new
+     * message still gets through.
+     */
+    const added = await this.customerPush.add('reply', job, {
+      ...DEFAULT_JOB_OPTIONS,
+      jobId: `customer-push-${job.conversationId}-${job.sentAt}`,
     });
     return added.id ?? null;
   }
