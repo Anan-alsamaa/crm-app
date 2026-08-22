@@ -36,6 +36,8 @@ interface SocketData {
   contactIsNew?: boolean;
   conversationId?: string;
   conversationCreated?: boolean;
+  /** Session came from the store QR code; the phone was typed, not proven. */
+  walkIn?: boolean;
   agentId?: string;
 }
 
@@ -136,7 +138,13 @@ export function registerConnection(deps: ConnectionDeps): void {
       const vendor = await directus.resolveVendor(claims.vendor_id);
       if (!vendor) throw new CustomerTokenError('unknown or inactive vendor');
       const contact = await directus.upsertContact(vendor.id, claims);
-      const conversation = await directus.findOrCreateConversation(vendor.id, contact.id);
+      // A walk-in session gets a conversation of its OWN. See
+      // `createWalkInConversation`: the phone was typed by somebody standing in
+      // a store, not proven, so it must not open a thread that number already
+      // owns.
+      const conversation = claims.walk_in
+        ? await directus.createWalkInConversation(vendor.id, contact.id, claims.phone ?? '')
+        : await directus.findOrCreateConversation(vendor.id, contact.id);
       data.kind = 'customer';
       data.vendorId = vendor.id;
       data.vendorColors = vendor.colors;
@@ -147,6 +155,7 @@ export function registerConnection(deps: ConnectionDeps): void {
       data.contactIsNew = contact.isNew;
       data.conversationId = conversation.id;
       data.conversationCreated = conversation.created;
+      data.walkIn = claims.walk_in === true;
       return next();
     } catch (err) {
       // Surface the REAL cause. Directus SDK rejects with a non-Error object
@@ -230,14 +239,21 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
   // CUSTOMER-side view is capped to the last 7 days by request: a months-long
   // relationship stays in the system and fully visible to agents, but the
   // widget only replays the recent week.
-  try {
-    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const history = await directus.loadConversationMessages(data.conversationId, { since });
-    if (history.length > 0) {
-      socket.emit('messages:history', { conversationId: data.conversationId, messages: history });
+  //
+  // A WALK-IN session replays nothing, and the conversation it was just given
+  // is empty anyway — this is belt and braces. The phone was typed by somebody
+  // in a store, not proven, so history is not theirs to be shown even if a
+  // future change made this conversation resumable.
+  if (!data.walkIn) {
+    try {
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const history = await directus.loadConversationMessages(data.conversationId, { since });
+      if (history.length > 0) {
+        socket.emit('messages:history', { conversationId: data.conversationId, messages: history });
+      }
+    } catch (err) {
+      logger.warn({ err }, 'failed to load conversation history');
     }
-  } catch (err) {
-    logger.warn({ err }, 'failed to load conversation history');
   }
   // A brand-new conversation fires the conversation_created automation trigger
   // (assignment / keyword rules) exactly once; a resumed one already fired it.

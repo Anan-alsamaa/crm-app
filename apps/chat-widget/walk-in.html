@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      viewport-fit=cover + the safe-area padding below: this page is opened
+      inside the app's web view on a phone with a notch, and content sliding
+      under the status bar is the single fastest way to make a web view look
+      like a web view.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Chat with us</title>
+    <meta name="theme-color" content="#0F8D8F" />
+    <link rel="icon" type="image/png" href="/yiji-logo.png" />
+    <meta name="description" content="Start a support chat — tell us your mobile number." />
+    <style>
+      :root {
+        --ink: #14181f;
+        --muted: #667085;
+        --brand: #0f8d8f;
+        --line: #e6e8ec;
+      }
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+      }
+      body {
+        font-family:
+          'SF Pro Text',
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+        background: #fff;
+        color: var(--ink);
+        /* The app's web view owns the status bar; keep clear of it. */
+        padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .wrap {
+        max-width: 420px;
+        margin: 0 auto;
+        width: 100%;
+      }
+      .logo {
+        height: 40px;
+        width: auto;
+        margin-bottom: 28px;
+      }
+      h1 {
+        font-size: 22px;
+        line-height: 1.25;
+        margin: 0 0 8px;
+        letter-spacing: -0.01em;
+      }
+      p.sub {
+        margin: 0 0 24px;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.5;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      input {
+        width: 100%;
+        /* 16px minimum: anything smaller makes iOS Safari zoom the page on
+           focus, which looks like the app breaking. */
+        font-size: 16px;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #f7f8fa;
+        color: var(--ink);
+        outline: none;
+      }
+      input:focus {
+        border-color: var(--brand);
+        box-shadow: 0 0 0 3px rgba(15, 141, 143, 0.15);
+      }
+      button {
+        width: 100%;
+        margin-top: 16px;
+        font-size: 16px;
+        font-weight: 700;
+        padding: 15px 16px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--brand);
+        color: #fff;
+      }
+      button:disabled {
+        opacity: 0.6;
+      }
+      .err {
+        margin-top: 12px;
+        font-size: 14px;
+        color: #b42318;
+      }
+      .foot {
+        margin-top: 20px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap" id="walk-in-intro">
+      <img class="logo" src="/yiji-logo.png" alt="" />
+      <h1>Something wrong with your order?</h1>
+      <p class="sub">
+        Tell us the mobile number you order with and we will start a chat with our team.
+      </p>
+      <form id="walk-in-form" novalidate>
+        <label for="phone">Mobile number</label>
+        <!--
+          type=tel + inputmode=numeric: opens the phone keypad rather than a
+          full keyboard. autocomplete=tel lets the phone fill its own number,
+          which is most of the typing removed at a counter.
+        -->
+        <input
+          id="phone"
+          name="phone"
+          type="tel"
+          inputmode="tel"
+          autocomplete="tel"
+          placeholder="05X XXX XXXX"
+          dir="ltr"
+        />
+        <button id="walk-in-submit" type="submit">Start chat</button>
+        <p class="err" id="walk-in-error" hidden></p>
+      </form>
+      <p class="foot">
+        We use your number only to connect this chat to your order history and to reply to you.
+      </p>
+    </div>
+    <script type="module" src="/src/walk-in.ts"></script>
+  </body>
+</html>

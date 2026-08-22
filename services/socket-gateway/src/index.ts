@@ -20,10 +20,12 @@ import { createRedis } from '@yiji/shared-config/redis';
 import { Server as SocketServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import pino from 'pino';
-import { CouponPushJob, ImportJob, ReportJob } from '@yiji/shared-types';
+import { CouponPushJob, ImportJob, ReportJob, WalkInSessionRequest } from '@yiji/shared-types';
 import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
 import { createHs256Verifier } from './auth/customer-jwt.js';
+import jwt from 'jsonwebtoken';
+import { createTokenBucket } from './rate-limit.js';
 import { validateAgentToken } from './auth/agent-jwt.js';
 import { createProducer } from './queue.js';
 import { createPresenceStore } from './presence-store.js';
@@ -197,6 +199,29 @@ async function main(): Promise<void> {
     if (corsOrigin === '*') return '*';
     return origin && corsOrigin.includes(origin) ? origin : null;
   };
+  /*
+   * The walk-in endpoint is called from the customer-facing QR page, which
+   * lives on the WIDGET's origin — so it is allow-listed against
+   * WIDGET_CORS_ORIGIN, the same list the widget's socket connection uses, and
+   * NOT against CORS_ORIGIN, which names the staff portals.
+   */
+  const allowWidgetOrigin = (originHeader: string | string[] | undefined): string | null => {
+    const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader;
+    if (widgetCorsOrigin === '*') return '*';
+    return origin && widgetCorsOrigin.includes(origin) ? origin : null;
+  };
+  app.addHook('onRequest', async (req, reply) => {
+    if (!req.url.startsWith('/walk-in/')) return;
+    const allow = allowWidgetOrigin(req.headers.origin);
+    if (allow) {
+      reply.header('Access-Control-Allow-Origin', allow);
+      reply.header('Vary', 'Origin');
+      reply.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', 'content-type');
+      reply.header('Access-Control-Max-Age', '600');
+    }
+    if (req.method === 'OPTIONS') return reply.code(204).send();
+  });
   app.addHook('onRequest', async (req, reply) => {
     if (!req.url.startsWith('/jobs/')) return;
     const allow = allowCorsOrigin(req.headers.origin);
@@ -212,7 +237,8 @@ async function main(): Promise<void> {
   // The global security onSend sets CORP: same-origin; relax it to cross-origin
   // for /jobs/* so the cross-origin admin portal can read the JSON response.
   app.addHook('onSend', async (req, reply, payload) => {
-    if (req.url.startsWith('/jobs/')) reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+    if (req.url.startsWith('/jobs/') || req.url.startsWith('/walk-in/'))
+      reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
     return payload;
   });
 
@@ -422,6 +448,71 @@ async function main(): Promise<void> {
   // distinctOnline > 0 right after you signed out, the gateway is the
   // source of truth saying you're still online, and the offending sockets
   // are listed in `agents`.
+  /**
+   * WALK-IN SESSION — the store QR code.
+   *
+   * A customer standing in a branch scans a printed code, types their phone
+   * number, and is handed a widget token. The token is minted HERE, server
+   * side, because it is signed with YIJI_JWT_SECRET — the same secret that
+   * authenticates every in-app customer. Shipping that secret to a public page
+   * so the browser could sign its own token would let anyone mint a token for
+   * any customer, which is the whole game.
+   *
+   * The phone is NOT verified, and the design accepts that rather than hiding
+   * it. What it buys: no SMS provider, no code to retype at a counter, no
+   * failed delivery on a weak signal. What it costs is bounded deliberately —
+   * the token carries `walk_in`, which gives the session a conversation of its
+   * own and replays no history, so a guessed number cannot read a stranger's
+   * chat. Compensation is unaffected because it was never self-service: an
+   * agent raises it and a supervisor approves it, and both can see the internal
+   * note this session opens with.
+   *
+   * Rate limited per IP. A phone number is six-ish digits of entropy in
+   * practice; without a limit this endpoint is an enumeration tool.
+   */
+  const walkInBuckets = new Map<string, ReturnType<typeof createTokenBucket>>();
+  app.post('/walk-in/session', async (req, reply) => {
+    const ip = req.ip || 'unknown';
+    let bucket = walkInBuckets.get(ip);
+    if (!bucket) {
+      // 5 immediately, then one every 30s. A real customer needs one.
+      bucket = createTokenBucket(5, 1 / 30);
+      walkInBuckets.set(ip, bucket);
+    }
+    if (!bucket.tryRemove()) {
+      return reply.code(429).send({ ok: false, error: 'too many attempts, try again shortly' });
+    }
+
+    const parsed = WalkInSessionRequest.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, error: 'a valid phone number is required' });
+    }
+    const { phone, vendorId } = parsed.data;
+
+    const vendor = await directus.resolveVendor(vendorId).catch(() => null);
+    if (!vendor) return reply.code(404).send({ ok: false, error: 'unknown or inactive vendor' });
+
+    /*
+     * A stable per-phone customer id, matching what the demo host derives, so a
+     * walk-in and a later in-app session for the same number land on ONE
+     * contact rather than two. The contact is shared; the conversation is not.
+     */
+    const digits = phone.replace(/\D/g, '');
+    const token = jwt.sign(
+      {
+        vendor_id: vendorId,
+        customer_id: `cust-${digits}`,
+        phone,
+        walk_in: true,
+      },
+      config.YIJI_JWT_SECRET,
+      { algorithm: 'HS256', expiresIn: '2h' },
+    );
+
+    logger.info({ vendorId, walkIn: true }, 'walk-in session issued');
+    return reply.send({ ok: true, token });
+  });
+
   app.get('/debug/presence', async () => getAgentPresenceSnapshot());
 
   httpServer.listen(config.PORT, () => logger.info(`socket-gateway on :${config.PORT}`));

@@ -131,3 +131,23 @@ export const DEFAULT_JOB_OPTIONS = {
   removeOnComplete: 1000,
   removeOnFail: false,
 };
+
+/**
+ * What the store QR page posts to open a walk-in chat session.
+ *
+ * Phone is the only thing asked of the customer, and it is the only thing that
+ * identifies them — so it is validated here rather than trusted. The pattern is
+ * deliberately loose (digits, spaces, +, dashes, parens) because Saudi numbers
+ * are written half a dozen ways on a shop counter and rejecting a valid one is
+ * worse than accepting a malformed one the gateway will simply fail to match.
+ */
+export const WalkInSessionRequest = z.object({
+  phone: z
+    .string()
+    .trim()
+    .min(7, 'phone is too short')
+    .max(24, 'phone is too long')
+    .regex(/^[+()\-\s\d]+$/, 'phone may only contain digits and + - ( ) spaces'),
+  vendorId: z.string().min(1),
+});
+export type WalkInSessionRequest = z.infer<typeof WalkInSessionRequest>;

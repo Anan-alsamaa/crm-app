@@ -166,6 +166,56 @@ export class GatewayDirectus {
     return { id: created.id, created: true };
   }
 
+  /**
+   * A conversation for a WALK-IN session — always new, never an existing one.
+   *
+   * The deliberate opposite of `findOrCreateConversation`. That method attaches
+   * a returning customer to the thread they already have, which is right when
+   * the platform has authenticated them. A walk-in visitor has only typed a
+   * phone number into a page reached from a QR code in a store, so attaching
+   * them to whatever thread that number already owns would hand a stranger's
+   * conversation to anyone who can guess a phone number.
+   *
+   * The internal note is the other half of the bargain. Not verifying the phone
+   * is only defensible because a human decides everything that follows — an
+   * agent raises compensation and a supervisor approves it — and a human can
+   * only weigh that if they can SEE the session was never verified. Internal,
+   * so it is in front of the agent and never in front of the customer.
+   */
+  async createWalkInConversation(
+    vendorUuid: string,
+    contactId: string,
+    phone: string,
+  ): Promise<{ id: string; created: boolean }> {
+    const created = (await this.client.request(
+      createItem('conversations', {
+        vendor: vendorUuid,
+        contact: contactId,
+        status: 'open',
+        priority: 'medium',
+        unread_count_agent: 0,
+        last_message_at: new Date().toISOString(),
+      } as never),
+    )) as { id: string };
+
+    await this.persistMessage({
+      conversationId: created.id,
+      senderType: 'system',
+      content:
+        `Walk-in chat — started from a store QR code. The number ${phone} was ` +
+        `typed by the visitor and has NOT been verified, and no earlier chat ` +
+        `history is shown in this session. Confirm who you are speaking to ` +
+        `before granting compensation.`,
+      isInternalNote: true,
+    }).catch(() => {
+      /* The warning is important, but a conversation the customer can use is
+         more important than the note about it. A failure here must not leave
+         somebody staring at a chat that never opened. */
+    });
+
+    return { id: created.id, created: true };
+  }
+
   /** Persist a message and bump conversation activity. Returns the new message. */
   async persistMessage(input: {
     conversationId: string;

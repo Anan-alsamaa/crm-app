@@ -25,6 +25,19 @@ export const CustomerClaims = z.object({
   // Name + email are optional and may be absent, null, or empty.
   name: z.preprocess(blankToUndefined, z.string().optional()),
   email: z.preprocess(blankToUndefined, z.string().email().optional()),
+  /**
+   * Minted by the WALK-IN endpoint rather than handed over by the Yiji app.
+   *
+   * The customer typed a phone number into a page reached from a QR code in a
+   * store; nobody proved the number is theirs. The session is therefore given
+   * a conversation of its own and no history — see `findOrCreateConversation`
+   * vs `createConversation` at the call site — so an unverified visitor can
+   * never read a stranger's past chat by guessing their number.
+   *
+   * Absent on the ordinary in-app token, which the Yiji platform signs for a
+   * customer it has already authenticated.
+   */
+  walk_in: z.boolean().optional(),
   iat: z.number().optional(),
   exp: z.number().optional(),
 });
