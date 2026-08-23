@@ -736,134 +736,165 @@ function Row({
                       </p>
                     </div>
                   )}
-                  {/* No ticket, nowhere to put the coupon. Approving used to
-                  succeed silently and write nothing, so the supervisor believed
-                  they had issued money that did not exist. Rejecting stays
-                  available — turning something down needs no destination. */}
-                  {/* A supervisor approving is the last gate before a customer is
-                  promised money, so the same rules the agent's form enforces
-                  are checked again HERE against the terms as they now stand.
-                  Both rows already in the system failed one of them. */}
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={busy || !row.ticket?.id || termsProblems.length > 0}
-                    title={termsProblems[0]?.message}
-                    onClick={() => {
-                      // Only what actually changed rides along — untouched fields
-                      // approve as asked, and no change at all is a straight
-                      // approval rather than an amendment.
-                      const patch = editing ? diffEdits(row, edits) : {};
-                      onDecide(true, note, Object.keys(patch).length ? patch : undefined);
-                    }}
-                  >
-                    {t('couponApprovals.approve', { defaultValue: 'Approve' })}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    disabled={busy}
-                    onClick={() => {
-                      setEditing((v) => !v);
-                      // Seed from what was asked for, so the supervisor adjusts a
-                      // value rather than recalling it.
-                      setEdits(seedEdits(row));
-                    }}
-                  >
-                    {t('couponApprovals.edit', { defaultValue: 'Edit' })}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    disabled={busy}
-                    onClick={() => setRejecting(true)}
-                  >
-                    {t('couponApprovals.reject', { defaultValue: 'Reject' })}
-                  </Button>
-                  {/* SAVE sits at the end of the decision row, after Approve, Edit
-                  and Reject — the last thing in the strip, and only while
-                  editing. It used to sit inside the edit grid above, which put
-                  the one control that commits a change nowhere near the
-                  controls that commit every other one. */}
-                  {editing && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      disabled={
-                        busy ||
-                        saveTerms.isPending ||
-                        termsProblems.length > 0 ||
-                        !editReason.trim()
-                      }
-                      title={
-                        termsProblems[0]?.message ??
-                        (editReason.trim()
-                          ? undefined
-                          : t('couponApprovals.editReasonRequired', {
-                              defaultValue: 'Give a reason for the change first.',
-                            }))
-                      }
-                      // Turns the colour of Approve under the cursor: this is
-                      // the button that commits, and it should say so at the
-                      // moment somebody is about to press it. `!` because `cn`
-                      // is a joiner, not tailwind-merge — without it the
-                      // variant's own hover wins on specificity order.
-                      className="hover:!bg-primary hover:!text-primary-foreground"
-                      onClick={() => {
-                        const patch = diffEdits(row, edits);
-                        if (Object.keys(patch).length === 0) {
-                          toast.success(
-                            t('couponApprovals.nothingChanged', {
-                              defaultValue: 'Nothing changed.',
-                            }),
-                          );
-                          return;
+                  {/*
+                    TWO MODES, never both at once.
+
+                    While an edit is open the only questions are "keep this
+                    change" and "throw it away", so Approve and Reject go. They
+                    were a genuine hazard sitting there: Approve mid-edit
+                    committed a half-finished amendment, and Reject threw the
+                    typing away with no warning that it would. Deciding is a
+                    different act from editing, and the strip now says which one
+                    is in progress.
+                  */}
+                  {editing ? (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={
+                          busy ||
+                          saveTerms.isPending ||
+                          termsProblems.length > 0 ||
+                          !editReason.trim()
                         }
-                        saveTerms.mutate(
-                          // The reason rides WITH the change, in one write. Two
-                          // writes could leave amended terms on record with no
-                          // account of why if the second one failed.
-                          { id: row.id, edits: { ...patch, decision_note: editReason.trim() } },
-                          {
-                            onSuccess: () => {
-                              toast.success(
-                                t('couponApprovals.termsSaved', {
-                                  defaultValue: 'Terms saved. Still waiting on a decision.',
-                                }),
-                              );
-                              // Saved terms are no longer a draft, so the form
-                              // closes and Save goes with it. Leaving an open
-                              // editor behind invites a second press that would
-                              // find nothing changed.
-                              setEditing(false);
-                              setEditReason('');
+                        title={
+                          termsProblems[0]?.message ??
+                          (editReason.trim()
+                            ? undefined
+                            : t('couponApprovals.editReasonRequired', {
+                                defaultValue: 'Give a reason for the change first.',
+                              }))
+                        }
+                        // Turns the colour of Approve under the cursor: this is
+                        // the button that commits, and it should say so at the
+                        // moment somebody is about to press it. `!` because `cn`
+                        // is a joiner, not tailwind-merge — without it the
+                        // variant's own hover wins on specificity order.
+                        className="hover:!bg-primary hover:!text-primary-foreground"
+                        onClick={() => {
+                          const patch = diffEdits(row, edits);
+                          if (Object.keys(patch).length === 0) {
+                            toast.success(
+                              t('couponApprovals.nothingChanged', {
+                                defaultValue: 'Nothing changed.',
+                              }),
+                            );
+                            return;
+                          }
+                          saveTerms.mutate(
+                            // The reason rides WITH the change, in one write. Two
+                            // writes could leave amended terms on record with no
+                            // account of why if the second one failed.
+                            { id: row.id, edits: { ...patch, decision_note: editReason.trim() } },
+                            {
+                              onSuccess: () => {
+                                toast.success(
+                                  t('couponApprovals.termsSaved', {
+                                    defaultValue: 'Terms saved. Still waiting on a decision.',
+                                  }),
+                                );
+                                // Saved terms are no longer a draft, so the form
+                                // closes and Save goes with it. Leaving an open
+                                // editor behind invites a second press that would
+                                // find nothing changed.
+                                setEditing(false);
+                                setEditReason('');
+                              },
+                              onError: () =>
+                                toast.error(
+                                  t('couponApprovals.termsSaveFailed', {
+                                    defaultValue: 'Could not save those terms.',
+                                  }),
+                                ),
                             },
-                            onError: () =>
-                              toast.error(
-                                t('couponApprovals.termsSaveFailed', {
-                                  defaultValue: 'Could not save those terms.',
-                                }),
-                              ),
-                          },
-                        );
-                      }}
-                    >
-                      {t('actions.save', { ns: 'common', defaultValue: 'Save' })}
-                    </Button>
-                  )}
-                  <span className="text-2xs text-muted-foreground">
-                    {row.ticket?.id
-                      ? t('couponApprovals.approveHint', {
-                          defaultValue: 'Approving puts the coupon on the ticket.',
-                        })
-                      : t('couponApprovals.noTicketHint', {
-                          defaultValue:
-                            'No ticket on this request — there is nowhere to put the coupon.',
+                          );
+                        }}
+                      >
+                        {t('actions.save', { ns: 'common', defaultValue: 'Save' })}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy || saveTerms.isPending}
+                        onClick={() => {
+                          // Discard, not just close: re-seeding from the row
+                          // means reopening the editor shows what was ASKED
+                          // for, never the abandoned draft.
+                          setEditing(false);
+                          setEditReason('');
+                          setEdits(seedEdits(row));
+                        }}
+                      >
+                        {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+                      </Button>
+                      <span className="text-2xs text-muted-foreground">
+                        {t('couponApprovals.editingHint', {
+                          defaultValue: 'Save or cancel this change before deciding.',
                         })}
-                  </span>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      {/* No ticket, nowhere to put the coupon. Approving used to
+                      succeed silently and write nothing, so the supervisor believed
+                      they had issued money that did not exist. Rejecting stays
+                      available — turning something down needs no destination. */}
+                      {/* A supervisor approving is the last gate before a customer is
+                      promised money, so the same rules the agent's form enforces
+                      are checked again HERE against the terms as they now stand.
+                      Both rows already in the system failed one of them. */}
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={busy || !row.ticket?.id || termsProblems.length > 0}
+                        title={termsProblems[0]?.message}
+                        onClick={() => {
+                          // Terms amended earlier in this session are already
+                          // saved on the row, so a straight approval is what
+                          // this is — nothing is pending to ride along.
+                          onDecide(true, note);
+                        }}
+                      >
+                        {t('couponApprovals.approve', { defaultValue: 'Approve' })}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={busy}
+                        onClick={() => {
+                          setEditing(true);
+                          // Seed from what was asked for, so the supervisor adjusts a
+                          // value rather than recalling it.
+                          setEdits(seedEdits(row));
+                        }}
+                      >
+                        {t('couponApprovals.edit', { defaultValue: 'Edit' })}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        disabled={busy}
+                        onClick={() => setRejecting(true)}
+                      >
+                        {t('couponApprovals.reject', { defaultValue: 'Reject' })}
+                      </Button>
+                      <span className="text-2xs text-muted-foreground">
+                        {row.ticket?.id
+                          ? t('couponApprovals.approveHint', {
+                              defaultValue: 'Approving puts the coupon on the ticket.',
+                            })
+                          : t('couponApprovals.noTicketHint', {
+                              defaultValue:
+                                'No ticket on this request — there is nowhere to put the coupon.',
+                            })}
+                      </span>
+                    </>
+                  )}
                 </>
               )}
             </div>

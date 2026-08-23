@@ -443,6 +443,23 @@ export function Widget({ config }: { config: WidgetConfig }) {
     };
   }, [lightbox]);
 
+  /**
+   * Whether a send can actually reach the gateway right now.
+   *
+   * `ready` alone is not enough, and that gap was a real silent failure: the
+   * send BUTTON was gated on `ready`, but the textarea had no disabled state
+   * and Enter calls `send()` directly — so during "Connecting…" or
+   * "Reconnecting…" a customer could type, press Enter, and watch nothing
+   * happen. `send()` bailed at its socket guard and returned without a word.
+   * Their complaint simply did not exist.
+   *
+   * Someone standing in a shop on a weak signal is EXACTLY who this widget is
+   * for, so the fix is to make the state visible rather than let the press
+   * disappear. The draft is never cleared on a refused send, so nothing they
+   * typed is lost — it goes the moment the socket is back.
+   */
+  const canSend = ready && status === 'connected';
+
   const send = () => {
     const content = draft.trim();
     const attachmentIds = pending.map((p) => p.id);
@@ -929,7 +946,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
                     className="yiji-attach"
                     onClick={() => fileRef.current?.click()}
                     aria-label={tr.attach}
-                    disabled={!ready || uploading}
+                    disabled={!canSend || uploading}
                   >
                     <AttachIcon />
                   </button>
@@ -940,8 +957,11 @@ export function Widget({ config }: { config: WidgetConfig }) {
                     onInput={onInput}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
+                        // Swallowed while offline rather than calling send():
+                        // this is the path that used to bypass the disabled
+                        // button and drop the message in silence.
                         e.preventDefault();
-                        send();
+                        if (canSend) send();
                       }
                     }}
                     rows={1}
@@ -951,7 +971,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
                   className="yiji-send"
                   onClick={send}
                   aria-label={tr.send}
-                  disabled={!ready || (draft.trim().length === 0 && pending.length === 0)}
+                  disabled={!canSend || (draft.trim().length === 0 && pending.length === 0)}
                 >
                   <SendIcon />
                 </button>
