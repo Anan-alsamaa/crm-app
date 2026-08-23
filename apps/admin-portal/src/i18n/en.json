@@ -1136,7 +1136,10 @@
     "listTitle": "Roles",
     "clearSelection": "Clear",
     "allGroup": "All",
-    "clearGroup": "None"
+    "clearGroup": "None",
+    "branchSelectShown": "Select these {{n}}",
+    "branchDeselectShown": "Clear these {{n}}",
+    "branchCount": "{{n}} selected."
   },
   "backup": {
     "title": "Backup",

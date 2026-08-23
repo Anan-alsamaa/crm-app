@@ -263,21 +263,23 @@ export function RolesPage() {
     const inScope =
       draft.brands.length > 0 ? all.filter((s) => s.brand && draft.brands.includes(s.brand)) : all;
     /*
-     * Two brands can trade in the same mall, so "Dhahran Mall" appears more
-     * than once and the chips become a coin toss. Only the AMBIGUOUS ones earn
-     * their brand as a suffix — qualifying every name would make the common
-     * case noisier to fix the rare one.
+     * Always "{brand} - {branch}", at the owner's request.
+     *
+     * It used to qualify only the AMBIGUOUS names, on the theory that
+     * suffixing every one made the common case noisier to fix the rare one.
+     * That was wrong about how the list is read: somebody fencing a role scans
+     * for their BRAND first and the branch second, so putting the brand last —
+     * and only sometimes — meant re-reading every line to find the group they
+     * were looking for. Brand first also sorts the list into brand blocks for
+     * free.
      */
-    const seen = new Map<string, number>();
-    for (const s of inScope) seen.set(s.name, (seen.get(s.name) ?? 0) + 1);
     const brandName = new Map((brands.data ?? []).map((b) => [b.id, b.name]));
-    return inScope.map((s) => ({
-      ...s,
-      label:
-        (seen.get(s.name) ?? 0) > 1 && s.brand
-          ? `${s.name} · ${brandName.get(s.brand) ?? ''}`.trim()
-          : s.name,
-    }));
+    return inScope
+      .map((s) => {
+        const brand = s.brand ? (brandName.get(s.brand) ?? '') : '';
+        return { ...s, label: brand ? `${brand} - ${s.name}` : s.name };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [stores.data, draft.brands, brands.data]);
   const GROUPS: Record<string, string> = {
     chat: t('roles.groupChat', { defaultValue: 'Customer chat' }),
