@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import {
   Button,
   ChartIcon,
-  ClockIcon,
   cn,
   DateField,
   DeltaBadge,
@@ -30,7 +29,8 @@ import {
   type ComplaintRow,
   type Cut,
 } from './complaints-api.js';
-import { CouponSpend } from './CouponSpend.js';
+import { CouponSpend, useCouponSpend } from './CouponSpend.js';
+import { couponWorth } from '@yiji/reports';
 import { CustomerReach } from './CustomerReach.js';
 
 /**
@@ -431,30 +431,8 @@ function Columns({
   );
 }
 
-/**
- * The reference dashboard's funnel: each stage as a meter against the first
- * stage, count at the end. Where the complaints go — and where they stall.
- */
-function Funnel({
-  steps,
-}: {
-  steps: Array<{ label: string; value: number; tone: 'primary' | 'sky' | 'success' | 'violet' }>;
-}) {
-  const base = Math.max(1, steps[0]?.value ?? 1);
-  return (
-    <ul className="space-y-3.5">
-      {steps.map((s) => (
-        <li key={s.label}>
-          <div className="mb-1 flex items-baseline justify-between gap-2">
-            <span className="text-xs text-foreground">{s.label}</span>
-            <span className="text-xs font-semibold tabular-nums text-foreground">{s.value}</span>
-          </div>
-          <MeterBar value={(s.value / base) * 100} tone={s.tone} />
-        </li>
-      ))}
-    </ul>
-  );
-}
+// `Funnel` went with the card it drew: logged -> closed -> rated -> satisfied
+// is the KPI strip again, in four bars.
 
 /**
  * One breakdown card: title, his "top N of M" note when the list is capped, and
@@ -755,6 +733,13 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
    * while the label is translated. Comparing labels would work in English and
    * quietly return nothing in Arabic.
    */
+  /**
+   * Coupons, for the strip. Shares CouponSpend's query key, so the tile and the
+   * card below it are one request and can never disagree.
+   */
+  const couponFacts = useCouponSpend(applied.from, applied.to, view === 'agent');
+  const coupons = useMemo(() => couponWorth(couponFacts.data ?? []), [couponFacts.data]);
+
   const drillInto =
     (title: string, keyOf: (r: ComplaintRow) => string, extra?: (r: ComplaintRow) => boolean) =>
     (row: Breakdown) =>
@@ -989,145 +974,160 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 })}
           </p>
 
-          {/* ── Six KPIs ─────────────────────────────────────────────────
+          {/* The KPI strip is AGENT only. Tickets, chats, compensation and
+              coupons are the support desk's numbers; the team around the
+              branches asked not to be shown them, and a dashboard that opens
+              with six numbers you have no use for is a dashboard people learn
+              to scroll past. */}
+          {view === 'agent' && (
+            <>
+              {/* ── KPIs ─────────────────────────────────────────────────────
               The share-of-a-whole cards carry the boards' data accents: a ring
               beside the two percentages, a thin meter under the two counts
               that are really fractions of a known total. Tones match the icon
               chip so the accent reads as the same signal, louder. */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Kpi
-              tone="neutral"
-              icon={<TicketIcon size={17} />}
-              order={0}
-              value={d.total.toLocaleString()}
-              label={t('complaintDash.kpiTotal', { defaultValue: 'Tickets' })}
-              sub={
-                d.monthsCovered
-                  ? t('complaintDash.months', {
-                      defaultValue_one: 'Past month',
-                      defaultValue_other: 'Past {{count}} months',
-                      count: d.monthsCovered,
-                    })
-                  : ''
-              }
-              delta={(() => {
-                // Month-over-month, only when two full-ish months exist. For a
-                // complaints count, DOWN is the good direction.
-                const cur = d.months[d.months.length - 1]?.count;
-                const prev = d.months[d.months.length - 2]?.count;
-                if (cur == null || prev == null || prev === 0) return undefined;
-                const pct = Math.round(((cur - prev) / prev) * 100);
-                // A partial month against a full one produces four-digit
-                // swings that read as noise, not signal — show nothing.
-                if (pct === 0 || Math.abs(pct) > 200) return undefined;
-                return (
-                  <DeltaBadge direction={pct > 0 ? 'up' : 'down'} positiveIsGood={false}>
-                    {pct > 0 ? `+${pct}%` : `${pct}%`}
-                  </DeltaBadge>
-                );
-              })()}
-            />
-            <Kpi
-              tone="sky"
-              icon={<InboxIcon size={17} />}
-              order={1}
-              value={String(d.open)}
-              label={t('complaintDash.kpiOpen', { defaultValue: 'Open / in progress' })}
-              sub={
-                d.total
-                  ? t('complaintDash.ofTotal', {
-                      defaultValue: '{{p}}% of total',
-                      p: Math.round((d.open / d.total) * 100),
-                    })
-                  : ''
-              }
-              visual={<ProgressRing value={d.total ? (d.open / d.total) * 100 : 0} tone="sky" />}
-            />
-            <Kpi
-              tone="violet"
-              icon={<ClockIcon size={17} />}
-              order={2}
-              value={String(d.overdue)}
-              label={t('complaintDash.kpiOverdue', { defaultValue: 'Overdue' })}
-              onOpen={
-                d.overdue > 0
-                  ? () =>
-                      setDrill({
-                        title: t('complaintDash.kpiOverdue', { defaultValue: 'Overdue' }),
-                        rows: (d.rows ?? []).filter((r) => r.overdue),
-                      })
-                  : undefined
-              }
-              // His "Escalated" has no equivalent status here, so this counts
-              // the real thing a supervisor would chase instead.
-              sub={t('complaintDash.overdueHint', { defaultValue: 'past first-reply SLA' })}
-              meter={<MeterBar value={d.total ? (d.overdue / d.total) * 100 : 0} tone="violet" />}
-            />
-            <Kpi
-              tone="success"
-              icon={<SparkleIcon size={17} />}
-              order={3}
-              value={
-                d.satisfiedPct === null
-                  ? t('complaintDash.notRatedYet', { defaultValue: 'No ratings yet' })
-                  : `${Math.round(d.satisfiedPct)}%`
-              }
-              label={t('complaintDash.kpiSatisfied', { defaultValue: 'Rated satisfied' })}
-              sub={
-                d.rated
-                  ? t('complaintDash.ratedOf', {
-                      defaultValue: '{{sat}} of {{rated}} rated',
-                      sat: d.satisfied,
-                      rated: d.rated,
-                    })
-                  : t('complaintDash.ratedNone', {
-                      defaultValue: 'Customers have not rated these yet',
-                    })
-              }
-              visual={
-                d.satisfiedPct === null ? undefined : (
-                  <ProgressRing value={d.satisfiedPct} tone="success" />
-                )
-              }
-            />
-            <Kpi
-              tone="primary"
-              icon={<ChartIcon size={17} />}
-              order={4}
-              value={d.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-              label={t('complaintDash.kpiCompensation', { defaultValue: 'Compensation SAR' })}
-              sub={
-                d.total
-                  ? t('complaintDash.compensatedCount', {
-                      defaultValue: '{{n}} compensated · {{v}} avg each',
-                      n: d.compensated,
-                      v: (d.avgCompensation ?? 0).toFixed(1),
-                    })
-                  : ''
-              }
-            />
-            <Kpi
-              tone="destructive"
-              icon={<UsersIcon size={17} />}
-              order={5}
-              value={String(d.chatsWaiting)}
-              label={t('complaintDash.kpiChats', { defaultValue: 'Chats waiting' })}
-              sub={t('complaintDash.ofChats', {
-                defaultValue: '{{n}} total',
-                n: d.chatsTotal,
-              })}
-              meter={
-                <MeterBar
-                  value={d.chatsTotal ? (d.chatsWaiting / d.chatsTotal) * 100 : 0}
-                  tone="destructive"
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <Kpi
+                  tone="neutral"
+                  icon={<TicketIcon size={17} />}
+                  order={0}
+                  value={d.total.toLocaleString()}
+                  label={t('complaintDash.kpiTotal', { defaultValue: 'Tickets' })}
+                  sub={
+                    d.monthsCovered
+                      ? t('complaintDash.months', {
+                          defaultValue_one: 'Past month',
+                          defaultValue_other: 'Past {{count}} months',
+                          count: d.monthsCovered,
+                        })
+                      : ''
+                  }
+                  delta={(() => {
+                    // Month-over-month, only when two full-ish months exist. For a
+                    // complaints count, DOWN is the good direction.
+                    const cur = d.months[d.months.length - 1]?.count;
+                    const prev = d.months[d.months.length - 2]?.count;
+                    if (cur == null || prev == null || prev === 0) return undefined;
+                    const pct = Math.round(((cur - prev) / prev) * 100);
+                    // A partial month against a full one produces four-digit
+                    // swings that read as noise, not signal — show nothing.
+                    if (pct === 0 || Math.abs(pct) > 200) return undefined;
+                    return (
+                      <DeltaBadge direction={pct > 0 ? 'up' : 'down'} positiveIsGood={false}>
+                        {pct > 0 ? `+${pct}%` : `${pct}%`}
+                      </DeltaBadge>
+                    );
+                  })()}
                 />
-              }
-            />
-          </div>
+                <Kpi
+                  tone="sky"
+                  icon={<InboxIcon size={17} />}
+                  order={1}
+                  value={String(d.open)}
+                  label={t('complaintDash.kpiOpen', { defaultValue: 'Open tickets' })}
+                  sub={
+                    d.total
+                      ? t('complaintDash.ofTotal', {
+                          defaultValue: '{{p}}% of total',
+                          p: Math.round((d.open / d.total) * 100),
+                        })
+                      : ''
+                  }
+                  visual={
+                    <ProgressRing value={d.total ? (d.open / d.total) * 100 : 0} tone="sky" />
+                  }
+                />
+                {/* No "Overdue" tile: an overdue ticket is an OPEN ticket, so it
+                was the same work counted twice, one card apart. */}
+                <Kpi
+                  tone="success"
+                  icon={<SparkleIcon size={17} />}
+                  order={3}
+                  value={
+                    d.satisfiedPct === null
+                      ? t('complaintDash.notRatedYet', { defaultValue: 'No ratings yet' })
+                      : `${Math.round(d.satisfiedPct)}%`
+                  }
+                  label={t('complaintDash.kpiSatisfied', { defaultValue: 'Customer ratings' })}
+                  sub={
+                    d.rated
+                      ? t('complaintDash.ratedOf', {
+                          defaultValue: '{{sat}} of {{rated}} rated',
+                          sat: d.satisfied,
+                          rated: d.rated,
+                        })
+                      : t('complaintDash.ratedNone', {
+                          defaultValue: 'Customers have not rated these yet',
+                        })
+                  }
+                  visual={
+                    d.satisfiedPct === null ? undefined : (
+                      <ProgressRing value={d.satisfiedPct} tone="success" />
+                    )
+                  }
+                />
+                <Kpi
+                  tone="primary"
+                  icon={<ChartIcon size={17} />}
+                  order={4}
+                  value={d.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  label={t('complaintDash.kpiCompensation', { defaultValue: 'Compensation SAR' })}
+                  sub={
+                    d.total
+                      ? t('complaintDash.compensatedCount', {
+                          defaultValue: '{{n}} compensated · {{v}} avg each',
+                          n: d.compensated,
+                          v: (d.avgCompensation ?? 0).toFixed(1),
+                        })
+                      : ''
+                  }
+                />
+                <Kpi
+                  tone="destructive"
+                  icon={<UsersIcon size={17} />}
+                  order={5}
+                  value={String(d.chatsWaiting)}
+                  label={t('complaintDash.kpiChats', { defaultValue: 'Open chats' })}
+                  sub={t('complaintDash.ofChats', {
+                    defaultValue: '{{n}} total',
+                    n: d.chatsTotal,
+                  })}
+                  meter={
+                    <MeterBar
+                      value={d.chatsTotal ? (d.chatsWaiting / d.chatsTotal) * 100 : 0}
+                      tone="destructive"
+                    />
+                  }
+                />
+                <Kpi
+                  tone="primary"
+                  icon={<InboxIcon size={17} />}
+                  order={5}
+                  value={String(d.chatsTotal)}
+                  label={t('complaintDash.kpiChatsTotal', { defaultValue: 'Total chats' })}
+                />
+                <Kpi
+                  tone="violet"
+                  icon={<SparkleIcon size={17} />}
+                  order={6}
+                  value={String(coupons.count)}
+                  label={t('complaintDash.kpiCoupons', { defaultValue: 'Coupons issued' })}
+                  sub={
+                    coupons.pendingCount > 0
+                      ? t('complaintDash.couponsPending', {
+                          defaultValue: '{{n}} awaiting a decision',
+                          n: coupons.pendingCount,
+                        })
+                      : ''
+                  }
+                />
+              </div>
+            </>
+          )}
 
           {/* Say what the satisfaction number is actually over. A percentage
               whose denominator is invisible is the easiest number to misread. */}
-          {d.closed > d.rated && (
+          {view === 'agent' && d.closed > d.rated && (
             <p className="px-1 text-2xs leading-relaxed text-muted-foreground">
               {t('complaintDash.satBasis', {
                 defaultValue:
@@ -1141,12 +1141,18 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           {/* What compensation is costing, for the roles allowed to see it.
               Sits above the ops snapshot because it is the one number on this
               page with money attached. */}
-          <CouponSpend from={applied.from} to={applied.to} ticketCompensationSar={d.compensation} />
+          {view === 'agent' && (
+            <CouponSpend
+              from={applied.from}
+              to={applied.to}
+              ticketCompensationSar={d.compensation}
+            />
+          )}
 
           {/* How much of the customer base the app actually reaches —
               the difference between a lookup that resolves itself and one
               an agent has to do by hand. */}
-          <CustomerReach />
+          {view === 'agent' && <CustomerReach />}
 
           {/* The Ops snapshot band is gone — every chip on it repeated a number
               from the KPI strip directly above it. */}
@@ -1214,11 +1220,11 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           {/* "Complaints per month" is gone: two readings on one chart, each
               with its own scale, is a picture you have to be told how to read. */}
 
-          {/* ── Heatmap + funnel ─────────────────────────────────────────
-              The reference dashboard's pair: WHEN complaints land (weekday ×
-              week intensity) beside WHERE they go (logged → closed → rated →
-              satisfied). */}
-          <div className="grid items-start gap-4 lg:grid-cols-[1.6fr_1fr]">
+          {/* The funnel is gone: logged -> closed -> rated -> satisfied is the
+              KPI strip again, drawn as four bars. Weekly activity stays on the
+              AGENT view — WHEN the desk is busy is a staffing question, and the
+              team around the branches has no use for it. */}
+          {view === 'agent' && (
             <SectionCard
               title={t('complaintDash.heatmap', { defaultValue: 'Weekly activity' })}
               hint={t('complaintDash.heatmapHint', {
@@ -1227,40 +1233,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             >
               <Heatmap rows={d.rows ?? []} locale={i18n?.language ?? 'en'} />
             </SectionCard>
-            {view === 'agent' && (
-              <SectionCard
-                title={t('complaintDash.funnel', { defaultValue: 'Tickets funnel' })}
-                hint={t('complaintDash.funnelHint', {
-                  defaultValue: 'Each stage against everything logged in range.',
-                })}
-              >
-                <Funnel
-                  steps={[
-                    {
-                      label: t('complaintDash.funnelLogged', { defaultValue: 'Logged' }),
-                      value: d.total,
-                      tone: 'primary',
-                    },
-                    {
-                      label: t('complaintDash.funnelClosed', { defaultValue: 'Closed' }),
-                      value: d.closed,
-                      tone: 'sky',
-                    },
-                    {
-                      label: t('complaintDash.funnelRated', { defaultValue: 'Rated' }),
-                      value: d.rated,
-                      tone: 'violet',
-                    },
-                    {
-                      label: t('complaintDash.funnelSatisfied', { defaultValue: 'Satisfied' }),
-                      value: d.satisfied,
-                      tone: 'success',
-                    },
-                  ]}
-                />
-              </SectionCard>
-            )}
-          </div>
+          )}
 
           {/* "Agent performance", "Agent performance — chat" and "Chat
               responsiveness" used to sit here.

@@ -62,7 +62,12 @@ function num(v: number | string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function useCouponSpend(from: string, to: string, enabled: boolean) {
+/**
+ * Exported so the KPI strip can put a coupon count beside the ticket counts
+ * without asking the database twice — same query key, so react-query serves
+ * both from one fetch.
+ */
+export function useCouponSpend(from: string, to: string, enabled: boolean) {
   return useQuery({
     queryKey: ['coupon-spend', from, to],
     enabled,

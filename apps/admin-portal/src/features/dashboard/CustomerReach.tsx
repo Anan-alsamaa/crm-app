@@ -89,7 +89,7 @@ export function CustomerReach({ className }: Props): JSX.Element | null {
     >
       <div className="mb-2.5 flex items-baseline justify-between gap-3">
         <h3 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('customerReach.title', { defaultValue: 'Customers in the Yiji app' })}
+          {t('customerReach.title', { defaultValue: 'Yiji vs non-Yiji customers' })}
         </h3>
         <span className="text-2xs text-muted-foreground">
           {t('customerReach.note', { defaultValue: 'All customers — not the selected range' })}

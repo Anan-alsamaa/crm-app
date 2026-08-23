@@ -37,6 +37,8 @@ vi.mock('../src/features/dashboard/complaints-api.js', () => api);
  */
 vi.mock('../src/features/dashboard/CouponSpend.js', () => ({
   CouponSpend: () => null,
+  // The KPI strip reads the same query for its coupon tile.
+  useCouponSpend: () => ({ data: [] }),
 }));
 
 /* Same reasoning for the customer-reach card: it runs its own query, and these

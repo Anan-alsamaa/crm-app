@@ -18,7 +18,6 @@ import {
   Spinner,
   StoreIcon,
   TeamIcon,
-  TicketIcon,
   Toaster,
   UploadIcon,
   UsersIcon,
@@ -437,25 +436,9 @@ function Shell({ children }: { children: React.ReactNode }) {
         },
       ],
     },
-    {
-      // Tickets sits between Restaurants and SLA at the owner's request: the
-      // register is read next to the branches it is about, and immediately
-      // before the policy that judges it.
-      heading: t('nav.ticketsGroup', { defaultValue: 'Tickets' }),
-      items: [
-        {
-          to: '/reports/operational-kpi/tickets',
-          requires: 'view_all_tickets' as const,
-          // "Tickets" up here, "Ticket breakdown" on the page and its tab. A
-          // single-item section renders the ITEM's label in the top bar, and
-          // the long form pushed every other label into an ellipsis — a nav
-          // where "Dashbo…" sits beside "Agent perform…" is worse than a
-          // slightly shorter word.
-          label: t('nav.ticketsGroup', { defaultValue: 'Tickets' }),
-          icon: TicketIcon,
-        },
-      ],
-    },
+    // A "Tickets" section used to sit here, pointing at Ticket breakdown.
+    // It was the SAME page as Reports -> Operational KPI -> Ticket breakdown,
+    // so the bar carried the destination twice and lit both pills at once.
     {
       heading: t('nav.policies', { defaultValue: 'Policies' }),
       items: [

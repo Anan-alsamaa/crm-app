@@ -311,15 +311,15 @@
     "months_few": "آخر {{count}} أشهر",
     "months_many": "آخر {{count}} شهرًا",
     "months_other": "آخر {{count}} شهر",
-    "kpiOpen": "مفتوحة / قيد المعالجة",
+    "kpiOpen": "التذاكر المفتوحة",
     "ofTotal": "{{p}}% من الإجمالي",
     "kpiOverdue": "متأخرة",
     "overdueHint": "تجاوزت مهلة أول رد",
-    "kpiSatisfied": "راضون",
+    "kpiSatisfied": "تقييمات العملاء",
     "ratedOf": "{{sat}} من {{rated}} مُقيَّمة",
     "kpiCompensation": "التعويض بالريال",
     "avgEach": "{{v}} متوسط لكل تذكرة",
-    "kpiChats": "محادثات منتظرة",
+    "kpiChats": "المحادثات المفتوحة",
     "ofChats": "{{n}} الإجمالي",
     "satBasis": "الرضا مأخوذ من تقييم العميل نفسه على المحادثة المرتبطة، لذا يغطي {{rated}} من {{closed}} تذكرة مغلقة — والباقي لم يُقيَّم (أو لم يُنشأ من محادثة).",
     "perMonth": "التذاكر شهرياً",
@@ -434,7 +434,10 @@
     "allYears": "الكل",
     "csvEverything": "كل المجموعات",
     "exportShown": "تصدير المعروض ({{n}})",
-    "exportEvery": "تصدير الكل ({{n}})"
+    "exportEvery": "تصدير الكل ({{n}})",
+    "kpiChatsTotal": "إجمالي المحادثات",
+    "kpiCoupons": "القسائم الصادرة",
+    "couponsPending": "{{n}} بانتظار القرار"
   },
   "complaintReport": {
     "any": "الكل",
@@ -642,7 +645,7 @@
     "entityTicket": "تذكرة"
   },
   "customerReach": {
-    "title": "العملاء في تطبيق يجي",
+    "title": "عملاء يِجي مقابل غير المسجّلين",
     "note": "كل العملاء — وليس النطاق المحدد",
     "of": "من {{total}}",
     "haveAccount": "لديهم حساب في التطبيق",

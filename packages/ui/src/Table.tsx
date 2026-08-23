@@ -81,22 +81,21 @@ function useScrollEdges(): {
 }
 
 export interface TableSurfaceProps extends HTMLAttributes<HTMLDivElement> {
-  /**
-   * Cap the table's height so the header stays put while the rows scroll under
-   * it. Any CSS length. Off by default: on a short table an inner scrollbar is
-   * just a second thing to operate.
-   */
-  maxHeight?: string;
   /** Accessible name for the scrollable region. */
   scrollLabel?: string;
   /**
-   * Take the rest of the page's height instead of growing with the rows.
+   * Cap the table's height so the header stays put while the rows scroll.
    *
-   * This is what makes a sticky header actually stick: the table owns the only
-   * vertical scroll on the page, so there is no outer scroller left to carry
-   * the header off screen.
+   * A VIEWPORT-relative length, not a flex chain. Filling the page needed every
+   * ancestor between the page and the table to agree about who may shrink —
+   * four levels of `flex-1 min-h-0`, and one page with two tables on it, both
+   * asking for the rest of the height. When any link in that chain disagreed
+   * the table resolved to nothing: a header, a scrollbar, and no rows at all.
+   *
+   * A max-height depends on nothing above it, so it cannot collapse. Paired
+   * with a floor, so a short viewport still shows rows rather than a sliver.
    */
-  fill?: boolean;
+  maxHeight?: string;
 }
 
 export function TableSurface({
@@ -104,7 +103,6 @@ export function TableSurface({
   children,
   maxHeight,
   scrollLabel,
-  fill,
   ...rest
 }: TableSurfaceProps): JSX.Element {
   const { ref, start, end } = useScrollEdges();
@@ -118,7 +116,6 @@ export function TableSurface({
         // container, and one more scrollport between the header and the one
         // that matters is one more thing for it to stick to by accident.
         'relative isolate flex min-h-0 flex-col overflow-clip rounded-xl bg-card ring-1 ring-foreground/[0.06]',
-        fill && 'flex-1',
         className,
       )}
       {...rest}
@@ -132,7 +129,6 @@ export function TableSurface({
         {...(scrollable ? { tabIndex: 0, role: 'region', 'aria-label': scrollLabel } : {})}
         className={cn(
           'overflow-x-auto overscroll-x-contain',
-          fill && 'min-h-0 flex-1',
           // The y axis is the whole sticky-header story.
           //
           // CSS turns `overflow-y: visible` into `auto` the moment `overflow-x`
@@ -164,7 +160,9 @@ export function TableSurface({
           '[scrollbar-width:thin]',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50',
         )}
-        style={maxHeight ? { maxHeight } : undefined}
+        // A floor as well as a ceiling: on a laptop in a browser with a big
+        // toolbar, "70vh minus the furniture" can come out at a couple of rows.
+        style={maxHeight ? { maxHeight, minHeight: '14rem' } : undefined}
       >
         {children}
       </div>

@@ -436,7 +436,7 @@ function TicketsReport({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5">
+    <div className="space-y-5">
       <ReportKpiStrip>
         <ReportKpi
           label={t('agentReports.kpiTickets', { defaultValue: 'Tickets' })}
@@ -545,7 +545,7 @@ function TicketsReport({
         </div>
       </div>
 
-      <TableSurface fill>
+      <TableSurface maxHeight="calc(100vh - 24rem)">
         <Table>
           <thead>
             <tr>
@@ -938,7 +938,7 @@ function ComplaintsReport({
     );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5">
+    <div className="space-y-5">
       <ReportKpiStrip>
         <ReportKpi
           label={t('agentReports.kpiTickets', { defaultValue: 'Tickets' })}
@@ -1368,7 +1368,10 @@ function ComplaintsReport({
           are the same report, so showing a curated subset here just meant the
           screen and the file disagreed. Wide by nature, so it scrolls
           horizontally inside its own surface rather than stretching the page. */}
-      <TableSurface fill scrollLabel={t('complaintReport.title', { defaultValue: 'Tickets' })}>
+      <TableSurface
+        maxHeight="calc(100vh - 24rem)"
+        scrollLabel={t('complaintReport.title', { defaultValue: 'Tickets' })}
+      >
         <Table>
           <thead>
             <tr>
@@ -1634,7 +1637,7 @@ function AgentKpiReport({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5">
+    <div className="space-y-5">
       <ReportKpiStrip>
         <ReportKpi
           label={t('agentReports.kpiAgents', { defaultValue: 'Agents' })}
@@ -1707,7 +1710,10 @@ function AgentKpiReport({
         </div>
       </div>
 
-      <TableSurface fill scrollLabel={t('agentReports.agentsTitle', { defaultValue: 'Agent KPI' })}>
+      <TableSurface
+        maxHeight="calc(100vh - 24rem)"
+        scrollLabel={t('agentReports.agentsTitle', { defaultValue: 'Agent KPI' })}
+      >
         <Table>
           <thead>
             <tr>
@@ -1935,7 +1941,7 @@ function ConversationReport({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5">
+    <div className="space-y-5">
       <ReportKpiStrip>
         <ReportKpi
           label={t('agentReports.kpiConversations', { defaultValue: 'Chats' })}
@@ -2141,7 +2147,7 @@ function ConversationReport({
           It used to stop dead at fifty rows with a note saying so and no way to
           reach row fifty-one — the export was the only route to the rest. */}
       <TableSurface
-        fill
+        maxHeight="calc(100vh - 24rem)"
         scrollLabel={t('agentReports.conversationsTitle', { defaultValue: 'Chat status' })}
       >
         <Table>
@@ -2216,7 +2222,10 @@ function ConversationReport({
       {/* Every day in range, not the last fourteen. The matrix is at most one
           row per day, so capping it bought nothing and cost the reader the
           first half of their own date range. */}
-      <TableSurface fill scrollLabel={t('agentReports.byDay', { defaultValue: 'By day' })}>
+      <TableSurface
+        maxHeight="calc(100vh - 24rem)"
+        scrollLabel={t('agentReports.byDay', { defaultValue: 'By day' })}
+      >
         <Table>
           <thead>
             <tr>
@@ -2383,7 +2392,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
         </div>
       </Toolbar>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
+      <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
         {/* Every report gets the whole monitor.
             The summaries used to be capped at 5xl-6xl on the theory that a KPI
             strip stretched across 1920px is four numbers with a metre of white
@@ -2391,7 +2400,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
             it — the cap was the reason nine columns needed a sideways swipe on
             a screen with room for twenty. The strip stays capped on its own
             (see ReportKpiStrip usages); the table gets the width. */}
-        <div className="mx-auto flex min-h-0 w-full flex-1 flex-col gap-5">
+        <div className="mx-auto w-full space-y-5">
           {/* The NAME is already on screen twice — the tab pill and the toolbar
               above. A third copy at 3xl was the biggest thing on the page and
               said nothing the other two had not. What survives is the one line

@@ -821,15 +821,15 @@
     "kpiTotal": "Tickets",
     "months_one": "Past month",
     "months_other": "Past {{count}} months",
-    "kpiOpen": "Open / in progress",
+    "kpiOpen": "Open tickets",
     "ofTotal": "{{p}}% of total",
     "kpiOverdue": "Overdue",
     "overdueHint": "past first-reply SLA",
-    "kpiSatisfied": "Rated satisfied",
+    "kpiSatisfied": "Customer ratings",
     "ratedOf": "{{sat}} of {{rated}} rated",
     "kpiCompensation": "Compensation SAR",
     "avgEach": "{{v}} avg each",
-    "kpiChats": "Chats waiting",
+    "kpiChats": "Open chats",
     "ofChats": "{{n}} total",
     "satBasis": "Satisfaction is the customer’s own CSAT rating on the linked chat, so it covers {{rated}} of {{closed}} closed tickets — the rest were never rated (or were not raised from a chat).",
     "perMonth": "Tickets per month",
@@ -915,7 +915,10 @@
     "perMonthHint2": "Each column is how many tickets were logged that month (left scale). The line is how much compensation was paid (right scale) — the two are counted differently, so they are scaled separately and only their SHAPES should be compared.",
     "peakLabel": "peak {{n}}",
     "trendMoney": "{{total}} paid out across the range.",
-    "perMonthHint3": "Two readings over the same months: how many tickets were logged, and what was paid out. Each has its own scale — they are different units."
+    "perMonthHint3": "Two readings over the same months: how many tickets were logged, and what was paid out. Each has its own scale — they are different units.",
+    "kpiChatsTotal": "Total chats",
+    "kpiCoupons": "Coupons issued",
+    "couponsPending": "{{n}} awaiting a decision"
   },
   "performance": {
     "title": "Agent performance",
@@ -1197,5 +1200,8 @@
     "minutes": "{{count}} min",
     "noneWaiting": "Nobody is waiting for a first reply.",
     "noneOpen": "Every ticket is finished."
+  },
+  "customerReach": {
+    "title": "Yiji vs non-Yiji customers"
   }
 }

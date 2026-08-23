@@ -460,8 +460,8 @@ export function AllCompensationPage() {
         />
       </Toolbar>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
-        <div className="flex min-h-0 flex-1 flex-col gap-5">
+      <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
+        <div className="space-y-5">
           <div className="border-b border-foreground/10 pb-5">
             <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
               {t('compensationAll.hint', {
@@ -614,7 +614,7 @@ export function AllCompensationPage() {
                thirty rows down had to scroll back up to learn which column
                they were looking at. */
             <TableSurface
-              fill
+              maxHeight="calc(100vh - 24rem)"
               scrollLabel={String(t('compensationAll.title', { defaultValue: 'Compensation' }))}
             >
               <Table className="min-w-[80rem]">

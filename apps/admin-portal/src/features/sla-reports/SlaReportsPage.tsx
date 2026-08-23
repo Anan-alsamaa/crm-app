@@ -410,7 +410,7 @@ export function SlaReportsPage() {
         />
       </Toolbar>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6 lg:px-8">
+      <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 lg:px-8">
         {report.isLoading ? (
           <div className="flex h-40 items-center justify-center">
             <Spinner />
@@ -424,7 +424,7 @@ export function SlaReportsPage() {
             })}
           />
         ) : (
-          <div className="mx-auto flex min-h-0 w-full flex-1 flex-col gap-5">
+          <div className="mx-auto w-full space-y-5">
             {/* Named once by the toolbar above, so this is just what it is for. */}
             <p className="max-w-3xl shrink-0 text-sm leading-relaxed text-muted-foreground">
               {t('slaReports.subtitle', {
@@ -702,7 +702,7 @@ function TicketTable({
       )}
 
       <TableSurface
-        fill
+        maxHeight="calc(100vh - 24rem)"
         scrollLabel={String(t('slaReports.title', { defaultValue: 'Ticket deadlines' }))}
       >
         <Table>
