@@ -161,33 +161,15 @@ export function parseStoresCsv(text: string): ParseStoresResult {
   return { rows: out, skipped, unmappedHeaders };
 }
 
-/** RFC 4180 quoting: wrap when the value could otherwise break the row. */
-function csvCell(value: unknown): string {
-  const s = value == null ? '' : String(value);
-  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-/**
- * Build a CSV from rows of plain values.
+/*
+ * The CSV WRITER moved to @yiji/reports, where the five report pages already
+ * reach for it. Two copies of a quoting-and-BOM routine is exactly the kind of
+ * pair that drifts silently: the other copy on this codebase had no BOM, so its
+ * files opened as mojibake in Excel for every Arabic name, and nobody found out
+ * until somebody opened one.
  *
- * Prefixed with a UTF-8 BOM because Excel otherwise reads the file as the
- * local codepage and mangles every Arabic store name — which is most of them.
+ * Re-exported rather than repointed at every call site, so the stores feature
+ * keeps importing what it always imported. The PARSER above stays here — it is
+ * the stores import, not a report concern.
  */
-export function toCsv(header: string[], rows: Array<Array<unknown>>): string {
-  const lines = [header.map(csvCell).join(',')];
-  for (const r of rows) lines.push(r.map(csvCell).join(','));
-  return `\ufeff${lines.join('\r\n')}\r\n`;
-}
-
-/** Hand a generated CSV to the browser as a download. */
-export function downloadCsv(filename: string, content: string): void {
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+export { toCsv, downloadCsv } from '@yiji/reports';

@@ -580,16 +580,29 @@ export const TICKET_REPORT_ORDER_KEY = 'yiji.ticketReport.columnOrder';
  * comparison is case-insensitive because the stored values are hand-entered
  * ("Not Compensated" with a capital C is in the data today).
  */
+/**
+ * Was this ticket compensated?
+ *
+ * Stated compensation wins; an unstated one is inferred from a coupon actually
+ * being attached, because the field was added after rows already carried
+ * coupons. Exported separately from the label so a count of compensated
+ * tickets and the word in the cell can never disagree — the report's headline
+ * number and its rows are the same question asked twice.
+ */
+export function isCompensated(
+  row: Pick<ComplaintReportRow, 'compensation' | 'couponCode' | 'couponValue' | 'couponPercent'>,
+): boolean {
+  const stated = (row.compensation ?? '').trim().toLowerCase();
+  if (stated === 'compensated') return true;
+  if (stated !== '') return false;
+  return !!row.couponCode.trim() || (row.couponValue ?? 0) > 0 || (row.couponPercent ?? 0) > 0;
+}
+
 export function compensationLabel(
   row: Pick<ComplaintReportRow, 'compensation' | 'couponCode' | 'couponValue' | 'couponPercent'>,
   t: Translate,
 ): string {
-  const stated = (row.compensation ?? '').trim().toLowerCase();
-  const compensated =
-    stated === 'compensated' ||
-    (stated === '' &&
-      (!!row.couponCode.trim() || (row.couponValue ?? 0) > 0 || (row.couponPercent ?? 0) > 0));
-  return compensated
+  return isCompensated(row)
     ? common('compensation.yes', 'Compensated', t)
     : common('compensation.no', 'Not compensated', t);
 }

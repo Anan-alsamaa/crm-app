@@ -203,44 +203,72 @@ describe('SlaReportsPage', () => {
     expect(api.useSlaReports).toHaveBeenLastCalledWith(7, { from: '', to: '' });
   });
 
-  it('exports the agent-view CSV', async () => {
+  it('exports a CSV Excel can actually open', async () => {
+    // There were two tests here, "agent-view" and "ticket-view", doing the same
+    // thing: the agent view was retired long ago, so both clicked the one
+    // remaining button and asserted only that SOMETHING downloaded. Neither
+    // would have noticed what was actually wrong with the file.
     api.useSlaReports.mockReturnValue({ isLoading: false, data: fullReport });
 
-    const createObjectURL = vi.fn(() => 'blob:sla');
+    const blobs: Blob[] = [];
+    URL.createObjectURL = vi.fn((b: Blob) => {
+      blobs.push(b);
+      return 'blob:sla';
+    }) as unknown as typeof URL.createObjectURL;
     const revokeObjectURL = vi.fn();
-    URL.createObjectURL = createObjectURL;
     URL.revokeObjectURL = revokeObjectURL;
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
     renderPage();
-    await userEvent.click(screen.getByText('Export CSV'));
+    await userEvent.click(screen.getByText('Export CSV (3)'));
 
-    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(blobs).toHaveLength(1);
     expect(clickSpy).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+
+    // Blob.text() is missing from the jsdom this suite runs on; FileReader is
+    // the portable way in. The BOM has to be checked on the RAW BYTES — a
+    // UTF-8 text decode consumes it, so reading as text and looking for U+FEFF
+    // finds nothing whether or not the file has one.
+    const read = <T,>(how: (fr: FileReader) => void, pick: (fr: FileReader) => T) =>
+      new Promise<T>((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(pick(fr));
+        fr.onerror = () => reject(fr.error);
+        how(fr);
+      });
+
+    const bytes = new Uint8Array(
+      await read<ArrayBuffer>(
+        (fr) => fr.readAsArrayBuffer(blobs[0]!),
+        (fr) => fr.result as ArrayBuffer,
+      ),
+    );
+    // A UTF-8 BOM, because without one Excel reads the file as the local
+    // codepage and every Arabic subject and agent name arrives as mojibake.
+    // This page's own writer emitted none, and nobody found out until somebody
+    // opened a file.
+    expect([bytes[0], bytes[1], bytes[2]]).toEqual([0xef, 0xbb, 0xbf]);
+
+    const text = await read<string>(
+      (fr) => fr.readAsText(blobs[0]!),
+      (fr) => String(fr.result),
+    );
+    const lines = text
+      .replace(/^\uFEFF/, '')
+      .trim()
+      .split('\r\n');
+    expect(lines[0]).toBe('Ticket,Priority,Status,Agent,Resolution,1st reply,Ticket id');
+    // A subject containing a comma and quotes survives the round trip instead
+    // of shifting every later column one place left.
+    expect(lines.join('\n')).toContain('"Invoice question, comma ""quoted"""');
     clickSpy.mockRestore();
   });
 
-  it('exports the ticket-view CSV', async () => {
-    api.useSlaReports.mockReturnValue({ isLoading: false, data: fullReport });
-
-    const createObjectURL = vi.fn(() => 'blob:sla');
-    URL.createObjectURL = createObjectURL;
-    URL.revokeObjectURL = vi.fn();
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-
-    renderPage();
-    await userEvent.click(screen.getByText('Export CSV'));
-
-    expect(createObjectURL).toHaveBeenCalledTimes(1);
-    expect(clickSpy).toHaveBeenCalledTimes(1);
-    clickSpy.mockRestore();
-  });
-
-  it('disables Export CSV while there is no data', () => {
+  it('disables the export while there is no data', () => {
     api.useSlaReports.mockReturnValue({ isLoading: false, data: undefined });
     renderPage();
-    expect(screen.getByText('Export CSV').closest('button')).toBeDisabled();
+    expect(screen.getByText('Export CSV (0)').closest('button')).toBeDisabled();
   });
 
   it('formats null / high / low percentages and minute values', () => {

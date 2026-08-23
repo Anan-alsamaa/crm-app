@@ -10,11 +10,14 @@ import {
   formatRelative,
   Input,
   Ltr,
-  Pagination,
+  pageCountOf,
   Pill,
+  ReportKpi,
+  ReportKpiStrip,
   SelectMenu,
   Skeleton,
   Table,
+  TablePager,
   TableSurface,
   Th,
   Toolbar,
@@ -22,7 +25,7 @@ import {
 } from '@yiji/ui';
 import { exportFileName } from '@yiji/shared-config';
 import { directus } from '../../lib/directus.js';
-import { downloadCsv, toCsv } from '../restaurants/csv.js';
+import { downloadCsv, toCsv } from '@yiji/reports';
 
 /**
  * The master record of every coupon the business has ever issued.
@@ -161,6 +164,9 @@ export function AllCompensationPage() {
   const [status, setStatus] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
+  // The right page size differs by task: 25 to read the queue, 500 to scan a
+  // month before exporting. One fixed size served neither.
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
 
   const list = useMemo(() => rows.data ?? [], [rows.data]);
 
@@ -208,11 +214,39 @@ export function AllCompensationPage() {
     });
   }, [list, from, to, agent, status, query]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  /**
+   * This report's own headline numbers, over the FILTERED set — a summary that
+   * ignores the filter under it is a summary of a different report.
+   *
+   * Value is deliberately the SAR total only. A percentage coupon has no value
+   * until an order is placed against it, so adding "20" from a 20% coupon to a
+   * riyal total would produce a number that is not money and cannot be checked
+   * against anything. The percentage coupons are counted separately instead.
+   */
+  const totals = useMemo(() => {
+    let sar = 0;
+    let percentCoupons = 0;
+    let approved = 0;
+    let pending = 0;
+    for (const r of filtered) {
+      const st = (r.status ?? 'pending').toLowerCase();
+      if (st === 'approved' || st === 'assigned') approved += 1;
+      if (st === 'pending') pending += 1;
+      const pct = Number(r.coupon_percent);
+      if (Number.isFinite(pct) && pct > 0) percentCoupons += 1;
+      else {
+        const v = Number(r.coupon_value);
+        if (Number.isFinite(v)) sar += v;
+      }
+    }
+    return { sar, percentCoupons, approved, pending };
+  }, [filtered]);
+
+  const pageCount = pageCountOf(filtered.length, pageSize);
   // Clamped rather than stored: narrowing a filter while on page 9 must not
   // leave the operator staring at an empty table.
   const current = Math.min(page, pageCount);
-  const paged = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const paged = filtered.slice((current - 1) * pageSize, current * pageSize);
 
   /**
    * What the coupon is worth, in whichever of the two forms it was granted.
@@ -426,7 +460,7 @@ export function AllCompensationPage() {
         />
       </Toolbar>
 
-      <div className="flex-1 overflow-auto px-5 py-4">
+      <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
         <div className="space-y-5">
           <div className="border-b border-foreground/10 pb-5">
             <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
@@ -436,6 +470,49 @@ export function AllCompensationPage() {
               })}
             </p>
           </div>
+
+          <ReportKpiStrip>
+            <ReportKpi
+              label={t('compensationAll.kpiRequests', { defaultValue: 'Coupons' })}
+              value={String(filtered.length)}
+              hint={
+                filtered.length === list.length
+                  ? undefined
+                  : String(
+                      t('complaintReport.ofTotal', {
+                        total: list.length,
+                        defaultValue: 'of {{total}} in range',
+                      }),
+                    )
+              }
+              tone="blue"
+            />
+            <ReportKpi
+              label={t('compensationAll.kpiApproved', { defaultValue: 'Approved' })}
+              value={String(totals.approved)}
+              tone="green"
+            />
+            <ReportKpi
+              label={t('compensationAll.kpiPending', { defaultValue: 'Pending' })}
+              value={String(totals.pending)}
+              tone="amber"
+            />
+            <ReportKpi
+              label={t('compensationAll.kpiValue', { defaultValue: 'Value (SAR)' })}
+              value={String(Math.round(totals.sar))}
+              hint={
+                totals.percentCoupons > 0
+                  ? String(
+                      t('compensationAll.kpiPercentAside', {
+                        count: totals.percentCoupons,
+                        defaultValue: 'plus {{count}} percentage coupons',
+                      }),
+                    )
+                  : undefined
+              }
+              tone="violet"
+            />
+          </ReportKpiStrip>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,16rem)_9rem_9rem_minmax(0,12rem)_minmax(0,10rem)_auto]">
             <label className="block space-y-1">
@@ -645,19 +722,33 @@ export function AllCompensationPage() {
                   )}
                 </tbody>
               </Table>
-              {pageCount > 1 && (
-                <div className="border-t border-foreground/[0.08] px-2 py-1.5">
-                  <Pagination
-                    page={current}
-                    pageCount={pageCount}
-                    onPage={setPage}
-                    prevLabel={t('pagination.prev', { defaultValue: 'Previous' })}
-                    nextLabel={t('pagination.next', { defaultValue: 'Next' })}
-                  />
-                </div>
-              )}
             </TableSurface>
           )}
+
+          <TablePager
+            page={current}
+            onPage={setPage}
+            pageSize={pageSize}
+            onPageSize={setPageSize}
+            total={filtered.length}
+            pageSizes={[10, 25, 50, 100, 250, 500]}
+            labels={{
+              rowsPerPage: String(
+                t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
+              ),
+              previous: String(t('pagination.prev', { defaultValue: 'Previous' })),
+              next: String(t('pagination.next', { defaultValue: 'Next' })),
+              showing: ({ from: f, to: tt, total }) =>
+                String(
+                  t('complaintReport.showingRange', {
+                    defaultValue: 'Showing {{from}}-{{to}} of {{total}}',
+                    from: f,
+                    to: tt,
+                    total,
+                  }),
+                ),
+            }}
+          />
         </div>
       </div>
     </div>

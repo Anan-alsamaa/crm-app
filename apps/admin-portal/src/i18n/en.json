@@ -503,7 +503,10 @@
     "range": "Date range",
     "subtitle": "Which TICKETS met the deadline they were promised",
     "title": "SLA performance",
-    "scopeNote": "One row per TICKET, judged against the deadline its SLA policy promised. Use it to find the breaches and who held them. For a per-agent rollup with CSAT see Agent KPI; for chat response times see Agent performance — those measure conversations, not tickets, so their numbers are not these ones."
+    "scopeNote": "One row per TICKET, judged against the deadline its SLA policy promised. Use it to find the breaches and who held them. For a per-agent rollup with CSAT see Agent KPI; for chat response times see Agent performance — those measure conversations, not tickets, so their numbers are not these ones.",
+    "colTicketId": "Ticket id",
+    "search": "Search subject or agent",
+    "naFilter": "No target"
   },
   "app": {
     "console": "Admin console"
@@ -587,14 +590,16 @@
       "brand": "Brand",
       "city": "City",
       "areaManager": "Area manager",
-      "chainManager": "Chain manager"
+      "chainManager": "Chain manager",
+      "chats": "Chats",
+      "inTime": "Answered in time"
     },
     "ticketsTitle": "Tickets",
-    "ticketsSubtitle": "Every ticket with SLA timings and the linked customer order — export to Excel.",
+    "ticketsSubtitle": "Every ticket with SLA timings and the linked customer order — export to CSV.",
     "agentsTitle": "Agent KPI",
     "agentsSubtitle": "One row per agent with the operational measures the performance pages track — chats handled, unanswered, answered in time, first response and time to solve, common chats taken — plus tickets and CSAT. Same arithmetic as Agent performance.",
     "conversationsTitle": "Conversation status",
-    "conversationsSubtitle": "Conversations by status, priority and day — export to Excel.",
+    "conversationsSubtitle": "Conversations by status, priority and day — search, page through them, or export to CSV.",
     "columns": "Columns",
     "exportColumns": "Export columns",
     "selectAll": "All",
@@ -609,7 +614,16 @@
     "col.inTime": "Answered in time",
     "col.firstResponseAvg": "First response (avg)",
     "col.timeToSolve": "Time to solve (avg)",
-    "col.commonTaken": "Common chats taken"
+    "col.commonTaken": "Common chats taken",
+    "byDay": "By day",
+    "dayCount": "{{count}} days",
+    "exportCsvAll": "Export all {{count}}",
+    "exportCsvCount": "Export CSV ({{count}})",
+    "exportCsvFiltered": "Export {{count}} shown",
+    "kpiBusiestDay": "Busiest day",
+    "kpiUrgent": "Urgent + high",
+    "searchAgent": "Search agent",
+    "searchConversations": "Search customer, phone, agent or order"
   },
   "ticketOps": {
     "title": "Ticket report",
@@ -986,7 +1000,7 @@
     "columnsHelp": "The order here is the order in the table and the export.",
     "moveFirst": "Move {{col}} to the front",
     "searchPlaceholder": "Order number, phone, branch, or a word from the complaint…",
-    "subtitle": "Every ticket in the operations report format. Search by phone, restaurant name or ID; rearrange the columns under the Columns button; export to Excel.",
+    "subtitle": "Every ticket in the operations report format. Search by phone, restaurant name or ID; rearrange the columns under the Columns button; export to CSV.",
     "title": "Tickets",
     "col": {
       "date": "Date",
@@ -1045,7 +1059,9 @@
     "systemUser": "System",
     "selectHint": "Click a row, then use History or Delete.",
     "importDisabled": "Importing is disabled",
-    "shownCount": "{{n}} of {{m}} shown"
+    "shownCount": "{{n}} of {{m}} shown",
+    "kpiBranches": "Branches",
+    "ofTotal": "of {{total}} in range"
   },
   "lists": {
     "title": "Dropdown values",
@@ -1127,5 +1143,12 @@
     "done": "Backup downloaded.",
     "partial": "Backup saved, but {{n}} collection(s) could not be read — see the list.",
     "failed": "failed"
+  },
+  "compensationAll": {
+    "kpiApproved": "Approved",
+    "kpiPending": "Pending",
+    "kpiPercentAside": "plus {{count}} percentage coupons",
+    "kpiRequests": "Coupons",
+    "kpiValue": "Value (SAR)"
   }
 }

@@ -7,14 +7,18 @@ import {
   cn,
   DateField,
   EmptyState,
+  ExportButtons,
   formatDateTime,
+  Input,
   Pill,
   ProgressRing,
   SelectMenu,
   ShieldIcon,
   Spinner,
+  pageCountOf,
   Table,
   TableFooterBar,
+  TablePager,
   TableSurface,
   Td,
   Th,
@@ -26,7 +30,7 @@ import {
   ZapIcon,
 } from '@yiji/ui';
 import { useSlaReports, type SlaCell, type TicketSla } from './api.js';
-import { reportFilename } from '@yiji/reports';
+import { exportCsv, reportFilename, type CsvColumn } from '@yiji/reports';
 
 const RANGE_DAYS = [7, 30, 90] as const;
 
@@ -55,20 +59,46 @@ const fmtMins = (n: number | null) =>
   n == null ? '—' : n < 60 ? `${Math.round(n)}m` : `${(n / 60).toFixed(1)}h`;
 /** Tone for a compliance %: green ≥90, amber ≥75, red below. */
 
-function SlaPill({ cell }: { cell: SlaCell }) {
+interface OutcomeName {
+  tone: 'success' | 'destructive' | 'warning' | 'muted';
+  /** What a row's pill says. */
+  label: string;
+  /** What a filter chip says, where there is no column header for context. */
+  filterLabel: string;
+}
+
+/** What each SLA outcome is called, in one place. */
+function useOutcomeNames(): Record<SlaCell['state'], OutcomeName> {
   const { t } = useTranslation();
-  const map = {
-    met: { tone: 'success' as const, label: t('slaReports.met', { defaultValue: 'Met' }) },
+  return {
+    met: {
+      tone: 'success',
+      label: String(t('slaReports.met', { defaultValue: 'Met' })),
+      filterLabel: String(t('slaReports.met', { defaultValue: 'Met' })),
+    },
     breached: {
-      tone: 'destructive' as const,
-      label: t('slaReports.breached', { defaultValue: 'Breached' }),
+      tone: 'destructive',
+      label: String(t('slaReports.breached', { defaultValue: 'Breached' })),
+      filterLabel: String(t('slaReports.breached', { defaultValue: 'Breached' })),
     },
     pending: {
-      tone: 'warning' as const,
-      label: t('slaReports.pending', { defaultValue: 'Pending' }),
+      tone: 'warning',
+      label: String(t('slaReports.pending', { defaultValue: 'Pending' })),
+      filterLabel: String(t('slaReports.pending', { defaultValue: 'Pending' })),
     },
-    na: { tone: 'muted' as const, label: '—' },
+    // An em dash is right INSIDE a row, where the column header supplies the
+    // context. On a filter chip it says nothing, so the state gets its real
+    // name there.
+    na: {
+      tone: 'muted',
+      label: '—',
+      filterLabel: String(t('slaReports.naFilter', { defaultValue: 'No target' })),
+    },
   };
+}
+
+function SlaPill({ cell }: { cell: SlaCell }) {
+  const map = useOutcomeNames();
   const { tone, label } = map[cell.state];
   const title = [
     cell.dueAt && `due ${formatDateTime(cell.dueAt)}`,
@@ -189,20 +219,11 @@ function Kpi({
   );
 }
 
-function downloadCsv(filename: string, rows: (string | number)[][]) {
-  const esc = (v: string | number) => {
-    const s = String(v ?? '');
-    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const csv = rows.map((r) => r.map(esc).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+/* The CSV writer that used to live here is gone. It emitted no UTF-8 BOM, so
+ * Excel read every Arabic subject and agent name as the local codepage and
+ * showed mojibake; it joined rows with a bare newline; and it did not neutralise
+ * a leading "=" in a customer-typed subject. @yiji/reports/csv does all three,
+ * and does them the same way for all five reports. */
 
 export function SlaReportsPage() {
   const { t } = useTranslation();
@@ -211,12 +232,39 @@ export function SlaReportsPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [agentFilter, setAgentFilter] = useState<{ id: string | null; name: string } | null>(null);
+  /**
+   * Search and outcome live HERE rather than inside the table, because the
+   * export reads from the same value. A filter the table owned privately would
+   * produce a file that disagreed with the screen that asked for it.
+   */
+  const [query, setQuery] = useState('');
+  const [outcome, setOutcome] = useState<'all' | SlaCell['state']>('all');
   const report = useSlaReports(days, { from, to });
 
   const ticketsShown = useMemo(() => {
     const all = report.data?.tickets ?? [];
-    if (agentFilter) return all.filter((tk) => tk.agentId === agentFilter.id);
-    return all;
+    const q = query.trim().toLowerCase();
+    return all.filter((tk) => {
+      if (agentFilter && tk.agentId !== agentFilter.id) return false;
+      if (outcome !== 'all' && tk.resolution.state !== outcome) return false;
+      if (!q) return true;
+      return (
+        tk.subject.toLowerCase().includes(q) ||
+        tk.agentName.toLowerCase().includes(q) ||
+        tk.id.toLowerCase().includes(q)
+      );
+    });
+  }, [report.data, agentFilter, query, outcome]);
+
+  /** Outcome tabs with counts, taken from the set BEFORE the outcome filter —
+   *  a count that moves as you filter by it tells you nothing. */
+  const outcomeCounts = useMemo(() => {
+    const base = (report.data?.tickets ?? []).filter(
+      (tk) => !agentFilter || tk.agentId === agentFilter.id,
+    );
+    const m = new Map<string, number>();
+    for (const tk of base) m.set(tk.resolution.state, (m.get(tk.resolution.state) ?? 0) + 1);
+    return { base: base.length, entries: [...m.entries()].sort((a, b) => b[1] - a[1]) };
   }, [report.data, agentFilter]);
 
   /**
@@ -225,26 +273,52 @@ export function SlaReportsPage() {
    * with the toggle gone it could only ever have been reached by accident, and
    * a per-agent rollup is what Agent KPI exports.
    */
-  const exportCsv = () => {
-    if (!report.data) return;
+  /** The columns of the table, as the file. Same order, same headings. */
+  const csvColumns: CsvColumn<TicketSla>[] = [
+    { header: t('slaReports.colTicket', { defaultValue: 'Ticket' }), value: (tk) => tk.subject },
     {
-      const rows: (string | number)[][] = [
-        ['ticket_id', 'subject', 'priority', 'status', 'agent', 'resolution', 'first_reply_min'],
-        ...ticketsShown.map((tk) => [
-          tk.id,
-          tk.subject,
-          tk.priority,
-          tk.status,
-          tk.agentName,
-          tk.resolution.state,
-          tk.responseMinutes == null ? '' : Math.round(tk.responseMinutes),
-        ]),
-      ];
-      downloadCsv(reportFilename('SLA by ticket', days, 'csv'), rows);
-    }
+      header: t('slaReports.colPriority', { defaultValue: 'Priority' }),
+      value: (tk) =>
+        String(t(`priority.${tk.priority}`, { ns: 'common', defaultValue: tk.priority })),
+    },
+    {
+      header: t('slaReports.colStatus', { defaultValue: 'Status' }),
+      value: (tk) => String(t(`status.${tk.status}`, { ns: 'common', defaultValue: tk.status })),
+    },
+    { header: t('slaReports.colAgent', { defaultValue: 'Agent' }), value: (tk) => tk.agentName },
+    {
+      header: t('slaReports.colResolution', { defaultValue: 'Resolution' }),
+      value: (tk) =>
+        String(t(`slaReports.${tk.resolution.state}`, { defaultValue: tk.resolution.state })),
+    },
+    {
+      header: t('slaReports.colReplyTime', { defaultValue: '1st reply' }),
+      // Minutes as a number, so the column can be averaged in a spreadsheet.
+      value: (tk) => (tk.responseMinutes == null ? null : Math.round(tk.responseMinutes)),
+    },
+    { header: t('slaReports.colTicketId', { defaultValue: 'Ticket id' }), value: (tk) => tk.id },
+  ];
+
+  const runExport = (scope: 'view' | 'all') => {
+    const rowsOut = scope === 'all' ? (report.data?.tickets ?? []) : ticketsShown;
+    if (rowsOut.length === 0) return;
+    exportCsv(reportFilename('SLA by ticket', days, 'csv'), csvColumns, rowsOut);
   };
 
   const totals = report.data?.totals;
+  /**
+   * Breaches the reader can actually reach.
+   *
+   * report.totals.breaches adds first-response breaches to resolution ones, but
+   * a ticket is raised out of a conversation that was already answered, so this
+   * report does not judge its first response at all — there is no such column.
+   * Counting them in the headline made the tile disagree with every row beneath
+   * it, and with the filter chip that selects them.
+   */
+  const resolutionBreaches = useMemo(
+    () => (report.data?.tickets ?? []).filter((tk) => tk.resolution.state === 'breached').length,
+    [report.data],
+  );
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -301,15 +375,25 @@ export function SlaReportsPage() {
         {/* Secondary, like the export on every other report. It was `ghost`
             here, so the same action looked like a different weight of thing
             depending on which report you were standing in. */}
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={exportCsv}
+        <ExportButtons
+          visibleCount={ticketsShown.length}
+          totalCount={report.data?.tickets.length ?? 0}
+          onExportView={() => runExport('view')}
+          onExportAll={() => runExport('all')}
           disabled={!report.data}
-        >
-          {t('slaReports.exportCsv', { defaultValue: 'Export CSV' })}
-        </Button>
+          labelPlain={t('agentReports.exportCsvCount', {
+            count: ticketsShown.length,
+            defaultValue: 'Export CSV ({{count}})',
+          })}
+          labelView={t('agentReports.exportCsvFiltered', {
+            count: ticketsShown.length,
+            defaultValue: 'Export {{count}} shown',
+          })}
+          labelAll={t('agentReports.exportCsvAll', {
+            count: report.data?.tickets.length ?? 0,
+            defaultValue: 'Export all {{count}}',
+          })}
+        />
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-4">
@@ -376,8 +460,8 @@ export function SlaReportsPage() {
               />
               <Kpi
                 label={t('slaReports.kpiBreaches', { defaultValue: 'Breaches' })}
-                value={String(totals?.breaches ?? 0)}
-                tone={(totals?.breaches ?? 0) > 0 ? 'crimson' : 'green'}
+                value={String(resolutionBreaches)}
+                tone={resolutionBreaches > 0 ? 'crimson' : 'green'}
                 icon={<ShieldIcon size={18} />}
               />
             </div>
@@ -403,6 +487,11 @@ export function SlaReportsPage() {
               tickets={ticketsShown}
               agentFilter={agentFilter}
               onClearAgent={() => setAgentFilter(null)}
+              query={query}
+              onQuery={setQuery}
+              outcome={outcome}
+              onOutcome={setOutcome}
+              outcomeCounts={outcomeCounts}
             />
           </div>
         )}
@@ -411,18 +500,105 @@ export function SlaReportsPage() {
   );
 }
 
+/** An outcome tab with its count — the same anatomy the other reports use. */
+function OutcomeChip({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors duration-fast',
+        active
+          ? 'bg-primary/15 text-primary ring-1 ring-inset ring-primary/25'
+          : 'text-muted-foreground ring-1 ring-border hover:bg-secondary hover:text-foreground',
+      )}
+    >
+      {label}
+      <span className="tabular-nums opacity-70">{count}</span>
+    </button>
+  );
+}
+
 function TicketTable({
   tickets,
   agentFilter,
   onClearAgent,
+  query,
+  onQuery,
+  outcome,
+  onOutcome,
+  outcomeCounts,
 }: {
   tickets: TicketSla[];
   agentFilter: { id: string | null; name: string } | null;
   onClearAgent: () => void;
+  query: string;
+  onQuery: (v: string) => void;
+  outcome: 'all' | SlaCell['state'];
+  onOutcome: (v: 'all' | SlaCell['state']) => void;
+  outcomeCounts: { base: number; entries: [string, number][] };
 }) {
   const { t } = useTranslation();
+  const outcomeNames = useOutcomeNames();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const pageCount = pageCountOf(tickets.length, pageSize);
+  const current = Math.min(page, pageCount);
+  const pageRows = tickets.slice((current - 1) * pageSize, current * pageSize);
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
+      {/* The filter bar. This report used to render EVERY ticket in the window
+          with no search, no filter and no pager — ninety days of tickets as one
+          unbroken scroll, where the only way to find a breach was the browser's
+          own find-in-page. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Input
+          className="w-full sm:w-72"
+          value={query}
+          onChange={(e) => {
+            onQuery(e.target.value);
+            setPage(1);
+          }}
+          placeholder={t('slaReports.search', { defaultValue: 'Search subject or agent' })}
+          aria-label={t('slaReports.search', { defaultValue: 'Search subject or agent' })}
+        />
+        <div className="flex flex-wrap items-center gap-1">
+          <OutcomeChip
+            label={String(t('agentReports.statusAll', { defaultValue: 'All' }))}
+            count={outcomeCounts.base}
+            active={outcome === 'all'}
+            onClick={() => {
+              onOutcome('all');
+              setPage(1);
+            }}
+          />
+          {outcomeCounts.entries.map(([k, n]) => (
+            <OutcomeChip
+              key={k}
+              label={outcomeNames[k as SlaCell['state']].filterLabel}
+              count={n}
+              active={outcome === k}
+              onClick={() => {
+                onOutcome(k as SlaCell['state']);
+                setPage(1);
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
       {agentFilter && (
         <div className="flex items-center gap-2 text-xs">
           <span className="text-muted-foreground">
@@ -439,7 +615,11 @@ function TicketTable({
           <span className="text-muted-foreground">{tickets.length}</span>
         </div>
       )}
-      <TableSurface>
+
+      <TableSurface
+        maxHeight="min(70vh, 44rem)"
+        scrollLabel={String(t('slaReports.title', { defaultValue: 'SLA reports' }))}
+      >
         <Table>
           <thead>
             <tr>
@@ -460,7 +640,7 @@ function TicketTable({
             </tr>
           </thead>
           <tbody>
-            {tickets.map((tk) => (
+            {pageRows.map((tk) => (
               <Tr key={tk.id}>
                 <Td className="max-w-[16rem] truncate font-medium" title={tk.subject}>
                   {tk.subject}
@@ -507,6 +687,29 @@ function TicketTable({
           </span>
         </TableFooterBar>
       </TableSurface>
+
+      <TablePager
+        page={current}
+        onPage={setPage}
+        pageSize={pageSize}
+        onPageSize={setPageSize}
+        total={tickets.length}
+        pageSizes={[10, 25, 50, 100, 250, 500]}
+        labels={{
+          rowsPerPage: String(t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' })),
+          previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
+          next: String(t('agentReports.next', { defaultValue: 'Next' })),
+          showing: ({ from, to, total }) =>
+            String(
+              t('complaintReport.showingRange', {
+                defaultValue: 'Showing {{from}}-{{to}} of {{total}}',
+                from,
+                to,
+                total,
+              }),
+            ),
+        }}
+      />
     </div>
   );
 }

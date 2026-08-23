@@ -81,6 +81,32 @@ function captureDownloads() {
   return { blobs, names, restore: () => clickSpy.mockRestore() };
 }
 
+/**
+ * Read a Blob as text.
+ *
+ * `Blob.text()` is missing from the jsdom this suite runs on, so FileReader —
+ * which jsdom does implement — is the portable way in.
+ */
+function blobText(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result));
+    fr.onerror = () => reject(fr.error);
+    fr.readAsText(blob);
+  });
+}
+
+/**
+ * Read a captured CSV blob back as lines, BOM stripped.
+ *
+ * A filename says nothing about whether the right rows went into the file, and
+ * the exports these reports produce ARE the table — so the tests read them.
+ */
+async function csvText(blob: Blob): Promise<string[]> {
+  const text = (await blobText(blob)).replace(/^\uFEFF/, '');
+  return text.trim().split('\r\n');
+}
+
 const tickets = [
   {
     id: 't1',
@@ -362,15 +388,42 @@ describe('AgentReportsPage — shell', () => {
     }
   });
 
-  it('renders the KPI strip, counting only real (assigned) agents', () => {
+  it('gives each report a KPI strip about ITS OWN rows', () => {
+    // The strip used to live in the shell, so all four reports showed the same
+    // four numbers whichever one you opened — total tickets, total
+    // conversations, agent count, overall CSAT — and none of them moved when
+    // the report did. A summary that ignores what it is summarising is
+    // decoration. Each report rolls up its own rows now.
     api.useAgentReportData.mockReturnValue(ok);
-    const { container } = renderPage();
-    expect(kpis(container)).toEqual({
+
+    const ticketsView = renderPage('tickets');
+    expect(kpis(ticketsView.container)).toEqual({
       Tickets: '3',
-      Conversations: '31',
-      Agents: '1', // the Unassigned bucket is not an agent
-      'CSAT avg': '4.25',
+      Open: '1',
+      Urgent: '1',
+      Breached: '1',
     });
+    ticketsView.unmount();
+
+    const agentsView = renderPage('agents');
+    expect(kpis(agentsView.container)).toEqual({
+      Agents: '1', // the Unassigned bucket is not an agent
+      Chats: '4',
+      // Weighted by the chats each percentage was measured over, so an agent
+      // with four chats is not averaged flat against one with none.
+      'Answered in time': '85%',
+      'CSAT avg': '4.26',
+    });
+    agentsView.unmount();
+
+    const convoView = renderPage('conversations');
+    expect(kpis(convoView.container)).toEqual({
+      Conversations: '31',
+      Open: '20',
+      'Urgent + high': '18',
+      'Busiest day': '2',
+    });
+    convoView.unmount();
   });
 
   it('re-queries when the date range changes', async () => {
@@ -531,11 +584,30 @@ describe('AgentReportsPage — agent KPI report', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Agent' }));
     expect(firstAgent()).toBe('Unassigned');
 
-    await userEvent.click(screen.getByText('Export to Excel'));
-    expect(dl.names[0]).toMatch(
-      /^Sara CRM - Agent performance \(last 30 days\) - \d{4}-\d{2}-\d{2}\.xlsx$/,
+    await userEvent.click(screen.getByText('Export CSV (2)'));
+    expect(dl.names[0]).toMatch(/^Sara CRM - Agent KPI \(last 30 days\) - \d{4}-\d{2}-\d{2}\.csv$/);
+    // The file IS the table: same columns, same headings, same order — and the
+    // sort the reader just applied is the order the rows come out in.
+    const lines = await csvText(dl.blobs[0]!);
+    expect(lines[0]).toBe(
+      'Agent,Chats,No reply yet,Answered in time,First response (avg),Time to solve (avg),Common chats taken,Tickets,CSAT avg (1-5)',
     );
+    expect(lines[1]!.startsWith('Unassigned,')).toBe(true);
+    expect(lines[2]!.startsWith('Ann Lee,')).toBe(true);
+    // A percentage as a NUMBER, so the column can be averaged in a spreadsheet
+    // without anybody stripping a "%" out of it first.
+    expect(lines[2]).toContain(',85,');
     dl.restore();
+  });
+
+  it('searches the agent table by name', async () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    const { container } = renderPage('agents');
+
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+    await user.type(screen.getByLabelText('Search agent'), 'Ann');
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
   });
 });
 
@@ -546,7 +618,11 @@ describe('AgentReportsPage — conversation status report', () => {
 
     expect(screen.getByText('By status')).toBeInTheDocument();
     expect(screen.getByText('By priority')).toBeInTheDocument();
-    expect(screen.getByText('20')).toBeInTheDocument(); // open conversations
+    // Scoped to the breakdown lists: "20" also appears in the KPI strip above
+    // them now, which is the point of the strip but makes a bare getByText
+    // ambiguous.
+    const lists = within(container.querySelectorAll('ul')[0]!.parentElement!.parentElement!);
+    expect(lists.getAllByText('20').length).toBeGreaterThan(0); // open conversations
     expect(screen.getByText('13')).toBeInTheDocument(); // low priority
 
     // Two tables now: the conversations themselves, then the day matrix. The
@@ -567,11 +643,12 @@ describe('AgentReportsPage — conversation status report', () => {
     ]);
     // One column per status, plus Date + Total.
     expect(headersOf(tables[1]!)).toEqual(['Date', 'Total', 'closed', 'open']);
-    // 16 days of data, only the last 14 previewed.
-    expect(tables[1]!.querySelectorAll('tbody tr')).toHaveLength(14);
-    expect(
-      screen.getByText('Showing the last 14 of 16 days — the export covers all.'),
-    ).toBeInTheDocument();
+    // EVERY day in range, not the last fourteen. The matrix is one row per day,
+    // so capping it bought nothing and cost the reader the first half of their
+    // own date range — with a note that pointed them at the export to see it.
+    expect(tables[1]!.querySelectorAll('tbody tr')).toHaveLength(16);
+    expect(screen.getByText('16 days')).toBeInTheDocument();
+    expect(screen.queryByText(/Showing the last/)).not.toBeInTheDocument();
   });
 
   it('opens the customers behind a status count', async () => {
@@ -586,26 +663,46 @@ describe('AgentReportsPage — conversation status report', () => {
     expect(openBox).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('exports the three-sheet conversation workbook', async () => {
+  it('exports the conversations as the table shows them', async () => {
     api.useAgentReportData.mockReturnValue(ok);
     const dl = captureDownloads();
     renderPage('conversations');
 
-    await userEvent.click(screen.getByText('Export to Excel'));
+    await userEvent.click(screen.getByText('Export CSV (1)'));
     expect(dl.blobs).toHaveLength(1);
     expect(dl.names[0]).toMatch(
-      /^Sara CRM - Conversations \(last 30 days\) - \d{4}-\d{2}-\d{2}\.xlsx$/,
+      /^Sara CRM - Conversations \(last 30 days\) - \d{4}-\d{2}-\d{2}\.csv$/,
     );
+    const lines = await csvText(dl.blobs[0]!);
+    expect(lines[0]).toBe('Customer,Phone,Status,Priority,Agent,Order,Last message');
+    // Status and priority arrive TRANSLATED, exactly as the pills read on
+    // screen — a file that says "open" where the page says something else is a
+    // file somebody has to come back and ask about.
+    expect(lines[1]).toContain('open');
+    expect(lines[1]).toContain('Ann Lee');
     dl.restore();
   });
 
-  it('hides the preview note when every day fits on screen', () => {
+  it('paginates the conversations instead of stopping dead at fifty', async () => {
+    // It used to render the first fifty rows and print a note saying so, with
+    // no way to reach row fifty-one: the export was the only route to the rest
+    // of your own report.
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      ...conversations.rows[0]!,
+      id: `c${i}`,
+      customerName: `Customer ${i}`,
+    }));
     api.useAgentReportData.mockReturnValue({
       ...ok,
-      data: { ...data, conversations: { ...conversations, byDay: byDay.slice(0, 3) } },
+      data: { ...data, conversations: { ...conversations, rows: many } },
     });
-    renderPage('conversations');
-    expect(screen.queryByText(/Showing the last/)).not.toBeInTheDocument();
+    const user = userEvent.setup({ delay: null });
+    const { container } = renderPage('conversations');
+
+    expect(container.querySelectorAll('table')[0]!.querySelectorAll('tbody tr')).toHaveLength(25);
+    expect(screen.getByText('Showing 1–25 of 60')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '3' }));
+    expect(screen.getByText('Showing 51–60 of 60')).toBeInTheDocument();
   });
 });
 
@@ -684,16 +781,27 @@ describe('AgentReportsPage — complaints report', () => {
     expect(within(row).queryByText('Riyadh')).toBeNull();
   });
 
-  it('exports a complaints workbook', async () => {
+  it('exports the complaints sheet as CSV, in the chosen column order', async () => {
     api.useAgentReportData.mockReturnValue(ok);
     const dl = captureDownloads();
     renderPage('complaints');
 
-    // The button carries the COUNT now, so the promise it makes is visible
-    // before it is clicked rather than checked by hand afterwards.
-    await userEvent.click(screen.getByText('Export 2 rows'));
+    // The button carries the COUNT, so the promise it makes is visible before
+    // it is clicked rather than checked by hand afterwards.
+    await userEvent.click(screen.getByText('Export CSV (2)'));
     expect(dl.blobs).toHaveLength(1);
-    expect(dl.names[0]).toMatch(/^Sara CRM - Tickets \(last 30 days\) - \d{4}-\d{2}-\d{2}\.xlsx$/);
+    expect(dl.names[0]).toMatch(/^Sara CRM - Tickets \(last 30 days\) - \d{4}-\d{2}-\d{2}\.csv$/);
+
+    const lines = await csvText(dl.blobs[0]!);
+    // The header is the visible table's header, in the order the reader
+    // arranged it — the screen and the file are one report. The first column
+    // on screen is the row-selection checkbox, which is a control rather than
+    // data, so the comparison starts after it.
+    const onScreen = Array.from(document.querySelectorAll('thead th'))
+      .slice(1)
+      .map((th) => th.textContent?.trim() ?? '');
+    expect(lines[0]!.split(',').slice(0, 3)).toEqual(onScreen.slice(0, 3));
+    expect(lines).toHaveLength(3); // header + 2 rows
     dl.restore();
   });
 
@@ -756,8 +864,12 @@ describe('AgentReportsPage — complaints report', () => {
     // rows the control splits in two, so BOTH answers are reachable and each
     // one carries its own count rather than relying on the wording.
     expect(screen.getByText('Export all 2')).toBeTruthy();
-    await user.click(screen.getByText('Export 1 filtered'));
+    await user.click(screen.getByText('Export 1 shown'));
     expect(dl.blobs).toHaveLength(1);
+    // One row in the file, not two — the filter is part of the question, and a
+    // file quietly holding the rows somebody filtered out is how a "your report
+    // is wrong" argument starts.
+    expect(await csvText(dl.blobs[0]!)).toHaveLength(2); // header + 1 row
     dl.restore();
   });
 
@@ -809,12 +921,16 @@ describe('AgentReportsPage — complaints report', () => {
     const combo = screen.getByRole('combobox', { name: 'Rows per page' });
     expect(combo).toHaveTextContent('25');
     await user.click(combo);
+    // 10 is back at the bottom of the list — not as the default, but because a
+    // report opened on a phone wants a screenful, and every other report on the
+    // system offers the same ladder. The same control now sits under all five.
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      '10',
       '25',
       '50',
       '100',
-      '200',
-      '1000',
+      '250',
+      '500',
     ]);
   });
 

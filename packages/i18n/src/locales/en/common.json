@@ -58,5 +58,9 @@
     "pageBody": "This page hit an unexpected error. You can try again, or reload the app.",
     "retry": "Try again",
     "reload": "Reload page"
+  },
+  "compensation": {
+    "yes": "Compensated",
+    "no": "Not compensated"
   }
 }

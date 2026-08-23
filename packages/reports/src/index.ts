@@ -28,7 +28,10 @@ export {
   type ComplaintReportRow,
   type Translate,
   compensationLabel,
+  isCompensated,
 } from './complaints.js';
+export { toCsv, rowsToCsv, downloadCsv, exportCsv, type CsvColumn } from './csv.js';
+
 export {
   buildWorkbook,
   downloadWorkbook,

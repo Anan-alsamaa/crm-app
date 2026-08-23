@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteItem, readUsers } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
@@ -33,8 +33,13 @@ import {
   ToolbarSpacer,
   Tr,
   type MetricTone,
+  pageCountOf,
+  ReportKpi,
+  ReportKpiStrip,
+  TablePager,
   UsersIcon,
   useTableSort,
+  ZapIcon,
 } from '@yiji/ui';
 import { matchStore, isUnmappedStore, resolveStoreAttribution } from '@yiji/shared-types';
 import {
@@ -42,6 +47,7 @@ import {
   useTicketOrders,
   type AgentKpiRow,
   type ComplaintReportRow,
+  type ConversationRow,
   type ConversationStatusReport,
   type SlaOutcome,
   type TicketReportRow,
@@ -51,9 +57,6 @@ import { directus } from '../../lib/directus.js';
 import { formatDuration } from '@yiji/reports';
 import { TicketHistoryDrawer } from './TicketHistoryDrawer.js';
 import {
-  buildAgentKpiSheets,
-  buildComplaintsSheets,
-  buildConversationSheets,
   buildTicketsSheets,
   COMPLAINT_COLUMN_KEYS,
   COMPLAINT_COLUMN_LABELS,
@@ -75,10 +78,13 @@ import {
   downloadWorkbook,
   joinComplaintStores,
   distinctValues,
+  exportCsv,
   filterTickets,
+  isCompensated,
   isEmptyFilter,
   moveColumn,
   reconcileColumnOrder,
+  type CsvColumn,
   type TicketFilterCriteria,
 } from '@yiji/reports';
 
@@ -123,14 +129,6 @@ const fmtScore = (n: number | null) => (n == null ? '—' : n.toFixed(2));
 const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 const STATUS_RANK: Record<string, number> = { new: 0, open: 1, pending: 2, resolved: 3, closed: 4 };
 const PAGE_SIZE = 10;
-/**
- * Page sizes for the tickets report.
- *
- * The right one genuinely differs by task: 25 to read a queue, 1000 to scan for
- * a pattern before exporting. One fixed size served neither.
- */
-const PAGE_SIZES = [25, 50, 100, 200, 1000] as const;
-
 const TICKET_SORT: Record<string, (r: TicketReportRow) => string | number | null | undefined> = {
   subject: (r) => r.subject.toLowerCase(),
   status: (r) => STATUS_RANK[r.status] ?? 99,
@@ -152,85 +150,47 @@ const AGENT_SORT: Record<string, (r: AgentKpiRow) => string | number | null | un
   csatAvg: (r) => r.csatAvg,
 };
 
-/* ── KPI card — boxed board tile: icon chip, hero numeral, micro-label ──── */
-type Tone = 'blue' | 'violet' | 'green' | 'amber';
-/* Colour as ACCENT, not surface — see TicketOpsPage for the rationale. This
- * page's Tone union is narrower (no crimson/slate). */
-const DOT_TONE: Record<Tone, string> = {
-  blue: 'bg-sky',
-  violet: 'bg-violet',
-  green: 'bg-success',
-  amber: 'bg-warning',
-};
-/* Icon chips take tint + hue token pairs; amber stays NEUTRAL — warning is a
- * light token and a warning-tinted chip fails contrast on the light theme. */
-const CHIP_TONE: Record<Tone, string> = {
-  blue: 'bg-sky-tint text-sky',
-  violet: 'bg-violet-tint text-violet',
-  green: 'bg-success-tint text-success',
-  amber: 'bg-secondary text-muted-foreground',
-};
-/* The SURFACE carries the hue too — a row of white boxes with one small
- * coloured square each reads as a form, not a dashboard. */
-const SURFACE_TONE: Record<Tone, string> = {
-  blue: 'bg-gradient-to-br from-sky-tint/70 to-card',
-  violet: 'bg-gradient-to-br from-violet-tint/70 to-card',
-  green: 'bg-gradient-to-br from-success-tint/70 to-card',
-  amber: 'bg-gradient-to-br from-warning-tint/70 to-card',
-};
-const NUMERAL_TONE: Record<Tone, string> = {
-  blue: 'text-[oklch(0.48_0.16_264)]',
-  violet: 'text-[oklch(0.48_0.19_285)]',
-  green: 'text-[oklch(0.45_0.13_155)]',
-  amber: 'text-[oklch(0.5_0.13_75)]',
-};
-
-function KpiTile({
-  label,
-  value,
-  tone,
-  icon,
-}: {
-  label: string;
-  value: string;
-  tone: Tone;
-  /** Rendered inside a tinted rounded-square chip above the numeral. */
-  icon?: ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        'rounded-2xl p-5 shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
-        'transition-[box-shadow,transform] duration-base ease-out motion-safe:hover:-translate-y-1',
-        'hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.08),0_20px_44px_-16px_oklch(var(--shadow-color)/0.28)]',
-        SURFACE_TONE[tone],
-      )}
-    >
-      {icon && (
-        <span
-          aria-hidden
-          className={cn('mb-3 grid h-9 w-9 place-items-center rounded-lg', CHIP_TONE[tone])}
-        >
-          {icon}
-        </span>
-      )}
-      {/* Numeral first, label as its NEXT sibling — the KPI reader in the
-          tests walks exactly this pair, so the anatomy is contractual. */}
-      <div
-        className={cn(
-          'text-4xl font-extrabold tabular-nums leading-none tracking-[-0.03em]',
-          NUMERAL_TONE[tone],
-        )}
-      >
-        {value}
-      </div>
-      <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT_TONE[tone])} />
-        {label}
-      </div>
-    </div>
+/** Page + size state, with the clamping every paged table needs. */
+function usePaged<T>(rows: T[], initialSize = 25) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(initialSize);
+  const pageCount = pageCountOf(rows.length, pageSize);
+  // Clamped rather than stored: filtering down while sitting on page 9 must
+  // not strand the reader on a page that no longer exists.
+  const current = Math.min(page, pageCount);
+  const pageRows = useMemo(
+    () => rows.slice((current - 1) * pageSize, current * pageSize),
+    [rows, current, pageSize],
   );
+  return { page: current, setPage, pageSize, setPageSize, pageRows };
 }
+
+/** The pager's strings, so all five reports say the same words. */
+function usePagerLabels() {
+  const { t } = useTranslation();
+  return {
+    rowsPerPage: String(t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' })),
+    previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
+    next: String(t('agentReports.next', { defaultValue: 'Next' })),
+    showing: ({ from, to, total }: { from: number; to: number; total: number }) =>
+      String(
+        t('complaintReport.showingRange', {
+          defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
+          from,
+          to,
+          total,
+        }),
+      ),
+  };
+}
+
+/**
+ * Rows per page for the report tables.
+ *
+ * Starts at 10 because a report opened to read wants a screenful, not a scroll;
+ * runs to 500 because scanning for a pattern before exporting wants the lot.
+ */
+const REPORT_PAGE_SIZES = [10, 25, 50, 100, 250, 500] as const;
 
 function StatusPill({ value }: { value: string }) {
   const { t } = useTranslation();
@@ -451,8 +411,45 @@ function TicketsReport({
     align,
   });
 
+  /** This report's own headline numbers, rolled up from the rows below. */
+  const totals = useMemo(
+    () => ({
+      open: rows.filter((r) => String(r.status).toLowerCase() === 'open').length,
+      urgent: rows.filter((r) => String(r.priority).toLowerCase() === 'urgent').length,
+      breached: rows.filter((r) => r.firstResponseState === 'breached').length,
+    }),
+    [rows],
+  );
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <ReportKpiStrip>
+        <ReportKpi
+          label={t('agentReports.kpiTickets', { defaultValue: 'Tickets' })}
+          value={String(rows.length)}
+          tone="blue"
+          icon={<TicketIcon size={18} />}
+        />
+        <ReportKpi
+          label={t('status.open', { ns: 'common', defaultValue: 'Open' })}
+          value={String(totals.open)}
+          tone="violet"
+          icon={<InboxIcon size={18} />}
+        />
+        <ReportKpi
+          label={t('priority.urgent', { ns: 'common', defaultValue: 'Urgent' })}
+          value={String(totals.urgent)}
+          tone="amber"
+          icon={<ZapIcon size={18} />}
+        />
+        <ReportKpi
+          label={t('slaReports.breached', { defaultValue: 'Breached' })}
+          value={String(totals.breached)}
+          tone="green"
+          icon={<SparkleIcon size={18} />}
+        />
+      </ReportKpiStrip>
+
       <div className="flex flex-wrap items-center gap-3">
         {/* Status filter, folded in from the register this table replaced. Counts
             come from the unfiltered set so they stay stable while filtering. */}
@@ -800,9 +797,18 @@ function ComplaintsReport({
       toast.error(t('agentReports.nothingToExport', { defaultValue: 'Nothing to export.' }));
       return;
     }
-    downloadWorkbook(
-      reportFilename('Tickets', days),
-      buildComplaintsSheets(rowsOut, tr, chosenColumns),
+    // The columns you chose, in the order you arranged them, rendered by the
+    // same function the cells use — so the file cannot say something different
+    // from the screen that produced it.
+    exportCsv(
+      reportFilename('Tickets', days, 'csv'),
+      chosenColumns.map((k) => ({
+        header: tr(COMPLAINT_COLUMN_LABELS[k].key, {
+          defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
+        }),
+        value: (r: ComplaintReportRow) => complaintCell(r, k, tr),
+      })),
+      rowsOut,
     );
     toast.success(
       t('agentReports.exported', {
@@ -824,10 +830,25 @@ function ComplaintsReport({
     });
 
   const [page, setPage] = useState(1);
+  const pagerLabels = usePagerLabels();
 
-  const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
+  const pageCount = pageCountOf(visible.length, pageSize);
   const current = Math.min(page, pageCount);
   const pageRows = visible.slice((current - 1) * pageSize, current * pageSize);
+
+  /**
+   * This report's own headline numbers, counted over the FILTERED set so the
+   * tiles answer the question actually on screen. A summary that ignores the
+   * filter under it is a summary of a different report.
+   */
+  const totals = useMemo(
+    () => ({
+      compensated: visible.filter(isCompensated).length,
+      branches: new Set(visible.map((r) => r.restaurantName).filter(Boolean)).size,
+      unmapped: countUnmappedComplaints(visible),
+    }),
+    [visible],
+  );
 
   /** A labelled dropdown built from the values actually present. */
   const FilterSelect = ({
@@ -861,7 +882,47 @@ function ComplaintsReport({
     );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <ReportKpiStrip>
+        <ReportKpi
+          label={t('agentReports.kpiTickets', { defaultValue: 'Tickets' })}
+          value={String(visible.length)}
+          hint={
+            visible.length === joined.length
+              ? undefined
+              : String(
+                  t('complaintReport.ofTotal', {
+                    total: joined.length,
+                    defaultValue: 'of {{total}} in range',
+                  }),
+                )
+          }
+          tone="blue"
+          icon={<TicketIcon size={18} />}
+        />
+        <ReportKpi
+          label={t('compensation.yes', { ns: 'common', defaultValue: 'Compensated' })}
+          value={String(totals.compensated)}
+          hint={
+            visible.length > 0 ? fmtPct((totals.compensated / visible.length) * 100) : undefined
+          }
+          tone="violet"
+          icon={<SparkleIcon size={18} />}
+        />
+        <ReportKpi
+          label={t('complaintReport.kpiBranches', { defaultValue: 'Branches' })}
+          value={String(totals.branches)}
+          tone="green"
+          icon={<UsersIcon size={18} />}
+        />
+        <ReportKpi
+          label={t('agentReports.notMapped', { defaultValue: 'Not mapped' })}
+          value={String(totals.unmapped)}
+          tone="amber"
+          icon={<InboxIcon size={18} />}
+        />
+      </ReportKpiStrip>
+
       {/* The filter bar. Free text first because it answers most questions on
           its own; the dropdowns are for slicing rather than finding. */}
       <div className="space-y-3 rounded-2xl bg-card p-3 shadow-soft ring-1 ring-foreground/[0.06]">
@@ -1170,15 +1231,15 @@ function ComplaintsReport({
             totalCount={joined.length}
             onExportView={() => onExport('view')}
             onExportAll={() => onExport('all')}
-            labelPlain={t('agentReports.exportExcelCount', {
+            labelPlain={t('agentReports.exportCsvCount', {
               count: visible.length,
-              defaultValue: 'Export {{count}} rows',
+              defaultValue: 'Export CSV ({{count}})',
             })}
-            labelView={t('agentReports.exportFiltered', {
+            labelView={t('agentReports.exportCsvFiltered', {
               count: visible.length,
-              defaultValue: 'Export {{count}} filtered',
+              defaultValue: 'Export {{count}} shown',
             })}
-            labelAll={t('agentReports.exportAllRows', {
+            labelAll={t('agentReports.exportCsvAll', {
               count: joined.length,
               defaultValue: 'Export all {{count}}',
             })}
@@ -1244,7 +1305,10 @@ function ComplaintsReport({
           are the same report, so showing a curated subset here just meant the
           screen and the file disagreed. Wide by nature, so it scrolls
           horizontally inside its own surface rather than stretching the page. */}
-      <TableSurface className="overflow-x-auto">
+      <TableSurface
+        maxHeight="min(70vh, 46rem)"
+        scrollLabel={t('complaintReport.title', { defaultValue: 'Tickets' })}
+      >
         <Table>
           <thead>
             <tr>
@@ -1356,42 +1420,15 @@ function ComplaintsReport({
         </TableFooterBar>
       </TableSurface>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-2xs text-muted-foreground">
-          {t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' })}
-          <SelectMenu
-            size="sm"
-            className="w-[6rem]"
-            aria-label={t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' })}
-            value={String(pageSize)}
-            onChange={(v) => {
-              setPageSize(Number(v));
-              // Row 3,000 is on a different page at 25 than at 1000, so the
-              // page number cannot survive the change. Going back to the start
-              // is the only honest answer.
-              setPage(1);
-            }}
-            options={PAGE_SIZES.map((n) => ({ value: String(n), label: String(n) }))}
-          />
-        </label>
-        <span className="text-2xs tabular-nums text-muted-foreground">
-          {t('complaintReport.showingRange', {
-            defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
-            from: visible.length === 0 ? 0 : (current - 1) * pageSize + 1,
-            to: Math.min(current * pageSize, visible.length),
-            total: visible.length,
-          })}
-        </span>
-        <div className="ms-auto">
-          <Pagination
-            page={current}
-            pageCount={pageCount}
-            onPage={setPage}
-            prevLabel={t('agentReports.prev', { defaultValue: 'Previous' })}
-            nextLabel={t('agentReports.next', { defaultValue: 'Next' })}
-          />
-        </div>
-      </div>
+      <TablePager
+        page={current}
+        onPage={setPage}
+        pageSize={pageSize}
+        onPageSize={setPageSize}
+        total={visible.length}
+        pageSizes={REPORT_PAGE_SIZES}
+        labels={pagerLabels}
+      />
       <ConfirmDialog
         open={!!confirmDelete}
         onCancel={() => setConfirmDelete(null)}
@@ -1425,38 +1462,172 @@ function AgentKpiReport({
   days: number;
 }) {
   const { t } = useTranslation();
-  const { sorted, sort, toggle } = useTableSort(agents, AGENT_SORT);
+  const pagerLabels = usePagerLabels();
+  const [query, setQuery] = useState('');
+
+  /**
+   * This report's own headline numbers, rolled up from the rows below.
+   *
+   * "Answered in time" is weighted by the chats each agent's percentage was
+   * measured over. A plain mean of the column would let somebody with two chats
+   * move the company number as far as somebody with two hundred — and the tile
+   * would then disagree with the table it sits on top of.
+   */
+  const totals = useMemo(() => {
+    const answeredOf = (a: AgentKpiRow) => Math.max(0, a.chats - a.noReply);
+    const answered = agents.reduce((n, a) => n + answeredOf(a), 0);
+    const inTime = agents.reduce(
+      (n, a) => (a.inTimePct == null ? n : n + (a.inTimePct / 100) * answeredOf(a)),
+      0,
+    );
+    const csatCount = agents.reduce((n, a) => n + a.csatCount, 0);
+    const csatSum = agents.reduce(
+      (n, a) => (a.csatAvg == null ? n : n + a.csatAvg * a.csatCount),
+      0,
+    );
+    return {
+      agents: agents.filter((a) => a.agentId).length,
+      chats: agents.reduce((n, a) => n + a.chats, 0),
+      inTimePct: answered > 0 ? (inTime / answered) * 100 : null,
+      csatAvg: csatCount > 0 ? csatSum / csatCount : null,
+    };
+  }, [agents]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? agents.filter((a) => a.agentName.toLowerCase().includes(q)) : agents;
+  }, [agents, query]);
+
+  const { sorted, sort, toggle } = useTableSort(filtered, AGENT_SORT);
+  const { page, setPage, pageSize, setPageSize, pageRows } = usePaged(sorted, 25);
+
   const sp = (key: string, align?: 'start' | 'end') => ({
     active: sort?.key === key,
     dir: sort?.dir ?? ('asc' as const),
-    onSort: () => toggle(key),
+    onSort: () => {
+      toggle(key);
+      setPage(1);
+    },
     align,
   });
 
-  const onExport = () => {
-    if (agents.length === 0) {
+  /** The columns of the table, as the file. Same order, same headings. */
+  const csvColumns: CsvColumn<AgentKpiRow>[] = [
+    { header: tr('agentReports.col.agent', { defaultValue: 'Agent' }), value: (a) => a.agentName },
+    { header: tr('agentReports.col.chats', { defaultValue: 'Chats' }), value: (a) => a.chats },
+    {
+      header: tr('agentReports.col.noReply', { defaultValue: 'No reply yet' }),
+      value: (a) => a.noReply,
+    },
+    {
+      header: tr('agentReports.col.inTime', { defaultValue: 'Answered in time' }),
+      // The screen shows a percentage sign; the file gives the number, so the
+      // column can be averaged in a spreadsheet without stripping characters.
+      value: (a) => (a.inTimePct == null ? null : Math.round(a.inTimePct)),
+    },
+    {
+      header: tr('agentReports.col.firstResponseAvg', { defaultValue: 'First response (avg)' }),
+      value: (a) => formatDuration(a.avgFirstResponseSec),
+    },
+    {
+      header: tr('agentReports.col.timeToSolve', { defaultValue: 'Time to solve (avg)' }),
+      value: (a) => formatDuration(a.avgTimeToSolveSec),
+    },
+    {
+      header: tr('agentReports.col.commonTaken', { defaultValue: 'Common chats taken' }),
+      value: (a) => a.commonTaken,
+    },
+    {
+      header: tr('agentReports.col.tickets', { defaultValue: 'Tickets' }),
+      value: (a) => a.tickets,
+    },
+    {
+      header: tr('agentReports.col.csatAvg', { defaultValue: 'CSAT avg (1-5)' }),
+      value: (a) => a.csatAvg,
+    },
+  ];
+
+  const onExport = (scope: 'view' | 'all') => {
+    const rowsOut = scope === 'all' ? agents : sorted;
+    if (rowsOut.length === 0) {
       toast.error(t('agentReports.nothingToExport', { defaultValue: 'Nothing to export.' }));
       return;
     }
-    downloadWorkbook(reportFilename('Agent performance', days), buildAgentKpiSheets(agents, tr));
+    exportCsv(reportFilename('Agent KPI', days, 'csv'), csvColumns, rowsOut);
     toast.success(
       t('agentReports.exported', {
-        count: agents.length,
+        count: rowsOut.length,
         defaultValue: 'Exported {{count}} rows.',
       }),
     );
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center">
+    <div className="space-y-5">
+      <ReportKpiStrip>
+        <ReportKpi
+          label={t('agentReports.kpiAgents', { defaultValue: 'Agents' })}
+          value={String(totals.agents)}
+          tone="blue"
+          icon={<UsersIcon size={18} />}
+        />
+        <ReportKpi
+          label={t('agentReports.col.chats', { defaultValue: 'Chats' })}
+          value={String(totals.chats)}
+          tone="violet"
+          icon={<InboxIcon size={18} />}
+        />
+        <ReportKpi
+          label={t('agentReports.col.inTime', { defaultValue: 'Answered in time' })}
+          value={fmtPct(totals.inTimePct)}
+          tone="amber"
+          icon={<ZapIcon size={18} />}
+        />
+        <ReportKpi
+          label={t('agentReports.kpiCsat', { defaultValue: 'CSAT avg' })}
+          value={fmtScore(totals.csatAvg)}
+          tone="green"
+          icon={<SparkleIcon size={18} />}
+        />
+      </ReportKpiStrip>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Input
+          className="w-full sm:w-64"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(1);
+          }}
+          placeholder={t('agentReports.searchAgent', { defaultValue: 'Search agent' })}
+          aria-label={t('agentReports.searchAgent', { defaultValue: 'Search agent' })}
+        />
         <div className="ms-auto">
-          <Button size="sm" onClick={onExport}>
-            {t('agentReports.exportExcel', { defaultValue: 'Export to Excel' })}
-          </Button>
+          <ExportButtons
+            visibleCount={sorted.length}
+            totalCount={agents.length}
+            onExportView={() => onExport('view')}
+            onExportAll={() => onExport('all')}
+            labelPlain={t('agentReports.exportCsvCount', {
+              count: sorted.length,
+              defaultValue: 'Export CSV ({{count}})',
+            })}
+            labelView={t('agentReports.exportCsvFiltered', {
+              count: sorted.length,
+              defaultValue: 'Export {{count}} shown',
+            })}
+            labelAll={t('agentReports.exportCsvAll', {
+              count: agents.length,
+              defaultValue: 'Export all {{count}}',
+            })}
+          />
         </div>
       </div>
-      <TableSurface>
+
+      <TableSurface
+        maxHeight="min(70vh, 44rem)"
+        scrollLabel={t('agentReports.agentsTitle', { defaultValue: 'Agent KPI' })}
+      >
         <Table>
           <thead>
             <tr>
@@ -1485,12 +1656,12 @@ function AgentKpiReport({
                 {tr('agentReports.col.tickets', { defaultValue: 'Tickets' })}
               </SortTh>
               <SortTh {...sp('csatAvg', 'end')}>
-                {tr('agentReports.col.csatAvg', { defaultValue: 'CSAT avg (1–5)' })}
+                {tr('agentReports.col.csatAvg', { defaultValue: 'CSAT avg (1-5)' })}
               </SortTh>
             </tr>
           </thead>
           <tbody>
-            {sorted.map((a) => (
+            {pageRows.map((a) => (
               <Tr key={a.agentId ?? '__unassigned__'}>
                 <Td className="font-medium">{a.agentName}</Td>
                 <Td className="text-end tabular-nums font-semibold">{a.chats}</Td>
@@ -1546,13 +1717,23 @@ function AgentKpiReport({
             the band adds no new strings. */}
         <TableFooterBar>
           <span className="flex items-baseline gap-1.5">
-            <span className="font-semibold tabular-nums text-foreground">{agents.length}</span>
+            <span className="font-semibold tabular-nums text-foreground">{sorted.length}</span>
             <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
               {t('agentReports.kpiAgents', { defaultValue: 'Agents' })}
             </span>
           </span>
         </TableFooterBar>
       </TableSurface>
+
+      <TablePager
+        page={page}
+        onPage={setPage}
+        pageSize={pageSize}
+        onPageSize={setPageSize}
+        total={sorted.length}
+        pageSizes={REPORT_PAGE_SIZES}
+        labels={pagerLabels}
+      />
     </div>
   );
 }
@@ -1569,31 +1750,117 @@ function ConversationReport({
   days: number;
 }) {
   const { t } = useTranslation();
+  const pagerLabels = usePagerLabels();
   /** Which status box is expanded, showing the customers behind its count. */
   const [drill, setDrill] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('all');
 
-  const onExport = () => {
-    if (report.total === 0) {
+  /** This report's own headline numbers, read off the rows underneath. */
+  const totals = useMemo(() => {
+    const open = report.byStatus.find((s) => s.key === 'open')?.count ?? 0;
+    const urgent = report.byPriority
+      .filter((p) => p.key === 'urgent' || p.key === 'high')
+      .reduce((n, p) => n + p.count, 0);
+    // The day the queue was heaviest — the one number on this report that says
+    // WHEN rather than how many, and the reason anybody staffs differently.
+    const busiest = report.byDay.reduce<{ day: string; total: number } | null>(
+      (best, d) => (best == null || d.total > best.total ? { day: d.day, total: d.total } : best),
+      null,
+    );
+    return { open, urgent, busiest };
+  }, [report]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return report.rows.filter((r) => {
+      if (status !== 'all' && r.status !== status) return false;
+      if (!q) return true;
+      return (
+        r.customerName.toLowerCase().includes(q) ||
+        r.customerPhone.toLowerCase().includes(q) ||
+        r.customerEmail.toLowerCase().includes(q) ||
+        r.agentName.toLowerCase().includes(q) ||
+        r.orderId.toLowerCase().includes(q)
+      );
+    });
+  }, [report.rows, query, status]);
+
+  const { page, setPage, pageSize, setPageSize, pageRows } = usePaged(visible, 25);
+
+  /** The conversations table, as the file. */
+  const csvColumns: CsvColumn<ConversationRow>[] = [
+    {
+      header: tr('agentReports.col.customer', { defaultValue: 'Customer' }),
+      value: (r) => r.customerName,
+    },
+    {
+      header: tr('agentReports.col.phone', { defaultValue: 'Phone' }),
+      value: (r) => r.customerPhone,
+    },
+    {
+      header: tr('agentReports.col.status', { defaultValue: 'Status' }),
+      value: (r) => String(t(`status.${r.status}`, { ns: 'common', defaultValue: r.status })),
+    },
+    {
+      header: tr('agentReports.col.priority', { defaultValue: 'Priority' }),
+      value: (r) => String(t(`priority.${r.priority}`, { ns: 'common', defaultValue: r.priority })),
+    },
+    { header: tr('agentReports.col.agent', { defaultValue: 'Agent' }), value: (r) => r.agentName },
+    {
+      header: tr('agentReports.col.orderNumber', { defaultValue: 'Order' }),
+      value: (r) => r.orderId,
+    },
+    {
+      header: tr('agentReports.col.lastMessage', { defaultValue: 'Last message' }),
+      value: (r) => (r.lastMessageAt ? fmtDateTime(r.lastMessageAt) : null),
+    },
+  ];
+
+  const onExport = (scope: 'view' | 'all') => {
+    const rowsOut = scope === 'all' ? report.rows : visible;
+    if (rowsOut.length === 0) {
       toast.error(t('agentReports.nothingToExport', { defaultValue: 'Nothing to export.' }));
       return;
     }
-    downloadWorkbook(reportFilename('Conversations', days), buildConversationSheets(report, tr));
+    exportCsv(reportFilename('Conversations', days, 'csv'), csvColumns, rowsOut);
     toast.success(
-      t('agentReports.exported', { count: report.total, defaultValue: 'Exported {{count}} rows.' }),
+      t('agentReports.exported', {
+        count: rowsOut.length,
+        defaultValue: 'Exported {{count}} rows.',
+      }),
     );
   };
 
-  const preview = report.byDay.slice(-14);
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center">
-        <div className="ms-auto">
-          <Button size="sm" onClick={onExport}>
-            {t('agentReports.exportExcel', { defaultValue: 'Export to Excel' })}
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <ReportKpiStrip>
+        <ReportKpi
+          label={t('agentReports.kpiConversations', { defaultValue: 'Conversations' })}
+          value={String(report.total)}
+          tone="blue"
+          icon={<InboxIcon size={18} />}
+        />
+        <ReportKpi
+          label={t('status.open', { ns: 'common', defaultValue: 'Open' })}
+          value={String(totals.open)}
+          tone="violet"
+          icon={<TicketIcon size={18} />}
+        />
+        <ReportKpi
+          label={t('agentReports.kpiUrgent', { defaultValue: 'Urgent + high' })}
+          value={String(totals.urgent)}
+          tone="amber"
+          icon={<ZapIcon size={18} />}
+        />
+        <ReportKpi
+          label={t('agentReports.kpiBusiestDay', { defaultValue: 'Busiest day' })}
+          value={totals.busiest ? String(totals.busiest.total) : '—'}
+          hint={totals.busiest?.day}
+          tone="green"
+          icon={<SparkleIcon size={18} />}
+        />
+      </ReportKpiStrip>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.06] shadow-soft">
@@ -1680,10 +1947,77 @@ function ConversationReport({
         </div>
       </div>
 
+      {/* Search, status and export sit together above the table they act on. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Input
+          className="w-full sm:w-72"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(1);
+          }}
+          placeholder={t('agentReports.searchConversations', {
+            defaultValue: 'Search customer, phone, agent or order',
+          })}
+          aria-label={t('agentReports.searchConversations', {
+            defaultValue: 'Search customer, phone, agent or order',
+          })}
+        />
+        <div className="flex flex-wrap items-center gap-1">
+          <FilterChip
+            label={t('agentReports.statusAll', { defaultValue: 'All' })}
+            count={report.rows.length}
+            active={status === 'all'}
+            onClick={() => {
+              setStatus('all');
+              setPage(1);
+            }}
+          />
+          {report.byStatus.map((s) => (
+            <FilterChip
+              key={s.key}
+              label={String(t(`status.${s.key}`, { ns: 'common', defaultValue: s.key }))}
+              count={s.count}
+              active={status === s.key}
+              onClick={() => {
+                setStatus(s.key);
+                setPage(1);
+              }}
+            />
+          ))}
+        </div>
+        <div className="ms-auto">
+          <ExportButtons
+            visibleCount={visible.length}
+            totalCount={report.rows.length}
+            onExportView={() => onExport('view')}
+            onExportAll={() => onExport('all')}
+            labelPlain={t('agentReports.exportCsvCount', {
+              count: visible.length,
+              defaultValue: 'Export CSV ({{count}})',
+            })}
+            labelView={t('agentReports.exportCsvFiltered', {
+              count: visible.length,
+              defaultValue: 'Export {{count}} shown',
+            })}
+            labelAll={t('agentReports.exportCsvAll', {
+              count: report.rows.length,
+              defaultValue: 'Export all {{count}}',
+            })}
+          />
+        </div>
+      </div>
+
       {/* The conversations themselves, with who they are with. The day matrix
           below answers "how many"; this answers "which", which is what somebody
-          reading a status report is about to go and do something about. */}
-      <TableSurface className="overflow-x-auto">
+          reading a status report is about to go and do something about.
+
+          It used to stop dead at fifty rows with a note saying so and no way to
+          reach row fifty-one — the export was the only route to the rest. */}
+      <TableSurface
+        maxHeight="min(70vh, 44rem)"
+        scrollLabel={t('agentReports.conversationsTitle', { defaultValue: 'Conversation status' })}
+      >
         <Table>
           <thead>
             <tr>
@@ -1697,7 +2031,7 @@ function ConversationReport({
             </tr>
           </thead>
           <tbody>
-            {report.rows.slice(0, 50).map((r) => (
+            {pageRows.map((r) => (
               <Tr key={r.id}>
                 <Td className="font-medium">
                   {r.customerName ? (
@@ -1727,16 +2061,39 @@ function ConversationReport({
             ))}
           </tbody>
         </Table>
-        {/* The truncation note reads as part of the table it truncates —
-            a bare caption floating on the canvas read as dead space. */}
-        {report.rows.length > 50 && (
-          <TableFooterBar>
-            <PreviewNote shown={Math.min(report.rows.length, 50)} total={report.rows.length} />
-          </TableFooterBar>
-        )}
+        <TableFooterBar>
+          <span className="font-medium tabular-nums">
+            {visible.length === report.rows.length
+              ? t('complaintReport.rowCount', {
+                  count: report.rows.length,
+                  defaultValue: '{{count}} rows',
+                })
+              : t('complaintReport.matches', {
+                  count: visible.length,
+                  total: report.rows.length,
+                  defaultValue: '{{count}} of {{total}}',
+                })}
+          </span>
+        </TableFooterBar>
       </TableSurface>
 
-      <TableSurface>
+      <TablePager
+        page={page}
+        onPage={setPage}
+        pageSize={pageSize}
+        onPageSize={setPageSize}
+        total={visible.length}
+        pageSizes={REPORT_PAGE_SIZES}
+        labels={pagerLabels}
+      />
+
+      {/* Every day in range, not the last fourteen. The matrix is at most one
+          row per day, so capping it bought nothing and cost the reader the
+          first half of their own date range. */}
+      <TableSurface
+        maxHeight="min(50vh, 28rem)"
+        scrollLabel={t('agentReports.byDay', { defaultValue: 'By day' })}
+      >
         <Table>
           <thead>
             <tr>
@@ -1752,7 +2109,7 @@ function ConversationReport({
             </tr>
           </thead>
           <tbody>
-            {preview.map((d) => (
+            {report.byDay.map((d) => (
               <Tr key={d.day}>
                 <Td className="tabular-nums text-muted-foreground">{d.day}</Td>
                 <Td className="text-end tabular-nums font-semibold">{d.total}</Td>
@@ -1765,33 +2122,16 @@ function ConversationReport({
             ))}
           </tbody>
         </Table>
-        {report.byDay.length > preview.length && (
-          <TableFooterBar>
-            <PreviewNote shown={preview.length} total={report.byDay.length} unit="days" />
-          </TableFooterBar>
-        )}
+        <TableFooterBar>
+          <span className="font-medium tabular-nums">
+            {t('agentReports.dayCount', {
+              count: report.byDay.length,
+              defaultValue: '{{count}} days',
+            })}
+          </span>
+        </TableFooterBar>
       </TableSurface>
     </div>
-  );
-}
-
-function PreviewNote({ shown, total, unit }: { shown: number; total: number; unit?: string }) {
-  const { t } = useTranslation();
-  if (shown >= total) return null;
-  return (
-    <p className="text-2xs text-muted-foreground">
-      {unit === 'days'
-        ? t('agentReports.previewDays', {
-            shown,
-            total,
-            defaultValue: 'Showing the last {{shown}} of {{total}} days — the export covers all.',
-          })
-        : t('agentReports.previewRows', {
-            shown,
-            total,
-            defaultValue: 'Showing {{shown}} of {{total}} rows — the export covers all.',
-          })}
-    </p>
   );
 }
 
@@ -1805,7 +2145,7 @@ const META: Record<
     titleKey: 'agentReports.ticketsTitle',
     titleDefault: 'Tickets',
     subKey: 'agentReports.ticketsSubtitle',
-    subDefault: 'Every ticket with SLA timings and the linked customer order — export to Excel.',
+    subDefault: 'Every ticket with SLA timings and the linked customer order — export to CSV.',
   },
   agents: {
     titleKey: 'agentReports.agentsTitle',
@@ -1822,14 +2162,15 @@ const META: Record<
     titleKey: 'agentReports.conversationsTitle',
     titleDefault: 'Conversation status',
     subKey: 'agentReports.conversationsSubtitle',
-    subDefault: 'Conversations by status, priority and day — export to Excel.',
+    subDefault:
+      'Conversations by status, priority and day — search, page through them, or export to CSV.',
   },
   complaints: {
     titleKey: 'complaintReport.title',
     titleDefault: 'Tickets',
     subKey: 'complaintReport.subtitle',
     subDefault:
-      'Every ticket in the operations report format. Search by phone, restaurant name or ID; rearrange the columns under the Columns button; export to Excel.',
+      'Every ticket in the operations report format. Search by phone, restaurant name or ID; rearrange the columns under the Columns button; export to CSV.',
   },
 };
 
@@ -1878,7 +2219,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
         </div>
       </Toolbar>
 
-      <div className="flex-1 overflow-auto px-5 py-4">
+      <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
         {/* The tickets report is a 29-column operations sheet and gets the whole
             monitor; the other three are read-and-move-on summaries and stay
             narrow, because a KPI strip stretched across 1920px is four numbers
@@ -1927,42 +2268,12 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
             />
           ) : (
             <>
-              {/* KPI strip — boxed board tiles: tinted icon chips, hero numerals.
-                  On the full-bleed complaints sheet the strip stays capped: four
-                  tiles stretched across 1920px are four small numbers separated
-                  by dead width. */}
-              <div
-                className={cn(
-                  'grid grid-cols-2 gap-3 sm:grid-cols-4',
-                  which === 'complaints' && 'max-w-4xl',
-                )}
-              >
-                <KpiTile
-                  label={t('agentReports.kpiTickets', { defaultValue: 'Tickets' })}
-                  value={String(data.tickets.length)}
-                  tone="blue"
-                  icon={<TicketIcon size={18} />}
-                />
-                <KpiTile
-                  label={t('agentReports.kpiConversations', { defaultValue: 'Conversations' })}
-                  value={String(data.conversations.total)}
-                  tone="violet"
-                  icon={<InboxIcon size={18} />}
-                />
-                <KpiTile
-                  label={t('agentReports.kpiAgents', { defaultValue: 'Agents' })}
-                  value={String(data.agents.filter((a) => a.agentId).length)}
-                  tone="amber"
-                  icon={<UsersIcon size={18} />}
-                />
-                <KpiTile
-                  label={t('agentReports.kpiCsat', { defaultValue: 'CSAT avg' })}
-                  value={fmtScore(data.csatOverall.avg)}
-                  tone="green"
-                  icon={<SparkleIcon size={18} />}
-                />
-              </div>
-
+              {/* No KPI strip here any more. It lived in the shell, so all
+                  three reports showed the SAME four numbers — total tickets,
+                  total conversations, agent count, overall CSAT — whichever
+                  report you had opened. Each report now rolls up its own rows
+                  and renders its own strip, which is the only way a summary can
+                  be a summary OF something. */}
               {which === 'tickets' && (
                 <>
                   {/* ONE table. The register that used to sit below duplicated

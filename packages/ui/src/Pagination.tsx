@@ -33,7 +33,7 @@ function windowed(page: number, count: number): (number | 'gap')[] {
 
 // Ghost chevron buttons — no ring, just a quiet hover fill.
 const edgeBtn =
-  'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-40';
+  'inline-flex h-9 min-w-[2.25rem] items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-40';
 
 export function Pagination({
   page,
@@ -56,7 +56,14 @@ export function Pagination({
         <span className="hidden sm:inline">{prevLabel}</span>
       </button>
 
-      <div className="flex items-center gap-1">
+      {/* On a phone the windowed strip is up to nine tap targets across
+          320px, which is how you end up on page 7 while aiming for page 1. The
+          numbers stay on tablet and up; below that the reader gets the same
+          information as a readout and moves with the chevrons. */}
+      <span className="text-xs font-medium tabular-nums text-muted-foreground sm:hidden">
+        {page} / {pageCount}
+      </span>
+      <div className="hidden items-center gap-1 sm:flex">
         {windowed(page, pageCount).map((it, i) =>
           it === 'gap' ? (
             <span key={`gap-${i}`} className="px-1 text-xs text-muted-foreground">
@@ -69,7 +76,7 @@ export function Pagination({
               onClick={() => onPage(it)}
               aria-current={it === page ? 'page' : undefined}
               className={cn(
-                'grid h-8 min-w-[2rem] place-items-center rounded-full px-2 text-xs font-semibold tabular-nums transition-colors duration-fast ease-out',
+                'grid h-9 min-w-[2.25rem] place-items-center rounded-full px-2 text-xs font-semibold tabular-nums transition-colors duration-fast ease-out',
                 it === page
                   ? 'bg-primary/15 text-primary ring-1 ring-inset ring-primary/25'
                   : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
