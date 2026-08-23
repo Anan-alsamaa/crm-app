@@ -199,7 +199,15 @@ export function TableSurface({
   children,
   maxHeight,
   fill = false,
-  fillMin = 260,
+  /*
+   * 320px is about five rows plus the header.
+   *
+   * Below that a table stops being a table and becomes a peephole, and the
+   * honest trade is to let the PAGE scroll instead — which it does, because
+   * the shell's scrollport is above this box, so overflowing it simply makes
+   * the page longer rather than putting anything out of reach.
+   */
+  fillMin = 320,
   fillGap = 20,
   scrollLabel,
   ...rest

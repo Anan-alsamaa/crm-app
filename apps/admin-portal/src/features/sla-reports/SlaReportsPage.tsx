@@ -20,8 +20,6 @@ import {
   Td,
   Th,
   TicketIcon,
-  Toolbar,
-  ToolbarSpacer,
   Tr,
   type MetricTone,
   ZapIcon,
@@ -173,7 +171,7 @@ function Kpi({
   label: string;
   value: string;
   tone?: KpiTone;
-  /** Rendered inside a tinted rounded-square chip above the numeral. */
+  /** Rendered in a tinted rounded-square chip at the start of the line. */
   icon?: ReactNode;
   /** End-aligned data accent — a `<ProgressRing>` for the % tiles. */
   visual?: ReactNode;
@@ -181,39 +179,46 @@ function Kpi({
   return (
     <div
       className={cn(
-        'rounded-2xl p-5 shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
-        'transition-[box-shadow,transform] duration-base ease-out motion-safe:hover:-translate-y-1',
-        'hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.08),0_20px_44px_-16px_oklch(var(--shadow-color)/0.28)]',
+        // ONE LINE, matching @yiji/ui's ReportKpi.
+        //
+        // These four opened this report at ~150px — a chip row, a 4xl numeral
+        // and a label, stacked. With the toolbar, the description and a
+        // two-row filter bar above them, the table began 560px down and
+        // floored at its minimum on a 900px screen. This report keeps its OWN
+        // tile rather than using the shared one because it needs a `crimson`
+        // tone the shared vocabulary has no seat for, and red for a badly
+        // missed SLA is the whole point of colouring these at all.
+        'flex items-center gap-3 rounded-xl px-3.5 py-2.5',
+        'shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_10px_26px_-14px_oklch(var(--shadow-color)/0.18)]',
+        'transition-[box-shadow] duration-base ease-out',
         KPI_SURFACE[tone],
       )}
     >
-      {/* Chip and ring share the top band: identity at the start, the data
-          accent at the end, boards-style. */}
-      {(icon || visual) && (
-        <div className="mb-3 flex items-start justify-between gap-2">
-          {icon && (
-            <span
-              aria-hidden
-              className={cn('grid h-9 w-9 place-items-center rounded-lg', KPI_CHIP[tone])}
-            >
-              {icon}
-            </span>
-          )}
-          {visual && <div className="ms-auto shrink-0">{visual}</div>}
-        </div>
+      {icon && (
+        <span
+          aria-hidden
+          className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg', KPI_CHIP[tone])}
+        >
+          {icon}
+        </span>
       )}
       <div
+        data-kpi-value
         className={cn(
-          'text-4xl font-extrabold leading-none tabular-nums tracking-[-0.03em]',
+          'shrink-0 text-2xl font-extrabold leading-none tabular-nums tracking-[-0.03em]',
           KPI_NUMERAL[tone],
         )}
       >
         {value}
       </div>
-      <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <div
+        data-kpi-label
+        className="flex min-w-0 items-center gap-1.5 text-2xs font-semibold uppercase leading-tight tracking-[0.1em] text-muted-foreground"
+      >
         <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', KPI_DOT[tone])} />
-        {label}
+        <span className="min-w-0">{label}</span>
       </div>
+      {visual && <div className="ms-auto shrink-0">{visual}</div>}
     </div>
   );
 }
@@ -341,76 +346,30 @@ export function SlaReportsPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Toolbar>
-        {/* Title only, as the sibling report pages do — the editorial header
-            below carries the subtitle, so repeating it up here made the two
-            headers read as a collision. */}
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('slaReports.title', { defaultValue: 'Ticket deadlines' })}
-        </h1>
-        <ToolbarSpacer />
-        {/* The by-agent / by-ticket toggle that used to sit here is gone. The
-            per-agent half was retired when Agent KPI took that job, so the
-            toggle had one working position and switched nothing — a control
-            that does nothing is worse than no control, because somebody keeps
-            clicking it expecting a different answer. */}
-        <div className="w-32">
-          {/* A shortcut, not a second source of truth: picking a preset WRITES
-              the two dates in the filter bar. */}
-          <SelectMenu
-            fullWidth
-            value=""
-            onChange={(v) => {
-              const n = Number(v);
-              const now = new Date();
-              setRange({
-                from: isoDay(new Date(now.getTime() - n * 86_400_000)),
-                to: isoDay(now),
-              });
-            }}
-            aria-label={t('slaReports.range', { defaultValue: 'Date range' })}
-            options={[
-              { value: '', label: t('agentReports.presets', { defaultValue: 'Quick range' }) },
-              ...RANGE_DAYS.map((d) => ({
-                value: String(d),
-                label: String(
-                  t('slaReports.lastDays', {
-                    count: d,
-                    days: d,
-                    defaultValue: 'Last {{days}} days',
-                  }),
-                ),
-              })),
-            ]}
-          />
-        </div>
-        {/* The dates live in the filter bar with the rest of the filters now
-            — two places to type the same range is one place too many. */}
-        {/* Secondary, like the export on every other report. It was `ghost`
-            here, so the same action looked like a different weight of thing
-            depending on which report you were standing in. */}
-        <ExportButtons
-          visibleCount={ticketsShown.length}
-          totalCount={report.data?.tickets.length ?? 0}
-          onExportView={() => runExport('view')}
-          onExportAll={() => runExport('all')}
-          disabled={!report.data}
-          labelPlain={t('agentReports.exportCsvCount', {
-            count: ticketsShown.length,
-            defaultValue: 'Export CSV ({{count}})',
-          })}
-          labelView={t('agentReports.exportCsvFiltered', {
-            count: ticketsShown.length,
-            defaultValue: 'Export {{count}} shown',
-          })}
-          labelAll={t('agentReports.exportCsvAll', {
-            count: report.data?.tickets.length ?? 0,
-            defaultValue: 'Export all {{count}}',
-          })}
-        />
-      </Toolbar>
-
       <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 lg:px-8">
+        {/* OUTSIDE the loading / empty / loaded branch, so the page identifies
+            itself in all three states.
+            It used to live in a toolbar, which rendered whatever the query was
+            doing; folding the toolbar away put the name inside the loaded
+            branch only, and a page that is still fetching became a spinner in
+            an unnamed rectangle. */}
+        {/* Name and purpose on ONE line.
+            They were three bands — a 60px toolbar carrying the name, a
+            paragraph carrying the purpose, and the gaps — on a page whose
+            table already floored at its minimum on a 900px screen. The
+            name stays as a real h1: the tab strip above shows it as a
+            selected pill, but a pill is not a heading. */}
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 className="shrink-0 text-sm font-semibold tracking-tight text-foreground">
+            {t('slaReports.title', { defaultValue: 'Ticket deadlines' })}
+          </h1>
+          <p className="min-w-0 max-w-3xl text-xs leading-relaxed text-muted-foreground">
+            {t('slaReports.subtitle', {
+              defaultValue: 'Which tickets were finished by the time they were promised.',
+            })}
+          </p>
+        </div>
+
         {report.isLoading ? (
           <div className="flex h-40 items-center justify-center">
             <Spinner />
@@ -424,18 +383,11 @@ export function SlaReportsPage() {
             })}
           />
         ) : (
-          <div className="mx-auto w-full space-y-3">
-            {/* Named once by the toolbar above, so this is just what it is for. */}
-            <p className="max-w-3xl shrink-0 text-sm leading-relaxed text-muted-foreground">
-              {t('slaReports.subtitle', {
-                defaultValue: 'Which tickets were finished by the time they were promised.',
-              })}
-            </p>
-
+          <div className="mx-auto mt-3 w-full space-y-3">
             {/* KPI strip — the % tiles carry a progress ring, boards-style: the
                 numeral stays the reading, the arc makes the shortfall visible
                 at a glance. */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Kpi
                 label={t('slaReports.kpiTickets', { defaultValue: 'Tickets' })}
                 value={String(totals?.tickets ?? 0)}
@@ -501,6 +453,61 @@ export function SlaReportsPage() {
               outcome={outcome}
               onOutcome={setOutcome}
               outcomeCounts={outcomeCounts}
+              rangePreset={
+                <SelectMenu
+                  fullWidth
+                  value=""
+                  onChange={(v) => {
+                    const n = Number(v);
+                    const now = new Date();
+                    setRange({
+                      from: isoDay(new Date(now.getTime() - n * 86_400_000)),
+                      to: isoDay(now),
+                    });
+                  }}
+                  aria-label={t('slaReports.range', { defaultValue: 'Date range' })}
+                  options={[
+                    {
+                      value: '',
+                      label: t('agentReports.presets', { defaultValue: 'Quick range' }),
+                    },
+                    ...RANGE_DAYS.map((d) => ({
+                      value: String(d),
+                      label: String(
+                        t('slaReports.lastDays', {
+                          count: d,
+                          days: d,
+                          defaultValue: 'Last {{days}} days',
+                        }),
+                      ),
+                    })),
+                  ]}
+                />
+              }
+              exportAction={
+                /* Secondary, like the export on every other report. It was
+                   `ghost` here, so the same action looked like a different
+                   weight of thing depending on which report you stood in. */
+                <ExportButtons
+                  visibleCount={ticketsShown.length}
+                  totalCount={report.data?.tickets.length ?? 0}
+                  onExportView={() => runExport('view')}
+                  onExportAll={() => runExport('all')}
+                  disabled={!report.data}
+                  labelPlain={t('agentReports.exportCsvCount', {
+                    count: ticketsShown.length,
+                    defaultValue: 'Export CSV ({{count}})',
+                  })}
+                  labelView={t('agentReports.exportCsvFiltered', {
+                    count: ticketsShown.length,
+                    defaultValue: 'Export {{count}} shown',
+                  })}
+                  labelAll={t('agentReports.exportCsvAll', {
+                    count: report.data?.tickets.length ?? 0,
+                    defaultValue: 'Export all {{count}}',
+                  })}
+                />
+              }
               bar={{
                 from,
                 to,
@@ -568,6 +575,8 @@ function TicketTable({
   outcome,
   onOutcome,
   outcomeCounts,
+  rangePreset,
+  exportAction,
   bar,
 }: {
   tickets: TicketSla[];
@@ -578,6 +587,21 @@ function TicketTable({
   outcome: 'all' | SlaCell['state'];
   onOutcome: (v: 'all' | SlaCell['state']) => void;
   outcomeCounts: { base: number; entries: [string, number][] };
+  /**
+   * The "last 7 / 30 / 90 days" shortcut, handed down so it can be rendered
+   * INSIDE the filter bar beside the two dates it writes. It used to sit in a
+   * toolbar of its own, whose only other content was the report's name — which
+   * the tab strip above it already shows as a selected pill.
+   */
+  rangePreset: ReactNode;
+  /**
+   * Export, rendered on the filter bar's own line.
+   *
+   * It lived in the toolbar that is gone. What it writes is whatever the
+   * controls beside it have narrowed to, so putting the two together says so —
+   * and it costs no band of its own.
+   */
+  exportAction: ReactNode;
   bar: {
     from: string;
     to: string;
@@ -654,6 +678,8 @@ function TicketTable({
           bar.onClear();
           setPage(1);
         }}
+        rangePreset={rangePreset}
+        actions={exportAction}
       />
 
       {/* The outcome tabs stay chips: four states with live counts is a thing

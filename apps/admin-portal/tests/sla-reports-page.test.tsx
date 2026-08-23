@@ -132,13 +132,24 @@ beforeEach(() => {
 });
 
 describe('SlaReportsPage', () => {
-  it('renders the spinner while loading', () => {
+  it('names itself while it is still loading', () => {
+    /*
+     * The heading used to come from a toolbar that rendered whatever the query
+     * was doing. Folding that toolbar away — it carried the report's name,
+     * which the tab strip above already shows as a selected pill, plus an
+     * export that belongs with its filters — briefly put the name inside the
+     * LOADED branch only, and a page still fetching became a spinner in an
+     * unnamed rectangle.
+     */
     api.useSlaReports.mockReturnValue({ isLoading: true, data: undefined });
-    const { container } = renderPage();
+    renderPage();
     expect(screen.getByText('Ticket deadlines')).toBeInTheDocument();
     // KPI strip / tables not rendered yet.
     expect(screen.queryByText('Tickets')).not.toBeInTheDocument();
-    expect(container.querySelector('svg')).toBeTruthy();
+    // Spinner is a bordered span, not an svg — assert the ROLE it exposes,
+    // which is what a screen reader is told and what cannot drift with the
+    // styling.
+    expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
   it('keeps the filters on screen when a range returns nothing', () => {
@@ -274,10 +285,23 @@ describe('SlaReportsPage', () => {
     clickSpy.mockRestore();
   });
 
-  it('disables the export while there is no data', () => {
+  it('offers no export when there is nothing to export, and says what to do', () => {
+    /*
+     * The export used to sit in the toolbar, always rendered and disabled when
+     * the query returned nothing. It lives in the filter bar now — beside the
+     * controls whose result it writes — so with no data there is no bar and no
+     * button.
+     *
+     * That is the honest shape: a disabled button tells a reader the feature
+     * exists, which they can see from any other range, whereas the empty state
+     * tells them the one thing they can act on. What matters is that the page
+     * does not simply go blank, so this asserts the instruction is there.
+     */
     api.useSlaReports.mockReturnValue({ isLoading: false, data: undefined });
     renderPage();
-    expect(screen.getByText('Export CSV (0)').closest('button')).toBeDisabled();
+    expect(screen.queryByText(/Export CSV/)).not.toBeInTheDocument();
+    expect(screen.getByText('No tickets in this window')).toBeInTheDocument();
+    expect(screen.getByText(/Widen the date range/)).toBeInTheDocument();
   });
 
   it('formats null / high / low percentages and minute values', () => {
