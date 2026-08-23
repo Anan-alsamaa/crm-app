@@ -254,7 +254,7 @@ export function VendorsPage() {
           <EmptyState
             title={t('vendors.empty', { defaultValue: 'No vendors yet.' })}
             description={t('vendors.emptyHint', {
-              defaultValue: 'Create your first vendor to start receiving conversations.',
+              defaultValue: 'Create your first vendor to start receiving chats.',
             })}
             action={
               <Button
@@ -312,7 +312,7 @@ export function VendorsPage() {
         }
         description={t('vendors.drawerHint', {
           defaultValue:
-            'Branding here drives the customer chat widget for every conversation routed to this vendor.',
+            'Branding here drives the customer chat widget for every chat routed to this vendor.',
         })}
         footer={
           <>

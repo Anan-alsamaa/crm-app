@@ -613,7 +613,10 @@ export function AllCompensationPage() {
                hand-rolled its own, so its header scrolled away and a reader
                thirty rows down had to scroll back up to learn which column
                they were looking at. */
-            <TableSurface>
+            <TableSurface
+              maxHeight="min(70vh, 44rem)"
+              scrollLabel={String(t('compensationAll.title', { defaultValue: 'Compensation' }))}
+            >
               <Table className="min-w-[80rem]">
                 <thead>
                   <tr>

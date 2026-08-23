@@ -111,5 +111,12 @@ export function ReportKpiStrip({
   children: ReactNode;
   className?: string;
 }): JSX.Element {
-  return <div className={cn('grid grid-cols-2 gap-3 lg:grid-cols-4', className)}>{children}</div>;
+  // Capped even when the page around it is not. The TABLE wants the whole
+  // monitor; four numerals stretched across 2560px are four numerals with a
+  // metre of white between them.
+  return (
+    <div className={cn('grid max-w-6xl grid-cols-2 gap-3 lg:grid-cols-4', className)}>
+      {children}
+    </div>
+  );
 }

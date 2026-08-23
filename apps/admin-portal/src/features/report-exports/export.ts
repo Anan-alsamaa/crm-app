@@ -328,7 +328,7 @@ export function buildConversationSheets(report: ConversationStatusReport, t: Tra
     { header: t('agentReports.col.created', { defaultValue: 'Created' }), width: 18 },
     { header: t('agentReports.col.lastMessage', { defaultValue: 'Last message' }), width: 18 },
     {
-      header: t('agentReports.col.conversationId', { defaultValue: 'Conversation ID' }),
+      header: t('agentReports.col.conversationId', { defaultValue: 'Chat ID' }),
       width: 26,
     },
   ];
@@ -345,7 +345,7 @@ export function buildConversationSheets(report: ConversationStatusReport, t: Tra
     c.id,
   ]);
   const detailSheet: Sheet = {
-    name: t('agentReports.tab.conversations', { defaultValue: 'Conversations' }),
+    name: t('agentReports.tab.conversations', { defaultValue: 'Chats' }),
     columns: detailColumns,
     rows: detailRows,
   };

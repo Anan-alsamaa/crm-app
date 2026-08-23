@@ -735,7 +735,7 @@ ${text}`;
                   <div className="text-xs text-muted-foreground">
                     {threadMessages.length > 0
                       ? t('conversation.startedOn', {
-                          defaultValue: 'Conversation started {{date}}',
+                          defaultValue: 'Chat started {{date}}',
                           date: dayLabel(threadMessages[0]!.date_created),
                         })
                       : t('inbox.noMessagesYet', { defaultValue: 'No messages yet' })}

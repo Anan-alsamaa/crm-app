@@ -166,7 +166,7 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
         },
         {
           id: 'go-report-conversations',
-          label: t('nav.reportConversations', { defaultValue: 'Conversation status' }),
+          label: t('nav.reportConversations', { defaultValue: 'Chat status' }),
           icon: <DownloadIcon size={16} />,
           keywords: ['xlsx', 'excel', 'download', 'export', 'conversation', 'status', 'report'],
           onSelect: () => navigate('/reports/agent-kpi/conversations'),

@@ -409,15 +409,15 @@ export function Inbox() {
                 display={
                   (filters.assignment ?? 'all') === 'mine'
                     ? t('inbox.assignedMine', { defaultValue: 'My queue' })
-                    : t('inbox.assignedAll', { defaultValue: 'All conversations' })
+                    : t('inbox.assignedAll', { defaultValue: 'All chats' })
                 }
-                aria-label={t('inbox.assignedAll', { defaultValue: 'All conversations' })}
+                aria-label={t('inbox.assignedAll', { defaultValue: 'All chats' })}
                 onChange={(v) => setFilters((f) => ({ ...f, assignment: v as 'mine' | 'all' }))}
                 options={[
                   { value: 'mine', label: t('inbox.assignedMine', { defaultValue: 'My queue' }) },
                   {
                     value: 'all',
-                    label: t('inbox.assignedAll', { defaultValue: 'All conversations' }),
+                    label: t('inbox.assignedAll', { defaultValue: 'All chats' }),
                   },
                 ]}
               />
@@ -522,7 +522,7 @@ export function Inbox() {
           <div className="flex-1 overflow-y-auto overflow-x-hidden">
             {conversations.isError ? (
               <ErrorState
-                title={t('inbox.loadError', { defaultValue: 'Could not load conversations' })}
+                title={t('inbox.loadError', { defaultValue: 'Could not load chats' })}
                 message={t('inbox.loadErrorHint', {
                   defaultValue: 'Check your connection and try again.',
                 })}
@@ -719,11 +719,10 @@ export function Inbox() {
                     {anyFilterOn
                       ? t('inbox.emptyFilteredHint', {
                           defaultValue:
-                            'Conversations are hidden, not gone. Clear the filters to see them.',
+                            'Chats are hidden, not gone. Clear the filters to see them.',
                         })
                       : t('inbox.emptyHint', {
-                          defaultValue:
-                            'New conversations from your widget land here in real time.',
+                          defaultValue: 'New chats from your widget land here in real time.',
                         })}
                   </p>
                 </div>
@@ -752,7 +751,7 @@ export function Inbox() {
               bind={list.bind}
               dragging={list.dragging}
               side="start"
-              label={t('inbox.resizeList', { defaultValue: 'Resize conversation list' })}
+              label={t('inbox.resizeList', { defaultValue: 'Resize chat list' })}
             />
           )}
         </aside>

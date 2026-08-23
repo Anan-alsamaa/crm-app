@@ -345,7 +345,7 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
         })}
         description={t('conversation.deleteTagWarning', {
           defaultValue:
-            'This removes the tag from every conversation, contact and ticket it’s on. It can’t be undone.',
+            'This removes the tag from every chat, contact and ticket it’s on. It can’t be undone.',
         })}
         confirmLabel={t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
         cancelLabel={t('actions.cancel', { ns: 'common' })}

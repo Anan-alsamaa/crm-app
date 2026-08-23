@@ -81,7 +81,7 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
     if ((conversations.data?.length ?? 0) > 0) {
       out.push({
         id: 'conversations',
-        heading: t('cmd.conversations', { defaultValue: 'Conversations' }),
+        heading: t('cmd.conversations', { defaultValue: 'Chats' }),
         items: (conversations.data ?? []).slice(0, 8).map((c) => ({
           id: `conv-${c.id}`,
           label:

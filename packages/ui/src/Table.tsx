@@ -192,7 +192,12 @@ export function Th({
         // A label row, not a slab. Distinct through weight, spacing and a
         // faint tint — a solid dark band reads as chrome bolted on top of the
         // data rather than as the data's own heading.
-        'sticky top-0 z-10 h-12 whitespace-nowrap bg-secondary/70 px-4 text-start align-middle',
+        // OPAQUE, not a 70% tint. The header only became genuinely sticky when
+        // the report tables gained a maxHeight, and a translucent band with
+        // rows sliding under it reads as a rendering fault rather than as a
+        // header. Still a faint tint, still a label row — just one you cannot
+        // see through.
+        'sticky top-0 z-10 h-12 whitespace-nowrap bg-secondary px-4 text-start align-middle',
         // The outermost columns get a wider gutter than the ones between, so
         // the data sits INSIDE the card rather than against its edge. Every
         // table on the system was hugging its own border.

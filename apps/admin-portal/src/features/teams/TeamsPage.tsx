@@ -159,7 +159,7 @@ export function TeamsPage() {
               <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t('teams.heroSubtitle', {
                   defaultValue:
-                    'Groups that decide where conversations and tickets route. See each team, who belongs to it, and who still needs a home.',
+                    'Groups that decide where chats and tickets route. See each team, who belongs to it, and who still needs a home.',
                 })}
               </p>
             </div>
@@ -229,7 +229,7 @@ export function TeamsPage() {
           <EmptyState
             title={t('teams.empty')}
             description={t('teams.emptyHint', {
-              defaultValue: 'Create your first team to start routing conversations.',
+              defaultValue: 'Create your first team to start routing chats.',
             })}
             action={
               <Button type="button" onClick={openCreate} iconStart={<PlusIcon />}>
@@ -340,8 +340,7 @@ export function TeamsPage() {
         }}
         title={editing ? t('teams.edit', { defaultValue: 'Edit team' }) : t('teams.create')}
         description={t('teams.createHint', {
-          defaultValue:
-            'Teams group agents so conversations and tickets route to the right people.',
+          defaultValue: 'Teams group agents so chats and tickets route to the right people.',
         })}
         footer={
           <>

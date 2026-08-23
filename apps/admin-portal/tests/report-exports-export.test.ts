@@ -318,7 +318,7 @@ describe('buildConversationSheets', () => {
 
   it('returns the summary / by-day / detail sheets in that order', () => {
     const sheets = buildConversationSheets(report, makeT());
-    expect(sheets.map((s) => s.name)).toEqual(['Summary', 'By day', 'Conversations']);
+    expect(sheets.map((s) => s.name)).toEqual(['Summary', 'By day', 'Chats']);
   });
 
   it('lays the summary out as status block, priority block, then the total', () => {
@@ -346,7 +346,7 @@ describe('buildConversationSheets', () => {
     ]);
   });
 
-  it('leads with the customer, not the conversation uuid', () => {
+  it('leads with the customer, not the chat uuid', () => {
     // The point of exporting a status report is to have a list somebody can
     // work through. A sheet whose first column is a uuid is not that list; the
     // id stays, at the end, for matching rows back against the system.
@@ -361,7 +361,7 @@ describe('buildConversationSheets', () => {
       'Agent',
       'Created',
       'Last message',
-      'Conversation ID',
+      'Chat ID',
     ]);
     expect(detail.rows).toEqual([
       [

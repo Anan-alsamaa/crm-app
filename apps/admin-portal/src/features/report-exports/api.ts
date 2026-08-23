@@ -344,16 +344,27 @@ function toNumber(v: unknown): number | null {
 
 /* ── Base report data (Directus only — no commerce) ───────────────────── */
 
+/**
+ * @param range explicit `from`/`to` (yyyy-mm-dd). Wins over `days`, exactly as
+ *              the SLA report already behaves — somebody who has typed two
+ *              dates has asked a more specific question than "the last 30
+ *              days", and answering the vaguer one ignores what they typed.
+ */
 export function useAgentReportData(
   days: number,
   labels: { unassigned: string; noSubject: string },
+  range?: { from?: string; to?: string },
 ) {
+  const from = range?.from?.trim() || '';
+  const to = range?.to?.trim() || '';
   return useQuery({
-    queryKey: ['agent-reports', days, labels.unassigned, labels.noSubject],
+    // The key carries everything the data resolved against — a range missing
+    // from here serves the previous range's rows under the new dates.
+    queryKey: ['agent-reports', days, from, to, labels.unassigned, labels.noSubject],
     staleTime: 60_000,
     queryFn: async (): Promise<AgentReportData> => {
       try {
-        return await loadAgentReport(days, labels);
+        return await loadAgentReport(days, labels, { from, to });
       } catch (err) {
         // Report the cause. A generic "could not load" on a page that made
         // twenty successful requests sends whoever is looking hunting through
@@ -368,10 +379,18 @@ export function useAgentReportData(
 async function loadAgentReport(
   days: number,
   labels: { unassigned: string; noSubject: string },
+  range?: { from?: string; to?: string },
 ): Promise<AgentReportData> {
   {
     {
-      const since = new Date(Date.now() - days * DAY_MS).toISOString();
+      const since = range?.from
+        ? `${range.from}T00:00:00`
+        : new Date(Date.now() - days * DAY_MS).toISOString();
+      /** Inclusive of the end day: "up to the 17th" means including the 17th. */
+      const until = range?.to ? `${range.to}T23:59:59` : '';
+      const inRange = (field: string) => ({
+        [field]: until ? { _gte: since, _lte: until } : { _gte: since },
+      });
       const now = Date.now();
 
       // Attempt the richer field list first; fall back to the base one if this
@@ -381,7 +400,7 @@ async function loadAgentReport(
         const query = (fields: readonly unknown[]) =>
           directus.request(
             readItems('tickets', {
-              filter: { date_created: { _gte: since } },
+              filter: inRange('date_created'),
               fields: fields as never,
               limit: -1,
               sort: ['-date_created'],
@@ -399,7 +418,7 @@ async function loadAgentReport(
         readTickets(),
         directus.request(
           readItems('conversations', {
-            filter: { date_created: { _gte: since } },
+            filter: inRange('date_created'),
             fields: [
               'id',
               'status',
@@ -420,7 +439,7 @@ async function loadAgentReport(
         ) as Promise<RawConversation[]>,
         directus.request(
           readItems('csat_responses', {
-            filter: { submitted_at: { _gte: since } },
+            filter: inRange('submitted_at'),
             fields: ['id', 'score', 'comment', 'submitted_at', 'conversation'],
             limit: -1,
           }),
@@ -670,7 +689,7 @@ async function loadAgentReport(
       try {
         const events = (await directus.request(
           readItems('routing_events' as never, {
-            filter: { date_created: { _gte: since } },
+            filter: inRange('date_created'),
             fields: ['conversation', 'agent', 'outcome', 'stage'],
             limit: -1,
           }) as never,

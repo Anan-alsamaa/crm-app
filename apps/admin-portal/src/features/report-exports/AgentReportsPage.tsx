@@ -832,9 +832,39 @@ function ComplaintsReport({
   const [page, setPage] = useState(1);
   const pagerLabels = usePagerLabels();
 
+  /**
+   * Sort accessors for every column, built from the cell renderer.
+   *
+   * Deriving them means a column can never be sortable-but-wrong, and a new
+   * column is sortable the day it is added. Three kinds need more than the
+   * rendered text:
+   *  - numbers, or "10" sorts before "9";
+   *  - the date, because the cell renders dd/mm/yyyy and sorting that string
+   *    groups every month together across years;
+   *  - time, which is HH:mm and happens to sort correctly as text.
+   */
+  const sortAccessors = useMemo(() => {
+    const acc: Record<string, (r: ComplaintReportRow) => string | number | null> = {};
+    for (const k of COMPLAINT_COLUMN_KEYS) {
+      acc[k] = (r) => {
+        if (k === 'date') return r.date; // ISO, so it sorts chronologically
+        const raw = complaintCell(r, k, tr);
+        if (raw == null || raw === '') return null;
+        if (COMPLAINT_COLUMN_LAYOUT[k] === 'number') {
+          const n = Number(raw);
+          return Number.isFinite(n) ? n : null;
+        }
+        return String(raw).toLowerCase();
+      };
+    }
+    return acc;
+  }, [tr]);
+
+  const { sorted, sort, toggle } = useTableSort(visible, sortAccessors);
+
   const pageCount = pageCountOf(visible.length, pageSize);
   const current = Math.min(page, pageCount);
-  const pageRows = visible.slice((current - 1) * pageSize, current * pageSize);
+  const pageRows = sorted.slice((current - 1) * pageSize, current * pageSize);
 
   /**
    * This report's own headline numbers, counted over the FILTERED set so the
@@ -1318,11 +1348,21 @@ function ComplaintsReport({
                 </span>
               </Th>
               {chosenColumns.map((k) => (
-                <Th key={k} className={cn(COMPLAINT_COLUMN_LAYOUT[k] === 'number' && 'text-end')}>
+                <SortTh
+                  key={k}
+                  active={sort?.key === k}
+                  dir={sort?.dir ?? 'asc'}
+                  align={COMPLAINT_COLUMN_LAYOUT[k] === 'number' ? 'end' : 'start'}
+                  onSort={() => {
+                    toggle(k);
+                    // A different order is a different page 7.
+                    setPage(1);
+                  }}
+                >
                   {tr(COMPLAINT_COLUMN_LABELS[k].key, {
                     defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
                   })}
-                </Th>
+                </SortTh>
               ))}
             </tr>
           </thead>
@@ -1516,11 +1556,11 @@ function AgentKpiReport({
     { header: tr('agentReports.col.agent', { defaultValue: 'Agent' }), value: (a) => a.agentName },
     { header: tr('agentReports.col.chats', { defaultValue: 'Chats' }), value: (a) => a.chats },
     {
-      header: tr('agentReports.col.noReply', { defaultValue: 'No reply yet' }),
+      header: tr('agentReports.col.noReply', { defaultValue: 'Not replied' }),
       value: (a) => a.noReply,
     },
     {
-      header: tr('agentReports.col.inTime', { defaultValue: 'Answered in time' }),
+      header: tr('agentReports.col.inTime', { defaultValue: 'Replied within 5 min' }),
       // The screen shows a percentage sign; the file gives the number, so the
       // column can be averaged in a spreadsheet without stripping characters.
       value: (a) => (a.inTimePct == null ? null : Math.round(a.inTimePct)),
@@ -1542,7 +1582,7 @@ function AgentKpiReport({
       value: (a) => a.tickets,
     },
     {
-      header: tr('agentReports.col.csatAvg', { defaultValue: 'CSAT avg (1-5)' }),
+      header: tr('agentReports.col.csatAvg', { defaultValue: 'Customer rating (1-5)' }),
       value: (a) => a.csatAvg,
     },
   ];
@@ -1578,13 +1618,13 @@ function AgentKpiReport({
           icon={<InboxIcon size={18} />}
         />
         <ReportKpi
-          label={t('agentReports.col.inTime', { defaultValue: 'Answered in time' })}
+          label={t('agentReports.col.inTime', { defaultValue: 'Replied within 5 min' })}
           value={fmtPct(totals.inTimePct)}
           tone="amber"
           icon={<ZapIcon size={18} />}
         />
         <ReportKpi
-          label={t('agentReports.kpiCsat', { defaultValue: 'CSAT avg' })}
+          label={t('agentReports.kpiCsat', { defaultValue: 'Customer rating' })}
           value={fmtScore(totals.csatAvg)}
           tone="green"
           icon={<SparkleIcon size={18} />}
@@ -1638,10 +1678,10 @@ function AgentKpiReport({
                 {tr('agentReports.col.chats', { defaultValue: 'Chats' })}
               </SortTh>
               <SortTh {...sp('noReply', 'end')}>
-                {tr('agentReports.col.noReply', { defaultValue: 'No reply yet' })}
+                {tr('agentReports.col.noReply', { defaultValue: 'Not replied' })}
               </SortTh>
               <SortTh {...sp('inTimePct', 'end')}>
-                {tr('agentReports.col.inTime', { defaultValue: 'Answered in time' })}
+                {tr('agentReports.col.inTime', { defaultValue: 'Replied within 5 min' })}
               </SortTh>
               <SortTh {...sp('avgFirstResponseSec', 'end')}>
                 {tr('agentReports.col.firstResponseAvg', { defaultValue: 'First response (avg)' })}
@@ -1656,7 +1696,7 @@ function AgentKpiReport({
                 {tr('agentReports.col.tickets', { defaultValue: 'Tickets' })}
               </SortTh>
               <SortTh {...sp('csatAvg', 'end')}>
-                {tr('agentReports.col.csatAvg', { defaultValue: 'CSAT avg (1-5)' })}
+                {tr('agentReports.col.csatAvg', { defaultValue: 'Customer rating (1-5)' })}
               </SortTh>
             </tr>
           </thead>
@@ -1836,7 +1876,7 @@ function ConversationReport({
     <div className="space-y-5">
       <ReportKpiStrip>
         <ReportKpi
-          label={t('agentReports.kpiConversations', { defaultValue: 'Conversations' })}
+          label={t('agentReports.kpiConversations', { defaultValue: 'Chats' })}
           value={String(report.total)}
           tone="blue"
           icon={<InboxIcon size={18} />}
@@ -2016,7 +2056,7 @@ function ConversationReport({
           reach row fifty-one — the export was the only route to the rest. */}
       <TableSurface
         maxHeight="min(70vh, 44rem)"
-        scrollLabel={t('agentReports.conversationsTitle', { defaultValue: 'Conversation status' })}
+        scrollLabel={t('agentReports.conversationsTitle', { defaultValue: 'Chat status' })}
       >
         <Table>
           <thead>
@@ -2149,14 +2189,14 @@ const META: Record<
   },
   agents: {
     titleKey: 'agentReports.agentsTitle',
-    titleDefault: 'Agent KPI',
+    titleDefault: 'Agent summary',
     subKey: 'agentReports.agentsSubtitle',
     // Names the object it counts. Three surfaces report response times now and
     // their numbers will never agree, because tickets and chats are different
     // things — saying which is which is cheaper than explaining the gap every
     // time somebody spots it.
     subDefault:
-      'One row per agent, over TICKETS: how many they held, how fast the first reply went out, how many breached, and what customers scored them. For the individual breaches see SLA performance; for chat response times see Agent performance.',
+      'One row per agent: how many chats they handled, how quickly they replied, and how customers rated them.',
   },
   conversations: {
     titleKey: 'agentReports.conversationsTitle',
@@ -2177,10 +2217,18 @@ const META: Record<
 export function AgentReportsPage({ report: which }: { report: ReportKind }) {
   const { t } = useTranslation();
   const [days, setDays] = useState(30);
-  const report = useAgentReportData(days, {
-    unassigned: t('agentReports.unassigned', { defaultValue: 'Unassigned' }),
-    noSubject: t('agentReports.noSubject', { defaultValue: '(no subject)' }),
-  });
+  // Explicit dates beat the rolling window — same behaviour as Ticket
+  // deadlines, so the two reports answer a typed date range the same way.
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const report = useAgentReportData(
+    days,
+    {
+      unassigned: t('agentReports.unassigned', { defaultValue: 'Unassigned' }),
+      noSubject: t('agentReports.noSubject', { defaultValue: '(no subject)' }),
+    },
+    { from, to },
+  );
   const tr: Translate = (key, opts) => String(t(key, opts));
   const data = report.data;
   const meta = META[which];
@@ -2217,21 +2265,38 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
             }))}
           />
         </div>
+        <label className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          {t('complaintDash.from', { defaultValue: 'From' })}
+          <DateField size="md" className="w-[9.5rem]" value={from} onChange={(v) => setFrom(v)} />
+        </label>
+        <label className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          {t('complaintDash.to', { defaultValue: 'To' })}
+          <DateField size="md" className="w-[9.5rem]" value={to} onChange={(v) => setTo(v)} />
+        </label>
+        {(from || to) && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setFrom('');
+              setTo('');
+            }}
+          >
+            {t('complaintDash.clear', { defaultValue: 'Clear' })}
+          </Button>
+        )}
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
-        {/* The tickets report is a 29-column operations sheet and gets the whole
-            monitor; the other three are read-and-move-on summaries and stay
-            narrow, because a KPI strip stretched across 1920px is four numbers
-            with a metre of white between them. Agent KPI gets one step more
-            room: its seven columns overflowed a 5xl card and clipped the CSAT
-            columns behind a scroll nobody notices on a 1920px monitor. */}
-        <div
-          className={cn(
-            'mx-auto space-y-5',
-            which === 'complaints' ? 'max-w-none' : which === 'agents' ? 'max-w-6xl' : 'max-w-5xl',
-          )}
-        >
+        {/* Every report gets the whole monitor.
+            The summaries used to be capped at 5xl-6xl on the theory that a KPI
+            strip stretched across 1920px is four numbers with a metre of white
+            between them. True of the strip, and false of the TABLE underneath
+            it — the cap was the reason nine columns needed a sideways swipe on
+            a screen with room for twenty. The strip stays capped on its own
+            (see ReportKpiStrip usages); the table gets the width. */}
+        <div className="mx-auto max-w-none space-y-5">
           {/* Clean editorial header — no gradient banner. */}
           <div className="border-b border-foreground/10 pb-5">
             <h2 className="text-3xl font-bold tracking-tight text-foreground">
@@ -2262,8 +2327,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
             <EmptyState
               title={t('agentReports.empty', { defaultValue: 'No data in this window' })}
               description={t('agentReports.emptyHint', {
-                defaultValue:
-                  'Widen the date range, or wait for tickets and conversations to land.',
+                defaultValue: 'Widen the date range, or wait for tickets and chats to land.',
               })}
             />
           ) : (

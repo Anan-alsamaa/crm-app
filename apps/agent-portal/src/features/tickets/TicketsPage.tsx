@@ -457,7 +457,7 @@ export function TicketsPage() {
                     <h3 className="text-md font-semibold text-foreground">{t('tickets.empty')}</h3>
                     <p className="text-xs text-muted-foreground">
                       {t('tickets.emptyHint', {
-                        defaultValue: 'Tickets are created from conversations that need follow-up.',
+                        defaultValue: 'Tickets are created from chats that need follow-up.',
                       })}
                     </p>
                   </div>
@@ -647,7 +647,7 @@ function ChatMediaDialog({
             </h3>
             <p className="text-sm leading-relaxed text-muted-foreground">
               {t('tickets.chatMediaHint', {
-                defaultValue: 'Files shared in this conversation. Add any missing here.',
+                defaultValue: 'Files shared in this chat. Add any missing here.',
               })}
             </p>
           </div>
@@ -675,7 +675,7 @@ function ChatMediaDialog({
             <p className="py-6 text-center text-sm text-muted-foreground">
               {visible
                 ? t('tickets.noChatMedia', {
-                    defaultValue: 'No files shared in this conversation.',
+                    defaultValue: 'No files shared in this chat.',
                   })
                 : t('tickets.chatNotVisible', {
                     defaultValue:
@@ -940,7 +940,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                       onClick={() => navigate(`/?conv=${tk.conversation}`)}
                       className="pb-px text-xs font-medium text-primary transition-colors duration-fast ease-out hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded"
                     >
-                      {t('tickets.viewConversation', { defaultValue: 'View conversation →' })}
+                      {t('tickets.viewConversation', { defaultValue: 'View chat →' })}
                     </button>
                   )}
                 </>

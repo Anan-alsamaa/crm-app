@@ -327,7 +327,7 @@ export function SlaReportsPage() {
             below carries the subtitle, so repeating it up here made the two
             headers read as a collision. */}
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('slaReports.title', { defaultValue: 'SLA reports' })}
+          {t('slaReports.title', { defaultValue: 'Ticket deadlines' })}
         </h1>
         <ToolbarSpacer />
         {/* The by-agent / by-ticket toggle that used to sit here is gone. The
@@ -410,15 +410,15 @@ export function SlaReportsPage() {
             })}
           />
         ) : (
-          <div className="mx-auto max-w-5xl space-y-5">
+          <div className="mx-auto max-w-none space-y-5">
             {/* Clean editorial header — same anatomy as the export reports. */}
             <div className="border-b border-foreground/10 pb-5">
               <h2 className="text-3xl font-bold tracking-tight text-foreground">
-                {t('slaReports.title', { defaultValue: 'SLA reports' })}
+                {t('slaReports.title', { defaultValue: 'Ticket deadlines' })}
               </h2>
               <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t('slaReports.subtitle', {
-                  defaultValue: 'Which TICKETS met the deadline they were promised',
+                  defaultValue: 'Which tickets were finished by the time they were promised.',
                 })}
               </p>
             </div>
@@ -618,7 +618,7 @@ function TicketTable({
 
       <TableSurface
         maxHeight="min(70vh, 44rem)"
-        scrollLabel={String(t('slaReports.title', { defaultValue: 'SLA reports' }))}
+        scrollLabel={String(t('slaReports.title', { defaultValue: 'Ticket deadlines' }))}
       >
         <Table>
           <thead>

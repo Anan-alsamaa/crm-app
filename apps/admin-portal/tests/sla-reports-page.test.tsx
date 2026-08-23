@@ -132,7 +132,7 @@ describe('SlaReportsPage', () => {
   it('renders the spinner while loading', () => {
     api.useSlaReports.mockReturnValue({ isLoading: true, data: undefined });
     const { container } = renderPage();
-    expect(screen.getByText('SLA reports')).toBeInTheDocument();
+    expect(screen.getByText('Ticket deadlines')).toBeInTheDocument();
     // KPI strip / tables not rendered yet.
     expect(screen.queryByText('Tickets')).not.toBeInTheDocument();
     expect(container.querySelector('svg')).toBeTruthy();

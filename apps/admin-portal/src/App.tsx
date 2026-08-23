@@ -18,6 +18,7 @@ import {
   Spinner,
   StoreIcon,
   TeamIcon,
+  TicketIcon,
   Toaster,
   UploadIcon,
   UsersIcon,
@@ -343,7 +344,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       // Its own destination, not folded into Reports: it is the page an
       // operations lead opens daily, and burying a daily page two clicks deep
       // to tidy a menu is a bad trade.
-      heading: t('nav.agentPerformanceGroup', { defaultValue: 'Agent performance' }),
+      heading: t('nav.agentPerformanceGroup', { defaultValue: 'Agents' }),
       items: [
         {
           to: '/agent-performance',
@@ -353,7 +354,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       ],
     },
     {
-      heading: t('nav.couponApprovalsGroup', { defaultValue: 'Coupon approvals' }),
+      heading: t('nav.couponApprovalsGroup', { defaultValue: 'Coupons' }),
       items: [
         {
           to: '/coupon-approvals',
@@ -408,6 +409,24 @@ function Shell({ children }: { children: React.ReactNode }) {
       ],
     },
     {
+      // Tickets sits between Restaurants and SLA at the owner's request: the
+      // register is read next to the branches it is about, and immediately
+      // before the policy that judges it.
+      heading: t('nav.ticketsGroup', { defaultValue: 'Tickets' }),
+      items: [
+        {
+          to: '/reports/operational-kpi/tickets',
+          // "Tickets" up here, "Ticket breakdown" on the page and its tab. A
+          // single-item section renders the ITEM's label in the top bar, and
+          // the long form pushed every other label into an ellipsis — a nav
+          // where "Dashbo…" sits beside "Agent perform…" is worse than a
+          // slightly shorter word.
+          label: t('nav.ticketsGroup', { defaultValue: 'Tickets' }),
+          icon: TicketIcon,
+        },
+      ],
+    },
+    {
       heading: t('nav.policies', { defaultValue: 'Policies' }),
       items: [{ to: '/sla', label: t('nav.sla'), icon: ShieldIcon }],
     },
@@ -416,7 +435,9 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         {
           to: '/ai-config',
-          label: t('nav.aiConfig', { defaultValue: 'AI assistance' }),
+          // A single-item section shows the ITEM label in the top bar, so this
+          // is the word that has to fit there. The page keeps its full title.
+          label: t('nav.aiConfigShort', { defaultValue: 'AI' }),
           icon: SparkleIcon,
         },
       ],
@@ -513,15 +534,15 @@ function Shell({ children }: { children: React.ReactNode }) {
 function reportTabs(t: TFunction) {
   return {
     agentKpi: [
-      { to: 'tickets', label: t('nav.reportAgents', { defaultValue: 'Agent KPI' }) },
-      { to: 'sla', label: t('nav.slaReports', { defaultValue: 'SLA performance' }) },
+      { to: 'tickets', label: t('nav.reportAgents', { defaultValue: 'Agent summary' }) },
+      { to: 'sla', label: t('nav.slaReports', { defaultValue: 'Ticket deadlines' }) },
       {
         to: 'conversations',
-        label: t('nav.reportConversations', { defaultValue: 'Conversation status' }),
+        label: t('nav.reportConversations', { defaultValue: 'Chat status' }),
       },
     ],
     opsKpi: [
-      { to: 'tickets', label: t('nav.reportTickets', { defaultValue: 'Tickets' }) },
+      { to: 'tickets', label: t('nav.reportTickets', { defaultValue: 'Ticket breakdown' }) },
       { to: 'compensation', label: t('nav.compensationAll', { defaultValue: 'Compensation' }) },
     ],
   };

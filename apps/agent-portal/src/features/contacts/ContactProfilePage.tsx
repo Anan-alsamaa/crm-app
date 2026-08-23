@@ -339,7 +339,7 @@ export function ContactProfilePage() {
           <div className="rounded-2xl border border-dashed border-foreground/[0.08] bg-card/40">
             <EmptyState
               icon={<InboxIcon size={24} />}
-              title={t('contacts.noHistory', { defaultValue: 'No conversations or tickets yet.' })}
+              title={t('contacts.noHistory', { defaultValue: 'No chats or tickets yet.' })}
             />
           </div>
         ) : (
@@ -375,7 +375,7 @@ export function ContactProfilePage() {
               {t(`status.${conv.status}`, { ns: 'common', defaultValue: conv.status })}
             </Pill>
             <span className="text-sm font-medium text-foreground">
-              {t('contacts.conversation', { defaultValue: 'Conversation' })}
+              {t('contacts.conversation', { defaultValue: 'Chat' })}
             </span>
           </div>
           <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">

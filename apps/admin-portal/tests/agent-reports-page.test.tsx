@@ -352,12 +352,11 @@ describe('AgentReportsPage — shell', () => {
   it('renders the per-report title and subtitle', () => {
     api.useAgentReportData.mockReturnValue(ok);
     renderPage('agents');
-    expect(screen.getAllByText('Agent KPI').length).toBeGreaterThanOrEqual(1);
-    // The subtitle names the OBJECT it counts. Three surfaces report response
-    // times and their numbers cannot agree — tickets and chats are different
-    // things — so each says which it measures and where the others live.
-    expect(screen.getByText(/One row per agent, over TICKETS/)).toBeInTheDocument();
-    expect(screen.getByText(/Agent performance/)).toBeInTheDocument();
+    // Each report is named after the OBJECT one of its rows IS — "Agent
+    // summary", not "Agent KPI", which named a discipline and read the same as
+    // the two reports beside it.
+    expect(screen.getAllByText('Agent summary').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/One row per agent/)).toBeInTheDocument();
   });
 
   it('renders skeletons while the report loads', () => {
@@ -411,14 +410,14 @@ describe('AgentReportsPage — shell', () => {
       Chats: '4',
       // Weighted by the chats each percentage was measured over, so an agent
       // with four chats is not averaged flat against one with none.
-      'Answered in time': '85%',
-      'CSAT avg': '4.26',
+      'Replied within 5 min': '85%',
+      'Customer rating': '4.26',
     });
     agentsView.unmount();
 
     const convoView = renderPage('conversations');
     expect(kpis(convoView.container)).toEqual({
-      Conversations: '31',
+      Chats: '31',
       Open: '20',
       'Urgent + high': '18',
       'Busiest day': '2',
@@ -429,14 +428,21 @@ describe('AgentReportsPage — shell', () => {
   it('re-queries when the date range changes', async () => {
     api.useAgentReportData.mockReturnValue(ok);
     renderPage();
-    expect(api.useAgentReportData).toHaveBeenCalledWith(30, {
-      unassigned: 'Unassigned',
-      noSubject: '(no subject)',
-    });
+    expect(api.useAgentReportData).toHaveBeenCalledWith(
+      30,
+      { unassigned: 'Unassigned', noSubject: '(no subject)' },
+      // The explicit from/to rides alongside the rolling window, as it already
+      // did on Ticket deadlines.
+      { from: '', to: '' },
+    );
 
     await userEvent.click(screen.getByRole('combobox', { name: 'Date range' }));
     await userEvent.click(screen.getByText('Last 7 days'));
-    expect(api.useAgentReportData).toHaveBeenLastCalledWith(7, expect.anything());
+    expect(api.useAgentReportData).toHaveBeenLastCalledWith(
+      7,
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });
 
@@ -590,7 +596,7 @@ describe('AgentReportsPage — agent KPI report', () => {
     // sort the reader just applied is the order the rows come out in.
     const lines = await csvText(dl.blobs[0]!);
     expect(lines[0]).toBe(
-      'Agent,Chats,No reply yet,Answered in time,First response (avg),Time to solve (avg),Common chats taken,Tickets,CSAT avg (1-5)',
+      'Agent,Chats,Not replied,Replied within 5 min,First response (avg),Time to solve (avg),Common chats taken,Tickets,Customer rating (1-5)',
     );
     expect(lines[1]!.startsWith('Unassigned,')).toBe(true);
     expect(lines[2]!.startsWith('Ann Lee,')).toBe(true);

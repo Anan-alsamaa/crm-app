@@ -406,7 +406,7 @@ export function ConversationToolbar({
             <button
               type="button"
               onClick={onToggleDetails}
-              aria-label={t('conversation.details', { defaultValue: 'Conversation details' })}
+              aria-label={t('conversation.details', { defaultValue: 'Chat details' })}
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors duration-fast ease-out hover:bg-secondary active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 lg:hidden"
             >
               <InfoIcon size={18} />

@@ -1550,7 +1550,7 @@ export function ComplaintDashboard() {
             <SectionCard
               title={t('complaintDash.chatHealth', { defaultValue: 'Chat responsiveness' })}
               hint={t('complaintDash.chatHealthHint', {
-                defaultValue: 'Whether conversations are being picked up, and how fast.',
+                defaultValue: 'Whether chats are being picked up, and how fast.',
               })}
             >
               <div className="flex items-baseline gap-3">
@@ -1774,7 +1774,7 @@ export function ComplaintDashboard() {
             title={t('complaintDash.chatPerf', { defaultValue: 'Agent performance — chat' })}
             hint={t('complaintDash.chatPerfHint', {
               defaultValue:
-                'Conversations routing offered them, who answered, how long the customer waited, and who let one time out.',
+                'Chats routing offered them, who answered, how long the customer waited, and who let one time out.',
             })}
           >
             {d.chatAgents.length === 0 ? (

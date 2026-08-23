@@ -215,7 +215,7 @@ describe('TicketsPage — a chat the ticket owner cannot read', () => {
     hooks.useCanReadConversation.mockReturnValue({ data: false, isLoading: false });
     renderPage('/tickets?id=t1');
     await waitFor(() => expect(screen.getByText('Timings')).toBeInTheDocument());
-    expect(screen.queryByText(/View conversation/)).toBeNull();
+    expect(screen.queryByText(/View chat/)).toBeNull();
     expect(screen.getByText(/chat assigned to another agent/)).toBeInTheDocument();
   });
 
@@ -227,7 +227,7 @@ describe('TicketsPage — a chat the ticket owner cannot read', () => {
     hooks.useCanReadConversation.mockReturnValue({ data: true, isLoading: false });
     renderPage('/tickets?id=t1');
     await waitFor(() => expect(screen.getByText('Timings')).toBeInTheDocument());
-    expect(screen.getByText(/View conversation/)).toBeInTheDocument();
+    expect(screen.getByText(/View chat/)).toBeInTheDocument();
   });
 });
 
