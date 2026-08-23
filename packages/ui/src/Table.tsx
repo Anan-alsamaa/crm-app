@@ -80,36 +80,139 @@ function useScrollEdges(): {
   return { ref, start: edges.start, end: edges.end };
 }
 
+/**
+ * How much room is actually left below this box, measured rather than guessed.
+ *
+ * The previous answer was a constant — `calc(100vh - 24rem)` — which assumed
+ * the furniture above a report came to 384px. On this build it comes to 585:
+ * a tab strip, a title, a description, a KPI band, a filter card and a row
+ * holding one Export button. So the table was handed more height than the
+ * screen had left, the page did not scroll (the shell owns the scrollport and
+ * the table was inside it), and everything past the fold was simply
+ * unreachable. On a laptop that showed four rows of twenty-five, with no way
+ * to reach the rest.
+ *
+ * A guess cannot survive that, because the furniture is not a constant: it
+ * changes with the report, with the width (a filter bar wraps), with the
+ * language, and with the reader's display scaling. So measure the distance
+ * from the top of the scrollport to this box and take what is left.
+ *
+ * The offset is computed against the scrollport's CONTENT, not the screen —
+ * `rect.top - portRect.top + port.scrollTop` — so it does not move as the port
+ * scrolls. Measuring against the screen would grow the table every time you
+ * scrolled toward it, and the growth would push it further down: a loop.
+ *
+ * Below `min` it stops shrinking and the port scrolls instead. A table crushed
+ * to two rows helps nobody, and at that point scrolling the page is the honest
+ * trade.
+ */
+function scrollPortOf(el: HTMLElement): HTMLElement {
+  let node = el.parentElement;
+  while (node && node !== document.body) {
+    const style = getComputedStyle(node);
+    if (/(auto|scroll|overlay)/.test(style.overflowY)) return node;
+    node = node.parentElement;
+  }
+  return document.documentElement;
+}
+
+function useViewportFill(
+  enabled: boolean,
+  min: number,
+  gap: number,
+): { ref: MutableRefObject<HTMLDivElement | null>; maxHeight?: number } {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined);
+
+  // Runs after EVERY render, not once: the furniture above changes when a
+  // filter bar wraps, a KPI band loads its numbers, or an empty state gives
+  // way to rows — none of which fire a resize on this element.
+  useEffect(() => {
+    if (!enabled) {
+      setMaxHeight((prev) => (prev === undefined ? prev : undefined));
+      return;
+    }
+    const el = ref.current;
+    if (!el || typeof window === 'undefined') return;
+
+    const measure = () => {
+      const node = ref.current;
+      if (!node) return;
+      const port = scrollPortOf(node);
+      const isRoot = port === document.documentElement;
+      const portTop = isRoot ? 0 : port.getBoundingClientRect().top;
+      const portHeight = isRoot ? window.innerHeight : port.clientHeight;
+      const offset = node.getBoundingClientRect().top - portTop + port.scrollTop;
+      const next = Math.max(min, Math.round(portHeight - offset - gap));
+      // Only commit a real change: this runs on every render, and writing the
+      // same number back would re-render forever.
+      setMaxHeight((prev) => (prev !== undefined && Math.abs(prev - next) <= 1 ? prev : next));
+    };
+
+    measure();
+    window.addEventListener('resize', measure);
+    let ro: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(measure);
+      // The port, because the window resizing is not the only way it changes
+      // size — the shell's own chrome moves it too.
+      ro.observe(scrollPortOf(el));
+    }
+    return () => {
+      window.removeEventListener('resize', measure);
+      ro?.disconnect();
+    };
+  });
+
+  return { ref, maxHeight };
+}
+
 export interface TableSurfaceProps extends HTMLAttributes<HTMLDivElement> {
   /** Accessible name for the scrollable region. */
   scrollLabel?: string;
   /**
    * Cap the table's height so the header stays put while the rows scroll.
    *
-   * A VIEWPORT-relative length, not a flex chain. Filling the page needed every
-   * ancestor between the page and the table to agree about who may shrink —
-   * four levels of `flex-1 min-h-0`, and one page with two tables on it, both
-   * asking for the rest of the height. When any link in that chain disagreed
-   * the table resolved to nothing: a header, a scrollbar, and no rows at all.
-   *
-   * A max-height depends on nothing above it, so it cannot collapse. Paired
-   * with a floor, so a short viewport still shows rows rather than a sliver.
+   * An explicit CSS length. Prefer `fill` — this is for the rare table that
+   * genuinely knows better than the measurement.
    */
   maxHeight?: string;
+  /**
+   * Take whatever height is left below this box, measured at runtime.
+   *
+   * The way every report table should ask. It replaces `maxHeight="calc(100vh
+   * - 24rem)"`, whose 24rem was a guess at how much furniture sits above a
+   * report; the real figure is 585px here and it is not a constant — it moves
+   * with the report, the width, the language and the reader's display scaling.
+   * When the guess was too big the table ran off the bottom of a screen that
+   * could not scroll, and a 25-row page showed four.
+   */
+  fill?: boolean;
+  /** Floor for `fill`, in px. Below this the page scrolls instead. */
+  fillMin?: number;
+  /** Breathing room left under the table by `fill`, in px. */
+  fillGap?: number;
 }
 
 export function TableSurface({
   className,
   children,
   maxHeight,
+  fill = false,
+  fillMin = 260,
+  fillGap = 20,
   scrollLabel,
   ...rest
 }: TableSurfaceProps): JSX.Element {
   const { ref, start, end } = useScrollEdges();
+  const outer = useViewportFill(fill, fillMin, fillGap);
   const scrollable = start || end;
+  // An explicit maxHeight still wins; `fill` supplies one when it can measure.
+  const cap = maxHeight ?? (outer.maxHeight !== undefined ? `${outer.maxHeight}px` : undefined);
 
   return (
     <div
+      ref={outer.ref}
       className={cn(
         // `clip` rather than `hidden`: both clip the square corners of the
         // content to the rounded card, but hidden also makes this a scroll
@@ -160,9 +263,10 @@ export function TableSurface({
           '[scrollbar-width:thin]',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50',
         )}
-        // A floor as well as a ceiling: on a laptop in a browser with a big
-        // toolbar, "70vh minus the furniture" can come out at a couple of rows.
-        style={maxHeight ? { maxHeight, minHeight: '14rem' } : undefined}
+        // A floor as well as a ceiling. `fill` already clamps to `fillMin`, but
+        // an explicit maxHeight has no such guard, and neither does the first
+        // paint before the measurement lands.
+        style={cap ? { maxHeight: cap, minHeight: '14rem' } : undefined}
       >
         {children}
       </div>

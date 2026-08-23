@@ -64,35 +64,53 @@ export function ReportKpi({ label, value, tone, icon, hint }: ReportKpiProps): J
   return (
     <div
       className={cn(
-        'rounded-2xl p-5 shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
-        'transition-[box-shadow,transform] duration-base ease-out motion-safe:hover:-translate-y-1',
-        'hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.08),0_20px_44px_-16px_oklch(var(--shadow-color)/0.28)]',
+        // ONE LINE, not a stacked card.
+        //
+        // These four tiles opened every report at 140px. With the tab strip,
+        // the toolbar, the description, the filter card and a band holding a
+        // single Export button, the table started 585px down — and a laptop at
+        // 150% display scaling has 620 CSS pixels in total, so a 25-row page
+        // showed four rows with no way to scroll to the rest. Four numbers are
+        // worth a glance, not a third of the screen; laid along a line they
+        // read just as fast and cost 50px instead of 140.
+        'flex items-center gap-3 rounded-xl px-3.5 py-2.5',
+        'shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_10px_26px_-14px_oklch(var(--shadow-color)/0.18)]',
+        'transition-[box-shadow] duration-base ease-out',
         SURFACE_TONE[tone],
       )}
     >
       {icon && (
         <span
           aria-hidden
-          className={cn('mb-3 grid h-9 w-9 place-items-center rounded-lg', CHIP_TONE[tone])}
+          className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg', CHIP_TONE[tone])}
         >
           {icon}
         </span>
       )}
-      {/* Numeral first, label as its NEXT sibling — the KPI reader in the
-          tests walks exactly this pair, so the anatomy is contractual. */}
+      {/* Numeral, then label. Marked with data attributes rather than left to
+          be found by font size: the test helper used to look for `.text-4xl`,
+          so restyling the tile from a stacked card to a line silently emptied
+          every KPI assertion on four reports. A test that keys on a Tailwind
+          size is testing the stylesheet. This pair is the contract. */}
       <div
+        data-kpi-value
         className={cn(
-          'text-4xl font-extrabold tabular-nums leading-none tracking-[-0.03em]',
+          'shrink-0 text-2xl font-extrabold tabular-nums leading-none tracking-[-0.03em]',
           NUMERAL_TONE[tone],
         )}
       >
         {value}
       </div>
-      <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <div
+        data-kpi-label
+        className="flex min-w-0 items-center gap-1.5 text-2xs font-semibold uppercase leading-tight tracking-[0.1em] text-muted-foreground"
+      >
         <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT_TONE[tone])} />
-        {label}
+        <span className="min-w-0">{label}</span>
       </div>
-      {hint && <div className="mt-1 text-2xs tabular-nums text-muted-foreground">{hint}</div>}
+      {hint && (
+        <div className="ms-auto shrink-0 text-2xs tabular-nums text-muted-foreground">{hint}</div>
+      )}
     </div>
   );
 }
@@ -115,7 +133,7 @@ export function ReportKpiStrip({
   // monitor; four numerals stretched across 2560px are four numerals with a
   // metre of white between them.
   return (
-    <div className={cn('grid max-w-6xl grid-cols-2 gap-3 lg:grid-cols-4', className)}>
+    <div className={cn('grid max-w-6xl grid-cols-2 gap-2 lg:grid-cols-4', className)}>
       {children}
     </div>
   );

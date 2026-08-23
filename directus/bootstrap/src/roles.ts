@@ -201,6 +201,18 @@ const TICKET_FIELDS_AGENT_WRITABLE = [
 
 const SELF_RECIPIENT = { recipient: { _eq: '$CURRENT_USER' } };
 
+/**
+ * Collections whose change history the console can read back.
+ *
+ * One list because two grants have to agree: revisions carry WHAT changed,
+ * activity carries WHO and WHEN, and a drawer with one but not the other shows
+ * edits made by nobody.
+ *
+ * Anything added here must already be readable by the role it is granted to —
+ * this widens the audit trail, it does not open a collection.
+ */
+const AUDITED_COLLECTIONS = ['tickets', 'coupon_approvals'];
+
 export const roles: RoleSpec[] = [
   {
     name: 'Administrator',
@@ -217,17 +229,24 @@ export const roles: RoleSpec[] = [
     permissions: [
       ...ALL_BUSINESS.flatMap(crud),
       ...crud('directus_users'),
-      // Ticket change history = Directus's own activity + revisions. The Admin
-      // role has no admin_access, so the system tables need explicit grants.
+      /* Change history = Directus's own activity + revisions. The Admin role
+       * has no admin_access, so the system tables need explicit grants.
+       *
+       * SCOPED TO A LIST, not to one collection. It named `tickets` alone, so
+       * the Compensation report's History button read an empty result on every
+       * coupon — not a 403 anyone could report, but a drawer politely saying
+       * "no changes recorded" about a row that had been approved, edited and
+       * re-priced. A permission filter returning nothing is indistinguishable
+       * from a row with nothing to show. */
       {
         collection: 'directus_activity',
         action: 'read',
-        permissions: { collection: { _eq: 'tickets' } },
+        permissions: { collection: { _in: AUDITED_COLLECTIONS } },
       },
       {
         collection: 'directus_revisions',
         action: 'read',
-        permissions: { collection: { _eq: 'tickets' } },
+        permissions: { collection: { _in: AUDITED_COLLECTIONS } },
       },
       ...appendOnly('ticket_events'),
       // Stores: full read/delete, but create and update are field-scoped so the

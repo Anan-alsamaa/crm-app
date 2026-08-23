@@ -70,9 +70,16 @@ function renderPage(which: ReportKind = 'tickets') {
 /** Read the KPI tiles as `{ label: value }` (value div, then label div). */
 function kpis(container: HTMLElement) {
   const out: Record<string, string> = {};
-  // KPI numerals standardized to text-4xl across all report pages (this page
-  // was the one holdout at 3xl) — consistent component vocabulary.
-  container.querySelectorAll('.text-4xl').forEach((v) => {
+  /*
+   * Read the tiles by their CONTRACT, not by their font size.
+   *
+   * This used to query `.text-4xl`. Restyling ReportKpi from a stacked card to
+   * a single line — a purely visual change — dropped the numeral to text-2xl
+   * and every assertion here started comparing an empty object against the
+   * expected numbers. Four reports lost their KPI coverage without a single
+   * test turning red for a reason anyone could act on.
+   */
+  container.querySelectorAll('[data-kpi-value]').forEach((v) => {
     const label = v.nextElementSibling?.textContent?.trim();
     if (label) out[label] = v.textContent?.trim() ?? '';
   });
@@ -486,7 +493,11 @@ describe('AgentReportsPage — shell', () => {
 
   it('lets a quick range WRITE the two dates rather than compete with them', async () => {
     api.useAgentReportData.mockReturnValue(ok);
-    renderPage();
+    // The shortcut now sits IN the filter bar beside the two dates it writes,
+    // not in a toolbar band of its own — a control that writes fields you
+    // cannot see is a control you have to test by hand to trust. The reports
+    // with a filter bar are the ones that have it, so render one of those.
+    renderPage('agents');
     await userEvent.click(screen.getByRole('combobox', { name: 'Date range' }));
     await userEvent.click(screen.getByText('Last 7 days'));
     const range = api.useAgentReportData.mock.calls.at(-1)?.[2] as { from: string; to: string };
@@ -667,27 +678,28 @@ describe('AgentReportsPage — agent KPI report', () => {
 });
 
 describe('AgentReportsPage — conversation status report', () => {
-  it('renders the status/priority breakdowns and the last 14 days', () => {
+  it('shows ONE table at a time, and the breakdowns behind their own tab', async () => {
+    /*
+     * This report has three things to say and used to say them all at once:
+     * the two summary boxes, the chat list, and the day matrix, stacked.
+     * Each table asked for the height left below it, so on a laptop the pair
+     * resolved to two three-row boxes with the second below a fold the page
+     * could not scroll to — and the single Export button between them wrote
+     * only the first, with nothing on screen saying so.
+     *
+     * One view at a time now. Each table gets the room; the export follows
+     * what you are looking at.
+     */
     api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
     const { container } = renderPage('conversations');
 
-    expect(screen.getByText('By status')).toBeInTheDocument();
-    expect(screen.getByText('By priority')).toBeInTheDocument();
-    // Scoped to the breakdown lists: "20" also appears in the KPI strip above
-    // them now, which is the point of the strip but makes a bare getByText
-    // ambiguous.
-    const lists = within(container.querySelectorAll('ul')[0]!.parentElement!.parentElement!);
-    expect(lists.getAllByText('20').length).toBeGreaterThan(0); // open conversations
-    expect(screen.getByText('13')).toBeInTheDocument(); // low priority
-
-    // Two tables now: the conversations themselves, then the day matrix. The
-    // matrix answers "how many"; the list answers "which", which is what
-    // somebody reading a status report is about to act on.
-    const tables = container.querySelectorAll('table');
-    expect(tables).toHaveLength(2);
     const headersOf = (tbl: Element) =>
       Array.from(tbl.querySelectorAll('thead th')).map((th) => th.textContent?.trim());
-    expect(headersOf(tables[0]!)).toEqual([
+
+    // Chats first: the "which", which is what a reader is about to act on.
+    expect(container.querySelectorAll('table')).toHaveLength(1);
+    expect(headersOf(container.querySelector('table')!)).toEqual([
       'Customer',
       'Phone',
       'Status',
@@ -696,12 +708,30 @@ describe('AgentReportsPage — conversation status report', () => {
       'Order',
       'Last message',
     ]);
-    // One column per status, plus Date + Total.
-    expect(headersOf(tables[1]!)).toEqual(['Date', 'Total', 'closed', 'open']);
+
+    // By day: the "how many, when". One column per status, plus Date + Total.
+    await user.click(screen.getByRole('tab', { name: /By day/ }));
+    expect(container.querySelectorAll('table')).toHaveLength(1);
+    expect(headersOf(container.querySelector('table')!)).toEqual([
+      'Date',
+      'Total',
+      'closed',
+      'open',
+    ]);
+
+    // Breakdown: the two summary boxes, with the room to be read.
+    await user.click(screen.getByRole('tab', { name: /Breakdown/ }));
+    expect(screen.getByText('By status')).toBeInTheDocument();
+    expect(screen.getByText('By priority')).toBeInTheDocument();
+    expect(container.querySelectorAll('table')).toHaveLength(0);
+    const lists = within(container.querySelectorAll('ul')[0]!.parentElement!.parentElement!);
+    expect(lists.getAllByText('20').length).toBeGreaterThan(0); // open conversations
+    expect(screen.getByText('13')).toBeInTheDocument(); // low priority
+    await user.click(screen.getByRole('tab', { name: /By day/ }));
     // EVERY day in range, not the last fourteen. The matrix is one row per day,
     // so capping it bought nothing and cost the reader the first half of their
     // own date range — with a note that pointed them at the export to see it.
-    expect(tables[1]!.querySelectorAll('tbody tr')).toHaveLength(16);
+    expect(container.querySelector('table')!.querySelectorAll('tbody tr')).toHaveLength(16);
     expect(screen.getByText('16 days')).toBeInTheDocument();
     expect(screen.queryByText(/Showing the last/)).not.toBeInTheDocument();
   });
@@ -713,7 +743,12 @@ describe('AgentReportsPage — conversation status report', () => {
     const user = userEvent.setup({ delay: null });
     renderPage('conversations');
 
-    const openBox = screen.getAllByRole('button').find((b) => /open/i.test(b.textContent ?? ''))!;
+    // The status boxes moved behind their own tab — 240px of summary above the
+    // chat list is 240px the list does not get.
+    await user.click(screen.getByRole('tab', { name: /Breakdown/ }));
+    const openBox = screen
+      .getAllByRole('button')
+      .find((b) => /open/i.test(b.textContent ?? '') && b.hasAttribute('aria-expanded'))!;
     await user.click(openBox);
     expect(openBox).toHaveAttribute('aria-expanded', 'true');
   });

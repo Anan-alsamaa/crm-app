@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, DateField, Input, SelectMenu } from '@yiji/ui';
 
@@ -43,6 +43,28 @@ export interface ReportFilterBarProps {
   /** True when anything is narrowing the set — shows Clear. */
   filtering: boolean;
   onClear: () => void;
+  /**
+   * Export (and anything else that acts on the filtered set), rendered on the
+   * bar's own line.
+   *
+   * It used to sit in a band of its own between the filters and the table: a
+   * full row, 60px with its gap, holding one button. Four such economies —
+   * this row, the KPI tiles, the description and the outer gaps — are why the
+   * table started 585px down a screen that is often 620 CSS pixels tall. The
+   * export also BELONGS here: what it writes is whatever these controls have
+   * narrowed to, and putting the two together says so.
+   */
+  actions?: ReactNode;
+  /**
+   * The "last 7 / 30 / 90 days" shortcut, beside the dates it writes.
+   *
+   * It used to live in a toolbar of its own above the report — a 60px band
+   * whose only other content was the report's name, which the tab strip
+   * directly above it was already showing as a selected pill. Two bands, one
+   * fact. The shortcut belongs next to the two dates it sets anyway: a control
+   * that writes fields you cannot see is a control you have to test to trust.
+   */
+  rangePreset?: ReactNode;
 }
 
 export function ReportFilterBar({
@@ -57,10 +79,13 @@ export function ReportFilterBar({
   selects = [],
   filtering,
   onClear,
+  actions,
+  rangePreset,
 }: ReportFilterBarProps): JSX.Element {
   const { t } = useTranslation();
+  const hasSecondRow = selects.length > 0 || filtering;
   return (
-    <div className="shrink-0 space-y-3 rounded-2xl bg-card p-3 shadow-soft ring-1 ring-foreground/[0.06]">
+    <div className="shrink-0 space-y-2 rounded-2xl bg-card p-2.5 shadow-soft ring-1 ring-foreground/[0.06]">
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-1 flex-col gap-1" style={{ minWidth: '18rem' }}>
           <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
@@ -84,9 +109,13 @@ export function ReportFilterBar({
           </span>
           <DateField className="w-[9.5rem]" value={to} onChange={onTo} />
         </label>
+        {rangePreset && <div className="flex w-36 items-end">{rangePreset}</div>}
+        {/* On a wide bar the actions ride the first row; they drop to the
+            second only when there is one. */}
+        {actions && !hasSecondRow && <div className="ms-auto flex items-end">{actions}</div>}
       </div>
 
-      {(selects.length > 0 || filtering) && (
+      {hasSecondRow && (
         <div className="flex flex-wrap items-end gap-2">
           {selects.map((s) => (
             <label key={s.key} className="flex flex-col gap-1">
@@ -111,6 +140,7 @@ export function ReportFilterBar({
               {t('inbox.clearFilters', { defaultValue: 'Clear filters' })}
             </Button>
           )}
+          {actions && <div className="ms-auto flex items-end">{actions}</div>}
         </div>
       )}
     </div>

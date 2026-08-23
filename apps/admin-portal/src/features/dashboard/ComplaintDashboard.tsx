@@ -3,20 +3,24 @@ import { useTranslation } from 'react-i18next';
 import {
   Button,
   ChartIcon,
+  CheckCircleIcon,
   cn,
   DateField,
   DeltaBadge,
   Drawer,
   ErrorState,
   InboxIcon,
+  InfoIcon,
   MeterBar,
   ProgressRing,
   SectionCard,
   SelectMenu,
   Skeleton,
   SparkleIcon,
+  StoreIcon,
   TicketIcon,
   UsersIcon,
+  ZapIcon,
 } from '@yiji/ui';
 import {
   emptyComplaintFilters,
@@ -478,139 +482,16 @@ function CutCard({
   );
 }
 
-/**
- * His donut: a ring with the total in the middle and a legend of count · share.
+/* The DONUT is gone, with the "Where tickets come from" card it drew.
  *
- * It answers a different question from the bar list beside it — the bars rank,
- * the ring shows how the whole divides — which is why he draws both from the
- * same numbers and why the categorical palette is fixed and shared, so a colour
- * means the same thing in every ring on the page.
+ * It ranked brands as arcs directly above a "By brand" panel ranking the same
+ * numbers as bars with the counts written on — the same answer twice, and the
+ * slower of the two to read. Comparing arc lengths is a thing people are bad
+ * at; reading "37" is not.
  *
- * Drawn with stroke-dasharray on one circle per slice rather than arc paths:
- * no trigonometry to get wrong, and it degrades to a plain ring at any size.
+ * SLICE went with it. It was the only palette naming six hues at full chroma,
+ * and nothing else on this dashboard draws in them.
  */
-/* The design tokens are raw OKLCH COMPONENTS ("0.536 0.132 194"), not finished
- * colours, so they only work wrapped in oklch(). Passing `var(--primary)`
- * straight to `stroke` yields `stroke: 0.536 0.132 194`, which is invalid — the
- * browser drops the declaration and the slice paints nothing, leaving a donut
- * that is present in the DOM and invisible on screen. (Same trap the KPI chips
- * hit with `bg-violet` earlier in this feature.) */
-/* No `--warning` slice: it is a LIGHT token, and a pale-yellow wedge on the
- * light theme's white card is a slice you cannot see. Magenta fills its seat
- * in the categorical order. */
-const SLICE = [
-  'oklch(var(--primary))',
-  'oklch(var(--magenta))',
-  'oklch(var(--success))',
-  'oklch(var(--violet))',
-  'oklch(var(--sky))',
-  'oklch(var(--destructive))',
-];
-
-function Donut({ rows, onSelect }: { rows: Breakdown[]; onSelect?: (row: Breakdown) => void }) {
-  const { t } = useTranslation();
-  const total = rows.reduce((s, r) => s + r.count, 0);
-  if (total === 0)
-    return (
-      <CardEmpty
-        label={t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
-      />
-    );
-
-  const R = 54;
-  const C = 2 * Math.PI * R;
-  let offset = 0;
-
-  return (
-    <div className="flex flex-wrap items-center gap-5">
-      <svg
-        width="140"
-        height="140"
-        viewBox="0 0 140 140"
-        role="img"
-        aria-hidden
-        className="shrink-0"
-      >
-        {rows.map((r, i) => {
-          const len = (r.count / total) * C;
-          const seg = (
-            <circle
-              key={r.key}
-              r={R}
-              cx="70"
-              cy="70"
-              fill="none"
-              stroke={SLICE[i % SLICE.length]}
-              strokeWidth="22"
-              strokeDasharray={`${len} ${C - len}`}
-              strokeDashoffset={-offset}
-              transform="rotate(-90 70 70)"
-            />
-          );
-          offset += len;
-          return seg;
-        })}
-        {/* Punch the middle out with the card colour, then print the total —
-            the number every reader looks for first. */}
-        <circle r="43" cx="70" cy="70" className="fill-card" />
-        <text
-          x="70"
-          y="67"
-          textAnchor="middle"
-          className="fill-foreground text-xl font-extrabold tabular-nums tracking-[-0.03em]"
-        >
-          {total}
-        </text>
-        <text
-          x="70"
-          y="84"
-          textAnchor="middle"
-          className="fill-muted-foreground text-[9px] font-semibold uppercase tracking-[0.12em]"
-        >
-          {t('complaintDash.donutTotal', { defaultValue: 'total' })}
-        </text>
-      </svg>
-      {/* Hairline separators, table-style: the counts are end-aligned across
-          the card's whole half, and without a rule per row the eye loses which
-          label a number belongs to over the gap. */}
-      <ul className="min-w-0 flex-1 divide-y divide-border/60">
-        {rows.map((r, i) => {
-          const body = (
-            <>
-              <span
-                aria-hidden
-                className="h-2.5 w-2.5 shrink-0 rounded-md"
-                style={{ background: SLICE[i % SLICE.length] }}
-              />
-              <span className="min-w-0 flex-1 truncate text-start text-foreground" title={r.label}>
-                {r.label}
-              </span>
-              <span className="shrink-0 tabular-nums text-muted-foreground">
-                <strong className="font-semibold text-foreground">{r.count}</strong> ·{' '}
-                {Math.round((r.count / total) * 100)}%
-              </span>
-            </>
-          );
-          return (
-            <li key={r.key}>
-              {onSelect ? (
-                <button
-                  type="button"
-                  onClick={() => onSelect(r)}
-                  className="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 -mx-1 text-xs transition-colors duration-fast hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                >
-                  {body}
-                </button>
-              ) : (
-                <span className="flex items-center gap-2 py-1.5 text-xs">{body}</span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
 
 // `Composition` lived here for the Service health card, which is gone: it was
 // a fourth reading of numbers the KPI strip already carries.
@@ -747,6 +628,30 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
         title: `${title}: ${row.label}`,
         rows: (d?.rows ?? []).filter((r) => keyOf(r) === row.key && (extra ? extra(r) : true)),
       });
+
+  /**
+   * What the team around the BRANCHES needs at a glance.
+   *
+   * This view used to open with no numbers at all — a correction to it opening
+   * with the support desk's numbers, which are not theirs. But a wall of
+   * ranked lists with nothing to read at a glance is the other failure: you
+   * have to study the page before you know whether anything is wrong.
+   *
+   * Every figure here is about branches, and every one names its subject
+   * rather than only counting it. "37" is a number to go and look up; "37 —
+   * Herfy Olaya" is the branch somebody rings this morning.
+   */
+  const ops = useMemo(
+    () => ({
+      // DISTINCT, not rows.length: the cut is capped to what a chart can draw,
+      // so counting its rows would report "8 branches" for any range at all.
+      branchesAffected: d?.byRestaurant.distinct ?? 0,
+      branchesKnown: d?.storeOptions.length ?? 0,
+      worstBranch: d?.byRestaurant.rows[0] ?? null,
+      topProblem: d?.byType.rows[0] ?? null,
+    }),
+    [d],
+  );
 
   // Picking a brand narrows the restaurants to that brand's branches. There
   // are 132 of them across four brands, and a list that ignores the brand you
@@ -974,6 +879,101 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 })}
           </p>
 
+          {/* The desk's numbers — chats waiting, compensation paid, coupons
+              issued — are AGENT only. The team around the branches asked not to
+              be shown them, and a dashboard opening with figures you have no
+              use for is one people learn to scroll past. These four are about
+              BRANCHES, which is what a branch, area or chain manager owns. */}
+          {view === 'operations' && (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Kpi
+                tone="neutral"
+                icon={<StoreIcon size={17} />}
+                order={0}
+                value={String(ops.branchesAffected)}
+                label={t('complaintDash.opsBranchesHit', {
+                  defaultValue: 'Branches with tickets',
+                })}
+                sub={
+                  ops.branchesKnown
+                    ? t('complaintDash.opsOfBranches', {
+                        defaultValue: 'of {{n}} on the list',
+                        n: ops.branchesKnown,
+                      })
+                    : ''
+                }
+                visual={
+                  ops.branchesKnown ? (
+                    <ProgressRing
+                      value={(ops.branchesAffected / ops.branchesKnown) * 100}
+                      tone="sky"
+                    />
+                  ) : undefined
+                }
+              />
+              <Kpi
+                tone="destructive"
+                icon={<StoreIcon size={17} />}
+                order={1}
+                value={ops.worstBranch ? String(ops.worstBranch.count) : '\u2014'}
+                label={t('complaintDash.opsWorstBranch', { defaultValue: 'Busiest branch' })}
+                sub={
+                  ops.worstBranch?.label ??
+                  t('complaintDash.notMeasured', { defaultValue: 'Not measured yet' })
+                }
+                onOpen={
+                  ops.worstBranch
+                    ? () =>
+                        drillInto(
+                          t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' }),
+                          (r) => r.restaurantName,
+                        )(ops.worstBranch!)
+                    : undefined
+                }
+              />
+              <Kpi
+                tone="primary"
+                icon={<ZapIcon size={17} />}
+                order={2}
+                value={ops.topProblem ? String(ops.topProblem.count) : '\u2014'}
+                label={t('complaintDash.opsTopProblem', { defaultValue: 'Most common problem' })}
+                sub={
+                  ops.topProblem?.label ??
+                  t('complaintDash.notMeasured', { defaultValue: 'Not measured yet' })
+                }
+                onOpen={
+                  ops.topProblem
+                    ? () =>
+                        drillInto(
+                          t('complaintDash.byType', { defaultValue: 'By ticket type' }),
+                          (r) => r.complaintType,
+                        )(ops.topProblem!)
+                    : undefined
+                }
+              />
+              {/* The blind spot, said out loud. Every cut on this view groups by
+                  branch, so a ticket carrying none is invisible in all of them —
+                  and a report that quietly drops rows is worse than one that
+                  reports zero. It was admitted in a hint under one card; it is
+                  a number of its own now. */}
+              <Kpi
+                tone="violet"
+                icon={<InfoIcon size={17} />}
+                order={3}
+                value={String(d.unattributed)}
+                label={t('complaintDash.opsNoBranch', { defaultValue: 'No branch recorded' })}
+                sub={t('complaintDash.opsNoBranchHint', {
+                  defaultValue: 'missing from every cut below',
+                })}
+                meter={
+                  d.total ? (
+                    <MeterBar value={(d.unattributed / d.total) * 100} tone="violet" />
+                  ) : undefined
+                }
+              />
+            </div>
+          )}
+
           {/* The KPI strip is AGENT only. Tickets, chats, compensation and
               coupons are the support desk's numbers; the team around the
               branches asked not to be shown them, and a dashboard that opens
@@ -986,7 +986,17 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
               beside the two percentages, a thin meter under the two counts
               that are really fractions of a known total. Tones match the icon
               chip so the accent reads as the same signal, louder. */}
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {/* SEQUENCED, not just listed.
+                    The seven tiles ran total, open, ratings, compensation,
+                    open chats, total chats, coupons — three across, so the
+                    last sat alone on a row of its own and the two chat numbers
+                    were split by a row break with a money figure wedged
+                    between them.
+                    Eight now, four across: two clean rows, each one subject.
+                    The TICKET's life on top — raised, still open, solved, and
+                    what the customer made of it — and below it the CHATS and
+                    what the desk paid out to settle things. */}
                 <Kpi
                   tone="neutral"
                   icon={<TicketIcon size={17} />}
@@ -1004,7 +1014,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                   }
                   delta={(() => {
                     // Month-over-month, only when two full-ish months exist. For a
-                    // complaints count, DOWN is the good direction.
+                    // ticket count, DOWN is the good direction.
                     const cur = d.months[d.months.length - 1]?.count;
                     const prev = d.months[d.months.length - 2]?.count;
                     if (cur == null || prev == null || prev === 0) return undefined;
@@ -1038,7 +1048,29 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                   }
                 />
                 {/* No "Overdue" tile: an overdue ticket is an OPEN ticket, so it
-                was the same work counted twice, one card apart. */}
+                    was the same work counted twice, one card apart.
+                    SOLVED is the other half of Open, and it was the number
+                    missing from the row — "121 raised, 6 open" leaves the
+                    reader to do the subtraction and hope nothing else happened
+                    to the other 115. */}
+                <Kpi
+                  tone="success"
+                  icon={<CheckCircleIcon size={17} />}
+                  order={2}
+                  value={String(d.closed)}
+                  label={t('complaintDash.kpiSolved', { defaultValue: 'Solved tickets' })}
+                  sub={
+                    d.total
+                      ? t('complaintDash.ofTotal', {
+                          defaultValue: '{{p}}% of total',
+                          p: Math.round((d.closed / d.total) * 100),
+                        })
+                      : ''
+                  }
+                  visual={
+                    <ProgressRing value={d.total ? (d.closed / d.total) * 100 : 0} tone="success" />
+                  }
+                />
                 <Kpi
                   tone="success"
                   icon={<SparkleIcon size={17} />}
@@ -1066,21 +1098,15 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                     )
                   }
                 />
+                {/* Row two: the CHATS, and what the desk paid out. The two chat
+                    numbers sit side by side — one is the denominator of the
+                    other, and a row break between them made that invisible. */}
                 <Kpi
                   tone="primary"
-                  icon={<ChartIcon size={17} />}
+                  icon={<InboxIcon size={17} />}
                   order={4}
-                  value={d.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  label={t('complaintDash.kpiCompensation', { defaultValue: 'Compensation SAR' })}
-                  sub={
-                    d.total
-                      ? t('complaintDash.compensatedCount', {
-                          defaultValue: '{{n}} compensated · {{v}} avg each',
-                          n: d.compensated,
-                          v: (d.avgCompensation ?? 0).toFixed(1),
-                        })
-                      : ''
-                  }
+                  value={String(d.chatsTotal)}
+                  label={t('complaintDash.kpiChatsTotal', { defaultValue: 'Total chats' })}
                 />
                 <Kpi
                   tone="destructive"
@@ -1101,15 +1127,24 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 />
                 <Kpi
                   tone="primary"
-                  icon={<InboxIcon size={17} />}
-                  order={5}
-                  value={String(d.chatsTotal)}
-                  label={t('complaintDash.kpiChatsTotal', { defaultValue: 'Total chats' })}
+                  icon={<ChartIcon size={17} />}
+                  order={6}
+                  value={d.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  label={t('complaintDash.kpiCompensation', { defaultValue: 'Compensation SAR' })}
+                  sub={
+                    d.total
+                      ? t('complaintDash.compensatedCount', {
+                          defaultValue: '{{n}} compensated · {{v}} avg each',
+                          n: d.compensated,
+                          v: (d.avgCompensation ?? 0).toFixed(1),
+                        })
+                      : ''
+                  }
                 />
                 <Kpi
                   tone="violet"
                   icon={<SparkleIcon size={17} />}
-                  order={6}
+                  order={7}
                   value={String(coupons.count)}
                   label={t('complaintDash.kpiCoupons', { defaultValue: 'Coupons issued' })}
                   sub={
@@ -1195,26 +1230,11 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
               a different way: the bars rank, these show the split. He keeps
               both, and on a page people scan rather than study, that is the
               point rather than a duplication. */}
-          <div className="grid gap-4 md:grid-cols-2">
-            {view === 'operations' && (
-              <SectionCard
-                title={t('complaintDash.brandMix', { defaultValue: 'Where tickets come from' })}
-              >
-                <Donut
-                  rows={d.byBrand.rows}
-                  onSelect={drillInto(
-                    t('complaintDash.byBrand', { defaultValue: 'By brand' }),
-                    (r) => r.brandName,
-                  )}
-                />
-              </SectionCard>
-            )}
-          </div>
-
-          {/* ── Service health ───────────────────────────────────────────
-              His gauge + composition strip: one glance at whether the work is
-              finishing well, and whether chats are being picked up. */}
-          <div className="grid gap-4 md:grid-cols-2"></div>
+          {/* "Where tickets come from" is gone. It was a doughnut of the brand
+              split, and the "By brand" panel directly below it ranks the same
+              numbers with the counts written on. A ring you have to compare
+              arc lengths in, sitting above a table of the same figures, is the
+              same answer twice — and the slower of the two. */}
 
           {/* ── Trend ────────────────────────────────────────────────────── */}
           {/* "Complaints per month" is gone: two readings on one chart, each

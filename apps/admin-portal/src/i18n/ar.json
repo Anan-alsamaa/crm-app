@@ -123,7 +123,9 @@
     "searchConversations": "ابحث بالعميل أو الجوال أو الموظف أو الطلب",
     "presets": "مدى سريع",
     "searchAgentHint": "اسم الموظف",
-    "searchConversationsHint": "العميل أو الجوال أو الموظف أو رقم الطلب"
+    "searchConversationsHint": "العميل أو الجوال أو الموظف أو رقم الطلب",
+    "viewChats": "المحادثات",
+    "viewBreakdown": "التوزيع"
   },
   "aiConfig": {
     "title": "المساعدة بالذكاء الاصطناعي",
@@ -286,7 +288,11 @@
     "kpiPending": "قيد الانتظار",
     "kpiPercentAside": "بالإضافة إلى {{count}} قسيمة بنسبة مئوية",
     "kpiRequests": "القسائم",
-    "kpiValue": "القيمة (ريال)"
+    "kpiValue": "القيمة (ريال)",
+    "deleteTitle": "حذف سجل الكوبون هذا؟",
+    "deleteConfirm": "حذف «{{label}}»؟ يُحذف السجل، ويبقى منفّذ الحذف في سجل التغييرات. لا يُلغى بذلك أي كوبون سبق تسليمه للعميل.",
+    "deleted": "تم حذف سجل الكوبون.",
+    "deleteFailed": "تعذّر حذف هذا السجل."
   },
   "complaintDash": {
     "tableTotal": "الإجمالي",
@@ -401,7 +407,7 @@
     "snapshotRange": "النطاق المحدد",
     "byTypeHint": "عمّا يشتكي العملاء فعلًا، الأكبر أولًا.",
     "topOf": "أعلى {{n}} من {{m}}",
-    "notMeasured": "لم يُقَس بعد",
+    "notMeasured": "لم تُقس بعد",
     "perMonthHint2": "كل عمود يمثل عدد التذاكر المسجّلة في ذلك الشهر (المقياس الأيمن). والخط يمثل قيمة التعويض المدفوع (مقياس منفصل) — القياسان مختلفان، لذا يُقارَن الشكل العام فقط لا الارتفاع.",
     "peakLabel": "الذروة {{n}}",
     "trendMoney": "{{total}} إجمالي المدفوع في النطاق.",
@@ -437,7 +443,14 @@
     "exportEvery": "تصدير الكل ({{n}})",
     "kpiChatsTotal": "إجمالي المحادثات",
     "kpiCoupons": "القسائم الصادرة",
-    "couponsPending": "{{n}} بانتظار القرار"
+    "couponsPending": "{{n}} بانتظار القرار",
+    "kpiSolved": "التذاكر المحلولة",
+    "opsBranchesHit": "الفروع التي لديها تذاكر",
+    "opsOfBranches": "من {{n}} في القائمة",
+    "opsWorstBranch": "الفرع الأكثر انشغالًا",
+    "opsTopProblem": "أكثر المشكلات تكرارًا",
+    "opsNoBranch": "بدون فرع مسجَّل",
+    "opsNoBranchHint": "غير محتسبة في أي تصنيف أدناه"
   },
   "complaintReport": {
     "any": "الكل",
@@ -502,7 +515,7 @@
     "importEmpty": "لا صفوف صالحة — يتوقع عمود تاريخ ومطعم.",
     "importFailed": "فشل الاستيراد.",
     "historyTitle": "سجلّ التغييرات — {{label}}",
-    "noHistory": "لا تغييرات مسجّلة منذ إنشاء التذكرة.",
+    "noHistory": "لم تُسجَّل أي تغييرات منذ إنشاء هذا السجل.",
     "historyCreated": "أنشأ التذكرة",
     "historyEdited": "عدّل",
     "unknownUser": "مستخدم غير معروف",

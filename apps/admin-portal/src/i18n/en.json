@@ -655,7 +655,9 @@
     "searchConversations": "Search customer, phone, agent or order",
     "presets": "Quick range",
     "searchAgentHint": "Agent name",
-    "searchConversationsHint": "Customer, phone, agent or order number"
+    "searchConversationsHint": "Customer, phone, agent or order number",
+    "viewChats": "Chats",
+    "viewBreakdown": "Breakdown"
   },
   "ticketOps": {
     "title": "Ticket report",
@@ -937,7 +939,14 @@
     "perMonthHint3": "Two readings over the same months: how many tickets were logged, and what was paid out. Each has its own scale — they are different units.",
     "kpiChatsTotal": "Total chats",
     "kpiCoupons": "Coupons issued",
-    "couponsPending": "{{n}} awaiting a decision"
+    "couponsPending": "{{n}} awaiting a decision",
+    "kpiSolved": "Solved tickets",
+    "opsBranchesHit": "Branches with tickets",
+    "opsOfBranches": "of {{n}} on the list",
+    "opsWorstBranch": "Busiest branch",
+    "opsTopProblem": "Most common problem",
+    "opsNoBranch": "No branch recorded",
+    "opsNoBranchHint": "missing from every cut below"
   },
   "performance": {
     "title": "Agent performance",
@@ -1087,7 +1096,7 @@
     "importEmpty": "No usable rows found — expected a Date and Restaurant column.",
     "importFailed": "Import failed.",
     "historyTitle": "Change history — {{label}}",
-    "noHistory": "No changes recorded since this ticket was created.",
+    "noHistory": "No changes recorded since this record was created.",
     "historyCreated": "created the ticket",
     "historyEdited": "edited",
     "unknownUser": "Unknown user",
@@ -1187,7 +1196,11 @@
     "kpiPending": "Pending",
     "kpiPercentAside": "plus {{count}} percentage coupons",
     "kpiRequests": "Coupons",
-    "kpiValue": "Value (SAR)"
+    "kpiValue": "Value (SAR)",
+    "deleteTitle": "Delete this coupon record?",
+    "deleteConfirm": "Delete “{{label}}”? The record goes; who deleted it stays in the change history. A coupon already issued to a customer is NOT recalled by this.",
+    "deleted": "Coupon record deleted.",
+    "deleteFailed": "Could not delete that record."
   },
   "auth": {
     "noPortalAccess": "This portal is not for your role",

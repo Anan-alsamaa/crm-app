@@ -206,16 +206,47 @@ describe('ComplaintDashboard — every section his page has', () => {
     // Chain managers own brands, area managers own territories, branch managers
     // own restaurants — so this view cuts the same rows by those.
     render(<ComplaintDashboard view="operations" />);
-    for (const heading of [
-      'Where tickets come from',
-      'Top restaurants',
-      'By brand',
-      'By area',
-      'By city',
-    ]) {
+    for (const heading of ['Top restaurants', 'By brand', 'By area', 'By city']) {
       expect(screen.getByText(heading), `missing section: ${heading}`).toBeInTheDocument();
     }
     expect(screen.queryByText('By agent')).not.toBeInTheDocument();
+    /*
+     * "Where tickets come from" was a doughnut of the brand split sitting
+     * directly above the "By brand" panel, which ranks the same numbers as
+     * bars with the counts printed on them. The same answer twice, and the
+     * slower of the two: comparing arc lengths is a thing people are bad at.
+     */
+    expect(screen.queryByText('Where tickets come from')).not.toBeInTheDocument();
+  });
+
+  it('opens the operations view on numbers about BRANCHES, and names them', () => {
+    /*
+     * This view used to open with no numbers at all — a correction to it
+     * opening with the support desk's (chats waiting, compensation paid,
+     * coupons issued), which are not this team's. But a wall of ranked lists
+     * with nothing to read at a glance is the other failure: you have to study
+     * the page before you know whether anything is wrong.
+     *
+     * Each tile NAMES its subject rather than only counting it. "37" is a
+     * number to go and look up; "37 — Herfy Olaya" is the branch somebody
+     * rings this morning.
+     */
+    render(<ComplaintDashboard view="operations" />);
+    for (const label of [
+      'Branches with tickets',
+      'Busiest branch',
+      'Most common problem',
+      'No branch recorded',
+    ]) {
+      expect(screen.getByText(label), `missing operations KPI: ${label}`).toBeInTheDocument();
+    }
+    // The desk's own numbers stay off this view.
+    for (const gone of ['Compensation SAR', 'Coupons issued', 'Open chats', 'Total chats']) {
+      expect(
+        screen.queryByText(gone),
+        `${gone} is not an operations number`,
+      ).not.toBeInTheDocument();
+    }
   });
 
   it('drops the readings that were a fourth copy of somebody else’s number', () => {
@@ -257,45 +288,26 @@ describe('ComplaintDashboard — every section his page has', () => {
   });
 });
 
-describe('ComplaintDashboard — donut slices are actually painted', () => {
-  /**
-   * The design tokens are raw OKLCH COMPONENTS, so `stroke="var(--primary)"`
-   * is an invalid colour: the browser drops it and the ring renders present in
-   * the DOM but invisible on screen. jsdom does not compute styles well enough
-   * to catch that, so assert the shape of the value we hand the browser.
+describe('ComplaintDashboard — the ticket lifecycle reads as one row', () => {
+  /*
+   * The donut block that used to live here is gone with the donut.
+   *
+   * Two of its three tests would still have PASSED against the ProgressRings
+   * on the KPI tiles — `circle[stroke]` matches those too — so leaving them
+   * would have meant three green tests guarding a component nobody renders.
+   * A test that cannot fail for the reason it was written is worse than no
+   * test: it reports coverage that does not exist.
    */
-  it('gives every slice a complete colour function, not a bare token', () => {
-    const { container } = render(<ComplaintDashboard />);
-    const slices = Array.from(container.querySelectorAll('circle[stroke]'));
-    expect(slices.length).toBeGreaterThan(0);
-    for (const s of slices) {
-      const stroke = s.getAttribute('stroke') ?? '';
-      expect(stroke, `bare token would paint nothing: ${stroke}`).toMatch(/^oklch\(|^#|^rgb/);
-    }
-  });
-
-  it('gives every legend chip the same complete colour', () => {
-    const { container } = render(<ComplaintDashboard />);
-    const chips = Array.from(container.querySelectorAll('span[style*="background"]'));
-    expect(chips.length).toBeGreaterThan(0);
-    for (const c of chips) {
-      expect(c.getAttribute('style') ?? '').toMatch(/oklch\(|#|rgb/);
-    }
-  });
-
-  it('sizes the slices in proportion and prints the total in the middle', () => {
-    const { container } = render(<ComplaintDashboard view="operations" />);
-    // Target the DONUT svg specifically — the page has other svgs (select
-    // chevrons, the trend line) and picking the first one tests nothing.
-    const svg = container.querySelector('svg[viewBox="0 0 140 140"]');
-    // The one donut on this view is "Where tickets come from": byBrand is
-    // 7 + 3, so the ring shows 10 in the centre.
-    expect(svg?.textContent).toContain('10');
-    const first = svg?.querySelector('circle[stroke-dasharray]');
-    const [len] = (first?.getAttribute('stroke-dasharray') ?? '').split(' ').map(Number);
-    const circumference = 2 * Math.PI * 54;
-    // Largest slice first: 7 of 10.
-    expect(len).toBeCloseTo(circumference * 0.7, 1);
+  it('says how many were solved, not just how many are open', () => {
+    // "121 raised, 6 open" leaves the reader to do the subtraction and hope
+    // nothing else happened to the other 115.
+    render(<ComplaintDashboard />);
+    expect(screen.getByText('Tickets')).toBeInTheDocument();
+    expect(screen.getByText('Open tickets')).toBeInTheDocument();
+    expect(screen.getByText('Solved tickets')).toBeInTheDocument();
+    // Overdue is not a fifth state: an overdue ticket IS an open one, so a tile
+    // of its own was the same work counted twice, one card apart.
+    expect(screen.queryByText('Overdue')).not.toBeInTheDocument();
   });
 });
 

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteItem, readUsers } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
@@ -29,8 +30,6 @@ import {
   Th,
   TicketIcon,
   toast,
-  Toolbar,
-  ToolbarSpacer,
   Tr,
   type MetricTone,
   pageCountOf,
@@ -57,6 +56,7 @@ import { directus } from '../../lib/directus.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useRememberedRange, isoDay } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
+import { ViewSwitch } from '../../components/ViewSwitch.js';
 import { formatDuration } from '@yiji/reports';
 import { TicketHistoryDrawer } from './TicketHistoryDrawer.js';
 import {
@@ -102,8 +102,49 @@ interface RangeProps {
     to: string;
     setFrom: (v: string) => void;
     setTo: (v: string) => void;
+    /** Both ends at once — what the quick-range shortcut writes. */
+    setRange: (r: { from: string; to: string }) => void;
     reset: () => void;
   };
+}
+
+/**
+ * "Last 7 / 30 / 90 days", rendered inside the filter bar beside the dates.
+ *
+ * A shortcut, not a second source of truth: picking a preset WRITES the two
+ * dates next to it, so the shortcut and the fields can never disagree about
+ * which period is on screen. It sat in a toolbar of its own until the toolbar
+ * turned out to be 60px of screen saying what the tab strip above it already
+ * said.
+ */
+function RangePreset({ range }: RangeProps): JSX.Element {
+  const { t } = useTranslation();
+  return (
+    <SelectMenu
+      fullWidth
+      value=""
+      onChange={(v) => {
+        const n = Number(v);
+        const now = new Date();
+        range.setRange({
+          from: isoDay(new Date(now.getTime() - n * 86_400_000)),
+          to: isoDay(now),
+        });
+      }}
+      aria-label={t('agentReports.range', { defaultValue: 'Date range' })}
+      options={[
+        { value: '', label: t('agentReports.presets', { defaultValue: 'Quick range' }) },
+        ...RANGE_DAYS.map((d) => ({
+          value: String(d),
+          label: t('agentReports.lastDays', {
+            count: d,
+            days: d,
+            defaultValue: 'Last {{days}} days',
+          }),
+        })),
+      ]}
+    />
+  );
 }
 
 const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructive'> = {
@@ -436,7 +477,7 @@ function TicketsReport({
   );
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <ReportKpiStrip>
         <ReportKpi
           label={t('agentReports.kpiTickets', { defaultValue: 'Tickets' })}
@@ -545,7 +586,7 @@ function TicketsReport({
         </div>
       </div>
 
-      <TableSurface maxHeight="calc(100vh - 24rem)">
+      <TableSurface fill>
         <Table>
           <thead>
             <tr>
@@ -938,7 +979,7 @@ function ComplaintsReport({
     );
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <ReportKpiStrip>
         <ReportKpi
           label={t('agentReports.kpiTickets', { defaultValue: 'Tickets' })}
@@ -1368,10 +1409,7 @@ function ComplaintsReport({
           are the same report, so showing a curated subset here just meant the
           screen and the file disagreed. Wide by nature, so it scrolls
           horizontally inside its own surface rather than stretching the page. */}
-      <TableSurface
-        maxHeight="calc(100vh - 24rem)"
-        scrollLabel={t('complaintReport.title', { defaultValue: 'Tickets' })}
-      >
+      <TableSurface fill scrollLabel={t('complaintReport.title', { defaultValue: 'Tickets' })}>
         <Table>
           <thead>
             <tr>
@@ -1637,7 +1675,7 @@ function AgentKpiReport({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <ReportKpiStrip>
         <ReportKpi
           label={t('agentReports.kpiAgents', { defaultValue: 'Agents' })}
@@ -1685,10 +1723,7 @@ function AgentKpiReport({
           range.reset();
           setPage(1);
         }}
-      />
-
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="ms-auto">
+        actions={
           <ExportButtons
             visibleCount={sorted.length}
             totalCount={agents.length}
@@ -1707,13 +1742,11 @@ function AgentKpiReport({
               defaultValue: 'Export all {{count}}',
             })}
           />
-        </div>
-      </div>
+        }
+        rangePreset={<RangePreset range={range} />}
+      />
 
-      <TableSurface
-        maxHeight="calc(100vh - 24rem)"
-        scrollLabel={t('agentReports.agentsTitle', { defaultValue: 'Agent KPI' })}
-      >
+      <TableSurface fill scrollLabel={t('agentReports.agentsTitle', { defaultValue: 'Agent KPI' })}>
         <Table>
           <thead>
             <tr>
@@ -1840,6 +1873,20 @@ function ConversationReport({
   const pagerLabels = usePagerLabels();
   /** Which status box is expanded, showing the customers behind its count. */
   const [drill, setDrill] = useState<string | null>(null);
+  /*
+   * Which of this report's two tables is on screen.
+   *
+   * They answer different questions — the chat list is "which", the day matrix
+   * is "how many, when" — and both are worth having. Stacked, they were worth
+   * having in theory: each one asked for the height left below it, so on a
+   * laptop the pair resolved to two 260px boxes, three rows apiece, one of them
+   * below the fold. And the Export button sat between them exporting only the
+   * first, with nothing on screen saying so.
+   *
+   * One at a time. Each gets the full height, and the export writes whatever
+   * you are looking at.
+   */
+  const [view, setView] = useState<'chats' | 'byDay' | 'breakdown'>('chats');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
   const [agent, setAgent] = useState('');
@@ -1925,7 +1972,42 @@ function ConversationReport({
     },
   ];
 
+  /** The day matrix, as the file — one column per status, same as on screen. */
+  const dayCsvColumns: CsvColumn<(typeof report.byDay)[number]>[] = [
+    { header: tr('agentReports.col.date', { defaultValue: 'Date' }), value: (d) => d.day },
+    {
+      header: tr('agentReports.col.total', { defaultValue: 'Total' }),
+      value: (d) => d.total,
+    },
+    ...report.statuses.map((st) => ({
+      header: String(t(`status.${st}`, { ns: 'common', defaultValue: st })),
+      value: (d: (typeof report.byDay)[number]) => d.byStatus[st] ?? 0,
+    })),
+  ];
+
+  /**
+   * Export what is ON SCREEN.
+   *
+   * It used to export the chat list whatever you were looking at, because the
+   * chat list was the only thing it knew how to write — so scrolling down to
+   * the day matrix and pressing Export handed you a different table with no
+   * warning. Now the button belongs to the view.
+   */
   const onExport = (scope: 'view' | 'all') => {
+    if (view === 'byDay') {
+      if (report.byDay.length === 0) {
+        toast.error(t('agentReports.nothingToExport', { defaultValue: 'Nothing to export.' }));
+        return;
+      }
+      exportCsv(reportFilename('Chats by day', days, 'csv'), dayCsvColumns, report.byDay);
+      toast.success(
+        t('agentReports.exported', {
+          count: report.byDay.length,
+          defaultValue: 'Exported {{count}} rows.',
+        }),
+      );
+      return;
+    }
     const rowsOut = scope === 'all' ? report.rows : visible;
     if (rowsOut.length === 0) {
       toast.error(t('agentReports.nothingToExport', { defaultValue: 'Nothing to export.' }));
@@ -1941,7 +2023,7 @@ function ConversationReport({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <ReportKpiStrip>
         <ReportKpi
           label={t('agentReports.kpiConversations', { defaultValue: 'Chats' })}
@@ -1970,299 +2052,338 @@ function ConversationReport({
         />
       </ReportKpiStrip>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.06] shadow-soft">
-          <h3 className="mb-3 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {t('agentReports.byStatus', { defaultValue: 'By status' })}
-          </h3>
-          <ul className="space-y-2">
-            {report.byStatus.map((s) => {
-              const open = drill === s.key;
-              return (
-                <li key={s.key}>
-                  {/* Clicking a count opens the customers behind it. "20 open"
-                      is a number; twenty phone numbers is a morning's work, and
-                      the whole reason somebody looks at this box. */}
-                  <button
-                    type="button"
-                    onClick={() => setDrill(open ? null : s.key)}
-                    aria-expanded={open}
-                    className="flex w-full items-center justify-between gap-2 rounded-lg px-1.5 py-1 text-sm transition-colors duration-fast hover:bg-secondary/60"
-                  >
-                    <StatusPill value={s.key} />
-                    <MeterBar
-                      value={report.total > 0 ? (s.count / report.total) * 100 : 0}
-                      tone={STATUS_METER[s.key] ?? 'primary'}
-                      className="ms-auto w-16 shrink-0"
-                    />
-                    <span className="tabular-nums font-semibold text-foreground">{s.count}</span>
-                    <span aria-hidden className="text-2xs text-muted-foreground">
-                      {open ? '▴' : '▾'}
-                    </span>
-                  </button>
-                  {open && (
-                    <ul className="mt-1.5 max-h-64 space-y-1 overflow-auto rounded-xl bg-secondary/40 p-2">
-                      {report.rows
-                        .filter((r) => r.status === s.key)
-                        .map((r) => (
-                          <li
-                            key={r.id}
-                            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs"
-                          >
-                            <span className="font-mono tabular-nums text-foreground">
-                              {r.customerPhone ||
-                                r.customerName ||
-                                r.customerEmail ||
-                                t('agentReports.noContact', { defaultValue: 'no contact on file' })}
-                            </span>
-                            {r.customerPhone && r.customerName && (
-                              <span className="text-muted-foreground">{r.customerName}</span>
-                            )}
-                            {r.orderId && (
-                              <span className="font-mono text-2xs text-muted-foreground">
-                                #{r.orderId}
-                              </span>
-                            )}
-                            <span className="ms-auto text-2xs text-muted-foreground">
-                              {r.agentName}
-                            </span>
-                          </li>
-                        ))}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-        <div className="rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.06] shadow-soft">
-          <h3 className="mb-3 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {t('agentReports.byPriority', { defaultValue: 'By priority' })}
-          </h3>
-          <ul className="space-y-2">
-            {report.byPriority.map((p) => (
-              <li key={p.key} className="flex items-center gap-2 px-1.5 text-sm">
-                <PriorityPill value={p.key} />
-                <MeterBar
-                  value={report.total > 0 ? (p.count / report.total) * 100 : 0}
-                  tone={PRIORITY_METER[p.key] ?? 'sky'}
-                  className="ms-auto w-16 shrink-0"
-                />
-                <span className="tabular-nums font-semibold text-foreground">{p.count}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      <ReportFilterBar
-        searchLabel={t('agentReports.searchConversations', {
-          defaultValue: 'Search customer, phone, agent or order',
-        })}
-        searchPlaceholder={t('agentReports.searchConversationsHint', {
-          defaultValue: 'Customer, phone, agent or order number',
-        })}
-        search={query}
-        onSearch={(v) => {
-          setQuery(v);
-          setPage(1);
-        }}
-        from={range.from}
-        to={range.to}
-        onFrom={range.setFrom}
-        onTo={range.setTo}
-        selects={[
+      <ViewSwitch
+        label={t('agentReports.conversationsTitle', { defaultValue: 'Chat status' })}
+        value={view}
+        onChange={setView}
+        options={[
           {
-            key: 'status',
-            label: t('agentReports.col.status', { defaultValue: 'Status' }),
-            value: status,
-            onChange: (v) => {
-              setStatus(v);
-              setPage(1);
-            },
-            options: report.byStatus.map((s) => ({
-              value: s.key,
-              label: String(t(`status.${s.key}`, { ns: 'common', defaultValue: s.key })),
-            })),
+            value: 'chats',
+            label: t('agentReports.viewChats', { defaultValue: 'Chats' }),
+            count: report.rows.length,
           },
           {
-            key: 'agent',
-            label: t('agentReports.col.agent', { defaultValue: 'Agent' }),
-            value: agent,
-            onChange: (v) => {
-              setAgent(v);
-              setPage(1);
-            },
-            options: agentOptions,
+            value: 'byDay',
+            label: t('agentReports.byDay', { defaultValue: 'By day' }),
+            count: report.byDay.length,
           },
           {
-            key: 'priority',
-            label: t('agentReports.col.priority', { defaultValue: 'Priority' }),
-            value: priority,
-            onChange: (v) => {
-              setPriority(v);
-              setPage(1);
-            },
-            options: priorityOptions,
+            value: 'breakdown',
+            label: t('agentReports.viewBreakdown', { defaultValue: 'Breakdown' }),
           },
         ]}
-        filtering={Boolean(query.trim() || status || agent || priority)}
-        onClear={() => {
-          setQuery('');
-          setStatus('');
-          setAgent('');
-          setPriority('');
-          range.reset();
-          setPage(1);
-        }}
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="ms-auto">
-          <ExportButtons
-            visibleCount={visible.length}
-            totalCount={report.rows.length}
-            onExportView={() => onExport('view')}
-            onExportAll={() => onExport('all')}
-            labelPlain={t('agentReports.exportCsvCount', {
-              count: visible.length,
-              defaultValue: 'Export CSV ({{count}})',
-            })}
-            labelView={t('agentReports.exportCsvFiltered', {
-              count: visible.length,
-              defaultValue: 'Export {{count}} shown',
-            })}
-            labelAll={t('agentReports.exportCsvAll', {
-              count: report.rows.length,
-              defaultValue: 'Export all {{count}}',
-            })}
-          />
+      {/* A VIEW, not a permanent band. These two boxes are a genuinely useful
+          read — the status one drills through to the customers behind each
+          count — but they are 240px, and sitting above the chat list they put
+          its first row 559px down a laptop screen. Given a tab of their own
+          they cost the list nothing and get the room to be read properly. */}
+      {view === 'breakdown' && (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="rounded-2xl bg-card p-3 ring-1 ring-foreground/[0.06] shadow-soft">
+            <h3 className="mb-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('agentReports.byStatus', { defaultValue: 'By status' })}
+            </h3>
+            <ul className="space-y-2">
+              {report.byStatus.map((s) => {
+                const open = drill === s.key;
+                return (
+                  <li key={s.key}>
+                    {/* Clicking a count opens the customers behind it. "20 open"
+                      is a number; twenty phone numbers is a morning's work, and
+                      the whole reason somebody looks at this box. */}
+                    <button
+                      type="button"
+                      onClick={() => setDrill(open ? null : s.key)}
+                      aria-expanded={open}
+                      className="flex w-full items-center justify-between gap-2 rounded-lg px-1.5 py-1 text-sm transition-colors duration-fast hover:bg-secondary/60"
+                    >
+                      <StatusPill value={s.key} />
+                      <MeterBar
+                        value={report.total > 0 ? (s.count / report.total) * 100 : 0}
+                        tone={STATUS_METER[s.key] ?? 'primary'}
+                        className="ms-auto w-16 shrink-0"
+                      />
+                      <span className="tabular-nums font-semibold text-foreground">{s.count}</span>
+                      <span aria-hidden className="text-2xs text-muted-foreground">
+                        {open ? '▴' : '▾'}
+                      </span>
+                    </button>
+                    {open && (
+                      <ul className="mt-1.5 max-h-64 space-y-1 overflow-auto rounded-xl bg-secondary/40 p-2">
+                        {report.rows
+                          .filter((r) => r.status === s.key)
+                          .map((r) => (
+                            <li
+                              key={r.id}
+                              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs"
+                            >
+                              <span className="font-mono tabular-nums text-foreground">
+                                {r.customerPhone ||
+                                  r.customerName ||
+                                  r.customerEmail ||
+                                  t('agentReports.noContact', {
+                                    defaultValue: 'no contact on file',
+                                  })}
+                              </span>
+                              {r.customerPhone && r.customerName && (
+                                <span className="text-muted-foreground">{r.customerName}</span>
+                              )}
+                              {r.orderId && (
+                                <span className="font-mono text-2xs text-muted-foreground">
+                                  #{r.orderId}
+                                </span>
+                              )}
+                              <span className="ms-auto text-2xs text-muted-foreground">
+                                {r.agentName}
+                              </span>
+                            </li>
+                          ))}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          <div className="rounded-2xl bg-card p-3 ring-1 ring-foreground/[0.06] shadow-soft">
+            <h3 className="mb-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('agentReports.byPriority', { defaultValue: 'By priority' })}
+            </h3>
+            <ul className="space-y-1.5">
+              {report.byPriority.map((p) => (
+                <li key={p.key} className="flex items-center gap-2 px-1.5 text-sm">
+                  <PriorityPill value={p.key} />
+                  <MeterBar
+                    value={report.total > 0 ? (p.count / report.total) * 100 : 0}
+                    tone={PRIORITY_METER[p.key] ?? 'sky'}
+                    className="ms-auto w-16 shrink-0"
+                  />
+                  <span className="tabular-nums font-semibold text-foreground">{p.count}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Breakdown reads the whole range and has nothing to search, so the bar
+          would sit there looking broken. Dates still drive it — they are set
+          from the other two views, which is where a reader changes them. */}
+      {view !== 'breakdown' && (
+        <ReportFilterBar
+          searchLabel={t('agentReports.searchConversations', {
+            defaultValue: 'Search customer, phone, agent or order',
+          })}
+          searchPlaceholder={t('agentReports.searchConversationsHint', {
+            defaultValue: 'Customer, phone, agent or order number',
+          })}
+          search={query}
+          onSearch={(v) => {
+            setQuery(v);
+            setPage(1);
+          }}
+          from={range.from}
+          to={range.to}
+          onFrom={range.setFrom}
+          onTo={range.setTo}
+          selects={[
+            {
+              key: 'status',
+              label: t('agentReports.col.status', { defaultValue: 'Status' }),
+              value: status,
+              onChange: (v) => {
+                setStatus(v);
+                setPage(1);
+              },
+              options: report.byStatus.map((s) => ({
+                value: s.key,
+                label: String(t(`status.${s.key}`, { ns: 'common', defaultValue: s.key })),
+              })),
+            },
+            {
+              key: 'agent',
+              label: t('agentReports.col.agent', { defaultValue: 'Agent' }),
+              value: agent,
+              onChange: (v) => {
+                setAgent(v);
+                setPage(1);
+              },
+              options: agentOptions,
+            },
+            {
+              key: 'priority',
+              label: t('agentReports.col.priority', { defaultValue: 'Priority' }),
+              value: priority,
+              onChange: (v) => {
+                setPriority(v);
+                setPage(1);
+              },
+              options: priorityOptions,
+            },
+          ]}
+          filtering={Boolean(query.trim() || status || agent || priority)}
+          onClear={() => {
+            setQuery('');
+            setStatus('');
+            setAgent('');
+            setPriority('');
+            range.reset();
+            setPage(1);
+          }}
+          actions={
+            <ExportButtons
+              visibleCount={visible.length}
+              totalCount={report.rows.length}
+              onExportView={() => onExport('view')}
+              onExportAll={() => onExport('all')}
+              labelPlain={t('agentReports.exportCsvCount', {
+                count: visible.length,
+                defaultValue: 'Export CSV ({{count}})',
+              })}
+              labelView={t('agentReports.exportCsvFiltered', {
+                count: visible.length,
+                defaultValue: 'Export {{count}} shown',
+              })}
+              labelAll={t('agentReports.exportCsvAll', {
+                count: report.rows.length,
+                defaultValue: 'Export all {{count}}',
+              })}
+            />
+          }
+          rangePreset={<RangePreset range={range} />}
+        />
+      )}
 
       {/* The conversations themselves, with who they are with. The day matrix
-          below answers "how many"; this answers "which", which is what somebody
+          answers "how many"; this answers "which", which is what somebody
           reading a status report is about to go and do something about.
 
           It used to stop dead at fifty rows with a note saying so and no way to
           reach row fifty-one — the export was the only route to the rest. */}
-      <TableSurface
-        maxHeight="calc(100vh - 24rem)"
-        scrollLabel={t('agentReports.conversationsTitle', { defaultValue: 'Chat status' })}
-      >
-        <Table>
-          <thead>
-            <tr>
-              <Th>{tr('agentReports.col.customer', { defaultValue: 'Customer' })}</Th>
-              <Th>{tr('agentReports.col.phone', { defaultValue: 'Phone' })}</Th>
-              <Th>{tr('agentReports.col.status', { defaultValue: 'Status' })}</Th>
-              <Th>{tr('agentReports.col.priority', { defaultValue: 'Priority' })}</Th>
-              <Th>{tr('agentReports.col.agent', { defaultValue: 'Agent' })}</Th>
-              <Th>{tr('agentReports.col.orderNumber', { defaultValue: 'Order' })}</Th>
-              <Th>{tr('agentReports.col.lastMessage', { defaultValue: 'Last message' })}</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.map((r) => (
-              <Tr key={r.id}>
-                <Td className="font-medium">
-                  {r.customerName ? (
-                    <span className="flex items-center gap-2">
-                      <Avatar size="xs" name={r.customerName} phone={r.customerPhone} />
-                      <span className="min-w-0 truncate">{r.customerName}</span>
-                    </span>
-                  ) : (
-                    t('agentReports.noName', { defaultValue: '—' })
-                  )}
-                </Td>
-                <Td className="font-mono tabular-nums text-muted-foreground">
-                  {r.customerPhone || '—'}
-                </Td>
-                <Td>
-                  <StatusPill value={r.status} />
-                </Td>
-                <Td>
-                  <PriorityPill value={r.priority} />
-                </Td>
-                <Td className="text-muted-foreground">{r.agentName}</Td>
-                <Td className="font-mono tabular-nums text-muted-foreground">{r.orderId || '—'}</Td>
-                <Td className="tabular-nums text-muted-foreground">
-                  {r.lastMessageAt ? fmtDateTime(r.lastMessageAt) : '—'}
-                </Td>
-              </Tr>
-            ))}
-          </tbody>
-        </Table>
-        <TableFooterBar>
-          <span className="font-medium tabular-nums">
-            {visible.length === report.rows.length
-              ? t('complaintReport.rowCount', {
-                  count: report.rows.length,
-                  defaultValue: '{{count}} rows',
-                })
-              : t('complaintReport.matches', {
-                  count: visible.length,
-                  total: report.rows.length,
-                  defaultValue: '{{count}} of {{total}}',
-                })}
-          </span>
-        </TableFooterBar>
-      </TableSurface>
+      {view === 'chats' && (
+        <>
+          <TableSurface
+            fill
+            scrollLabel={t('agentReports.conversationsTitle', { defaultValue: 'Chat status' })}
+          >
+            <Table>
+              <thead>
+                <tr>
+                  <Th>{tr('agentReports.col.customer', { defaultValue: 'Customer' })}</Th>
+                  <Th>{tr('agentReports.col.phone', { defaultValue: 'Phone' })}</Th>
+                  <Th>{tr('agentReports.col.status', { defaultValue: 'Status' })}</Th>
+                  <Th>{tr('agentReports.col.priority', { defaultValue: 'Priority' })}</Th>
+                  <Th>{tr('agentReports.col.agent', { defaultValue: 'Agent' })}</Th>
+                  <Th>{tr('agentReports.col.orderNumber', { defaultValue: 'Order' })}</Th>
+                  <Th>{tr('agentReports.col.lastMessage', { defaultValue: 'Last message' })}</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((r) => (
+                  <Tr key={r.id}>
+                    <Td className="font-medium">
+                      {r.customerName ? (
+                        <span className="flex items-center gap-2">
+                          <Avatar size="xs" name={r.customerName} phone={r.customerPhone} />
+                          <span className="min-w-0 truncate">{r.customerName}</span>
+                        </span>
+                      ) : (
+                        t('agentReports.noName', { defaultValue: '—' })
+                      )}
+                    </Td>
+                    <Td className="font-mono tabular-nums text-muted-foreground">
+                      {r.customerPhone || '—'}
+                    </Td>
+                    <Td>
+                      <StatusPill value={r.status} />
+                    </Td>
+                    <Td>
+                      <PriorityPill value={r.priority} />
+                    </Td>
+                    <Td className="text-muted-foreground">{r.agentName}</Td>
+                    <Td className="font-mono tabular-nums text-muted-foreground">
+                      {r.orderId || '—'}
+                    </Td>
+                    <Td className="tabular-nums text-muted-foreground">
+                      {r.lastMessageAt ? fmtDateTime(r.lastMessageAt) : '—'}
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+            <TableFooterBar>
+              <span className="font-medium tabular-nums">
+                {visible.length === report.rows.length
+                  ? t('complaintReport.rowCount', {
+                      count: report.rows.length,
+                      defaultValue: '{{count}} rows',
+                    })
+                  : t('complaintReport.matches', {
+                      count: visible.length,
+                      total: report.rows.length,
+                      defaultValue: '{{count}} of {{total}}',
+                    })}
+              </span>
+            </TableFooterBar>
+          </TableSurface>
 
-      <TablePager
-        page={page}
-        onPage={setPage}
-        pageSize={pageSize}
-        onPageSize={setPageSize}
-        total={visible.length}
-        pageSizes={REPORT_PAGE_SIZES}
-        labels={pagerLabels}
-      />
+          <TablePager
+            page={page}
+            onPage={setPage}
+            pageSize={pageSize}
+            onPageSize={setPageSize}
+            total={visible.length}
+            pageSizes={REPORT_PAGE_SIZES}
+            labels={pagerLabels}
+          />
+        </>
+      )}
 
       {/* Every day in range, not the last fourteen. The matrix is at most one
           row per day, so capping it bought nothing and cost the reader the
           first half of their own date range. */}
-      <TableSurface
-        maxHeight="calc(100vh - 24rem)"
-        scrollLabel={t('agentReports.byDay', { defaultValue: 'By day' })}
-      >
-        <Table>
-          <thead>
-            <tr>
-              <Th>{tr('agentReports.col.date', { defaultValue: 'Date' })}</Th>
-              <Th className="text-end">
-                {tr('agentReports.col.total', { defaultValue: 'Total' })}
-              </Th>
-              {report.statuses.map((s) => (
-                <Th key={s} className="text-end">
-                  {tr(`status.${s}`, { ns: 'common', defaultValue: s })}
+      {view === 'byDay' && (
+        <TableSurface fill scrollLabel={t('agentReports.byDay', { defaultValue: 'By day' })}>
+          <Table>
+            <thead>
+              <tr>
+                <Th>{tr('agentReports.col.date', { defaultValue: 'Date' })}</Th>
+                <Th className="text-end">
+                  {tr('agentReports.col.total', { defaultValue: 'Total' })}
                 </Th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {report.byDay.map((d) => (
-              <Tr key={d.day}>
-                <Td className="tabular-nums text-muted-foreground">{d.day}</Td>
-                <Td className="text-end tabular-nums font-semibold">{d.total}</Td>
                 {report.statuses.map((s) => (
-                  <Td key={s} className="text-end tabular-nums text-muted-foreground">
-                    {d.byStatus[s] ?? 0}
-                  </Td>
+                  <Th key={s} className="text-end">
+                    {tr(`status.${s}`, { ns: 'common', defaultValue: s })}
+                  </Th>
                 ))}
-              </Tr>
-            ))}
-          </tbody>
-        </Table>
-        <TableFooterBar>
-          <span className="font-medium tabular-nums">
-            {t('agentReports.dayCount', {
-              count: report.byDay.length,
-              defaultValue: '{{count}} days',
-            })}
-          </span>
-        </TableFooterBar>
-      </TableSurface>
+              </tr>
+            </thead>
+            <tbody>
+              {report.byDay.map((d) => (
+                <Tr key={d.day}>
+                  <Td className="tabular-nums text-muted-foreground">{d.day}</Td>
+                  <Td className="text-end tabular-nums font-semibold">{d.total}</Td>
+                  {report.statuses.map((s) => (
+                    <Td key={s} className="text-end tabular-nums text-muted-foreground">
+                      {d.byStatus[s] ?? 0}
+                    </Td>
+                  ))}
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+          <TableFooterBar>
+            <span className="font-medium tabular-nums">
+              {t('agentReports.dayCount', {
+                count: report.byDay.length,
+                defaultValue: '{{count}} days',
+              })}
+            </span>
+          </TableFooterBar>
+        </TableSurface>
+      )}
     </div>
   );
 }
@@ -2356,42 +2477,6 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t(meta.titleKey, { defaultValue: meta.titleDefault })}
-        </h1>
-        <ToolbarSpacer />
-        <div className="w-36">
-          {/* A shortcut, not a second source of truth: picking a preset WRITES
-              the two dates below, so the toolbar and the filter bar can never
-              disagree about which period is on screen. */}
-          <SelectMenu
-            fullWidth
-            value=""
-            onChange={(v) => {
-              const n = Number(v);
-              const now = new Date();
-              setRange({
-                from: isoDay(new Date(now.getTime() - n * 86_400_000)),
-                to: isoDay(now),
-              });
-            }}
-            aria-label={t('agentReports.range', { defaultValue: 'Date range' })}
-            options={[
-              { value: '', label: t('agentReports.presets', { defaultValue: 'Quick range' }) },
-              ...RANGE_DAYS.map((d) => ({
-                value: String(d),
-                label: t('agentReports.lastDays', {
-                  count: d,
-                  days: d,
-                  defaultValue: 'Last {{days}} days',
-                }),
-              })),
-            ]}
-          />
-        </div>
-      </Toolbar>
-
       <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
         {/* Every report gets the whole monitor.
             The summaries used to be capped at 5xl-6xl on the theory that a KPI
@@ -2400,14 +2485,25 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
             it — the cap was the reason nine columns needed a sideways swipe on
             a screen with room for twenty. The strip stays capped on its own
             (see ReportKpiStrip usages); the table gets the width. */}
-        <div className="mx-auto w-full space-y-5">
-          {/* The NAME is already on screen twice — the tab pill and the toolbar
-              above. A third copy at 3xl was the biggest thing on the page and
-              said nothing the other two had not. What survives is the one line
-              that does: what this report is for. */}
-          <p className="max-w-3xl shrink-0 text-sm leading-relaxed text-muted-foreground">
-            {t(meta.subKey, { defaultValue: meta.subDefault })}
-          </p>
+        <div className="mx-auto w-full space-y-3">
+          {/* Name and purpose on ONE line.
+              They used to be three bands: a 60px toolbar carrying the name, a
+              paragraph carrying the purpose, and the gaps between them — about
+              90px, on a page where the table was already starting 585px down a
+              screen that is often 620 CSS pixels tall.
+              The name stays, as a real h1: the tab strip above shows it as a
+              selected pill, but a pill is not a heading and a page with no
+              heading is a page a screen reader cannot summarise. The purpose
+              rides beside it and drops away on narrow screens, where there is
+              no room and the reader has the tab strip anyway. */}
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h1 className="shrink-0 text-sm font-semibold tracking-tight text-foreground">
+              {t(meta.titleKey, { defaultValue: meta.titleDefault })}
+            </h1>
+            <p className="min-w-0 max-w-3xl text-xs leading-relaxed text-muted-foreground">
+              {t(meta.subKey, { defaultValue: meta.subDefault })}
+            </p>
+          </div>
 
           {report.isLoading ? (
             <div className="space-y-3">
@@ -2460,7 +2556,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
                     agents={data.agents}
                     tr={tr}
                     days={days}
-                    range={{ from, to, setFrom, setTo, reset: resetRange }}
+                    range={{ from, to, setFrom, setTo, setRange, reset: resetRange }}
                   />
                 </>
               )}
@@ -2469,7 +2565,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
                   report={data.conversations}
                   tr={tr}
                   days={days}
-                  range={{ from, to, setFrom, setTo, reset: resetRange }}
+                  range={{ from, to, setFrom, setTo, setRange, reset: resetRange }}
                 />
               )}
               {which === 'complaints' &&

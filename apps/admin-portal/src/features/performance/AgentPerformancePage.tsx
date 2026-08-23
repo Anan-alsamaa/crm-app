@@ -314,16 +314,28 @@ export function AgentPerformancePage() {
       tone: 'success',
     },
   ];
+  /*
+   * Two lines that must be told apart at a glance.
+   *
+   * They were `primary` and `violet`, which stopped being two colours when the
+   * brand moved to indigo: the palette keeps every CRM hue within ~35 degrees
+   * of 278, so the brand and the violet accent are neighbours. On this chart
+   * that made first response and time to solve the same purple, and the only
+   * way to read the pair was the legend order.
+   *
+   * Sky against jade instead — opposite ends of the semantic range, and both
+   * far enough from the indigo interface that neither reads as chrome.
+   */
   const timeSeries: ChartSeries[] = [
     {
       key: 'first',
       label: t('performance.firstResponse', { defaultValue: 'First response' }),
-      tone: 'primary',
+      tone: 'sky',
     },
     {
       key: 'solve',
       label: t('performance.timeToSolve', { defaultValue: 'Time to solve' }),
-      tone: 'violet',
+      tone: 'success',
     },
   ];
 

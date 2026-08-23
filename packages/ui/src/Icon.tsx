@@ -164,6 +164,17 @@ export function ZapIcon({ size = 18, className, ...rest }: IconProps): JSX.Eleme
   );
 }
 
+/** A tick inside a circle — "this one is finished", wherever a count of done
+ *  things needs a mark of its own rather than borrowing the ticket icon. */
+export function CheckCircleIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12.2 2.4 2.4 4.6-5" />
+    </svg>
+  );
+}
+
 export function CalendarIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
   return (
     <svg {...svgProps(size, className)} {...rest}>

@@ -79,23 +79,37 @@ function toEntries(revisions: RevisionRow[]) {
 
 export function TicketHistoryDrawer({
   ticketId,
+  collection = 'tickets',
   label,
   userNames,
   onClose,
 }: {
   ticketId: string;
-  /** What the drawer calls the ticket — complaint type, order number. */
+  /**
+   * Which collection the id belongs to.
+   *
+   * Everything below this line is collection-agnostic — Directus revisions are
+   * the same shape whatever they describe — and the only thing that was
+   * ticket-specific was this filter. Compensation needed the identical drawer
+   * and would otherwise have got a second copy of it, which is how two change
+   * logs end up disagreeing about what counts as a change.
+   */
+  collection?: string;
+  /** What the drawer calls the row — complaint type, order number, coupon code. */
   label: string;
   userNames: Map<string, string>;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
   const revisions = useQuery({
-    queryKey: ['admin-ticket-revisions', ticketId],
+    // The collection is part of the key: ids are unique per collection, not
+    // across them, so without it a coupon and a ticket could share a cache
+    // entry and one would show the other's history.
+    queryKey: ['admin-item-revisions', collection, ticketId],
     queryFn: async () =>
       (await directus.request(
         readRevisions({
-          filter: { collection: { _eq: 'tickets' }, item: { _eq: ticketId } },
+          filter: { collection: { _eq: collection }, item: { _eq: ticketId } },
           sort: ['id'],
           limit: -1,
           fields: ['id', 'data', 'delta', { activity: ['id', 'action', 'timestamp', 'user'] }],
@@ -118,8 +132,12 @@ export function TicketHistoryDrawer({
           <Skeleton className="h-24 w-full rounded-xl" />
         ) : entries.length === 0 ? (
           <p className="text-sm text-muted-foreground">
+            {/* "this record", not "this ticket": the drawer serves coupons too
+                now, and telling somebody looking at a coupon that their ticket
+                is unchanged is the kind of small wrongness that makes a reader
+                stop trusting the panel. */}
             {t('complaintReport.noHistory', {
-              defaultValue: 'No changes recorded since this ticket was created.',
+              defaultValue: 'No changes recorded since this record was created.',
             })}
           </p>
         ) : (

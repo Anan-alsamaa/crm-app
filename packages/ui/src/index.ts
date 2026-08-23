@@ -39,6 +39,7 @@ export {
   ShieldIcon,
   ZapIcon,
   CalendarIcon,
+  CheckCircleIcon,
   SparkleIcon,
 } from './Icon.js';
 export type { IconProps } from './Icon.js';

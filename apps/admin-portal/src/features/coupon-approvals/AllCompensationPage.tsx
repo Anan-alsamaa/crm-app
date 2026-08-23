@@ -1,31 +1,32 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
-import { readItems } from '@directus/sdk';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { deleteItem, readItems, readUsers } from '@directus/sdk';
 import {
   Button,
-  DateField,
+  cn,
+  ConfirmDialog,
   ExportButtons,
   formatDate,
   formatRelative,
-  Input,
   Ltr,
   pageCountOf,
   Pill,
   ReportKpi,
   ReportKpiStrip,
-  SelectMenu,
   Skeleton,
   Table,
   TablePager,
   TableSurface,
   Th,
-  Toolbar,
-  ToolbarSpacer,
+  toast,
 } from '@yiji/ui';
 import { exportFileName } from '@yiji/shared-config';
 import { directus } from '../../lib/directus.js';
 import { downloadCsv, toCsv } from '@yiji/reports';
+import { ReportFilterBar } from '../../components/ReportFilterBar.js';
+import { TicketHistoryDrawer } from '../report-exports/TicketHistoryDrawer.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 
 /**
  * The master record of every coupon the business has ever issued.
@@ -158,6 +159,58 @@ interface Column {
 export function AllCompensationPage() {
   const { t } = useTranslation();
   const rows = useAllCoupons();
+  const { can } = useAuth();
+  const qc = useQueryClient();
+  /*
+   * The row-level actions this page was missing.
+   *
+   * Ticket breakdown has had History and Delete since the ops-portal batch;
+   * Compensation, which is the same shape of report over a different
+   * collection, had neither — so the one page recording what the business
+   * gave away was also the one page where you could not ask who changed a
+   * coupon after it was approved.
+   *
+   * Selection-driven, the same way: pick a row, then act from the bar.
+   * Disabled rather than hidden without a selection, so the control teaches
+   * its own precondition.
+   */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [historyOf, setHistoryOf] = useState<{ id: string; label: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; label: string } | null>(null);
+  const canSeeHistory = can('approve_coupons');
+  const canDelete = can('delete_tickets');
+  const del = useMutation({
+    mutationFn: (id: string) => directus.request(deleteItem('coupon_approvals' as never, id)),
+    onSuccess: () => {
+      setSelectedId(null);
+      void qc.invalidateQueries({ queryKey: ['all-coupons'] });
+      toast.success(t('compensationAll.deleted', { defaultValue: 'Coupon record deleted.' }));
+    },
+    onError: () =>
+      toast.error(
+        t('compensationAll.deleteFailed', { defaultValue: 'Could not delete that record.' }),
+      ),
+  });
+  /*
+   * Actor names for the history drawer. Ids alone accuse nobody legibly: a
+   * change log reading "f5548287-… set status to approved" is a log people
+   * stop opening.
+   */
+  const users = useQuery({
+    queryKey: ['report-user-names'],
+    staleTime: 5 * 60_000,
+    queryFn: async () =>
+      (await directus.request(
+        readUsers({ limit: -1, fields: ['id', 'first_name', 'last_name', 'email'] }),
+      )) as unknown as Array<{ id: string; first_name: string | null; email: string | null }>,
+  });
+  const userNames = useMemo(
+    () =>
+      new Map(
+        (users.data ?? []).map((u) => [u.id, u.first_name?.trim() || u.email?.trim() || u.id]),
+      ),
+    [users.data],
+  );
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [agent, setAgent] = useState('');
@@ -431,46 +484,12 @@ export function AllCompensationPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('compensationAll.title', { defaultValue: 'Compensation' })}
-        </h1>
-        <ToolbarSpacer />
-        <span className="text-2xs tabular-nums text-muted-foreground">
-          {t('compensationAll.count', {
-            defaultValue: '{{n}} of {{total}}',
-            n: filtered.length,
-            total: list.length,
-          })}
-        </span>
-        <ExportButtons
-          visibleCount={filtered.length}
-          totalCount={rows.data?.length ?? 0}
-          onExportView={() => exportCsv('view')}
-          onExportAll={() => exportCsv('all')}
-          labelPlain={t('stores.export', { defaultValue: 'Export CSV' })}
-          labelView={t('compensationAll.exportFiltered', {
-            count: filtered.length,
-            defaultValue: 'Export {{count}} shown',
-          })}
-          labelAll={t('compensationAll.exportAll', {
-            count: rows.data?.length ?? 0,
-            defaultValue: 'Export all {{count}}',
-          })}
-        />
-      </Toolbar>
-
+      {/* No Toolbar. It carried the report's NAME, which the tab strip directly
+          above already shows as a selected pill, plus an export that belongs
+          with the filters it exports. Two bands, one fact, 60px of a screen
+          the table needs. */}
       <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
-        <div className="space-y-5">
-          <div className="border-b border-foreground/10 pb-5">
-            <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
-              {t('compensationAll.hint', {
-                defaultValue:
-                  'Every coupon anyone has asked for, whatever state it reached, with the full terms of each. Admin statistics is the supervisor view of those decisions; this is the record.',
-              })}
-            </p>
-          </div>
-
+        <div className="space-y-3">
           <ReportKpiStrip>
             <ReportKpi
               label={t('compensationAll.kpiRequests', { defaultValue: 'Coupons' })}
@@ -514,96 +533,117 @@ export function AllCompensationPage() {
             />
           </ReportKpiStrip>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,16rem)_9rem_9rem_minmax(0,12rem)_minmax(0,10rem)_auto]">
-            <label className="block space-y-1">
-              <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('actions.search', { ns: 'common', defaultValue: 'Search' })}
-              </span>
-              <Input
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setPage(1);
-                }}
-                placeholder={t('compensationAll.searchPlaceholder', {
-                  defaultValue: 'Order ID, code, customer, phone, brand',
-                })}
-                aria-label={t('actions.search', { ns: 'common', defaultValue: 'Search' })}
-              />
-            </label>
-            <label className="block space-y-1">
-              <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('performance.from', { defaultValue: 'From' })}
-              </span>
-              <DateField
-                value={from}
-                onChange={(v) => {
-                  setFrom(v);
-                  setPage(1);
-                }}
-                aria-label={t('performance.from', { defaultValue: 'From' })}
-              />
-            </label>
-            <label className="block space-y-1">
-              <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('performance.to', { defaultValue: 'To' })}
-              </span>
-              <DateField
-                value={to}
-                onChange={(v) => {
-                  setTo(v);
-                  setPage(1);
-                }}
-                aria-label={t('performance.to', { defaultValue: 'To' })}
-              />
-            </label>
-            <label className="block space-y-1">
-              <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('compensationAll.agent', { defaultValue: 'Assigned by' })}
-              </span>
-              <SelectMenu
-                fullWidth
-                value={agent}
-                onChange={(v) => {
+          {/* The SHARED filter bar, not a sixth idea of one.
+              This page hand-rolled a six-column grid with its own labels,
+              spacing and Clear button, so "narrow to last week" looked and
+              behaved differently here than on every other report. Same
+              anatomy everywhere now: search, dates, dropdowns, clear — and the
+              actions that operate on whatever those leave. */}
+          <ReportFilterBar
+            searchLabel={String(t('actions.search', { ns: 'common', defaultValue: 'Search' }))}
+            searchPlaceholder={String(
+              t('compensationAll.searchPlaceholder', {
+                defaultValue: 'Order ID, code, customer, phone, brand',
+              }),
+            )}
+            search={query}
+            onSearch={(v) => {
+              setQuery(v);
+              setPage(1);
+            }}
+            from={from}
+            to={to}
+            onFrom={(v) => {
+              setFrom(v);
+              setPage(1);
+            }}
+            onTo={(v) => {
+              setTo(v);
+              setPage(1);
+            }}
+            selects={[
+              {
+                key: 'agent',
+                label: String(t('compensationAll.agent', { defaultValue: 'Assigned by' })),
+                value: agent,
+                onChange: (v) => {
                   setAgent(v);
                   setPage(1);
-                }}
-                aria-label={t('compensationAll.agent', { defaultValue: 'Assigned by' })}
-                options={[
-                  { value: '', label: t('compensationAll.anyAgent', { defaultValue: 'Anyone' }) },
-                  ...agents,
-                ]}
-              />
-            </label>
-            <label className="block space-y-1">
-              <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('compensationAll.state', { defaultValue: 'Status' })}
-              </span>
-              <SelectMenu
-                fullWidth
-                value={status}
-                onChange={(v) => {
+                },
+                options: agents,
+              },
+              {
+                key: 'status',
+                label: String(t('compensationAll.state', { defaultValue: 'Status' })),
+                value: status,
+                onChange: (v) => {
                   setStatus(v);
                   setPage(1);
-                }}
-                aria-label={t('compensationAll.state', { defaultValue: 'Status' })}
-                options={[
-                  { value: '', label: t('agentReports.statusAll', { defaultValue: 'All' }) },
-                  ...statuses.map((s) => ({
-                    value: s,
-                    label: t(`status.${s}`, { ns: 'common', defaultValue: s }),
-                  })),
-                ]}
-              />
-            </label>
-            {filtering && (
-              <div className="flex items-end">
-                <Button type="button" variant="ghost" size="sm" onClick={reset}>
-                  {t('inbox.clearFilters', { defaultValue: 'Clear filters' })}
-                </Button>
+                },
+                options: statuses.map((st) => ({
+                  value: st,
+                  label: String(t(`status.${st}`, { ns: 'common', defaultValue: st })),
+                })),
+              },
+            ]}
+            filtering={filtering}
+            onClear={reset}
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <ExportButtons
+                  visibleCount={filtered.length}
+                  totalCount={rows.data?.length ?? 0}
+                  onExportView={() => exportCsv('view')}
+                  onExportAll={() => exportCsv('all')}
+                  labelPlain={t('stores.export', { defaultValue: 'Export CSV' })}
+                  labelView={t('compensationAll.exportFiltered', {
+                    count: filtered.length,
+                    defaultValue: 'Export {{count}} shown',
+                  })}
+                  labelAll={t('compensationAll.exportAll', {
+                    count: rows.data?.length ?? 0,
+                    defaultValue: 'Export all {{count}}',
+                  })}
+                />
+                {canSeeHistory && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ring-1 ring-border"
+                    disabled={!selectedId}
+                    onClick={() => {
+                      const row = filtered.find((r) => r.id === selectedId);
+                      if (row)
+                        setHistoryOf({
+                          id: row.id,
+                          label: row.coupon_code || row.title || row.id,
+                        });
+                    }}
+                  >
+                    {t('complaintReport.historyBtn', { defaultValue: 'History' })}
+                  </Button>
+                )}
+                {canDelete && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={!selectedId || del.isPending}
+                    className="text-destructive ring-1 ring-border hover:bg-destructive/10"
+                    onClick={() => {
+                      const row = filtered.find((r) => r.id === selectedId);
+                      if (!row) return;
+                      setConfirmDelete({
+                        id: row.id,
+                        label: row.coupon_code || row.title || row.id,
+                      });
+                    }}
+                  >
+                    {t('complaintReport.deleteBtn', { defaultValue: 'Delete' })}
+                  </Button>
+                )}
               </div>
-            )}
-          </div>
+            }
+          />
 
           {rows.isLoading ? (
             <Skeleton className="h-64 w-full rounded-2xl" />
@@ -614,7 +654,7 @@ export function AllCompensationPage() {
                thirty rows down had to scroll back up to learn which column
                they were looking at. */
             <TableSurface
-              maxHeight="calc(100vh - 24rem)"
+              fill
               scrollLabel={String(t('compensationAll.title', { defaultValue: 'Compensation' }))}
             >
               <Table className="min-w-[80rem]">
@@ -645,9 +685,21 @@ export function AllCompensationPage() {
                     </tr>
                   ) : (
                     paged.map((r) => (
+                      /* Clicking the row selects it; the bar above then acts on
+                         it. `aria-selected` rather than colour alone — a tinted
+                         row does not read as "selected" to anyone who cannot
+                         see the tint, and this is the row a Delete is about to
+                         act on. */
                       <tr
                         key={r.id}
-                        className="border-t border-foreground/[0.06] transition-colors duration-fast hover:bg-primary/[0.07]"
+                        onClick={() => setSelectedId((cur) => (cur === r.id ? null : r.id))}
+                        aria-selected={selectedId === r.id}
+                        className={cn(
+                          'cursor-pointer border-t border-foreground/[0.06] transition-colors duration-fast',
+                          selectedId === r.id
+                            ? 'bg-primary/[0.10] hover:bg-primary/[0.14]'
+                            : 'hover:bg-primary/[0.07]',
+                        )}
                       >
                         {columns.map((c) => {
                           const v = c.get(r);
@@ -751,6 +803,37 @@ export function AllCompensationPage() {
                   }),
                 ),
             }}
+          />
+
+          {historyOf && (
+            /* The SAME drawer Ticket breakdown uses, pointed at a different
+               collection. A second implementation would be a second opinion
+               about what counts as a change. */
+            <TicketHistoryDrawer
+              ticketId={historyOf.id}
+              collection="coupon_approvals"
+              label={historyOf.label}
+              userNames={userNames}
+              onClose={() => setHistoryOf(null)}
+            />
+          )}
+
+          <ConfirmDialog
+            open={!!confirmDelete}
+            onCancel={() => setConfirmDelete(null)}
+            onConfirm={() => {
+              if (confirmDelete) del.mutate(confirmDelete.id);
+              setConfirmDelete(null);
+            }}
+            destructive
+            title={t('compensationAll.deleteTitle', { defaultValue: 'Delete this coupon record?' })}
+            description={t('compensationAll.deleteConfirm', {
+              label: confirmDelete?.label ?? '',
+              defaultValue:
+                'Delete \u201c{{label}}\u201d? The record goes; who deleted it stays in the change history. A coupon already issued to a customer is NOT recalled by this.',
+            })}
+            confirmLabel={t('complaintReport.deleteBtn', { defaultValue: 'Delete' })}
+            cancelLabel={t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
           />
         </div>
       </div>

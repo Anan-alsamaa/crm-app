@@ -424,7 +424,7 @@ export function SlaReportsPage() {
             })}
           />
         ) : (
-          <div className="mx-auto w-full space-y-5">
+          <div className="mx-auto w-full space-y-3">
             {/* Named once by the toolbar above, so this is just what it is for. */}
             <p className="max-w-3xl shrink-0 text-sm leading-relaxed text-muted-foreground">
               {t('slaReports.subtitle', {
@@ -702,7 +702,7 @@ function TicketTable({
       )}
 
       <TableSurface
-        maxHeight="calc(100vh - 24rem)"
+        fill
         scrollLabel={String(t('slaReports.title', { defaultValue: 'Ticket deadlines' }))}
       >
         <Table>

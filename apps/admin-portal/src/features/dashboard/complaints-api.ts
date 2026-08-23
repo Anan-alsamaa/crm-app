@@ -1,6 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { aggregate, readItems, readUsers } from '@directus/sdk';
-import { buildStoreIndex, matchStore, type StoreSnapshot } from '@yiji/shared-types';
+import {
+  buildStoreIndex,
+  matchStore,
+  normaliseConversationStatus,
+  type StoreSnapshot,
+} from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -704,7 +709,22 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       const chatHandledByAgent = new Map<string, number>();
       let chatsWaiting = 0;
       for (const c of conversations) {
-        const done = c.status === 'resolved' || c.status === 'closed';
+        /*
+         * A CHAT is 'open' or 'solved'. It is not 'resolved' or 'closed' —
+         * those are TICKET statuses, and the chat enum was narrowed to two
+         * states some time ago with the old values migrated across.
+         *
+         * This line was still testing the retired vocabulary, so it matched
+         * nothing: every chat in the system counted as waiting. The dashboard
+         * read "Open chats 193, 193 total" while the Chat status report, two
+         * clicks away, said 124 open and 69 solved from the same rows. A
+         * hard-coded 100% is exactly the kind of wrong number nobody
+         * questions, because it never looks like an error.
+         *
+         * `normaliseConversationStatus` is the one place that knows the
+         * mapping, retired values included.
+         */
+        const done = normaliseConversationStatus(c.status) === 'solved';
         if (!done) chatsWaiting += 1;
         const id = c.assigned_agent ?? '';
         if (!c.assigned_agent) continue;
