@@ -113,6 +113,7 @@ const AiConfigPage = lazy(() =>
 
 import type { TFunction } from 'i18next';
 import type { NavSection } from './nav.js';
+import type { Privilege } from './lib/privileges.js';
 import { ReportGroupTabs } from './components/ReportGroupTabs.js';
 
 /* Colorful nav: each item's icon sits in its own vivid tinted tile that pops
@@ -285,6 +286,7 @@ function MobileBrand() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
+  const tabs = reportTabs(t);
   const location = useLocation();
   const { user, logout, can } = useAuth();
   const displayName = staffDisplayName(user, 'Admin');
@@ -484,10 +486,33 @@ function Shell({ children }: { children: React.ReactNode }) {
    * The tuple type is restored with a cast because filtering cannot prove
    * non-emptiness to the compiler; the `length` guard above it is the proof.
    */
+  /**
+   * How many reports each group page would actually show this role.
+   *
+   * A group whose strip has collapsed to a single report is not a group any
+   * more — it IS that report. Operations could reach exactly one thing under
+   * Operational KPI, Ticket breakdown, which already has its own entry in the
+   * bar: the same page, listed twice, under two different names, one of them
+   * jargon. Dropping the group leaves "Dashboard | Tickets", which is the whole
+   * of what that role does.
+   *
+   * Counted rather than hardcoded, so this stays true as privileges move: a
+   * role that can see Compensation as well keeps the group, and a role that can
+   * see only Compensation keeps it too — the collapse only removes a duplicate.
+   */
+  const visibleTabs = (group: { to: string; requires?: Privilege }[]) =>
+    group.filter((tab) => !tab.requires || can(tab.requires));
+  const opsKpiCollapsedToTickets =
+    visibleTabs(tabs.opsKpi).length === 1 && visibleTabs(tabs.opsKpi)[0]?.to === 'tickets';
+
   const sections: NavSection[] = allSections
     .map((section) => ({
       ...section,
-      items: section.items.filter((it) => !it.requires || can(it.requires)),
+      items: section.items.filter((it) => {
+        if (it.requires && !can(it.requires)) return false;
+        if (it.to === '/reports/operational-kpi' && opsKpiCollapsedToTickets) return false;
+        return true;
+      }),
     }))
     .filter((section) => section.items.length > 0) as NavSection[];
 
