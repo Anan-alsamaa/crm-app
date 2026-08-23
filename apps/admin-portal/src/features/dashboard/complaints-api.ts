@@ -153,6 +153,15 @@ export interface ComplaintRow {
   compensation: string;
   couponValue: number;
   isOpen: boolean;
+  /**
+   * Blew its first-response deadline and is still unanswered.
+   *
+   * Carried on the row rather than recomputed by whoever needs it, so the
+   * Overdue KPI and the list you get by opening it are the same set by
+   * construction — two places applying "the same" rule is two places for it to
+   * drift.
+   */
+  overdue: boolean;
 }
 
 export interface MonthPoint {
@@ -666,6 +675,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
           compensation: r.compensation ?? '',
           couponValue: money,
           isOpen: !CLOSED_STATUSES.has(r.status),
+          overdue: isOverdue,
         });
         byAgentCount.set(agentId, (byAgentCount.get(agentId) ?? 0) + 1);
         if (!CLOSED_STATUSES.has(r.status)) {

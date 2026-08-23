@@ -89,6 +89,14 @@ export interface TableSurfaceProps extends HTMLAttributes<HTMLDivElement> {
   maxHeight?: string;
   /** Accessible name for the scrollable region. */
   scrollLabel?: string;
+  /**
+   * Take the rest of the page's height instead of growing with the rows.
+   *
+   * This is what makes a sticky header actually stick: the table owns the only
+   * vertical scroll on the page, so there is no outer scroller left to carry
+   * the header off screen.
+   */
+  fill?: boolean;
 }
 
 export function TableSurface({
@@ -96,6 +104,7 @@ export function TableSurface({
   children,
   maxHeight,
   scrollLabel,
+  fill,
   ...rest
 }: TableSurfaceProps): JSX.Element {
   const { ref, start, end } = useScrollEdges();
@@ -104,10 +113,12 @@ export function TableSurface({
   return (
     <div
       className={cn(
-        // `overflow-hidden` so the rounded corners actually clip the header
-        // band and the last row. Without it the square corners of the content
-        // sat proud of the rounded card and the whole thing read as unfinished.
-        'relative isolate overflow-hidden rounded-xl bg-card ring-1 ring-foreground/[0.06]',
+        // `clip` rather than `hidden`: both clip the square corners of the
+        // content to the rounded card, but hidden also makes this a scroll
+        // container, and one more scrollport between the header and the one
+        // that matters is one more thing for it to stick to by accident.
+        'relative isolate flex min-h-0 flex-col overflow-clip rounded-xl bg-card ring-1 ring-foreground/[0.06]',
+        fill && 'flex-1',
         className,
       )}
       {...rest}
@@ -121,7 +132,27 @@ export function TableSurface({
         {...(scrollable ? { tabIndex: 0, role: 'region', 'aria-label': scrollLabel } : {})}
         className={cn(
           'overflow-x-auto overscroll-x-contain',
-          maxHeight ? 'overflow-y-auto' : '',
+          fill && 'min-h-0 flex-1',
+          // The y axis is the whole sticky-header story.
+          //
+          // CSS turns `overflow-y: visible` into `auto` the moment `overflow-x`
+          // is auto — so a horizontally scrolling table becomes a VERTICAL
+          // scroll container too, whether or not anybody asked. The header then
+          // sticks to that box, the page scrolls the box away, and the header
+          // goes with it. `clip` keeps the horizontal scroll and refuses the
+          // vertical scrollport, so `top-0` resolves against the page and the
+          // header stays where a reader expects it.
+          //
+          // maxHeight is the deliberate exception: a table asked to cap its own
+          // height genuinely wants an inner scroller, and its header sticks to
+          // that.
+          // A sticky header sticks to the nearest SCROLLPORT, and `overflow-x:
+          // auto` makes this box one whether or not the y axis asked. That is
+          // fine — it is the scrollport the header should use — but only
+          // because the pages that hold these tables give the table the height
+          // and stop scrolling themselves. Two nested scrollers was the bug:
+          // the header stuck faithfully to a box the page then scrolled away.
+          'overflow-y-auto',
           // A visible track. The app's global scrollbar thumb is deliberately
           // faint, which is right for a page and wrong for the one control that
           // reaches half this table's columns.

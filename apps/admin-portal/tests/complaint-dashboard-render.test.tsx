@@ -178,19 +178,14 @@ beforeEach(() => {
 });
 
 describe('ComplaintDashboard — every section his page has', () => {
-  it('renders the donuts, the trend and the breakdowns', () => {
+  it('gives the AGENT view the support desk cuts', () => {
+    // The default view is the desk: what was logged, where it stands, who is
+    // holding it. Nothing about branch hierarchy.
     render(<ComplaintDashboard />);
     for (const heading of [
-      'Complaint status mix',
-      'Where complaints come from',
-      'Service health',
       'Complaints per month',
       'Unsolved complaints by agent',
-      'Top restaurants',
       'By complaint type',
-      'By brand',
-      'By area',
-      'By city',
       'By status',
       'By service type',
       'By agent',
@@ -198,15 +193,49 @@ describe('ComplaintDashboard — every section his page has', () => {
     ]) {
       expect(screen.getByText(heading), `missing section: ${heading}`).toBeInTheDocument();
     }
+    for (const elsewhere of [
+      'Where complaints come from',
+      'Top restaurants',
+      'By brand',
+      'By area',
+    ]) {
+      expect(
+        screen.queryByText(elsewhere),
+        `should be on Operations: ${elsewhere}`,
+      ).not.toBeInTheDocument();
+    }
   });
 
-  it('leaves the agent numbers to the pages that are about agents', () => {
+  it('gives the OPERATIONS view the team around the branches', () => {
+    // Chain managers own brands, area managers own territories, branch managers
+    // own restaurants — so this view cuts the same rows by those.
+    render(<ComplaintDashboard view="operations" />);
+    for (const heading of [
+      'Where complaints come from',
+      'Top restaurants',
+      'By brand',
+      'By area',
+      'By city',
+    ]) {
+      expect(screen.getByText(heading), `missing section: ${heading}`).toBeInTheDocument();
+    }
+    expect(screen.queryByText('By agent')).not.toBeInTheDocument();
+  });
+
+  it('drops the readings that were a fourth copy of somebody else’s number', () => {
     // "Agent performance", "Agent performance — chat" and "Chat responsiveness"
     // were AGENT numbers on a BRANCH dashboard, and the fourth place to read
     // them: the Agent dashboard, the Agent performance page and the Agent
     // summary report all answer the same question with the same arithmetic.
     render(<ComplaintDashboard />);
-    for (const gone of ['Chat responsiveness', 'Agent performance', 'Agent performance — chat']) {
+    for (const gone of [
+      'Chat responsiveness',
+      'Agent performance',
+      'Agent performance — chat',
+      // Same numbers as the By-status bars and the KPI strip, read a third way.
+      'Complaint status mix',
+      'Service health',
+    ]) {
       expect(screen.queryByText(gone), `still present: ${gone}`).not.toBeInTheDocument();
     }
   });
@@ -254,26 +283,27 @@ describe('ComplaintDashboard — donut slices are actually painted', () => {
   });
 
   it('sizes the slices in proportion and prints the total in the middle', () => {
-    const { container } = render(<ComplaintDashboard />);
+    const { container } = render(<ComplaintDashboard view="operations" />);
     // Target the DONUT svg specifically — the page has other svgs (select
     // chevrons, the trend line) and picking the first one tests nothing.
     const svg = container.querySelector('svg[viewBox="0 0 140 140"]');
-    // byStatus is 6 + 4, so the first ring shows 10 in the centre.
+    // The one donut on this view is "Where complaints come from": byBrand is
+    // 7 + 3, so the ring shows 10 in the centre.
     expect(svg?.textContent).toContain('10');
     const first = svg?.querySelector('circle[stroke-dasharray]');
     const [len] = (first?.getAttribute('stroke-dasharray') ?? '').split(' ').map(Number);
     const circumference = 2 * Math.PI * 54;
-    // Largest slice first: 6 of 10.
-    expect(len).toBeCloseTo(circumference * 0.6, 1);
+    // Largest slice first: 7 of 10.
+    expect(len).toBeCloseTo(circumference * 0.7, 1);
   });
 });
 
 describe('ComplaintDashboard — a capped list admits what it hides', () => {
   it('prints "top N of M" only on the cuts that are actually truncated', () => {
-    render(<ComplaintDashboard />);
+    render(<ComplaintDashboard view="operations" />);
     // byCity shows 1 of 24 distinct cities.
     expect(screen.getByText('top 1 of 24')).toBeInTheDocument();
-    // byType shows all 2 of its 2, so it must NOT claim to be capped.
+    // A cut showing everything it has must NOT claim to be capped.
     expect(screen.queryByText('top 2 of 2')).not.toBeInTheDocument();
   });
 

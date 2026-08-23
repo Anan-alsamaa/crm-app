@@ -396,7 +396,7 @@ export function SlaReportsPage() {
         />
       </Toolbar>
 
-      <div className="flex-1 overflow-auto px-5 py-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6 lg:px-8">
         {report.isLoading ? (
           <div className="flex h-40 items-center justify-center">
             <Spinner />
@@ -410,7 +410,7 @@ export function SlaReportsPage() {
             })}
           />
         ) : (
-          <div className="mx-auto max-w-none space-y-5">
+          <div className="mx-auto flex min-h-0 w-full flex-1 flex-col gap-5">
             {/* Clean editorial header — same anatomy as the export reports. */}
             <div className="border-b border-foreground/10 pb-5">
               <h2 className="text-3xl font-bold tracking-tight text-foreground">
@@ -617,7 +617,7 @@ function TicketTable({
       )}
 
       <TableSurface
-        maxHeight="min(70vh, 44rem)"
+        fill
         scrollLabel={String(t('slaReports.title', { defaultValue: 'Ticket deadlines' }))}
       >
         <Table>

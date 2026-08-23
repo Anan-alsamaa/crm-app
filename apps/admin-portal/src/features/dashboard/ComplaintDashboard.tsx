@@ -117,6 +117,7 @@ function Kpi({
   meter,
   delta,
   order = 0,
+  onOpen,
 }: {
   value: string;
   label: string;
@@ -131,13 +132,22 @@ function Kpi({
   delta?: React.ReactNode;
   /** Position in the KPI row — drives the entrance cascade. */
   order?: number;
+  /**
+   * Makes the WHOLE card open its rows.
+   *
+   * Not a button parked on the card: a card carrying a control has two targets,
+   * and the number itself is what people point at.
+   */
+  onOpen?: () => void;
 }) {
   // An unmeasurable KPI used to render at hero size, which reads as a broken
   // card rather than as "nothing to measure yet". Anything without a digit in
   // it is a phrase standing in for a measurement, not a measurement.
   const empty = !/\d/.test(value);
+  const Root = onOpen ? 'button' : 'div';
   return (
-    <div
+    <Root
+      {...(onOpen ? { type: 'button', onClick: onOpen } : {})}
       style={{ animationDelay: `${Math.min(order, 6) * 55}ms` }}
       className={cn(
         'group flex flex-col rounded-2xl p-5 shadow-soft ring-1',
@@ -145,6 +155,8 @@ function Kpi({
         'motion-safe:animate-rise-in',
         'transition-[box-shadow,transform,border-color] duration-base ease-out',
         'hover:shadow-float hover:ring-foreground/[0.12] motion-safe:hover:-translate-y-1',
+        onOpen &&
+          'w-full cursor-pointer text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
       )}
     >
       {/* Label above the numeral and the icon chip at the END — the reference
@@ -195,7 +207,7 @@ function Kpi({
           {sub ?? ''}
         </div>
       </div>
-    </div>
+    </Root>
   );
 }
 
@@ -643,52 +655,8 @@ function Donut({ rows, onSelect }: { rows: Breakdown[]; onSelect?: (row: Breakdo
   );
 }
 
-/**
- * His split bar: one strip showing how a whole divides, with a key underneath.
- * Zero-value segments are dropped rather than rendered as slivers you cannot
- * read or tell apart.
- */
-function Composition({
-  segments,
-}: {
-  segments: Array<{ key: string; label: string; value: number; className: string }>;
-}) {
-  const { t } = useTranslation();
-  const shown = segments.filter((s) => s.value > 0);
-  const total = shown.reduce((sum, s) => sum + s.value, 0);
-  if (total === 0)
-    return (
-      <CardEmpty
-        label={t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
-      />
-    );
-  return (
-    <div className="mt-4">
-      <div className="flex h-3 overflow-hidden rounded-full bg-secondary">
-        {shown.map((s) => (
-          <span
-            key={s.key}
-            className={s.className}
-            style={{ width: `${(s.value / total) * 100}%` }}
-            title={`${s.label}: ${s.value}`}
-          />
-        ))}
-      </div>
-      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
-        {shown.map((s) => (
-          <li
-            key={s.key}
-            className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground"
-          >
-            <span aria-hidden className={cn('h-2 w-2 shrink-0 rounded-md', s.className)} />
-            {s.label}
-            <strong className="font-semibold tabular-nums text-foreground">{s.value}</strong>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+// `Composition` lived here for the Service health card, which is gone: it was
+// a fourth reading of numbers the KPI strip already carries.
 
 /**
  * Complaints per month as columns with compensation overlaid as a line — his
@@ -891,7 +859,19 @@ function DrillDown({
   );
 }
 
-export function ComplaintDashboard() {
+/**
+ * One dashboard component, two views.
+ *
+ * **agent** is the support desk — the tickets, chats and compensation the team
+ * is holding, with its charts. **operations** is the TEAM around the branches:
+ * chain managers own brands, area managers own territories, branch managers own
+ * restaurants, so it cuts the same filtered set by brand, area, city and branch.
+ *
+ * Shared, because both answer questions about the same rows: the filter bar, the
+ * KPI strip and the ops snapshot. Split past that, because the two audiences
+ * have nothing else in common.
+ */
+export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'operations' } = {}) {
   const { t, i18n } = useTranslation();
   // Draft vs applied: his bar only re-runs the dashboard on Apply, which matters
   // when a filter change means refetching every ticket.
@@ -1208,6 +1188,15 @@ export function ComplaintDashboard() {
               order={2}
               value={String(d.overdue)}
               label={t('complaintDash.kpiOverdue', { defaultValue: 'Overdue' })}
+              onOpen={
+                d.overdue > 0
+                  ? () =>
+                      setDrill({
+                        title: t('complaintDash.kpiOverdue', { defaultValue: 'Overdue' }),
+                        rows: (d.rows ?? []).filter((r) => r.overdue),
+                      })
+                  : undefined
+              }
               // His "Escalated" has no equivalent status here, so this counts
               // the real thing a supervisor would chase instead.
               sub={t('complaintDash.overdueHint', { defaultValue: 'past first-reply SLA' })}
@@ -1378,32 +1367,34 @@ export function ComplaintDashboard() {
               The reference board's column panel. It replaces the ranked
               "By complaint type" list further down — same records, same
               drill, read as a shape instead of a table. */}
-          <SectionCard
-            title={t('complaintDash.byType', { defaultValue: 'By complaint type' })}
-            hint={t('complaintDash.byTypeHint', {
-              defaultValue: 'What customers are actually complaining about, biggest first.',
-            })}
-            aside={
-              d.byType.distinct > 8
-                ? t('complaintDash.topOf', {
-                    defaultValue: 'top {{n}} of {{m}}',
-                    n: 8,
-                    m: d.byType.distinct,
-                  })
-                : undefined
-            }
-          >
-            <Columns
-              rows={d.byType.rows}
-              emptyLabel={t('complaintDash.nothingInRange', {
-                defaultValue: 'Nothing in this range.',
+          {view === 'agent' && (
+            <SectionCard
+              title={t('complaintDash.byType', { defaultValue: 'By complaint type' })}
+              hint={t('complaintDash.byTypeHint', {
+                defaultValue: 'What customers are actually complaining about, biggest first.',
               })}
-              onSelect={drillInto(
-                t('complaintDash.byType', { defaultValue: 'By complaint type' }),
-                (r) => r.complaintType,
-              )}
-            />
-          </SectionCard>
+              aside={
+                d.byType.distinct > 8
+                  ? t('complaintDash.topOf', {
+                      defaultValue: 'top {{n}} of {{m}}',
+                      n: 8,
+                      m: d.byType.distinct,
+                    })
+                  : undefined
+              }
+            >
+              <Columns
+                rows={d.byType.rows}
+                emptyLabel={t('complaintDash.nothingInRange', {
+                  defaultValue: 'Nothing in this range.',
+                })}
+                onSelect={drillInto(
+                  t('complaintDash.byType', { defaultValue: 'By complaint type' }),
+                  (r) => r.complaintType,
+                )}
+              />
+            </SectionCard>
+          )}
 
           {/* ── The two rings ────────────────────────────────────────────
               Same numbers as the By-status and By-brand bars further down, read
@@ -1411,117 +1402,38 @@ export function ComplaintDashboard() {
               both, and on a page people scan rather than study, that is the
               point rather than a duplication. */}
           <div className="grid gap-4 md:grid-cols-2">
-            <SectionCard
-              title={t('complaintDash.statusMix', { defaultValue: 'Complaint status mix' })}
-            >
-              <Donut
-                rows={d.byStatus.rows.map((r) => ({
-                  ...r,
-                  label: t(`status.${r.key}`, { ns: 'common', defaultValue: r.key }),
-                }))}
-                onSelect={drillInto(
-                  t('complaintDash.statusMix', { defaultValue: 'Complaint status mix' }),
-                  (r) => r.status,
-                )}
-              />
-            </SectionCard>
-            <SectionCard
-              title={t('complaintDash.brandMix', { defaultValue: 'Where complaints come from' })}
-            >
-              <Donut
-                rows={d.byBrand.rows}
-                onSelect={drillInto(
-                  t('complaintDash.byBrand', { defaultValue: 'By brand' }),
-                  (r) => r.brandName,
-                )}
-              />
-            </SectionCard>
+            {view === 'operations' && (
+              <SectionCard
+                title={t('complaintDash.brandMix', { defaultValue: 'Where complaints come from' })}
+              >
+                <Donut
+                  rows={d.byBrand.rows}
+                  onSelect={drillInto(
+                    t('complaintDash.byBrand', { defaultValue: 'By brand' }),
+                    (r) => r.brandName,
+                  )}
+                />
+              </SectionCard>
+            )}
           </div>
 
           {/* ── Service health ───────────────────────────────────────────
               His gauge + composition strip: one glance at whether the work is
               finishing well, and whether chats are being picked up. */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <SectionCard
-              title={t('complaintDash.health', { defaultValue: 'Service health' })}
-              hint={t('complaintDash.healthHint', {
-                defaultValue: 'Where every complaint in this range currently stands.',
-              })}
-            >
-              <div className="flex items-baseline gap-3">
-                <span
-                  className={cn(
-                    d.satisfiedPct === null
-                      ? 'text-sm font-semibold'
-                      : 'text-4xl font-extrabold tabular-nums tracking-[-0.03em]',
-                    d.satisfiedPct === null
-                      ? 'text-muted-foreground'
-                      : d.satisfiedPct >= 80
-                        ? 'text-success'
-                        : d.satisfiedPct >= 50
-                          ? 'text-warning-foreground'
-                          : 'text-destructive',
-                  )}
-                >
-                  {d.satisfiedPct === null
-                    ? t('complaintDash.notMeasured', { defaultValue: 'Not measured yet' })
-                    : `${Math.round(d.satisfiedPct)}%`}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {t('complaintDash.healthGauge', {
-                    defaultValue: 'of rated complaints ended satisfied',
-                  })}
-                </span>
-              </div>
-              <Composition
-                segments={[
-                  {
-                    key: 'sat',
-                    label: t('complaintDash.segSatisfied', { defaultValue: 'Closed satisfied' }),
-                    value: d.health.closedSatisfied,
-                    className: 'bg-success',
-                  },
-                  {
-                    key: 'unsat',
-                    label: t('complaintDash.segUnsatisfied', {
-                      defaultValue: 'Closed unsatisfied',
-                    }),
-                    value: d.health.closedUnsatisfied,
-                    className: 'bg-destructive',
-                  },
-                  {
-                    key: 'unrated',
-                    label: t('complaintDash.segUnrated', { defaultValue: 'Closed, not rated' }),
-                    value: d.health.closedUnrated,
-                    className: 'bg-muted-foreground/40',
-                  },
-                  {
-                    key: 'open',
-                    label: t('complaintDash.segOpen', { defaultValue: 'Still open' }),
-                    value: d.health.openNotOverdue,
-                    className: 'bg-sky',
-                  },
-                  {
-                    key: 'overdue',
-                    label: t('complaintDash.segOverdue', { defaultValue: 'Overdue' }),
-                    value: d.health.overdue,
-                    className: 'bg-violet',
-                  },
-                ]}
-              />
-            </SectionCard>
-          </div>
+          <div className="grid gap-4 md:grid-cols-2"></div>
 
           {/* ── Trend ────────────────────────────────────────────────────── */}
-          <SectionCard
-            title={t('complaintDash.perMonth', { defaultValue: 'Complaints per month' })}
-            hint={t('complaintDash.perMonthHint3', {
-              defaultValue:
-                'Two readings over the same months: how many complaints were logged, and what was paid out. Each has its own scale — they are different units.',
-            })}
-          >
-            <TrendChart months={d.months} />
-          </SectionCard>
+          {view === 'agent' && (
+            <SectionCard
+              title={t('complaintDash.perMonth', { defaultValue: 'Complaints per month' })}
+              hint={t('complaintDash.perMonthHint3', {
+                defaultValue:
+                  'Two readings over the same months: how many complaints were logged, and what was paid out. Each has its own scale — they are different units.',
+              })}
+            >
+              <TrendChart months={d.months} />
+            </SectionCard>
+          )}
 
           {/* ── Heatmap + funnel ─────────────────────────────────────────
               The reference dashboard's pair: WHEN complaints land (weekday ×
@@ -1536,37 +1448,39 @@ export function ComplaintDashboard() {
             >
               <Heatmap rows={d.rows ?? []} locale={i18n?.language ?? 'en'} />
             </SectionCard>
-            <SectionCard
-              title={t('complaintDash.funnel', { defaultValue: 'Complaints funnel' })}
-              hint={t('complaintDash.funnelHint', {
-                defaultValue: 'Each stage against everything logged in range.',
-              })}
-            >
-              <Funnel
-                steps={[
-                  {
-                    label: t('complaintDash.funnelLogged', { defaultValue: 'Logged' }),
-                    value: d.total,
-                    tone: 'primary',
-                  },
-                  {
-                    label: t('complaintDash.funnelClosed', { defaultValue: 'Closed' }),
-                    value: d.closed,
-                    tone: 'sky',
-                  },
-                  {
-                    label: t('complaintDash.funnelRated', { defaultValue: 'Rated' }),
-                    value: d.rated,
-                    tone: 'violet',
-                  },
-                  {
-                    label: t('complaintDash.funnelSatisfied', { defaultValue: 'Satisfied' }),
-                    value: d.satisfied,
-                    tone: 'success',
-                  },
-                ]}
-              />
-            </SectionCard>
+            {view === 'agent' && (
+              <SectionCard
+                title={t('complaintDash.funnel', { defaultValue: 'Complaints funnel' })}
+                hint={t('complaintDash.funnelHint', {
+                  defaultValue: 'Each stage against everything logged in range.',
+                })}
+              >
+                <Funnel
+                  steps={[
+                    {
+                      label: t('complaintDash.funnelLogged', { defaultValue: 'Logged' }),
+                      value: d.total,
+                      tone: 'primary',
+                    },
+                    {
+                      label: t('complaintDash.funnelClosed', { defaultValue: 'Closed' }),
+                      value: d.closed,
+                      tone: 'sky',
+                    },
+                    {
+                      label: t('complaintDash.funnelRated', { defaultValue: 'Rated' }),
+                      value: d.rated,
+                      tone: 'violet',
+                    },
+                    {
+                      label: t('complaintDash.funnelSatisfied', { defaultValue: 'Satisfied' }),
+                      value: d.satisfied,
+                      tone: 'success',
+                    },
+                  ]}
+                />
+              </SectionCard>
+            )}
           </div>
 
           {/* "Agent performance", "Agent performance — chat" and "Chat
@@ -1585,149 +1499,168 @@ export function ComplaintDashboard() {
                 agent": that ranks who logged the most, this ranks who is still
                 holding unfinished work — a heavy logger with nothing
                 outstanding is the opposite of a problem. */}
-            <SectionCard
-              title={t('complaintDash.unsolvedByAgent', {
-                defaultValue: 'Unsolved complaints by agent',
-              })}
-              hint={
-                d.byOpenAgent.rows.length > 0
-                  ? t('complaintDash.unsolvedHint', {
-                      defaultValue: '{{n}} still open across the filtered range.',
-                      n: d.open,
-                    })
-                  : undefined
-              }
-              className="md:col-span-2"
-            >
-              {d.byOpenAgent.rows.length === 0 ? (
-                <CardEmpty
-                  label={t('complaintDash.nothingOutstanding', {
-                    defaultValue: 'Nothing outstanding — every complaint in this range is closed.',
-                  })}
-                />
-              ) : (
-                // Shares are OF THE OPEN PILE, not of every complaint: "40% of
-                // what is still open" is the question being asked here.
-                <Bars
-                  rows={d.byOpenAgent.rows}
-                  total={d.open}
-                  color="bg-destructive"
-                  onSelect={drillInto(
-                    t('complaintDash.unsolvedByAgent', {
-                      defaultValue: 'Unsolved complaints by agent',
-                    }),
-                    (r) => r.agentId,
-                    // His click lands on the UNSOLVED ones only, not everything
-                    // that agent has ever logged.
-                    (r) => r.isOpen,
-                  )}
-                />
-              )}
-            </SectionCard>
-            <CutCard
-              title={t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' })}
-              hint={
-                d.unattributed > 0
-                  ? t('complaintDash.unattributed', {
+            {view === 'agent' && (
+              <SectionCard
+                title={t('complaintDash.unsolvedByAgent', {
+                  defaultValue: 'Unsolved complaints by agent',
+                })}
+                hint={
+                  d.byOpenAgent.rows.length > 0
+                    ? t('complaintDash.unsolvedHint', {
+                        defaultValue: '{{n}} still open across the filtered range.',
+                        n: d.open,
+                      })
+                    : undefined
+                }
+                className="md:col-span-2"
+              >
+                {d.byOpenAgent.rows.length === 0 ? (
+                  <CardEmpty
+                    label={t('complaintDash.nothingOutstanding', {
                       defaultValue:
-                        '{{n}} complaint(s) have no branch recorded and are missing from this cut.',
-                      n: d.unattributed,
-                    })
-                  : undefined
-              }
-              cut={d.byRestaurant}
-              total={d.total}
-              color="bg-foreground"
-              onSelect={drillInto(
-                t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' }),
-                (r) => r.restaurantName,
-              )}
-            />
-            <CutCard
-              title={t('complaintDash.byBrand', { defaultValue: 'By brand' })}
-              cut={d.byBrand}
-              total={d.total}
-              // Magenta, not warning: `--warning` is a light token whose bars
-              // wash out on the light theme.
-              color="bg-magenta"
-              onSelect={drillInto(
-                t('complaintDash.byBrand', { defaultValue: 'By brand' }),
-                (r) => r.brandName,
-              )}
-            />
-            <CutCard
-              title={t('complaintDash.byArea', { defaultValue: 'By area' })}
-              hint={t('complaintDash.byAreaHint', {
-                defaultValue: 'The area manager responsible for the branch.',
-              })}
-              cut={d.byArea}
-              total={d.total}
-              color="bg-primary"
-              onSelect={drillInto(
-                t('complaintDash.byArea', { defaultValue: 'By area' }),
-                (r) => r.area,
-              )}
-            />
-            <CutCard
-              title={t('complaintDash.byCity', { defaultValue: 'By city' })}
-              cut={d.byCity}
-              total={d.total}
-              color="bg-sky"
-              onSelect={drillInto(
-                t('complaintDash.byCity', { defaultValue: 'By city' }),
-                (r) => r.city,
-              )}
-            />
-            <CutCard
-              title={t('complaintDash.byAgent', { defaultValue: 'By agent' })}
-              cut={d.byAgent}
-              total={d.total}
-              color="bg-violet"
-              onSelect={drillInto(
-                t('complaintDash.byAgent', { defaultValue: 'By agent' }),
-                (r) => r.agentId,
-              )}
-            />
-            <CutCard
-              title={t('complaintDash.byStatus', { defaultValue: 'By status' })}
-              cut={{
-                ...d.byStatus,
-                rows: d.byStatus.rows.map((r) => ({
-                  ...r,
-                  label: t(`status.${r.key}`, { ns: 'common', defaultValue: r.key }),
-                })),
-              }}
-              total={d.total}
-              color="bg-success"
-              onSelect={drillInto(
-                t('complaintDash.byStatus', { defaultValue: 'By status' }),
-                (r) => r.status,
-              )}
-            />
-            <CutCard
-              title={t('complaintDash.byServiceType', { defaultValue: 'By service type' })}
-              cut={d.byServiceType}
-              total={d.total}
-              color="bg-primary"
-              onSelect={drillInto(
-                t('complaintDash.byServiceType', { defaultValue: 'By service type' }),
-                (r) => r.serviceType,
-              )}
-            />
+                        'Nothing outstanding — every complaint in this range is closed.',
+                    })}
+                  />
+                ) : (
+                  // Shares are OF THE OPEN PILE, not of every complaint: "40% of
+                  // what is still open" is the question being asked here.
+                  <Bars
+                    rows={d.byOpenAgent.rows}
+                    total={d.open}
+                    color="bg-destructive"
+                    onSelect={drillInto(
+                      t('complaintDash.unsolvedByAgent', {
+                        defaultValue: 'Unsolved complaints by agent',
+                      }),
+                      (r) => r.agentId,
+                      // His click lands on the UNSOLVED ones only, not everything
+                      // that agent has ever logged.
+                      (r) => r.isOpen,
+                    )}
+                  />
+                )}
+              </SectionCard>
+            )}
+            {view === 'operations' && (
+              <CutCard
+                title={t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' })}
+                hint={
+                  d.unattributed > 0
+                    ? t('complaintDash.unattributed', {
+                        defaultValue:
+                          '{{n}} complaint(s) have no branch recorded and are missing from this cut.',
+                        n: d.unattributed,
+                      })
+                    : undefined
+                }
+                cut={d.byRestaurant}
+                total={d.total}
+                color="bg-foreground"
+                onSelect={drillInto(
+                  t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' }),
+                  (r) => r.restaurantName,
+                )}
+              />
+            )}
+            {view === 'operations' && (
+              <CutCard
+                title={t('complaintDash.byBrand', { defaultValue: 'By brand' })}
+                cut={d.byBrand}
+                total={d.total}
+                // Magenta, not warning: `--warning` is a light token whose bars
+                // wash out on the light theme.
+                color="bg-magenta"
+                onSelect={drillInto(
+                  t('complaintDash.byBrand', { defaultValue: 'By brand' }),
+                  (r) => r.brandName,
+                )}
+              />
+            )}
+            {view === 'operations' && (
+              <CutCard
+                title={t('complaintDash.byArea', { defaultValue: 'By area' })}
+                hint={t('complaintDash.byAreaHint', {
+                  defaultValue: 'The area manager responsible for the branch.',
+                })}
+                cut={d.byArea}
+                total={d.total}
+                color="bg-primary"
+                onSelect={drillInto(
+                  t('complaintDash.byArea', { defaultValue: 'By area' }),
+                  (r) => r.area,
+                )}
+              />
+            )}
+            {view === 'operations' && (
+              <CutCard
+                title={t('complaintDash.byCity', { defaultValue: 'By city' })}
+                cut={d.byCity}
+                total={d.total}
+                color="bg-sky"
+                onSelect={drillInto(
+                  t('complaintDash.byCity', { defaultValue: 'By city' }),
+                  (r) => r.city,
+                )}
+              />
+            )}
+            {view === 'agent' && (
+              <CutCard
+                title={t('complaintDash.byAgent', { defaultValue: 'By agent' })}
+                cut={d.byAgent}
+                total={d.total}
+                color="bg-violet"
+                onSelect={drillInto(
+                  t('complaintDash.byAgent', { defaultValue: 'By agent' }),
+                  (r) => r.agentId,
+                )}
+              />
+            )}
+            {view === 'agent' && (
+              <CutCard
+                title={t('complaintDash.byStatus', { defaultValue: 'By status' })}
+                cut={{
+                  ...d.byStatus,
+                  rows: d.byStatus.rows.map((r) => ({
+                    ...r,
+                    label: t(`status.${r.key}`, { ns: 'common', defaultValue: r.key }),
+                  })),
+                }}
+                total={d.total}
+                color="bg-success"
+                onSelect={drillInto(
+                  t('complaintDash.byStatus', { defaultValue: 'By status' }),
+                  (r) => r.status,
+                )}
+              />
+            )}
+            {view === 'agent' && (
+              <CutCard
+                title={t('complaintDash.byServiceType', { defaultValue: 'By service type' })}
+                cut={d.byServiceType}
+                total={d.total}
+                color="bg-primary"
+                onSelect={drillInto(
+                  t('complaintDash.byServiceType', { defaultValue: 'By service type' }),
+                  (r) => r.serviceType,
+                )}
+              />
+            )}
             {/* Retitled off his wording deliberately: he uses "Where complaints
                 come from" for the BRAND ring above. Two cards under one title
                 showing different things is worse than losing his phrasing. */}
-            <CutCard
-              title={t('complaintDash.bySource', { defaultValue: 'How complaints reach us' })}
-              className="md:col-span-2"
-              cut={d.bySource}
-              total={d.total}
-              color="bg-destructive"
-              onSelect={drillInto(
-                t('complaintDash.bySource', { defaultValue: 'How complaints reach us' }),
-                (r) => r.source,
-              )}
-            />
+            {view === 'agent' && (
+              <CutCard
+                title={t('complaintDash.bySource', { defaultValue: 'How complaints reach us' })}
+                className="md:col-span-2"
+                cut={d.bySource}
+                total={d.total}
+                color="bg-destructive"
+                onSelect={drillInto(
+                  t('complaintDash.bySource', { defaultValue: 'How complaints reach us' }),
+                  (r) => r.source,
+                )}
+              />
+            )}
           </div>
         </>
       )}

@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom';
 import { cn, Toolbar } from '@yiji/ui';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { ComplaintDashboard } from './ComplaintDashboard.js';
-import { AgentDashboard } from './AgentDashboard.js';
 
 /**
  * Two dashboards, because there are two jobs.
@@ -32,7 +31,9 @@ export function DashboardPage() {
   const { user, can } = useAuth();
   const firstName = user?.first_name || user?.email?.split('@')[0] || '';
   const canSeeAgent = can('view_all_chats');
-  const [tab, setTab] = useState<Tab>('operations');
+  const [tab, setTab] = useState<Tab>('agent');
+  // Without the chat privilege there is one dashboard, and it is Operations —
+  // the team view. Agent is the support desk and needs the desk's privilege.
   const active: Tab = canSeeAgent ? tab : 'operations';
 
   return (
@@ -52,8 +53,8 @@ export function DashboardPage() {
         >
           {(
             [
-              ['operations', t('dashboard.tabOperations', { defaultValue: 'Operations' })],
               ['agent', t('dashboard.tabAgent', { defaultValue: 'Agent' })],
+              ['operations', t('dashboard.tabOperations', { defaultValue: 'Operations' })],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -76,60 +77,55 @@ export function DashboardPage() {
         </nav>
       )}
 
-      {active === 'agent' ? (
-        <div className="min-h-0 flex-1">
-          <AgentDashboard />
-        </div>
-      ) : (
-        <div className="flex-1 overflow-auto p-4 sm:p-6">
-          {/* The reference dashboard's hero band: a saturated violet→jade sweep
-              with the greeting and the two jumps an admin makes first. White ink
-              on purpose — the fill is saturated in BOTH themes, and the theme
-              tokens would flip to unreadable here. */}
-          <div className="relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-violet to-brand-glow p-6 shadow-float">
-            <div
-              aria-hidden
-              className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.25),transparent_60%)]"
-            />
-            <div className="relative flex flex-wrap items-center justify-between gap-4">
-              <div className="min-w-0">
-                <h2 className="font-display text-2xl font-bold tracking-tight text-white">
-                  {firstName
-                    ? t('dashboard.heroWelcome', {
-                        defaultValue: 'Welcome back, {{name}}',
-                        name: firstName,
-                      })
-                    : t('dashboard.heroWelcomeBare', { defaultValue: 'Welcome back' })}
-                </h2>
-                <p className="mt-1 max-w-xl text-sm leading-relaxed text-white/85">
-                  {t('dashboard.heroSub', {
-                    defaultValue:
-                      'Here is where every complaint stands right now — filter the range below, or jump straight in.',
-                  })}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Link
-                  to="/reports/operational-kpi/tickets"
-                  className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[oklch(0.3_0.1_285)] shadow-sm transition-transform duration-fast motion-safe:hover:-translate-y-0.5"
-                >
-                  {t('dashboard.heroTickets', { defaultValue: 'Ticket breakdown' })}
-                </Link>
-                {can('view_all_chats') && (
+      <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4 sm:p-6">
+        {active === 'agent' && (
+          <>
+            {/* The reference dashboard's hero band: a saturated violet→jade
+                sweep with the greeting and the two jumps a supervisor makes
+                first. White ink on purpose — the fill is saturated in BOTH
+                themes, and the theme tokens would flip to unreadable here. */}
+            <div className="relative mb-5 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-violet to-brand-glow p-6 shadow-float">
+              <div
+                aria-hidden
+                className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.25),transparent_60%)]"
+              />
+              <div className="relative flex flex-wrap items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="font-display text-2xl font-bold tracking-tight text-white">
+                    {firstName
+                      ? t('dashboard.heroWelcome', {
+                          defaultValue: 'Welcome back, {{name}}',
+                          name: firstName,
+                        })
+                      : t('dashboard.heroWelcomeBare', { defaultValue: 'Welcome back' })}
+                  </h2>
+                  <p className="mt-1 max-w-xl text-sm leading-relaxed text-white/85">
+                    {t('dashboard.heroSub', {
+                      defaultValue:
+                        'Here is where every complaint stands right now — filter the range below, or jump straight in.',
+                    })}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Link
+                    to="/reports/operational-kpi/tickets"
+                    className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[oklch(0.3_0.1_285)] shadow-sm transition-transform duration-fast motion-safe:hover:-translate-y-0.5"
+                  >
+                    {t('dashboard.heroTickets', { defaultValue: 'Ticket breakdown' })}
+                  </Link>
                   <Link
                     to="/agent-performance"
                     className="rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white ring-1 ring-inset ring-white/40 transition-colors duration-fast hover:bg-white/25"
                   >
                     {t('dashboard.heroAgents', { defaultValue: 'Agent performance' })}
                   </Link>
-                )}
+                </div>
               </div>
             </div>
-          </div>
-
-          <ComplaintDashboard />
-        </div>
-      )}
+          </>
+        )}
+        <ComplaintDashboard view={active} />
+      </div>
     </div>
   );
 }
