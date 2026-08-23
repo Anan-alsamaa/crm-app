@@ -236,6 +236,41 @@ export const roles: RoleSpec[] = [
       { collection: 'stores', action: 'delete' },
       { collection: 'stores', action: 'create', fields: STORE_FIELDS_NO_YIJI_ID },
       { collection: 'stores', action: 'update', fields: STORE_FIELDS_NO_YIJI_ID },
+      // Auto-assignment outcomes. The workers write these; the dashboard, the
+      // agent-performance page and the Agent KPI report all READ them, and
+      // without the grant every one of those surfaces answered 403 and showed
+      // the reader a zero instead of a number. A missing measure that renders
+      // as "0" is worse than an error, because nobody goes looking.
+      ...readOnly('routing_events'),
+      // Junction tables. An Admin is a superset of an Agent for reading, but
+      // these were only ever granted to the Agent role — so an admin opening a
+      // tagged conversation, a ticket with an attachment, or a message with a
+      // mention got a 403 on the join and a view with the tags and files
+      // silently missing.
+      ...crud('conversations_tags'),
+      ...crud('contacts_tags'),
+      ...crud('tickets_files'),
+      ...crud('messages_files'),
+      ...crud('messages_mentions'),
+      // Compensation ops queue. The Agent role was granted these and the Admin
+      // role was not, so /reports/operational-kpi/compensation answered 403 for
+      // every CRM administrator while answering 200 for their own agents — the
+      // page rendered, empty, looking like there was no compensation data.
+      //
+      // Same shape as the Agent grant on purpose: read the queue, and the same
+      // field-scoped update. Status, computed values and coupon links stay
+      // read-only because the Directus flows write them, and a flow that runs
+      // with its own accountability is the whole point of that split.
+      ...(PROVISION_COMPENSATION ? COMPENSATION_COLLECTIONS.flatMap(readOnly) : []),
+      ...(PROVISION_COMPENSATION
+        ? [
+            {
+              collection: 'compensation_requests',
+              action: 'update' as Action,
+              fields: COMPENSATION_OPS_EDITABLE_FIELDS,
+            },
+          ]
+        : []),
     ],
   },
   {
