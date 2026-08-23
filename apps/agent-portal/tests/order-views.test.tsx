@@ -165,12 +165,12 @@ describe('LatestOrder (inbox)', () => {
     renderView(<LatestOrder vendorId="v1" customerId="cust-guid" />);
 
     await waitFor(() => expect(screen.getByText('#P-1')).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /New complaint/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /New ticket/ })).not.toBeInTheDocument();
   });
 
   it('order id is a button that CHOOSES that order and asks for a ticket', async () => {
     sessionStorage.clear();
-    // Two orders: the complaint is about the OLDER one, which is exactly the
+    // Two orders: the ticket is about the OLDER one, which is exactly the
     // case the automatic "latest order" lookup gets wrong.
     client.getOrders.mockResolvedValue([
       summary('N-1', '2026-06-25T15:00:00'),
@@ -188,7 +188,7 @@ describe('LatestOrder (inbox)', () => {
     );
 
     const trigger = await screen.findByRole('button', {
-      name: 'New complaint for order #N-2',
+      name: 'New ticket for order #N-2',
     });
     fireEvent.click(trigger);
 
@@ -266,7 +266,7 @@ describe('LatestOrder — keeping orders the agent looked up', () => {
 
   it('offers the manual search even when the customer already has orders', async () => {
     // It used to appear only when the automatic lookup came back empty, which
-    // made "the complaint is about an older order" an invisible case.
+    // made "the ticket is about an older order" an invisible case.
     client.getOrders.mockResolvedValue([summary('N-1', '2026-07-01T10:00:00')]);
     renderView(<LatestOrder vendorId="v1" customerId="c1" conversationId="conv-1" />);
     await screen.findByText(/N-1/);
@@ -359,7 +359,7 @@ describe('LatestOrder — keeping orders the agent looked up', () => {
 
   it('the ticket follows a KEPT order when that is the one clicked', async () => {
     // The case the whole feature exists for: the customer's two recent orders
-    // are on screen, the complaint is about an older one the agent looked up,
+    // are on screen, the ticket is about an older one the agent looked up,
     // and clicking it must be what the ticket records.
     const onCreate = vi.fn();
     client.getOrders.mockResolvedValue([
@@ -377,7 +377,7 @@ describe('LatestOrder — keeping orders the agent looked up', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'New complaint for order #OLD-7' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'New ticket for order #OLD-7' }));
     await waitFor(() => expect(getChosenOrder('conv-9')?.orderId).toBe('OLD-7'));
     expect(onCreate.mock.calls[0]![0]).toMatchObject({ orderId: 'OLD-7' });
   });

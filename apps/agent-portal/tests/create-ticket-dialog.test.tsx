@@ -43,9 +43,9 @@ function renderDialog(onClose = vi.fn()) {
   };
 }
 
-/** Pick a complaint type the way an agent does: type, then choose from the list. */
+/** Pick a ticket type the way an agent does: type, then choose from the list. */
 async function chooseComplaintType(label: string) {
-  const field = screen.getByText('Complaint type').parentElement!.querySelector('input')!;
+  const field = screen.getByText('Ticket type').parentElement!.querySelector('input')!;
   await userEvent.click(field);
   await userEvent.type(field, label);
   await userEvent.click(await screen.findByRole('option', { name: label }));
@@ -77,7 +77,7 @@ describe('CreateTicketForm', () => {
     expect(screen.getByText('tickets.description')).toBeInTheDocument();
   });
 
-  it('has no subject box — the complaint type names the ticket', () => {
+  it('has no subject box — the ticket type names the ticket', () => {
     renderDialog();
     expect(screen.queryByText('tickets.subject')).not.toBeInTheDocument();
     expect(screen.getByText('Required — it names the ticket')).toBeInTheDocument();
@@ -106,10 +106,10 @@ describe('CreateTicketForm', () => {
     // Not a generic "check the highlighted fields" — that sends the agent
     // hunting across thirteen fields for the one thing that is missing.
     expect(screen.getByText('tickets.create').closest('button')).toBeDisabled();
-    expect(screen.getByText('Choose a complaint type — it names the ticket')).toBeInTheDocument();
+    expect(screen.getByText('Choose a ticket type — it names the ticket')).toBeInTheDocument();
   });
 
-  it('saves the complaint type as the subject, verbatim', async () => {
+  it('saves the ticket type as the subject, verbatim', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({});
     hooks.useCreateTicketFromConversation.mockReturnValue({ mutateAsync });
     const { onClose } = renderDialog();
@@ -148,7 +148,7 @@ describe('CreateTicketForm', () => {
     expect(screen.getByText(/reported to the branch/)).toBeInTheDocument();
   });
 
-  it('stays silent for a complaint type the branch is not told about', async () => {
+  it('stays silent for a ticket type the branch is not told about', async () => {
     renderDialog();
     await chooseComplaintType('Technical issue');
     expect(screen.queryByText(/reported to the branch/)).not.toBeInTheDocument();

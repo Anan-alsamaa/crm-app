@@ -712,11 +712,11 @@ function ComplaintsReport({
     onSuccess: () => {
       setSelectedId(null);
       void qc.invalidateQueries({ queryKey: ['agent-reports'] });
-      toast.success(t('complaintReport.deleted', { defaultValue: 'Complaint deleted.' }));
+      toast.success(t('complaintReport.deleted', { defaultValue: 'Ticket deleted.' }));
     },
     onError: () =>
       toast.error(
-        t('complaintReport.deleteFailed', { defaultValue: 'Could not delete that complaint.' }),
+        t('complaintReport.deleteFailed', { defaultValue: 'Could not delete that ticket.' }),
       ),
   });
   /** Actor names for the history drawer — ids alone accuse nobody legibly. */
@@ -997,7 +997,7 @@ function ComplaintsReport({
               onChange={(e) => setCriterion({ query: e.target.value })}
               className="h-8"
               placeholder={t('complaintReport.searchPlaceholder', {
-                defaultValue: 'Order number, phone, branch, or a word from the complaint…',
+                defaultValue: 'Order number, phone, branch, or a word from the ticket…',
               })}
             />
           </label>
@@ -1026,7 +1026,7 @@ function ComplaintsReport({
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <FilterSelect
-            label={t('complaintReport.col.complaintType', { defaultValue: 'Complaint type' })}
+            label={t('complaintReport.col.complaintType', { defaultValue: 'Ticket type' })}
             field="complaintType"
             values={options.complaintType}
             value={criteria.complaintType}
@@ -2392,15 +2392,13 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
             a screen with room for twenty. The strip stays capped on its own
             (see ReportKpiStrip usages); the table gets the width. */}
         <div className="mx-auto flex min-h-0 w-full flex-1 flex-col gap-5">
-          {/* Clean editorial header — no gradient banner. */}
-          <div className="border-b border-foreground/10 pb-5">
-            <h2 className="text-3xl font-bold tracking-tight text-foreground">
-              {t(meta.titleKey, { defaultValue: meta.titleDefault })}
-            </h2>
-            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              {t(meta.subKey, { defaultValue: meta.subDefault })}
-            </p>
-          </div>
+          {/* The NAME is already on screen twice — the tab pill and the toolbar
+              above. A third copy at 3xl was the biggest thing on the page and
+              said nothing the other two had not. What survives is the one line
+              that does: what this report is for. */}
+          <p className="max-w-3xl shrink-0 text-sm leading-relaxed text-muted-foreground">
+            {t(meta.subKey, { defaultValue: meta.subDefault })}
+          </p>
 
           {report.isLoading ? (
             <div className="space-y-3">
@@ -2474,11 +2472,11 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
                      action, not a data problem. */
                   <EmptyState
                     title={t('complaintReport.noSchema', {
-                      defaultValue: 'Complaint fields are not available here',
+                      defaultValue: 'Ticket fields are not available here',
                     })}
                     description={t('complaintReport.noSchemaHint', {
                       defaultValue:
-                        'This Directus does not yet have the complaint fields. Apply the Directus bootstrap, then reload.',
+                        'This Directus does not yet have the ticket fields. Apply the Directus bootstrap, then reload.',
                     })}
                   />
                 ))}

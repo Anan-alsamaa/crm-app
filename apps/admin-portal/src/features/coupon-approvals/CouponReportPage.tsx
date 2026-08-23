@@ -206,7 +206,7 @@ export function CouponReportPage() {
                   tone="sky"
                   hint={t('couponReport.amendedHint', {
                     defaultValue:
-                      'A supervisor granted something other than what was asked for. High here means agents and supervisors disagree about what a complaint is worth.',
+                      'A supervisor granted something other than what was asked for. High here means agents and supervisors disagree about what a ticket is worth.',
                   })}
                 />
                 <Rate

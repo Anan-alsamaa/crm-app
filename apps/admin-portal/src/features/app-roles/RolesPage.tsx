@@ -290,7 +290,7 @@ export function RolesPage() {
     approve_coupons: t('roles.p.approveCoupons', { defaultValue: 'Approve coupons' }),
     view_dashboard: t('roles.p.viewDashboard', { defaultValue: 'View dashboards & reports' }),
     export_data: t('roles.p.exportData', { defaultValue: 'Export to Excel/CSV' }),
-    import_data: t('roles.p.importData', { defaultValue: 'Import complaints' }),
+    import_data: t('roles.p.importData', { defaultValue: 'Import tickets' }),
     manage_lists: t('roles.p.manageLists', { defaultValue: 'Edit dropdown lists & settings' }),
     manage_restaurants: t('roles.p.manageRestaurants', {
       defaultValue: 'Manage brands & branches',

@@ -152,9 +152,9 @@ export function OptionListsPage() {
   );
 
   const LIST_LABELS: Record<ListKey, string> = {
-    complaint_type: t('lists.complaintType', { defaultValue: 'Complaint type' }),
+    complaint_type: t('lists.complaintType', { defaultValue: 'Ticket type' }),
     service_type: t('lists.serviceType', { defaultValue: 'Service type' }),
-    complaint_source: t('lists.complaintSource', { defaultValue: 'Complaint source' }),
+    complaint_source: t('lists.complaintSource', { defaultValue: 'Ticket source' }),
     communication_method: t('lists.communicationMethod', { defaultValue: 'Communication method' }),
     compensation: t('lists.compensation', { defaultValue: 'Compensation' }),
     issuing_side: t('lists.issuingSide', { defaultValue: 'Issuing side' }),
@@ -274,7 +274,7 @@ export function OptionListsPage() {
                       })
                     : t('lists.help', {
                         defaultValue:
-                          'These values feed the complaint form live — no deploy needed. Retire a value to stop offering it; tickets that already carry it keep displaying it. The exact spellings are what reports group by, so a corrected spelling is a new value, not an edit.',
+                          'These values feed the ticket form live — no deploy needed. Retire a value to stop offering it; tickets that already carry it keep displaying it. The exact spellings are what reports group by, so a corrected spelling is a new value, not an edit.',
                       })
                 }
               >

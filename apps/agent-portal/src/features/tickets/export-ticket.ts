@@ -37,7 +37,7 @@ export function exportTicketWorkbook(
     'Service type': tk.service_type ?? '',
     'Complaint type': tk.complaint_type ?? '',
     'Customer mobile': tk.contact?.phone ?? '',
-    'Complaint description': tk.description ?? '',
+    'Ticket description': tk.description ?? '',
     Response: tk.response_desc ?? '',
     'Complaint source': tk.complaint_source ?? '',
     'Order amount': snap?.total != null ? Number(snap.total) : '',
@@ -46,7 +46,7 @@ export function exportTicketWorkbook(
     'Coupon code': tk.coupon_code ?? '',
     'Coupon value': tk.coupon_value != null ? Number(tk.coupon_value) : '',
     'Coupon %': tk.coupon_percent != null ? Number(tk.coupon_percent) : '',
-    'Complaint status': tk.status,
+    'Ticket status': tk.status,
     Agent: agentName,
     Compensation: tk.compensation ?? '',
   };

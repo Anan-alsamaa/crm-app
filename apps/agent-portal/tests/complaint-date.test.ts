@@ -7,13 +7,13 @@ import {
 } from '../src/features/tickets/ComplaintFields.js';
 
 /**
- * The complaint date is the one field an agent cannot recover later if it is
+ * The ticket date is the one field an agent cannot recover later if it is
  * stored wrong, and it is what every ops report groups by. These pin the two
- * ways it could silently go wrong: a timezone shift moving a complaint across
+ * ways it could silently go wrong: a timezone shift moving a ticket across
  * midnight, and a blank being stored as something other than "not answered".
  */
 
-describe('complaint date', () => {
+describe('ticket date', () => {
   it('stores what the agent typed, read as their local wall clock', () => {
     const patch = complaintPatch({ ...emptyComplaint, complaint_date: '2026-08-01T09:30' });
     // Whatever the machine's zone, 09:30 local is the instant stored — so

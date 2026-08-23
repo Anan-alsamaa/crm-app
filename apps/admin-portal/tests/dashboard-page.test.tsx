@@ -10,8 +10,8 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-// The Overview is now the complaints dashboard and nothing else; its data layer
-// is covered by complaint-dashboard-*.test.tsx, so it is stubbed here.
+// The Overview is now the tickets dashboard and nothing else; its data layer
+// is covered by ticket-dashboard-*.test.tsx, so it is stubbed here.
 const complaintsApi = vi.hoisted(() => ({
   useComplaintMetrics: vi.fn(() => ({ isLoading: true, isError: false, data: undefined })),
   useComplaintYears: vi.fn(() => ({ data: [2026], isLoading: false })),
@@ -80,7 +80,7 @@ describe('DashboardPage', () => {
     expect(complaintsApi.useComplaintMetrics).toHaveBeenCalled();
   });
 
-  it('carries no range picker of its own to disagree with the complaint filters', () => {
+  it('carries no range picker of its own to disagree with the ticket filters', () => {
     renderPage();
     expect(screen.queryByRole('combobox', { name: 'Date range' })).not.toBeInTheDocument();
   });

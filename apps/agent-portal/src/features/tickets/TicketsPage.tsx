@@ -291,11 +291,11 @@ export function TicketsPage() {
                     className="w-full"
                     value={criteria.complaintType ?? ''}
                     onChange={(v) => setCriteria((c) => ({ ...c, complaintType: v }))}
-                    aria-label={t('complaint.type', { defaultValue: 'Complaint type' })}
+                    aria-label={t('complaint.type', { defaultValue: 'Ticket type' })}
                     options={[
                       {
                         value: '',
-                        label: t('tickets.anyType', { defaultValue: 'Any complaint type' }),
+                        label: t('tickets.anyType', { defaultValue: 'Any ticket type' }),
                       },
                       // From the data in range, not the full vocabulary: a menu of
                       // types this agent has never handled is a list to read past.
@@ -1407,12 +1407,12 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
       branch ? storeLabel(branch) : '',
     ],
     [
-      t('complaint.date', { defaultValue: 'Complaint date' }),
+      t('complaint.date', { defaultValue: 'Ticket date' }),
       stored.complaint_date ? stored.complaint_date.replace('T', ' ') : '',
     ],
-    [t('complaint.type', { defaultValue: 'Complaint type' }), stored.complaint_type],
+    [t('complaint.type', { defaultValue: 'Ticket type' }), stored.complaint_type],
     [t('complaint.serviceType', { defaultValue: 'Service type' }), stored.service_type],
-    [t('complaint.source', { defaultValue: 'Complaint source' }), stored.complaint_source],
+    [t('complaint.source', { defaultValue: 'Ticket source' }), stored.complaint_source],
     [
       t('complaint.communication', { defaultValue: 'Communication method' }),
       stored.communication_method,
@@ -1524,7 +1524,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           ? t('complaint.savedCouponPending', {
               defaultValue: 'Saved. The coupon is waiting for a supervisor.',
             })
-          : t('complaint.saved', { defaultValue: 'Complaint details saved' }),
+          : t('complaint.saved', { defaultValue: 'Ticket details saved' }),
       );
     } catch {
       toast.error(t('errors.updateFailed', { ns: 'common' }));
@@ -1533,7 +1533,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
 
   return (
     <SectionCard
-      title={t('complaint.section', { defaultValue: 'Complaint details' })}
+      title={t('complaint.section', { defaultValue: 'Ticket details' })}
       aside={
         !editing && (
           <button
@@ -1547,7 +1547,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           >
             {rows.length
               ? t('actions.edit', { ns: 'common', defaultValue: 'Edit' })
-              : t('complaint.add', { defaultValue: 'Add complaint details' })}
+              : t('complaint.add', { defaultValue: 'Add ticket details' })}
           </button>
         )
       }
@@ -1609,7 +1609,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
       ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">
           {t('complaint.none', {
-            defaultValue: 'Not classified as a complaint yet.',
+            defaultValue: 'Not classified as a ticket yet.',
           })}
         </p>
       ) : (

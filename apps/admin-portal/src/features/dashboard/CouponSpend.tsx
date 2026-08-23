@@ -280,7 +280,7 @@ export function CouponSpend({
               <p className="text-2xs text-muted-foreground">
                 {t('couponSpend.ofTicketTotal', {
                   defaultValue:
-                    'Of {{total}} SAR total compensation on complaints in this range — the rest reached a ticket without an approval here.',
+                    'Of {{total}} SAR total compensation on tickets in this range — the rest reached a ticket without an approval here.',
                   total: SAR.format(ticketCompensationSar),
                 })}
               </p>

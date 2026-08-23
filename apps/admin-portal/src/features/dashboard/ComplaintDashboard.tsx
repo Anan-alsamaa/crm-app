@@ -29,7 +29,6 @@ import {
   type ComplaintFilters,
   type ComplaintRow,
   type Cut,
-  type MonthPoint,
 } from './complaints-api.js';
 import { CouponSpend } from './CouponSpend.js';
 import { CustomerReach } from './CustomerReach.js';
@@ -46,26 +45,6 @@ import { CustomerReach } from './CustomerReach.js';
  */
 
 const SAR = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' SAR';
-
-/** `2026-07` → `Jul 26`, matching his compact month captions. */
-function monthLabel(ym: string): string {
-  const [y, m] = ym.split('-');
-  const names = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  return `${names[Number(m) - 1] ?? m} ${(y ?? '').slice(2)}`;
-}
 
 /* ── KPI ──────────────────────────────────────────────────────────────────
  * The reference boards' KPI card: an icon in a tinted square chip, one big
@@ -298,7 +277,7 @@ function Bars({
               <button
                 type="button"
                 onClick={() => onSelect(r)}
-                title={t('complaintDash.drillHint', { defaultValue: 'Show these complaints' })}
+                title={t('complaintDash.drillHint', { defaultValue: 'Show these tickets' })}
                 className="flex w-full items-center gap-3 rounded-lg px-1 py-0.5 -mx-1 transition-colors duration-fast hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 {body}
@@ -658,127 +637,9 @@ function Donut({ rows, onSelect }: { rows: Breakdown[]; onSelect?: (row: Breakdo
 // `Composition` lived here for the Service health card, which is gone: it was
 // a fourth reading of numbers the KPI strip already carries.
 
-/**
- * Complaints per month as columns with compensation overlaid as a line — his
- * chart, and the one that answers the question the volume bars cannot: whether
- * what we pay out is tracking volume or running ahead of it.
- *
- * The two series have unrelated units, so each is scaled to its own maximum.
- * That is only honest if the reader can see it, hence the two axis captions.
- */
-function TrendChart({ months }: { months: MonthPoint[] }) {
-  const { t } = useTranslation();
-  if (months.length === 0)
-    return (
-      <CardEmpty
-        label={t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
-      />
-    );
-
-  /*
-   * TWO STACKED READINGS, not one dual-axis chart.
-   *
-   * Volume and money have unrelated units, so drawing them on one pair of axes
-   * meant scaling each to its own maximum — which makes a tall bar and a high
-   * line look comparable when they are not. The owner's verdict was that it
-   * "doesn't make any sense", and that was the honest reading of it.
-   *
-   * Each measure now gets its own row with its own labelled scale, sharing one
-   * month axis. Comparing them is still possible (they line up vertically) but
-   * nothing implies the two heights mean the same thing.
-   */
-  const maxCount = Math.max(1, ...months.map((m) => m.count));
-  const maxMoney = Math.max(1, ...months.map((m) => m.compensation));
-  const busiest = months.reduce((a, b) => (b.count > a.count ? b : a));
-  const avg = months.reduce((sum, m) => sum + m.count, 0) / months.length;
-  const totalMoney = months.reduce((sum, m) => sum + m.compensation, 0);
-
-  return (
-    <div>
-      {/* Row 1 — how many complaints. */}
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {t('complaintDash.complaintsAxis', { defaultValue: 'Complaints' })}
-        </span>
-        <span className="text-2xs tabular-nums text-muted-foreground">
-          {t('complaintDash.peakLabel', {
-            defaultValue: 'peak {{n}}',
-            n: maxCount,
-          })}
-        </span>
-      </div>
-      <div className="mt-2 flex items-end gap-2" style={{ height: 132 }}>
-        {months.map((m, i) => (
-          <div key={m.month} className="group flex h-full min-w-0 flex-1 flex-col justify-end">
-            <span className="mb-1.5 text-center text-2xs font-bold tabular-nums text-foreground">
-              {m.count}
-            </span>
-            <span
-              title={`${monthLabel(m.month)} · ${m.count}`}
-              className="mx-auto w-full max-w-[44px] origin-bottom rounded-t-xl bg-gradient-to-t from-primary/55 to-primary transition-[filter] duration-fast group-hover:brightness-110 motion-safe:animate-grow-y"
-              style={{
-                height: `${Math.max(4, (m.count / maxCount) * 100)}%`,
-                animationDelay: `${Math.min(i, 12) * 45}ms`,
-              }}
-            />
-          </div>
-        ))}
-      </div>
-
-      {/* Row 2 — what it cost, on its OWN scale, said so in words. */}
-      <div className="mt-5 flex items-baseline justify-between gap-3 border-t border-foreground/[0.07] pt-4">
-        <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {t('complaintDash.compensationAxis', { defaultValue: 'Compensation' })}
-        </span>
-        <span className="text-2xs tabular-nums text-muted-foreground">
-          {t('complaintDash.peakLabel', { defaultValue: 'peak {{n}}', n: SAR(maxMoney) })}
-        </span>
-      </div>
-      <div className="mt-2 flex items-end gap-2" style={{ height: 84 }}>
-        {months.map((m, i) => (
-          <div key={m.month} className="group flex h-full min-w-0 flex-1 flex-col justify-end">
-            <span className="mb-1.5 text-center text-2xs tabular-nums text-muted-foreground">
-              {m.compensation > 0 ? Math.round(m.compensation) : ''}
-            </span>
-            <span
-              title={`${monthLabel(m.month)} · ${SAR(m.compensation)}`}
-              className="mx-auto w-full max-w-[44px] origin-bottom rounded-t-xl bg-gradient-to-t from-violet/45 to-violet transition-[filter] duration-fast group-hover:brightness-110 motion-safe:animate-grow-y"
-              style={{
-                height: `${Math.max(2, (m.compensation / maxMoney) * 100)}%`,
-                animationDelay: `${Math.min(i, 12) * 45}ms`,
-              }}
-            />
-          </div>
-        ))}
-      </div>
-
-      {/* Shared month axis. */}
-      <div className="mt-2 flex gap-2 border-t border-foreground/[0.07] pt-2">
-        {months.map((m) => (
-          <span
-            key={m.month}
-            className="min-w-0 flex-1 truncate text-center text-2xs tabular-nums text-muted-foreground"
-          >
-            {monthLabel(m.month)}
-          </span>
-        ))}
-      </div>
-
-      <p className="mt-3 text-2xs leading-relaxed text-muted-foreground">
-        {t('complaintDash.trendCaption', {
-          defaultValue: 'Busiest month {{month}} with {{peak}}. Average {{avg}} per month.',
-          month: monthLabel(busiest.month),
-          peak: busiest.count,
-          avg: avg.toFixed(1),
-        })}{' '}
-        {t('complaintDash.trendMoney', {
-          defaultValue: '{{total}} paid out across the range.',
-          total: SAR(totalMoney),
-        })}
-      </p>
-    </div>
-  );
-}
+// TrendChart went with the "Tickets per month" card it drew — two readings on
+// one chart, each with its own scale, is a picture you have to be told how to
+// read.
 
 /**
  * The complaints behind one number.
@@ -807,7 +668,7 @@ function DrillDown({
       width="lg"
       title={title}
       description={t('complaintDash.drillCount', {
-        defaultValue: '{{n}} complaint(s) · {{money}} compensation',
+        defaultValue: '{{n}} ticket(s) · {{money}} compensation',
         n: rows.length,
         money: SAR(money),
       })}
@@ -1117,14 +978,14 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                   // range you filtered on — "last 90 days" over three
                   // complaints logged in one week should say so.
                   defaultValue:
-                    'Showing {{n}} complaints from {{from}} to {{to}} · {{money}} compensation',
+                    'Showing {{n}} tickets from {{from}} to {{to}} · {{money}} compensation',
                   n: d.total.toLocaleString(),
                   from: d.firstDate ?? '—',
                   to: d.lastDate ?? '—',
                   money: SAR(d.compensation),
                 })
               : t('complaintDash.noMatch', {
-                  defaultValue: 'No complaints match these filters.',
+                  defaultValue: 'No tickets match these filters.',
                 })}
           </p>
 
@@ -1139,7 +1000,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
               icon={<TicketIcon size={17} />}
               order={0}
               value={d.total.toLocaleString()}
-              label={t('complaintDash.kpiTotal', { defaultValue: 'Complaints' })}
+              label={t('complaintDash.kpiTotal', { defaultValue: 'Tickets' })}
               sub={
                 d.monthsCovered
                   ? t('complaintDash.months', {
@@ -1270,7 +1131,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             <p className="px-1 text-2xs leading-relaxed text-muted-foreground">
               {t('complaintDash.satBasis', {
                 defaultValue:
-                  'Satisfaction is the customer’s own CSAT rating on the linked chat, so it covers {{rated}} of {{closed}} closed complaints — the rest were never rated (or were not raised from a chat).',
+                  'Satisfaction is the customer’s own CSAT rating on the linked chat, so it covers {{rated}} of {{closed}} closed tickets — the rest were never rated (or were not raised from a chat).',
                 rated: d.rated,
                 closed: d.closed,
               })}
@@ -1287,81 +1148,8 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
               an agent has to do by hand. */}
           <CustomerReach />
 
-          {/* ── Ops snapshot ─────────────────────────────────────────────
-              The reference dashboard's snapshot band: a titled card whose
-              chips carry a tinted glyph tile, the number, and its word. Chips
-              are saturated fills with `text-background` ink, which flips with
-              the theme so the label holds on light too. */}
-          <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
-            <div className="mb-3 flex items-baseline justify-between gap-3">
-              <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                {t('complaintDash.snapshot', { defaultValue: 'Ops snapshot' })}
-              </h3>
-              <span className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground">
-                <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" />
-                {t('complaintDash.snapshotRange', { defaultValue: 'Selected range' })}
-              </span>
-            </div>
-            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
-              {(
-                [
-                  ['bg-sky', t('complaintDash.chipOpen', { defaultValue: 'Open' }), d.open],
-                  [
-                    'bg-violet',
-                    t('complaintDash.kpiOverdue', { defaultValue: 'Overdue' }),
-                    d.overdue,
-                  ],
-                  [
-                    'bg-success',
-                    t('complaintDash.chipSolved', { defaultValue: 'Solved' }),
-                    d.closed,
-                  ],
-                  [
-                    'bg-destructive',
-                    t('complaintDash.chipWaiting', { defaultValue: 'Chats waiting' }),
-                    d.chatsWaiting,
-                  ],
-                  [
-                    'bg-primary',
-                    'SAR',
-                    d.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 }),
-                  ],
-                ] as const
-              ).map(([bg, label, value], i) => (
-                <span
-                  key={label}
-                  style={{ animationDelay: `${i * 60}ms` }}
-                  className={cn(
-                    'flex items-center gap-2.5 rounded-xl px-3.5 py-3',
-                    // Tinted surface, coloured numeral. Five saturated fills in
-                    // a row shouted over the KPI cards above them, which are
-                    // the thing the page is actually about.
-                    'bg-card ring-1 ring-inset ring-foreground/[0.05]',
-                    'transition-[background-color] duration-fast ease-out hover:bg-secondary/60',
-                    'motion-safe:animate-rise-in',
-                  )}
-                >
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'grid h-8 w-8 shrink-0 place-items-center rounded-lg text-display opacity-90',
-                      bg,
-                    )}
-                  >
-                    <SparkleIcon size={14} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-lg font-extrabold leading-none tabular-nums tracking-[-0.02em] text-foreground">
-                      {value}
-                    </span>
-                    <span className="mt-0.5 block truncate text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                      {label}
-                    </span>
-                  </span>
-                </span>
-              ))}
-            </div>
-          </div>
+          {/* The Ops snapshot band is gone — every chip on it repeated a number
+              from the KPI strip directly above it. */}
 
           {/* ── Complaints by type ───────────────────────────────────────
               The reference board's column panel. It replaces the ranked
@@ -1369,7 +1157,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
               drill, read as a shape instead of a table. */}
           {view === 'agent' && (
             <SectionCard
-              title={t('complaintDash.byType', { defaultValue: 'By complaint type' })}
+              title={t('complaintDash.byType', { defaultValue: 'By ticket type' })}
               hint={t('complaintDash.byTypeHint', {
                 defaultValue: 'What customers are actually complaining about, biggest first.',
               })}
@@ -1389,7 +1177,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                   defaultValue: 'Nothing in this range.',
                 })}
                 onSelect={drillInto(
-                  t('complaintDash.byType', { defaultValue: 'By complaint type' }),
+                  t('complaintDash.byType', { defaultValue: 'By ticket type' }),
                   (r) => r.complaintType,
                 )}
               />
@@ -1404,7 +1192,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           <div className="grid gap-4 md:grid-cols-2">
             {view === 'operations' && (
               <SectionCard
-                title={t('complaintDash.brandMix', { defaultValue: 'Where complaints come from' })}
+                title={t('complaintDash.brandMix', { defaultValue: 'Where tickets come from' })}
               >
                 <Donut
                   rows={d.byBrand.rows}
@@ -1423,17 +1211,8 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           <div className="grid gap-4 md:grid-cols-2"></div>
 
           {/* ── Trend ────────────────────────────────────────────────────── */}
-          {view === 'agent' && (
-            <SectionCard
-              title={t('complaintDash.perMonth', { defaultValue: 'Complaints per month' })}
-              hint={t('complaintDash.perMonthHint3', {
-                defaultValue:
-                  'Two readings over the same months: how many complaints were logged, and what was paid out. Each has its own scale — they are different units.',
-              })}
-            >
-              <TrendChart months={d.months} />
-            </SectionCard>
-          )}
+          {/* "Complaints per month" is gone: two readings on one chart, each
+              with its own scale, is a picture you have to be told how to read. */}
 
           {/* ── Heatmap + funnel ─────────────────────────────────────────
               The reference dashboard's pair: WHEN complaints land (weekday ×
@@ -1450,7 +1229,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             </SectionCard>
             {view === 'agent' && (
               <SectionCard
-                title={t('complaintDash.funnel', { defaultValue: 'Complaints funnel' })}
+                title={t('complaintDash.funnel', { defaultValue: 'Tickets funnel' })}
                 hint={t('complaintDash.funnelHint', {
                   defaultValue: 'Each stage against everything logged in range.',
                 })}
@@ -1502,7 +1281,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             {view === 'agent' && (
               <SectionCard
                 title={t('complaintDash.unsolvedByAgent', {
-                  defaultValue: 'Unsolved complaints by agent',
+                  defaultValue: 'Unsolved tickets by agent',
                 })}
                 hint={
                   d.byOpenAgent.rows.length > 0
@@ -1517,8 +1296,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 {d.byOpenAgent.rows.length === 0 ? (
                   <CardEmpty
                     label={t('complaintDash.nothingOutstanding', {
-                      defaultValue:
-                        'Nothing outstanding — every complaint in this range is closed.',
+                      defaultValue: 'Nothing outstanding — every ticket in this range is closed.',
                     })}
                   />
                 ) : (
@@ -1530,7 +1308,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                     color="bg-destructive"
                     onSelect={drillInto(
                       t('complaintDash.unsolvedByAgent', {
-                        defaultValue: 'Unsolved complaints by agent',
+                        defaultValue: 'Unsolved tickets by agent',
                       }),
                       (r) => r.agentId,
                       // His click lands on the UNSOLVED ones only, not everything
@@ -1548,7 +1326,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                   d.unattributed > 0
                     ? t('complaintDash.unattributed', {
                         defaultValue:
-                          '{{n}} complaint(s) have no branch recorded and are missing from this cut.',
+                          '{{n}} ticket(s) have no branch recorded and are missing from this cut.',
                         n: d.unattributed,
                       })
                     : undefined
@@ -1650,13 +1428,13 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 showing different things is worse than losing his phrasing. */}
             {view === 'agent' && (
               <CutCard
-                title={t('complaintDash.bySource', { defaultValue: 'How complaints reach us' })}
+                title={t('complaintDash.bySource', { defaultValue: 'How tickets reach us' })}
                 className="md:col-span-2"
                 cut={d.bySource}
                 total={d.total}
                 color="bg-destructive"
                 onSelect={drillInto(
-                  t('complaintDash.bySource', { defaultValue: 'How complaints reach us' }),
+                  t('complaintDash.bySource', { defaultValue: 'How tickets reach us' }),
                   (r) => r.source,
                 )}
               />

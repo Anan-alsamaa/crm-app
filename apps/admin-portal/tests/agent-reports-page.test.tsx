@@ -28,7 +28,7 @@ const api = vi.hoisted(() => ({
 vi.mock('../src/features/report-exports/api.js', () => api);
 
 /**
- * The store master the Complaints report joins against. A REAL index (not a
+ * The store master the Tickets report joins against. A REAL index (not a
  * stub) so the join under test is the one that ships — including the
  * `store_code` tier that rescues a branch whose name drifted.
  */
@@ -245,7 +245,7 @@ const conversations = {
 };
 
 /**
- * Complaint rows as `api.ts` hands them over: store columns still blank, the
+ * Ticket rows as `api.ts` hands them over: store columns still blank, the
  * branch name straight off the stored order snapshot. The page does the join.
  */
 const complaints = [
@@ -262,7 +262,7 @@ const complaints = [
     brand: 'Casa Pasta',
     city: '',
     // The master spells this "LCP-006 Panorama Mall RYD" — only the code tier
-    // resolves it. Real case from the operations complaints history.
+    // resolves it. Real case from the operations tickets history.
     restaurantName: 'LCP-006 Panorama Mall',
     storeCode: '',
     yijiRestaurantId: '',
@@ -761,9 +761,9 @@ describe('AgentReportsPage — conversation status report', () => {
   });
 });
 
-describe('AgentReportsPage — complaints report', () => {
+describe('AgentReportsPage — ticket breakdown', () => {
   it("renders the operations manager's report under the Tickets heading", () => {
-    // One report, named Tickets: a complaint IS a ticket, and two pages over
+    // One report, named Tickets: a ticket IS a ticket, and two pages over
     // the same records only raised the question of which was authoritative.
     api.useAgentReportData.mockReturnValue(ok);
     renderPage('complaints');
@@ -806,7 +806,7 @@ describe('AgentReportsPage — complaints report', () => {
     // The store master now says Riyadh / Mo'men Elsharkasy (see PANORAMA), but
     // this ticket was raised when the branch sat in another city under another
     // manager. The report must show what was true then — re-resolving it live
-    // would quietly reassign a months-old complaint to someone who never
+    // would quietly reassign a months-old ticket to someone who never
     // handled it.
     api.useAgentReportData.mockReturnValue({
       ...ok,
@@ -860,7 +860,7 @@ describe('AgentReportsPage — complaints report', () => {
     expect(screen.getByText('Import file')).toBeInTheDocument();
   });
 
-  it('exports the complaints sheet as CSV, in the chosen column order', async () => {
+  it('exports the tickets sheet as CSV, in the chosen column order', async () => {
     api.useAgentReportData.mockReturnValue(ok);
     const dl = captureDownloads();
     renderPage('complaints');
@@ -1019,12 +1019,12 @@ describe('AgentReportsPage — complaints report', () => {
     expect(screen.getByText('Showing 1–2 of 2')).toBeInTheDocument();
   });
 
-  it('filters by complaint type exactly, from the values actually present', async () => {
+  it('filters by ticket type exactly, from the values actually present', async () => {
     api.useAgentReportData.mockReturnValue(ok);
     const user = userEvent.setup({ delay: null });
     const { container } = renderPage('complaints');
 
-    await user.click(screen.getByRole('combobox', { name: 'Complaint type' }));
+    await user.click(screen.getByRole('combobox', { name: 'Ticket type' }));
     // Built from the rows in range — a menu of every type the company has ever
     // used is a list to read past, and picking an absent one looks like a bug.
     const options = screen.getAllByRole('option').map((o) => o.textContent ?? '');
@@ -1057,7 +1057,7 @@ describe('AgentReportsPage — complaints report', () => {
 
   it('can send a column to the front in one action', async () => {
     // Twenty-seven ↑ clicks to move Compensation to the front was the actual
-    // complaint about this panel.
+    // ticket about this panel.
     api.useAgentReportData.mockReturnValue(ok);
     const user = userEvent.setup({ delay: null });
     renderPage('complaints');
@@ -1091,7 +1091,7 @@ describe('AgentReportsPage — complaints report', () => {
       data: { ...data, complaintFieldsAvailable: false },
     });
     renderPage('complaints');
-    expect(screen.getByText('Complaint fields are not available here')).toBeInTheDocument();
+    expect(screen.getByText('Ticket fields are not available here')).toBeInTheDocument();
     expect(screen.queryByText(/^Export \d+ rows$/)).not.toBeInTheDocument();
   });
 });

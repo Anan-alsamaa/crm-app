@@ -52,7 +52,7 @@ const ticket = {
 
 beforeEach(() => request.mockReset());
 
-describe('an agent reads their OWN complaints', () => {
+describe('an agent reads their OWN tickets', () => {
   it('states the scope in the query rather than relying on the role', async () => {
     request.mockResolvedValueOnce([]);
     renderHook(() => useMyComplaints(30, 'Sara'), { wrapper });
@@ -60,7 +60,7 @@ describe('an agent reads their OWN complaints', () => {
 
     const params = await sentParams();
     // Directus already scopes the Agent role to assigned_agent = $CURRENT_USER,
-    // so this is belt-and-braces — but the page PROMISES "my complaints", and a
+    // so this is belt-and-braces — but the page PROMISES "my tickets", and a
     // table that silently widens when a role permission is loosened, while still
     // titled "mine", is the failure this pins shut.
     expect(JSON.stringify(params.filter)).toContain('$CURRENT_USER');
@@ -80,8 +80,8 @@ describe('an agent reads their OWN complaints', () => {
     await waitFor(() => expect(result.current.data).toBeDefined());
 
     const r = result.current.data![0]!;
-    // Dated by when the complaint HAPPENED (30 Jul), not when the ticket was
-    // typed in (1 Aug). Getting this backwards files a Friday complaint under
+    // Dated by when the ticket HAPPENED (30 Jul), not when the ticket was
+    // typed in (1 Aug). Getting this backwards files a Friday ticket under
     // Sunday in every ops report.
     expect(r.date).toBe('2026-07-30');
     expect(r.time).toBe('18:05');
@@ -98,7 +98,7 @@ describe('an agent reads their OWN complaints', () => {
   });
 });
 
-describe('dating a complaint', () => {
+describe('dating a ticket', () => {
   it('falls back to the creation date for tickets raised before the field existed', async () => {
     request.mockResolvedValueOnce([{ ...ticket, complaint_date: null }]);
     const { result } = renderHook(() => useMyComplaints(30, 'Sara'), { wrapper });

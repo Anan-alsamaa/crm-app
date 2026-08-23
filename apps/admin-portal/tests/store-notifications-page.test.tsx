@@ -55,7 +55,7 @@ beforeEach(() => {
 });
 
 describe('StoreNotificationsPage', () => {
-  it('shows every complaint type, with only the chosen ones on', () => {
+  it('shows every ticket type, with only the chosen ones on', () => {
     renderPage();
     expect(screen.getByRole('button', { name: 'Missing item' })).toHaveAttribute(
       'aria-pressed',
@@ -133,7 +133,7 @@ describe('StoreNotificationsPage', () => {
     });
     renderPage();
     const row = screen.getByRole('row', { name: /LCP-002/ });
-    // The order leads: a branch looks the complaint up by order number before
+    // The order leads: a branch looks the ticket up by order number before
     // it reads what went wrong.
     expect(within(row).getByText('#946641')).toBeInTheDocument();
     expect(within(row).getByText(/2× Double burger, 1× Fries/)).toBeInTheDocument();

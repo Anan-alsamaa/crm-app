@@ -60,7 +60,7 @@ describe('CouponRequestDialog', () => {
     expect(screen.getByDisplayValue('+966501234567')).toBeInTheDocument();
   });
 
-  it('carries the complaint over as the reason rather than asking again', () => {
+  it('carries the ticket over as the reason rather than asking again', () => {
     renderDialog();
     expect(screen.getByDisplayValue('Order arrived cold.')).toBeInTheDocument();
   });
@@ -81,7 +81,7 @@ describe('CouponRequestDialog', () => {
   });
 
   it('does not let the agent choose the branch', () => {
-    // The coupon belongs to the branch the complaint was about. Offering a
+    // The coupon belongs to the branch the ticket was about. Offering a
     // picker would let an agent compensate against the wrong one.
     renderDialog();
     expect(screen.queryByLabelText(/brand/i)).not.toBeInTheDocument();
@@ -231,7 +231,7 @@ describe('CouponRequestDialog', () => {
     expect(screen.getByLabelText(/maximum discount/i)).toBeInTheDocument();
   });
 
-  it('still works for a complaint with no order behind it', async () => {
+  it('still works for a ticket with no order behind it', async () => {
     renderDialog({ brandId: null, restaurantId: null, customerPhone: null, description: null });
     await userEvent.click(screen.getByLabelText(/issuing side/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
@@ -261,10 +261,10 @@ describe('the dialog inside its drawer', () => {
 });
 
 describe('opening it from the add-ticket page', () => {
-  it('picks up a complaint typed after the page was mounted', async () => {
+  it('picks up a ticket typed after the page was mounted', async () => {
     // The reported bug. On add-ticket this dialog is mounted with the page, so
     // the initial state was captured while the description was still empty and
-    // the agent was asked to type the complaint a second time.
+    // the agent was asked to type the ticket a second time.
     const { rerender } = render(
       <QueryClientProvider
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
@@ -314,7 +314,7 @@ describe('opening it from the add-ticket page', () => {
  * wrong one. Where the ticket came from decides how it is answered: from the
  * inbox the order is known, so the agent CHOOSES a real line; raised manually
  * there is no order to choose from, so they type what the customer said.
- * Optional either way — not every complaint is about one item.
+ * Optional either way — not every ticket is about one item.
  */
 describe('the item a coupon compensates', () => {
   it('offers the order lines to choose from when the ticket came from an order', async () => {
@@ -397,7 +397,7 @@ describe('the item a coupon compensates', () => {
     expect(onCollect.mock.calls[0]![0]).toMatchObject({ item_name: 'Vegetable Pasta' });
   });
 
-  it('leaves the item null when the complaint is not about one', async () => {
+  it('leaves the item null when the ticket is not about one', async () => {
     const onCollect = vi.fn();
     renderDialog({ orderItems: [{ name: 'Vegetable Pasta', price: 26 }], onCollect });
     await userEvent.click(screen.getByLabelText(/issuing side/i));

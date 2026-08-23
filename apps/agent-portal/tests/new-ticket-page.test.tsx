@@ -91,7 +91,7 @@ describe('NewTicketPage — raised from a chat', () => {
 
   it('still renders the form when the conversation has no contact, with none set', () => {
     // The form disables its own submit; blanking the page would lose the branch
-    // and complaint fields the agent can still fill in.
+    // and ticket fields the agent can still fill in.
     inbox.useConversation.mockReturnValue({
       data: { id: 'c1', contact: null, vendor: { id: 'v1' } },
       isLoading: false,

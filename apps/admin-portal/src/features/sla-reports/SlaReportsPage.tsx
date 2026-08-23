@@ -425,17 +425,12 @@ export function SlaReportsPage() {
           />
         ) : (
           <div className="mx-auto flex min-h-0 w-full flex-1 flex-col gap-5">
-            {/* Clean editorial header — same anatomy as the export reports. */}
-            <div className="border-b border-foreground/10 pb-5">
-              <h2 className="text-3xl font-bold tracking-tight text-foreground">
-                {t('slaReports.title', { defaultValue: 'Ticket deadlines' })}
-              </h2>
-              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                {t('slaReports.subtitle', {
-                  defaultValue: 'Which tickets were finished by the time they were promised.',
-                })}
-              </p>
-            </div>
+            {/* Named once by the toolbar above, so this is just what it is for. */}
+            <p className="max-w-3xl shrink-0 text-sm leading-relaxed text-muted-foreground">
+              {t('slaReports.subtitle', {
+                defaultValue: 'Which tickets were finished by the time they were promised.',
+              })}
+            </p>
 
             {/* KPI strip — the % tiles carry a progress ring, boards-style: the
                 numeral stays the reading, the arc makes the shortfall visible

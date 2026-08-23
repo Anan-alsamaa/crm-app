@@ -111,13 +111,27 @@ const median = (xs: number[]): number | null => {
 /** First response for one chat, or null when it cannot be measured. */
 export function firstResponseSec(c: ChatTiming): number | null {
   if (!c.firstCustomerAt || !c.firstAgentAt) return null;
-  return secondsBetween(c.firstCustomerAt, c.firstAgentAt);
+  return positiveOrNull(secondsBetween(c.firstCustomerAt, c.firstAgentAt));
+}
+
+/**
+ * A duration, or null when the clock ran backwards.
+ *
+ * Real data has chats marked solved BEFORE the customer's first message — a
+ * reopened chat, a bad import, a clock skew. One of them is worth about minus
+ * twenty-five days, and a mean is happy to swallow that: the daily average
+ * drops below zero and the trend line leaves the chart, which reads as a
+ * rendering fault rather than as a bad row. A negative elapsed time is not a
+ * slow measurement, it is no measurement.
+ */
+function positiveOrNull(sec: number | null): number | null {
+  return sec == null || sec < 0 ? null : sec;
 }
 
 /** Time to solve for one chat, or null when it is unsolved or unmeasurable. */
 export function timeToSolveSec(c: ChatTiming): number | null {
   if (!c.firstCustomerAt || !c.solvedAt) return null;
-  return secondsBetween(c.firstCustomerAt, c.solvedAt);
+  return positiveOrNull(secondsBetween(c.firstCustomerAt, c.solvedAt));
 }
 
 /**

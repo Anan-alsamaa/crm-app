@@ -608,7 +608,7 @@ export function AgentPerformancePage() {
                     <thead className="sticky top-0 z-10 bg-card">
                       <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
                         <th className="px-4 py-2.5 text-start font-semibold">
-                          {t('performance.subject', { defaultValue: 'Complaint / chat' })}
+                          {t('performance.subject', { defaultValue: 'Ticket / chat' })}
                         </th>
                         <th className="px-4 py-2.5 text-start font-semibold">
                           {t('performance.customer', { defaultValue: 'Customer' })}

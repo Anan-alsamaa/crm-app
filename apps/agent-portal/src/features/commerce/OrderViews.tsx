@@ -124,7 +124,7 @@ function OrderHeader({ order, onCreateTicket }: { order: YijiOrder; onCreateTick
               // token, not a translatable part of the sentence, and this keeps
               // it in the accessible name in every locale.
               aria-label={`${t('commerce.newComplaint', {
-                defaultValue: 'New complaint for order',
+                defaultValue: 'New ticket for order',
               })} #${order.orderId}`}
               className="relative z-10 rounded font-mono text-xs text-primary underline decoration-dotted underline-offset-2 transition-colors duration-fast ease-out hover:decoration-solid focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >

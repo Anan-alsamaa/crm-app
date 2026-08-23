@@ -575,7 +575,7 @@ export function CouponRequestDialog({
       <DrawerSection
         title={t('coupons.why', { defaultValue: 'Why' })}
         description={t('coupons.whyHint', {
-          defaultValue: 'Carried over from the complaint. This is what the supervisor reads.',
+          defaultValue: 'Carried over from the ticket. This is what the supervisor reads.',
         })}
       >
         <FormField label={t('tickets.description', { defaultValue: 'Compensation reason' })}>

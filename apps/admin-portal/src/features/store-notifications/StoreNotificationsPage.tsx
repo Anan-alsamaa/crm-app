@@ -129,10 +129,10 @@ export function StoreNotificationsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <SectionCard
-        title={t('storeNotify.rulesTitle', { defaultValue: 'Complaints the branch is told about' })}
+        title={t('storeNotify.rulesTitle', { defaultValue: 'Tickets the branch is told about' })}
         hint={t('storeNotify.rulesHelp', {
           defaultValue:
-            'A ticket is reported to its branch only when its complaint type is selected here. The branch receives the order number and its items, the description and the resolution notes — nothing else about the customer.',
+            'A ticket is reported to its branch only when its ticket type is selected here. The branch receives the order number and its items, the description and the resolution notes — nothing else about the customer.',
         })}
         aside={
           <span className="tabular-nums">
@@ -171,7 +171,7 @@ export function StoreNotificationsPage() {
             <span>
               {t('storeNotify.noneSelected', {
                 defaultValue:
-                  'Nothing is selected, so no branch is told about anything. Pick the complaint types a branch can act on.',
+                  'Nothing is selected, so no branch is told about anything. Pick the ticket types a branch can act on.',
               })}
             </span>
           </p>
@@ -212,7 +212,7 @@ export function StoreNotificationsPage() {
                     {t('storeNotify.branch', { defaultValue: 'Branch' })}
                   </th>
                   <th className="px-4 py-2.5 text-start font-semibold">
-                    {t('storeNotify.type', { defaultValue: 'Complaint type' })}
+                    {t('storeNotify.type', { defaultValue: 'Ticket type' })}
                   </th>
                   <th className="px-4 py-2.5 text-start font-semibold">
                     {t('storeNotify.sends', { defaultValue: 'What the branch gets' })}

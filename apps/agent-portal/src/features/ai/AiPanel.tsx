@@ -143,7 +143,7 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
     },
     {
       key: 'intent',
-      label: tl('ai.action.intent', { defaultValue: 'Complaint type' }),
+      label: tl('ai.action.intent', { defaultValue: 'Ticket type' }),
       busy: intent.isPending,
       run: () => intent.mutate(),
     },
@@ -285,7 +285,7 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
           </ResultCard>
         )}
         {active === 'intent' && intent.data && (
-          <ResultCard label={tl('ai.action.intent', { defaultValue: 'Complaint type' })}>
+          <ResultCard label={tl('ai.action.intent', { defaultValue: 'Ticket type' })}>
             <div className="flex items-baseline gap-3">
               <Pill tone="primary">{intent.data.intent}</Pill>
               <span className="text-xs text-muted-foreground tabular-nums">

@@ -41,13 +41,13 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
 
   // 3. Open "Add ticket" from the conversation, which carries the contact and
   // vendor across. The form has no subject box on purpose — a ticket is named
-  // after its complaint type (see CreateTicketDialog) — so choosing that type
+  // after its ticket type (see CreateTicketDialog) — so choosing that type
   // is what makes the form submittable, not typing a title.
   await agent
     .getByRole('button', { name: /add ticket/i })
     .first()
     .click();
-  const typeSelect = agent.getByRole('combobox', { name: /complaint type/i });
+  const typeSelect = agent.getByRole('combobox', { name: /ticket type/i });
   await typeSelect.waitFor({ timeout: 15_000 });
   await typeSelect.click();
   const typeOption = agent.getByRole('option').nth(1);

@@ -183,22 +183,16 @@ describe('ComplaintDashboard — every section his page has', () => {
     // holding it. Nothing about branch hierarchy.
     render(<ComplaintDashboard />);
     for (const heading of [
-      'Complaints per month',
-      'Unsolved complaints by agent',
-      'By complaint type',
+      'Unsolved tickets by agent',
+      'By ticket type',
       'By status',
       'By service type',
       'By agent',
-      'How complaints reach us',
+      'How tickets reach us',
     ]) {
       expect(screen.getByText(heading), `missing section: ${heading}`).toBeInTheDocument();
     }
-    for (const elsewhere of [
-      'Where complaints come from',
-      'Top restaurants',
-      'By brand',
-      'By area',
-    ]) {
+    for (const elsewhere of ['Where tickets come from', 'Top restaurants', 'By brand', 'By area']) {
       expect(
         screen.queryByText(elsewhere),
         `should be on Operations: ${elsewhere}`,
@@ -211,7 +205,7 @@ describe('ComplaintDashboard — every section his page has', () => {
     // own restaurants — so this view cuts the same rows by those.
     render(<ComplaintDashboard view="operations" />);
     for (const heading of [
-      'Where complaints come from',
+      'Where tickets come from',
       'Top restaurants',
       'By brand',
       'By area',
@@ -233,8 +227,13 @@ describe('ComplaintDashboard — every section his page has', () => {
       'Agent performance',
       'Agent performance — chat',
       // Same numbers as the By-status bars and the KPI strip, read a third way.
-      'Complaint status mix',
+      'Ticket status mix',
       'Service health',
+      // Two readings on one chart, each with its own scale, is a picture you
+      // have to be told how to read.
+      'Tickets per month',
+      // Every chip repeated a number from the KPI strip directly above it.
+      'Ops snapshot',
     ]) {
       expect(screen.queryByText(gone), `still present: ${gone}`).not.toBeInTheDocument();
     }
@@ -287,7 +286,7 @@ describe('ComplaintDashboard — donut slices are actually painted', () => {
     // Target the DONUT svg specifically — the page has other svgs (select
     // chevrons, the trend line) and picking the first one tests nothing.
     const svg = container.querySelector('svg[viewBox="0 0 140 140"]');
-    // The one donut on this view is "Where complaints come from": byBrand is
+    // The one donut on this view is "Where tickets come from": byBrand is
     // 7 + 3, so the ring shows 10 in the centre.
     expect(svg?.textContent).toContain('10');
     const first = svg?.querySelector('circle[stroke-dasharray]');
@@ -310,25 +309,25 @@ describe('ComplaintDashboard — a capped list admits what it hides', () => {
   it('states the period the data actually covers, not the filter', () => {
     render(<ComplaintDashboard />);
     expect(
-      screen.getByText(/Showing 10 complaints from 2026-06-02 to 2026-07-29/),
+      screen.getByText(/Showing 10 tickets from 2026-06-02 to 2026-07-29/),
     ).toBeInTheDocument();
   });
 
-  it('shows how many complaints were settled, not just what was spent', () => {
+  it('shows how many tickets were settled, not just what was spent', () => {
     render(<ComplaintDashboard />);
     expect(screen.getByText('4 compensated · 25.0 avg each')).toBeInTheDocument();
   });
 });
 
 describe('ComplaintDashboard — click-through drill-down', () => {
-  it('opens the complaints behind a bar, not just its count', async () => {
+  it('opens the tickets behind a bar, not just its count', async () => {
     const user = userEvent.setup();
     render(<ComplaintDashboard />);
 
     await user.click(screen.getByRole('button', { name: /Missing item/ }));
 
-    // The drawer names the cut and lists the matching complaint only.
-    expect(screen.getByText('By complaint type: Missing item')).toBeInTheDocument();
+    // The drawer names the cut and lists the matching ticket only.
+    expect(screen.getByText('By ticket type: Missing item')).toBeInTheDocument();
     expect(screen.getByText('Missing garlic sauce')).toBeInTheDocument();
     expect(screen.queryByText('Order arrived cold')).not.toBeInTheDocument();
   });
@@ -343,25 +342,25 @@ describe('ComplaintDashboard — click-through drill-down', () => {
     expect(screen.queryByText('Missing garlic sauce')).not.toBeInTheDocument();
   });
 
-  it('drills an agent from the unsolved chart to their OPEN complaints only', async () => {
+  it('drills an agent from the unsolved chart to their OPEN tickets only', async () => {
     const user = userEvent.setup();
     render(<ComplaintDashboard />);
 
     // "Sara" is the unsolved-chart row; the fixture keys it by label, so use
     // the agent breakdown row for Amjad which has one open and one closed.
-    const unsolved = screen.getByText('Unsolved complaints by agent').closest('section')!;
+    const unsolved = screen.getByText('Unsolved tickets by agent').closest('section')!;
     const bar = unsolved.querySelector('button')!;
     await user.click(bar);
     // Sara has no rows in the fixture — the drawer still opens and says so
     // rather than silently doing nothing.
-    expect(screen.getByText(/Unsolved complaints by agent: Sara/)).toBeInTheDocument();
+    expect(screen.getByText(/Unsolved tickets by agent: Sara/)).toBeInTheDocument();
   });
 
   it('totals the compensation of whatever slice was opened', async () => {
     const user = userEvent.setup();
     render(<ComplaintDashboard />);
     await user.click(screen.getByRole('button', { name: /Missing item/ }));
-    expect(screen.getByText(/1 complaint\(s\) · 10 SAR compensation/)).toBeInTheDocument();
+    expect(screen.getByText(/1 ticket\(s\) · 10 SAR compensation/)).toBeInTheDocument();
   });
 
   // The "CRM replies per agent" assertion went with the agent table it drove.

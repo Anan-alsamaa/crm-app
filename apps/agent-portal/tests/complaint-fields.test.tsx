@@ -176,7 +176,7 @@ describe('the option comboboxes are locked to the list', () => {
     let latest: ComplaintValues = emptyComplaint;
     render(<Harness onValues={(v) => (latest = v)} />);
 
-    const box = screen.getByLabelText('Complaint type');
+    const box = screen.getByLabelText('Ticket type');
     await user.click(box);
     await user.type(box, 'roach');
 
@@ -193,7 +193,7 @@ describe('the option comboboxes are locked to the list', () => {
     let latest: ComplaintValues = emptyComplaint;
     render(<Harness onValues={(v) => (latest = v)} />);
 
-    const box = screen.getByLabelText('Complaint source');
+    const box = screen.getByLabelText('Ticket source');
     await user.click(box);
     await user.type(box, 'whatsapp');
     await user.click(screen.getByRole('option', { name: 'WhatsApp' }));
@@ -207,7 +207,7 @@ describe('the option comboboxes are locked to the list', () => {
     let latest: ComplaintValues = emptyComplaint;
     render(<Harness onValues={(v) => (latest = v)} />);
 
-    const box = screen.getByLabelText('Complaint type');
+    const box = screen.getByLabelText('Ticket type');
     await user.click(box);
     await user.type(box, 'Something I invented');
     expect(screen.getByText('No matching option.')).toBeTruthy();

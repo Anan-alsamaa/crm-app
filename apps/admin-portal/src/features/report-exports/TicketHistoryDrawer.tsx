@@ -119,7 +119,7 @@ export function TicketHistoryDrawer({
         ) : entries.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t('complaintReport.noHistory', {
-              defaultValue: 'No changes recorded since this complaint was created.',
+              defaultValue: 'No changes recorded since this ticket was created.',
             })}
           </p>
         ) : (
@@ -146,7 +146,7 @@ export function TicketHistoryDrawer({
                   <span>
                     {e.action === 'create'
                       ? t('complaintReport.historyCreated', {
-                          defaultValue: 'created the complaint',
+                          defaultValue: 'created the ticket',
                         })
                       : t('complaintReport.historyEdited', { defaultValue: 'edited' })}
                   </span>

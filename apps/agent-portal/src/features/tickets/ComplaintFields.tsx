@@ -410,7 +410,7 @@ export function StorePicker({
         detail ||
         (inferredFrom
           ? t('complaint.branchInferred', {
-              defaultValue: 'From the order — change it if the complaint is about another branch.',
+              defaultValue: 'From the order — change it if the ticket is about another branch.',
             })
           : t('complaint.branchHint', {
               defaultValue: 'Search by code, name or city.',
@@ -637,7 +637,7 @@ export function ComplaintClassification({
           this date, and it is the one thing the agent cannot recover later if
           they leave it wrong. */}
       <FormField
-        label={t('complaint.date', { defaultValue: 'Complaint date' })}
+        label={t('complaint.date', { defaultValue: 'Ticket date' })}
         hint={t('complaint.dateHint', { defaultValue: 'When it happened' })}
       >
         <Input
@@ -648,7 +648,7 @@ export function ComplaintClassification({
         />
       </FormField>
       <FormField
-        label={t('complaint.type', { defaultValue: 'Complaint type' })}
+        label={t('complaint.type', { defaultValue: 'Ticket type' })}
         hint={
           typeRequired
             ? t('complaint.typeNames', { defaultValue: 'Required — it names the ticket' })
@@ -671,7 +671,7 @@ export function ComplaintClassification({
         />
       </FormField>
       <FormField
-        label={t('complaint.source', { defaultValue: 'Complaint source' })}
+        label={t('complaint.source', { defaultValue: 'Ticket source' })}
         hint={t('complaint.sourceHint', { defaultValue: 'Where it came in' })}
       >
         <Combobox

@@ -143,18 +143,18 @@ describe('AiPanel — reply language', () => {
   it('offers only actions that act on THIS chat', () => {
     // Search did not act on the conversation in front of the agent, and the
     // inbox has its own. Lead scoring is a sales idea with no meaning in a
-    // complaints inbox — there are no leads, only complaints.
+    // tickets inbox — there are no leads, only tickets.
     renderPanel();
     expect(screen.queryByRole('button', { name: 'Search' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Score lead' })).toBeNull();
   });
 
-  it('classifies against the complaint types the ticket form offers', async () => {
+  it('classifies against the ticket types the ticket form offers', async () => {
     // A generic tag like "shipping_issue" is a translation job handed back to
     // the agent; the point is an answer they can use as-is.
     ai.intent.mockResolvedValue({ intent: 'Late order', confidence: 0.9 });
     renderPanel();
-    await userEvent.click(screen.getByRole('button', { name: 'Complaint type' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Ticket type' }));
     await waitFor(() => expect(ai.intent).toHaveBeenCalled());
     const candidates = ai.intent.mock.calls[0]![2];
     expect(Array.isArray(candidates)).toBe(true);

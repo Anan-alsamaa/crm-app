@@ -102,7 +102,7 @@ export function DashboardPage() {
                   <p className="mt-1 max-w-xl text-sm leading-relaxed text-white/85">
                     {t('dashboard.heroSub', {
                       defaultValue:
-                        'Here is where every complaint stands right now — filter the range below, or jump straight in.',
+                        'Here is where every ticket stands right now — filter the range below, or jump straight in.',
                     })}
                   </p>
                 </div>

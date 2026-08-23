@@ -44,7 +44,7 @@ vi.mock('../src/features/inbox/api.js', () => ({
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
   useAuth: () => ({ user: { id: 'agent-1', first_name: 'Sara', last_name: null, email: null } }),
 }));
-// The list is fed by the agent's own complaints, joined against the store
+// The list is fed by the agent's own tickets, joined against the store
 // master so branch attribution matches the manager's report exactly.
 const complaints = vi.hoisted(() => ({ useMyComplaints: vi.fn() }));
 vi.mock('../src/features/complaints/api.js', () => complaints);
@@ -52,7 +52,7 @@ vi.mock('../src/features/tickets/useStoreMatch.js', async () => {
   const { buildStoreIndex } = await import('@yiji/shared-types');
   return {
     useStoreIndex: () => ({ index: buildStoreIndex([]), isLoading: false, count: 0 }),
-    // The detail pane's complaint panel lists branches to pick from.
+    // The detail pane's ticket panel lists branches to pick from.
     useStores: () => ({ data: [], isLoading: false }),
   };
 });
@@ -152,7 +152,7 @@ describe('TicketsPage', () => {
 
   it('lists tickets as readable rows, not as a 27-column sheet', () => {
     // The operations report belongs to the manager's portal. An agent works one
-    // complaint at a time and reads the queue at a glance, which a horizontally
+    // ticket at a time and reads the queue at a glance, which a horizontally
     // scrolling table does not give them.
     renderPage();
     expect(screen.getByText('Refund please')).toBeInTheDocument();
@@ -171,7 +171,7 @@ describe('TicketsPage', () => {
     expect(screen.getByText(/LCP-032 Masief Plaza/)).toBeInTheDocument();
   });
 
-  it('leads the row with the complaint type, the way the ops sheet is scanned', () => {
+  it('leads the row with the ticket type, the way the ops sheet is scanned', () => {
     // A distinct type, so it cannot be confused with the subject "Refund please".
     complaints.useMyComplaints.mockReturnValue({
       data: [{ ...complaintRow, complaintType: 'Late order' }],

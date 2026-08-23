@@ -363,7 +363,7 @@ function RequestDetail({ id }: { id: string }) {
             />
           </div>
         </Section>
-        <Section title={t('compensation.complaint', { defaultValue: 'Complaint' })}>
+        <Section title={t('compensation.complaint', { defaultValue: 'Ticket' })}>
           <ClassificationEditor request={r} />
           <div className="mt-1">
             <EditableAmount

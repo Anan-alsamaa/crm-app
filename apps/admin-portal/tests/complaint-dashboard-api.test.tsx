@@ -89,7 +89,7 @@ const STORES = [
 
 const USERS = [{ id: 'u1', first_name: 'Amjad', last_name: null, email: 'a@x.com' }];
 
-/** A complaint with sensible defaults; override what the test is about. */
+/** A ticket with sensible defaults; override what the test is about. */
 function ticket(over: Record<string, unknown> = {}) {
   return {
     id: 't' + Math.random().toString(36).slice(2, 7),
@@ -118,7 +118,7 @@ async function run(filters: ComplaintFilters = emptyComplaintFilters) {
   return result.current.data!;
 }
 
-describe('complaint dashboard — compensation', () => {
+describe('ticket dashboard — compensation', () => {
   it('sums coupon_value into the headline compensation figure', async () => {
     mockData({
       tickets: [
@@ -132,8 +132,8 @@ describe('complaint dashboard — compensation', () => {
     const d = await run();
     expect(d.total).toBe(3);
     expect(d.compensation).toBe(40);
-    // Averaged over EVERY complaint, not just the compensated ones — that is
-    // the "cost per complaint" the ops manager reads it as.
+    // Averaged over EVERY ticket, not just the compensated ones — that is
+    // the "cost per ticket" the ops manager reads it as.
     expect(d.avgCompensation).toBeCloseTo(40 / 3);
   });
 
@@ -156,14 +156,14 @@ describe('complaint dashboard — compensation', () => {
   });
 });
 
-describe('complaint dashboard — branch attribution', () => {
+describe('ticket dashboard — branch attribution', () => {
   it('prefers the branch the agent picked over the order snapshot', async () => {
     mockData({
       tickets: [
         ticket({
           store: 'st2',
           // A snapshot pointing at the OTHER branch must not win: someone chose
-          // st2 by hand, and the order may not be what the complaint is about.
+          // st2 by hand, and the order may not be what the ticket is about.
           order_snapshot: { restaurantName: 'Dhahran Mall', brandName: 'Casa Pasta' },
         }),
       ],
@@ -191,7 +191,7 @@ describe('complaint dashboard — branch attribution', () => {
     expect(d.unattributed).toBe(0);
   });
 
-  it('counts a complaint with no branch at all rather than dropping it', async () => {
+  it('counts a ticket with no branch at all rather than dropping it', async () => {
     mockData({
       tickets: [ticket({ store: null, order_snapshot: null }), ticket()],
       stores: STORES,
@@ -205,7 +205,7 @@ describe('complaint dashboard — branch attribution', () => {
   });
 });
 
-describe('complaint dashboard — filters', () => {
+describe('ticket dashboard — filters', () => {
   it('filters by brand, city and restaurant using the resolved branch', async () => {
     const tickets = [ticket({ store: 'st1' }), ticket({ store: 'st2' }), ticket({ store: 'st2' })];
     mockData({ tickets, stores: STORES, users: USERS });
@@ -245,8 +245,8 @@ describe('complaint dashboard — filters', () => {
   });
 });
 
-describe('complaint dashboard — status, satisfaction and agents', () => {
-  it('counts open work and SLA-breached complaints separately', async () => {
+describe('ticket dashboard — status, satisfaction and agents', () => {
+  it('counts open work and SLA-breached tickets separately', async () => {
     mockData({
       tickets: [
         ticket({ status: 'new' }),
@@ -269,7 +269,7 @@ describe('complaint dashboard — status, satisfaction and agents', () => {
     expect(d.overdue).toBe(1);
   });
 
-  it('rates satisfaction only over complaints whose chat was actually rated', async () => {
+  it('rates satisfaction only over tickets whose chat was actually rated', async () => {
     mockData({
       tickets: [
         ticket({ status: 'closed', conversation: 'c1' }),
@@ -324,14 +324,14 @@ describe('complaint dashboard — status, satisfaction and agents', () => {
     expect(a.compensation).toBe(30);
   });
 
-  it('keeps unassigned complaints visible instead of hiding them from the table', async () => {
+  it('keeps unassigned tickets visible instead of hiding them from the table', async () => {
     mockData({ tickets: [ticket({ assigned_agent: null })], stores: STORES, users: USERS });
     const d = await run();
     expect(d.agents.map((a) => a.name)).toContain('Unassigned');
   });
 });
 
-describe('complaint dashboard — breakdowns', () => {
+describe('ticket dashboard — breakdowns', () => {
   it('ranks each breakdown biggest first and ignores blanks', async () => {
     mockData({
       tickets: [
@@ -351,10 +351,10 @@ describe('complaint dashboard — breakdowns', () => {
     expect(d.byServiceType.rows).toEqual([{ key: 'Delivery', label: 'Delivery', count: 2 }]);
   });
 
-  it('offers filter options from the store master, not from what happens to have complaints', async () => {
+  it('offers filter options from the store master, not from what happens to have tickets', async () => {
     mockData({ tickets: [ticket({ store: 'st1' })], stores: STORES, users: USERS });
     const d = await run();
-    // st2 has no complaints yet but must still be filterable — otherwise you
+    // st2 has no tickets yet but must still be filterable — otherwise you
     // cannot ask "did this branch have any?".
     expect(d.storeOptions.map((s) => s.name)).toEqual([
       'LCP-002 Dhahran Mall',
@@ -365,7 +365,7 @@ describe('complaint dashboard — breakdowns', () => {
   });
 });
 
-describe('complaint dashboard — the dimensions his dashboard slices by', () => {
+describe('ticket dashboard — the dimensions his dashboard slices by', () => {
   it('breaks down by area manager and by agent', async () => {
     mockData({
       tickets: [
@@ -377,7 +377,7 @@ describe('complaint dashboard — the dimensions his dashboard slices by', () =>
       users: USERS,
     });
     const d = await run();
-    // st2 has no area manager, so only st1's two complaints carry an area.
+    // st2 has no area manager, so only st1's two tickets carry an area.
     expect(d.byArea.rows).toEqual([{ key: 'Aly', label: 'Aly', count: 2 }]);
     expect(d.byAgent.rows.map((r) => [r.label, r.count])).toEqual([
       ['Amjad', 2],
@@ -395,7 +395,7 @@ describe('complaint dashboard — the dimensions his dashboard slices by', () =>
   });
 
   it('never asks Directus for a customer phone number', async () => {
-    // The dashboard reports on where complaints come from, not on who made
+    // The dashboard reports on where tickets come from, not on who made
     // them. It displayed no number and now filters on none, so pulling one into
     // an aggregate payload would be collecting data for nothing.
     mockData({ tickets: [ticket({})], stores: STORES, users: USERS });
@@ -414,7 +414,7 @@ describe('complaint dashboard — the dimensions his dashboard slices by', () =>
   });
 });
 
-describe('complaint dashboard — chat performance', () => {
+describe('ticket dashboard — chat performance', () => {
   const CONVERSATIONS = [
     { id: 'c1', status: 'open', assigned_agent: 'u1' },
     { id: 'c2', status: 'closed', assigned_agent: 'u1' },
@@ -473,7 +473,7 @@ describe('complaint dashboard — chat performance', () => {
     expect(d.chatAgents.find((x) => x.id === 'u1')?.chatsHandled).toBe(2);
   });
 
-  it('carries each agent chat workload onto the complaints table too', async () => {
+  it('carries each agent chat workload onto the tickets table too', async () => {
     mockData({
       tickets: [ticket({ assigned_agent: 'u1' })],
       stores: STORES,
@@ -487,7 +487,7 @@ describe('complaint dashboard — chat performance', () => {
   });
 });
 
-describe('complaint dashboard — service health composition', () => {
+describe('ticket dashboard — service health composition', () => {
   it('splits the range into satisfied / unsatisfied / unrated / open / overdue', async () => {
     mockData({
       tickets: [
@@ -542,8 +542,8 @@ describe('complaint dashboard — service health composition', () => {
   });
 });
 
-describe('complaint dashboard — unsolved work per agent', () => {
-  it('ranks who is holding open complaints, not who logged the most', async () => {
+describe('ticket dashboard — unsolved work per agent', () => {
+  it('ranks who is holding open tickets, not who logged the most', async () => {
     mockData({
       tickets: [
         // Amjad logs a lot but finishes everything.
@@ -575,7 +575,7 @@ describe('complaint dashboard — unsolved work per agent', () => {
     expect(d.byOpenAgent.rows).toEqual([]);
   });
 
-  it('names unassigned open complaints rather than dropping them', async () => {
+  it('names unassigned open tickets rather than dropping them', async () => {
     mockData({
       tickets: [ticket({ assigned_agent: null, status: 'open' })],
       stores: STORES,

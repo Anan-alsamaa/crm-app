@@ -466,7 +466,7 @@ export function CreateTicketDialog({
       ? // Named, not vague: "check the highlighted fields" sends the agent
         // hunting across a fourteen-field form for the one thing missing.
         t('tickets.pickComplaintType', {
-          defaultValue: 'Choose a complaint type — it names the ticket',
+          defaultValue: 'Choose a ticket type — it names the ticket',
         })
       : complaintHasErrors(complaint)
         ? t('tickets.fixFieldsFirst', { defaultValue: 'Check the highlighted fields' })
@@ -575,7 +575,7 @@ export function CreateTicketDialog({
               tone="violet"
               title={t('complaint.whatHappened', { defaultValue: 'What happened' })}
               hint={t('complaint.whatHappenedHint', {
-                defaultValue: 'The complaint as the customer reported it',
+                defaultValue: 'The ticket as the customer reported it',
               })}
             >
               <ComplaintClassification
@@ -651,11 +651,11 @@ export function CreateTicketDialog({
                     {chosenMatch?.store
                       ? t('tickets.branchWillSee', {
                           defaultValue:
-                            'This complaint type is reported to the branch. Only the description and the resolution notes are sent.',
+                            'This ticket type is reported to the branch. Only the description and the resolution notes are sent.',
                         })
                       : t('tickets.branchWillSeeNoStore', {
                           defaultValue:
-                            'This complaint type is reported to the branch — attach one so it can be.',
+                            'This ticket type is reported to the branch — attach one so it can be.',
                         })}
                   </span>
                 </p>
