@@ -45,8 +45,8 @@ test('customer message reaches the agent and the agent reply returns', async ({ 
   // the one this test signs in as — so "the first row of my queue" was asserting
   // something the product never promised, and failing for a reason that had
   // nothing to do with delivery.
-  await agent.getByLabel(/all conversations/i).click();
-  await agent.getByRole('option', { name: /all conversations/i }).click();
+  await agent.getByLabel(/all chats/i).click();
+  await agent.getByRole('option', { name: /all chats/i }).click();
   const convo = agent.locator('aside li button').filter({ hasText: text });
   await convo.first().waitFor({ timeout: 15_000 });
   await convo.first().click();

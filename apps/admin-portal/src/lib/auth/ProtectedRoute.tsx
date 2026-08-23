@@ -1,11 +1,33 @@
 import type { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Spinner } from '@yiji/ui';
-import { useAuth, isAdmin } from './AuthContext.js';
+import { useTranslation } from 'react-i18next';
+import { EmptyState, Spinner } from '@yiji/ui';
+import { useAuth } from './AuthContext.js';
+import type { Privilege } from '../privileges.js';
 
-/** Gate admin routes: authenticated AND an admin role. */
-export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
+/**
+ * Gate a route: signed in, admitted to this portal, and — optionally — holding
+ * the privilege the page needs.
+ *
+ * The `requires` check is what stops a bookmark being a back door. The nav hides
+ * what a role cannot use, but a hidden link is not a closed one, and somebody
+ * who once had access keeps the URL in their history.
+ *
+ * None of this is the security boundary; Directus is. A role that reaches a page
+ * it should not have gets an empty table rather than data. This exists so people
+ * are not offered work they cannot do, and so the refusal reads as a rule rather
+ * than as a fault.
+ */
+export function ProtectedRoute({
+  children,
+  requires,
+}: {
+  children: ReactNode;
+  requires?: Privilege;
+}) {
+  const { t } = useTranslation();
+  const { user, loading, canUsePortal, can } = useAuth();
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -14,12 +36,34 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
-  if (!isAdmin(user)) {
+
+  if (!canUsePortal) {
     return (
-      <div className="flex h-full items-center justify-center p-6 text-center text-red-600">
-        Your account does not have administrator access.
+      <div className="flex h-full items-center justify-center p-6">
+        <EmptyState
+          title={t('auth.noPortalAccess', { defaultValue: 'This portal is not for your role' })}
+          description={t('auth.noPortalAccessHint', {
+            defaultValue:
+              'Your account is signed in, but none of the screens here are open to it. If you handle customer chats, use the agent portal instead.',
+          })}
+        />
       </div>
     );
   }
+
+  if (requires && !can(requires)) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <EmptyState
+          title={t('auth.noPagePrivilege', { defaultValue: 'You do not have access to this page' })}
+          description={t('auth.noPagePrivilegeHint', {
+            defaultValue:
+              'Your role does not include this. An administrator can change that under Roles & privileges.',
+          })}
+        />
+      </div>
+    );
+  }
+
   return <>{children}</>;
 }

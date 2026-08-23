@@ -104,6 +104,11 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     ...readOnly('directus_users'),
     ...readOnly('option_lists'),
     ...readOnly('app_settings'),
+    // Its OWN privileges, so the portal can decide what to offer this person.
+    // Without this a scoped role signs in, reads nothing back, and is handed
+    // either an empty portal or — worse — the whole nav, because "no privileges
+    // found" and "no privileges granted" look identical from the client.
+    ...readOnly('app_roles'),
     ...readOnly('quick_replies'),
     ...readOnly('routing_events'),
     ...readOnly('directus_files'),

@@ -54,6 +54,7 @@ import {
 } from './api.js';
 import { useStoreIndex } from '../restaurants/api.js';
 import { directus } from '../../lib/directus.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 import { formatDuration } from '@yiji/reports';
 import { TicketHistoryDrawer } from './TicketHistoryDrawer.js';
 import {
@@ -666,6 +667,18 @@ function ComplaintsReport({
   days: number;
 }) {
   const { t } = useTranslation();
+  /**
+   * Which of the row actions this role is OFFERED.
+   *
+   * An operations role is here to read the register and take a copy of it, and
+   * showing it Delete taught it by clicking that it could not. Hiding is not
+   * securing — Directus refuses the write either way — but a button that only
+   * ever fails is worse than no button.
+   */
+  const { can } = useAuth();
+  const canSeeHistory = can('edit_all_tickets');
+  const canDelete = can('delete_tickets');
+  const canImport = can('import_data');
   const [cols, setCols] = useState<Set<ComplaintColumnKey>>(() => new Set(COMPLAINT_COLUMN_KEYS));
   const [showCols, setShowCols] = useState(false);
   const [colQuery, setColQuery] = useState('');
@@ -1277,48 +1290,55 @@ function ComplaintsReport({
           {/* Selection-driven actions, ops-portal style: pick a row, then act
               from here. Disabled — not hidden — without a selection, so the
               affordance teaches its own precondition. */}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="ring-1 ring-border"
-            disabled={!selectedId}
-            onClick={() => {
-              const row = visible.find((v) => v.id === selectedId);
-              if (row)
-                setHistoryOf({
-                  id: row.id,
-                  label: [row.complaintType, row.orderNumber].filter(Boolean).join(' · ') || row.id,
-                });
-            }}
-          >
-            {t('complaintReport.historyBtn', { defaultValue: 'History' })}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={!selectedId || del.isPending}
-            className="text-destructive ring-1 ring-border hover:bg-destructive/10"
-            onClick={() => {
-              const row = visible.find((v) => v.id === selectedId);
-              if (!row) return;
-              const label =
-                [row.complaintType, row.orderNumber].filter(Boolean).join(' · ') || row.id;
-              setConfirmDelete({ id: row.id, label });
-            }}
-          >
-            {t('complaintReport.deleteBtn', { defaultValue: 'Delete' })}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="ring-1 ring-border"
-            disabled
-            title={t('complaintReport.importDisabled', {
-              defaultValue: 'Importing is disabled',
-            })}
-          >
-            {t('complaintReport.importBtn', { defaultValue: 'Import file' })}
-          </Button>
+          {canSeeHistory && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ring-1 ring-border"
+              disabled={!selectedId}
+              onClick={() => {
+                const row = visible.find((v) => v.id === selectedId);
+                if (row)
+                  setHistoryOf({
+                    id: row.id,
+                    label:
+                      [row.complaintType, row.orderNumber].filter(Boolean).join(' · ') || row.id,
+                  });
+              }}
+            >
+              {t('complaintReport.historyBtn', { defaultValue: 'History' })}
+            </Button>
+          )}
+          {canDelete && (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!selectedId || del.isPending}
+              className="text-destructive ring-1 ring-border hover:bg-destructive/10"
+              onClick={() => {
+                const row = visible.find((v) => v.id === selectedId);
+                if (!row) return;
+                const label =
+                  [row.complaintType, row.orderNumber].filter(Boolean).join(' · ') || row.id;
+                setConfirmDelete({ id: row.id, label });
+              }}
+            >
+              {t('complaintReport.deleteBtn', { defaultValue: 'Delete' })}
+            </Button>
+          )}
+          {canImport && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ring-1 ring-border"
+              disabled
+              title={t('complaintReport.importDisabled', {
+                defaultValue: 'Importing is disabled',
+              })}
+            >
+              {t('complaintReport.importBtn', { defaultValue: 'Import file' })}
+            </Button>
+          )}
         </div>
       </div>
 

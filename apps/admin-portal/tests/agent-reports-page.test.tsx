@@ -35,6 +35,21 @@ vi.mock('../src/features/report-exports/api.js', () => api);
 const storesApi = vi.hoisted(() => ({ useStoreIndex: vi.fn() }));
 vi.mock('../src/features/restaurants/api.js', () => storesApi);
 
+/**
+ * The report reads privileges to decide which row actions to OFFER.
+ *
+ * Mocked as an administrator here so these tests keep asserting the full page.
+ * What each privilege hides has its own test below, driven through this same
+ * mock rather than by rendering a whole AuthProvider — the question is what the
+ * page does with an answer, not how the answer is fetched.
+ */
+const authMock = vi.hoisted(() => ({
+  can: vi.fn((_priv: string): boolean => true),
+}));
+vi.mock('../src/lib/auth/AuthContext.js', () => ({
+  useAuth: () => ({ can: authMock.can }),
+}));
+
 // export.ts / xlsx.ts stay REAL: clicking "Export to Excel" must actually build
 // a workbook, which is the behaviour worth asserting.
 import {
@@ -331,6 +346,8 @@ const PANORAMA = {
 };
 
 beforeEach(() => {
+  authMock.can.mockReset();
+  authMock.can.mockReturnValue(true);
   // The column order is persisted, so without this one test's arrangement
   // leaks into the next and the failures look like product bugs.
   localStorage.clear();
@@ -785,6 +802,30 @@ describe('AgentReportsPage — complaints report', () => {
     const row = container.querySelectorAll('tbody tr')[0]! as HTMLElement;
     expect(within(row).getByText('Dammam')).toBeTruthy();
     expect(within(row).queryByText('Riyadh')).toBeNull();
+  });
+
+  it('offers only the row actions the role holds', () => {
+    // An operations role reads the register and takes a copy of it. Showing it
+    // Delete taught it by clicking that it could not — Directus refuses the
+    // write either way, but a button that only ever fails is worse than no
+    // button. Export stays: that is the whole job.
+    api.useAgentReportData.mockReturnValue(ok);
+    authMock.can.mockImplementation((priv: string) => priv === 'export_data');
+    renderPage('complaints');
+
+    expect(screen.queryByText('History')).toBeNull();
+    expect(screen.queryByText('Delete')).toBeNull();
+    expect(screen.queryByText('Import file')).toBeNull();
+    expect(screen.getByText(/^Export CSV/)).toBeInTheDocument();
+  });
+
+  it('offers every row action to a role that holds them all', () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    renderPage('complaints');
+
+    expect(screen.getByText('History')).toBeInTheDocument();
+    expect(screen.getByText('Delete')).toBeInTheDocument();
+    expect(screen.getByText('Import file')).toBeInTheDocument();
   });
 
   it('exports the complaints sheet as CSV, in the chosen column order', async () => {

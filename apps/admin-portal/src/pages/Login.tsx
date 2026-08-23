@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button, cn, FormField, Input, toast, Toaster } from '@yiji/ui';
-import { useAuth, isAdmin } from '../lib/auth/AuthContext.js';
+import { useAuth } from '../lib/auth/AuthContext.js';
 import { LanguageToggle } from '../components/LanguageToggle.js';
 import { RESET_PASSWORD_PATH } from './ResetPassword.js';
 
@@ -97,8 +97,12 @@ export function Login() {
   const onSubmit = handleSubmit(async (values) => {
     setAuthError(null);
     try {
-      const user = await login(values.email, values.password);
-      if (!isAdmin(user)) {
+      // The portal admits any role with something in it, not administrators
+      // only. An operations lead given a carefully scoped role used to be told
+      // "Administrator access required" at the door — which reads as a wrong
+      // password rather than as a rule.
+      const { allowed } = await login(values.email, values.password);
+      if (!allowed) {
         await logout();
         setAuthError(t('login.notAdmin'));
         return;
@@ -167,7 +171,7 @@ export function Login() {
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {view === 'signin'
-                    ? t('login.subtitle', { defaultValue: 'Administrator access required.' })
+                    ? t('login.subtitle', { defaultValue: 'Sign in with your work account.' })
                     : view === 'forgot'
                       ? t('login.forgotSubtitle', {
                           defaultValue: "Enter your work email and we'll send you a reset link.",

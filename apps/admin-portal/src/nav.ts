@@ -1,4 +1,5 @@
 import type { UsersIcon } from '@yiji/ui';
+import type { Privilege } from './lib/privileges.js';
 
 /*
  * Nav shapes shared by the two presentations of the same tree: the horizontal
@@ -24,6 +25,16 @@ export interface NavItem {
    * above it.
    */
   group?: string;
+  /**
+   * The privilege this destination needs, if any.
+   *
+   * Items whose privilege the signed-in role lacks are removed before the nav
+   * renders — a section left with no items disappears with them. Hiding is not
+   * securing: the same privilege gates the ROUTE (see ProtectedRoute), so a
+   * bookmark cannot walk in behind the menu, and Directus decides what any of
+   * it can actually read.
+   */
+  requires?: Privilege;
 }
 
 export interface NavSection {

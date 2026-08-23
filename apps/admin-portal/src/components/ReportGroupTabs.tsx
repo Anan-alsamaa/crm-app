@@ -1,10 +1,20 @@
 import type { JSX } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { cn } from '@yiji/ui';
+import { useAuth } from '../lib/auth/AuthContext.js';
+import type { Privilege } from '../lib/privileges.js';
 
 export interface ReportTab {
   to: string;
   label: string;
+  /**
+   * The privilege this report needs.
+   *
+   * The top nav filters its own destinations, but this strip is a SECOND set of
+   * them one level down — and it was rendering all of them. An operations role
+   * that could reach Ticket breakdown was shown Compensation sitting beside it.
+   */
+  requires?: Privilege;
 }
 
 /**
@@ -23,16 +33,19 @@ export interface ReportTab {
  * and the strip itself never remounts.
  */
 export function ReportGroupTabs({ tabs }: { tabs: ReportTab[] }): JSX.Element {
+  const { can } = useAuth();
+  const visible = tabs.filter((tab) => !tab.requires || can(tab.requires));
   return (
     <div className="flex h-full min-h-0 flex-col">
       <nav
         aria-label="Report"
+        hidden={visible.length < 2}
         // Sticky and hairlined: it belongs to the masthead above it, not to
         // the report below, and scrolling a long table must not take the
         // reader's place in the section away with it.
         className="sticky top-0 z-10 flex shrink-0 items-center gap-1 overflow-x-auto border-b border-foreground/[0.06] bg-background/95 px-4 py-2 backdrop-blur"
       >
-        {tabs.map((tab) => (
+        {visible.map((tab) => (
           <NavLink
             key={tab.to}
             to={tab.to}

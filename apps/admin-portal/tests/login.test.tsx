@@ -54,16 +54,22 @@ describe('Login', () => {
     expect(screen.getByText('login.submit')).toBeInTheDocument();
   });
 
-  it('navigates home after an admin logs in', async () => {
-    authState.login.mockResolvedValueOnce({ role: { name: 'Administrator' } });
+  it('navigates home when the portal has something for this role', async () => {
+    // login() reports the DECISION alongside the identity: the portal admits
+    // any role with a screen in it, not administrators only, and the screen
+    // has to act on that in the same tick as the sign-in.
+    authState.login.mockResolvedValueOnce({
+      user: { role: { name: 'Administrator' } },
+      allowed: true,
+    });
     renderLogin();
     await fillCredentials();
     await userEvent.click(screen.getByText('login.submit'));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
   });
 
-  it('rejects a non-admin and shows an error', async () => {
-    authState.login.mockResolvedValueOnce({ role: { name: 'Agent' } });
+  it('rejects a role with nothing in this portal and says so', async () => {
+    authState.login.mockResolvedValueOnce({ user: { role: { name: 'Agent' } }, allowed: false });
     authState.logout.mockResolvedValueOnce(undefined);
     renderLogin();
     await fillCredentials();

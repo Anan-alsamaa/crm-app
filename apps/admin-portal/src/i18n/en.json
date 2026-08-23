@@ -6,7 +6,7 @@
     "title": "Sign in to Sara CRM Admin",
     "submit": "Sign in",
     "error": "Invalid email or password",
-    "notAdmin": "Your account does not have administrator access.",
+    "notAdmin": "Your account has no access to this portal. If you handle customer chats, use the agent portal.",
     "emailPlaceholder": "you@company.com",
     "forgot": "Forgot password?",
     "hidePassword": "Hide password",
@@ -15,7 +15,7 @@
     "forgotHint": "Password resets are handled by your system administrator.",
     "secure": "Every action audit-logged",
     "help": "Trouble signing in? Talk to your system administrator.",
-    "subtitle": "Administrator access required.",
+    "subtitle": "Sign in with your work account.",
     "backToSignIn": "Back to sign in",
     "forgotTitle": "Reset your password",
     "forgotSubtitle": "Enter your work email and we'll send you a reset link.",
@@ -1157,5 +1157,11 @@
     "kpiPercentAside": "plus {{count}} percentage coupons",
     "kpiRequests": "Coupons",
     "kpiValue": "Value (SAR)"
+  },
+  "auth": {
+    "noPortalAccess": "This portal is not for your role",
+    "noPortalAccessHint": "Your account is signed in, but none of the screens here are open to it. If you handle customer chats, use the agent portal instead.",
+    "noPagePrivilege": "You do not have access to this page",
+    "noPagePrivilegeHint": "Your role does not include this. An administrator can change that under Roles & privileges."
   }
 }

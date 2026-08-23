@@ -239,6 +239,14 @@ function Row({
   busy: boolean;
 }) {
   const { t } = useTranslation();
+  /**
+   * Deciding a coupon is a money decision, so it is its own privilege rather
+   * than something everyone who can SEE the queue inherits. The route already
+   * requires it; this is the second lock, so a future change that surfaces the
+   * queue read-only somewhere cannot quietly hand out the buttons with it.
+   */
+  const { can: hasPrivilege } = useAuth();
+  const canDecide = hasPrivilege('approve_coupons');
   const [note, setNote] = useState('');
   const [rejecting, setRejecting] = useState(false);
   /**
@@ -388,7 +396,7 @@ function Row({
         </div>
         {/* Above the overlay AND clickable: deciding must not be a side effect
             of trying to expand, nor the other way round. */}
-        {pending && !rejecting && !expanded && (
+        {pending && canDecide && !rejecting && !expanded && (
           <div className="relative flex shrink-0 items-center gap-2">
             <Button
               type="button"
@@ -846,43 +854,49 @@ function Row({
                       promised money, so the same rules the agent's form enforces
                       are checked again HERE against the terms as they now stand.
                       Both rows already in the system failed one of them. */}
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={busy || !row.ticket?.id || termsProblems.length > 0}
-                        title={termsProblems[0]?.message}
-                        onClick={() => {
-                          // Terms amended earlier in this session are already
-                          // saved on the row, so a straight approval is what
-                          // this is — nothing is pending to ride along.
-                          onDecide(true, note);
-                        }}
-                      >
-                        {t('couponApprovals.approve', { defaultValue: 'Approve' })}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        disabled={busy}
-                        onClick={() => {
-                          setEditing(true);
-                          // Seed from what was asked for, so the supervisor adjusts a
-                          // value rather than recalling it.
-                          setEdits(seedEdits(row));
-                        }}
-                      >
-                        {t('couponApprovals.edit', { defaultValue: 'Edit' })}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="destructive"
-                        disabled={busy}
-                        onClick={() => setRejecting(true)}
-                      >
-                        {t('couponApprovals.reject', { defaultValue: 'Reject' })}
-                      </Button>
+                      {canDecide && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={busy || !row.ticket?.id || termsProblems.length > 0}
+                          title={termsProblems[0]?.message}
+                          onClick={() => {
+                            // Terms amended earlier in this session are already
+                            // saved on the row, so a straight approval is what
+                            // this is — nothing is pending to ride along.
+                            onDecide(true, note);
+                          }}
+                        >
+                          {t('couponApprovals.approve', { defaultValue: 'Approve' })}
+                        </Button>
+                      )}
+                      {canDecide && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={busy}
+                          onClick={() => {
+                            setEditing(true);
+                            // Seed from what was asked for, so the supervisor adjusts a
+                            // value rather than recalling it.
+                            setEdits(seedEdits(row));
+                          }}
+                        >
+                          {t('couponApprovals.edit', { defaultValue: 'Edit' })}
+                        </Button>
+                      )}
+                      {canDecide && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          disabled={busy}
+                          onClick={() => setRejecting(true)}
+                        >
+                          {t('couponApprovals.reject', { defaultValue: 'Reject' })}
+                        </Button>
+                      )}
                       <span className="text-2xs text-muted-foreground">
                         {row.ticket?.id
                           ? t('couponApprovals.approveHint', {

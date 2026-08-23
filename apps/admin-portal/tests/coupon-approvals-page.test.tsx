@@ -20,8 +20,19 @@ vi.mock('react-i18next', () => ({
     i18n: { language: 'en', changeLanguage: vi.fn(), dir: () => 'ltr' },
   }),
 }));
+/**
+ * A supervisor: signed in, and holding the coupon privilege.
+ *
+ * Deciding a coupon is a money decision and has its own privilege now, so the
+ * page asks before it offers Approve / Edit / Reject. `couponPrivilege` is a
+ * variable so one test below can take it away and assert the row goes quiet.
+ */
+const couponPrivilege = vi.hoisted(() => ({ granted: true }));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
-  useAuth: () => ({ user: { id: 'sup-1', first_name: 'Nadia' } }),
+  useAuth: () => ({
+    user: { id: 'sup-1', first_name: 'Nadia' },
+    can: (priv: string) => (priv === 'approve_coupons' ? couponPrivilege.granted : true),
+  }),
 }));
 
 const api = vi.hoisted(() => ({
@@ -61,6 +72,7 @@ const pending = {
 const mutate = vi.fn();
 
 beforeEach(() => {
+  couponPrivilege.granted = true;
   mutate.mockReset();
   api.useCouponApprovals.mockReturnValue({ data: [pending], isLoading: false });
   api.useDecideCoupon.mockReturnValue({ mutate, isPending: false });
@@ -112,6 +124,20 @@ describe('CouponApprovalsPage', () => {
     expect(screen.getByText(/\+9665/)).toBeInTheDocument();
     // The agent's own words. Deciding without them is guessing.
     expect(screen.getAllByText(/Two items missing/).length).toBeGreaterThan(0);
+  });
+
+  it('offers no decision to a role without the coupon privilege', () => {
+    // Approving is the last gate before a customer is promised money, so it is
+    // its own privilege rather than something everyone who can SEE the queue
+    // inherits. The route already requires it; this is the second lock, so a
+    // change that surfaces the queue read-only somewhere cannot quietly hand
+    // out the buttons with it.
+    couponPrivilege.granted = false;
+    renderPage();
+
+    expect(screen.queryByText('Approve')).toBeNull();
+    expect(screen.queryByText('Reject')).toBeNull();
+    expect(screen.queryByText('Edit')).toBeNull();
   });
 
   it('approves in a single click', async () => {

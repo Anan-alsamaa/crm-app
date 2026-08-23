@@ -286,7 +286,7 @@ function MobileBrand() {
 function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, can } = useAuth();
   const displayName = staffDisplayName(user, 'Admin');
   // Command-palette open state is lifted here so the top-bar search trigger and
   // the Cmd/Ctrl+K shortcut both drive the one palette instance below.
@@ -297,12 +297,13 @@ function Shell({ children }: { children: React.ReactNode }) {
   // changes (Policies, Intelligence). Each report is its own clearly-named
   // entry: Ticket report + SLA performance (live dashboards you view), and
   // Scheduled reports + Excel exports (the ways you get data OUT).
-  const sections: NavSection[] = [
+  const allSections: NavSection[] = [
     {
       heading: t('nav.overview', { defaultValue: 'Overview' }),
       items: [
         {
           to: '/dashboard',
+          requires: 'view_dashboard' as const,
           label: t('nav.dashboard', { defaultValue: 'Dashboard' }),
           icon: ChartIcon,
         },
@@ -323,11 +324,13 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         {
           to: '/reports/agent-kpi',
+          requires: 'view_all_chats' as const,
           label: t('nav.agentKpiGroup', { defaultValue: 'Agent KPI' }),
           icon: DownloadIcon,
         },
         {
           to: '/reports/operational-kpi',
+          requires: 'view_all_tickets' as const,
           label: t('nav.opsKpiGroup', { defaultValue: 'Operational KPI' }),
           icon: DownloadIcon,
         },
@@ -335,6 +338,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           // NOT `/reports`: that is now the parent of the two KPI pages, so a
           // link to it would light up alongside whichever one is open.
           to: '/reports/scheduled',
+          requires: 'manage_lists' as const,
           label: t('nav.reports', { defaultValue: 'Scheduled reports' }),
           icon: CalendarIcon,
         },
@@ -348,6 +352,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         {
           to: '/agent-performance',
+          requires: 'view_all_chats' as const,
           label: t('nav.agentPerformance', { defaultValue: 'Agent performance' }),
           icon: ClockIcon,
         },
@@ -358,11 +363,13 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         {
           to: '/coupon-approvals',
+          requires: 'approve_coupons' as const,
           label: t('nav.couponApprovals', { defaultValue: 'Coupon approvals' }),
           icon: ShieldIcon,
         },
         {
           to: '/coupon-report',
+          requires: 'approve_coupons' as const,
           label: t('nav.couponReport', { defaultValue: 'Admin statistics' }),
           icon: ShieldIcon,
         },
@@ -371,26 +378,35 @@ function Shell({ children }: { children: React.ReactNode }) {
     {
       heading: t('nav.workspace', { defaultValue: 'Workspace' }),
       items: [
-        { to: '/users', label: t('nav.users'), icon: UsersIcon },
+        { to: '/users', label: t('nav.users'), icon: UsersIcon, requires: 'manage_users' as const },
         {
           to: '/roles',
+          requires: 'manage_users' as const,
           label: t('nav.roles', { defaultValue: 'Roles & privileges' }),
           icon: ShieldIcon,
         },
-        { to: '/teams', label: t('nav.teams'), icon: TeamIcon },
-        { to: '/vendors', label: t('nav.vendors', { defaultValue: 'Vendors' }), icon: StoreIcon },
+        { to: '/teams', label: t('nav.teams'), icon: TeamIcon, requires: 'manage_users' as const },
+        {
+          to: '/vendors',
+          label: t('nav.vendors', { defaultValue: 'Vendors' }),
+          icon: StoreIcon,
+          requires: 'manage_restaurants' as const,
+        },
         {
           to: '/lists',
+          requires: 'manage_lists' as const,
           label: t('nav.lists', { defaultValue: 'Dropdown lists' }),
           icon: SettingsIcon,
         },
         {
           to: '/imports',
+          requires: 'import_data' as const,
           label: t('nav.imports', { defaultValue: 'Import contacts' }),
           icon: UploadIcon,
         },
         {
           to: '/backup',
+          requires: 'manage_users' as const,
           label: t('nav.backup', { defaultValue: 'Backup' }),
           icon: DownloadIcon,
         },
@@ -399,10 +415,21 @@ function Shell({ children }: { children: React.ReactNode }) {
     {
       heading: t('nav.restaurants', { defaultValue: 'Restaurants' }),
       items: [
-        { to: '/brands', label: t('nav.brands', { defaultValue: 'Brands' }), icon: StoreIcon },
-        { to: '/stores', label: t('nav.stores', { defaultValue: 'Stores' }), icon: StoreIcon },
+        {
+          to: '/brands',
+          label: t('nav.brands', { defaultValue: 'Brands' }),
+          icon: StoreIcon,
+          requires: 'manage_restaurants' as const,
+        },
+        {
+          to: '/stores',
+          label: t('nav.stores', { defaultValue: 'Stores' }),
+          icon: StoreIcon,
+          requires: 'manage_restaurants' as const,
+        },
         {
           to: '/store-notifications',
+          requires: 'manage_restaurants' as const,
           label: t('nav.storeNotifications', { defaultValue: 'Branch notifications' }),
           icon: StoreIcon,
         },
@@ -416,6 +443,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         {
           to: '/reports/operational-kpi/tickets',
+          requires: 'view_all_tickets' as const,
           // "Tickets" up here, "Ticket breakdown" on the page and its tab. A
           // single-item section renders the ITEM's label in the top bar, and
           // the long form pushed every other label into an ellipsis — a nav
@@ -428,13 +456,16 @@ function Shell({ children }: { children: React.ReactNode }) {
     },
     {
       heading: t('nav.policies', { defaultValue: 'Policies' }),
-      items: [{ to: '/sla', label: t('nav.sla'), icon: ShieldIcon }],
+      items: [
+        { to: '/sla', label: t('nav.sla'), icon: ShieldIcon, requires: 'manage_lists' as const },
+      ],
     },
     {
       heading: t('nav.intelligence', { defaultValue: 'Intelligence' }),
       items: [
         {
           to: '/ai-config',
+          requires: 'manage_lists' as const,
           // A single-item section shows the ITEM label in the top bar, so this
           // is the word that has to fit there. The page keeps its full title.
           label: t('nav.aiConfigShort', { defaultValue: 'AI' }),
@@ -443,6 +474,23 @@ function Shell({ children }: { children: React.ReactNode }) {
       ],
     },
   ];
+
+  /**
+   * The nav this ROLE gets: destinations whose privilege they hold, and only
+   * the sections still holding a destination.
+   *
+   * Built here rather than inside TopNav so the rail in the mobile drawer and
+   * the top bar cannot disagree about what exists — they render the same array.
+   * The tuple type is restored with a cast because filtering cannot prove
+   * non-emptiness to the compiler; the `length` guard above it is the proof.
+   */
+  const sections: NavSection[] = allSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((it) => !it.requires || can(it.requires)),
+    }))
+    .filter((section) => section.items.length > 0) as NavSection[];
+
   // ONE floating bar (the owner's reference layout — no sidebars): brand at
   // the start, the grouped nav pills in the middle, utilities at the end. The
   // rail still exists but only as the mobile drawer.
@@ -534,16 +582,35 @@ function Shell({ children }: { children: React.ReactNode }) {
 function reportTabs(t: TFunction) {
   return {
     agentKpi: [
-      { to: 'tickets', label: t('nav.reportAgents', { defaultValue: 'Agent summary' }) },
-      { to: 'sla', label: t('nav.slaReports', { defaultValue: 'Ticket deadlines' }) },
+      {
+        to: 'tickets',
+        label: t('nav.reportAgents', { defaultValue: 'Agent summary' }),
+        requires: 'view_all_chats' as const,
+      },
+      {
+        to: 'sla',
+        label: t('nav.slaReports', { defaultValue: 'Ticket deadlines' }),
+        requires: 'view_all_tickets' as const,
+      },
       {
         to: 'conversations',
         label: t('nav.reportConversations', { defaultValue: 'Chat status' }),
+        requires: 'view_all_chats' as const,
       },
     ],
     opsKpi: [
-      { to: 'tickets', label: t('nav.reportTickets', { defaultValue: 'Ticket breakdown' }) },
-      { to: 'compensation', label: t('nav.compensationAll', { defaultValue: 'Compensation' }) },
+      {
+        to: 'tickets',
+        label: t('nav.reportTickets', { defaultValue: 'Ticket breakdown' }),
+        requires: 'view_all_tickets' as const,
+      },
+      {
+        // Compensation is a money screen, so it follows the coupon privilege
+        // rather than the ticket one it happens to sit beside.
+        to: 'compensation',
+        label: t('nav.compensationAll', { defaultValue: 'Compensation' }),
+        requires: 'approve_coupons' as const,
+      },
     ],
   };
 }
@@ -561,7 +628,7 @@ export function App() {
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="view_dashboard">
                 <Shell>
                   <DashboardPage />
                 </Shell>
@@ -571,7 +638,7 @@ export function App() {
           <Route
             path="/users"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="manage_users">
                 <Shell>
                   <UsersPage />
                 </Shell>
@@ -581,7 +648,7 @@ export function App() {
           <Route
             path="/teams"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="manage_users">
                 <Shell>
                   <TeamsPage />
                 </Shell>
@@ -591,7 +658,7 @@ export function App() {
           <Route
             path="/sla"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="manage_lists">
                 <Shell>
                   <SlaPoliciesPage />
                 </Shell>
@@ -601,7 +668,7 @@ export function App() {
           <Route
             path="/vendors"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="manage_restaurants">
                 <Shell>
                   <VendorsPage />
                 </Shell>
@@ -611,7 +678,7 @@ export function App() {
           <Route
             path="/brands"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="manage_restaurants">
                 <Shell>
                   <BrandsPage />
                 </Shell>
@@ -621,7 +688,7 @@ export function App() {
           <Route
             path="/stores"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="manage_restaurants">
                 <Shell>
                   <StoresPage />
                 </Shell>
@@ -631,7 +698,7 @@ export function App() {
           <Route
             path="/ai-config"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="manage_lists">
                 <Shell>
                   <AiConfigPage />
                 </Shell>
@@ -645,7 +712,7 @@ export function App() {
           <Route
             path="/reports/scheduled"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="manage_lists">
                 <Shell>
                   <ReportsPage />
                 </Shell>
@@ -655,7 +722,7 @@ export function App() {
           <Route
             path="/reports/agent-kpi"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="view_all_chats">
                 <Shell>
                   <ReportGroupTabs tabs={tabs.agentKpi} />
                 </Shell>
@@ -663,14 +730,35 @@ export function App() {
             }
           >
             <Route index element={<Navigate to="tickets" replace />} />
-            <Route path="tickets" element={<ReportExportsPage report="agents" />} />
-            <Route path="sla" element={<SlaReportsPage />} />
-            <Route path="conversations" element={<ReportExportsPage report="conversations" />} />
+            <Route
+              path="tickets"
+              element={
+                <ProtectedRoute requires="view_all_chats">
+                  <ReportExportsPage report="agents" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="sla"
+              element={
+                <ProtectedRoute requires="view_all_tickets">
+                  <SlaReportsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="conversations"
+              element={
+                <ProtectedRoute requires="view_all_chats">
+                  <ReportExportsPage report="conversations" />
+                </ProtectedRoute>
+              }
+            />
           </Route>
           <Route
             path="/reports/operational-kpi"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="view_all_tickets">
                 <Shell>
                   <ReportGroupTabs tabs={tabs.opsKpi} />
                 </Shell>
@@ -678,8 +766,22 @@ export function App() {
             }
           >
             <Route index element={<Navigate to="tickets" replace />} />
-            <Route path="tickets" element={<ReportExportsPage report="complaints" />} />
-            <Route path="compensation" element={<AllCompensationPage />} />
+            <Route
+              path="tickets"
+              element={
+                <ProtectedRoute requires="view_all_tickets">
+                  <ReportExportsPage report="complaints" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="compensation"
+              element={
+                <ProtectedRoute requires="approve_coupons">
+                  <AllCompensationPage />
+                </ProtectedRoute>
+              }
+            />
           </Route>
           {/* The Complaints report was merged into Tickets — same records,
               one page. Redirect so existing links and bookmarks still land. */}
@@ -691,7 +793,7 @@ export function App() {
           <Route
             path="/coupon-approvals"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="approve_coupons">
                 <Shell>
                   <CouponApprovalsPage />
                 </Shell>
@@ -705,7 +807,7 @@ export function App() {
           <Route
             path="/coupon-report"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="approve_coupons">
                 <Shell>
                   <CouponReportPage />
                 </Shell>
@@ -715,7 +817,7 @@ export function App() {
           <Route
             path="/store-notifications"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="manage_restaurants">
                 <Shell>
                   <StoreNotificationsPage />
                 </Shell>
@@ -725,7 +827,7 @@ export function App() {
           <Route
             path="/agent-performance"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="view_all_chats">
                 <Shell>
                   <AgentPerformancePage />
                 </Shell>
@@ -753,7 +855,7 @@ export function App() {
           <Route
             path="/lists"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="manage_lists">
                 <Shell>
                   <OptionListsPage />
                 </Shell>
@@ -763,7 +865,7 @@ export function App() {
           <Route
             path="/roles"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="manage_users">
                 <Shell>
                   <RolesPage />
                 </Shell>
@@ -773,7 +875,7 @@ export function App() {
           <Route
             path="/backup"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="manage_users">
                 <Shell>
                   <BackupPage />
                 </Shell>
@@ -783,7 +885,7 @@ export function App() {
           <Route
             path="/imports"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="import_data">
                 <Shell>
                   <ImportsPage />
                 </Shell>

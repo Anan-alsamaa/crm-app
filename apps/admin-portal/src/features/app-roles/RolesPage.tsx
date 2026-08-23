@@ -21,6 +21,7 @@ import {
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { BranchPicker } from './BranchPicker.js';
+import { PRIVILEGES, PRIVILEGE_GROUP, type Privilege } from '../../lib/privileges.js';
 
 /**
  * Roles & privileges, the way the ops portal does it: a named role is a set of
@@ -33,26 +34,16 @@ import { BranchPicker } from './BranchPicker.js';
  * (Admin, Agent) appear locked because they are defined in code, where their
  * two security incidents' worth of hardening lives.
  *
- * The PRIVS list mirrors the extension's catalog — a tick with no catalog
- * entry is stripped server-side, so the two cannot drift into lying.
+ * The list comes from lib/privileges — the same one `useAuth().can()` reads to
+ * decide what each screen offers, so a privilege ticked here and a button shown
+ * over there cannot mean different things. The extension's CATALOG stays the
+ * authority on what a tick GRANTS: a tick with no catalog entry is stripped
+ * server-side, which is what stops the two drifting into lying.
  */
-const PRIVS: ReadonlyArray<{ key: string; group: string }> = [
-  { key: 'use_chat', group: 'chat' },
-  { key: 'view_all_chats', group: 'chat' },
-  { key: 'view_tickets', group: 'tickets' },
-  { key: 'view_all_tickets', group: 'tickets' },
-  { key: 'create_tickets', group: 'tickets' },
-  { key: 'edit_tickets', group: 'tickets' },
-  { key: 'edit_all_tickets', group: 'tickets' },
-  { key: 'delete_tickets', group: 'tickets' },
-  { key: 'approve_coupons', group: 'tickets' },
-  { key: 'view_dashboard', group: 'reporting' },
-  { key: 'export_data', group: 'reporting' },
-  { key: 'import_data', group: 'reporting' },
-  { key: 'manage_lists', group: 'admin' },
-  { key: 'manage_restaurants', group: 'admin' },
-  { key: 'manage_users', group: 'admin' },
-];
+const PRIVS: ReadonlyArray<{ key: Privilege; group: string }> = PRIVILEGES.map((key) => ({
+  key,
+  group: PRIVILEGE_GROUP[key],
+}));
 
 /* One hue per capability area, so a role's shape is legible before reading a
  * single label: chat is sky, tickets jade, reporting violet, administration

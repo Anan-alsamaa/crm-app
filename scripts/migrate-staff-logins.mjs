@@ -49,12 +49,9 @@ const H = { authorization: `Bearer ${AT}`, 'content-type': 'application/json' };
 
 const users = (
   await (
-    await fetch(
-      `${D}/users?fields=id,email,first_name,last_name,login_name&limit=-1`,
-      {
-        headers: H,
-      },
-    )
+    await fetch(`${D}/users?fields=id,email,first_name,last_name,login_name&limit=-1`, {
+      headers: H,
+    })
   ).json()
 ).data;
 
