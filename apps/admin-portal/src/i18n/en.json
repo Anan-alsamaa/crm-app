@@ -511,7 +511,9 @@
     "scopeNote": "One row per TICKET, judged against the deadline its SLA policy promised. Use it to find the breaches and who held them. For a per-agent rollup with CSAT see Agent KPI; for chat response times see Agent performance — those measure chats, not tickets, so their numbers are not these ones.",
     "colTicketId": "Ticket id",
     "search": "Search subject or agent",
-    "naFilter": "No target"
+    "naFilter": "No target",
+    "searchHint": "Ticket subject, agent or id",
+    "noneInRange": "No tickets match these filters. Widen the dates, or clear them."
   },
   "app": {
     "console": "Admin console"
@@ -631,7 +633,10 @@
     "kpiBusiestDay": "Busiest day",
     "kpiUrgent": "Urgent + high",
     "searchAgent": "Search agent",
-    "searchConversations": "Search customer, phone, agent or order"
+    "searchConversations": "Search customer, phone, agent or order",
+    "presets": "Quick range",
+    "searchAgentHint": "Agent name",
+    "searchConversationsHint": "Customer, phone, agent or order number"
   },
   "ticketOps": {
     "title": "Ticket report",

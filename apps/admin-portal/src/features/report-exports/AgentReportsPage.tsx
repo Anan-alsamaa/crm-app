@@ -55,6 +55,8 @@ import {
 import { useStoreIndex } from '../restaurants/api.js';
 import { directus } from '../../lib/directus.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { useRememberedRange, isoDay } from '../../lib/date-range.js';
+import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { formatDuration } from '@yiji/reports';
 import { TicketHistoryDrawer } from './TicketHistoryDrawer.js';
 import {
@@ -92,6 +94,17 @@ import {
 /** Which of the four exportable reports this page instance renders. */
 export type ReportKind = 'tickets' | 'agents' | 'conversations' | 'complaints';
 const RANGE_DAYS = [7, 30, 90] as const;
+
+/** The remembered range, handed down so each report's filter bar can drive it. */
+interface RangeProps {
+  range: {
+    from: string;
+    to: string;
+    setFrom: (v: string) => void;
+    setTo: (v: string) => void;
+    reset: () => void;
+  };
+}
 
 const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructive'> = {
   low: 'muted',
@@ -1513,11 +1526,12 @@ function AgentKpiReport({
   agents,
   tr,
   days,
+  range,
 }: {
   agents: AgentKpiRow[];
   tr: Translate;
   days: number;
-}) {
+} & RangeProps) {
   const { t } = useTranslation();
   const pagerLabels = usePagerLabels();
   const [query, setQuery] = useState('');
@@ -1648,17 +1662,29 @@ function AgentKpiReport({
         />
       </ReportKpiStrip>
 
+      <ReportFilterBar
+        searchLabel={t('agentReports.searchAgent', { defaultValue: 'Search agent' })}
+        searchPlaceholder={t('agentReports.searchAgentHint', {
+          defaultValue: 'Agent name',
+        })}
+        search={query}
+        onSearch={(v) => {
+          setQuery(v);
+          setPage(1);
+        }}
+        from={range.from}
+        to={range.to}
+        onFrom={range.setFrom}
+        onTo={range.setTo}
+        filtering={query.trim() !== ''}
+        onClear={() => {
+          setQuery('');
+          range.reset();
+          setPage(1);
+        }}
+      />
+
       <div className="flex flex-wrap items-center gap-3">
-        <Input
-          className="w-full sm:w-64"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(1);
-          }}
-          placeholder={t('agentReports.searchAgent', { defaultValue: 'Search agent' })}
-          aria-label={t('agentReports.searchAgent', { defaultValue: 'Search agent' })}
-        />
         <div className="ms-auto">
           <ExportButtons
             visibleCount={sorted.length}
@@ -1798,17 +1824,20 @@ function ConversationReport({
   report,
   tr,
   days,
+  range,
 }: {
   report: ConversationStatusReport;
   tr: Translate;
   days: number;
-}) {
+} & RangeProps) {
   const { t } = useTranslation();
   const pagerLabels = usePagerLabels();
   /** Which status box is expanded, showing the customers behind its count. */
   const [drill, setDrill] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState('all');
+  const [status, setStatus] = useState('');
+  const [agent, setAgent] = useState('');
+  const [priority, setPriority] = useState('');
 
   /** This report's own headline numbers, read off the rows underneath. */
   const totals = useMemo(() => {
@@ -1825,10 +1854,29 @@ function ConversationReport({
     return { open, urgent, busiest };
   }, [report]);
 
+  /** Options built from the rows in range, never from an enum. */
+  const agentOptions = useMemo(
+    () =>
+      [...new Set(report.rows.map((r) => r.agentName).filter(Boolean))]
+        .sort()
+        .map((v) => ({ value: v, label: v })),
+    [report.rows],
+  );
+  const priorityOptions = useMemo(
+    () =>
+      report.byPriority.map((p) => ({
+        value: p.key,
+        label: String(t(`priority.${p.key}`, { ns: 'common', defaultValue: p.key })),
+      })),
+    [report.byPriority, t],
+  );
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return report.rows.filter((r) => {
-      if (status !== 'all' && r.status !== status) return false;
+      if (status && r.status !== status) return false;
+      if (agent && r.agentName !== agent) return false;
+      if (priority && r.priority !== priority) return false;
       if (!q) return true;
       return (
         r.customerName.toLowerCase().includes(q) ||
@@ -1838,7 +1886,7 @@ function ConversationReport({
         r.orderId.toLowerCase().includes(q)
       );
     });
-  }, [report.rows, query, status]);
+  }, [report.rows, query, status, agent, priority]);
 
   const { page, setPage, pageSize, setPageSize, pageRows } = usePaged(visible, 25);
 
@@ -2001,45 +2049,69 @@ function ConversationReport({
         </div>
       </div>
 
-      {/* Search, status and export sit together above the table they act on. */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Input
-          className="w-full sm:w-72"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(1);
-          }}
-          placeholder={t('agentReports.searchConversations', {
-            defaultValue: 'Search customer, phone, agent or order',
-          })}
-          aria-label={t('agentReports.searchConversations', {
-            defaultValue: 'Search customer, phone, agent or order',
-          })}
-        />
-        <div className="flex flex-wrap items-center gap-1">
-          <FilterChip
-            label={t('agentReports.statusAll', { defaultValue: 'All' })}
-            count={report.rows.length}
-            active={status === 'all'}
-            onClick={() => {
-              setStatus('all');
+      <ReportFilterBar
+        searchLabel={t('agentReports.searchConversations', {
+          defaultValue: 'Search customer, phone, agent or order',
+        })}
+        searchPlaceholder={t('agentReports.searchConversationsHint', {
+          defaultValue: 'Customer, phone, agent or order number',
+        })}
+        search={query}
+        onSearch={(v) => {
+          setQuery(v);
+          setPage(1);
+        }}
+        from={range.from}
+        to={range.to}
+        onFrom={range.setFrom}
+        onTo={range.setTo}
+        selects={[
+          {
+            key: 'status',
+            label: t('agentReports.col.status', { defaultValue: 'Status' }),
+            value: status,
+            onChange: (v) => {
+              setStatus(v);
               setPage(1);
-            }}
-          />
-          {report.byStatus.map((s) => (
-            <FilterChip
-              key={s.key}
-              label={String(t(`status.${s.key}`, { ns: 'common', defaultValue: s.key }))}
-              count={s.count}
-              active={status === s.key}
-              onClick={() => {
-                setStatus(s.key);
-                setPage(1);
-              }}
-            />
-          ))}
-        </div>
+            },
+            options: report.byStatus.map((s) => ({
+              value: s.key,
+              label: String(t(`status.${s.key}`, { ns: 'common', defaultValue: s.key })),
+            })),
+          },
+          {
+            key: 'agent',
+            label: t('agentReports.col.agent', { defaultValue: 'Agent' }),
+            value: agent,
+            onChange: (v) => {
+              setAgent(v);
+              setPage(1);
+            },
+            options: agentOptions,
+          },
+          {
+            key: 'priority',
+            label: t('agentReports.col.priority', { defaultValue: 'Priority' }),
+            value: priority,
+            onChange: (v) => {
+              setPriority(v);
+              setPage(1);
+            },
+            options: priorityOptions,
+          },
+        ]}
+        filtering={Boolean(query.trim() || status || agent || priority)}
+        onClear={() => {
+          setQuery('');
+          setStatus('');
+          setAgent('');
+          setPriority('');
+          range.reset();
+          setPage(1);
+        }}
+      />
+
+      <div className="flex flex-wrap items-center gap-3">
         <div className="ms-auto">
           <ExportButtons
             visibleCount={visible.length}
@@ -2227,31 +2299,51 @@ const META: Record<
 
 export function AgentReportsPage({ report: which }: { report: ReportKind }) {
   const { t } = useTranslation();
-  const [days, setDays] = useState(30);
-  // Explicit dates beat the rolling window — same behaviour as Ticket
-  // deadlines, so the two reports answer a typed date range the same way.
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  /**
+   * One remembered range, shared by all three reports under this page.
+   *
+   * Whatever you last looked at is what you get back — on the next report, and
+   * after a refresh. Only when nothing is stored does it fall back to the last
+   * month up to today.
+   */
+  const {
+    from,
+    to,
+    setFrom,
+    setTo,
+    setRange,
+    reset: resetRange,
+  } = useRememberedRange('sara.reports.range');
   const report = useAgentReportData(
-    days,
+    0,
     {
       unassigned: t('agentReports.unassigned', { defaultValue: 'Unassigned' }),
       noSubject: t('agentReports.noSubject', { defaultValue: '(no subject)' }),
     },
     { from, to },
   );
+  /** Days the range actually covers — the export file name says the period. */
+  const days = useMemo(() => {
+    const a = Date.parse(from);
+    const b = Date.parse(to);
+    return Number.isFinite(a) && Number.isFinite(b)
+      ? Math.max(1, Math.round((b - a) / 86_400_000))
+      : 30;
+  }, [from, to]);
   const tr: Translate = (key, opts) => String(t(key, opts));
   const data = report.data;
   const meta = META[which];
 
-  const isEmpty =
-    which === 'tickets'
-      ? !!data && data.tickets.length === 0
-      : which === 'agents'
-        ? !!data && data.agents.length === 0
-        : which === 'complaints'
-          ? !!data && data.complaints.length === 0
-          : !!data && data.conversations.total === 0;
+  /**
+   * An empty RESULT is not an empty page.
+   *
+   * The shell used to replace the whole body — filter bar included — the
+   * moment a range returned nothing, so narrowing to a quiet month left you
+   * looking at "no data" with no dates on screen to widen. The only way out
+   * was the browser back button. The reports render their own empty tables
+   * now, and the controls that got you here stay put; the emptiness check
+   * that drove that branch went with it.
+   */
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -2260,43 +2352,35 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
           {t(meta.titleKey, { defaultValue: meta.titleDefault })}
         </h1>
         <ToolbarSpacer />
-        <div className="w-32">
+        <div className="w-36">
+          {/* A shortcut, not a second source of truth: picking a preset WRITES
+              the two dates below, so the toolbar and the filter bar can never
+              disagree about which period is on screen. */}
           <SelectMenu
             fullWidth
-            value={String(days)}
-            onChange={(v) => setDays(Number(v))}
+            value=""
+            onChange={(v) => {
+              const n = Number(v);
+              const now = new Date();
+              setRange({
+                from: isoDay(new Date(now.getTime() - n * 86_400_000)),
+                to: isoDay(now),
+              });
+            }}
             aria-label={t('agentReports.range', { defaultValue: 'Date range' })}
-            options={RANGE_DAYS.map((d) => ({
-              value: String(d),
-              label: t('agentReports.lastDays', {
-                count: d,
-                days: d,
-                defaultValue: 'Last {{days}} days',
-              }),
-            }))}
+            options={[
+              { value: '', label: t('agentReports.presets', { defaultValue: 'Quick range' }) },
+              ...RANGE_DAYS.map((d) => ({
+                value: String(d),
+                label: t('agentReports.lastDays', {
+                  count: d,
+                  days: d,
+                  defaultValue: 'Last {{days}} days',
+                }),
+              })),
+            ]}
           />
         </div>
-        <label className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {t('complaintDash.from', { defaultValue: 'From' })}
-          <DateField size="md" className="w-[9.5rem]" value={from} onChange={(v) => setFrom(v)} />
-        </label>
-        <label className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {t('complaintDash.to', { defaultValue: 'To' })}
-          <DateField size="md" className="w-[9.5rem]" value={to} onChange={(v) => setTo(v)} />
-        </label>
-        {(from || to) && (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setFrom('');
-              setTo('');
-            }}
-          >
-            {t('complaintDash.clear', { defaultValue: 'Clear' })}
-          </Button>
-        )}
       </Toolbar>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
@@ -2334,7 +2418,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
                 defaultValue: 'Check your connection and try again.',
               })}
             />
-          ) : !data || isEmpty ? (
+          ) : !data ? (
             <EmptyState
               title={t('agentReports.empty', { defaultValue: 'No data in this window' })}
               description={t('agentReports.emptyHint', {
@@ -2365,11 +2449,21 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
                       Ticket report listed the same agents with overlapping
                       columns, so the page showed one dataset twice. This report's
                       own table wins — it has the Excel export. */}
-                  <AgentKpiReport agents={data.agents} tr={tr} days={days} />
+                  <AgentKpiReport
+                    agents={data.agents}
+                    tr={tr}
+                    days={days}
+                    range={{ from, to, setFrom, setTo, reset: resetRange }}
+                  />
                 </>
               )}
               {which === 'conversations' && (
-                <ConversationReport report={data.conversations} tr={tr} days={days} />
+                <ConversationReport
+                  report={data.conversations}
+                  tr={tr}
+                  days={days}
+                  range={{ from, to, setFrom, setTo, reset: resetRange }}
+                />
               )}
               {which === 'complaints' &&
                 (data.complaintFieldsAvailable ? (

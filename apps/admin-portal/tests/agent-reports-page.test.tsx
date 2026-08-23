@@ -346,6 +346,9 @@ const PANORAMA = {
 };
 
 beforeEach(() => {
+  // The range is remembered in localStorage, so one case's dates would
+  // otherwise become the next case's starting point.
+  window.localStorage.clear();
   authMock.can.mockReset();
   authMock.can.mockReturnValue(true);
   // The column order is persisted, so without this one test's arrangement
@@ -390,18 +393,28 @@ describe('AgentReportsPage — shell', () => {
     expect(screen.getByText('Could not load report data')).toBeInTheDocument();
   });
 
-  it('renders the empty state per report kind', () => {
+  it('keeps the filters on screen when a range returns nothing', () => {
+    // Narrowing to a quiet month used to replace the whole body — filter bar
+    // included — so you were left reading "no data" with no dates on screen to
+    // widen, and the browser back button was the only way out.
     const empty = {
       isLoading: false,
       isError: false,
       data: { ...data, tickets: [], agents: [], conversations: { ...conversations, total: 0 } },
     };
-    for (const kind of ['tickets', 'agents', 'conversations'] as ReportKind[]) {
+    for (const kind of ['agents', 'conversations'] as ReportKind[]) {
       api.useAgentReportData.mockReturnValue(empty);
       const { unmount } = renderPage(kind);
-      expect(screen.getByText('No data in this window')).toBeInTheDocument();
+      // The way back is still there.
+      expect(screen.getAllByPlaceholderText('dd/mm/yyyy').length).toBe(2);
       unmount();
     }
+  });
+
+  it('still says so when the query itself came back with nothing', () => {
+    api.useAgentReportData.mockReturnValue({ isLoading: false, isError: false, data: undefined });
+    renderPage('agents');
+    expect(screen.getByText('No data in this window')).toBeInTheDocument();
   });
 
   it('gives each report a KPI strip about ITS OWN rows', () => {
@@ -442,24 +455,43 @@ describe('AgentReportsPage — shell', () => {
     convoView.unmount();
   });
 
-  it('re-queries when the date range changes', async () => {
+  it('opens on the last month when nothing has been chosen before', () => {
+    // Every report used to open on its own idea of "recently" and forget it the
+    // moment you left. The fallback is the last month up to today, as REAL
+    // dates — so the range in the filter bar and the range the query ran are
+    // the same thing, always.
     api.useAgentReportData.mockReturnValue(ok);
     renderPage();
-    expect(api.useAgentReportData).toHaveBeenCalledWith(
-      30,
-      { unassigned: 'Unassigned', noSubject: '(no subject)' },
-      // The explicit from/to rides alongside the rolling window, as it already
-      // did on Ticket deadlines.
-      { from: '', to: '' },
-    );
+    const range = api.useAgentReportData.mock.calls.at(-1)?.[2] as { from: string; to: string };
+    expect(range.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(range.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const days = (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000;
+    expect(days).toBeCloseTo(30, 0);
+  });
 
+  it('remembers the range you last looked at', () => {
+    // Somebody working a month-end across four reports typed the same two dates
+    // four times, then typed them again after a refresh.
+    window.localStorage.setItem(
+      'sara.reports.range',
+      JSON.stringify({ from: '2026-01-05', to: '2026-02-05' }),
+    );
+    api.useAgentReportData.mockReturnValue(ok);
+    renderPage();
+    expect(api.useAgentReportData).toHaveBeenLastCalledWith(expect.any(Number), expect.anything(), {
+      from: '2026-01-05',
+      to: '2026-02-05',
+    });
+  });
+
+  it('lets a quick range WRITE the two dates rather than compete with them', async () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    renderPage();
     await userEvent.click(screen.getByRole('combobox', { name: 'Date range' }));
     await userEvent.click(screen.getByText('Last 7 days'));
-    expect(api.useAgentReportData).toHaveBeenLastCalledWith(
-      7,
-      expect.anything(),
-      expect.anything(),
-    );
+    const range = api.useAgentReportData.mock.calls.at(-1)?.[2] as { from: string; to: string };
+    const days = (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000;
+    expect(days).toBeCloseTo(7, 0);
   });
 });
 

@@ -56,9 +56,9 @@ async function login(page: import('@playwright/test').Page) {
   await page.locator('#password').fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   // Wait for the post-login landing — the admin lands on the Dashboard, whose
-  // h1 is "Overview" (level:1 disambiguates it from the "Overview" section
-  // sub-heading) — so callers can click nav links without racing the redirect.
-  await expect(page.getByRole('heading', { name: /overview/i, level: 1 })).toBeVisible({
+  // h1 says so (level:1 keeps it off the tab strip and the section headings
+  // below it) — so callers can click nav links without racing the redirect.
+  await expect(page.getByRole('heading', { name: /^dashboard$/i, level: 1 })).toBeVisible({
     timeout: 20_000,
   });
 }

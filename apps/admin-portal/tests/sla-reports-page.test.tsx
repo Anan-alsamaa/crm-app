@@ -122,6 +122,9 @@ const fullReport = {
 
 // jsdom lacks scrollIntoView, which SelectMenu's listbox calls on open.
 beforeEach(() => {
+  // The range is remembered in localStorage — clear it so one case's dates do
+  // not become the next case's starting point.
+  window.localStorage.clear();
   api.useSlaReports.mockReset();
   if (!Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = vi.fn();
@@ -138,7 +141,9 @@ describe('SlaReportsPage', () => {
     expect(container.querySelector('svg')).toBeTruthy();
   });
 
-  it('renders the empty state when there are no tickets', () => {
+  it('keeps the filters on screen when a range returns nothing', () => {
+    // An empty RESULT is not an empty page: the dates that got you here have to
+    // stay, or there is no way to widen them.
     api.useSlaReports.mockReturnValue({
       isLoading: false,
       data: {
@@ -148,7 +153,8 @@ describe('SlaReportsPage', () => {
       },
     });
     renderPage();
-    expect(screen.getByText('No tickets in this window')).toBeInTheDocument();
+    expect(screen.getAllByPlaceholderText('dd/mm/yyyy').length).toBe(2);
+    expect(screen.getByText(/No tickets match these filters/)).toBeInTheDocument();
   });
 
   it('renders the empty state when data is missing', () => {
@@ -187,20 +193,23 @@ describe('SlaReportsPage', () => {
     // assertion below is really about.
     fireEvent.change(screen.getByLabelText(/^from$/i), { target: { value: '01/08/2026' } });
     fireEvent.change(screen.getByLabelText(/^to$/i), { target: { value: '14/08/2026' } });
-    expect(api.useSlaReports).toHaveBeenLastCalledWith(30, {
+    // The window is DERIVED from the dates now, so the first argument follows
+    // whatever was typed rather than being a second, independent answer.
+    expect(api.useSlaReports).toHaveBeenLastCalledWith(expect.any(Number), {
       from: '2026-08-01',
       to: '2026-08-14',
     });
   });
 
-  it('changes the date range through the SelectMenu combobox', async () => {
+  it('lets a quick range WRITE the two dates rather than compete with them', async () => {
     api.useSlaReports.mockReturnValue({ isLoading: false, data: fullReport });
     renderPage();
 
     await userEvent.click(screen.getByRole('combobox', { name: 'Date range' }));
     await userEvent.click(screen.getByText('Last 7 days'));
-    // The explicit from/to now rides alongside the rolling window.
-    expect(api.useSlaReports).toHaveBeenLastCalledWith(7, { from: '', to: '' });
+    const range = api.useSlaReports.mock.calls.at(-1)?.[1] as { from: string; to: string };
+    const days = (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000;
+    expect(days).toBeCloseTo(7, 0);
   });
 
   it('exports a CSV Excel can actually open', async () => {

@@ -2,14 +2,11 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Avatar,
-  Button,
   ClockIcon,
   cn,
-  DateField,
   EmptyState,
   ExportButtons,
   formatDateTime,
-  Input,
   Pill,
   ProgressRing,
   SelectMenu,
@@ -31,6 +28,8 @@ import {
 } from '@yiji/ui';
 import { useSlaReports, type SlaCell, type TicketSla } from './api.js';
 import { exportCsv, reportFilename, type CsvColumn } from '@yiji/reports';
+import { useRememberedRange, isoDay } from '../../lib/date-range.js';
+import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 
 const RANGE_DAYS = [7, 30, 90] as const;
 
@@ -227,10 +226,22 @@ function Kpi({
 
 export function SlaReportsPage() {
   const { t } = useTranslation();
-  const [days, setDays] = useState(30);
-  // Explicit dates beat the rolling window — see useSlaReports.
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const {
+    from,
+    to,
+    setFrom,
+    setTo,
+    setRange,
+    reset: resetRange,
+  } = useRememberedRange('sara.reports.range');
+  /** Days the range covers — the export file name says the period. */
+  const days = useMemo(() => {
+    const a = Date.parse(from);
+    const b = Date.parse(to);
+    return Number.isFinite(a) && Number.isFinite(b)
+      ? Math.max(1, Math.round((b - a) / 86_400_000))
+      : 30;
+  }, [from, to]);
   const [agentFilter, setAgentFilter] = useState<{ id: string | null; name: string } | null>(null);
   /**
    * Search and outcome live HERE rather than inside the table, because the
@@ -239,6 +250,8 @@ export function SlaReportsPage() {
    */
   const [query, setQuery] = useState('');
   const [outcome, setOutcome] = useState<'all' | SlaCell['state']>('all');
+  const [priority, setPriority] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const report = useSlaReports(days, { from, to });
 
   const ticketsShown = useMemo(() => {
@@ -247,6 +260,8 @@ export function SlaReportsPage() {
     return all.filter((tk) => {
       if (agentFilter && tk.agentId !== agentFilter.id) return false;
       if (outcome !== 'all' && tk.resolution.state !== outcome) return false;
+      if (priority && tk.priority !== priority) return false;
+      if (statusFilter && tk.status !== statusFilter) return false;
       if (!q) return true;
       return (
         tk.subject.toLowerCase().includes(q) ||
@@ -254,7 +269,11 @@ export function SlaReportsPage() {
         tk.id.toLowerCase().includes(q)
       );
     });
-  }, [report.data, agentFilter, query, outcome]);
+  }, [report.data, agentFilter, query, outcome, priority, statusFilter]);
+
+  /** Options built from the rows in range, never from an enum. */
+  const optionsOf = (pick: (tk: TicketSla) => string) =>
+    [...new Set((report.data?.tickets ?? []).map(pick).filter(Boolean))].sort();
 
   /** Outcome tabs with counts, taken from the set BEFORE the outcome filter —
    *  a count that moves as you filter by it tells you nothing. */
@@ -336,42 +355,37 @@ export function SlaReportsPage() {
             that does nothing is worse than no control, because somebody keeps
             clicking it expecting a different answer. */}
         <div className="w-32">
+          {/* A shortcut, not a second source of truth: picking a preset WRITES
+              the two dates in the filter bar. */}
           <SelectMenu
             fullWidth
-            value={String(days)}
-            onChange={(v) => setDays(Number(v))}
+            value=""
+            onChange={(v) => {
+              const n = Number(v);
+              const now = new Date();
+              setRange({
+                from: isoDay(new Date(now.getTime() - n * 86_400_000)),
+                to: isoDay(now),
+              });
+            }}
             aria-label={t('slaReports.range', { defaultValue: 'Date range' })}
-            options={RANGE_DAYS.map((d) => ({
-              value: String(d),
-              label: t('slaReports.lastDays', {
-                count: d,
-                days: d,
-                defaultValue: 'Last {{days}} days',
-              }),
-            }))}
+            options={[
+              { value: '', label: t('agentReports.presets', { defaultValue: 'Quick range' }) },
+              ...RANGE_DAYS.map((d) => ({
+                value: String(d),
+                label: String(
+                  t('slaReports.lastDays', {
+                    count: d,
+                    days: d,
+                    defaultValue: 'Last {{days}} days',
+                  }),
+                ),
+              })),
+            ]}
           />
         </div>
-        <label className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {t('complaintDash.from', { defaultValue: 'From' })}
-          <DateField size="md" className="w-[9.5rem]" value={from} onChange={(v) => setFrom(v)} />
-        </label>
-        <label className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {t('complaintDash.to', { defaultValue: 'To' })}
-          <DateField size="md" className="w-[9.5rem]" value={to} onChange={(v) => setTo(v)} />
-        </label>
-        {(from || to) && (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setFrom('');
-              setTo('');
-            }}
-          >
-            {t('complaintDash.clear', { defaultValue: 'Clear' })}
-          </Button>
-        )}
+        {/* The dates live in the filter bar with the rest of the filters now
+            — two places to type the same range is one place too many. */}
         {/* Secondary, like the export on every other report. It was `ghost`
             here, so the same action looked like a different weight of thing
             depending on which report you were standing in. */}
@@ -401,7 +415,7 @@ export function SlaReportsPage() {
           <div className="flex h-40 items-center justify-center">
             <Spinner />
           </div>
-        ) : !report.data || report.data.tickets.length === 0 ? (
+        ) : !report.data ? (
           <EmptyState
             icon={<TicketIcon size={22} />}
             title={t('slaReports.empty', { defaultValue: 'No tickets in this window' })}
@@ -492,6 +506,26 @@ export function SlaReportsPage() {
               outcome={outcome}
               onOutcome={setOutcome}
               outcomeCounts={outcomeCounts}
+              bar={{
+                from,
+                to,
+                setFrom,
+                setTo,
+                priority,
+                setPriority,
+                status: statusFilter,
+                setStatus: setStatusFilter,
+                priorityOptions: optionsOf((tk) => tk.priority),
+                statusOptions: optionsOf((tk) => tk.status),
+                filtering: Boolean(query.trim() || priority || statusFilter),
+                onClear: () => {
+                  setQuery('');
+                  setPriority('');
+                  setStatusFilter('');
+                  setOutcome('all');
+                  resetRange();
+                },
+              }}
             />
           </div>
         )}
@@ -539,6 +573,7 @@ function TicketTable({
   outcome,
   onOutcome,
   outcomeCounts,
+  bar,
 }: {
   tickets: TicketSla[];
   agentFilter: { id: string | null; name: string } | null;
@@ -548,6 +583,20 @@ function TicketTable({
   outcome: 'all' | SlaCell['state'];
   onOutcome: (v: 'all' | SlaCell['state']) => void;
   outcomeCounts: { base: number; entries: [string, number][] };
+  bar: {
+    from: string;
+    to: string;
+    setFrom: (v: string) => void;
+    setTo: (v: string) => void;
+    priority: string;
+    setPriority: (v: string) => void;
+    status: string;
+    setStatus: (v: string) => void;
+    priorityOptions: string[];
+    statusOptions: string[];
+    onClear: () => void;
+    filtering: boolean;
+  };
 }) {
   const { t } = useTranslation();
   const outcomeNames = useOutcomeNames();
@@ -563,17 +612,58 @@ function TicketTable({
           with no search, no filter and no pager — ninety days of tickets as one
           unbroken scroll, where the only way to find a breach was the browser's
           own find-in-page. */}
+      <ReportFilterBar
+        searchLabel={t('slaReports.search', { defaultValue: 'Search subject or agent' })}
+        searchPlaceholder={t('slaReports.searchHint', {
+          defaultValue: 'Ticket subject, agent or id',
+        })}
+        search={query}
+        onSearch={(v) => {
+          onQuery(v);
+          setPage(1);
+        }}
+        from={bar.from}
+        to={bar.to}
+        onFrom={bar.setFrom}
+        onTo={bar.setTo}
+        selects={[
+          {
+            key: 'status',
+            label: t('slaReports.colStatus', { defaultValue: 'Status' }),
+            value: bar.status,
+            onChange: (v) => {
+              bar.setStatus(v);
+              setPage(1);
+            },
+            options: bar.statusOptions.map((v) => ({
+              value: v,
+              label: String(t(`status.${v}`, { ns: 'common', defaultValue: v })),
+            })),
+          },
+          {
+            key: 'priority',
+            label: t('slaReports.colPriority', { defaultValue: 'Priority' }),
+            value: bar.priority,
+            onChange: (v) => {
+              bar.setPriority(v);
+              setPage(1);
+            },
+            options: bar.priorityOptions.map((v) => ({
+              value: v,
+              label: String(t(`priority.${v}`, { ns: 'common', defaultValue: v })),
+            })),
+          },
+        ]}
+        filtering={bar.filtering}
+        onClear={() => {
+          bar.onClear();
+          setPage(1);
+        }}
+      />
+
+      {/* The outcome tabs stay chips: four states with live counts is a thing
+          to glance at and press, not a dropdown to open. */}
       <div className="flex flex-wrap items-center gap-3">
-        <Input
-          className="w-full sm:w-72"
-          value={query}
-          onChange={(e) => {
-            onQuery(e.target.value);
-            setPage(1);
-          }}
-          placeholder={t('slaReports.search', { defaultValue: 'Search subject or agent' })}
-          aria-label={t('slaReports.search', { defaultValue: 'Search subject or agent' })}
-        />
         <div className="flex flex-wrap items-center gap-1">
           <OutcomeChip
             label={String(t('agentReports.statusAll', { defaultValue: 'All' }))}
@@ -640,6 +730,18 @@ function TicketTable({
             </tr>
           </thead>
           <tbody>
+            {pageRows.length === 0 && (
+              <Tr>
+                <Td
+                  colSpan={agentFilter ? 5 : 6}
+                  className="py-10 text-center text-muted-foreground"
+                >
+                  {t('slaReports.noneInRange', {
+                    defaultValue: 'No tickets match these filters. Widen the dates, or clear them.',
+                  })}
+                </Td>
+              </Tr>
+            )}
             {pageRows.map((tk) => (
               <Tr key={tk.id}>
                 <Td className="max-w-[16rem] truncate font-medium" title={tk.subject}>
