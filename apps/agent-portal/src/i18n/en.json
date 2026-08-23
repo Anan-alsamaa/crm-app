@@ -155,7 +155,8 @@
       "generic": "Couldn’t get an answer. Please try again."
     },
     "empty": "Ask about the inbox, tickets, SLA, reports, contacts, automation or the widget. Follow-up questions work — the chat clears when you close this panel.",
-    "title2": "Aura"
+    "title2": "Aura",
+    "jumpToLatest": "Jump to the latest message"
   },
   "login": {
     "title": "Sign in to Sara CRM",

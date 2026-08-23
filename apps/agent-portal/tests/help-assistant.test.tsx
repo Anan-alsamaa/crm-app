@@ -230,3 +230,85 @@ describe('HelpAssistant (agent portal)', () => {
     expect(screen.getByText('How do I reassign a ticket?')).toBeInTheDocument();
   });
 });
+
+describe('HelpAssistant — the panel a reader can actually read', () => {
+  /**
+   * The reported failure: opening Aura showed her greeting already scrolled
+   * off its own top edge, beginning mid-sentence under a header that had
+   * stayed put because it was sticky.
+   *
+   * Cause: a scroll anchor sat at the very bottom of the feed — below the
+   * greeting and four starter chips — and `scrollIntoView` was called on it
+   * unconditionally on mount. An opening greeting is the TOP of a
+   * conversation, not the bottom, and there is nothing yet to scroll past.
+   */
+  it('does not scroll a conversation that has not started', async () => {
+    /*
+     * Both routes are watched, not just the current one. jsdom implements
+     * neither, so a component that reverted to `scrollIntoView` on an anchor —
+     * exactly the shape of the original bug — would sail past a spy that only
+     * knew about `scrollTo`, and this test would go green on the broken code.
+     */
+    const scrollTo = vi.fn();
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+      configurable: true,
+      writable: true,
+      value: scrollTo,
+    });
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      writable: true,
+      value: scrollIntoView,
+    });
+    renderHelp();
+    await openPanel();
+    expect(screen.getByText(/I am Aura/)).toBeInTheDocument();
+    expect(scrollTo, 'the opening greeting must not be scrolled away').not.toHaveBeenCalled();
+    expect(scrollIntoView, 'nor by an anchor below the starter chips').not.toHaveBeenCalled();
+  });
+
+  /**
+   * And the other half: the transcript must be REACHABLE.
+   *
+   * The bottom-anchoring was `justify-content: flex-end`, which overflows past
+   * a scroll container's START edge — and content that overflows the start edge
+   * of a flex container cannot be scrolled to. The browser reports
+   * scrollHeight === clientHeight and the earliest messages are simply gone.
+   * An auto margin on the first child anchors the same way and resolves to
+   * zero once the content overflows, so scrolling works.
+   */
+  it('anchors messages to the foot WITHOUT putting the earliest out of reach', async () => {
+    ai.helpAssistant.mockResolvedValueOnce({ answer: 'Use the Assignee menu.', offTopic: false });
+    const { container } = renderHelp();
+    await openPanel();
+
+    const feed = () => container.ownerDocument.querySelector('[aria-live="polite"]') as HTMLElement;
+    // Opening state: anchored to the TOP, or the greeting and its starter
+    // questions drop to the floor of a tall empty rectangle.
+    expect(feed().className).not.toContain('mt-auto');
+    expect(feed().className).not.toContain('justify-end');
+
+    await user.type(screen.getByLabelText('Your question'), 'How do I reassign a ticket?');
+    await user.click(screen.getByRole('button', { name: 'Ask' }));
+    await screen.findByText('Use the Assignee menu.');
+
+    // Underway: anchored to the foot by an auto margin, never by justify-end.
+    expect(feed().className).toContain('[&>*:first-child]:mt-auto');
+    expect(feed().className, 'justify-end makes overflow above unreachable').not.toContain(
+      'justify-end',
+    );
+  });
+
+  it('gives the transcript its own scroller, so the header cannot be scrolled away', async () => {
+    const { container } = renderHelp();
+    await openPanel();
+    const feed = container.ownerDocument.querySelector('[aria-live="polite"]') as HTMLElement;
+    expect(feed.className).toContain('overflow-y-auto');
+    // The header used to be `sticky top-0` INSIDE the drawer's own scroller,
+    // which works right up until something scrolls the body — and then the
+    // header stays while the first message slides underneath it.
+    const header = screen.getByText('CRM assistant').closest('div')?.parentElement;
+    expect(header?.className ?? '').not.toContain('sticky');
+  });
+});
