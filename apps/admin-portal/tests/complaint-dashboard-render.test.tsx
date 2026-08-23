@@ -178,16 +178,13 @@ beforeEach(() => {
 });
 
 describe('ComplaintDashboard — every section his page has', () => {
-  it('renders both donuts, the trend, both agent tables and the breakdowns', () => {
+  it('renders the donuts, the trend and the breakdowns', () => {
     render(<ComplaintDashboard />);
     for (const heading of [
       'Complaint status mix',
       'Where complaints come from',
       'Service health',
-      'Chat responsiveness',
       'Complaints per month',
-      'Agent performance',
-      'Agent performance — chat',
       'Unsolved complaints by agent',
       'Top restaurants',
       'By complaint type',
@@ -200,6 +197,17 @@ describe('ComplaintDashboard — every section his page has', () => {
       'How complaints reach us',
     ]) {
       expect(screen.getByText(heading), `missing section: ${heading}`).toBeInTheDocument();
+    }
+  });
+
+  it('leaves the agent numbers to the pages that are about agents', () => {
+    // "Agent performance", "Agent performance — chat" and "Chat responsiveness"
+    // were AGENT numbers on a BRANCH dashboard, and the fourth place to read
+    // them: the Agent dashboard, the Agent performance page and the Agent
+    // summary report all answer the same question with the same arithmetic.
+    render(<ComplaintDashboard />);
+    for (const gone of ['Chat responsiveness', 'Agent performance', 'Agent performance — chat']) {
+      expect(screen.queryByText(gone), `still present: ${gone}`).not.toBeInTheDocument();
     }
   });
 
@@ -326,16 +334,7 @@ describe('ComplaintDashboard — click-through drill-down', () => {
     expect(screen.getByText(/1 complaint\(s\) · 10 SAR compensation/)).toBeInTheDocument();
   });
 
-  it('shows CRM replies per agent in place of his WhatsApp column', () => {
-    const { container } = render(<ComplaintDashboard />);
-    const header = screen.getByText('CRM replies');
-    expect(header).toBeInTheDocument();
-    // Scoped to the COMPLAINTS agent table — the chat table reports the same
-    // count under "Replies sent", so an unscoped match hits both.
-    const table = header.closest('table')!;
-    const idx = Array.from(table.querySelectorAll('th')).indexOf(header as HTMLTableCellElement);
-    const cell = table.querySelectorAll('tbody tr')[0]!.querySelectorAll('td')[idx]!;
-    expect(cell.textContent).toBe('42');
-    expect(container).toBeTruthy();
-  });
+  // The "CRM replies per agent" assertion went with the agent table it drove.
+  // That column now lives on Agent summary, where it is covered by
+  // agent-reports-page.test.tsx.
 });

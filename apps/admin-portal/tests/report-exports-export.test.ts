@@ -284,6 +284,10 @@ describe('buildConversationSheets', () => {
         customerPhone: '+966500000001',
         customerEmail: 'saad@example.com',
         orderId: '946641',
+        // A customer wrote and nobody has answered — the dashboard's "waiting"
+        // tile counts exactly this.
+        awaitingReply: true,
+        waitingMinutes: 42,
       },
       {
         id: 'c2',
@@ -298,6 +302,8 @@ describe('buildConversationSheets', () => {
         customerPhone: '',
         customerEmail: '',
         orderId: '',
+        awaitingReply: false,
+        waitingMinutes: null,
       },
     ],
     byStatus: [

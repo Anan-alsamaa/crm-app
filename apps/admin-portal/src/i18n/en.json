@@ -69,7 +69,7 @@
     "aiConfigShort": "AI"
   },
   "dashboard": {
-    "title": "Overview",
+    "title": "Dashboard",
     "range": "Date range",
     "lastDays": "Last {{count}} days",
     "conversations": "Chats",
@@ -110,7 +110,9 @@
     "heroWelcomeBare": "Welcome back",
     "heroSub": "Here is where every complaint stands right now — filter the range below, or jump straight in.",
     "heroTickets": "Tickets report",
-    "heroAgents": "Agent performance"
+    "heroAgents": "Agent performance",
+    "tabOperations": "Operations",
+    "tabAgent": "Agent"
   },
   "automation": {
     "title": "Automation",
@@ -596,7 +598,9 @@
       "chainManager": "Chain manager",
       "chats": "Chats",
       "inTime": "Replied within 5 min",
-      "noReply": "Not replied"
+      "noReply": "Not replied",
+      "customer": "Customer",
+      "orderNumber": "Order"
     },
     "ticketsTitle": "Tickets",
     "ticketsSubtitle": "Every ticket with SLA timings and the linked customer order — export to CSV.",
@@ -1163,5 +1167,30 @@
     "noPortalAccessHint": "Your account is signed in, but none of the screens here are open to it. If you handle customer chats, use the agent portal instead.",
     "noPagePrivilege": "You do not have access to this page",
     "noPagePrivilegeHint": "Your role does not include this. An administrator can change that under Roles & privileges."
+  },
+  "agentDash": {
+    "title": "Agent",
+    "chats": "Chats",
+    "tickets": "Tickets",
+    "customers": "Customers and coupons",
+    "totalChats": "Total chats",
+    "waitingChats": "Waiting for a reply",
+    "waitingHint": "A customer wrote and nobody has answered",
+    "totalTickets": "Total tickets",
+    "openTickets": "Tickets still open",
+    "openTicketsHint": "Not solved or closed yet",
+    "rating": "Customer rating",
+    "ratingCount": "from {{count}} ratings",
+    "ratingNone": "nobody has rated yet",
+    "couponsIssued": "Coupons issued",
+    "couponsPending": "{{count}} still awaiting a decision",
+    "couponValue": "Value issued (SAR)",
+    "couponUnpriced": "{{count}} with no riyal figure",
+    "showThese": "Show these",
+    "hideThese": "Hide",
+    "waitingFor": "Waiting",
+    "minutes": "{{count}} min",
+    "noneWaiting": "Nobody is waiting for a first reply.",
+    "noneOpen": "Every ticket is finished."
   }
 }

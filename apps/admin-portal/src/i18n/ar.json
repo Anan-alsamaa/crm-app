@@ -84,7 +84,9 @@
       "chainManager": "مدير السلسلة",
       "chats": "المحادثات",
       "inTime": "رد خلال ٥ دقائق",
-      "noReply": "بلا رد"
+      "noReply": "بلا رد",
+      "customer": "العميل",
+      "orderNumber": "الطلب"
     },
     "ticketsTitle": "التذاكر",
     "ticketsSubtitle": "كل تذكرة مع أزمنة SLA والطلب المرتبط بالعميل — قابلة للتصدير إلى CSV.",
@@ -646,7 +648,7 @@
     "explain": "سجل الطلبات والقسائم والتعويضات تُحل تلقائيًا لعملاء التطبيق. أما البقية فتُعالج يدويًا."
   },
   "dashboard": {
-    "title": "نظرة عامة",
+    "title": "لوحة المعلومات",
     "range": "النطاق الزمني",
     "lastDays": "آخر {{count}} يوم",
     "conversations": "المحادثات",
@@ -687,7 +689,9 @@
     "heroWelcomeBare": "مرحبًا بعودتك",
     "heroSub": "هنا موقف كل شكوى الآن — رشّح النطاق أدناه أو انتقل مباشرة.",
     "heroTickets": "تقرير التذاكر",
-    "heroAgents": "أداء الموظفين"
+    "heroAgents": "أداء الموظفين",
+    "tabOperations": "العمليات",
+    "tabAgent": "الموظفون"
   },
   "helpAssistant": {
     "launch": "أورا",
@@ -1406,5 +1410,30 @@
     "noPortalAccessHint": "تم تسجيل دخولك، لكن لا تتوفر لدورك أي شاشة هنا. إن كنت تتعامل مع محادثات العملاء، استخدم بوابة الموظفين.",
     "noPagePrivilege": "لا تملك صلاحية الوصول إلى هذه الصفحة",
     "noPagePrivilegeHint": "دورك لا يشمل هذه الصفحة. يمكن للمسؤول تغيير ذلك من «الأدوار والصلاحيات»."
+  },
+  "agentDash": {
+    "title": "الموظفون",
+    "chats": "المحادثات",
+    "tickets": "التذاكر",
+    "customers": "العملاء والقسائم",
+    "totalChats": "إجمالي المحادثات",
+    "waitingChats": "بانتظار الرد",
+    "waitingHint": "كتب العميل ولم يرد أحد",
+    "totalTickets": "إجمالي التذاكر",
+    "openTickets": "تذاكر ما زالت مفتوحة",
+    "openTicketsHint": "لم تُحل أو تُغلق بعد",
+    "rating": "تقييم العميل",
+    "ratingCount": "من {{count}} تقييم",
+    "ratingNone": "لا توجد تقييمات بعد",
+    "couponsIssued": "القسائم الصادرة",
+    "couponsPending": "{{count}} بانتظار القرار",
+    "couponValue": "القيمة الصادرة (ريال)",
+    "couponUnpriced": "{{count}} بلا قيمة بالريال",
+    "showThese": "اعرضها",
+    "hideThese": "إخفاء",
+    "waitingFor": "الانتظار",
+    "minutes": "{{count}} دقيقة",
+    "noneWaiting": "لا أحد ينتظر ردًا أول.",
+    "noneOpen": "كل التذاكر منجزة."
   }
 }

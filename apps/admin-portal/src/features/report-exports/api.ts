@@ -238,6 +238,20 @@ export interface ConversationRow {
   customerEmail: string;
   /** The order the chat was last seen to be about, when there is one. */
   orderId: string;
+  /**
+   * A customer has written and NO agent has replied yet.
+   *
+   * The same signal Agent summary counts as "Not replied", read off the same
+   * first-message timings, so the dashboard tile and that column can never
+   * disagree about how many people are waiting.
+   *
+   * Deliberately not "no activity for N minutes": an agent's own last message
+   * would reset that, so a chat nobody has answered and a chat somebody
+   * answered a minute ago would look identical.
+   */
+  awaitingReply: boolean;
+  /** Minutes since the customer's first message, when awaiting a reply. */
+  waitingMinutes: number | null;
 }
 
 export interface ConversationStatusReport {
@@ -815,6 +829,10 @@ async function loadAgentReport(
           d.total += 1;
           d.byStatus[c.status] = (d.byStatus[c.status] ?? 0) + 1;
         }
+        const times = chatTimes.get(c.id);
+        // Solved chats are not waiting on anybody, however the messages fell.
+        const awaitingReply =
+          c.status !== 'solved' && !!times?.firstCustomerAt && !times?.firstAgentAt;
         return {
           id: c.id,
           status: c.status,
@@ -826,6 +844,11 @@ async function loadAgentReport(
           customerPhone: c.contact?.phone ?? '',
           customerEmail: c.contact?.email ?? '',
           orderId: c.last_order_id ?? '',
+          awaitingReply,
+          waitingMinutes:
+            awaitingReply && times?.firstCustomerAt
+              ? Math.max(0, Math.round((now - new Date(times.firstCustomerAt).getTime()) / 60000))
+              : null,
         };
       });
 

@@ -1,84 +1,135 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Toolbar } from '@yiji/ui';
+import { cn, Toolbar } from '@yiji/ui';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { ComplaintDashboard } from './ComplaintDashboard.js';
+import { AgentDashboard } from './AgentDashboard.js';
 
 /**
- * The Overview: what customers complained about.
+ * Two dashboards, because there are two jobs.
  *
- * It used to be two dashboards behind a tab strip — complaints, and a "support
- * activity" view of conversation volume, SLA, CSAT and ticket lifecycle. The
- * second is gone by request. It answered "how are WE working", which the
- * Reports section already answers in more detail and with filters an admin can
- * act on; keeping a shallower copy of it here meant the first thing anyone saw
- * on opening the console was a tab decision rather than an answer.
+ * **Operations** is about BRANCHES: which of them customers are complaining
+ * about, for what, and how that moves over the months. **Agent** is about the
+ * support desk: how many chats and tickets are in hand, how many people are
+ * waiting, what customers thought, and what compensation has cost.
  *
- * The name stays "Overview" rather than becoming "Complaints": it is the
- * console's landing page, and people navigate to it by position and habit.
+ * They used to be one page of fourteen panels, and the support half was
+ * scattered through the branch half — so the question "how many people are
+ * waiting right now" could not be answered without reading past a brand
+ * breakdown. Splitting them means each page is short enough to take in.
  *
- * The complaints view carries its own from/to/brand/city/store filter bar, so
- * there is deliberately no range picker in this toolbar to disagree with it.
+ * The Agent tab needs `view_all_chats`. That is what makes "operations can see
+ * the operations dashboard" true rather than aspirational: an Operations role
+ * holds `view_dashboard` and not `view_all_chats`, so it lands here and finds
+ * one dashboard, with no strip suggesting there is somewhere else to be.
  */
+
+type Tab = 'operations' | 'agent';
+
 export function DashboardPage() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const firstName = user?.first_name || user?.email?.split('@')[0] || '';
+  const canSeeAgent = can('view_all_chats');
+  const [tab, setTab] = useState<Tab>('operations');
+  const active: Tab = canSeeAgent ? tab : 'operations';
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Toolbar>
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('dashboard.title', { defaultValue: 'Overview' })}
+          {t('dashboard.title', { defaultValue: 'Dashboard' })}
         </h1>
       </Toolbar>
 
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
-        {/* The reference dashboard's hero band: a saturated violet→jade sweep
-            with the greeting and the two jumps an admin makes first. White ink
-            on purpose — the fill is saturated in BOTH themes, and the theme
-            tokens would flip to unreadable here. */}
-        <div className="relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-violet to-brand-glow p-6 shadow-float">
-          <div
-            aria-hidden
-            className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.25),transparent_60%)]"
-          />
-          <div className="relative flex flex-wrap items-center justify-between gap-4">
-            <div className="min-w-0">
-              <h2 className="font-display text-2xl font-bold tracking-tight text-white">
-                {firstName
-                  ? t('dashboard.heroWelcome', {
-                      defaultValue: 'Welcome back, {{name}}',
-                      name: firstName,
-                    })
-                  : t('dashboard.heroWelcomeBare', { defaultValue: 'Welcome back' })}
-              </h2>
-              <p className="mt-1 max-w-xl text-sm leading-relaxed text-white/85">
-                {t('dashboard.heroSub', {
-                  defaultValue:
-                    'Here is where every complaint stands right now — filter the range below, or jump straight in.',
-                })}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Link
-                to="/report-tickets"
-                className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[oklch(0.3_0.1_285)] shadow-sm transition-transform duration-fast motion-safe:hover:-translate-y-0.5"
-              >
-                {t('dashboard.heroTickets', { defaultValue: 'Tickets report' })}
-              </Link>
-              <Link
-                to="/agent-performance"
-                className="rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white ring-1 ring-inset ring-white/40 transition-colors duration-fast hover:bg-white/25"
-              >
-                {t('dashboard.heroAgents', { defaultValue: 'Agent performance' })}
-              </Link>
+      {/* A strip of one is a label, not a choice — a role with a single
+          dashboard is simply shown it. */}
+      {canSeeAgent && (
+        <nav
+          aria-label={t('dashboard.title', { defaultValue: 'Dashboard' })}
+          className="flex shrink-0 items-center gap-1 border-b border-foreground/[0.06] px-4 py-2"
+        >
+          {(
+            [
+              ['operations', t('dashboard.tabOperations', { defaultValue: 'Operations' })],
+              ['agent', t('dashboard.tabAgent', { defaultValue: 'Agent' })],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              aria-current={active === key ? 'page' : undefined}
+              className={cn(
+                'shrink-0 rounded-full px-3.5 py-1.5 text-sm whitespace-nowrap',
+                'transition-[background-color,color,font-weight] duration-fast ease-out',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                active === key
+                  ? 'bg-primary/15 font-semibold text-primary ring-1 ring-inset ring-primary/25'
+                  : 'font-medium text-muted-foreground hover:bg-secondary hover:text-foreground',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      )}
+
+      {active === 'agent' ? (
+        <div className="min-h-0 flex-1">
+          <AgentDashboard />
+        </div>
+      ) : (
+        <div className="flex-1 overflow-auto p-4 sm:p-6">
+          {/* The reference dashboard's hero band: a saturated violet→jade sweep
+              with the greeting and the two jumps an admin makes first. White ink
+              on purpose — the fill is saturated in BOTH themes, and the theme
+              tokens would flip to unreadable here. */}
+          <div className="relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-violet to-brand-glow p-6 shadow-float">
+            <div
+              aria-hidden
+              className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.25),transparent_60%)]"
+            />
+            <div className="relative flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="font-display text-2xl font-bold tracking-tight text-white">
+                  {firstName
+                    ? t('dashboard.heroWelcome', {
+                        defaultValue: 'Welcome back, {{name}}',
+                        name: firstName,
+                      })
+                    : t('dashboard.heroWelcomeBare', { defaultValue: 'Welcome back' })}
+                </h2>
+                <p className="mt-1 max-w-xl text-sm leading-relaxed text-white/85">
+                  {t('dashboard.heroSub', {
+                    defaultValue:
+                      'Here is where every complaint stands right now — filter the range below, or jump straight in.',
+                  })}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Link
+                  to="/reports/operational-kpi/tickets"
+                  className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[oklch(0.3_0.1_285)] shadow-sm transition-transform duration-fast motion-safe:hover:-translate-y-0.5"
+                >
+                  {t('dashboard.heroTickets', { defaultValue: 'Ticket breakdown' })}
+                </Link>
+                {can('view_all_chats') && (
+                  <Link
+                    to="/agent-performance"
+                    className="rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white ring-1 ring-inset ring-white/40 transition-colors duration-fast hover:bg-white/25"
+                  >
+                    {t('dashboard.heroAgents', { defaultValue: 'Agent performance' })}
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <ComplaintDashboard />
-      </div>
+          <ComplaintDashboard />
+        </div>
+      )}
     </div>
   );
 }

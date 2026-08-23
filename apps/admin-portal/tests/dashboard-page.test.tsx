@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -21,10 +21,20 @@ const complaintsApi = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/dashboard/complaints-api.js', () => complaintsApi);
 
-// The hero band greets the signed-in admin and links into the reports, so the
-// page needs an auth identity and a router.
+/**
+ * The hero band greets the signed-in admin and links into the reports, so the
+ * page needs an auth identity and a router.
+ *
+ * It also asks whether this role may see the AGENT dashboard: that is what
+ * decides whether there are two tabs or one. `chatPrivilege` is a variable so
+ * the tests below can answer both ways.
+ */
+const chatPrivilege = vi.hoisted(() => ({ granted: true }));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
-  useAuth: () => ({ user: { first_name: 'Test', email: 'test@example.com' } }),
+  useAuth: () => ({
+    user: { first_name: 'Test', email: 'test@example.com' },
+    can: (priv: string) => (priv === 'view_all_chats' ? chatPrivilege.granted : true),
+  }),
 }));
 
 import { MemoryRouter } from 'react-router-dom';
@@ -41,17 +51,32 @@ function renderPage() {
 }
 
 describe('DashboardPage', () => {
-  it('keeps the name Overview, because that is where people navigate by habit', () => {
-    renderPage();
-    expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument();
+  beforeEach(() => {
+    chatPrivilege.granted = true;
   });
 
-  it('shows the complaints dashboard with no tab to choose first', () => {
+  it('is called Dashboard, and opens on Operations', () => {
     renderPage();
-    // The support-activity view is gone: an admin opening the console gets an
-    // answer, not a tab decision.
-    expect(screen.queryByText('Support activity')).not.toBeInTheDocument();
-    expect(screen.queryByText('Complaints')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    // Operations first: it is the branch view, and the branch question is what
+    // this console is opened for.
+    expect(complaintsApi.useComplaintMetrics).toHaveBeenCalled();
+  });
+
+  it('offers both dashboards to a role that can see chats', () => {
+    renderPage();
+    expect(screen.getByRole('button', { name: 'Operations' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agent' })).toBeInTheDocument();
+  });
+
+  it('shows one dashboard, and no strip, to a role that cannot see chats', () => {
+    // An Operations role holds view_dashboard and not view_all_chats. It lands
+    // on the operations dashboard and is not shown a tab it cannot open — a
+    // strip of one is a label, not a choice.
+    chatPrivilege.granted = false;
+    renderPage();
+    expect(screen.queryByRole('button', { name: 'Agent' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Operations' })).not.toBeInTheDocument();
     expect(complaintsApi.useComplaintMetrics).toHaveBeenCalled();
   });
 
