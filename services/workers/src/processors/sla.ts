@@ -1,14 +1,20 @@
 import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
-import { QUEUES, type NotificationJob, type Priority, type SlaJob } from '@yiji/shared-types';
-import { computeDueAt, warningAt } from '../lib/sla-clock.js';
+import {
+  pickSlaPolicy,
+  QUEUES,
+  type NotificationJob,
+  type Priority,
+  type SlaJob,
+} from '@yiji/shared-types';
+import { computeDueAt, warningAt, type BusinessHours } from '../lib/sla-clock.js';
 import type { TicketRepo, TicketRow, SlaPolicyRow, TeamRepo } from './repos.js';
 
 /**
  * SLA processor (T071) — handles three job kinds:
- *   reconcile — periodic sweep: picks an SLA policy by priority, computes
- *     deadlines, schedules warning + breach delayed jobs. Idempotent via
- *     stable jobIds.
+ *   reconcile — periodic sweep: picks the SLA policy whose coverage best fits
+ *     the ticket, computes deadlines against the policy's working hours, and
+ *     schedules warning + breach delayed jobs. Idempotent via stable jobIds.
  *   warning   — fires at warning_threshold_percent of the way to the deadline.
  *   breach    — fires at the deadline.
  *
@@ -29,27 +35,34 @@ export interface SlaDeps {
 /**
  * The policy that governs this ticket, or none.
  *
- * `applies_to_priority` is NULLABLE and in practice often null: the
- * compensation clone ships five active policies that carry no priorities at
- * all. Dereferencing it unguarded threw `TypeError: Cannot read properties of
- * null` inside `Array.find`, which does not skip to the next candidate — it
- * propagates, so the whole reconcile sweep died before it reached the one
- * policy that DID match. The visible symptom was the entire SLA feature
- * reporting nothing: no ticket was ever stamped with a policy or a deadline,
- * so "SLA performance" showed a dash in every row and zero breaches forever,
- * while the sweep looked like it was running fine.
+ * The rule itself lives in @yiji/shared-types so the admin console can show an
+ * operator the same answer this sweep will reach — a matching rule that exists
+ * in two places is one that will eventually disagree with itself, and the
+ * disagreement would surface as a ticket held to a promise nobody could find.
  *
- * A policy that names no priorities governs nothing, which is the honest
- * reading of an empty list and now the coded one.
+ * Two things it settles that the old one-line `find` did not:
+ *
+ *   - A policy now narrows by ticket type, arrival channel and brand as well
+ *     as priority, so several policies routinely match one ticket. The most
+ *     SPECIFIC one wins, rather than whichever row Directus returned first.
+ *   - `applies_to_priority` is NULLABLE and often null: the compensation clone
+ *     ships five active policies carrying no coverage at all. Dereferencing it
+ *     unguarded threw inside `Array.find`, which does not skip to the next
+ *     candidate — it propagates, so the whole sweep died before reaching the
+ *     policy that DID match. The visible symptom was the entire SLA feature
+ *     reporting nothing, forever, while the sweep looked healthy. A policy
+ *     that names no coverage governs nothing, which is the honest reading of
+ *     an empty list and now the coded one.
  */
 function pickPolicy(ticket: TicketRow, policies: SlaPolicyRow[]): SlaPolicyRow | null {
-  return (
-    policies.find(
-      (p) =>
-        p.active &&
-        Array.isArray(p.applies_to_priority) &&
-        p.applies_to_priority.includes(ticket.priority),
-    ) ?? null
+  return pickSlaPolicy(
+    policies.filter((p) => p.active),
+    {
+      priority: ticket.priority,
+      complaintType: ticket.complaint_type,
+      complaintSource: ticket.complaint_source,
+      brandName: ticket.store_snapshot?.brandName ?? null,
+    },
   );
 }
 
@@ -63,16 +76,41 @@ function jobId(ticketId: string, deadline: Deadline, kind: 'warning' | 'breach')
   return `${ticketId}-${deadline}-${kind}`;
 }
 
+/**
+ * When to warn, measured the same way the deadline was.
+ *
+ * `warningAt` interpolates on the wall clock, which is right for a round-the-
+ * clock policy and wrong for one with working hours: 80% of the way through a
+ * Thursday-to-Sunday span lands somewhere on Saturday, with the branch shut and
+ * nobody to warn. Under working hours the warning is 80% of the WORKED minutes,
+ * so it arrives while there is still someone who can act on it.
+ *
+ * Falls back to the wall clock if the hours are unusable — a warning that fires
+ * early is a nuisance, a sweep that dies is the whole feature going quiet.
+ */
+function warningInstant(
+  start: Date,
+  dueAt: Date,
+  pct: number,
+  minutes: number,
+  hours: BusinessHours | null,
+): Date {
+  if (!hours) return warningAt(start, dueAt, pct);
+  try {
+    return computeDueAt(start, Math.max(1, Math.round((minutes * pct) / 100)), hours);
+  } catch {
+    return warningAt(start, dueAt, pct);
+  }
+}
+
 /** Schedule (or update) warning + breach delayed jobs for one deadline. */
 async function schedule(
   deps: SlaDeps,
   ticketId: string,
   deadline: Deadline,
-  start: Date,
   dueAt: Date,
-  warningPct: number,
+  warningTs: Date,
 ): Promise<void> {
-  const warningTs = warningAt(start, dueAt, warningPct);
   const now = Date.now();
   const warnDelay = Math.max(0, warningTs.getTime() - now);
   const breachDelay = Math.max(0, dueAt.getTime() - now);
@@ -218,7 +256,7 @@ export async function runReconcile(deps: SlaDeps): Promise<void> {
   for (const t of tickets) {
     if (isDone(t)) continue;
 
-    // Attach an SLA policy by priority if missing.
+    // Attach the best-fitting SLA policy if the ticket has none.
     let policyId = t.sla_policy;
     let policy = policyId ? (policies.find((p) => p.id === policyId) ?? null) : null;
     if (!policy) {
@@ -229,25 +267,49 @@ export async function runReconcile(deps: SlaDeps): Promise<void> {
     }
 
     const start = t.date_created ? new Date(t.date_created) : new Date();
-    // Compute + persist due dates if not already set.
+    /* Compute + persist due dates if not already set.
+     *
+     * `computeDueAt` THROWS on working hours it cannot satisfy — a policy whose
+     * open windows were all cleared, or a target that does not fit inside a
+     * year of them. Unguarded, one such policy would abort the sweep for every
+     * ticket behind it in the list, which is precisely how this feature went
+     * silent for its whole life the last time (see pickPolicy). One broken
+     * policy should cost its own tickets and nothing else. */
     const patch: Partial<TicketRow> = {};
-    if (!t.first_response_due_at) {
-      const due = computeDueAt(start, policy.first_response_minutes, policy.business_hours);
-      patch.first_response_due_at = due.toISOString();
-    }
-    if (!t.resolution_due_at) {
-      const due = computeDueAt(start, policy.resolution_minutes, policy.business_hours);
-      patch.resolution_due_at = due.toISOString();
+    try {
+      if (!t.first_response_due_at) {
+        const due = computeDueAt(start, policy.first_response_minutes, policy.business_hours);
+        patch.first_response_due_at = due.toISOString();
+      }
+      if (!t.resolution_due_at) {
+        const due = computeDueAt(start, policy.resolution_minutes, policy.business_hours);
+        patch.resolution_due_at = due.toISOString();
+      }
+    } catch (err) {
+      deps.logger.error(
+        {
+          ticketId: t.id,
+          policy: policy.id,
+          policyName: policy.name,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        'could not compute SLA deadlines for this ticket — check the policy working hours',
+      );
+      continue;
     }
     if (Object.keys(patch).length > 0) await deps.tickets.patchTicket(t.id, patch);
 
     // Schedule warning + breach for each deadline (idempotent via jobId).
     const frDue = new Date(patch.first_response_due_at ?? t.first_response_due_at!);
     const resDue = new Date(patch.resolution_due_at ?? t.resolution_due_at!);
+    const pct = policy.warning_threshold_percent;
+    const hours = policy.business_hours;
     if (!t.first_responded_at) {
-      await schedule(deps, t.id, 'first_response', start, frDue, policy.warning_threshold_percent);
+      const warn = warningInstant(start, frDue, pct, policy.first_response_minutes, hours);
+      await schedule(deps, t.id, 'first_response', frDue, warn);
     }
-    await schedule(deps, t.id, 'resolution', start, resDue, policy.warning_threshold_percent);
+    const resWarn = warningInstant(start, resDue, pct, policy.resolution_minutes, hours);
+    await schedule(deps, t.id, 'resolution', resDue, resWarn);
   }
 }
 

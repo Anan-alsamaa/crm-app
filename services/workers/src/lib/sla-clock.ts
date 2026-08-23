@@ -11,14 +11,17 @@
  *
  * Pure & deterministic (no ambient clock) so it can be unit-tested.
  */
-export interface BusinessHours {
-  /** IANA timezone name, e.g. 'Asia/Riyadh'. The weekday keys + window times
-   *  below are interpreted in THIS zone. */
-  timezone: string;
-  /** Map of weekday → array of `[openHHMM, closeHHMM]` windows. Keys are '0'..'6'
-   *  with 0=Sunday (local weekday). Empty / missing key ⇒ closed all day. */
-  days: Record<string, Array<[string, string]>>;
-}
+import type { SlaBusinessHours } from '@yiji/shared-types';
+/**
+ * The shape is defined in @yiji/shared-types, not here.
+ *
+ * It used to live in this file, where the admin console could not reach it —
+ * which is part of why no policy ever carried business hours: the engine was
+ * complete and correct, and the only writer of the column had no name for what
+ * it was supposed to write. Aliased rather than renamed so every call site in
+ * the worker keeps reading `BusinessHours`.
+ */
+export type BusinessHours = SlaBusinessHours;
 
 /** Minutes since midnight for an 'HH:MM' string ('17:00' → 1020, '24:00' → 1440). */
 function parseHHMM(hhmm: string): number {

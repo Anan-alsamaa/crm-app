@@ -570,9 +570,45 @@ export const collections: CollectionSpec[] = [
       { field: 'name', type: 'string', required: true },
       { field: 'description', type: 'text' },
       { field: 'applies_to_priority', type: 'json' },
+      /* WHICH tickets a policy governs, beyond their priority.
+       *
+       * Priority alone was the only thing a policy could narrow by, so every
+       * policy anyone wrote was effectively just a pair of durations. But a
+       * roach in the food and a missing sauce sachet are not the same promise,
+       * and a complaint phoned in is not the same promise as one left on
+       * Instagram overnight. Each of these is a list of the values it covers;
+       * empty or null means the dimension is not tested. The matching rule
+       * lives in one place for the worker and the console both — see
+       * `pickSlaPolicy` in @yiji/shared-types.
+       *
+       * Stored as the same free strings the tickets store, NOT as enums: the
+       * operations team edits `option_lists` without a deploy, and a policy
+       * naming a type they later retire has to keep meaning what it said. */
+      {
+        field: 'applies_to_type',
+        type: 'json',
+        note: 'Complaint types this policy covers. Empty = any type.',
+      },
+      {
+        field: 'applies_to_source',
+        type: 'json',
+        note: 'Arrival channels this policy covers. Empty = any channel.',
+      },
+      {
+        field: 'applies_to_brand',
+        type: 'json',
+        note: 'Brand names this policy covers, matched against the ticket’s frozen store snapshot. Empty = any brand.',
+      },
       { field: 'first_response_minutes', type: 'integer', required: true },
       { field: 'resolution_minutes', type: 'integer', required: true },
       { field: 'warning_threshold_percent', type: 'integer', defaultValue: 80 },
+      /* WHEN the clock runs. Null = round the clock, which is what every
+       * policy created through the console meant until the console could say
+       * otherwise — a 4-hour resolution target counted through the night is a
+       * breach recorded at 03:00 against a branch that was shut. Shape is
+       * `{ timezone, days: { '0'..'6': [[open, close], ...] } }`; see
+       * BusinessHours in services/workers/src/lib/sla-clock.ts, which has
+       * computed against it correctly all along. */
       { field: 'business_hours', type: 'json' },
       { field: 'active', type: 'boolean', defaultValue: true },
     ],

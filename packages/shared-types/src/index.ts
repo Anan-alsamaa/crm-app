@@ -16,5 +16,6 @@ export * from './coupon-approvals.js';
 export * from './socket.js';
 export * from './ai.js';
 export * from './queues.js';
+export * from './sla.js';
 
 export const SHARED_TYPES_VERSION = '0.0.0';

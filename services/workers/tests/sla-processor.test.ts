@@ -124,6 +124,151 @@ describe('runReconcile (T067)', () => {
     expect(patched.some((p) => p.patch.first_response_due_at)).toBe(true);
   });
 
+  it('holds a ticket to the most specific policy that covers it, not the first row back', async () => {
+    /*
+     * With four coverage dimensions, several policies matching one ticket is
+     * the normal case rather than the edge case. The old `find` took whichever
+     * row Directus happened to return first, so the promise a ticket was held
+     * to depended on row order — the same ticket could change deadline between
+     * two sweeps with nothing having been edited.
+     */
+    const broad: SlaPolicyRow = { ...POLICY, id: 'broad', name: 'All tickets' };
+    const narrow: SlaPolicyRow = {
+      ...POLICY,
+      id: 'narrow',
+      name: 'Roach, Herfy',
+      applies_to_type: ['Roach found'],
+      applies_to_brand: ['Herfy'],
+      first_response_minutes: 5,
+    };
+    const ticket: TicketRow = {
+      ...baseTicket,
+      complaint_type: 'Roach found',
+      store_snapshot: { brandName: 'Herfy' },
+    };
+
+    for (const order of [
+      [broad, narrow],
+      [narrow, broad],
+    ]) {
+      const { repo, patched } = makeRepo([{ ...ticket }], order);
+      const q = makeQueues();
+      await runReconcile({
+        tickets: repo,
+        teams: makeTeams(),
+        slaQueue: q.slaQueue,
+        notificationsQueue: q.notificationsQueue,
+        logger,
+      });
+      expect(patched[0]?.patch.sla_policy).toBe('narrow');
+    }
+  });
+
+  it('does not hold a ticket to a policy whose coverage it misses', async () => {
+    const brandOnly: SlaPolicyRow = { ...POLICY, id: 'kudu', applies_to_brand: ['Kudu'] };
+    const { repo, patched } = makeRepo(
+      [{ ...baseTicket, store_snapshot: { brandName: 'Herfy' } }],
+      [brandOnly],
+    );
+    const q = makeQueues();
+    await runReconcile({
+      tickets: repo,
+      teams: makeTeams(),
+      slaQueue: q.slaQueue,
+      notificationsQueue: q.notificationsQueue,
+      logger,
+    });
+    expect(patched).toEqual([]);
+    expect(q.sla).toEqual([]);
+  });
+
+  it('counts the deadline in working hours, not through the night', async () => {
+    /*
+     * 16:00 on a Sunday plus a 4-hour target. Round the clock that is 20:00 the
+     * same evening, breached against a branch that shut at 17:00. Under working
+     * hours only the last hour of Sunday counts, so it is due at 12:00 on
+     * Monday — and the warning lands inside Monday morning rather than at some
+     * point on the closed Sunday evening.
+     */
+    const officeHours: SlaPolicyRow = {
+      ...POLICY,
+      id: 'office',
+      resolution_minutes: 240,
+      business_hours: {
+        timezone: 'UTC',
+        days: Object.fromEntries(
+          [0, 1, 2, 3, 4].map((d) => [String(d), [['09:00', '17:00'] as [string, string]]]),
+        ),
+      },
+    };
+    const raisedAt = new Date('2026-06-07T16:00:00Z');
+    const { repo, patched } = makeRepo(
+      [{ ...baseTicket, date_created: raisedAt.toISOString() }],
+      [officeHours],
+    );
+    const q = makeQueues();
+    // The queue delays are measured from NOW, so the clock has to sit at the
+    // moment the ticket was raised for them to mean anything.
+    vi.useFakeTimers();
+    vi.setSystemTime(raisedAt);
+    try {
+      await runReconcile({
+        tickets: repo,
+        teams: makeTeams(),
+        slaQueue: q.slaQueue,
+        notificationsQueue: q.notificationsQueue,
+        logger,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const due = patched.find((p) => p.patch.resolution_due_at)?.patch.resolution_due_at;
+    expect(due).toBe(new Date('2026-06-08T12:00:00Z').toISOString());
+
+    // 80% of 240 WORKED minutes = 192, which is 11:12 Monday — inside the
+    // working day. Wall-clock interpolation between 16:00 Sunday and 12:00
+    // Monday would have put the warning at 00:00, with nobody there to act.
+    const warn = q.sla.find(
+      (j) => j.name === 'warning' && (j.data as { deadline: string }).deadline === 'resolution',
+    );
+    const delay = (warn?.opts as { delay: number }).delay;
+    expect(new Date(raisedAt.getTime() + delay).toISOString()).toBe('2026-06-08T11:12:00.000Z');
+  });
+
+  it('lets one unusable policy cost only its own tickets', async () => {
+    /*
+     * `computeDueAt` throws when working hours have no open window. Unguarded,
+     * that aborted the sweep for every ticket behind it in the list — the same
+     * shape of failure as the null-priority crash above, and the reason this
+     * feature has twice gone completely silent rather than partially wrong.
+     */
+    const closedForever: SlaPolicyRow = {
+      ...POLICY,
+      id: 'closed',
+      applies_to_type: ['Late order'],
+      business_hours: { timezone: 'UTC', days: {} },
+    };
+    const { repo, patched } = makeRepo(
+      [
+        { ...baseTicket, id: 'broken', complaint_type: 'Late order' },
+        { ...baseTicket, id: 'fine' },
+      ],
+      [closedForever, POLICY],
+    );
+    const q = makeQueues();
+    await runReconcile({
+      tickets: repo,
+      teams: makeTeams(),
+      slaQueue: q.slaQueue,
+      notificationsQueue: q.notificationsQueue,
+      logger,
+    });
+
+    expect(patched.some((p) => p.id === 'fine' && p.patch.first_response_due_at)).toBe(true);
+    expect(patched.some((p) => p.id === 'broken' && p.patch.first_response_due_at)).toBe(false);
+  });
+
   it('assigns SLA policy by priority + computes due dates + schedules 4 jobs', async () => {
     const { repo, patched } = makeRepo([{ ...baseTicket }], [POLICY]);
     const q = makeQueues();

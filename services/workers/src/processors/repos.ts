@@ -3,7 +3,7 @@
  * a live Directus. The real (Directus-backed) implementations live in
  * `directus-repos.ts`; tests pass in-memory stubs.
  */
-import type { Priority } from '@yiji/shared-types';
+import type { Priority, SlaPolicyScope } from '@yiji/shared-types';
 
 export interface TicketRow {
   id: string;
@@ -18,9 +18,19 @@ export interface TicketRow {
   assigned_agent: string | null;
   assigned_team: string | null;
   date_created: string | null;
+  /* The three facts an SLA policy may narrow by, beyond priority. Read on the
+   * reconcile sweep because that is where a policy gets attached; a ticket
+   * that carries none of them still matches a priority-only policy. */
+  complaint_type?: string | null;
+  complaint_source?: string | null;
+  /* Frozen store attribution — `brandName` is the half the SLA matcher reads.
+   * The snapshot, not a live join: an SLA is a promise made when the ticket was
+   * raised, so moving a branch to another brand today must not retroactively
+   * change which promise last month's tickets were held to. */
+  store_snapshot?: { brandName?: string | null } | null;
 }
 
-export interface SlaPolicyRow {
+export interface SlaPolicyRow extends SlaPolicyScope {
   id: string;
   name: string;
   applies_to_priority: Priority[];

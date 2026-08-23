@@ -40,6 +40,13 @@ export function createTicketRepo(client: YijiDirectusClient): TicketRepo {
             'assigned_agent',
             'assigned_team',
             'date_created',
+            /* The coverage facts. A policy may narrow by any of them, so the
+             * sweep cannot decide which policy governs a ticket without
+             * reading them — before this, every policy was matched on
+             * priority alone because priority was all the sweep could see. */
+            'complaint_type',
+            'complaint_source',
+            'store_snapshot',
           ],
           limit: -1,
         }),
@@ -53,6 +60,9 @@ export function createTicketRepo(client: YijiDirectusClient): TicketRepo {
             'id',
             'name',
             'applies_to_priority',
+            'applies_to_type',
+            'applies_to_source',
+            'applies_to_brand',
             'first_response_minutes',
             'resolution_minutes',
             'warning_threshold_percent',
