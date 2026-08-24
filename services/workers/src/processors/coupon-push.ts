@@ -1,9 +1,10 @@
-import type { Job } from 'bullmq';
+import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
-import { readItem, updateItem } from '@directus/sdk';
+import { readItem, readItems, updateItem } from '@directus/sdk';
 import type { CouponPushJob, YijiAdminPoster } from '@yiji/shared-types';
-import { couponWindow, isYijiUnavailable } from '@yiji/shared-types';
+import { couponWindow, isYijiRefused, isYijiUnavailable } from '@yiji/shared-types';
 import type { YijiDirectusClient } from '@yiji/shared-config';
+import { describeError } from '../lib/errors.js';
 
 /**
  * Tell Yiji about a coupon a supervisor approved.
@@ -90,6 +91,8 @@ export interface CouponApprovalRow {
    */
   ticket: { order_id: string | null } | null;
   yiji_coupon_user_id: string | null;
+  /** Why the last delivery attempt did not land. Null once it does. */
+  yiji_push_error?: string | null;
 }
 
 /** Postgres returns `numeric` as a string; Yiji is sent numbers. */
@@ -228,13 +231,146 @@ export function readCouponUserId(body: YijiCouponResponse): {
   return { ok: true, couponUserId: String(id) };
 }
 
+/**
+ * Turn Yiji's refusal body into one line a supervisor can act on.
+ *
+ * `exceptionMessage` is where they put the human reason; '0' is their idiom for
+ * "no message". Everything else falls back to the raw shape rather than a
+ * shrug — an unexplained failure on the approval screen is the thing this
+ * column exists to prevent.
+ */
+export function describeRefusal(body: unknown): string {
+  const b = body as { exceptionMessage?: string | null; result?: number } | null;
+  const msg = b?.exceptionMessage;
+  if (typeof msg === 'string' && msg && msg !== '0') return msg.slice(0, 500);
+  return JSON.stringify(body ?? 'no body').slice(0, 500);
+}
+
+/**
+ * Write down why the coupon did not go.
+ *
+ * Best-effort: if recording the failure ALSO fails there is nothing useful left
+ * to do, and throwing here would replace a precise reason with a generic one.
+ * The status is untouched — the coupon is still approved and still owed.
+ */
+async function recordFailure(
+  directus: YijiDirectusClient,
+  id: string,
+  detail: string,
+): Promise<void> {
+  try {
+    await directus.request(
+      updateItem('coupon_approvals' as never, id, {
+        yiji_push_error: detail,
+        yiji_pushed_at: new Date().toISOString(),
+      } as never),
+    );
+  } catch {
+    /* the thrown/returned outcome still carries the reason */
+  }
+}
+
 /** What a push attempt concluded, for the log and the tests. */
 export type PushOutcome =
   | 'delivered'
   | 'disabled'
   | 'not-approved'
   | 'already-assigned'
-  | 'no-order';
+  | 'no-order'
+  /**
+   * Yiji answered, and the answer was no — for a reason that will not change
+   * by asking again ("User already have this coupon", an order it cannot see).
+   *
+   * Returned rather than thrown, so BullMQ marks the job done instead of
+   * retrying an answer that is settled. The request stays `approved` and the
+   * reason is written to `yiji_push_error`, because a coupon that did not
+   * arrive is still owed to the customer and a supervisor has to be able to
+   * see why without reading a worker log.
+   */
+  | 'refused';
+
+/**
+ * Find approved coupons that have never reached Yiji, and enqueue them.
+ *
+ * WHY THIS HAS TO EXIST. Delivery is triggered by the supervisor's Approve
+ * click, which enqueues one job. That covers everything approved from now on
+ * and NOTHING approved before the integration existed — thirteen coupons in
+ * this database, already granted to real customers, that no code path would
+ * ever have picked up. It also covers the gap the click cannot: the enqueue is
+ * deliberately fire-and-forget (a supervisor's decision must not fail because
+ * Redis is down), so a coupon can be approved with no job behind it.
+ *
+ * The selection is the honest definition of "owed but not delivered":
+ *   approved or edited, no receipt, and no recorded refusal.
+ *
+ * The refusal check is what stops this becoming a loop. Yiji answers a settled
+ * "no" the same way every time, so a row carrying `yiji_push_error` is left
+ * alone until a human clears it — which is what the Retry action on the
+ * approval screen does. Without that, every sweep would re-ask a question that
+ * has already been answered.
+ *
+ * Safe to run as often as you like: the job id is per approval, and the push
+ * itself re-reads the row and refuses anything already delivered.
+ */
+export async function runCouponDeliverySweep(deps: {
+  directus: YijiDirectusClient;
+  logger: Logger;
+  couponsQueue: Queue;
+}): Promise<number> {
+  const { directus, logger, couponsQueue } = deps;
+  let rows: Array<{ id: string; coupon_code: string | null }>;
+  try {
+    rows = (await directus.request(
+      readItems(
+        'coupon_approvals' as never,
+        {
+          filter: {
+            status: { _in: ['approved', 'edited'] },
+            yiji_coupon_user_id: { _null: true },
+            yiji_push_error: { _null: true },
+          },
+          fields: ['id', 'coupon_code'],
+          limit: -1,
+        } as never,
+      ),
+    )) as unknown as Array<{ id: string; coupon_code: string | null }>;
+  } catch (err) {
+    logger.error(
+      // describeError, not `err.message`: a Directus rejection is a plain
+      // object, and the usual idiom logs it as "[object Object]" — which is how
+      // a missing svc-workers permission on this very collection reported
+      // itself as an unexplained failure.
+      { err: describeError(err) },
+      'could not read undelivered coupons — skipping this sweep',
+    );
+    return 0;
+  }
+
+  let queued = 0;
+  for (const row of rows) {
+    try {
+      await couponsQueue.add(
+        'push',
+        { couponApprovalId: row.id },
+        // Same id the approval click uses, so a coupon already waiting in the
+        // queue is not queued twice.
+        { jobId: `coupon-push-${row.id}`, removeOnComplete: true, removeOnFail: false },
+      );
+      queued++;
+    } catch (err) {
+      logger.error(
+        {
+          id: row.id,
+          code: row.coupon_code,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        'could not enqueue an undelivered coupon — the next sweep will try again',
+      );
+    }
+  }
+  if (queued > 0) logger.info({ queued }, 'undelivered coupons enqueued');
+  return queued;
+}
 
 export async function processCouponPushJob(
   job: Job<CouponPushJob>,
@@ -269,6 +405,7 @@ export async function processCouponPushJob(
         // us whether a previous attempt already succeeded.
         { ticket: ['order_id'] },
         'yiji_coupon_user_id',
+        'yiji_push_error',
       ],
     } as never),
   )) as unknown as CouponApprovalRow;
@@ -336,10 +473,41 @@ export async function processCouponPushJob(
       'idempotency-key': row.coupon_code ?? id,
     });
   } catch (err) {
+    /*
+     * TWO KINDS OF FAILURE, AND THEY NEED OPPOSITE HANDLING.
+     *
+     * Yiji returns a considered refusal as HTTP 400 with a JSON body — verified
+     * live: `{"result":2,"exceptionMessage":"User already have this coupon"}`.
+     * Retrying that gets the same answer five more times and buries the one
+     * message that explains why nothing arrived. So it is RECORDED and the job
+     * finishes.
+     *
+     * A 502, a timeout or a dropped connection is the opposite case: nothing
+     * has been decided, and trying again is exactly right. Those still throw.
+     */
+    if (isYijiRefused(err)) {
+      const detail = describeRefusal(err.body);
+      await recordFailure(directus, id, detail);
+      logger.warn(
+        { id, code: row.coupon_code, orderId, detail },
+        'yiji refused the coupon — staying approved, not retrying',
+      );
+      return 'refused';
+    }
+    /*
+     * DELIBERATELY WRITES NOTHING.
+     *
+     * `yiji_push_error` is what parks a coupon — the delivery sweep skips any
+     * row carrying one, because a settled refusal repeats forever. Recording a
+     * TIMEOUT there would park a coupon that is genuinely owed behind an
+     * outage that has since cleared, and only a human noticing would free it.
+     * Left blank, the same sweep retries it in five minutes and it heals
+     * itself.
+     */
+    const reason = describeError(err);
     // Rethrown, so BullMQ retries with backoff rather than swallowing it. The
     // status stays `approved`: nothing was delivered, and saying otherwise
     // would be the one lie this whole file is arranged to prevent.
-    const reason = err instanceof Error ? err.message : String(err);
     throw new Error(
       `${isYijiUnavailable(err) ? 'yiji unavailable' : 'yiji coupon push failed'}: ${reason}`,
     );
@@ -361,7 +529,17 @@ export async function processCouponPushJob(
    */
   const verdict = readCouponUserId(body);
   if (!verdict.ok) {
-    throw new Error(`${verdict.error} (approval ${id}, code ${row.coupon_code ?? '—'})`);
+    /*
+     * A refusal can also arrive as a 200 — their API is not consistent about
+     * which it uses, so both roads lead here. Recorded and not retried for the
+     * same reason: `result` is an answer, not an outage.
+     */
+    await recordFailure(directus, id, verdict.error ?? 'yiji refused the coupon');
+    logger.warn(
+      { id, code: row.coupon_code, orderId, detail: verdict.error },
+      'yiji refused the coupon in a 200 body — staying approved, not retrying',
+    );
+    return 'refused';
   }
 
   await directus.request(
@@ -371,6 +549,9 @@ export async function processCouponPushJob(
       // two writes would otherwise leave "assigned" with nothing to prove it.
       yiji_coupon_user_id: verdict.couponUserId,
       yiji_pushed_at: new Date().toISOString(),
+      // Cleared on success: a stale reason beside a delivered coupon reads as
+      // an unresolved problem and sends someone looking for one.
+      yiji_push_error: null,
     } as never),
   );
   logger.info(

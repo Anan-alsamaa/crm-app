@@ -38,6 +38,18 @@ export interface CouponApprovalRow {
   restaurant_id: string | null;
   /** True when a supervisor changed those terms before approving. */
   edited_by_admin: boolean | null;
+  /**
+   * DELIVERY, which is not the same thing as the decision.
+   *
+   * `yiji_coupon_user_id` is the receipt — present only once Yiji actually
+   * holds the coupon. `yiji_push_error` is why it does not, in Yiji's own
+   * words. Without both on screen an approved coupon that was refused looks
+   * exactly like one the worker has not reached yet, and the customer is told
+   * about compensation that does not exist.
+   */
+  yiji_coupon_user_id: string | null;
+  yiji_pushed_at: string | null;
+  yiji_push_error: string | null;
   decided_at: string | null;
   decision_note: string | null;
   date_created: string | null;
@@ -97,6 +109,9 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
               'brand_id',
               'restaurant_id',
               'edited_by_admin',
+              'yiji_coupon_user_id',
+              'yiji_pushed_at',
+              'yiji_push_error',
               {
                 ticket: [
                   'id',
@@ -258,6 +273,37 @@ export function useSaveCouponTerms() {
   return useMutation({
     mutationFn: (input: { id: string; edits: Record<string, unknown> }) =>
       directus.request(updateItem('coupon_approvals' as never, input.id, input.edits as never)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['coupon-approvals'] }),
+  });
+}
+
+/**
+ * Try the delivery again after Yiji refused it.
+ *
+ * A refusal is recorded rather than retried — Yiji answers a settled "no" the
+ * same way every time, and repeating it only buries the reason. That leaves the
+ * coupon parked, which is right until somebody has DONE something about it:
+ * corrected the order, or established that the customer really should get a
+ * second coupon.
+ *
+ * So this is deliberately a human action. Clearing `yiji_push_error` is what
+ * un-parks the row — the worker's delivery sweep picks up anything approved,
+ * undelivered and unrefused — and the direct enqueue means the supervisor sees
+ * the result now rather than within five minutes. The enqueue is best-effort
+ * for the same reason it is on the approve path: if Redis is down the sweep
+ * still gets there.
+ */
+export function useRetryCouponDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await directus.request(
+        updateItem('coupon_approvals' as never, id, { yiji_push_error: null } as never),
+      );
+      await jobProducer.enqueueCouponPush(id).catch(() => {
+        /* the sweep is the safety net */
+      });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['coupon-approvals'] }),
   });
 }

@@ -1020,7 +1020,12 @@
       "approved": "Approved",
       "rejected": "Rejected",
       "all": "All"
-    }
+    },
+    "delivered": "Delivered to Yiji",
+    "deliveredRef": "reference {{ref}}",
+    "deliveryPending": "Approved — waiting to be sent to Yiji.",
+    "notDelivered": "Not delivered — Yiji said: {{why}}",
+    "retryDelivery": "Try again"
   },
   "complaintReport": {
     "any": "Any",

@@ -25,6 +25,7 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
 import {
   useCouponApprovals,
   useDecideCoupon,
+  useRetryCouponDelivery,
   useSaveCouponTerms,
   type CouponApprovalRow,
 } from './api.js';
@@ -44,9 +45,13 @@ import {
  */
 // Wider than CouponApprovalStatus on purpose: the push worker moves a row to
 // `assigned` once Yiji has it, and that state still has to render.
+/* Every state in COUPON_APPROVAL_STATUSES, so none falls through to a default
+ * that would paint a rejection like an approval. `edited` is an approval on
+ * amended terms; `assigned` is an approval Yiji has taken. */
 const TONE: Record<string, 'warning' | 'success' | 'destructive'> = {
   pending: 'warning',
   approved: 'success',
+  edited: 'success',
   assigned: 'success',
   rejected: 'destructive',
 };
@@ -272,7 +277,11 @@ function Row({
   const [edits, setEdits] = useState<TermEdits>(() => seedEdits(row));
   const setEdit = (k: keyof TermEdits, v: string) => setEdits((e) => ({ ...e, [k]: v }));
   const saveTerms = useSaveCouponTerms();
+  const retry = useRetryCouponDelivery();
   const pending = row.status === 'pending';
+  /* Delivery only means anything once a decision has been made, and only an
+   * APPROVAL is owed to anybody — a rejected coupon was never going to Yiji. */
+  const approvedNotPending = row.status === 'approved' || row.status === 'assigned';
 
   /**
    * What is wrong with the numbers as they now stand — the amended terms while
@@ -586,6 +595,54 @@ function Row({
               {row.reason}
             </p>
           )}
+
+          {/*
+            DID IT ACTUALLY REACH THE CUSTOMER?
+            The decision and the delivery are different facts, and only one of
+            them puts a coupon in someone's app. An approved row that Yiji
+            refused looks identical to one the worker has not got to yet, so an
+            agent would tell a customer about compensation that does not exist.
+            Both states are named here, and the refusal carries Yiji's own words
+            plus the only action that un-parks it.
+          */}
+          {approvedNotPending &&
+            (row.yiji_coupon_user_id ? (
+              <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <Pill tone="success" size="sm" dot>
+                  {t('couponApprovals.delivered', { defaultValue: 'Delivered to Yiji' })}
+                </Pill>
+                <span className="tabular-nums">
+                  {t('couponApprovals.deliveredRef', {
+                    defaultValue: 'reference {{ref}}',
+                    ref: row.yiji_coupon_user_id,
+                  })}
+                </span>
+              </p>
+            ) : row.yiji_push_error ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-warning-tint px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
+                <span className="min-w-0 flex-1">
+                  {t('couponApprovals.notDelivered', {
+                    defaultValue: 'Not delivered — Yiji said: {{why}}',
+                    why: row.yiji_push_error,
+                  })}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7"
+                  disabled={retry.isPending}
+                  onClick={() => retry.mutate(row.id)}
+                >
+                  {t('couponApprovals.retryDelivery', { defaultValue: 'Try again' })}
+                </Button>
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {t('couponApprovals.deliveryPending', {
+                  defaultValue: 'Approved — waiting to be sent to Yiji.',
+                })}
+              </p>
+            ))}
 
           {row.status !== 'pending' && row.decision_note && (
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">

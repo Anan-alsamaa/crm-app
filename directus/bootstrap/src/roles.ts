@@ -555,6 +555,22 @@ export const roles: RoleSpec[] = [
       { collection: 'conversations_tags', action: 'read' },
       { collection: 'contacts_tags', action: 'create' },
       { collection: 'contacts_tags', action: 'read' },
+      /*
+       * COUPON DELIVERY. The push re-reads the approval with this token, then
+       * writes the receipt and moves it to `assigned`; the delivery sweep
+       * queries the same collection for anything still owed.
+       *
+       * Without these the whole feature 403s at the first call — the approval
+       * is recorded, the job is queued, the worker cannot see the row, and the
+       * customer never gets the coupon a supervisor granted. Nothing on any
+       * screen says so, which is the exact shape this codebase keeps finding.
+       *
+       * Read + update only. The worker must never CREATE an approval: granting
+       * a coupon is a decision a person makes, and an account that can write
+       * one is an account that can hand out money unattended.
+       */
+      { collection: 'coupon_approvals', action: 'read' },
+      { collection: 'coupon_approvals', action: 'update' },
     ],
   },
   {

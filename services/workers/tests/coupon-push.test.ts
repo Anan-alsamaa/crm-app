@@ -3,6 +3,7 @@ import type { Job } from 'bullmq';
 import type { Logger } from 'pino';
 import {
   processCouponPushJob,
+  runCouponDeliverySweep,
   readCouponUserId,
   yijiCouponPayload,
   YIJI_COUPON_PATH,
@@ -28,6 +29,7 @@ import {
  * status is the thing worth asserting.
  */
 vi.mock('@directus/sdk', () => ({
+  readItems: (collection: string, opts: unknown) => ({ collection, opts }),
   readItem: (collection: string, id: string, opts: unknown) => ({ collection, id, opts }),
   updateItem: (collection: string, id: string, payload: unknown) => ({
     collection,
@@ -282,18 +284,26 @@ describe('processCouponPushJob', () => {
     expect(patches[0]).toHaveProperty('yiji_pushed_at');
   });
 
-  it('retries a refusal rather than calling it delivered', async () => {
+  it('never calls a refusal delivered — it records the reason and stops', async () => {
+    /*
+     * This used to throw so BullMQ would retry. It should not: "coupon limit
+     * reached" is Yiji's considered answer and will be the same answer five
+     * attempts later, so retrying only buries the one line that explains why
+     * the customer has nothing. The request stays `approved` — the decision
+     * stands, the delivery did not happen — and the reason is written where a
+     * supervisor can see it.
+     */
     const { deps: d, patches } = deps({
       postCoupon: vi.fn(async () => ({
         result: 0,
         exceptionMessage: 'coupon limit reached',
       })) as never,
     });
-    // Thrown, so BullMQ retries with backoff. Exhausting the attempts leaves it
-    // `approved`, which is the honest end state: the decision stands, the
-    // delivery did not happen.
-    await expect(processCouponPushJob(job(), d)).rejects.toThrow(/coupon limit reached/);
-    expect(patches).toHaveLength(0);
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
+    expect(patches[0]).toMatchObject({
+      yiji_push_error: expect.stringMatching(/coupon limit reached/),
+    });
+    expect(patches[0]).not.toHaveProperty('status');
   });
 
   it('will not push a coupon with no order to attach it to', async () => {
@@ -360,7 +370,185 @@ describe('processCouponPushJob', () => {
       }) as never,
     });
     await expect(processCouponPushJob(job(), d)).rejects.toThrow(/502/);
-    // Nothing recorded: the decision stands, the delivery did not happen.
+    /*
+     * Nothing recorded, and that is load-bearing. `yiji_push_error` is what
+     * PARKS a coupon — the delivery sweep skips any row carrying one. Writing a
+     * timeout there would park a coupon that is genuinely owed behind an outage
+     * that has since cleared, and only a human noticing would free it.
+     */
     expect(patches).toHaveLength(0);
+  });
+});
+
+describe('a refusal is an answer, not an outage', () => {
+  /*
+   * Verified against the live API before this was written: Yiji returns a
+   * considered refusal as HTTP 400 with a JSON body —
+   *   {"result":2,"exceptionMessage":"User already have this coupon", ...}
+   * Retrying that gets the same answer five more times and buries the one
+   * message that explains why nothing arrived.
+   */
+  class RefusedError extends Error {
+    name = 'YijiRefusedError';
+    constructor(
+      readonly status: number,
+      readonly body: unknown,
+    ) {
+      super(`admin refused (${status})`);
+    }
+  }
+
+  it('records the reason and stops, rather than retrying a settled no', async () => {
+    const { deps: d, patches } = deps({
+      postCoupon: vi.fn(async () => {
+        throw new RefusedError(400, {
+          result: 2,
+          exceptionMessage: 'User already have this coupon',
+        });
+      }) as never,
+    });
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
+    // The reason is on the row, where a supervisor can see it — not only in a
+    // worker log nobody reads.
+    expect(patches[0]).toMatchObject({ yiji_push_error: 'User already have this coupon' });
+    // And the coupon is still owed: no receipt, no 'assigned'.
+    expect(patches[0]).not.toHaveProperty('status');
+    expect(patches[0]).not.toHaveProperty('yiji_coupon_user_id');
+  });
+
+  it('treats a refusal delivered as a 200 body exactly the same way', async () => {
+    // Their API is not consistent about which it uses, so both roads lead to
+    // the same place.
+    const { deps: d, patches } = deps({
+      postCoupon: vi.fn(async () => ({ result: 0, exceptionMessage: 'order not found' })) as never,
+    });
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
+    expect(String((patches[0] as { yiji_push_error: string }).yiji_push_error)).toMatch(
+      /order not found/,
+    );
+  });
+
+  it('still RETRIES an upstream that is merely unwell', async () => {
+    // A 502 or a timeout has decided nothing; trying again is exactly right.
+    const { deps: d } = deps({
+      postCoupon: vi.fn(async () => {
+        throw new Error('admin upstream 502 for /api/CouponUserOrder/CreateCouponUserFromOrder');
+      }) as never,
+    });
+    await expect(processCouponPushJob(job(), d)).rejects.toThrow(/502/);
+  });
+
+  it('clears a stale reason when a later attempt succeeds', async () => {
+    // A recorded failure sitting beside a delivered coupon reads as an
+    // unresolved problem and sends someone looking for one.
+    const { deps: d, patches } = deps(
+      {},
+      { ...ROW, yiji_push_error: 'User already have this coupon' },
+    );
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('delivered');
+    expect(patches[0]).toMatchObject({ status: 'assigned', yiji_push_error: null });
+  });
+});
+
+describe('runCouponDeliverySweep', () => {
+  function sweepHarness(rows: Array<Record<string, unknown>>) {
+    const added: Array<{ data: unknown; opts: { jobId?: string } }> = [];
+    const directus = { request: vi.fn(async () => rows) };
+    const couponsQueue = {
+      add: vi.fn(async (_n: string, data: unknown, opts: { jobId?: string }) => {
+        added.push({ data, opts });
+      }),
+    };
+    return { added, directus, couponsQueue, filter: directus.request };
+  }
+
+  it('enqueues coupons that were approved before delivery existed', async () => {
+    /*
+     * The reason this sweep has to exist. Delivery is triggered by the Approve
+     * click, which covers everything approved from now on and NOTHING approved
+     * earlier — thirteen coupons in this database, already granted to real
+     * customers, that no code path would ever have picked up.
+     */
+    const h = sweepHarness([
+      { id: 'ca-1', coupon_code: 'A' },
+      { id: 'ca-2', coupon_code: 'B' },
+    ]);
+    const queued = await runCouponDeliverySweep({
+      directus: h.directus as never,
+      logger,
+      couponsQueue: h.couponsQueue as never,
+    });
+    expect(queued).toBe(2);
+    // Same id the Approve click uses, so a coupon already waiting is not
+    // queued twice.
+    expect(h.added.map((a) => a.opts.jobId)).toEqual(['coupon-push-ca-1', 'coupon-push-ca-2']);
+  });
+
+  it('asks only for coupons that are owed and unanswered', async () => {
+    // The refusal check is what stops this becoming a loop: Yiji answers a
+    // settled "no" the same way every time.
+    const h = sweepHarness([]);
+    await runCouponDeliverySweep({
+      directus: h.directus as never,
+      logger,
+      couponsQueue: h.couponsQueue as never,
+    });
+    const arg = (h.filter as ReturnType<typeof vi.fn>).mock.calls[0]![0] as {
+      opts: { filter: Record<string, unknown> };
+    };
+    expect(arg.opts.filter).toMatchObject({
+      status: { _in: ['approved', 'edited'] },
+      yiji_coupon_user_id: { _null: true },
+      yiji_push_error: { _null: true },
+    });
+  });
+
+  it('survives a read failure without taking the worker down', async () => {
+    const h = sweepHarness([]);
+    h.directus.request = vi.fn(async () => {
+      throw new Error('directus down');
+    });
+    await expect(
+      runCouponDeliverySweep({
+        directus: h.directus as never,
+        logger,
+        couponsQueue: h.couponsQueue as never,
+      }),
+    ).resolves.toBe(0);
+  });
+});
+
+describe('an outage must not park a coupon', () => {
+  it('leaves yiji_push_error blank after a transient failure, so the sweep retries it', async () => {
+    /*
+     * The delivery sweep selects `yiji_push_error IS NULL`. If a timeout wrote
+     * a reason there, a coupon that is genuinely owed would sit behind an
+     * outage that cleared minutes later, waiting for somebody to notice. A
+     * refusal parks; an outage does not.
+     */
+    class RefusedError extends Error {
+      name = 'YijiRefusedError';
+      constructor(
+        readonly status: number,
+        readonly body: unknown,
+      ) {
+        super('refused');
+      }
+    }
+    const transient = deps({
+      postCoupon: vi.fn(async () => {
+        throw new Error('network error: socket hang up');
+      }) as never,
+    });
+    await expect(processCouponPushJob(job(), transient.deps)).rejects.toThrow(/socket hang up/);
+    expect(transient.patches).toHaveLength(0);
+
+    const refused = deps({
+      postCoupon: vi.fn(async () => {
+        throw new RefusedError(400, { result: 2, exceptionMessage: 'no' });
+      }) as never,
+    });
+    await expect(processCouponPushJob(job(), refused.deps)).resolves.toBe('refused');
+    expect(refused.patches).toHaveLength(1);
   });
 });

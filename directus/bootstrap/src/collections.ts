@@ -6,6 +6,7 @@
  */
 
 import {
+  COUPON_APPROVAL_STATUSES,
   CommunicationMethod,
   Compensation,
   ComplaintSource,
@@ -463,9 +464,16 @@ export const collections: CollectionSpec[] = [
       },
       { field: 'reason', type: 'text', note: 'Why the agent is asking. Read by the supervisor.' },
       {
+        /*
+         * Generated from the shared vocabulary, never retyped. The column used
+         * to list three states while the worker wrote a fourth (`assigned`, the
+         * moment Yiji accepts a coupon) and treated a fifth (`edited`) as
+         * approved — so the value that means "the customer actually has this"
+         * was not among the ones the console offered.
+         */
         field: 'status',
         type: 'string',
-        choices: ['pending', 'approved', 'rejected'],
+        choices: [...COUPON_APPROVAL_STATUSES],
         defaultValue: 'pending',
         index: true,
       },
@@ -495,7 +503,23 @@ export const collections: CollectionSpec[] = [
       {
         field: 'yiji_pushed_at',
         type: 'dateTime',
-        note: 'When Yiji accepted the coupon. Paired with yiji_coupon_user_id.',
+        note: 'When delivery was last ATTEMPTED. Paired with yiji_coupon_user_id on success, with yiji_push_error on failure.',
+      },
+      /**
+       * Why the coupon has not reached Yiji, in words a supervisor can act on.
+       *
+       * Their API refuses with an HTTP 400 carrying a reason
+       * ("User already have this coupon"), and retrying a settled answer only
+       * buries it. Without somewhere to put that reason, an undelivered coupon
+       * is indistinguishable on screen from one nobody has got to yet — which
+       * is precisely the silent-empty shape this codebase keeps finding.
+       *
+       * Cleared the moment a delivery succeeds.
+       */
+      {
+        field: 'yiji_push_error',
+        type: 'text',
+        note: 'Why the last delivery attempt failed. Null once the coupon has been delivered.',
       },
     ],
   },

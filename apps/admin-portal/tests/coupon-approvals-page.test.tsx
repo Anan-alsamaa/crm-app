@@ -39,6 +39,7 @@ const api = vi.hoisted(() => ({
   useCouponApprovals: vi.fn(),
   useDecideCoupon: vi.fn(),
   useSaveCouponTerms: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useRetryCouponDelivery: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 vi.mock('../src/features/coupon-approvals/api.js', () => api);
 
@@ -252,5 +253,65 @@ describe('CouponApprovalsPage', () => {
     renderPage();
     await user.click(screen.getByRole('button', { name: 'approved' }));
     await waitFor(() => expect(api.useCouponApprovals).toHaveBeenCalledWith('approved'));
+  });
+});
+
+describe('CouponApprovalsPage — did it actually reach the customer?', () => {
+  /*
+   * The decision and the delivery are different facts, and only one of them
+   * puts a coupon in somebody's app. Yiji refuses with a reason
+   * ("User already have this coupon") and the push records it rather than
+   * retrying a settled answer — so without this on screen, a refused coupon
+   * looks exactly like one the worker has not got to yet, and an agent tells a
+   * customer about compensation that does not exist.
+   */
+  const approved = { ...pending, status: 'approved' as const, decided_at: '2026-08-24T10:00:00Z' };
+
+  it('shows the Yiji reference once the coupon has actually been delivered', async () => {
+    api.useCouponApprovals.mockReturnValue({
+      data: [{ ...approved, yiji_coupon_user_id: '21117' }],
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    expect(screen.getByText(/delivered to yiji/i)).toBeInTheDocument();
+    expect(screen.getByText(/21117/)).toBeInTheDocument();
+  });
+
+  it('says it is still waiting when nothing has been attempted', async () => {
+    api.useCouponApprovals.mockReturnValue({ data: [approved], isLoading: false });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    expect(screen.getByText(/waiting to be sent to yiji/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /try again/i })).not.toBeInTheDocument();
+  });
+
+  it("shows Yiji's own words when it refused, and offers the only action that helps", async () => {
+    const retryMutate = vi.fn();
+    api.useRetryCouponDelivery.mockReturnValue({ mutate: retryMutate, isPending: false });
+    api.useCouponApprovals.mockReturnValue({
+      data: [{ ...approved, yiji_push_error: 'User already have this coupon' }],
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    expect(screen.getByText(/user already have this coupon/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /try again/i }));
+    expect(retryMutate).toHaveBeenCalledWith('ca1');
+  });
+
+  it('says nothing about delivery for a REJECTED coupon, which was never going', async () => {
+    api.useCouponApprovals.mockReturnValue({
+      data: [{ ...pending, status: 'rejected' as const, decided_at: '2026-08-24T10:00:00Z' }],
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    expect(screen.queryByText(/waiting to be sent to yiji/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/delivered to yiji/i)).not.toBeInTheDocument();
   });
 });

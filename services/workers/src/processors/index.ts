@@ -28,6 +28,7 @@ import {
 import { processImportJob, type ImportsDeps } from './imports.js';
 import { processReportJob, type ReportsDeps } from './reports.js';
 import { processCouponPushJob } from './coupon-push.js';
+export { runCouponDeliverySweep } from './coupon-push.js';
 import { processCustomerPushJob } from './customer-push.js';
 import { handleRouting } from '../routing.js';
 import {
@@ -64,6 +65,27 @@ export type Processor = (job: Job, deps: ProcessorDeps) => Promise<void>;
  * Rebuilt per job it would sign into Yiji again on every coupon — a login per
  * delivery, and a burst of them the moment a supervisor approves a batch.
  */
+/**
+ * COUPON DELIVERY IS OFF UNTIL SOMEBODY TURNS IT ON.
+ *
+ * Every other integration in this service is safe to have running: the worst a
+ * misconfigured one does is fail. This one hands real money to real customers,
+ * and it works from a BACKLOG — the delivery sweep picks up everything approved
+ * and undelivered, so the first tick after it goes live sends all of them at
+ * once.
+ *
+ * That must be a decision somebody makes, not a side effect of restarting a
+ * worker on a laptop. The credential cannot be the switch, because it is shared
+ * with the order status-history integration that has been live for weeks.
+ *
+ * Off unless `YIJI_COUPON_DELIVERY` is exactly `on`. Everything else still
+ * runs: approvals are recorded, jobs are queued, and each one reports
+ * `disabled` and stays `approved` — which is the honest state, and exactly what
+ * the console now shows as "waiting to be sent to Yiji".
+ */
+const couponDeliveryEnabled =
+  (process.env.YIJI_COUPON_DELIVERY ?? '').trim().toLowerCase() === 'on';
+
 const yijiAdminPoster = createYijiAdminPoster({
   apiUrl: process.env.YIJI_API_URL ?? '',
   adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
@@ -184,7 +206,7 @@ export const processors: Record<QueueName, Processor> = {
        * it expires. `null` when the credential is absent, which leaves the
        * request `approved` rather than pretending it was delivered.
        */
-      postCoupon: yijiAdminPoster ?? undefined,
+      postCoupon: (couponDeliveryEnabled ? yijiAdminPoster : null) ?? undefined,
       // Yiji's API is multi-tenant and routes on this header. Defaulted to the
       // tenant the captured request used rather than left blank: a missing
       // tenant is a refusal Yiji reports as a 200, which is the hardest kind

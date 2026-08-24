@@ -11,7 +11,24 @@
  * writes. They never talk to Directus.
  */
 
-export const COUPON_APPROVAL_STATUSES = ['pending', 'approved', 'rejected'] as const;
+/**
+ * DERIVED, not retyped. There is one list of coupon states and this is a view
+ * of it.
+ *
+ * This constant used to be its own hand-written `['pending','approved',
+ * 'rejected']` while `CouponRequestStatus` next door carried five values — and
+ * the two disagreed about the two that matter most. The worker writes
+ * `assigned` the moment Yiji accepts a coupon, and reads `edited` as approved;
+ * neither existed here, so the admin console's own type said a state its data
+ * would routinely be in was impossible, and `TONE[row.status]` fell through to
+ * a default for the one status that means the customer actually has something.
+ *
+ * The Directus `choices` for this column are generated from the same list, so
+ * the three places that have to agree cannot drift apart again.
+ */
+import { CouponRequestStatus } from './coupon-request.js';
+
+export const COUPON_APPROVAL_STATUSES = CouponRequestStatus.options;
 export type CouponApprovalStatus = (typeof COUPON_APPROVAL_STATUSES)[number];
 
 /** The coupon fields as the ticket form holds them (strings from inputs). */

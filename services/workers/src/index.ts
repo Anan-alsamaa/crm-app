@@ -20,6 +20,7 @@ import {
   processors,
   scheduleReconcile,
   scheduleInactivitySweep,
+  runCouponDeliverySweep,
   syncScheduledReports,
   type ProcessorDeps,
 } from './processors/index.js';
@@ -104,6 +105,32 @@ async function main(): Promise<void> {
   const inactivityMinutes = Number(process.env.INACTIVITY_MINUTES ?? 120);
   await scheduleInactivitySweep(queues[QUEUES.automation], 5 * 60_000);
   logger.info({ inactivityMinutes }, 'inactivity sweep scheduled (every 5m)');
+
+  /*
+   * Recurring coupon delivery sweep.
+   *
+   * The supervisor's Approve click enqueues one job, deliberately
+   * fire-and-forget so their decision cannot fail because Redis is down. This
+   * is the safety net under that: anything approved and still undelivered gets
+   * picked up, including the coupons approved before the integration existed.
+   * See runCouponDeliverySweep for why a recorded refusal is left alone.
+   */
+  const couponSweep = async () => {
+    // Nothing to sweep for when delivery is off — the jobs would all report
+    // `disabled`, which is just noise in the queue and the log.
+    if ((process.env.YIJI_COUPON_DELIVERY ?? '').trim().toLowerCase() !== 'on') return;
+    await runCouponDeliverySweep({
+      directus,
+      logger,
+      couponsQueue: queues[QUEUES.coupons],
+    }).catch((err) => logger.warn({ err: (err as Error).message }, 'coupon delivery sweep failed'));
+  };
+  void couponSweep();
+  const couponSweepTimer = setInterval(() => void couponSweep(), 5 * 60_000);
+  logger.info(
+    { enabled: (process.env.YIJI_COUPON_DELIVERY ?? '').trim().toLowerCase() === 'on' },
+    'coupon delivery sweep scheduled (every 5m) — set YIJI_COUPON_DELIVERY=on to send',
+  );
 
   // Scheduled reports (§16/§18): register a BullMQ Job Scheduler per report that
   // has a `schedule.cron`, so BullMQ fires it and the reports worker generates +
@@ -243,6 +270,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'shutting down — draining workers');
     clearInterval(reportSyncTimer);
+    clearInterval(couponSweepTimer);
     await Promise.all(workers.map((w) => w.close()));
     await Promise.all(Object.values(queues).map((q) => q.close()));
     await app.close();

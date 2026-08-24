@@ -446,6 +446,49 @@ function byNewest(a: YijiOrder, b: YijiOrder): number {
  * is a claim about us, and an agent needs to know which one they are reading
  * before they say it out loud to somebody.
  */
+/**
+ * Yiji ANSWERED, and the answer was no.
+ *
+ * Separate from `YijiUnavailableError` because the two need opposite handling
+ * and conflating them costs real money either way round. Their API returns
+ * refusals as **HTTP 400 with a JSON body** — verified live:
+ *
+ *   400 {"result":2,"exceptionMessage":"User already have this coupon", ...}
+ *
+ * Retrying that is pointless: the answer will be the same in ten seconds and in
+ * ten hours, and the retries bury the one message that explains why nothing
+ * arrived. Retrying a 502 or a timeout, by contrast, is exactly right.
+ *
+ * Carries the PARSED body so the caller can read the endpoint-specific verdict
+ * out of it rather than regex a string.
+ */
+export class YijiRefusedError extends Error {
+  readonly status: number;
+  readonly body: unknown;
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.name = 'YijiRefusedError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
+/**
+ * Identified by SHAPE, not `instanceof`.
+ *
+ * In a pnpm workspace the same package can be instantiated more than once —
+ * the worker's copy and a caller's copy — and `instanceof` then answers false
+ * for an error that is, for every purpose that matters, exactly this one. The
+ * cost of getting that wrong here is retrying a settled refusal five times, so
+ * the check tests what the value IS rather than where its constructor came
+ * from.
+ */
+export function isYijiRefused(err: unknown): err is YijiRefusedError {
+  if (err instanceof YijiRefusedError) return true;
+  const e = err as { name?: unknown; status?: unknown } | null;
+  return !!e && e.name === 'YijiRefusedError' && typeof e.status === 'number';
+}
+
 export class YijiUnavailableError extends Error {
   readonly isYijiUnavailable = true;
   constructor(message: string, opts?: { cause?: unknown }) {
@@ -602,13 +645,31 @@ export class HttpYijiClient implements YijiClient {
           continue;
         }
         if (!res.ok) {
-          const detail = await res.text().catch(() => '');
+          /*
+           * A 4xx is Yiji's CONSIDERED ANSWER, not a sick upstream. The body
+           * carries the reason, so it is parsed rather than stringified — and
+           * raised as a refusal, which the caller must not retry.
+           *
+           * 5xx and anything unparseable stay `YijiUnavailableError`: those are
+           * the failures where trying again is the right move.
+           */
+          const raw = await res.text().catch(() => '');
+          let parsed: unknown = null;
+          try {
+            parsed = raw ? JSON.parse(raw) : null;
+          } catch {
+            /* not JSON — fall through to the unavailable path */
+          }
+          if (res.status >= 400 && res.status < 500 && parsed) {
+            throw new YijiRefusedError(`admin ${path} refused (${res.status})`, res.status, parsed);
+          }
           throw new YijiUnavailableError(
-            `admin upstream ${res.status} for ${path}: ${detail.slice(0, 300)}`,
+            `admin upstream ${res.status} for ${path}: ${raw.slice(0, 300)}`,
           );
         }
         return (await res.json()) as T;
       } catch (err) {
+        if (err instanceof YijiRefusedError) throw err;
         if (err instanceof YijiUnavailableError) throw err;
         const reason =
           err instanceof Error && err.name === 'AbortError'
