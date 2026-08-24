@@ -149,7 +149,16 @@ export interface ComplaintRow {
   agentName: string;
   restaurantName: string;
   brandName: string;
+  /**
+   * The AREA MANAGER responsible for the branch — a person, not a place.
+   *
+   * Named `area` because that is the operations sheet's own column name and
+   * every export, filter and column order keys on it. The dashboard says "area
+   * manager" out loud instead, which is what it has always held.
+   */
   area: string;
+  /** The CHAIN MANAGER above them — the next line of accountability. */
+  chain: string;
   city: string;
   complaintType: string;
   serviceType: string;
@@ -212,7 +221,14 @@ export interface ComplaintMetrics {
   byType: Cut;
   byBrand: Cut;
   byArea: Cut;
+  /** Grouped by chain manager — the level above the area manager. */
+  byChain: Cut;
   byCity: Cut;
+  /**
+   * The area manager whose estate is most widely affected, measured in BRANCHES
+   * rather than tickets. Null when no ticket carries a branch.
+   */
+  widestArea: { manager: string; branches: number; estate: number } | null;
   byStatus: Cut;
   byServiceType: Cut;
   bySource: Cut;
@@ -523,6 +539,8 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         brandId: string | null;
         brandName: string;
         area: string;
+        /** The chain manager above the area manager. */
+        chain: string;
         city: string;
       };
       const rows: Row[] = [];
@@ -534,6 +552,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         let brandId: string | null = null;
         let brandName = '';
         let area = '';
+        let chain = '';
         let city = '';
 
         // What was frozen onto the ticket WINS over the live store row. The
@@ -549,7 +568,32 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
           // filter, and a renamed brand is still the same brand.
           brandId = (frozen.storeId ? storeById.get(frozen.storeId)?.brand?.id : null) ?? null;
           brandName = frozen.brandName;
-          area = frozen.areaManager;
+          /*
+           * THE MANAGER COMES FROM THE BRANCH MASTER, NOT THE SNAPSHOT.
+           *
+           * Everything else here is deliberately frozen: a brand renamed today
+           * must not rewrite what last month's tickets say. The manager is the
+           * exception, for two reasons.
+           *
+           * It is WRONG in the snapshot. Measured on live data: 43 tickets
+           * carry "Mo'men Elsharkasy" as their area manager, spread across
+           * branches whose master records name Jestoni Tejo, Ahmed Nouh,
+           * Mostafa Alsayeed, Eslam Saeed and Moamen Tag AlDin. One value was
+           * stamped across an import. Not one of the snapshot names even
+           * EXISTS in the store master — "FAHAD MOUSTAFA" against "Fahd
+           * Moustafa", "Khaled Abdellah" against "Khaled Abdella Mohamed" — so
+           * any count grouped by it was a count of a name nobody answers to.
+           *
+           * And the question is different. Brand attribution asks "what was
+           * true then"; an operations dashboard asks "who do I talk to about
+           * this branch NOW", and that is today's manager by definition. A
+           * frozen name would send an area manager to somebody else's branches.
+           *
+           * The snapshot is still the fallback, because a name is better than a
+           * blank when the branch cannot be resolved at all.
+           */
+          area = direct?.area_manager || frozen.areaManager;
+          chain = direct?.chain_manager ?? '';
           city = frozen.city;
         } else if (direct) {
           storeId = direct.id;
@@ -557,6 +601,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
           brandId = direct.brand?.id ?? null;
           brandName = direct.brand?.name ?? '';
           area = direct.area_manager ?? '';
+          chain = direct.chain_manager ?? '';
           city = direct.city ?? '';
         } else if (tk.order_snapshot) {
           const m = matchStore(storeIndex, {
@@ -569,6 +614,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
             restaurantName = [m.store.code, m.store.name].filter(Boolean).join(' ');
             brandId = storeById.get(m.store.id)?.brand?.id ?? null;
             area = m.areaManager;
+            chain = storeById.get(m.store.id)?.chain_manager ?? '';
             city = m.city;
           } else {
             // Keep the order's own wording so the branch is at least named.
@@ -584,7 +630,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         if (filters.city && city !== filters.city) continue;
         if (filters.store && storeId !== filters.store) continue;
 
-        rows.push({ ...tk, storeId, restaurantName, brandId, brandName, area, city });
+        rows.push({ ...tk, storeId, restaurantName, brandId, brandName, area, chain, city });
       }
 
       // ── KPIs ────────────────────────────────────────────────────────────
@@ -605,7 +651,20 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       const byType = new Map<string, number>();
       const byBrand = new Map<string, number>();
       const byArea = new Map<string, number>();
+      const byChain = new Map<string, number>();
       const byCity = new Map<string, number>();
+      /*
+       * Which BRANCHES each area manager has trouble in, as a set rather than a
+       * count of tickets.
+       *
+       * Breadth, not volume — and the distinction is the whole reason this is
+       * here. Nothing in this data records how much business a branch did, so a
+       * ticket count says a big branch is worse than a small one. "Eleven of
+       * your eighteen branches have a complaint this fortnight" survives that
+       * objection: it is a statement about spread, which is the thing an area
+       * manager can actually act on.
+       */
+      const branchesByArea = new Map<string, Set<string>>();
       const byStatus = new Map<string, number>();
       const byServiceType = new Map<string, number>();
       const bySource = new Map<string, number>();
@@ -675,7 +734,13 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         bump(byType, r.complaint_type);
         bump(byBrand, r.brandName);
         bump(byArea, r.area);
+        bump(byChain, r.chain);
         bump(byCity, r.city);
+        if (r.area && r.restaurantName) {
+          const set = branchesByArea.get(r.area) ?? new Set<string>();
+          set.add(r.restaurantName);
+          branchesByArea.set(r.area, set);
+        }
         bump(byStatus, r.status);
         bump(byServiceType, r.service_type);
         bump(bySource, r.complaint_source);
@@ -690,6 +755,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
           restaurantName: r.restaurantName,
           brandName: r.brandName,
           area: r.area,
+          chain: r.chain,
           city: r.city,
           complaintType: r.complaint_type ?? '',
           serviceType: r.service_type ?? '',
@@ -865,7 +931,28 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         byType: topN(byType, 12),
         byBrand: topN(byBrand, 10),
         byArea: topN(byArea, 10),
+        byChain: topN(byChain, 10),
         byCity: topN(byCity, 10),
+        /*
+         * The area manager with the widest spread, and how much of their
+         * estate it covers. `estate` comes from the store master, not from the
+         * tickets, so "3 of 18" stays honest when only three branches have
+         * complained.
+         */
+        widestArea: (() => {
+          let best: { manager: string; branches: number; estate: number } | null = null;
+          for (const [manager, set] of branchesByArea) {
+            if (!manager) continue;
+            if (!best || set.size > best.branches) {
+              best = {
+                manager,
+                branches: set.size,
+                estate: storeRows.filter((s) => s.area_manager === manager).length,
+              };
+            }
+          }
+          return best;
+        })(),
         byStatus: topN(byStatus, 10),
         byServiceType: topN(byServiceType, 8),
         bySource: topN(bySource, 8),

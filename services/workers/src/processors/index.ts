@@ -3,6 +3,7 @@ import type { Logger } from 'pino';
 import {
   QUEUES,
   createYijiAdminPoster,
+  createYijiOrderReader,
   type QueueName,
   type NotificationJob,
   type SlaJob,
@@ -85,6 +86,19 @@ export type Processor = (job: Job, deps: ProcessorDeps) => Promise<void>;
  */
 const couponDeliveryEnabled =
   (process.env.YIJI_COUPON_DELIVERY ?? '').trim().toLowerCase() === 'on';
+
+/**
+ * Reads Yiji's own record of an order, for the coupon payload.
+ *
+ * Built once alongside the poster. Read-only, and the coupon push treats a
+ * failure here as "less corroboration", never as a reason not to deliver.
+ */
+const yijiOrderReader = createYijiOrderReader({
+  apiUrl: process.env.YIJI_API_URL ?? '',
+  adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
+  adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
+  adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
+});
 
 const yijiAdminPoster = createYijiAdminPoster({
   apiUrl: process.env.YIJI_API_URL ?? '',
@@ -207,6 +221,7 @@ export const processors: Record<QueueName, Processor> = {
        * request `approved` rather than pretending it was delivered.
        */
       postCoupon: (couponDeliveryEnabled ? yijiAdminPoster : null) ?? undefined,
+      readOrder: yijiOrderReader ?? undefined,
       // Yiji's API is multi-tenant and routes on this header. Defaulted to the
       // tenant the captured request used rather than left blank: a missing
       // tenant is a refusal Yiji reports as a 200, which is the hardest kind

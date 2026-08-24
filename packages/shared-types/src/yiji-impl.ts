@@ -728,6 +728,36 @@ export class HttpYijiClient implements YijiClient {
     }
   }
 
+  /**
+   * The coupon-shaped view of an order.
+   *
+   * Reads the same endpoint as `getOrder` but keeps the RAW fields, because a
+   * coupon needs Yiji's own ids and their own phone formatting — the mapped
+   * `YijiOrder` deliberately drops `userId` and `brandId`, which no other
+   * caller wanted.
+   *
+   * Null on 404 (`fetch` returns null), so a missing order is distinguishable
+   * from an unreachable API, which throws.
+   */
+  async getCouponOrderContext(orderId: string): Promise<CouponOrderContext | null> {
+    const raw = await this.fetch<RawYijiOrder & Record<string, unknown>>(
+      `/api/Order/GetOrderAsync/${encodeURIComponent(orderId)}`,
+    );
+    if (!raw) return null;
+    const num = (v: unknown): number | undefined =>
+      typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+    const str = (v: unknown): string | undefined =>
+      typeof v === 'string' && v.trim() ? v.trim() : undefined;
+    return {
+      userId: str(raw.userId),
+      customerPhone: str(raw.customerPhoneNumber),
+      customerName: str(raw.customerName),
+      restaurantId: num(raw.restaurantId),
+      brandId: num(raw.brandId),
+      tenantId: num(raw.tenantId),
+    };
+  }
+
   async getOrder(_vendorId: string, orderId: string): Promise<YijiOrder | null> {
     const raw = await this.fetch<RawYijiOrder>(
       `/api/Order/GetOrderAsync/${encodeURIComponent(orderId)}`,
@@ -847,6 +877,53 @@ export interface YijiClientEnv {
   adminPassword?: string;
   /** Override the mock fixtures (tests only). */
   mockFixtures?: MockFixtures;
+}
+
+/**
+ * What a COUPON needs to know about an order, taken from Yiji's own record.
+ *
+ * Deliberately not folded into `YijiOrder`. That shape is consumed by the
+ * inbox, the order panel and the timeline, and widening it for one caller's
+ * needs makes every consumer carry fields it will never read. This is the
+ * coupon's question, asked in the coupon's terms.
+ *
+ * Everything here is THEIR value for THEIR namespace, which is the whole point:
+ * our `brand_id` says "Casa Pasta" and our `restaurant_id` says "store-4", and
+ * neither means anything on their side. `userId` is the one that matters most —
+ * it is the customer id we could not otherwise obtain, because their API has no
+ * lookup by phone, and it is sitting on the order all along.
+ */
+export interface CouponOrderContext {
+  /** Yiji's customer id — a GUID. What their `userId` field wants. */
+  userId?: string;
+  /** In THEIR format, `+9665XXXXXXXX`. Sent verbatim rather than reformatted. */
+  customerPhone?: string;
+  customerName?: string;
+  /** Numeric ids in Yiji's namespace, not ours. */
+  restaurantId?: number;
+  brandId?: number;
+  tenantId?: number;
+}
+
+/** Reads the coupon context for one order, or null when it cannot be found. */
+export type YijiOrderReader = (orderId: string) => Promise<CouponOrderContext | null>;
+
+/**
+ * Build a reader for the order API, or null when no base URL is configured.
+ *
+ * Mirrors `createYijiAdminPoster`: the caller holds a function, not a client,
+ * and cannot accidentally reach the rest of the API through it.
+ */
+export function createYijiOrderReader(env: YijiClientEnv = {}): YijiOrderReader | null {
+  if (!env.apiUrl?.trim()) return null;
+  const client = new HttpYijiClient({
+    baseUrl: env.apiUrl,
+    token: env.token,
+    adminUrl: env.adminApiUrl,
+    adminEmail: env.adminEmail,
+    adminPassword: env.adminPassword,
+  });
+  return (orderId) => client.getCouponOrderContext(orderId);
 }
 
 /**

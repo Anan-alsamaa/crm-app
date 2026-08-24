@@ -903,7 +903,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
               counting a thing: what customers are actually complaining about,
               which is what a branch, area or chain manager goes and fixes. */}
           {view === 'operations' && (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
               {/* The thing to go and FIX. Named, because "66" is a number to
                   look up and "66 — Cleanness" is this week's job. */}
               <Kpi
@@ -953,6 +953,53 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                         )(ops.topService!)
                     : undefined
                 }
+              />
+              {/* WHOSE ESTATE, and how much of it.
+                  Branches, not tickets — deliberately. Nothing in this data
+                  records how much business a branch did, so a ticket count says
+                  a big branch is worse than a small one, which is the objection
+                  that retired every count this strip used to carry. "11 of 18
+                  branches" survives it: spread is a statement an area manager
+                  can act on, and it names the person to act. */}
+              <Kpi
+                tone="sky"
+                icon={<UsersIcon size={17} />}
+                order={2}
+                /* "3 of 18" only when the estate is genuinely known. A manager
+                   whose name is not in the branch master has no estate to
+                   divide by, and "22/—" reads as a broken number rather than a
+                   missing one. */
+                value={
+                  d.widestArea
+                    ? d.widestArea.estate > 0
+                      ? `${d.widestArea.branches}/${d.widestArea.estate}`
+                      : String(d.widestArea.branches)
+                    : '—'
+                }
+                label={t('complaintDash.opsWidestArea', {
+                  defaultValue: 'Area manager most affected',
+                })}
+                sub={
+                  d.widestArea
+                    ? d.widestArea.estate > 0
+                      ? `${d.widestArea.manager} · ${t('complaintDash.opsOfBranches', {
+                          count: d.widestArea.estate,
+                          defaultValue: 'of {{count}} branches',
+                        })}`
+                      : d.widestArea.manager
+                    : String(t('complaintDash.notMeasured', { defaultValue: 'Not measured yet' }))
+                }
+                onOpen={(() => {
+                  // Narrowed once, outside the callback: the drill needs a
+                  // Breakdown, and `key` is what the filter matches on.
+                  const w = d.widestArea;
+                  if (!w) return undefined;
+                  return () =>
+                    drillInto(
+                      String(t('complaintDash.byArea', { defaultValue: 'By area manager' })),
+                      (r) => r.area,
+                    )({ key: w.manager, label: w.manager, count: w.branches });
+                })()}
               />
             </div>
           )}
@@ -1339,16 +1386,39 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             )}
             {view === 'operations' && (
               <CutCard
-                title={t('complaintDash.byArea', { defaultValue: 'By area' })}
+                /* "By area" for a column that has always held a PERSON. The
+                   hint underneath said "the area manager responsible for the
+                   branch" while the title said area, so the one thing an
+                   operations reader wants — who do I talk to — was the one
+                   thing the heading hid. */
+                title={t('complaintDash.byArea', { defaultValue: 'By area manager' })}
                 hint={t('complaintDash.byAreaHint', {
-                  defaultValue: 'The area manager responsible for the branch.',
+                  defaultValue: 'Who is responsible for the branch the ticket came from.',
                 })}
                 cut={d.byArea}
                 total={d.total}
                 color="bg-primary"
                 onSelect={drillInto(
-                  t('complaintDash.byArea', { defaultValue: 'By area' }),
+                  t('complaintDash.byArea', { defaultValue: 'By area manager' }),
                   (r) => r.area,
+                )}
+              />
+            )}
+            {view === 'operations' && (
+              <CutCard
+                /* The line above the area manager. An area manager fixes a
+                   branch; a chain manager is who you go to when the same thing
+                   is happening across several areas. */
+                title={t('complaintDash.byChain', { defaultValue: 'By chain manager' })}
+                hint={t('complaintDash.byChainHint', {
+                  defaultValue: 'The manager above the area — for problems that span areas.',
+                })}
+                cut={d.byChain}
+                total={d.total}
+                color="bg-violet-500"
+                onSelect={drillInto(
+                  t('complaintDash.byChain', { defaultValue: 'By chain manager' }),
+                  (r) => r.chain,
                 )}
               />
             )}

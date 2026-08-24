@@ -628,3 +628,96 @@ describe('a coupon marked never-send is inert', () => {
     expect(arg.opts.filter).toMatchObject({ delivery_excluded: { _neq: true } });
   });
 });
+
+describe("the payload carries YIJI's own values for the order", () => {
+  /*
+   * Read back from a real order on their API, not assumed:
+   *   userId              "3e681e9e-2178-495b-8526-0bba25b17182"  (a GUID)
+   *   customerPhoneNumber "+966503813055"                          (E.164)
+   *   restaurantId        107          brandId 1        tenantId 1
+   *
+   * Every one of those is a value we either could not obtain or hold in a
+   * different namespace, and they were sitting on the order all along.
+   */
+  const ORDER = {
+    userId: '3e681e9e-2178-495b-8526-0bba25b17182',
+    customerPhone: '+966503813055',
+    customerName: '34219503813055@AFCO.com',
+    restaurantId: 107,
+    brandId: 1,
+    tenantId: 1,
+  };
+
+  it('takes the customer id from the ORDER — we cannot get it any other way', () => {
+    // Their API has no lookup by phone, and 0 of 13 approvals here carried an
+    // external_customer_id. The order is the only route to it.
+    const p = yijiCouponPayload(
+      { ...ROW, contact: { ...ROW.contact!, external_customer_id: null } },
+      ORDER,
+    ) as { couponUser: Record<string, unknown> };
+    expect(p.couponUser.userId).toBe(ORDER.userId);
+  });
+
+  it('sends the phone in THEIR format, not ours', () => {
+    /*
+     * We store `05…` because that is what people say and type; Yiji stores
+     * `+9665…`. A coupon lands in their system, so it goes in their shape.
+     */
+    const p = yijiCouponPayload(ROW, ORDER) as { couponUser: Record<string, unknown> };
+    expect(p.couponUser.customerPhone).toBe('+966503813055');
+  });
+
+  it('converts our stored number when the order lookup gave nothing', () => {
+    const p = yijiCouponPayload(
+      { ...ROW, contact: { ...ROW.contact!, phone: '0503813055' } },
+      null,
+    ) as { couponUser: Record<string, unknown> };
+    expect(p.couponUser.customerPhone).toBe('+966503813055');
+  });
+
+  it('uses THEIR brand and branch ids, and only when the order supplied them', () => {
+    /*
+     * Ours are "Casa Pasta" and "store-4" — meaningless on their side, which is
+     * why they used to be omitted entirely. A wrong number here would scope the
+     * coupon to somebody else's branch, so it is sent only when it came from
+     * the order itself.
+     */
+    const withOrder = yijiCouponPayload(ROW, ORDER) as {
+      couponUser: { coupon: Record<string, unknown> };
+    };
+    expect(withOrder.couponUser.coupon.restaurantId).toBe(107);
+    expect(withOrder.couponUser.coupon.brandId).toBe(1);
+
+    const without = yijiCouponPayload(ROW, null) as {
+      couponUser: { coupon: Record<string, unknown> };
+    };
+    expect(without.couponUser.coupon).not.toHaveProperty('restaurantId');
+    expect(without.couponUser.coupon).not.toHaveProperty('brandId');
+  });
+
+  it('still delivers when the order cannot be read at all', async () => {
+    // Everything the lookup adds is corroboration the endpoint can derive from
+    // orderId itself. Refusing to deliver an approved coupon because a
+    // read-only enrichment call timed out would be the wrong trade by a
+    // distance.
+    const {
+      deps: d,
+      patches,
+      postCoupon,
+    } = deps({
+      readOrder: vi.fn(async () => {
+        throw new Error('order api unreachable');
+      }) as never,
+    });
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('delivered');
+    expect(postCoupon).toHaveBeenCalled();
+    expect(patches[0]).toMatchObject({ status: 'assigned' });
+  });
+
+  it('asks about the order the ticket actually names', async () => {
+    const readOrder = vi.fn(async () => ORDER);
+    const { deps: d } = deps({ readOrder: readOrder as never });
+    await processCouponPushJob(job(), d);
+    expect(readOrder).toHaveBeenCalledWith('1187929');
+  });
+});

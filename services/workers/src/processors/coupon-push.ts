@@ -1,9 +1,15 @@
 import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
 import { readItem, readItems, updateItem } from '@directus/sdk';
-import type { CouponPushJob, YijiAdminPoster } from '@yiji/shared-types';
+import type {
+  CouponOrderContext,
+  CouponPushJob,
+  YijiAdminPoster,
+  YijiOrderReader,
+} from '@yiji/shared-types';
 import {
   couponWindow,
+  internationalPhone,
   isPhoneDerivedCustomerId,
   isYijiRefused,
   isYijiUnavailable,
@@ -55,6 +61,15 @@ export interface CouponPushDeps {
    * that talks to the same host — and so this processor never holds a secret.
    */
   postCoupon?: YijiAdminPoster;
+  /**
+   * Reads Yiji's own record of the order, for the customer id, their phone
+   * formatting and their brand/restaurant ids — see `yijiCouponPayload`.
+   *
+   * Optional, and a failure here never blocks delivery: the order id alone is
+   * enough for the endpoint to resolve the customer, so a coupon still goes
+   * with less corroboration rather than not at all.
+   */
+  readOrder?: YijiOrderReader;
   /**
    * Yiji's `tenantid` header. Their API is multi-tenant and mis-routes a call
    * without it; the captured request sends `1`.
@@ -112,48 +127,65 @@ function num(v: number | string | null | undefined): number | null {
 /**
  * The body Yiji receives, shaped to `CreateCouponUserFromOrder`.
  *
- * The field names are no longer a guess: they come from Yiji's own schema and
- * from a captured request that returned `result: 1`. The endpoint attaches a
- * coupon to ONE ORDER, which is exactly what this business grants — a coupon
- * because a specific order went wrong.
+ * The field names come from Yiji's own schema and from a captured request that
+ * returned `result: 1`. The endpoint attaches a coupon to ONE ORDER, which is
+ * exactly what this business grants — a coupon because a specific order went
+ * wrong.
  *
- * THE ORDER IS THE KEY. The captured call sends `orderId` and no `userId` at
- * all, and the endpoint is named FromOrder: Yiji resolves the customer from
- * the order it already owns. So the order is required and the customer id is
- * not — sending our `external_customer_id` when we hold one is extra
- * corroboration, not the address. Requiring it would have blocked 18 of the 19
- * approvals in this database, which is how a correct-looking guard becomes an
- * outage.
+ * THE ORDER IS THE KEY, and it is also the SOURCE. Yiji's own record of the
+ * order carries the customer id, the customer's phone in their formatting, and
+ * their numeric brand and restaurant ids — all read back before this is built
+ * (see `CouponOrderContext`). Preferring their values over ours is not
+ * politeness, it is the difference between a field that matches and one that
+ * merely looks filled in:
+ *
+ *   userId        their GUID. We could not otherwise obtain it — their API has
+ *                 no lookup by phone — and 0 of 13 approvals here carried one.
+ *                 It was sitting on the order the whole time.
+ *   customerPhone `+9665XXXXXXXX`, confirmed by reading a real order back. We
+ *                 store `05…` because that is what people say and type, so it
+ *                 is converted rather than sent as we hold it.
+ *   restaurantId  numbers in THEIR namespace (107, 1). Ours are "store-4" and
+ *                 "Casa Pasta", which is why they used to be omitted entirely.
+ *   brandId       Sending a wrong number here would scope the coupon to
+ *                 somebody else's branch, so it is sent only when it came FROM
+ *                 the order.
  *
  * `couponId: 0` because we are not redeeming a catalogue entry Yiji already
  * holds; we are asking it to create a compensation coupon. The TERMS the
- * supervisor approved therefore have to travel with the request — under
- * `couponUser.coupon`, which is where Yiji's schema defines them. Leaving them
- * out would mean a supervisor approves 25 SAR and the customer receives
- * whatever Yiji's default happens to be, with nothing on either side recording
- * the difference.
- *
- * What is deliberately NOT sent: our brand and restaurant ids. Yiji's schema
- * has `brandId` and `restaurantId` as numbers in ITS namespace; ours are CRM
- * identifiers their side cannot resolve, and a wrong id is worse than none —
- * it would scope the coupon to somebody else's branch.
+ * supervisor approved therefore travel under `couponUser.coupon`, or a
+ * supervisor approves 25 SAR and the customer receives whatever their default
+ * happens to be.
  */
-export function yijiCouponPayload(row: CouponApprovalRow): Record<string, unknown> {
+export function yijiCouponPayload(
+  row: CouponApprovalRow,
+  /**
+   * Yiji's own record of the order. Absent when the lookup failed or is not
+   * configured — the push still goes, because the order id alone is enough for
+   * the endpoint to resolve the customer; it just carries less corroboration.
+   */
+  order?: CouponOrderContext | null,
+): Record<string, unknown> {
   const orderId = num(row.ticket?.order_id ?? null);
   const window = row.valid_from && row.valid_to ? couponWindow(row.valid_from, row.valid_to) : null;
   const amount = num(row.coupon_value);
   const percent = num(row.coupon_percent);
   const cap = num(row.max_discount);
   const limit = num(row.usage_limit) ?? 1;
+
   /*
-   * Only an id YIJI issued. A walk-in contact used to carry `cust-<digits>` —
-   * minted by our own gateway from a typed phone number — in the column that
-   * means "their id in Yiji". Sending that would hand their resolver a value
-   * we invented and dress it as an account. The gateway no longer writes them,
-   * and this refuses to send one that predates that fix.
+   * Their id first, ours only if it is genuinely theirs.
+   *
+   * `external_customer_id` is null for every walk-in and was, for a while,
+   * filled with a `cust-<digits>` handle our own gateway minted — which is why
+   * this refuses anything phone-derived rather than trusting the column.
    */
   const stored = row.contact?.external_customer_id?.trim();
-  const yijiUserId = stored && !isPhoneDerivedCustomerId(stored) ? stored : undefined;
+  const yijiUserId =
+    order?.userId ?? (stored && !isPhoneDerivedCustomerId(stored) ? stored : undefined);
+
+  // Theirs verbatim — it is already in their format — else ours, converted.
+  const phone = order?.customerPhone ?? internationalPhone(row.contact?.phone) ?? undefined;
 
   return {
     id: 0,
@@ -170,12 +202,13 @@ export function yijiCouponPayload(row: CouponApprovalRow): Record<string, unknow
       couponCode: row.coupon_code ?? '',
       couponName: row.title ?? '',
       compensationReason: row.reason ?? '',
-      // So a Yiji-side reader can identify the customer without joining back.
-      customerName: row.contact?.name ?? '',
-      customerPhone: row.contact?.phone ?? '',
-      // Only when we genuinely hold it — an empty string is a value their
-      // resolver would have to interpret, and the order already answers this.
       ...(yijiUserId ? { userId: yijiUserId } : {}),
+      ...(phone ? { customerPhone: phone } : {}),
+      // Ours is often blank and theirs is a generated address; prefer whichever
+      // a human would recognise, and send nothing rather than an empty string.
+      ...(row.contact?.name?.trim() || order?.customerName
+        ? { customerName: row.contact?.name?.trim() || order?.customerName }
+        : {}),
       // The terms the supervisor approved. Only one of amount/percentage is
       // ever set — the discount category decides which — so the other is left
       // off rather than sent as zero, which would read as "no discount".
@@ -191,6 +224,9 @@ export function yijiCouponPayload(row: CouponApprovalRow): Record<string, unknow
         // compensation coupon is a single grant unless somebody said otherwise.
         reachLimit: limit,
         limitForUser: limit,
+        // Only ever THEIR ids, and only when the order supplied them.
+        ...(order?.restaurantId != null ? { restaurantId: order.restaurantId } : {}),
+        ...(order?.brandId != null ? { brandId: order.brandId } : {}),
         ...(window
           ? {
               activationDate: window.from,
@@ -399,7 +435,7 @@ export async function processCouponPushJob(
   job: Job<CouponPushJob>,
   deps: CouponPushDeps,
 ): Promise<PushOutcome> {
-  const { directus, logger, postCoupon, yijiTenantId } = deps;
+  const { directus, logger, postCoupon, readOrder, yijiTenantId } = deps;
   const id = job.data.couponApprovalId;
 
   const row = (await directus.request(
@@ -486,7 +522,33 @@ export async function processCouponPushJob(
     );
     return 'no-order';
   }
-  const payload = yijiCouponPayload(row);
+  /*
+   * Ask Yiji what it already knows about this order.
+   *
+   * Best-effort by design. Everything it returns is corroboration the endpoint
+   * can derive for itself from `orderId`, so a lookup that fails costs a richer
+   * payload and nothing more — refusing to deliver an approved coupon because a
+   * read-only enrichment call timed out would be the wrong trade by a distance.
+   */
+  let order: CouponOrderContext | null = null;
+  if (readOrder) {
+    try {
+      order = await readOrder(orderId);
+      if (!order) {
+        logger.warn(
+          { id, orderId },
+          'yiji does not know this order — pushing on the order id alone',
+        );
+      }
+    } catch (err) {
+      logger.warn(
+        { id, orderId, err: describeError(err) },
+        'could not read the order for coupon enrichment — pushing without it',
+      );
+    }
+  }
+
+  const payload = yijiCouponPayload(row, order);
 
   if (!postCoupon) {
     logger.info(

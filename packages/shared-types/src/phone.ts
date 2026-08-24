@@ -78,6 +78,31 @@ export function phoneCustomerId(raw: string | null | undefined): string {
 }
 
 /**
+ * The same number in E.164: `+9665XXXXXXXX`.
+ *
+ * We store `05…` because that is what people say and type. Yiji stores
+ * `+966503813055` — confirmed by reading a real order back from their own API,
+ * not assumed — and a coupon lands in THEIR system, so it goes in their shape.
+ *
+ * The rule generally: one canonical form inside, converted at the single point
+ * where an external system wants something else. `whatsappNumber` below does
+ * the same job for wa.me, which wants no `+`.
+ *
+ * Returns null rather than a guess when the number is not a Saudi mobile, so a
+ * caller can decide whether to send nothing or to send what it has.
+ */
+export function internationalPhone(raw: string | null | undefined): string | null {
+  const local = normalizePhone(raw);
+  const digits = local.replace(/\D/g, '');
+  if (/^05\d{8}$/.test(digits)) return `+${SA_CODE}${digits.slice(1)}`;
+  if (/^9665\d{8}$/.test(digits)) return `+${digits}`;
+  // Already international and not Saudi — pass it through rather than refuse;
+  // it is still a valid thing to hand an external system.
+  if (local.startsWith('+')) return local;
+  return null;
+}
+
+/**
  * The same number as WhatsApp needs it: `9665XXXXXXXX`, digits only.
  *
  * The one place the local form is deliberately abandoned, because wa.me is not

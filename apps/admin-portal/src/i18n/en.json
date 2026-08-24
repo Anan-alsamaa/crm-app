@@ -391,7 +391,13 @@
     "governsChatOption": "Chat — first response",
     "governsTicketOption": "Ticket — time to solve",
     "firstResponseHint": "Measured from the customer’s first message to the agent’s first reply.",
-    "resolutionHint": "Measured from when the ticket is raised to when it is solved."
+    "resolutionHint": "Measured from when the ticket is raised to when it is solved.",
+    "deleteConfirm": "Delete policy",
+    "deleteChecking": "Checking what this policy governs…",
+    "deleteWithTickets": "{{count}} open tickets are being held to this policy. Deleting it leaves them with no deadline at all — deactivate it instead to stop it governing anything new.",
+    "deleteNoTickets": "No tickets are currently held to this policy. Deleting it cannot be undone.",
+    "deleted": "Policy \"{{name}}\" deleted.",
+    "deleteError": "Could not delete the policy."
   },
   "users": {
     "inactive": "Inactive",
@@ -866,8 +872,8 @@
     "byStatus": "By status",
     "byServiceType": "By service type",
     "bySource": "How tickets reach us",
-    "area": "Area",
-    "allAreas": "All areas",
+    "area": "Area manager",
+    "allAreas": "All area managers",
     "health": "Service health",
     "healthHint": "Where every ticket in this range currently stands.",
     "healthGauge": "of rated tickets ended satisfied",
@@ -893,8 +899,8 @@
     "colWait": "Avg wait",
     "colChatsOpen": "Chats open",
     "colChatsSolved": "Chats solved",
-    "byArea": "By area",
-    "byAreaHint": "The area manager responsible for the branch.",
+    "byArea": "By area manager",
+    "byAreaHint": "Who is responsible for the branch the ticket came from.",
     "byAgent": "By agent",
     "statusMix": "Ticket status mix",
     "brandMix": "Where tickets come from",
@@ -935,7 +941,11 @@
     "opsTopProblem": "Most common problem",
     "compensationBypass": "{{n}} tickets · {{sar}} SAR with no approval raised",
     "compensationApproved": "across {{n}} approved coupons",
-    "opsTopService": "Most affected service type"
+    "opsTopService": "Most affected service type",
+    "byChain": "By chain manager",
+    "byChainHint": "The manager above the area — for problems that span areas.",
+    "opsWidestArea": "Area manager most affected",
+    "opsOfBranches": "of {{count}} branches"
   },
   "performance": {
     "title": "Agent performance",

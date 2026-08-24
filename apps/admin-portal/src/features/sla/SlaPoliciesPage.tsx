@@ -3,7 +3,7 @@ import { useForm, type UseFormRegister } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { readItems, createItem, updateItem } from '@directus/sdk';
+import { readItems, createItem, updateItem, deleteItem } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
@@ -67,6 +67,55 @@ const POLICY_FIELDS = [
   'business_hours',
   'active',
 ];
+
+/**
+ * Delete a policy.
+ *
+ * The FK is `ON DELETE SET NULL`, so tickets are detached rather than deleted —
+ * which is the safe half. The unsafe half is that a detached ticket silently
+ * loses the deadline it was being held to, and nothing on the ticket says why.
+ * So the confirmation counts them first and says the number out loud; see
+ * `useGovernedTicketCount`.
+ *
+ * Deactivating is usually the better move and is one checkbox away on the same
+ * card — it stops the policy governing anything NEW while leaving the tickets
+ * already under it alone. Delete is for a policy that was a mistake.
+ */
+function useDeleteSlaPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => directus.request(deleteItem('sla_policies' as never, id)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sla-policies'] }),
+  });
+}
+
+/**
+ * How many tickets this policy is currently holding to a deadline.
+ *
+ * Fetched only when somebody actually reaches for Delete — it is a question
+ * nobody asks until then, and asking it for every card on every render would be
+ * one request per policy for a number usually nobody reads.
+ */
+function useGovernedTicketCount(policyId: string | null) {
+  return useQuery({
+    queryKey: ['sla-policy-tickets', policyId],
+    enabled: !!policyId,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const rows = (await directus.request(
+        readItems(
+          'tickets' as never,
+          {
+            filter: { sla_policy: { _eq: policyId } },
+            fields: ['id'],
+            limit: -1,
+          } as never,
+        ),
+      )) as unknown as Array<{ id: string }>;
+      return rows.length;
+    },
+  });
+}
 
 function useSlaPolicies() {
   return useQuery({
@@ -301,6 +350,20 @@ export function SlaPoliciesPage() {
   const closeDrawer = () => {
     setOpen(false);
     setEditingId(null);
+  };
+
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const remove = useDeleteSlaPolicy();
+  const governed = useGovernedTicketCount(confirmingDelete);
+
+  const confirmDelete = async (id: string, name: string) => {
+    try {
+      await remove.mutateAsync(id);
+      toast.success(t('sla.deleted', { defaultValue: 'Policy "{{name}}" deleted.', name }));
+      setConfirmingDelete(null);
+    } catch {
+      toast.error(t('sla.deleteError', { defaultValue: 'Could not delete the policy.' }));
+    }
   };
 
   const problem = hoursProblem(hours);
@@ -575,7 +638,59 @@ export function SlaPoliciesPage() {
                       <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(p)}>
                         {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
                       </Button>
+                      {/* Two steps, in place. A policy is the promise a whole
+                          class of tickets is held to, and a single click next
+                          to Edit is too easy to hit by accident. */}
+                      {confirmingDelete === p.id ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setConfirmingDelete(null)}
+                          >
+                            {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            disabled={remove.isPending}
+                            onClick={() => void confirmDelete(p.id, p.name)}
+                          >
+                            {t('sla.deleteConfirm', { defaultValue: 'Delete policy' })}
+                          </Button>
+                        </span>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setConfirmingDelete(p.id)}
+                        >
+                          {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+                        </Button>
+                      )}
                     </div>
+                    {confirmingDelete === p.id && (
+                      <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-2xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
+                        {governed.isLoading
+                          ? t('sla.deleteChecking', {
+                              defaultValue: 'Checking what this policy governs…',
+                            })
+                          : (governed.data ?? 0) > 0
+                            ? t('sla.deleteWithTickets', {
+                                count: governed.data ?? 0,
+                                defaultValue:
+                                  '{{count}} open tickets are being held to this policy. Deleting it leaves them with no deadline at all — deactivate it instead to stop it governing anything new.',
+                              })
+                            : t('sla.deleteNoTickets', {
+                                defaultValue:
+                                  'No tickets are currently held to this policy. Deleting it cannot be undone.',
+                              })}
+                      </p>
+                    )}
                   </article>
                 ))}
               </div>

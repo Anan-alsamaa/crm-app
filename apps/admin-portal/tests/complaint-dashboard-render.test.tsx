@@ -85,6 +85,11 @@ const METRICS = {
   byType: cut([bd('Missing item', 7), bd('Late order', 3)]),
   byBrand: cut([bd('Casa Pasta', 7), bd('Pasketti', 3)]),
   byArea: cut([bd('Aly', 5)]),
+  byChain: cut([bd('Ibrahim Mahmoud', 5)]),
+  /* Branches, not tickets: "3 of 18 of this manager's branches have a
+     complaint" is a statement about spread, which is the one an area manager
+     can act on without knowing how much business each branch did. */
+  widestArea: { manager: 'Aly', branches: 3, estate: 18 },
   byCity: cut([bd('Khobar', 6)], 24),
   byStatus: cut([bd('closed', 6), bd('open', 4)]),
   byServiceType: cut([bd('Delivery', 8)]),
@@ -206,7 +211,19 @@ describe('ComplaintDashboard — every section his page has', () => {
     // Chain managers own brands, area managers own territories, branch managers
     // own restaurants — so this view cuts the same rows by those.
     render(<ComplaintDashboard view="operations" />);
-    for (const heading of ['Top restaurants', 'By brand', 'By area', 'By city']) {
+    /*
+     * "By area manager" and "By chain manager", not "By area" and "By chain".
+     * Those columns have always held a PERSON — the hint under the panel said
+     * so — while the heading said a place, hiding the one thing an operations
+     * reader wants: who do I go and talk to.
+     */
+    for (const heading of [
+      'Top restaurants',
+      'By brand',
+      'By area manager',
+      'By chain manager',
+      'By city',
+    ]) {
       expect(screen.getByText(heading), `missing section: ${heading}`).toBeInTheDocument();
     }
     expect(screen.queryByText('By agent')).not.toBeInTheDocument();
@@ -407,4 +424,42 @@ describe('ComplaintDashboard — click-through drill-down', () => {
   // The "CRM replies per agent" assertion went with the agent table it drove.
   // That column now lives on Agent summary, where it is covered by
   // agent-reports-page.test.tsx.
+});
+
+describe('ComplaintDashboard — Operations is about the estate, not the queue', () => {
+  /*
+   * The objection that shaped this whole view: nothing in these rows records
+   * how much BUSINESS a branch did, so a ticket count says a big branch is
+   * worse than a small one. Every count this strip used to carry — tickets in
+   * range, open tickets, branches with a ticket, the busiest branch, the share
+   * from the top five — died on that, and none of them should come back.
+   *
+   * What belongs here instead names something an operations reader acts on: a
+   * problem to fix, a part of the operation where it breaks, and a PERSON whose
+   * estate is most widely affected.
+   */
+  it('names the area manager whose estate is most widely affected', () => {
+    render(<ComplaintDashboard view="operations" />);
+    expect(screen.getByText('Area manager most affected')).toBeInTheDocument();
+    // Branches out of their whole estate — spread, which survives the
+    // no-order-volume objection that a ticket count does not.
+    expect(screen.getByText('3/18')).toBeInTheDocument();
+    // Named on the tile itself, not only in the ranked panel below — the point
+    // is that the top of the page says who to talk to.
+    expect(screen.getAllByText('Aly').length).toBeGreaterThan(0);
+  });
+
+  it('still carries no bare ticket counts', () => {
+    render(<ComplaintDashboard view="operations" />);
+    for (const gone of [
+      'Tickets in range',
+      'Open tickets',
+      'Branches with tickets',
+      'Busiest branch',
+      'From the top 5 branches',
+      'No branch recorded',
+    ]) {
+      expect(screen.queryByText(gone), `${gone} came back`).not.toBeInTheDocument();
+    }
+  });
 });
