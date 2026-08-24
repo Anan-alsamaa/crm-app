@@ -53,7 +53,7 @@ const customerToken = (i) =>
     {
       vendor_id: VENDOR,
       customer_id: `lt-${stamp}-${i}`,
-      phone: `+96650${String(1000000 + i).slice(-7)}`,
+      phone: `050${String(1000000 + i).slice(-7)}`,
       email: `lt${i}@loadtest.local`,
       name: `LoadTest ${i}`,
     },
@@ -143,7 +143,9 @@ async function main() {
   console.log(`connected:        ${metrics.connected}/${CUSTOMERS}  (failed ${metrics.connFail})`);
   console.log(`connect burst:    ${connectMs}ms to connect+seed ${CUSTOMERS} customers`);
   console.log(`messages sent:    ${metrics.sent}`);
-  console.log(`echoes received:  ${metrics.echoed}/${metrics.sent}  (round-trip persist+broadcast)`);
+  console.log(
+    `echoes received:  ${metrics.echoed}/${metrics.sent}  (round-trip persist+broadcast)`,
+  );
   console.log(
     `round-trip (ms):  p50=${pct(metrics.latencies, 0.5)}  p95=${pct(metrics.latencies, 0.95)}  max=${metrics.latencies.length ? Math.max(...metrics.latencies) : 0}`,
   );

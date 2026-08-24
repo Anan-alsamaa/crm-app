@@ -9,12 +9,21 @@ import { isPhoneDerivedCustomerId, normalizePhone, phoneCustomerId } from '../sr
  */
 
 describe('normalizePhone', () => {
-  it('turns the local trunk form into E.164', () => {
-    expect(normalizePhone('0555123456')).toBe('+966555123456');
+  it('canonicalises to the LOCAL form — the one people actually use', () => {
+    /*
+     * `05XXXXXXXX` is what an agent reads out on a call, what a customer types,
+     * and what a branch prints. Storing the same string means a number copied
+     * from a ticket into a dialler works, and a search for what the customer
+     * told you finds them.
+     */
+    expect(normalizePhone('0555123456')).toBe('0555123456');
   });
 
-  it('leaves an already-canonical number alone', () => {
-    expect(normalizePhone('+966555123456')).toBe('+966555123456');
+  it('brings the country code home rather than leaving two spellings', () => {
+    // The live table held FOUR shapes at once and two customers were in it
+    // twice under two spellings of the same number.
+    expect(normalizePhone('+966555123456')).toBe('0555123456');
+    expect(normalizePhone('966555123456')).toBe('0555123456');
   });
 
   it('agrees across every way one number gets written', () => {
@@ -27,12 +36,24 @@ describe('normalizePhone', () => {
       '555123456',
     ];
     const seen = new Set(forms.map(normalizePhone));
-    expect([...seen]).toEqual(['+966555123456']);
+    expect([...seen]).toEqual(['0555123456']);
   });
 
   it('drops a trunk zero left in after the country code', () => {
     // "+966 05…" is a real thing people type.
-    expect(normalizePhone('+9660555123456')).toBe('+966555123456');
+    expect(normalizePhone('+9660555123456')).toBe('0555123456');
+  });
+
+  it('collapses a doubled trunk zero without eating the real one', () => {
+    expect(normalizePhone('00555123456')).toBe('0555123456');
+  });
+
+  it('will not hand a leading 0 to something that is not a mobile number', () => {
+    // Length-checked, so a stray 5-leading string is left visibly wrong rather
+    // than dressed up as a number. There is one such value in the live table —
+    // 18 digits, from a mis-paste — and leaving it alone is what lets somebody
+    // notice it.
+    expect(normalizePhone('508317417558378794')).toBe('508317417558378794');
   });
 
   it('keeps a foreign number rather than pretending it is Saudi', () => {
@@ -53,9 +74,11 @@ describe('normalizePhone', () => {
 
 describe('phoneCustomerId', () => {
   it('is the same id however the number was typed', () => {
-    expect(phoneCustomerId('0555123456')).toBe('cust-966555123456');
-    expect(phoneCustomerId('+966555123456')).toBe('cust-966555123456');
-    expect(phoneCustomerId('966 555 123 456')).toBe('cust-966555123456');
+    // The point is agreement, not the particular digits: one handset, one id,
+    // whichever spelling it arrived in.
+    expect(phoneCustomerId('0555123456')).toBe('cust-0555123456');
+    expect(phoneCustomerId('+966555123456')).toBe('cust-0555123456');
+    expect(phoneCustomerId('966 555 123 456')).toBe('cust-0555123456');
   });
 });
 

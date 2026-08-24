@@ -830,133 +830,165 @@
 }
 
 /* ───── Agent-offline fallback ─────
- * A STRIP above the composer, not a panel that replaces it.
+ * A FOOTER above the composer, never a screen that replaces it.
  *
- * This block used to be a stacked card — title, paragraph, and three
- * full-width rows each carrying a 36px icon chip. On a phone it filled the
- * widget: a customer who only wanted to type a sentence met a wall of contact
- * details and had to scroll past it to reach the box. That reads as "go away
- * and phone us", when the truthful message is "leave it here and we will
- * reply" — the message IS delivered and answered later.
+ * This began as a stacked panel — title, paragraph and three full-width rows
+ * each carrying a 36px icon chip. On a phone it filled the widget: a customer
+ * who only wanted to type a sentence met a wall of contact details and had to
+ * scroll past it to reach the box. That reads as "go away and phone us", when
+ * the truthful message is "leave it here and we will reply".
  *
- * So: one line of text, two inline chips, and the conversation stays visible
- * behind it. The chips are real `tel:` / `wa.me` links, one tap each.
+ * One reassuring line, then two action CARDS of equal weight — the only two
+ * things to do on this surface, so they should look like it. The conversation
+ * stays visible above and the composer sits right below.
  */
 .yiji-offline {
-  padding: 10px 14px;
-  /*
-   * NEUTRAL, and deliberately not tinted.
-   *
-   * An amber wash reads as "something has gone wrong"; nothing has — the team
-   * is simply not at their desks and the message will still be answered. A
-   * BRAND tint is no better: this widget is tenant-branded, so 5% of
-   * `--yiji-primary` is a pale lavender for one tenant and a pale red for the
-   * next, and neither was chosen for this strip. The neutral secondary surface
-   * separates the strip from the thread without saying anything about it.
-   */
+  padding: 12px 14px 14px;
+  /* Neutral, deliberately. Amber reads as "something has gone wrong" — nothing
+     has. A brand tint is no better: this widget is tenant-branded, so 5% of the
+     primary is a pale lavender for one tenant and a pale red for the next, and
+     neither was chosen for this strip. */
   background: var(--yiji-surface-2);
   border-top: 1px solid var(--yiji-border);
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
+  flex-direction: column;
+  gap: 10px;
 }
+
+/* The reassurance. Small, quiet, and it does NOT repeat "we are offline" —
+   the header pill already says that, and saying it twice makes a routine
+   closing time feel like an incident. */
 .yiji-offline-body {
   margin: 0;
-  /* Takes the row on its own when the chips cannot sit beside it, and shrinks
-     rather than pushing them off the edge when they can. */
-  flex: 1 1 min(100%, 15rem);
-  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
   font-size: 12.5px;
   line-height: 1.45;
-  color: var(--yiji-ink);
+  color: var(--yiji-muted);
 }
+.yiji-offline-body-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  /* Optically centred on the first line of text rather than its box. */
+  margin-top: 2px;
+  color: var(--yiji-muted);
+}
+.yiji-offline-body-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Two columns, equal width. Neither channel is the fallback for the other: a
+   customer who wants to speak to somebody picks the phone, one who wants a
+   written trail picks WhatsApp. */
 .yiji-offline-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-inline-start: auto;
 }
 .yiji-offline-link {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 12px 7px 8px;
-  border-radius: 999px;
+  gap: 9px;
+  /* 48px tall: a tap target somebody can hit while holding a tray. */
+  min-height: 48px;
+  padding: 8px 10px;
+  border-radius: 14px;
   background: var(--yiji-surface);
   border: 1px solid var(--yiji-border);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
   text-decoration: none;
   color: var(--yiji-ink);
+  min-width: 0;
   transition:
-    background-color 160ms var(--yiji-ease),
     border-color 160ms var(--yiji-ease),
+    box-shadow 160ms var(--yiji-ease),
     transform 160ms var(--yiji-ease);
 }
-[dir='rtl'] .yiji-offline-link {
-  padding: 7px 8px 7px 12px;
-}
 .yiji-offline-link:hover {
-  background: color-mix(in oklab, var(--yiji-primary) 8%, var(--yiji-surface));
-  border-color: color-mix(in oklab, var(--yiji-primary) 35%, var(--yiji-border));
+  border-color: color-mix(in oklab, var(--yiji-primary) 40%, var(--yiji-border));
+  box-shadow: 0 3px 10px rgb(15 23 42 / 0.08);
 }
 .yiji-offline-link:active {
   transform: translateY(1px);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
 }
-/* A visible ring, because these are the only two ways out of an offline
-   widget and a keyboard user must be able to find them. */
+/* A visible ring: these are the only two ways out of an offline widget, and a
+   keyboard user has to be able to find them. */
 .yiji-offline-link:focus-visible {
   outline: 2px solid var(--yiji-primary);
   outline-offset: 2px;
 }
+
 .yiji-offline-link-icon {
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
-  border-radius: 50%;
+  border-radius: 10px;
   background: color-mix(in oklab, var(--yiji-primary) 12%, transparent);
   color: var(--yiji-primary);
   display: grid;
   place-items: center;
 }
 .yiji-offline-link-icon svg {
-  width: 13px;
-  height: 13px;
+  width: 15px;
+  height: 15px;
 }
+/* WhatsApp keeps its own green. It is the one brand mark here a customer
+   recognises before they read anything, and repainting it in the tenant's
+   colour costs that recognition for no gain. */
+.yiji-offline-link-wa .yiji-offline-link-icon {
+  background: color-mix(in oklab, #25d366 16%, transparent);
+  color: #128c7e;
+}
+.yiji-offline-link-wa:hover {
+  border-color: color-mix(in oklab, #25d366 45%, var(--yiji-border));
+}
+
 .yiji-offline-link-text {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
+  flex-direction: column;
+  gap: 1px;
   min-width: 0;
 }
 .yiji-offline-link-label {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10.5px;
+  font-weight: 600;
   color: var(--yiji-muted);
-  white-space: nowrap;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.3;
 }
 .yiji-offline-link-value {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 700;
   color: var(--yiji-ink);
   font-variant-numeric: tabular-nums;
-  /* A phone number is read left-to-right in every locale. */
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  /* A phone number reads left-to-right in every locale, and must never be
+     broken across lines — half a number is worse than none. */
   direction: ltr;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[dir='rtl'] .yiji-offline-link-value,
+[dir='rtl'] .yiji-offline-link-label {
+  text-align: right;
 }
 [dir='rtl'] .yiji-offline-link-value {
   unicode-bidi: plaintext;
 }
 
-/* Narrow phones: the label is decoration once the icon has said which channel
-   this is, and dropping it keeps both chips on one row instead of stacking
-   them into the tall block this replaced. */
-@media (max-width: 380px) {
-  .yiji-offline-link-label {
-    display: none;
-  }
+/* Very narrow phones: stack rather than squeeze, so the number never
+   truncates. Two 48px rows still cost less height than the panel this
+   replaced. */
+@media (max-width: 340px) {
   .yiji-offline-actions {
-    margin-inline-start: 0;
+    grid-template-columns: 1fr;
   }
 }
 

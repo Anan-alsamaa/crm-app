@@ -158,7 +158,7 @@ export default async function globalSetup(): Promise<void> {
               // the reports' phone column look broken when it was merely empty.
               // (vendor, phone) is UNIQUE, so this has to vary per run the way
               // external_customer_id above already does.
-              phone: `+9665${String(Date.now()).slice(-7)}${i}`,
+              phone: `05${String(Date.now()).slice(-7)}${i}`,
             }),
           }),
         );

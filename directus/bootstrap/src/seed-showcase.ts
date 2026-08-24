@@ -214,7 +214,7 @@ async function main(): Promise<void> {
       body: JSON.stringify({
         name: `${first} ${last}`,
         email,
-        phone: `+9665${int(10_000_000, 99_999_999)}`,
+        phone: `05${int(10_000_000, 99_999_999)}`,
         vendor: pick(vendorIds),
       }),
     });

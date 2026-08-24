@@ -160,7 +160,16 @@ async function main(): Promise<void> {
       ext: 'seed-1',
       name: 'Sarah Khan',
       email: 'sarah@acme.com',
-      phone: '+966500000001',
+      /*
+       * Local form, like everything else that stores a number.
+       *
+       * Seeds write straight to Directus and never pass through
+       * `normalizePhone`, so a seed in `+966…` quietly reintroduces the second
+       * spelling this product spent a migration removing — and `upsertContact`
+       * matches on EXACT equality, so the seeded customer and the real one
+       * become two contacts.
+       */
+      phone: '0500000001',
       status: 'open',
       priority: 'high',
       assigned: true,
@@ -177,7 +186,7 @@ async function main(): Promise<void> {
       ext: 'seed-2',
       name: 'Ahmed Ali',
       email: 'ahmed@shop.sa',
-      phone: '+966500000002',
+      phone: '0500000002',
       status: 'open',
       priority: 'medium',
       assigned: false,
@@ -193,7 +202,7 @@ async function main(): Promise<void> {
       ext: 'seed-3',
       name: 'Maria Lopez',
       email: 'maria@mail.com',
-      phone: '+966500000003',
+      phone: '0500000003',
       status: 'open',
       priority: 'low',
       assigned: true,
@@ -209,7 +218,7 @@ async function main(): Promise<void> {
       ext: 'seed-4',
       name: 'John Park',
       email: 'john@biz.io',
-      phone: '+966500000004',
+      phone: '0500000004',
       status: 'solved',
       priority: 'medium',
       assigned: true,
@@ -225,7 +234,7 @@ async function main(): Promise<void> {
       ext: 'seed-5',
       name: 'Layla Hassan',
       email: 'layla@vip.com',
-      phone: '+966500000005',
+      phone: '0500000005',
       status: 'open',
       priority: 'urgent',
       assigned: false,

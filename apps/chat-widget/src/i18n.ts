@@ -80,7 +80,12 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
      * to is a line of the customer's screen it takes. It also leads with the
      * thing that is actually true — the message gets through — rather than
      * apologising and pointing at the phone. */
-    offlineBody: "Leave your message here and we'll reply when we're back — or reach us now:",
+    /* Short enough not to wrap on a phone. It makes ONE promise — the message
+     * gets through — and leaves the cards below to speak for themselves; their
+     * labels already say what they are. It also does not repeat "we are
+     * offline", which the header pill says: twice makes a routine closing time
+     * feel like an incident. */
+    offlineBody: "Leave a message and we'll reply as soon as we're back.",
     offlineAutoReply:
       "Thanks for your message — our team is offline right now. We've received it and will reply as soon as we're back online.",
     offlineCallLabel: 'Call us',
@@ -115,7 +120,7 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     csatThanks: 'شكرًا لك على ملاحظاتك!',
     csatThanksSub: 'نقدّر الوقت الذي خصصته.',
     offlineTitle: 'فريق الدعم غير متاح حاليًا',
-    offlineBody: 'اترك رسالتك هنا وسنرد فور عودتنا — أو تواصل معنا الآن:',
+    offlineBody: 'اترك رسالتك وسنرد فور عودتنا.',
     offlineAutoReply:
       'شكرًا لرسالتك — فريقنا غير متصل حاليًا. لقد استلمنا رسالتك وسنردّ عليك فور عودتنا.',
     offlineCallLabel: 'اتصل بنا',

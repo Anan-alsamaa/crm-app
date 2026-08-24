@@ -41,10 +41,17 @@ async function api(method, path, token, body) {
 
 async function main() {
   const owner = await login('e.habibi@anan.sa', '123456');
-  const agentToken = await login(process.env.AGENT_EMAIL ?? 'e2e.agent@example.com', process.env.AGENT_PASSWORD ?? '123456');
+  const agentToken = await login(
+    process.env.AGENT_EMAIL ?? 'e2e.agent@example.com',
+    process.env.AGENT_PASSWORD ?? '123456',
+  );
   const agentId = (await api('GET', '/users/me?fields=id', agentToken)).data.id;
   const vendorId = (
-    await api('GET', '/items/vendors?filter[yiji_vendor_id][_eq]=demo-vendor&fields=id&limit=1', owner)
+    await api(
+      'GET',
+      '/items/vendors?filter[yiji_vendor_id][_eq]=demo-vendor&fields=id&limit=1',
+      owner,
+    )
   ).data[0].id;
 
   const custToken = jwt.sign(
@@ -53,7 +60,7 @@ async function main() {
       customer_id: 'demo-customer-1',
       name: 'Demo Customer',
       email: 'demo.customer@example.com',
-      phone: '+966500000001',
+      phone: '0500000001',
     },
     SECRET,
     { algorithm: 'HS256', expiresIn: '1h' },
@@ -89,8 +96,11 @@ async function main() {
     setTimeout(() => rej(new Error('no ready event')), 8000);
   });
   const convId = ready.conversationId;
-  log('STEP 1  customer connects (widget JWT)', !!convId,
-    `conv ${String(convId).slice(0, 8)}…, branding=${ready.branding ? 'yes' : 'no'}, agentsOnline=${ready.agentsOnline}`);
+  log(
+    'STEP 1  customer connects (widget JWT)',
+    !!convId,
+    `conv ${String(convId).slice(0, 8)}…, branding=${ready.branding ? 'yes' : 'no'}, agentsOnline=${ready.agentsOnline}`,
+  );
 
   // STEP 2 — customer sends a message → persists + broadcasts
   custSock.emit('message:send', {
@@ -100,8 +110,11 @@ async function main() {
   });
   await wait(1500);
   const echoed = custMsgs.some((m) => m.clientMsgId === 'c1');
-  log('STEP 2  customer message persists + fans out', echoed && agentInboxActivity,
-    `echo=${echoed}, agent inbox:activity=${agentInboxActivity}`);
+  log(
+    'STEP 2  customer message persists + fans out',
+    echoed && agentInboxActivity,
+    `echo=${echoed}, agent inbox:activity=${agentInboxActivity}`,
+  );
 
   // STEP 3 — agent opens the thread + replies → customer receives live
   agentSock.emit('conversation:subscribe', { conversationId: convId });
@@ -113,16 +126,25 @@ async function main() {
   });
   await wait(1500);
   const custGotReply = custMsgs.some((m) => m.senderType === 'agent' && m.clientMsgId === 'a1');
-  log('STEP 3  agent reply reaches customer live', custGotReply, `customer received agent msg=${custGotReply}`);
+  log(
+    'STEP 3  agent reply reaches customer live',
+    custGotReply,
+    `customer received agent msg=${custGotReply}`,
+  );
 
   // STEP 4 — assign + resolve
   await api('PATCH', `/items/conversations/${convId}`, agentToken, {
     assigned_agent: agentId,
     status: 'resolved',
   });
-  const conv = (await api('GET', `/items/conversations/${convId}?fields=assigned_agent,status`, agentToken)).data;
-  log('STEP 4  agent assigns + resolves', conv.assigned_agent === agentId && conv.status === 'resolved',
-    `assigned=${conv.assigned_agent === agentId}, status=${conv.status}`);
+  const conv = (
+    await api('GET', `/items/conversations/${convId}?fields=assigned_agent,status`, agentToken)
+  ).data;
+  log(
+    'STEP 4  agent assigns + resolves',
+    conv.assigned_agent === agentId && conv.status === 'resolved',
+    `assigned=${conv.assigned_agent === agentId}, status=${conv.status}`,
+  );
 
   // STEP 5 — AI summarize (Gemini, PII-redacted)
   try {
@@ -150,11 +172,21 @@ async function main() {
   // STEP 6 — CSAT
   custSock.emit('csat:submit', { conversationId: convId, score: 5, comment: 'Great help!' });
   await wait(1500);
-  const csat = (await api('GET', `/items/csat_responses?filter[conversation][_eq]=${convId}&fields=score&limit=1`, owner)).data;
+  const csat = (
+    await api(
+      'GET',
+      `/items/csat_responses?filter[conversation][_eq]=${convId}&fields=score&limit=1`,
+      owner,
+    )
+  ).data;
   log('STEP 6  customer CSAT persists', csat.length > 0, `score=${csat[0]?.score}`);
 
   // STEP 7 — commerce panel (client-side MockYijiClient)
-  log('STEP 7  commerce panel data', true, 'MockYijiClient returns LTV+orders for demo-customer-1 (unit-verified)');
+  log(
+    'STEP 7  commerce panel data',
+    true,
+    'MockYijiClient returns LTV+orders for demo-customer-1 (unit-verified)',
+  );
 
   custSock.close();
   agentSock.close();

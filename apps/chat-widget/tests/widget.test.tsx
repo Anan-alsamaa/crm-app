@@ -503,3 +503,63 @@ describe('Widget — attachments', () => {
     expect(screen.getAllByText('Attachment').length).toBeGreaterThan(0);
   });
 });
+
+describe('Widget — the wa.me conversion stays in step with the shared rule', () => {
+  /*
+   * `waNumber` in Widget.tsx is a DELIBERATE copy of `whatsappNumber` in
+   * @yiji/shared-types. This widget is embedded into other people's pages and
+   * its dependencies are exactly preact and socket.io-client; importing a
+   * workspace package to reuse six lines would pull zod and the rest of the
+   * shared types into a customer-facing bundle to save nothing.
+   *
+   * A duplication nobody checks is one that drifts, and the failure here is
+   * SILENT: a wrong wa.me number opens a chat with nobody rather than refusing.
+   * So the copy is pinned to the shared rule's contract.
+   */
+  const cases: Array<[string, string]> = [
+    ['0565266122', '966565266122'],
+    ['565266122', '966565266122'],
+    ['966565266122', '966565266122'],
+    ['00966565266122', '966565266122'],
+    ['+966 56 526 6122', '966565266122'],
+  ];
+
+  for (const [input, want] of cases) {
+    it(`sends ${input} to wa.me/${want}`, () => {
+      renderWidget({ autoOpen: true, fallback: { phone: '920012111', whatsapp: input } });
+      driveReady({ agentsOnline: 0 });
+      expect(screen.getByText(input).closest('a')).toHaveAttribute('href', `https://wa.me/${want}`);
+    });
+  }
+});
+
+describe('Widget — the offline footer in Arabic', () => {
+  it('keeps the numbers left-to-right inside an RTL panel', () => {
+    /*
+     * A phone number reads the same way in every locale, and a right-to-left
+     * container will happily reverse the digit run around a `+` or a separator.
+     * The value carries an explicit `direction: ltr`, and the card layout is
+     * flexbox with logical gaps rather than left/right margins, so the whole
+     * footer mirrors without the numbers coming with it.
+     */
+    const { container } = renderWidget({
+      autoOpen: true,
+      locale: 'ar',
+      fallback: { phone: '920012111', whatsapp: '0565266122' },
+    });
+    driveReady({ agentsOnline: 0 });
+
+    expect(container.querySelector('.yiji-widget')?.getAttribute('dir')).toBe('rtl');
+    // The Arabic copy is what renders, not the English fallback.
+    expect(screen.getByText('اترك رسالتك وسنرد فور عودتنا.')).toBeInTheDocument();
+    // Both routes are still there and still point where they should.
+    expect(screen.getByText('920012111').closest('a')).toHaveAttribute('href', 'tel:920012111');
+    expect(screen.getByText('0565266122').closest('a')).toHaveAttribute(
+      'href',
+      'https://wa.me/966565266122',
+    );
+    // Two cards, and no email crept back in.
+    expect(container.querySelectorAll('.yiji-offline-link')).toHaveLength(2);
+    expect(container.querySelector('a[href^="mailto:"]')).toBeNull();
+  });
+});

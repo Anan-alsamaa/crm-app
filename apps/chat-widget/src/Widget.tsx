@@ -50,17 +50,32 @@ const DEFAULT_FALLBACK = {
 };
 
 /**
- * A Saudi local number as wa.me wants it: country code, no leading zero, digits
- * only. `05XXXXXXXX` → `9665XXXXXXXX`.
+ * A Saudi local number as wa.me wants it: `05XXXXXXXX` → `9665XXXXXXXX`.
  *
- * Done here rather than asking whoever configures the widget to write it twice,
- * because the number on a poster is the local one and a mistyped country code
- * fails silently — wa.me opens a chat with nobody rather than refusing.
+ * A DELIBERATE COPY of `whatsappNumber` in @yiji/shared-types, and the only
+ * duplication in this file. This widget is embedded into other people's pages
+ * and its dependencies are exactly `preact` and `socket.io-client`; importing a
+ * workspace package to reuse six lines would pull zod and the rest of the
+ * shared types into a customer-facing bundle to save nothing.
+ *
+ * The duplication is pinned rather than trusted — `walk-in.test.ts` asserts
+ * both implementations agree on the same inputs, so a change to the shared rule
+ * that this one misses fails a test instead of quietly sending an offline
+ * customer to a chat with nobody.
+ *
+ * The number on a poster is the local one and a mistyped country code fails
+ * silently, so the conversion belongs in code rather than in whoever fills in
+ * the config.
  */
 function waNumber(raw: string): string {
   const digits = raw.replace(/\D/g, '');
-  if (digits.startsWith('966')) return digits;
-  if (digits.startsWith('0')) return `966${digits.slice(1)}`;
+  if (/^05\d{8}$/.test(digits)) return `966${digits.slice(1)}`;
+  if (/^5\d{8}$/.test(digits)) return `966${digits}`;
+  if (/^9665\d{8}$/.test(digits)) return digits;
+  if (/^009665\d{8}$/.test(digits)) return digits.slice(2);
+  // Operator-configured rather than customer-typed, so an unusual shape is more
+  // likely a number this rule has not met than a mistake. Dropping the link
+  // would leave an offline customer with one way out instead of two.
   return digits;
 }
 
@@ -180,6 +195,16 @@ function PhoneIcon() {
       aria-hidden
     >
       <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92Z" />
+    </svg>
+  );
+}
+
+/** Outside opening hours — the reason, said once, in a glyph. */
+function ClockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -855,25 +880,37 @@ export function Widget({ config }: { config: WidgetConfig }) {
             </div>
           ) : (
             <>
-              {/* Offline: the customer can still leave a message (see send() for
-                  the auto-reply) — the direct-contact options are a secondary
-                  fallback shown above the composer, not a replacement for it. */}
               {/*
-                A STRIP, NOT A SCREEN.
-                This used to be a stacked panel — title, paragraph, and three
-                full-width rows each with a 36px icon chip — sitting between the
+                OFFLINE: A FOOTER, NOT A SCREEN.
+
+                This began as a stacked panel — title, paragraph, and three
+                full-width rows each carrying a 36px icon chip — between the
                 conversation and the composer. On a phone it filled the widget,
-                so a customer who only wanted to type a sentence was met by a
-                wall of contact details and had to scroll past it to reach the
-                box. That reads as "go away and phone us" when the truthful
-                message is "leave it here and we will reply".
-                One line, two inline chips, and the thread stays visible.
-                Email is gone: it is the slowest channel of the three and the
-                one nobody uses from a phone at a counter.
+                so a customer who only wanted to type a sentence met a wall of
+                contact details and had to scroll past it to reach the box. That
+                reads as "go away and phone us", when the truthful message is
+                "leave it here and we will reply" — the message IS delivered and
+                answered, see send() for the auto-reply.
+
+                What is here now: one reassuring line, then two real action
+                CARDS of equal weight. Cards rather than links because these are
+                the only two things to do on this surface and they should look
+                like it; equal weight because neither is the fallback for the
+                other — a customer who wants to speak to somebody picks the
+                phone, one who wants a written trail picks WhatsApp.
+
+                The header already carries "our agents are offline", so this
+                does not repeat it. Email is gone: the slowest of the channels
+                and the one nobody uses from a phone at a counter.
               */}
               {ready && agentsOnline === 0 && (
                 <div className="yiji-offline" role="region" aria-label={tr.offlineTitle}>
-                  <p className="yiji-offline-body">{tr.offlineBody}</p>
+                  <p className="yiji-offline-body">
+                    <span className="yiji-offline-body-icon" aria-hidden>
+                      <ClockIcon />
+                    </span>
+                    <span>{tr.offlineBody}</span>
+                  </p>
                   <div className="yiji-offline-actions">
                     <a
                       href={`tel:${(config.fallback?.phone ?? DEFAULT_FALLBACK.phone).replace(/\s+/g, '')}`}
@@ -891,7 +928,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
                     </a>
                     <a
                       href={`https://wa.me/${waNumber(config.fallback?.whatsapp ?? DEFAULT_FALLBACK.whatsapp)}`}
-                      className="yiji-offline-link"
+                      className="yiji-offline-link yiji-offline-link-wa"
                       target="_blank"
                       rel="noopener noreferrer"
                     >

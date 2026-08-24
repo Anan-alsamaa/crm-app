@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
+import { whatsappNumber } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -16,15 +17,15 @@ import { directus } from '../../lib/directus.js';
  * unofficial automation routes breach WhatsApp's terms and risk the number.
  */
 
-/** `0551234567` or `551234567` (Excel eats the leading zero) → `966551234567`. */
-export function saudiWaNumber(raw: string | null | undefined): string | null {
-  const digits = (raw ?? '').replace(/\D/g, '');
-  if (/^05\d{8}$/.test(digits)) return `966${digits.slice(1)}`;
-  if (/^5\d{8}$/.test(digits)) return `966${digits}`;
-  if (/^9665\d{8}$/.test(digits)) return digits;
-  if (/^009665\d{8}$/.test(digits)) return digits.slice(2);
-  return null;
-}
+/**
+ * `0551234567` or `551234567` (Excel eats the leading zero) → `966551234567`.
+ *
+ * Re-exported rather than reimplemented: the rule now lives in
+ * @yiji/shared-types beside `normalizePhone`, because the customer widget needs
+ * the identical conversion for its offline WhatsApp link and two copies of a
+ * phone rule is how one of them quietly stops matching the other.
+ */
+export const saudiWaNumber = whatsappNumber;
 
 export const DEFAULT_WA_TEMPLATE =
   'مرحباً عزيزي، معك خدمة عملاء تطبيق يجي، تواصلنا بخصوص شكواكم على الطلب رقم {order}';
