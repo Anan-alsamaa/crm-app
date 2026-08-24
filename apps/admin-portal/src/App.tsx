@@ -19,7 +19,6 @@ import {
   StoreIcon,
   TeamIcon,
   Toaster,
-  UploadIcon,
   UsersIcon,
   cn,
   type AppShellRailContext,
@@ -102,9 +101,6 @@ const RolesPage = lazy(() =>
 );
 const BackupPage = lazy(() =>
   import('./features/backup/BackupPage.js').then((m) => ({ default: m.BackupPage })),
-);
-const ImportsPage = lazy(() =>
-  import('./features/imports/ImportsPage.js').then((m) => ({ default: m.ImportsPage })),
 );
 const AiConfigPage = lazy(() =>
   import('./features/ai-config/AiConfigPage.js').then((m) => ({ default: m.AiConfigPage })),
@@ -398,12 +394,6 @@ function Shell({ children }: { children: React.ReactNode }) {
           requires: 'manage_lists' as const,
           label: t('nav.lists', { defaultValue: 'Dropdown lists' }),
           icon: SettingsIcon,
-        },
-        {
-          to: '/imports',
-          requires: 'import_data' as const,
-          label: t('nav.imports', { defaultValue: 'Import contacts' }),
-          icon: UploadIcon,
         },
         {
           to: '/backup',
@@ -890,16 +880,14 @@ export function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/imports"
-            element={
-              <ProtectedRoute requires="import_data">
-                <Shell>
-                  <ImportsPage />
-                </Shell>
-              </ProtectedRoute>
-            }
-          />
+          {/* No /imports route.
+              "Import contacts" bulk-loaded CUSTOMERS from a CSV, and it sat in
+              the admin console — where nobody who talks to customers can reach
+              it, and where the job it does has no bearing on anything else on
+              the page. Customers arrive here by chatting, by ordering, or from
+              the Yiji app; a spreadsheet of them was answering a question this
+              business does not ask. Removed rather than moved: the agent portal
+              has no use for it either. */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

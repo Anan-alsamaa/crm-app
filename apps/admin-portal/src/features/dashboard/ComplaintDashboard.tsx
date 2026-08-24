@@ -887,12 +887,14 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                   // The span is the range the DATA covers, which is not the
                   // range you filtered on — "last 90 days" over three
                   // complaints logged in one week should say so.
-                  defaultValue:
-                    'Showing {{n}} tickets from {{from}} to {{to}} · {{money}} compensation',
+                  // No money here any more. It was the ticket-side sum,
+                  // which counted refused and un-approved amounts; the KPI tile
+                  // carries the approved figure, and one number in one place is
+                  // the whole point of removing the other.
+                  defaultValue: 'Showing {{n}} tickets from {{from}} to {{to}}',
                   n: d.total.toLocaleString(),
                   from: d.firstDate ?? '—',
                   to: d.lastDate ?? '—',
-                  money: SAR(d.compensation),
                 })
               : t('complaintDash.noMatch', {
                   defaultValue: 'No tickets match these filters.',
@@ -1182,45 +1184,33 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                     />
                   }
                 />
-                {/* SAYS WHAT IT COUNTS.
-                    This read 779 while "Coupons approved here" below read 254,
-                    and nothing on screen explained the gap — the card called it
-                    "the rest", which is not something anyone can act on. The
-                    two measure different things: this is every riyal recorded
-                    on a TICKET, however it got there; that card is the approved
-                    subset of the approval QUEUE.
-                    The sub-line now names the difference, because it is not
-                    rounding — most compensation is reaching tickets without an
-                    approval ever being raised, which is a fact about how the
-                    desk works, not a display bug. */}
+                {/* THE MONEY IS WHAT WAS APPROVED.
+                    This used to total `tickets.coupon_value` — every riyal ever
+                    typed into that column, including amounts on coupons that
+                    were refused, amounts still awaiting a decision, and amounts
+                    nobody ever raised an approval for. It read 779 against the
+                    254 actually approved, which is not a number anybody can use
+                    and was two figures on one dashboard that looked like they
+                    should agree.
+                    What the business gave away is what it APPROVED, so this is
+                    the approval queue's own total. It shares CouponSpend's
+                    query key with the card below, so the tile and the card are
+                    one request and cannot disagree. */}
                 <Kpi
                   tone="primary"
                   icon={<ChartIcon size={17} />}
                   order={6}
-                  value={d.compensation.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  value={coupons.sar.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                   label={t('complaintDash.kpiCompensation', {
-                    defaultValue: 'Compensation on tickets (SAR)',
+                    defaultValue: 'Compensation approved (SAR)',
                   })}
                   sub={
-                    d.compensationWithoutApproval != null && d.compensationWithoutApproval > 0
-                      ? t('complaintDash.compensationBypass', {
-                          // BOTH halves describe the same set. It read
-                          // "51 tickets · 409 SAR", where the 51 was tickets
-                          // marked Compensated and the 409 was money on the 32
-                          // with no approval — two different denominators in
-                          // one sentence, which is how a clarification becomes
-                          // the next confusion.
-                          defaultValue: '{{n}} tickets · {{sar}} SAR with no approval raised',
-                          n: d.ticketsCompensatedWithoutApproval ?? 0,
-                          sar: Math.round(d.compensationWithoutApproval).toLocaleString(),
+                    coupons.count > 0
+                      ? t('complaintDash.compensationApproved', {
+                          defaultValue: 'across {{n}} approved coupons',
+                          n: coupons.count,
                         })
-                      : d.total
-                        ? t('complaintDash.compensatedCount', {
-                            defaultValue: '{{n}} compensated · {{v}} avg each',
-                            n: d.compensated,
-                            v: (d.avgCompensation ?? 0).toFixed(1),
-                          })
-                        : ''
+                      : ''
                   }
                 />
                 <Kpi
@@ -1258,14 +1248,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           {/* What compensation is costing, for the roles allowed to see it.
               Sits above the ops snapshot because it is the one number on this
               page with money attached. */}
-          {view === 'agent' && (
-            <CouponSpend
-              from={applied.from}
-              to={applied.to}
-              ticketCompensationSar={d.compensation}
-              sarWithoutApproval={d.compensationWithoutApproval}
-            />
-          )}
+          {view === 'agent' && <CouponSpend from={applied.from} to={applied.to} />}
 
           {/* How much of the customer base the app actually reaches —
               the difference between a lookup that resolves itself and one

@@ -336,9 +336,22 @@ describe('ComplaintDashboard — a capped list admits what it hides', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows how many tickets were settled, not just what was spent', () => {
+  it('reports the money that was APPROVED, not every riyal typed on a ticket', () => {
+    /*
+     * This asserted "4 compensated · 25.0 avg each" — the average of
+     * `tickets.coupon_value` across the range. That sum counts amounts on
+     * coupons that were REFUSED, amounts still awaiting a decision, and
+     * amounts nobody raised an approval for at all; on real data it read 779
+     * against the 254 actually approved, and the two sat on one dashboard
+     * looking like they should agree.
+     *
+     * What the business gave away is what it APPROVED, so the tile reads the
+     * approval queue and the ticket-side sum is gone from the metrics
+     * entirely rather than left computed for somebody to re-display.
+     */
     render(<ComplaintDashboard />);
-    expect(screen.getByText('4 compensated · 25.0 avg each')).toBeInTheDocument();
+    expect(screen.getByText('Compensation approved (SAR)')).toBeInTheDocument();
+    expect(screen.queryByText(/avg each/)).not.toBeInTheDocument();
   });
 });
 

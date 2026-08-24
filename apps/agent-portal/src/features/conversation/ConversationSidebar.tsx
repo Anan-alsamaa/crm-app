@@ -18,7 +18,6 @@ import {
 import type { YijiOrder } from '@yiji/shared-types';
 import {
   useConversation,
-  useCustomerHistory,
   useLinkedTickets,
   type ConversationMessage,
   type MessageAttachment,
@@ -136,7 +135,6 @@ export function ConversationSidebar({
   const { t } = useTranslation();
   const convo = useConversation(conversationId);
   const tickets = useLinkedTickets(conversationId);
-  const history = useCustomerHistory(convo.data?.contact?.id ?? null, conversationId);
   const navigate = useNavigate();
   const updateContact = useUpdateContact();
   // Pull the contact's Yiji ids (external_customer_id + vendor.yiji_vendor_id) so
@@ -381,39 +379,15 @@ export function ConversationSidebar({
         </section>
       )}
 
-      {/* "Earlier chats" is gone.
-          It promised everything this customer had said to us before, and each
-          row rendered a status pill and a date — nothing else. Five rows of
-          "Solved · 23/08/2026" identify no conversation and answer no
-          question; there was no subject, no preview, no agent, so the only way
-          to find out what any of them was about was to open all of them.
-
-          The ask behind it was real (a returning customer routed to a new
-          agent should not have to repeat a story we already hold) and it is
-          already met properly one click away: the contact profile merges
-          conversations AND tickets into one chronological timeline. So this is
-          a link to that, which is the honest version of what the panel was
-          pretending to be. */}
-      {contact.data?.id && history.data && history.data.length > 0 && (
-        <section className="px-5 py-4">
-          <button
-            type="button"
-            onClick={() => navigate(`/contacts/${contact.data!.id}`)}
-            className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-2 text-start text-xs transition-colors duration-fast ease-out hover:bg-foreground/[0.04]"
-          >
-            <span className="text-muted-foreground">
-              {t('sidebar.customerHistoryLink', {
-                count: history.data.length,
-                defaultValue: '{{count}} earlier chats with this customer',
-              })}
-            </span>
-            <span aria-hidden className="shrink-0 text-primary">
-              &rsaquo;
-            </span>
-          </button>
-        </section>
-      )}
-
+      {/* No "earlier chats" panel, and no link standing in for one.
+          It listed a status pill and a date per past conversation — five lines
+          of "Solved · 23/08/2026", which identify nothing and answer nothing.
+          Replacing it with a link to the contact profile was still one more
+          thing in a sidebar the agent reads while a customer waits, and the
+          owner does not want it there.
+          The customer's full history has a home already: Contacts, where the
+          profile merges chats AND tickets into one timeline. Nothing was lost
+          except a panel that was pretending to be it. */}
       {/* Linked tickets — hairline-ruled rows with hover lift, not stacked cards. */}
       <section className="px-5 py-4">
         <SectionLabel count={tickets.data?.length}>{t('sidebar.linkedTickets')}</SectionLabel>

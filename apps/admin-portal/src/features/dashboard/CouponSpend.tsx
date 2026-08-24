@@ -35,26 +35,15 @@ interface Props {
   /** ISO `yyyy-mm-dd`, from the dashboard's applied filter. Empty = no bound. */
   from: string;
   to: string;
-  /**
-   * Total compensation on the TICKETS in the same range — the "Compensation
-   * SAR" KPI above. Passed in so this card can state how it relates to that
-   * number instead of leaving two money figures on one page to be compared by
-   * eye. See the reconciliation line below.
-   */
-  ticketCompensationSar?: number;
-  /**
-   * Of that total, how much sits on tickets with NO approval row at all.
+  /*
+   * The ticket-side total and the "with no approval" gap are gone.
    *
-   * This is the whole reason the two figures differ, and the card used to
-   * describe it only as "the rest" — so a reader comparing 779 against 254 was
-   * left to guess. Counted from the tickets themselves rather than by
-   * subtracting this queue's total: an approval whose amount was later edited
-   * on the ticket would make that subtraction quietly wrong.
-   *
-   * `null` when `coupon_approvals` could not be read, so a permission gap
-   * reports as unknown rather than as a confident zero.
+   * They existed to reconcile this card against a KPI that summed
+   * `tickets.coupon_value` — a figure that counted refused coupons, coupons
+   * still awaiting a decision, and amounts nobody ever raised an approval for.
+   * That KPI now reads the approval queue's own total, so there are no longer
+   * two numbers to reconcile: this card IS the number.
    */
-  sarWithoutApproval?: number | null;
   className?: string;
 }
 
@@ -128,13 +117,7 @@ export function useCouponSpend(from: string, to: string, enabled: boolean) {
 
 const SAR = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 
-export function CouponSpend({
-  from,
-  to,
-  ticketCompensationSar,
-  sarWithoutApproval,
-  className,
-}: Props): JSX.Element | null {
+export function CouponSpend({ from, to, className }: Props): JSX.Element | null {
   const { t } = useTranslation();
   const { user } = useAuth();
   const allowed = canSeeCouponMoney(user);
@@ -295,30 +278,6 @@ export function CouponSpend({
                 however the coupon was raised; this card sums what went through
                 the CRM's own approval queue. The difference is compensation
                 that reached a ticket without being approved here. */}
-            {ticketCompensationSar != null && ticketCompensationSar > 0 && (
-              /* A RECONCILIATION, not a shrug.
-                 This said "the rest reached a ticket without an approval here",
-                 which named no figure — so the two numbers on this dashboard
-                 still looked like they disagreed, and the question came back.
-                 The gap is counted from the tickets themselves rather than by
-                 subtracting this queue's total: an approval whose amount was
-                 later edited on the ticket would make that subtraction quietly
-                 wrong, and this line exists to be trusted. */
-              <p className="text-2xs leading-relaxed text-muted-foreground">
-                {sarWithoutApproval != null && sarWithoutApproval > 0
-                  ? t('couponSpend.reconcile', {
-                      defaultValue:
-                        'Tickets in this range carry {{total}} SAR in total. {{gap}} SAR of that was set straight on the ticket, with no approval raised here.',
-                      total: SAR.format(ticketCompensationSar),
-                      gap: SAR.format(sarWithoutApproval),
-                    })
-                  : t('couponSpend.ofTicketTotal', {
-                      defaultValue:
-                        'Of {{total}} SAR total compensation on tickets in this range — the rest reached a ticket without an approval here.',
-                      total: SAR.format(ticketCompensationSar),
-                    })}
-              </p>
-            )}
 
             {/* Said out loud rather than folded into the total — see couponSar. */}
             {w.unpriced > 0 && (

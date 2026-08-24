@@ -56,14 +56,15 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 export const jobProducer = {
-  /** Enqueue a contact-import job (workers `imports` queue → ImportJob). */
-  enqueueImport(input: {
-    fileId: string;
-    vendorId: string;
-    mapping: Record<string, string>;
-  }): Promise<EnqueueResult> {
-    return post<EnqueueResult>('/jobs/import', input);
-  },
+  /* No `enqueueImport`. The contact-CSV import it fed was removed from the
+   * console: it bulk-loaded customers from a spreadsheet, in the one portal
+   * where nobody who talks to customers can reach it. Customers arrive here by
+   * chatting, by ordering, or from the Yiji app.
+   *
+   * The gateway's /jobs/import endpoint and the workers' `imports` queue are
+   * still wired up and are now unreachable — nothing calls them. They are inert
+   * rather than harmful, and pulling queue plumbing out of two services is a
+   * change worth making on its own rather than alongside this one. */
   /** Enqueue a "run now" for a saved report (workers `reports` queue → ReportJob). */
   enqueueReport(reportId: string): Promise<EnqueueResult> {
     return post<EnqueueResult>('/jobs/report', { reportId });

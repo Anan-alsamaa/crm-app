@@ -82,7 +82,6 @@ export interface AgentPerformance {
   solvedPct: number | null;
   /** Mean hours from raised to closed, over the ones actually closed. */
   avgHoursToClose: number | null;
-  compensation: number;
   /** Still not closed — what a supervisor chases. */
   open: number;
   /** Their chat workload alongside the complaints, as his table shows it. */
@@ -173,7 +172,6 @@ export interface MonthPoint {
   /** `yyyy-mm`. */
   month: string;
   count: number;
-  compensation: number;
 }
 
 export interface ComplaintMetrics {
@@ -186,32 +184,23 @@ export interface ComplaintMetrics {
   rated: number;
   satisfied: number;
   satisfiedPct: number | null;
-  compensation: number;
-  avgCompensation: number | null;
-  /** Complaints actually marked Compensated — not the same as "has a coupon". */
-  compensated: number;
   /**
-   * Compensation recorded on tickets that never went through the coupon
-   * approval queue, and the count of those tickets.
+   * Complaints marked Compensated. A COUNT, deliberately — there is no money
+   * figure on this type any more.
    *
-   * WHY THIS EXISTS. Two numbers on this dashboard looked like they should
-   * agree and did not: "Compensation SAR" read 779 while "Coupons approved
-   * here" read 254. They measure different things — the first is every riyal
-   * typed into `tickets.coupon_value`, the second is the approved subset of
-   * `coupon_approvals` — and the gap was described only as "the rest", which
-   * is not an explanation anybody can act on.
+   * `tickets.coupon_value` used to be summed into a headline "Compensation
+   * SAR", and it was the wrong number: it totals every riyal ever typed into
+   * that column, including amounts on coupons that were refused, amounts still
+   * awaiting a decision, and amounts nobody ever raised an approval for at
+   * all. On this data it read 779 against the 254 that was actually approved —
+   * two figures on one dashboard that looked like they should agree.
    *
-   * The gap is worth naming, because it is not rounding: on this data 32 of
-   * the 50 compensated tickets carry money that no approval was ever raised
-   * for. Stating the figure turns a confusing pair of numbers into a
-   * reconciliation, and surfaces a real operational fact — most compensation
-   * is bypassing the queue that exists to authorise it.
-   *
-   * `null` when `coupon_approvals` is unreadable for this role, so a
-   * permission gap reports as "unknown" rather than as a confident zero.
+   * What the business gave away is what it APPROVED, so the money now comes
+   * from `coupon_approvals` (see couponWorth / useCouponSpend) and the
+   * ticket-side sum is gone rather than left computed for somebody to
+   * resurrect. Per-month and per-agent money went with it for the same reason.
    */
-  compensationWithoutApproval: number | null;
-  ticketsCompensatedWithoutApproval: number | null;
+  compensated: number;
   /** Oldest / newest complaint in the filtered set (`yyyy-mm-dd`), for the header. */
   firstDate: string | null;
   lastDate: string | null;
@@ -384,36 +373,6 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       if (filters.from) dateFilter._gte = `${filters.from}T00:00:00`;
       // Inclusive `to`: a range ending on the 31st must contain the 31st.
       if (filters.to) dateFilter._lte = `${filters.to}T23:59:59`;
-
-      /*
-       * Which tickets have a coupon approval at all.
-       *
-       * Ids only — the amounts come from the tickets themselves, so this is a
-       * membership test, not a second source of money. Best-effort: coupon
-       * data is permission-gated (see canSeeCouponMoney), and a role that
-       * cannot read the queue must still get a dashboard. It resolves to null
-       * rather than an empty set so "unknown" stays distinguishable from
-       * "none" — an empty set would claim every riyal bypassed the queue.
-       */
-      const approvedTicketIds: Promise<Set<string> | null> = directus
-        .request(
-          readItems(
-            'coupon_approvals' as never,
-            {
-              fields: ['ticket'],
-              limit: -1,
-            } as never,
-          ),
-        )
-        .then(
-          (rows) =>
-            new Set(
-              (rows as unknown as Array<{ ticket: string | null }>)
-                .map((r) => (r.ticket == null ? null : String(r.ticket)))
-                .filter((v): v is string => !!v),
-            ),
-        )
-        .catch(() => null);
 
       const [tickets, storeRows, users, csat, conversations, routing, messageCounts] =
         await Promise.all([
@@ -637,7 +596,6 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       let satisfied = 0;
       let closedUnsatisfied = 0;
       let openNotOverdue = 0;
-      let compensation = 0;
       let compensated = 0;
       let firstDate: string | null = null;
       let lastDate: string | null = null;
@@ -660,22 +618,17 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       >();
       const flat: ComplaintRow[] = [];
 
-      const withApproval = await approvedTicketIds;
-      let compensationWithoutApproval = 0;
-      let ticketsCompensatedWithoutApproval = 0;
-
       for (const r of rows) {
+        /*
+         * Still read per ROW, for the drill-down list only.
+         *
+         * It is no longer totalled anywhere: summing `tickets.coupon_value`
+         * counts refused coupons, coupons still awaiting a decision, and
+         * amounts nobody ever raised an approval for, so the total was 779
+         * against the 254 actually approved. What the business gave away is
+         * what it APPROVED — that figure comes from `coupon_approvals`.
+         */
         const money = typeof r.coupon_value === 'number' ? r.coupon_value : 0;
-        compensation += money;
-        // Money on a ticket that no approval was ever raised for. Counted from
-        // the TICKET side, not by subtracting the queue's total: an approval
-        // whose amount was later edited on the ticket would make the
-        // subtraction quietly wrong, and this figure exists precisely to be
-        // trusted as a reconciliation.
-        if (money > 0 && withApproval && !withApproval.has(String(r.id))) {
-          compensationWithoutApproval += money;
-          ticketsCompensatedWithoutApproval += 1;
-        }
         // Their own field, not "coupon_value > 0" — an agent can mark a
         // complaint Compensated before the coupon amount is filled in, and the
         // two questions ("was it settled" / "what did it cost") are different.
@@ -713,9 +666,8 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
 
         const month = (r.date_created ?? '').slice(0, 7);
         if (month) {
-          const cur = monthMap.get(month) ?? { month, count: 0, compensation: 0 };
+          const cur = monthMap.get(month) ?? { month, count: 0 };
           cur.count += 1;
-          cur.compensation += money;
           monthMap.set(month, cur);
         }
 
@@ -842,7 +794,6 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
           avgHoursToClose: a.hours.length
             ? a.hours.reduce((x, y) => x + y, 0) / a.hours.length
             : null,
-          compensation: a.money,
           open: a.open,
           chatsOpen: chatOpenByAgent.get(id) ?? 0,
           chatsSolved: chatSolvedByAgent.get(id) ?? 0,
@@ -904,10 +855,6 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         rated,
         satisfied,
         satisfiedPct: rated ? (satisfied / rated) * 100 : null,
-        compensation,
-        compensationWithoutApproval: withApproval ? compensationWithoutApproval : null,
-        ticketsCompensatedWithoutApproval: withApproval ? ticketsCompensatedWithoutApproval : null,
-        avgCompensation: rows.length ? compensation / rows.length : null,
         compensated,
         firstDate,
         lastDate,

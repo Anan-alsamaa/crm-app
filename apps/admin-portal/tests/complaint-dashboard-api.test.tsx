@@ -141,40 +141,42 @@ async function run(filters: ComplaintFilters = emptyComplaintFilters) {
 }
 
 describe('ticket dashboard — compensation', () => {
-  it('sums coupon_value into the headline compensation figure', async () => {
+  /*
+   * THE TICKET-SIDE MONEY IS GONE, and these two tests went with it.
+   *
+   * They guarded a headline that summed `tickets.coupon_value` across the
+   * range, and a per-month split of the same. That sum counts every riyal ever
+   * typed into the column: amounts on coupons that were REFUSED, amounts still
+   * awaiting a decision, and amounts nobody raised an approval for at all. On
+   * real data it read 779 against the 254 actually approved — the two sat on
+   * one dashboard looking like they should agree.
+   *
+   * What the business gave away is what it APPROVED, which comes from
+   * `coupon_approvals` (couponWorth, covered in the reports package). Keeping a
+   * test for the ticket-side total would keep the wrong number alive and
+   * waiting to be re-displayed.
+   *
+   * What survives is the COUNT, which is a different fact and still true.
+   */
+  it('counts the tickets an agent marked Compensated, and no longer totals their money', async () => {
     mockData({
       tickets: [
-        ticket({ coupon_value: 25 }),
-        ticket({ coupon_value: 15 }),
-        ticket({ coupon_value: null }),
+        ticket({ coupon_value: 25, compensation: 'Compensated' }),
+        ticket({ coupon_value: 15, compensation: 'Compensated' }),
+        // A value with no Compensated mark: money in the column is not the
+        // same claim as "this complaint was settled", which is why the count
+        // reads the flag rather than the amount.
+        ticket({ coupon_value: 40, compensation: null }),
       ],
       stores: STORES,
       users: USERS,
     });
     const d = await run();
     expect(d.total).toBe(3);
-    expect(d.compensation).toBe(40);
-    // Averaged over EVERY ticket, not just the compensated ones — that is
-    // the "cost per ticket" the ops manager reads it as.
-    expect(d.avgCompensation).toBeCloseTo(40 / 3);
-  });
-
-  it('splits compensation per month alongside the volume', async () => {
-    mockData({
-      tickets: [
-        ticket({ date_created: iso('2026-05-04T09:00:00Z'), coupon_value: 10 }),
-        ticket({ date_created: iso('2026-05-20T09:00:00Z'), coupon_value: 5 }),
-        ticket({ date_created: iso('2026-06-02T09:00:00Z'), coupon_value: 100 }),
-      ],
-      stores: STORES,
-      users: USERS,
-    });
-    const d = await run();
-    expect(d.months.map((m) => m.month)).toEqual(['2026-05', '2026-06']);
-    expect(d.months.map((m) => m.count)).toEqual([2, 1]);
-    // June is the cheap month by volume and the expensive one by cost — the
-    // whole reason the line is overlaid on the columns.
-    expect(d.months.map((m) => m.compensation)).toEqual([15, 100]);
+    expect(d.compensated).toBe(2);
+    expect(d).not.toHaveProperty('compensation');
+    expect(d).not.toHaveProperty('avgCompensation');
+    expect(d.months.every((m) => !('compensation' in m))).toBe(true);
   });
 });
 
@@ -343,7 +345,7 @@ describe('ticket dashboard — status, satisfaction and agents', () => {
     expect(a.open).toBe(1);
     expect(a.solvedPct).toBe(50);
     expect(a.avgHoursToClose).toBe(4);
-    expect(a.compensation).toBe(30);
+    // No per-agent money: it was the same ticket-side sum, cut by agent.
   });
 
   it('keeps unassigned tickets visible instead of hiding them from the table', async () => {

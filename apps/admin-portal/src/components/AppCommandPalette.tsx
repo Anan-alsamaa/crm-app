@@ -16,7 +16,6 @@ import {
   SparkleIcon,
   StoreIcon,
   TeamIcon,
-  UploadIcon,
   UsersIcon,
   useCommandPaletteShortcut,
   ZapIcon,
@@ -99,13 +98,6 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
           icon: <StoreIcon size={16} />,
           keywords: ['restaurants', 'branches', 'outlets'],
           onSelect: () => navigate('/stores'),
-        },
-        {
-          id: 'go-imports',
-          label: t('nav.imports', { defaultValue: 'Import contacts' }),
-          icon: <UploadIcon size={16} />,
-          keywords: ['csv', 'upload', 'contacts'],
-          onSelect: () => navigate('/imports'),
         },
         {
           id: 'go-sla',
