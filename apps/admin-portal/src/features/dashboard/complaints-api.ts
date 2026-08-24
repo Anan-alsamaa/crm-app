@@ -575,14 +575,18 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
            * must not rewrite what last month's tickets say. The manager is the
            * exception, for two reasons.
            *
-           * It is WRONG in the snapshot. Measured on live data: 43 tickets
-           * carry "Mo'men Elsharkasy" as their area manager, spread across
-           * branches whose master records name Jestoni Tejo, Ahmed Nouh,
-           * Mostafa Alsayeed, Eslam Saeed and Moamen Tag AlDin. One value was
-           * stamped across an import. Not one of the snapshot names even
-           * EXISTS in the store master — "FAHAD MOUSTAFA" against "Fahd
-           * Moustafa", "Khaled Abdellah" against "Khaled Abdella Mohamed" — so
-           * any count grouped by it was a count of a name nobody answers to.
+           * It WAS wrong in the snapshot, and could be again. Measured on
+           * live data before the repair: 43 tickets carried "Mo'men
+           * Elsharkasy" as their area manager, spread across branches whose
+           * masters name Jestoni Tejo, Ahmed Nouh, Mostafa Alsayeed, Eslam
+           * Saeed and Moamen Tag AlDin — one value stamped across an import.
+           * Not one snapshot name even existed in the store master ("FAHAD
+           * MOUSTAFA" against "Fahd Moustafa"), so any count grouped by it
+           * counted a name nobody answers to. The snapshots have since been
+           * corrected from the master by
+           * `scripts/repair-store-snapshots.mjs`, but reading the master here
+           * is what makes a repeat of that import harmless rather than
+           * silently wrong again.
            *
            * And the question is different. Brand attribution asks "what was
            * true then"; an operations dashboard asks "who do I talk to about
