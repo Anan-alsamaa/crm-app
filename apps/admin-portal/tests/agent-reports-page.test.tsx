@@ -885,24 +885,24 @@ describe('AgentReportsPage — ticket breakdown', () => {
     expect(screen.queryByText('Half-filled row')).not.toBeInTheDocument();
   });
 
-  it('says how many it is hiding, rather than quietly showing fewer', () => {
-    api.useAgentReportData.mockReturnValue(ok);
-    renderPage('complaints');
-    expect(screen.getByText(/1 tickets? are hidden because fields are missing/i)).toBeTruthy();
-  });
-
-  it('shows them on request, and says that it is', async () => {
-    const user = userEvent.setup();
+  it('hides a half-filled row without a banner, which is a deliberate trade', async () => {
+    /*
+     * There WAS a banner stating the count with a Show them control — the usual
+     * defence against silent filtering. The owner removed it once the
+     * half-filled rows had been deleted: on a clean database it is furniture
+     * that never says anything.
+     *
+     * Pinned so the trade stays visible in code: an incomplete row is now
+     * hidden with NOTHING on screen to say so. The place it shows up is the
+     * count — this report's tile against the dashboard's, which counts
+     * everything.
+     */
     api.useAgentReportData.mockReturnValue(ok);
     const { container } = renderPage('complaints');
-    await user.click(screen.getByRole('button', { name: /show them/i }));
-    expect(container.querySelectorAll('tbody tr')).toHaveLength(3);
-    expect(screen.getByText('Half-filled row')).toBeInTheDocument();
-    // The notice flips rather than disappearing: what is on screen is never
-    // left unexplained in either direction.
-    expect(screen.getByText(/including 1 tickets? with fields missing/i)).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: /hide them/i }));
     expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(screen.queryByText('Half-filled row')).not.toBeInTheDocument();
+    expect(screen.queryByText(/are hidden because fields are missing/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /show them/i })).not.toBeInTheDocument();
   });
 
   it('resolves a branch whose name drifted, via its store code', () => {

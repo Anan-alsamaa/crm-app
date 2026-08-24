@@ -224,11 +224,6 @@ export interface ComplaintMetrics {
   /** Grouped by chain manager — the level above the area manager. */
   byChain: Cut;
   byCity: Cut;
-  /**
-   * The area manager whose estate is most widely affected, measured in BRANCHES
-   * rather than tickets. Null when no ticket carries a branch.
-   */
-  widestArea: { manager: string; branches: number; estate: number } | null;
   byStatus: Cut;
   byServiceType: Cut;
   bySource: Cut;
@@ -657,18 +652,6 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       const byArea = new Map<string, number>();
       const byChain = new Map<string, number>();
       const byCity = new Map<string, number>();
-      /*
-       * Which BRANCHES each area manager has trouble in, as a set rather than a
-       * count of tickets.
-       *
-       * Breadth, not volume — and the distinction is the whole reason this is
-       * here. Nothing in this data records how much business a branch did, so a
-       * ticket count says a big branch is worse than a small one. "Eleven of
-       * your eighteen branches have a complaint this fortnight" survives that
-       * objection: it is a statement about spread, which is the thing an area
-       * manager can actually act on.
-       */
-      const branchesByArea = new Map<string, Set<string>>();
       const byStatus = new Map<string, number>();
       const byServiceType = new Map<string, number>();
       const bySource = new Map<string, number>();
@@ -740,11 +723,6 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         bump(byArea, r.area);
         bump(byChain, r.chain);
         bump(byCity, r.city);
-        if (r.area && r.restaurantName) {
-          const set = branchesByArea.get(r.area) ?? new Set<string>();
-          set.add(r.restaurantName);
-          branchesByArea.set(r.area, set);
-        }
         bump(byStatus, r.status);
         bump(byServiceType, r.service_type);
         bump(bySource, r.complaint_source);
@@ -937,26 +915,6 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         byArea: topN(byArea, 10),
         byChain: topN(byChain, 10),
         byCity: topN(byCity, 10),
-        /*
-         * The area manager with the widest spread, and how much of their
-         * estate it covers. `estate` comes from the store master, not from the
-         * tickets, so "3 of 18" stays honest when only three branches have
-         * complained.
-         */
-        widestArea: (() => {
-          let best: { manager: string; branches: number; estate: number } | null = null;
-          for (const [manager, set] of branchesByArea) {
-            if (!manager) continue;
-            if (!best || set.size > best.branches) {
-              best = {
-                manager,
-                branches: set.size,
-                estate: storeRows.filter((s) => s.area_manager === manager).length,
-              };
-            }
-          }
-          return best;
-        })(),
         byStatus: topN(byStatus, 10),
         byServiceType: topN(byServiceType, 8),
         bySource: topN(bySource, 8),

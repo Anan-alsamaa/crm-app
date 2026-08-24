@@ -7,6 +7,7 @@ import { readItems, createItem, updateItem, deleteItem } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
+  ConfirmDialog,
   cn,
   Drawer,
   DrawerSection,
@@ -352,15 +353,19 @@ export function SlaPoliciesPage() {
     setEditingId(null);
   };
 
-  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  /* The policy the dialog is asking about. Holds the NAME as well as the id,
+     so the heading can say which one without re-finding it in the list. */
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const remove = useDeleteSlaPolicy();
-  const governed = useGovernedTicketCount(confirmingDelete);
+  const governed = useGovernedTicketCount(pendingDelete?.id ?? null);
 
-  const confirmDelete = async (id: string, name: string) => {
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const { id, name } = pendingDelete;
     try {
       await remove.mutateAsync(id);
       toast.success(t('sla.deleted', { defaultValue: 'Policy "{{name}}" deleted.', name }));
-      setConfirmingDelete(null);
+      setPendingDelete(null);
     } catch {
       toast.error(t('sla.deleteError', { defaultValue: 'Could not delete the policy.' }));
     }
@@ -638,59 +643,21 @@ export function SlaPoliciesPage() {
                       <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(p)}>
                         {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
                       </Button>
-                      {/* Two steps, in place. A policy is the promise a whole
-                          class of tickets is held to, and a single click next
-                          to Edit is too easy to hit by accident. */}
-                      {confirmingDelete === p.id ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setConfirmingDelete(null)}
-                          >
-                            {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            disabled={remove.isPending}
-                            onClick={() => void confirmDelete(p.id, p.name)}
-                          >
-                            {t('sla.deleteConfirm', { defaultValue: 'Delete policy' })}
-                          </Button>
-                        </span>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setConfirmingDelete(p.id)}
-                        >
-                          {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
-                        </Button>
-                      )}
+                      {/* One button. The confirmation is a DIALOG rather than
+                          this button turning red and asking again: a control
+                          that changes meaning under the cursor is one you can
+                          double-click straight through, and a policy is the
+                          promise a whole class of tickets is held to. */}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setPendingDelete({ id: p.id, name: p.name })}
+                      >
+                        {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+                      </Button>
                     </div>
-                    {confirmingDelete === p.id && (
-                      <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-2xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
-                        {governed.isLoading
-                          ? t('sla.deleteChecking', {
-                              defaultValue: 'Checking what this policy governs…',
-                            })
-                          : (governed.data ?? 0) > 0
-                            ? t('sla.deleteWithTickets', {
-                                count: governed.data ?? 0,
-                                defaultValue:
-                                  '{{count}} open tickets are being held to this policy. Deleting it leaves them with no deadline at all — deactivate it instead to stop it governing anything new.',
-                              })
-                            : t('sla.deleteNoTickets', {
-                                defaultValue:
-                                  'No tickets are currently held to this policy. Deleting it cannot be undone.',
-                              })}
-                      </p>
-                    )}
                   </article>
                 ))}
               </div>
@@ -698,6 +665,42 @@ export function SlaPoliciesPage() {
           )}
         </div>
       </div>
+
+      {/*
+        WHAT IT COSTS, before the click that cannot be taken back.
+        The FK is ON DELETE SET NULL, so the tickets survive — but each one
+        silently loses the deadline it was being held to, with nothing on the
+        ticket to say why. That number is fetched when the dialog opens and
+        stated here, along with the gentler option: deactivating stops a policy
+        governing anything NEW while leaving the tickets already under it alone.
+      */}
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title={t('sla.deleteTitle', {
+          defaultValue: 'Delete "{{name}}"?',
+          name: pendingDelete?.name ?? '',
+        })}
+        description={
+          governed.isLoading
+            ? t('sla.deleteChecking', { defaultValue: 'Checking what this policy governs…' })
+            : (governed.data ?? 0) > 0
+              ? t('sla.deleteWithTickets', {
+                  count: governed.data ?? 0,
+                  defaultValue:
+                    '{{count}} open tickets are being held to this policy. Deleting it leaves them with no deadline at all — deactivate it instead to stop it governing anything new.',
+                })
+              : t('sla.deleteNoTickets', {
+                  defaultValue:
+                    'No tickets are currently held to this policy. Deleting it cannot be undone.',
+                })
+        }
+        confirmLabel={t('sla.deleteConfirm', { defaultValue: 'Delete policy' })}
+        cancelLabel={t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+        destructive
+        loading={remove.isPending}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setPendingDelete(null)}
+      />
 
       <Drawer
         open={open}

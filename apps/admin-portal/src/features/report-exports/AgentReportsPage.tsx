@@ -831,10 +831,17 @@ function ComplaintsReport({
    * line of empty cells. Sixty-eight of them arrived from the end-to-end test
    * suite, which seeds against this same database.
    *
-   * SHOWN, NOT SWALLOWED. Filtering silently is the failure this codebase
-   * keeps repeating: something matches nothing and the result reads as a
-   * plausible answer. So the count of hidden rows is stated above the table
-   * with a control to show them, and the export follows whatever is on screen.
+   * There WAS a banner here stating how many rows were hidden, with a control
+   * to show them — the usual defence against silent filtering, which is the
+   * failure this codebase keeps repeating. The owner removed it once the
+   * half-filled rows had been deleted: on a clean database it is a strip of
+   * furniture that never says anything.
+   *
+   * THE TRADE, so whoever reads this next knows it was made deliberately: a
+   * ticket that arrives half-filled from now on is hidden with nothing on
+   * screen to say so. The place it will show up is the count — this report's
+   * "TICKETS" tile against the dashboard's, which counts everything. If those
+   * two ever disagree, this filter is why.
    */
   const isComplete = (r: (typeof joined)[number]) =>
     Boolean(
@@ -845,12 +852,8 @@ function ComplaintsReport({
       r.orderNumber &&
       r.date,
     );
-  const [showIncomplete, setShowIncomplete] = useState(false);
-  const incompleteCount = useMemo(() => joined.filter((r) => !isComplete(r)).length, [joined]);
-  const complete = useMemo(
-    () => (showIncomplete ? joined : joined.filter(isComplete)),
-    [joined, showIncomplete],
-  );
+
+  const complete = useMemo(() => joined.filter(isComplete), [joined]);
   const visible = useMemo(() => filterTickets(complete, criteria), [complete, criteria]);
 
   /**
@@ -1079,42 +1082,6 @@ function ComplaintsReport({
           icon={<InboxIcon size={18} />}
         />
       </ReportKpiStrip>
-
-      {/* WHAT IS BEING HIDDEN, said out loud.
-          Filtering incomplete rows away silently is the failure this codebase
-          keeps repeating — something matches nothing and the shortfall reads
-          as a plausible answer. The count is stated and the rows are one click
-          away. */}
-      {incompleteCount > 0 && (
-        <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-center gap-2 rounded-xl bg-warning-tint px-3.5 py-2 text-2xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
-          <span>
-            {showIncomplete
-              ? t('complaintReport.incompleteShown', {
-                  count: incompleteCount,
-                  defaultValue:
-                    'Including {{count}} tickets with fields missing — they carry no branch, service type, channel or order.',
-                })
-              : t('complaintReport.incompleteHidden', {
-                  count: incompleteCount,
-                  defaultValue:
-                    '{{count}} tickets are hidden because fields are missing — no branch, service type, channel or order.',
-                })}
-          </span>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="ms-auto h-7"
-            onClick={() => {
-              setShowIncomplete((v) => !v);
-              setPage(1);
-            }}
-          >
-            {showIncomplete
-              ? t('complaintReport.hideIncomplete', { defaultValue: 'Hide them' })
-              : t('complaintReport.showIncomplete', { defaultValue: 'Show them' })}
-          </Button>
-        </div>
-      )}
 
       {/* The filter bar. Free text first because it answers most questions on
           its own; the dropdowns are for slicing rather than finding. */}

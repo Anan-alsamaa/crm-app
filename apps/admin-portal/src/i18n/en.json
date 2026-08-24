@@ -397,7 +397,8 @@
     "deleteWithTickets": "{{count}} open tickets are being held to this policy. Deleting it leaves them with no deadline at all — deactivate it instead to stop it governing anything new.",
     "deleteNoTickets": "No tickets are currently held to this policy. Deleting it cannot be undone.",
     "deleted": "Policy \"{{name}}\" deleted.",
-    "deleteError": "Could not delete the policy."
+    "deleteError": "Could not delete the policy.",
+    "deleteTitle": "Delete \"{{name}}\"?"
   },
   "users": {
     "inactive": "Inactive",

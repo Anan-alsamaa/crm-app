@@ -903,7 +903,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
               counting a thing: what customers are actually complaining about,
               which is what a branch, area or chain manager goes and fixes. */}
           {view === 'operations' && (
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               {/* The thing to go and FIX. Named, because "66" is a number to
                   look up and "66 — Cleanness" is this week's job. */}
               <Kpi
@@ -953,53 +953,6 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                         )(ops.topService!)
                     : undefined
                 }
-              />
-              {/* WHOSE ESTATE, and how much of it.
-                  Branches, not tickets — deliberately. Nothing in this data
-                  records how much business a branch did, so a ticket count says
-                  a big branch is worse than a small one, which is the objection
-                  that retired every count this strip used to carry. "11 of 18
-                  branches" survives it: spread is a statement an area manager
-                  can act on, and it names the person to act. */}
-              <Kpi
-                tone="sky"
-                icon={<UsersIcon size={17} />}
-                order={2}
-                /* "3 of 18" only when the estate is genuinely known. A manager
-                   whose name is not in the branch master has no estate to
-                   divide by, and "22/—" reads as a broken number rather than a
-                   missing one. */
-                value={
-                  d.widestArea
-                    ? d.widestArea.estate > 0
-                      ? `${d.widestArea.branches}/${d.widestArea.estate}`
-                      : String(d.widestArea.branches)
-                    : '—'
-                }
-                label={t('complaintDash.opsWidestArea', {
-                  defaultValue: 'Area manager most affected',
-                })}
-                sub={
-                  d.widestArea
-                    ? d.widestArea.estate > 0
-                      ? `${d.widestArea.manager} · ${t('complaintDash.opsOfBranches', {
-                          count: d.widestArea.estate,
-                          defaultValue: 'of {{count}} branches',
-                        })}`
-                      : d.widestArea.manager
-                    : String(t('complaintDash.notMeasured', { defaultValue: 'Not measured yet' }))
-                }
-                onOpen={(() => {
-                  // Narrowed once, outside the callback: the drill needs a
-                  // Breakdown, and `key` is what the filter matches on.
-                  const w = d.widestArea;
-                  if (!w) return undefined;
-                  return () =>
-                    drillInto(
-                      String(t('complaintDash.byArea', { defaultValue: 'By area manager' })),
-                      (r) => r.area,
-                    )({ key: w.manager, label: w.manager, count: w.branches });
-                })()}
               />
             </div>
           )}
