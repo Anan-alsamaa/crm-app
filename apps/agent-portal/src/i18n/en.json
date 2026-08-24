@@ -331,7 +331,8 @@
     "editContact": "Edit customer details",
     "name": "Name",
     "openTicket": "Open ticket",
-    "customerHistory": "Earlier chats"
+    "customerHistory": "Earlier chats",
+    "customerHistoryLink": "{{count}} earlier chats with this customer"
   },
   "tickets": {
     "title": "Tickets",

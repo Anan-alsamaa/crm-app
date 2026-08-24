@@ -42,6 +42,19 @@ interface Props {
    * eye. See the reconciliation line below.
    */
   ticketCompensationSar?: number;
+  /**
+   * Of that total, how much sits on tickets with NO approval row at all.
+   *
+   * This is the whole reason the two figures differ, and the card used to
+   * describe it only as "the rest" — so a reader comparing 779 against 254 was
+   * left to guess. Counted from the tickets themselves rather than by
+   * subtracting this queue's total: an approval whose amount was later edited
+   * on the ticket would make that subtraction quietly wrong.
+   *
+   * `null` when `coupon_approvals` could not be read, so a permission gap
+   * reports as unknown rather than as a confident zero.
+   */
+  sarWithoutApproval?: number | null;
   className?: string;
 }
 
@@ -119,6 +132,7 @@ export function CouponSpend({
   from,
   to,
   ticketCompensationSar,
+  sarWithoutApproval,
   className,
 }: Props): JSX.Element | null {
   const { t } = useTranslation();
@@ -282,12 +296,27 @@ export function CouponSpend({
                 the CRM's own approval queue. The difference is compensation
                 that reached a ticket without being approved here. */}
             {ticketCompensationSar != null && ticketCompensationSar > 0 && (
-              <p className="text-2xs text-muted-foreground">
-                {t('couponSpend.ofTicketTotal', {
-                  defaultValue:
-                    'Of {{total}} SAR total compensation on tickets in this range — the rest reached a ticket without an approval here.',
-                  total: SAR.format(ticketCompensationSar),
-                })}
+              /* A RECONCILIATION, not a shrug.
+                 This said "the rest reached a ticket without an approval here",
+                 which named no figure — so the two numbers on this dashboard
+                 still looked like they disagreed, and the question came back.
+                 The gap is counted from the tickets themselves rather than by
+                 subtracting this queue's total: an approval whose amount was
+                 later edited on the ticket would make that subtraction quietly
+                 wrong, and this line exists to be trusted. */
+              <p className="text-2xs leading-relaxed text-muted-foreground">
+                {sarWithoutApproval != null && sarWithoutApproval > 0
+                  ? t('couponSpend.reconcile', {
+                      defaultValue:
+                        'Tickets in this range carry {{total}} SAR in total. {{gap}} SAR of that was set straight on the ticket, with no approval raised here.',
+                      total: SAR.format(ticketCompensationSar),
+                      gap: SAR.format(sarWithoutApproval),
+                    })
+                  : t('couponSpend.ofTicketTotal', {
+                      defaultValue:
+                        'Of {{total}} SAR total compensation on tickets in this range — the rest reached a ticket without an approval here.',
+                      total: SAR.format(ticketCompensationSar),
+                    })}
               </p>
             )}
 

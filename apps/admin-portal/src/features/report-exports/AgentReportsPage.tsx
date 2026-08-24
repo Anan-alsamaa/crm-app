@@ -53,6 +53,8 @@ import {
 } from './api.js';
 import { useStoreIndex } from '../restaurants/api.js';
 import { directus } from '../../lib/directus.js';
+import { usePinnedWidth } from '../../lib/pinned-width.js';
+import { ColumnScroller } from '../../components/ColumnScroller.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useRememberedRange, isoDay } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
@@ -505,7 +507,11 @@ function TicketsReport({
         />
       </ReportKpiStrip>
 
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Pinned like the rest of the furniture: this bar acts on the table
+          beside it, and a toolbar that slides out of the window when you scroll
+          to the far columns is a toolbar you have to scroll back for. See
+          usePinnedWidth. */}
+      <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-center gap-3">
         {/* Status filter, folded in from the register this table replaced. Counts
             come from the unfiltered set so they stay stable while filtering. */}
         <div className="flex flex-wrap items-center gap-1">
@@ -586,7 +592,7 @@ function TicketsReport({
         </div>
       </div>
 
-      <TableSurface fill>
+      <TableSurface flow>
         <Table>
           <thead>
             <tr>
@@ -782,6 +788,15 @@ function ComplaintsReport({
    * 946641" behaves identically wherever it is asked. See @yiji/reports.
    */
   const [criteria, setCriteria] = useState<TicketFilterCriteria>({});
+  /*
+   * What is typed but not yet asked for.
+   *
+   * These nine controls used to write straight through, so the table re-filtered
+   * and re-paged on every keystroke and every half-typed date — moving under the
+   * hands of somebody still deciding what to ask. Same bargain as the shared
+   * ReportFilterBar: type freely, then Apply (or press Enter).
+   */
+  const [draft, setDraft] = useState<TicketFilterCriteria>({});
   /**
    * How many rows to show at once.
    *
@@ -828,10 +843,21 @@ function ComplaintsReport({
     [joined],
   );
 
-  const setCriterion = (patch: Partial<TicketFilterCriteria>) => {
-    setCriteria((c) => ({ ...c, ...patch }));
-    setPage(1); // a filtered set is a different set; page 7 of it means nothing
+  const setCriterion = (patch: Partial<TicketFilterCriteria>) =>
+    setDraft((c) => ({ ...c, ...patch }));
+
+  /** Push the draft through. A filtered set is a different set, so page 7 of it
+   *  means nothing — every apply lands on page 1. */
+  const applyFilters = () => {
+    setCriteria(draft);
+    setPage(1);
   };
+  const clearFilters = () => {
+    setDraft({});
+    setCriteria({});
+    setPage(1);
+  };
+  const filtersDirty = JSON.stringify(draft) !== JSON.stringify(criteria);
 
   /** The column currently being dragged in the picker, if any. */
   const [dragKey, setDragKey] = useState<ComplaintColumnKey | null>(null);
@@ -1022,7 +1048,19 @@ function ComplaintsReport({
 
       {/* The filter bar. Free text first because it answers most questions on
           its own; the dropdowns are for slicing rather than finding. */}
-      <div className="space-y-3 rounded-2xl bg-card p-3 shadow-soft ring-1 ring-foreground/[0.06]">
+      {/* Pinned, like the rest of the furniture — see usePinnedWidth. Without
+          the explicit width it would be laid out at the TABLE's width (the
+          stack is `w-max` so sticky has room to work), which is a filter card
+          five thousand pixels wide with its controls huddled at one end. */}
+      <form
+        // A real form, so Enter anywhere inside it applies — the reflex anybody
+        // typing into a search box already has.
+        onSubmit={(e) => {
+          e.preventDefault();
+          applyFilters();
+        }}
+        className="sticky start-0 w-[var(--pin-w,100%)] space-y-3 rounded-2xl bg-card p-3 shadow-soft ring-1 ring-foreground/[0.06]"
+      >
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex flex-1 flex-col gap-1" style={{ minWidth: '18rem' }}>
             <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
@@ -1034,7 +1072,7 @@ function ComplaintsReport({
                 complaint up by whatever they have to hand, and deciding which
                 field a number belongs to is work the computer can do. */}
             <Input
-              value={criteria.query ?? ''}
+              value={draft.query ?? ''}
               onChange={(e) => setCriterion({ query: e.target.value })}
               className="h-8"
               placeholder={t('complaintReport.searchPlaceholder', {
@@ -1049,7 +1087,7 @@ function ComplaintsReport({
             <DateField
               size="sm"
               className="w-[9rem]"
-              value={criteria.from ?? ''}
+              value={draft.from ?? ''}
               onChange={(v) => setCriterion({ from: v })}
             />
           </label>
@@ -1060,7 +1098,7 @@ function ComplaintsReport({
             <DateField
               size="sm"
               className="w-[9rem]"
-              value={criteria.to ?? ''}
+              value={draft.to ?? ''}
               onChange={(v) => setCriterion({ to: v })}
             />
           </label>
@@ -1070,67 +1108,73 @@ function ComplaintsReport({
             label={t('complaintReport.col.complaintType', { defaultValue: 'Ticket type' })}
             field="complaintType"
             values={options.complaintType}
-            value={criteria.complaintType}
+            value={draft.complaintType}
           />
           <FilterSelect
             label={t('complaintReport.col.complaintStatus', { defaultValue: 'Status' })}
             field="status"
             values={options.complaintStatus}
-            value={criteria.status}
+            value={draft.status}
           />
           <FilterSelect
             label={t('complaintReport.col.brand', { defaultValue: 'Brand' })}
             field="brand"
             values={options.brand}
-            value={criteria.brand}
+            value={draft.brand}
           />
           <FilterSelect
             label={t('complaintReport.col.city', { defaultValue: 'City' })}
             field="city"
             values={options.city}
-            value={criteria.city}
+            value={draft.city}
           />
           <FilterSelect
             label={t('complaintReport.col.agent', { defaultValue: 'Agent' })}
             field="agent"
             values={options.agent}
-            value={criteria.agent}
+            value={draft.agent}
           />
           <FilterSelect
             label={t('complaintReport.col.serviceType', { defaultValue: 'Service type' })}
             field="serviceType"
             values={options.serviceType}
-            value={criteria.serviceType}
+            value={draft.serviceType}
           />
           <FilterSelect
             label={t('complaintReport.col.complaintSource', { defaultValue: 'Source' })}
             field="source"
             values={options.complaintSource}
-            value={criteria.source}
+            value={draft.source}
           />
           <FilterSelect
             label={t('complaintReport.col.compensation', { defaultValue: 'Compensation' })}
             field="compensation"
             values={options.compensation}
-            value={criteria.compensation}
+            value={draft.compensation}
           />
-          {!isEmptyFilter(criteria) && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8"
-              onClick={() => {
-                setCriteria({});
-                setPage(1);
-              }}
-            >
-              {t('complaintReport.clearFilters', { defaultValue: 'Clear filters' })}
+          <div className="ms-auto flex items-end gap-2">
+            {(!isEmptyFilter(criteria) || !isEmptyFilter(draft)) && (
+              <Button size="sm" variant="ghost" className="h-8" onClick={clearFilters}>
+                {t('complaintReport.clearFilters', { defaultValue: 'Clear filters' })}
+              </Button>
+            )}
+            {/* Always present, disabled when nothing is waiting: a button that
+                comes and goes is one people stop looking for, and its disabled
+                state is what says "the table already matches these". */}
+            <Button type="submit" size="sm" className="h-8" disabled={!filtersDirty}>
+              {filtersDirty
+                ? t('complaintReport.applyPending', { defaultValue: 'Apply changes' })
+                : t('complaintReport.apply', { defaultValue: 'Apply' })}
             </Button>
-          )}
+          </div>
         </div>
-      </div>
+      </form>
 
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Pinned like the rest of the furniture: this bar acts on the table
+          beside it, and a toolbar that slides out of the window when you scroll
+          to the far columns is a toolbar you have to scroll back for. See
+          usePinnedWidth. */}
+      <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-center gap-3">
         {unmapped > 0 && (
           <Pill tone="warning" size="sm">
             {t('complaintReport.unmappedStores', {
@@ -1409,7 +1453,7 @@ function ComplaintsReport({
           are the same report, so showing a curated subset here just meant the
           screen and the file disagreed. Wide by nature, so it scrolls
           horizontally inside its own surface rather than stretching the page. */}
-      <TableSurface fill scrollLabel={t('complaintReport.title', { defaultValue: 'Tickets' })}>
+      <TableSurface flow scrollLabel={t('complaintReport.title', { defaultValue: 'Tickets' })}>
         <Table>
           <thead>
             <tr>
@@ -1746,7 +1790,7 @@ function AgentKpiReport({
         rangePreset={<RangePreset range={range} />}
       />
 
-      <TableSurface fill scrollLabel={t('agentReports.agentsTitle', { defaultValue: 'Agent KPI' })}>
+      <TableSurface flow scrollLabel={t('agentReports.agentsTitle', { defaultValue: 'Agent KPI' })}>
         <Table>
           <thead>
             <tr>
@@ -2265,7 +2309,7 @@ function ConversationReport({
       {view === 'chats' && (
         <>
           <TableSurface
-            fill
+            flow
             scrollLabel={t('agentReports.conversationsTitle', { defaultValue: 'Chat status' })}
           >
             <Table>
@@ -2345,7 +2389,7 @@ function ConversationReport({
           row per day, so capping it bought nothing and cost the reader the
           first half of their own date range. */}
       {view === 'byDay' && (
-        <TableSurface fill scrollLabel={t('agentReports.byDay', { defaultValue: 'By day' })}>
+        <TableSurface flow scrollLabel={t('agentReports.byDay', { defaultValue: 'By day' })}>
           <Table>
             <thead>
               <tr>
@@ -2461,6 +2505,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
       : 30;
   }, [from, to]);
   const tr: Translate = (key, opts) => String(t(key, opts));
+  const pinRef = usePinnedWidth();
   const data = report.data;
   const meta = META[which];
 
@@ -2477,7 +2522,23 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
+      {/* NO VERTICAL PADDING ON THE SCROLLPORT.
+                 `position: sticky; top: 0` pins to the scrollport's CONTENT
+                 box, so 20px of padding here left a 20px band above the pinned
+                 header with rows sliding through it — a strip of half-visible
+                 checkboxes over the column names. The spacing moves inside,
+                 where it is spacing rather than a gap in the sticky ceiling. */}
+      {/* A VISIBLE horizontal bar.
+                 The app's global scrollbar thumb is deliberately faint, which
+                 is right for a page and wrong for the one control that reaches
+                 half a report's columns — at 12px and near-transparent at the
+                 very foot of the window it was easy to miss that the table
+                 continued at all. Paired with <ColumnScroller/>, which says how
+                 many columns are hidden and pages through them. */}
+      <div
+        ref={pinRef}
+        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-4 sm:px-6 lg:px-8"
+      >
         {/* Every report gets the whole monitor.
             The summaries used to be capped at 5xl-6xl on the theory that a KPI
             strip stretched across 1920px is four numbers with a metre of white
@@ -2485,7 +2546,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
             it — the cap was the reason nine columns needed a sideways swipe on
             a screen with room for twenty. The strip stays capped on its own
             (see ReportKpiStrip usages); the table gets the width. */}
-        <div className="mx-auto w-full space-y-3">
+        <div className="w-max min-w-full space-y-3 py-4 sm:py-5">
           {/* Name and purpose on ONE line.
               They used to be three bands: a 60px toolbar carrying the name, a
               paragraph carrying the purpose, and the gaps between them — about
@@ -2496,7 +2557,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
               heading is a page a screen reader cannot summarise. The purpose
               rides beside it and drops away on narrow screens, where there is
               no room and the reader has the tab strip anyway. */}
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-baseline gap-x-3 gap-y-1">
             <h1 className="shrink-0 text-sm font-semibold tracking-tight text-foreground">
               {t(meta.titleKey, { defaultValue: meta.titleDefault })}
             </h1>
@@ -2595,6 +2656,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
             </>
           )}
         </div>
+        <ColumnScroller portRef={pinRef} />
       </div>
     </div>
   );

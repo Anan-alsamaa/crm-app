@@ -142,13 +142,56 @@ export function ImportsPage() {
 
       <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 py-8 space-y-6 sm:px-10">
         {/* Clean editorial header — no gradient banner. */}
-        <div className="border-b border-foreground/10 pb-5">
+        {/* SAYS WHAT IT IS FOR, not just what the buttons do.
+            The page described its own mechanics — upload, map, preview, queue —
+            and never said what a "contact" is here or what a file has to look
+            like, so the first question anybody asked was "what is this feature
+            for?". Four sentences is cheaper than that question. */}
+        <div className="space-y-3 border-b border-foreground/10 pb-5">
           <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
             {t('imports.heroSubtitle', {
               defaultValue:
-                'Upload a CSV, map its columns to contact fields, preview the first rows, then queue the import. Deduplication runs per-vendor on phone or email.',
+                'Loads CUSTOMERS into the CRM in bulk — the people who raise tickets and chats. Use it to seed the customer list from an existing system, so an agent opening a chat already sees a name instead of a bare phone number.',
             })}
           </p>
+          <dl className="grid max-w-2xl gap-x-6 gap-y-1.5 text-xs sm:grid-cols-[9rem_1fr]">
+            <dt className="font-semibold text-foreground">
+              {t('imports.specFormat', { defaultValue: 'File' })}
+            </dt>
+            <dd className="text-muted-foreground">
+              {t('imports.specFormatV', {
+                defaultValue:
+                  'A .csv with a header row, saved as UTF-8. Column names can be anything — you map them yourself in the next step.',
+              })}
+            </dd>
+            <dt className="font-semibold text-foreground">
+              {t('imports.specFields', { defaultValue: 'Columns it can use' })}
+            </dt>
+            <dd className="text-muted-foreground">
+              {t('imports.specFieldsV', {
+                defaultValue:
+                  'Name, Email, Phone, and Customer ID (the id this customer has in your other system). Anything else in the file is ignored.',
+              })}
+            </dd>
+            <dt className="font-semibold text-foreground">
+              {t('imports.specRow', { defaultValue: 'Each row needs' })}
+            </dt>
+            <dd className="text-muted-foreground">
+              {t('imports.specRowV', {
+                defaultValue:
+                  'At least one of phone, email or customer ID. A row with only a name is skipped — there would be no way to match it to anyone.',
+              })}
+            </dd>
+            <dt className="font-semibold text-foreground">
+              {t('imports.specDedupe', { defaultValue: 'Duplicates' })}
+            </dt>
+            <dd className="text-muted-foreground">
+              {t('imports.specDedupeV', {
+                defaultValue:
+                  'A row matching an existing contact on phone OR email is counted and left alone. Nothing is overwritten, so re-running the same file is safe.',
+              })}
+            </dd>
+          </dl>
         </div>
 
         {/* Vendor select — an action card with a tinted icon chip. */}

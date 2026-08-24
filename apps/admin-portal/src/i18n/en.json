@@ -266,7 +266,15 @@
     "empty": "Upload a CSV to begin",
     "emptyHint": "Map columns to contact fields, preview the first rows, then queue the import.",
     "queueError": "Could not queue import: {{message}}",
-    "heroSubtitle": "Upload a CSV, map its columns to contact fields, preview the first rows, then queue the import. Deduplication runs per-vendor on phone or email."
+    "heroSubtitle": "Loads CUSTOMERS into the CRM in bulk — the people who raise tickets and chats. Use it to seed the customer list from an existing system, so an agent opening a chat already sees a name instead of a bare phone number.",
+    "specFormat": "File",
+    "specFormatV": "A .csv with a header row, saved as UTF-8. Column names can be anything — you map them yourself in the next step.",
+    "specFields": "Columns it can use",
+    "specFieldsV": "Name, Email, Phone, and Customer ID (the id this customer has in your other system). Anything else in the file is ignored.",
+    "specRow": "Each row needs",
+    "specRowV": "At least one of phone, email or customer ID. A row with only a name is skipped — there would be no way to match it to anyone.",
+    "specDedupe": "Duplicates",
+    "specDedupeV": "A row matching an existing contact on phone OR email is counted and left alone. Nothing is overwritten, so re-running the same file is safe."
   },
   "vendors": {
     "title": "Vendors",
@@ -849,7 +857,7 @@
     "overdueHint": "past first-reply SLA",
     "kpiSatisfied": "Customer ratings",
     "ratedOf": "{{sat}} of {{rated}} rated",
-    "kpiCompensation": "Compensation SAR",
+    "kpiCompensation": "Compensation on tickets (SAR)",
     "avgEach": "{{v}} avg each",
     "kpiChats": "Open chats",
     "ofChats": "{{n}} total",
@@ -947,7 +955,13 @@
     "opsWorstBranch": "Busiest branch",
     "opsTopProblem": "Most common problem",
     "opsNoBranch": "No branch recorded",
-    "opsNoBranchHint": "missing from every cut below"
+    "opsNoBranchHint": "missing from every cut below",
+    "opsVolume": "Tickets in range",
+    "opsVolumeHint": "about the branches you cover",
+    "opsConcentration": "From the top {{n}} branches",
+    "opsConcentrationHint": "of {{n}} branches with any ticket",
+    "opsCaveat": "These count tickets, not orders — nothing here records how much business a branch did, so a higher count is not by itself a worse branch.",
+    "compensationBypass": "{{n}} tickets · {{sar}} SAR with no approval raised"
   },
   "performance": {
     "title": "Agent performance",
@@ -1106,7 +1120,13 @@
     "importDisabled": "Importing is disabled",
     "shownCount": "{{n}} of {{m}} shown",
     "kpiBranches": "Branches",
-    "ofTotal": "of {{total}} in range"
+    "ofTotal": "of {{total}} in range",
+    "apply": "Apply",
+    "applyPending": "Apply changes",
+    "moreColumns": "{{count}} more columns →",
+    "allColumns": "All columns shown",
+    "scrollLeft": "Earlier columns",
+    "scrollRight": "Later columns"
   },
   "lists": {
     "title": "Dropdown values",
@@ -1236,5 +1256,8 @@
   },
   "customerReach": {
     "title": "Yiji vs non-Yiji customers"
+  },
+  "couponSpend": {
+    "reconcile": "Tickets in this range carry {{total}} SAR in total. {{gap}} SAR of that was set straight on the ticket, with no approval raised here."
   }
 }

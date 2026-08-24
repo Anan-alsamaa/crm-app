@@ -192,6 +192,30 @@ export interface TableSurfaceProps extends HTMLAttributes<HTMLDivElement> {
   fillMin?: number;
   /** Breathing room left under the table by `fill`, in px. */
   fillGap?: number;
+  /**
+   * Let the PAGE do the scrolling, on both axes.
+   *
+   * The table renders every row it was given and creates no scroller of its
+   * own, so nothing sits between the header and the page's scrollport. Three
+   * things follow, and they are the three the reports were asked for:
+   *
+   *   - all the rows the page size selected are really there, instead of a
+   *     window onto them
+   *   - `sticky top-0` on the header resolves against the PAGE, so the column
+   *     names stay put as you read down
+   *   - the horizontal scrollbar belongs to the page, so it sits at the bottom
+   *     of the screen rather than under the last row — you can reach the far
+   *     columns without first scrolling to the end of the table
+   *
+   * The card grows to the table's own width (`w-max min-w-full`) so its
+   * background and ring wrap the whole thing rather than stopping at the
+   * viewport edge, and it must NOT clip: clipping would hide the overflow the
+   * page needs to see in order to scroll to it.
+   *
+   * Mutually exclusive with `fill`, which is the opposite bargain — cap the
+   * table and scroll inside it.
+   */
+  flow?: boolean;
 }
 
 export function TableSurface({
@@ -209,11 +233,14 @@ export function TableSurface({
    */
   fillMin = 320,
   fillGap = 20,
+  flow = false,
   scrollLabel,
   ...rest
 }: TableSurfaceProps): JSX.Element {
   const { ref, start, end } = useScrollEdges();
-  const outer = useViewportFill(fill, fillMin, fillGap);
+  // `fill` measures a remainder; in flow mode there is no remainder to measure
+  // because nothing is capped, so the hook stays switched off.
+  const outer = useViewportFill(fill && !flow, fillMin, fillGap);
   const scrollable = start || end;
   // An explicit maxHeight still wins; `fill` supplies one when it can measure.
   const cap = maxHeight ?? (outer.maxHeight !== undefined ? `${outer.maxHeight}px` : undefined);
@@ -222,11 +249,18 @@ export function TableSurface({
     <div
       ref={outer.ref}
       className={cn(
-        // `clip` rather than `hidden`: both clip the square corners of the
-        // content to the rounded card, but hidden also makes this a scroll
-        // container, and one more scrollport between the header and the one
-        // that matters is one more thing for it to stick to by accident.
-        'relative isolate flex min-h-0 flex-col overflow-clip rounded-xl bg-card ring-1 ring-foreground/[0.06]',
+        'relative isolate flex min-h-0 flex-col rounded-xl bg-card ring-1 ring-foreground/[0.06]',
+        flow
+          ? // Wide enough for the table, never narrower than the page. No
+            // clipping: the overflow is exactly what the page's scrollport
+            // needs to see in order to offer a scrollbar for it.
+            'w-max min-w-full'
+          : // `clip` rather than `hidden`: both clip the square corners of the
+            // content to the rounded card, but hidden also makes this a scroll
+            // container, and one more scrollport between the header and the
+            // one that matters is one more thing for it to stick to by
+            // accident.
+            'overflow-clip',
         className,
       )}
       {...rest}
@@ -236,67 +270,76 @@ export function TableSurface({
         // A scrollable region is only a tab stop when there is something to
         // scroll — otherwise every table on the page becomes a stop that does
         // nothing. When it IS scrollable, the arrow keys move it, which is the
-        // only way to reach the far columns without a mouse.
-        {...(scrollable ? { tabIndex: 0, role: 'region', 'aria-label': scrollLabel } : {})}
+        // only way to reach the far columns without a mouse. In flow mode this
+        // box scrolls nothing, so it is not a stop at all.
+        {...(scrollable && !flow ? { tabIndex: 0, role: 'region', 'aria-label': scrollLabel } : {})}
         className={cn(
-          'overflow-x-auto overscroll-x-contain',
-          // The y axis is the whole sticky-header story.
-          //
-          // CSS turns `overflow-y: visible` into `auto` the moment `overflow-x`
-          // is auto — so a horizontally scrolling table becomes a VERTICAL
-          // scroll container too, whether or not anybody asked. The header then
-          // sticks to that box, the page scrolls the box away, and the header
-          // goes with it. `clip` keeps the horizontal scroll and refuses the
-          // vertical scrollport, so `top-0` resolves against the page and the
-          // header stays where a reader expects it.
-          //
-          // maxHeight is the deliberate exception: a table asked to cap its own
-          // height genuinely wants an inner scroller, and its header sticks to
-          // that.
-          // A sticky header sticks to the nearest SCROLLPORT, and `overflow-x:
-          // auto` makes this box one whether or not the y axis asked. That is
-          // fine — it is the scrollport the header should use — but only
-          // because the pages that hold these tables give the table the height
-          // and stop scrolling themselves. Two nested scrollers was the bug:
-          // the header stuck faithfully to a box the page then scrolled away.
-          'overflow-y-auto',
-          // A visible track. The app's global scrollbar thumb is deliberately
-          // faint, which is right for a page and wrong for the one control that
-          // reaches half this table's columns.
-          '[&::-webkit-scrollbar]:h-3',
-          '[&::-webkit-scrollbar-thumb]:rounded-full',
-          '[&::-webkit-scrollbar-thumb]:bg-foreground/20',
-          'hover:[&::-webkit-scrollbar-thumb]:bg-foreground/30',
-          '[&::-webkit-scrollbar-track]:bg-foreground/[0.04]',
-          '[scrollbar-width:thin]',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50',
+          flow
+            ? // NOT a scroll container. That is the whole point: a sticky
+              // header sticks to the nearest scrollport, so any overflow here
+              // would capture it and the column names would scroll away with
+              // the rows. With nothing between the header and the page, the
+              // page is the scrollport — which also puts the horizontal
+              // scrollbar at the foot of the screen instead of under the last
+              // row.
+              'contents'
+            : cn(
+                'overflow-x-auto overscroll-x-contain',
+                // The y axis is the whole sticky-header story.
+                //
+                // CSS turns `overflow-y: visible` into `auto` the moment
+                // `overflow-x` is auto — so a horizontally scrolling table
+                // becomes a VERTICAL scroll container too, whether or not
+                // anybody asked. Here that is fine: the pages using this mode
+                // give the table a height and stop scrolling themselves, so
+                // this box IS the scrollport the header should use. Two nested
+                // scrollers was the bug — the header sticking faithfully to a
+                // box the page then scrolled away.
+                'overflow-y-auto',
+                // A visible track. The app's global scrollbar thumb is
+                // deliberately faint, which is right for a page and wrong for
+                // the one control that reaches half this table's columns.
+                '[&::-webkit-scrollbar]:h-3',
+                '[&::-webkit-scrollbar-thumb]:rounded-full',
+                '[&::-webkit-scrollbar-thumb]:bg-foreground/20',
+                'hover:[&::-webkit-scrollbar-thumb]:bg-foreground/30',
+                '[&::-webkit-scrollbar-track]:bg-foreground/[0.04]',
+                '[scrollbar-width:thin]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50',
+              ),
         )}
         // A floor as well as a ceiling. `fill` already clamps to `fillMin`, but
         // an explicit maxHeight has no such guard, and neither does the first
         // paint before the measurement lands.
-        style={cap ? { maxHeight: cap, minHeight: '14rem' } : undefined}
+        style={cap && !flow ? { maxHeight: cap, minHeight: '14rem' } : undefined}
       >
         {children}
       </div>
 
       {/* Edge fades — pointer-events-none so they never swallow a click on the
-          cell underneath. Rendered above the content but below the scrollbar. */}
-      <div
-        aria-hidden
-        className={cn(
-          'pointer-events-none absolute inset-y-0 start-0 z-[1] w-8 transition-opacity duration-200',
-          'bg-gradient-to-r from-card to-transparent rtl:bg-gradient-to-l',
-          start ? 'opacity-100' : 'opacity-0',
-        )}
-      />
-      <div
-        aria-hidden
-        className={cn(
-          'pointer-events-none absolute inset-y-0 end-0 z-[1] w-8 transition-opacity duration-200',
-          'bg-gradient-to-l from-card to-transparent rtl:bg-gradient-to-r',
-          end ? 'opacity-100' : 'opacity-0',
-        )}
-      />
+          cell underneath. Rendered above the content but below the scrollbar.
+          Nothing to fade in flow mode: the page owns the scrolling, and its own
+          scrollbar at the foot of the screen is the affordance. */}
+      {!flow && (
+        <>
+          <div
+            aria-hidden
+            className={cn(
+              'pointer-events-none absolute inset-y-0 start-0 z-[1] w-8 transition-opacity duration-200',
+              'bg-gradient-to-r from-card to-transparent rtl:bg-gradient-to-l',
+              start ? 'opacity-100' : 'opacity-0',
+            )}
+          />
+          <div
+            aria-hidden
+            className={cn(
+              'pointer-events-none absolute inset-y-0 end-0 z-[1] w-8 transition-opacity duration-200',
+              'bg-gradient-to-l from-card to-transparent rtl:bg-gradient-to-r',
+              end ? 'opacity-100' : 'opacity-0',
+            )}
+          />
+        </>
+      )}
     </div>
   );
 }

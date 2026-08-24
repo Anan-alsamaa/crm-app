@@ -68,6 +68,19 @@ function renderPage(which: ReportKind = 'tickets') {
 }
 
 /** Read the KPI tiles as `{ label: value }` (value div, then label div). */
+/**
+ * Press Apply.
+ *
+ * Filters no longer write through on each keystroke — the table used to
+ * re-query and re-page while somebody was still typing, moving under their
+ * hands. Typing now moves a draft and this commits it, which is exactly what
+ * these tests have to do too: asserting straight after `type()` was asserting
+ * on the auto-apply that was removed on purpose.
+ */
+async function apply(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: /^Apply changes$/ }));
+}
+
 function kpis(container: HTMLElement) {
   const out: Record<string, string> = {};
   /*
@@ -673,6 +686,7 @@ describe('AgentReportsPage — agent KPI report', () => {
 
     expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
     await user.type(screen.getByLabelText('Search agent'), 'Ann');
+    await apply(user);
     expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
   });
 });
@@ -940,6 +954,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
     const { container } = renderPage('complaints');
 
     await user.type(screen.getByLabelText(/Search by phone/), 'Panorama');
+    await apply(user);
     expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
     expect(screen.getByText('1 of 2')).toBeInTheDocument();
   });
@@ -951,6 +966,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
 
     // Stored as 0511111111; searched with spacing and punctuation.
     await user.type(screen.getByLabelText(/Search by phone/), '051-111 1111');
+    await apply(user);
     expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
   });
 
@@ -960,6 +976,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
     const { container } = renderPage('complaints');
 
     await user.type(screen.getByLabelText(/Search by phone/), 'zzzznothing');
+    await apply(user);
     expect(container.querySelectorAll('tbody tr')).toHaveLength(0);
     expect(screen.getByText('0 of 2')).toBeInTheDocument();
   });
@@ -973,6 +990,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
     renderPage('complaints');
 
     await user.type(screen.getByLabelText(/Search by phone/), 'Panorama');
+    await apply(user);
     // One row left after the filter, and the button says so — which is how a
     // reader knows it will not quietly export all 2. The moment a filter hides
     // rows the control splits in two, so BOTH answers are reachable and each
@@ -994,6 +1012,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
     renderPage('complaints');
 
     await user.type(screen.getByLabelText(/Search by phone/), 'Panorama');
+    await apply(user);
     await user.click(screen.getByText('Export all 2'));
     expect(dl.blobs).toHaveLength(1);
     dl.restore();
@@ -1078,6 +1097,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
     const { container } = renderPage('complaints');
 
     await user.type(screen.getByLabelText(/Search by phone/), 'zzzznothing');
+    await apply(user);
     expect(container.querySelectorAll('tbody tr')).toHaveLength(0);
 
     await user.click(screen.getByText('Clear filters'));

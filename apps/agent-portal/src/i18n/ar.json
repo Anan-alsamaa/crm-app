@@ -391,7 +391,8 @@
     "editContact": "تعديل بيانات العميل",
     "name": "الاسم",
     "openTicket": "فتح التذكرة",
-    "customerHistory": "محادثات سابقة"
+    "customerHistory": "محادثات سابقة",
+    "customerHistoryLink": "{{count}} محادثات سابقة مع هذا العميل"
   },
   "tickets": {
     "title": "التذاكر",

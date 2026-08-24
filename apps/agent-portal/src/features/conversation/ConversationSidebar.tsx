@@ -11,7 +11,6 @@ import {
   Spinner,
   StatCard,
   cn,
-  formatDate,
   formatRelative,
   toast,
   useResizable,
@@ -382,39 +381,36 @@ export function ConversationSidebar({
         </section>
       )}
 
-      {/* Everything this customer said to us BEFORE this chat.
-          The operations manager's ask: a returning customer routed to another
-          agent used to arrive with no history, so the new agent made them
-          repeat a story we already had. */}
-      {history.data && history.data.length > 0 && (
+      {/* "Earlier chats" is gone.
+          It promised everything this customer had said to us before, and each
+          row rendered a status pill and a date — nothing else. Five rows of
+          "Solved · 23/08/2026" identify no conversation and answer no
+          question; there was no subject, no preview, no agent, so the only way
+          to find out what any of them was about was to open all of them.
+
+          The ask behind it was real (a returning customer routed to a new
+          agent should not have to repeat a story we already hold) and it is
+          already met properly one click away: the contact profile merges
+          conversations AND tickets into one chronological timeline. So this is
+          a link to that, which is the honest version of what the panel was
+          pretending to be. */}
+      {contact.data?.id && history.data && history.data.length > 0 && (
         <section className="px-5 py-4">
-          <SectionLabel count={history.data.length}>
-            {t('sidebar.customerHistory', { defaultValue: 'Earlier chats' })}
-          </SectionLabel>
-          <ul className="divide-y divide-foreground/[0.06]">
-            {history.data.map((h) => (
-              <li key={h.id}>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/?conv=${encodeURIComponent(h.id)}`)}
-                  className="block w-full rounded-lg px-1 py-2.5 text-start transition-colors duration-fast ease-out hover:bg-foreground/[0.04]"
-                >
-                  <div className="flex items-center gap-2">
-                    <Pill tone={h.status === 'solved' ? 'success' : 'neutral'} size="sm">
-                      {t(`status.${h.status}`, { ns: 'common', defaultValue: h.status })}
-                    </Pill>
-                    <span className="truncate text-2xs tabular-nums text-muted-foreground">
-                      {h.last_message_at
-                        ? formatDate(h.last_message_at)
-                        : h.date_created
-                          ? formatDate(h.date_created)
-                          : ''}
-                    </span>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <button
+            type="button"
+            onClick={() => navigate(`/contacts/${contact.data!.id}`)}
+            className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-2 text-start text-xs transition-colors duration-fast ease-out hover:bg-foreground/[0.04]"
+          >
+            <span className="text-muted-foreground">
+              {t('sidebar.customerHistoryLink', {
+                count: history.data.length,
+                defaultValue: '{{count}} earlier chats with this customer',
+              })}
+            </span>
+            <span aria-hidden className="shrink-0 text-primary">
+              &rsaquo;
+            </span>
+          </button>
         </section>
       )}
 

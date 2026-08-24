@@ -219,29 +219,38 @@ describe('ComplaintDashboard — every section his page has', () => {
     expect(screen.queryByText('Where tickets come from')).not.toBeInTheDocument();
   });
 
-  it('opens the operations view on numbers about BRANCHES, and names them', () => {
+  it('opens the operations view on readings the complaint data can support', () => {
     /*
      * This view used to open with no numbers at all — a correction to it
      * opening with the support desk's (chats waiting, compensation paid,
      * coupons issued), which are not this team's. But a wall of ranked lists
-     * with nothing to read at a glance is the other failure: you have to study
-     * the page before you know whether anything is wrong.
+     * with nothing to read at a glance is the other failure.
      *
-     * Each tile NAMES its subject rather than only counting it. "37" is a
-     * number to go and look up; "37 — Herfy Olaya" is the branch somebody
-     * rings this morning.
+     * The first attempt then led with "Busiest branch", and the owner was
+     * right to reject it: these rows are complaints, not orders, and nothing
+     * here records how much business a branch did. A branch with more
+     * complaints may simply be bigger. Any figure shaped like a RATE is a
+     * fiction, so what is left is counts and shares OF THE COMPLAINTS — plus a
+     * line saying so, because leaving it unsaid is how a dashboard talks
+     * somebody into the wrong decision.
      */
     render(<ComplaintDashboard view="operations" />);
-    for (const label of [
-      'Branches with tickets',
-      'Busiest branch',
-      'Most common problem',
-      'No branch recorded',
-    ]) {
+    for (const label of ['Tickets in range', 'Open tickets', 'Most common problem']) {
       expect(screen.getByText(label), `missing operations KPI: ${label}`).toBeInTheDocument();
     }
+    // The concentration tile names how many branches it is talking about, so
+    // its label carries a number and has to be matched loosely.
+    expect(screen.getByText(/From the top \d+ branches/)).toBeInTheDocument();
+    expect(screen.getByText(/count tickets, not orders/)).toBeInTheDocument();
+
+    // The three that went, and why: a verdict the data cannot support, a
+    // number a manager can do nothing with, and a data-quality reading that
+    // belongs with the cut it distorts.
+    for (const gone of ['Busiest branch', 'Branches with tickets', 'No branch recorded']) {
+      expect(screen.queryByText(gone), `${gone} should be gone`).not.toBeInTheDocument();
+    }
     // The desk's own numbers stay off this view.
-    for (const gone of ['Compensation SAR', 'Coupons issued', 'Open chats', 'Total chats']) {
+    for (const gone of ['Coupons issued', 'Open chats', 'Total chats']) {
       expect(
         screen.queryByText(gone),
         `${gone} is not an operations number`,

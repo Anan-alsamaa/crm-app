@@ -1,4 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { usePinnedWidth } from '../../lib/pinned-width.js';
+import { ColumnScroller } from '../../components/ColumnScroller.js';
 import { useTranslation } from 'react-i18next';
 import {
   Avatar,
@@ -231,6 +233,7 @@ function Kpi({
 
 export function SlaReportsPage() {
   const { t } = useTranslation();
+  const pinRef = usePinnedWidth();
   const {
     from,
     to,
@@ -346,7 +349,23 @@ export function SlaReportsPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 lg:px-8">
+      {/* NO VERTICAL PADDING ON THE SCROLLPORT.
+                 `position: sticky; top: 0` pins to the scrollport's CONTENT
+                 box, so 20px of padding here left a 20px band above the pinned
+                 header with rows sliding through it — a strip of half-visible
+                 checkboxes over the column names. The spacing moves inside,
+                 where it is spacing rather than a gap in the sticky ceiling. */}
+      {/* A VISIBLE horizontal bar.
+                 The app's global scrollbar thumb is deliberately faint, which
+                 is right for a page and wrong for the one control that reaches
+                 half a report's columns — at 12px and near-transparent at the
+                 very foot of the window it was easy to miss that the table
+                 continued at all. Paired with <ColumnScroller/>, which says how
+                 many columns are hidden and pages through them. */}
+      <div
+        ref={pinRef}
+        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-4 py-0 sm:px-6 lg:px-8"
+      >
         {/* OUTSIDE the loading / empty / loaded branch, so the page identifies
             itself in all three states.
             It used to live in a toolbar, which rendered whatever the query was
@@ -359,7 +378,7 @@ export function SlaReportsPage() {
             table already floored at its minimum on a 900px screen. The
             name stays as a real h1: the tab strip above shows it as a
             selected pill, but a pill is not a heading. */}
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-baseline gap-x-3 gap-y-1 pt-4 sm:pt-5">
           <h1 className="shrink-0 text-sm font-semibold tracking-tight text-foreground">
             {t('slaReports.title', { defaultValue: 'Ticket deadlines' })}
           </h1>
@@ -383,7 +402,7 @@ export function SlaReportsPage() {
             })}
           />
         ) : (
-          <div className="mx-auto mt-3 w-full space-y-3">
+          <div className="mt-3 w-max min-w-full space-y-3 pb-4 sm:pb-5">
             {/* KPI strip — the % tiles carry a progress ring, boards-style: the
                 numeral stays the reading, the arc makes the shortfall visible
                 at a glance. */}
@@ -531,6 +550,7 @@ export function SlaReportsPage() {
             />
           </div>
         )}
+        <ColumnScroller portRef={pinRef} />
       </div>
     </div>
   );
@@ -728,7 +748,7 @@ function TicketTable({
       )}
 
       <TableSurface
-        fill
+        flow
         scrollLabel={String(t('slaReports.title', { defaultValue: 'Ticket deadlines' }))}
       >
         <Table>

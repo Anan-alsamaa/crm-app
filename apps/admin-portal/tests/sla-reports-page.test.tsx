@@ -204,7 +204,14 @@ describe('SlaReportsPage', () => {
     // assertion below is really about.
     fireEvent.change(screen.getByLabelText(/^from$/i), { target: { value: '01/08/2026' } });
     fireEvent.change(screen.getByLabelText(/^to$/i), { target: { value: '14/08/2026' } });
-    // The window is DERIVED from the dates now, so the first argument follows
+    /*
+     * Then COMMIT. Filters no longer write through on each keystroke — the
+     * report used to re-query on every half-typed date, so a range was fetched
+     * three or four times on the way to being entered. Typing moves a draft;
+     * Apply is what asks the question.
+     */
+    fireEvent.click(screen.getByRole('button', { name: /^Apply changes$/ }));
+    // The window is DERIVED from the dates, so the first argument follows
     // whatever was typed rather than being a second, independent answer.
     expect(api.useSlaReports).toHaveBeenLastCalledWith(expect.any(Number), {
       from: '2026-08-01',

@@ -69,7 +69,15 @@ export function TablePager({
   const showing = labels?.showing?.({ from, to, total }) ?? `Showing ${from}–${to} of ${total}`;
 
   return (
-    <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4', className)}>
+    /* `sticky start-0` pins it against a horizontal page scroll — see
+       ReportKpiStrip for why. A pager that slides out of the window when you
+       scroll to the far columns is a pager you have to scroll back for. */
+    <div
+      className={cn(
+        'sticky start-0 flex w-[var(--pin-w,100%)] flex-col gap-3 sm:flex-row sm:items-center sm:gap-4',
+        className,
+      )}
+    >
       <div className="flex items-center gap-3">
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="whitespace-nowrap">{rowsPerPage}</span>

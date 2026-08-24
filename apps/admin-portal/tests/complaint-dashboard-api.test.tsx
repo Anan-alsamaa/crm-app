@@ -40,10 +40,19 @@ beforeEach(() => {
 });
 
 /**
- * Queue the seven directus.request calls IN ORDER:
- * tickets, stores, users, csat, conversations, routing_events, message counts.
- * They are a positional Promise.all — adding a query to the hook without adding
- * it here silently shifts every later mock onto the wrong result.
+ * Answer each directus read BY COLLECTION, not by position.
+ *
+ * This used to be a chain of `mockResolvedValueOnce` in the order the hook
+ * happens to issue its queries, with a comment warning that adding a query
+ * without adding a line here "silently shifts every later mock onto the wrong
+ * result". It is not silent — all 29 tests fail at once — but the failure says
+ * "expected false to be true" twenty-nine times and names nothing, so the
+ * warning was right about the part that matters: the diagnosis is on the
+ * reader.
+ *
+ * Dispatching on the collection removes the ordering coupling entirely. A new
+ * read defaults to `[]` and the suite keeps passing; a read of something these
+ * tests care about is named here and cannot land on the wrong answer.
  */
 function mockData(opts: {
   tickets?: unknown[];
@@ -53,15 +62,28 @@ function mockData(opts: {
   conversations?: unknown[];
   routing?: unknown[];
   messages?: unknown[];
+  couponApprovals?: unknown[];
+  /** Collections whose read should REJECT, for the permission-gap cases. */
+  fail?: string[];
 }) {
-  request
-    .mockResolvedValueOnce(opts.tickets ?? [])
-    .mockResolvedValueOnce(opts.stores ?? [])
-    .mockResolvedValueOnce(opts.users ?? [])
-    .mockResolvedValueOnce(opts.csat ?? [])
-    .mockResolvedValueOnce(opts.conversations ?? [])
-    .mockResolvedValueOnce(opts.routing ?? [])
-    .mockResolvedValueOnce(opts.messages ?? []);
+  const byCollection: Record<string, unknown[]> = {
+    tickets: opts.tickets ?? [],
+    stores: opts.stores ?? [],
+    directus_users: opts.users ?? [],
+    csat_responses: opts.csat ?? [],
+    conversations: opts.conversations ?? [],
+    routing_events: opts.routing ?? [],
+    messages: opts.messages ?? [],
+    coupon_approvals: opts.couponApprovals ?? [],
+  };
+  const failing = new Set(opts.fail ?? []);
+  request.mockImplementation((q: unknown) => {
+    const collection = (q as { collection?: string })?.collection ?? '';
+    // The message counts are an aggregate over `messages`; everything else is
+    // a plain read. Both arrive here carrying their collection name.
+    if (failing.has(collection)) return Promise.reject(new Error('forbidden'));
+    return Promise.resolve(byCollection[collection] ?? []);
+  });
 }
 
 const STORES = [
@@ -460,14 +482,7 @@ describe('ticket dashboard — chat performance', () => {
   });
 
   it('survives an aggregate the server refuses rather than blanking the page', async () => {
-    request
-      .mockResolvedValueOnce([]) // tickets
-      .mockResolvedValueOnce(STORES)
-      .mockResolvedValueOnce(USERS)
-      .mockResolvedValueOnce([]) // csat
-      .mockResolvedValueOnce(CONVERSATIONS)
-      .mockResolvedValueOnce([]) // routing
-      .mockRejectedValueOnce(new Error('forbidden')); // message aggregate
+    mockData({ stores: STORES, users: USERS, conversations: CONVERSATIONS, fail: ['messages'] });
     const d = await run();
     expect(d.chatAgents.find((x) => x.id === 'u1')?.messages).toBe(0);
     expect(d.chatAgents.find((x) => x.id === 'u1')?.chatsHandled).toBe(2);

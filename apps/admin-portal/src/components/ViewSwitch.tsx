@@ -44,7 +44,9 @@ export function ViewSwitch<T extends string>({
       role="tablist"
       aria-label={label}
       className={cn(
-        'inline-flex shrink-0 items-center gap-1 rounded-full bg-secondary p-1',
+        // `sticky start-0` pins it against a horizontal page scroll — see
+        // ReportKpiStrip. `w-fit` so sticking does not stretch the pill row.
+        'sticky start-0 inline-flex w-fit shrink-0 items-center gap-1 rounded-full bg-secondary p-1',
         className,
       )}
     >

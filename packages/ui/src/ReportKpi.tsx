@@ -133,7 +133,16 @@ export function ReportKpiStrip({
   // monitor; four numerals stretched across 2560px are four numerals with a
   // metre of white between them.
   return (
-    <div className={cn('grid max-w-6xl grid-cols-2 gap-2 lg:grid-cols-4', className)}>
+    /* `sticky start-0` pins it against a horizontal page scroll: a report in
+       flow mode lets the page scroll sideways for the table's far columns, and
+       without this the summary rides off the screen with it. Only ever as wide
+       as the viewport, so sticking it costs nothing vertically. */
+    <div
+      className={cn(
+        'sticky start-0 grid w-[var(--pin-w,100%)] max-w-6xl grid-cols-2 gap-2 lg:grid-cols-4',
+        className,
+      )}
+    >
       {children}
     </div>
   );
