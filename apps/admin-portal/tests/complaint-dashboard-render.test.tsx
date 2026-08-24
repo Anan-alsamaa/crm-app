@@ -219,37 +219,42 @@ describe('ComplaintDashboard — every section his page has', () => {
     expect(screen.queryByText('Where tickets come from')).not.toBeInTheDocument();
   });
 
-  it('opens the operations view on readings the complaint data can support', () => {
+  it('opens the operations view on readings that NAME a problem, never a count', () => {
     /*
-     * This view used to open with no numbers at all — a correction to it
-     * opening with the support desk's (chats waiting, compensation paid,
-     * coupons issued), which are not this team's. But a wall of ranked lists
-     * with nothing to read at a glance is the other failure.
+     * Six readings were proposed for this strip and rejected, and they had one
+     * thing in common: every one COUNTED something — tickets in the range,
+     * tickets still open, branches with a ticket, the busiest branch, tickets
+     * with no branch, the share coming from the top five branches.
      *
-     * The first attempt then led with "Busiest branch", and the owner was
-     * right to reject it: these rows are complaints, not orders, and nothing
-     * here records how much business a branch did. A branch with more
-     * complaints may simply be bigger. Any figure shaped like a RATE is a
-     * fiction, so what is left is counts and shares OF THE COMPLAINTS — plus a
-     * line saying so, because leaving it unsaid is how a dashboard talks
-     * somebody into the wrong decision.
+     * The objection that killed the first is the one that kills them all.
+     * These rows are complaints, not orders; nothing records how much business
+     * a branch did, so a count cannot become a rate and a branch with more
+     * complaints may simply be bigger. A bare count also leaves an area
+     * manager with nothing to do on Monday, and the ranked panels below
+     * already carry the distribution for anyone who wants to read it properly.
+     *
+     * What is left names a problem: WHAT customers complain about, and WHERE
+     * in the operation it happens.
      */
     render(<ComplaintDashboard view="operations" />);
-    for (const label of ['Tickets in range', 'Open tickets', 'Most common problem']) {
-      expect(screen.getByText(label), `missing operations KPI: ${label}`).toBeInTheDocument();
-    }
-    // The concentration tile names how many branches it is talking about, so
-    // its label carries a number and has to be matched loosely.
-    expect(screen.getByText(/From the top \d+ branches/)).toBeInTheDocument();
-    expect(screen.getByText(/count tickets, not orders/)).toBeInTheDocument();
+    expect(screen.getByText('Most common problem')).toBeInTheDocument();
+    expect(screen.getByText('Most affected service type')).toBeInTheDocument();
 
-    // The three that went, and why: a verdict the data cannot support, a
-    // number a manager can do nothing with, and a data-quality reading that
-    // belongs with the cut it distorts.
-    for (const gone of ['Busiest branch', 'Branches with tickets', 'No branch recorded']) {
-      expect(screen.queryByText(gone), `${gone} should be gone`).not.toBeInTheDocument();
+    for (const counted of [
+      'Tickets in range',
+      'Open tickets',
+      'Busiest branch',
+      'Branches with tickets',
+      'No branch recorded',
+    ]) {
+      expect(
+        screen.queryByText(counted),
+        `${counted} counts rather than names`,
+      ).not.toBeInTheDocument();
     }
-    // The desk's own numbers stay off this view.
+    expect(screen.queryByText(/From the top \d+ branches/)).not.toBeInTheDocument();
+
+    // The desk's own numbers stay off this view too.
     for (const gone of ['Coupons issued', 'Open chats', 'Total chats']) {
       expect(
         screen.queryByText(gone),

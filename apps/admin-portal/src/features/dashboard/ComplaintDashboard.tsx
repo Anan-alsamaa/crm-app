@@ -631,47 +631,30 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
   /**
    * What the team around the BRANCHES needs at a glance.
    *
-   * WHAT THIS DATA CANNOT SAY. These rows are complaints, not orders. There is
-   * no denominator here — nothing records how much business a branch did — so
-   * any figure shaped like a RATE is a fiction: a branch with more complaints
-   * may simply be bigger, or busier, or open longer. The first version of this
-   * strip led with "Busiest branch", which is precisely that fiction stated as
-   * a fact, and the owner was right to reject it.
+   * SIX READINGS WERE REJECTED HERE, and they had one thing in common: every
+   * one COUNTED something — tickets in range, tickets still open, branches
+   * with a ticket, the busiest branch, tickets with no branch, the share
+   * coming from the top five branches.
    *
-   * So everything below is a COUNT or a SHARE OF THE COMPLAINTS THEMSELVES,
-   * which the data does support:
+   * The objection that killed the first is the one that kills them all. These
+   * rows are complaints, not orders; nothing records how much business a
+   * branch did, so a count cannot become a rate and a branch with more
+   * complaints may simply be bigger. And a bare count tells an area manager
+   * nothing to do on Monday — the ranked panels below already carry the
+   * distribution for anyone who wants to read it properly.
    *
-   *   - how many came in, and which way the number is moving
-   *   - how many are still open, because those are the ones to chase
-   *   - what they are mostly about, because that is the thing to go and fix
-   *   - how CONCENTRATED they are, which says whether this is a few branches
-   *     or a process problem — a statement about the distribution, not a
-   *     verdict on any branch
-   *
-   * The two figures that went: "Branches with tickets" (a number a manager can
-   * do nothing with) and "No branch recorded" (a data-quality reading, not an
-   * operations one — it belongs with the cut it distorts, where it already is).
+   * What is left names a PROBLEM instead of counting a thing: what customers
+   * are complaining about, and where in the operation it happens. Both are
+   * shares of the complaints themselves, which the data does support, and both
+   * point at something a branch, area or chain manager can go and fix.
    */
-  const ops = useMemo(() => {
-    const branchRows = d?.byRestaurant.all ?? [];
-    const top5 = branchRows.slice(0, 5).reduce((n, r) => n + r.count, 0);
-    // Of the tickets that resolved to a branch at all — including the
-    // unattributed ones in the denominator would understate concentration by
-    // an amount that has nothing to do with how complaints are distributed.
-    const attributed = branchRows.reduce((n, r) => n + r.count, 0);
-    const cur = d?.months[d.months.length - 1]?.count;
-    const prev = d?.months[d.months.length - 2]?.count;
-    const monthPct =
-      cur == null || prev == null || prev === 0 ? null : Math.round(((cur - prev) / prev) * 100);
-    return {
+  const ops = useMemo(
+    () => ({
       topProblem: d?.byType.rows[0] ?? null,
-      branchesWithTickets: d?.byRestaurant.distinct ?? 0,
-      concentrationPct: attributed > 0 ? (top5 / attributed) * 100 : null,
-      topBranchCount: Math.min(5, branchRows.length),
-      // A partial month against a full one produces swings that read as noise.
-      monthPct: monthPct != null && monthPct !== 0 && Math.abs(monthPct) <= 200 ? monthPct : null,
-    };
-  }, [d]);
+      topService: d?.byServiceType.rows[0] ?? null,
+    }),
+    [d],
+  );
 
   // Picking a brand narrows the restaurants to that brand's branches. There
   // are 132 of them across four brands, and a list that ignores the brand you
@@ -901,136 +884,77 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 })}
           </p>
 
-          {/* The desk's numbers — chats waiting, compensation paid, coupons
-              issued — are AGENT only. The team around the branches asked not to
-              be shown them.
+          {/* WHAT THE OPERATIONS STRIP IS NOT.
+              Six readings have been proposed here and rejected, and they had
+              one thing in common: every one of them COUNTED something — tickets
+              in the range, tickets still open, branches with a ticket, the
+              busiest branch, tickets with no branch, the share coming from the
+              top five branches.
 
-              WHAT THIS DATA CANNOT SAY. These rows are complaints, not orders.
-              Nothing here records how much business a branch did, so any
-              figure shaped like a RATE is a fiction — a branch with more
-              complaints may simply be bigger, or busier, or open longer. The
-              first version of this strip led with "Busiest branch", which is
-              exactly that fiction stated as a fact.
+              The objection that killed the first of them is the one that kills
+              them all: these rows are complaints, not orders. Nothing here
+              records how much business a branch did, so a count cannot be
+              turned into a rate, and a branch with more complaints may simply
+              be bigger. A count on its own tells an area manager nothing they
+              can act on, and the ranked panels below already carry the
+              distribution for anyone who wants to read it properly.
 
-              What went with it: "Branches with tickets" (a number a manager
-              can do nothing with) and "No branch recorded" (a data-quality
-              reading, not an operations one — it belongs with the cut it
-              distorts, where it already is).
-
-              What is left is a count or a share of the complaints themselves,
-              which the data does support: how many came in and which way it is
-              moving, how many are still open, what they are mostly about, and
-              how concentrated they are. */}
+              What survives is the reading that names a PROBLEM rather than
+              counting a thing: what customers are actually complaining about,
+              which is what a branch, area or chain manager goes and fixes. */}
           {view === 'operations' && (
-            <>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <Kpi
-                  tone="neutral"
-                  icon={<TicketIcon size={17} />}
-                  order={0}
-                  value={d.total.toLocaleString()}
-                  label={t('complaintDash.opsVolume', { defaultValue: 'Tickets in range' })}
-                  sub={t('complaintDash.opsVolumeHint', {
-                    defaultValue: 'about the branches you cover',
-                  })}
-                  delta={
-                    ops.monthPct == null ? undefined : (
-                      <DeltaBadge
-                        direction={ops.monthPct > 0 ? 'up' : 'down'}
-                        positiveIsGood={false}
-                      >
-                        {ops.monthPct > 0 ? `+${ops.monthPct}%` : `${ops.monthPct}%`}
-                      </DeltaBadge>
-                    )
-                  }
-                />
-                {/* The ones to chase. A count of unfinished work needs no
-                    denominator to be actionable. */}
-                <Kpi
-                  tone="sky"
-                  icon={<InboxIcon size={17} />}
-                  order={1}
-                  value={String(d.open)}
-                  label={t('complaintDash.kpiOpen', { defaultValue: 'Open tickets' })}
-                  sub={
-                    d.total
-                      ? t('complaintDash.ofTotal', {
-                          defaultValue: '{{p}}% of total',
-                          p: Math.round((d.open / d.total) * 100),
-                        })
-                      : ''
-                  }
-                  visual={
-                    <ProgressRing value={d.total ? (d.open / d.total) * 100 : 0} tone="sky" />
-                  }
-                  onOpen={() =>
-                    setDrill({
-                      title: String(t('complaintDash.kpiOpen', { defaultValue: 'Open tickets' })),
-                      rows: (d.rows ?? []).filter((r) => r.isOpen),
-                    })
-                  }
-                />
-                {/* The thing to go and FIX. Named, because "66" is a number to
-                    look up and "66 — Cleanness" is this week's job. */}
-                <Kpi
-                  tone="primary"
-                  icon={<ZapIcon size={17} />}
-                  order={2}
-                  value={ops.topProblem ? String(ops.topProblem.count) : '—'}
-                  label={t('complaintDash.opsTopProblem', { defaultValue: 'Most common problem' })}
-                  sub={
-                    ops.topProblem?.label ??
-                    String(t('complaintDash.notMeasured', { defaultValue: 'Not measured yet' }))
-                  }
-                  onOpen={
-                    ops.topProblem
-                      ? () =>
-                          drillInto(
-                            String(t('complaintDash.byType', { defaultValue: 'By ticket type' })),
-                            (r) => r.complaintType,
-                          )(ops.topProblem!)
-                      : undefined
-                  }
-                />
-                {/* CONCENTRATION, not a verdict.
-                    A share of the complaints themselves: it says whether this
-                    is a handful of branches or something running through the
-                    whole estate, which changes what you do on Monday. It does
-                    NOT say those branches are worse — that needs order volume,
-                    which nothing here records. */}
-                <Kpi
-                  tone="violet"
-                  icon={<StoreIcon size={17} />}
-                  order={3}
-                  value={
-                    ops.concentrationPct == null ? '—' : `${Math.round(ops.concentrationPct)}%`
-                  }
-                  label={t('complaintDash.opsConcentration', {
-                    defaultValue: 'From the top {{n}} branches',
-                    n: ops.topBranchCount,
-                  })}
-                  sub={t('complaintDash.opsConcentrationHint', {
-                    defaultValue: 'of {{n}} branches with any ticket',
-                    n: ops.branchesWithTickets,
-                  })}
-                  meter={
-                    ops.concentrationPct == null ? undefined : (
-                      <MeterBar value={ops.concentrationPct} tone="violet" />
-                    )
-                  }
-                />
-              </div>
-
-              {/* Said once, out loud, under the numbers it governs. Leaving it
-                  unsaid is how a dashboard talks somebody into the wrong
-                  decision. */}
-              <p className="text-2xs leading-relaxed text-muted-foreground">
-                {t('complaintDash.opsCaveat', {
-                  defaultValue:
-                    'These count tickets, not orders — nothing here records how much business a branch did, so a higher count is not by itself a worse branch.',
+            <div className="grid gap-3 sm:grid-cols-2">
+              {/* The thing to go and FIX. Named, because "66" is a number to
+                  look up and "66 — Cleanness" is this week's job. */}
+              <Kpi
+                tone="primary"
+                icon={<ZapIcon size={17} />}
+                order={0}
+                value={ops.topProblem ? String(ops.topProblem.count) : '—'}
+                label={t('complaintDash.opsTopProblem', { defaultValue: 'Most common problem' })}
+                sub={
+                  ops.topProblem?.label ??
+                  String(t('complaintDash.notMeasured', { defaultValue: 'Not measured yet' }))
+                }
+                onOpen={
+                  ops.topProblem
+                    ? () =>
+                        drillInto(
+                          String(t('complaintDash.byType', { defaultValue: 'By ticket type' })),
+                          (r) => r.complaintType,
+                        )(ops.topProblem!)
+                    : undefined
+                }
+              />
+              {/* WHERE IN THE OPERATION it breaks — delivery, dine-in, pickup.
+                  Same family as the tile beside it: it names a thing to look
+                  at rather than counting tickets or ranking branches, and the
+                  answer changes who you talk to on Monday. */}
+              <Kpi
+                tone="violet"
+                icon={<StoreIcon size={17} />}
+                order={1}
+                value={ops.topService ? String(ops.topService.count) : '—'}
+                label={t('complaintDash.opsTopService', {
+                  defaultValue: 'Most affected service type',
                 })}
-              </p>
-            </>
+                sub={
+                  ops.topService?.label ??
+                  String(t('complaintDash.notMeasured', { defaultValue: 'Not measured yet' }))
+                }
+                onOpen={
+                  ops.topService
+                    ? () =>
+                        drillInto(
+                          String(
+                            t('complaintDash.byServiceType', { defaultValue: 'By service type' }),
+                          ),
+                          (r) => r.serviceType,
+                        )(ops.topService!)
+                    : undefined
+                }
+              />
+            </div>
           )}
 
           {/* The KPI strip is AGENT only. Tickets, chats, compensation and

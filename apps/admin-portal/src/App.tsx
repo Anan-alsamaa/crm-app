@@ -481,10 +481,30 @@ function Shell({ children }: { children: React.ReactNode }) {
   const sections: NavSection[] = allSections
     .map((section) => ({
       ...section,
-      items: section.items.filter((it) => {
-        if (it.requires && !can(it.requires)) return false;
-        if (it.to === '/reports/operational-kpi' && opsKpiCollapsedToTickets) return false;
-        return true;
+      items: section.items.flatMap((it) => {
+        if (it.requires && !can(it.requires)) return [];
+        /*
+         * A group that collapses to ONE tab becomes that tab.
+         *
+         * This used to just drop the group and add nothing back, on the
+         * reasoning that a "Operational KPI → Ticket breakdown" pair with one
+         * leaf is the same destination named twice. True — but for a role that
+         * can see only Ticket breakdown, dropping the group dropped its ONLY
+         * report, the Reports section then had no items and was filtered out
+         * whole, and an Operations user was left with a top bar containing
+         * Dashboard and nothing else. The duplicate was worth removing; the
+         * destination was not.
+         */
+        if (it.to === '/reports/operational-kpi' && opsKpiCollapsedToTickets) {
+          return [
+            {
+              ...it,
+              to: '/reports/operational-kpi/tickets',
+              label: t('nav.reportTickets', { defaultValue: 'Ticket breakdown' }),
+            },
+          ];
+        }
+        return [it];
       }),
     }))
     .filter((section) => section.items.length > 0) as NavSection[];

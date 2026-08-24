@@ -924,19 +924,10 @@
     "kpiCoupons": "Coupons issued",
     "couponsPending": "{{n}} awaiting a decision",
     "kpiSolved": "Solved tickets",
-    "opsBranchesHit": "Branches with tickets",
-    "opsOfBranches": "of {{n}} on the list",
-    "opsWorstBranch": "Busiest branch",
     "opsTopProblem": "Most common problem",
-    "opsNoBranch": "No branch recorded",
-    "opsNoBranchHint": "missing from every cut below",
-    "opsVolume": "Tickets in range",
-    "opsVolumeHint": "about the branches you cover",
-    "opsConcentration": "From the top {{n}} branches",
-    "opsConcentrationHint": "of {{n}} branches with any ticket",
-    "opsCaveat": "These count tickets, not orders — nothing here records how much business a branch did, so a higher count is not by itself a worse branch.",
     "compensationBypass": "{{n}} tickets · {{sar}} SAR with no approval raised",
-    "compensationApproved": "across {{n}} approved coupons"
+    "compensationApproved": "across {{n}} approved coupons",
+    "opsTopService": "Most affected service type"
   },
   "performance": {
     "title": "Agent performance",

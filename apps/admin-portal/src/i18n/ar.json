@@ -445,19 +445,10 @@
     "kpiCoupons": "القسائم الصادرة",
     "couponsPending": "{{n}} بانتظار القرار",
     "kpiSolved": "التذاكر المحلولة",
-    "opsBranchesHit": "الفروع التي لديها تذاكر",
-    "opsOfBranches": "من {{n}} في القائمة",
-    "opsWorstBranch": "الفرع الأكثر انشغالًا",
     "opsTopProblem": "أكثر المشكلات تكرارًا",
-    "opsNoBranch": "بدون فرع مسجَّل",
-    "opsNoBranchHint": "غير محتسبة في أي تصنيف أدناه",
-    "opsVolume": "التذاكر في النطاق",
-    "opsVolumeHint": "عن الفروع التي تغطيها",
-    "opsConcentration": "من أعلى {{n}} فروع",
-    "opsConcentrationHint": "من {{n}} فرعًا لديها تذاكر",
-    "opsCaveat": "هذه أرقام تذاكر وليست طلبات — لا يسجَّل هنا حجم أعمال الفرع، فارتفاع العدد وحده لا يعني أن الفرع أسوأ.",
     "compensationBypass": "{{n}} تذكرة · {{sar}} ريال دون طلب اعتماد",
-    "compensationApproved": "عبر {{n}} كوبونًا معتمدًا"
+    "compensationApproved": "عبر {{n}} كوبونًا معتمدًا",
+    "opsTopService": "نوع الخدمة الأكثر تأثرًا"
   },
   "complaintReport": {
     "any": "الكل",
