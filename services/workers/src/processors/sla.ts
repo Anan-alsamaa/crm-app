@@ -102,6 +102,29 @@ function isDone(t: TicketRow): boolean {
   return t.status === 'resolved' || t.status === 'closed';
 }
 
+/**
+ * A POLICY CANNOT PROMISE BACKWARDS.
+ *
+ * The moment a policy is created, everything already in the database becomes
+ * overdue against it. Measured on this deployment the day the two policies were
+ * written: the ticket policy immediately took six tickets raised one to two
+ * WEEKS earlier and marked all six breached, none met — a resolution SLA
+ * reporting 0% when it had never had the chance to measure anything. The chat
+ * policy would have done the same to 123 unanswered conversations.
+ *
+ * Nobody could have known about a promise that did not exist yet, so a policy
+ * governs work that STARTED after it did. This is not a migration convenience
+ * to be deleted once the data is clean: it is true every time somebody writes a
+ * new policy, or widens an old one by creating a more specific replacement.
+ *
+ * Missing dates fall through to "governed" — Directus always stamps
+ * `date_created`, and going silent is the worse failure of the two.
+ */
+function predatesPolicy(startedAt: string | null, policy: SlaPolicyRow): boolean {
+  if (!policy.date_created || !startedAt) return false;
+  return new Date(startedAt).getTime() < new Date(policy.date_created).getTime();
+}
+
 function jobId(ticketId: string, deadline: Deadline, kind: 'warning' | 'breach'): string {
   // BullMQ (v5.50+) rejects custom job ids containing ':' (its redis key
   // delimiter), so use '-' separators.
@@ -294,6 +317,9 @@ export async function runReconcile(deps: SlaDeps): Promise<void> {
     if (!policy) {
       policy = pickPolicy(t, policies);
       if (!policy) continue;
+      // Checked before ATTACHING, not after: once a ticket carries a policy it
+      // keeps it, so this is the only moment the question is asked.
+      if (predatesPolicy(t.date_created, policy)) continue;
       policyId = policy.id;
       await deps.tickets.patchTicket(t.id, { sla_policy: policyId });
     }
@@ -415,24 +441,10 @@ export async function runChatReconcile(deps: SlaDeps): Promise<void> {
     if (!dueAt) {
       const policy = pickChatPolicy(c, policies);
       if (!policy) continue;
+      // See `predatesPolicy`. Judging the chats already waiting would page the
+      // whole team at once, about conversations nobody was ever promised.
+      if (predatesPolicy(c.date_created, policy)) continue;
       const start = c.date_created ? new Date(c.date_created) : new Date();
-      /*
-       * A PROMISE CANNOT BE MADE RETROACTIVELY.
-       *
-       * The moment a chat policy is created, every conversation already sitting
-       * unanswered in the database becomes overdue against it — 123 of them
-       * here, none of which anyone could have known about when they arrived.
-       * Judging those would page the whole team at once and open the chat SLA
-       * report on a wall of breaches that describe seeding, not service.
-       *
-       * So the policy governs chats that started AFTER it did. This is not a
-       * migration convenience that can be deleted later: it is true every time
-       * somebody writes a new policy, and doing it here rather than in a
-       * one-off backfill means the next one behaves correctly too.
-       */
-      if (policy.date_created && start.getTime() < new Date(policy.date_created).getTime()) {
-        continue;
-      }
       try {
         dueAt = computeDueAt(
           start,
@@ -532,9 +544,32 @@ export async function runWarning(
   if (!t || isDone(t)) return;
   if (deadline === 'first_response' && t.first_responded_at) return;
 
-  // Idempotent: rely on the eventCreated dedup via type+payload at the data
-  // layer (multiple warnings allowed in principle; in practice the jobId on
-  // the scheduled job makes re-firing rare).
+  /*
+   * WARN ONCE PER (TICKET, DEADLINE) — the same ledger the breach already has.
+   *
+   * This used to rely on the scheduled job's stable `jobId` to prevent
+   * re-firing, on the reasoning that BullMQ rejects a duplicate id. It does —
+   * but only while the job still EXISTS, and these are added with
+   * `removeOnComplete: true`. So the job ran, deleted itself, and the next
+   * reconcile 60 seconds later re-added the same id to an empty queue and ran
+   * it again. For an already-overdue ticket the delay is zero, so this was a
+   * loop, not an edge case.
+   *
+   * Measured before the fix: 20,397 sla_warning rows across SIX tickets, still
+   * growing by six a minute, four days after the first one. `ticket_events` is
+   * the append-only trail that field history and "last modified by" are derived
+   * from, so this was not merely noise — it was burying the record it lives in.
+   *
+   * The event is written BEFORE the notification for the same reason the breach
+   * does it: a crash between them costs one page, where the reverse costs a
+   * page every minute forever.
+   */
+  const prior = await deps.tickets.listTicketEvents(t.id, 'sla_warning');
+  if (prior.some((e) => (e.payload as { deadline?: string } | null)?.deadline === deadline)) {
+    deps.logger.debug({ ticketId: t.id, deadline }, 'sla warning already sent — skipping');
+    return;
+  }
+
   await deps.tickets.createTicketEvent(t.id, 'sla_warning', { deadline });
   const recipient = t.assigned_agent;
   if (recipient) await enqueueNotification(deps, recipient, 'sla_warning', t, deadline);

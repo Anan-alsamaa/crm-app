@@ -687,3 +687,96 @@ describe('escalation fans out to the assigned team', () => {
     expect(q.notifications).toHaveLength(3); // 1 breach + 2 escalations
   });
 });
+
+describe('runReconcile — a policy cannot promise backwards', () => {
+  it('does not attach a policy to a ticket raised before the policy existed', async () => {
+    /*
+     * Measured on live data the day the two policies were written: the ticket
+     * policy immediately took six tickets raised one to two WEEKS earlier and
+     * marked all six breached, none met — a resolution SLA reporting 0% when it
+     * had never had the chance to measure anything. Nobody could have known
+     * about a promise that did not exist yet.
+     */
+    const old = { ...baseTicket, id: 'old', date_created: '2026-08-11T22:53:49.000Z' };
+    const { repo, patched } = makeRepo(
+      [old],
+      [{ ...POLICY, date_created: '2026-08-24T09:58:07.000Z' }],
+    );
+    const q = makeQueues();
+    await runReconcile({ tickets: repo, teams: makeTeams(), ...q, logger });
+    expect(patched).toHaveLength(0);
+    expect(q.sla).toHaveLength(0);
+  });
+
+  it('still governs a ticket raised after it', async () => {
+    const fresh = { ...baseTicket, id: 'fresh', date_created: '2026-08-25T08:00:00.000Z' };
+    const { repo, patched } = makeRepo(
+      [fresh],
+      [{ ...POLICY, date_created: '2026-08-24T09:58:07.000Z' }],
+    );
+    const q = makeQueues();
+    await runReconcile({ tickets: repo, teams: makeTeams(), ...q, logger });
+    expect(patched.some((p) => p.patch.sla_policy === POLICY.id)).toBe(true);
+    expect(patched.some((p) => p.patch.resolution_due_at)).toBe(true);
+  });
+
+  it('keeps honouring a policy already attached, even to an older ticket', async () => {
+    // The check guards ATTACHMENT. A ticket that already carries a policy was
+    // promised something, and moving the goalposts under it afterwards would be
+    // the same retroactive change in the other direction.
+    const old = {
+      ...baseTicket,
+      id: 'attached',
+      date_created: '2026-08-11T22:53:49.000Z',
+      sla_policy: POLICY.id,
+    };
+    const { repo, patched } = makeRepo(
+      [old],
+      [{ ...POLICY, date_created: '2026-08-24T09:58:07.000Z' }],
+    );
+    const q = makeQueues();
+    await runReconcile({ tickets: repo, teams: makeTeams(), ...q, logger });
+    expect(patched.some((p) => p.patch.resolution_due_at)).toBe(true);
+  });
+});
+
+describe('runWarning — warns once, not once a minute', () => {
+  it('does not re-warn on a later sweep', async () => {
+    /*
+     * The reconcile re-adds the warning job every 60s with a stable jobId, and
+     * BullMQ only rejects a duplicate id while the job still EXISTS — these are
+     * added with removeOnComplete. So the job ran, deleted itself, and was
+     * re-added to an empty queue a minute later. For an already-overdue ticket
+     * the delay is zero, which made it a loop.
+     *
+     * Measured on live data before this ledger existed: 20,397 sla_warning rows
+     * across SIX tickets, still growing by six a minute four days on — burying
+     * the append-only trail that field history is derived from.
+     */
+    const t = { ...baseTicket, id: 'warn-once' };
+    const { repo, events } = makeRepo([t], [POLICY]);
+    const q = makeQueues();
+    const deps = { tickets: repo, teams: makeTeams(), ...q, logger };
+
+    await runWarning(deps, t.id, 'resolution');
+    await runWarning(deps, t.id, 'resolution');
+    await runWarning(deps, t.id, 'resolution');
+
+    expect(events.filter((e) => e.type === 'sla_warning')).toHaveLength(1);
+    expect(q.notifications.filter((n) => n.name === 'sla_warning')).toHaveLength(1);
+  });
+
+  it('still warns separately for a different deadline on the same ticket', async () => {
+    // The two deadlines are independent promises; silencing one must not
+    // silence the other.
+    const t = { ...baseTicket, id: 'warn-both' };
+    const { repo, events } = makeRepo([t], [POLICY]);
+    const q = makeQueues();
+    const deps = { tickets: repo, teams: makeTeams(), ...q, logger };
+
+    await runWarning(deps, t.id, 'resolution');
+    await runWarning(deps, t.id, 'first_response');
+
+    expect(events.filter((e) => e.type === 'sla_warning')).toHaveLength(2);
+  });
+});
