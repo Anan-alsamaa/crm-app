@@ -50,6 +50,9 @@ export interface CouponApprovalRow {
   yiji_coupon_user_id: string | null;
   yiji_pushed_at: string | null;
   yiji_push_error: string | null;
+  /** Marked never-send — a test row, or honoured in the branch instead. */
+  delivery_excluded: boolean | null;
+  delivery_excluded_reason: string | null;
   decided_at: string | null;
   decision_note: string | null;
   date_created: string | null;
@@ -112,6 +115,8 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
               'yiji_coupon_user_id',
               'yiji_pushed_at',
               'yiji_push_error',
+              'delivery_excluded',
+              'delivery_excluded_reason',
               {
                 ticket: [
                   'id',

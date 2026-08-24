@@ -42,7 +42,6 @@ export interface WidgetStrings {
   offlineAutoReply: string;
   offlineCallLabel: string;
   offlineWhatsappLabel: string;
-  offlineEmailLabel: string;
 }
 
 const strings: Record<WidgetLocale, WidgetStrings> = {
@@ -77,13 +76,15 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     csatThanks: 'Thanks for the feedback!',
     csatThanksSub: 'We appreciate you taking the time.',
     offlineTitle: 'Our agents are offline right now',
-    offlineBody:
-      'Unfortunately, our agents are offline now. Please contact us directly and we will get back to you as soon as possible.',
+    /* Short on purpose: this sits above the composer, and every line it wraps
+     * to is a line of the customer's screen it takes. It also leads with the
+     * thing that is actually true — the message gets through — rather than
+     * apologising and pointing at the phone. */
+    offlineBody: "Leave your message here and we'll reply when we're back — or reach us now:",
     offlineAutoReply:
       "Thanks for your message — our team is offline right now. We've received it and will reply as soon as we're back online.",
     offlineCallLabel: 'Call us',
     offlineWhatsappLabel: 'WhatsApp',
-    offlineEmailLabel: 'Email us',
   },
   ar: {
     title: 'الدعم',
@@ -114,13 +115,11 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     csatThanks: 'شكرًا لك على ملاحظاتك!',
     csatThanksSub: 'نقدّر الوقت الذي خصصته.',
     offlineTitle: 'فريق الدعم غير متاح حاليًا',
-    offlineBody:
-      'للأسف، وكلاؤنا غير متصلين في الوقت الحالي. يرجى التواصل معنا مباشرةً وسنعاود التواصل في أقرب وقت.',
+    offlineBody: 'اترك رسالتك هنا وسنرد فور عودتنا — أو تواصل معنا الآن:',
     offlineAutoReply:
       'شكرًا لرسالتك — فريقنا غير متصل حاليًا. لقد استلمنا رسالتك وسنردّ عليك فور عودتنا.',
     offlineCallLabel: 'اتصل بنا',
     offlineWhatsappLabel: 'واتساب',
-    offlineEmailLabel: 'راسلنا بالبريد',
   },
 };
 

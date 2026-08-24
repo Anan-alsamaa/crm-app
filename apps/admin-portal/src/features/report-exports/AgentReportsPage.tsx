@@ -1537,7 +1537,7 @@ function ComplaintsReport({
                   key={k}
                   active={sort?.key === k}
                   dir={sort?.dir ?? 'asc'}
-                  align={COMPLAINT_COLUMN_LAYOUT[k] === 'number' ? 'end' : 'start'}
+                  align={columnAlign(k)}
                   onSort={() => {
                     toggle(k);
                     // A different order is a different page 7.
@@ -1592,6 +1592,9 @@ function ComplaintsReport({
                       className={cn(
                         layout === 'text' ? 'align-top' : 'whitespace-nowrap',
                         layout === 'number' && 'text-end tabular-nums',
+                        // Centred and tabular: the header above uses the same
+                        // rule, so the column reads as one edge rather than two.
+                        layout === 'compact' && 'text-center tabular-nums',
                       )}
                     >
                       {unmapped ? (
@@ -2540,6 +2543,21 @@ const META: Record<
       'Every ticket in the operations report format. Search by phone, restaurant name or ID; rearrange the columns under the Columns button; export to CSV.',
   },
 };
+
+/**
+ * Where a column's text sits, for the HEADER and the cells beneath it alike.
+ *
+ * These used to be decided in two places — `=== 'number' ? 'end' : 'start'` on
+ * the header, a different expression on the cell — which is exactly how a
+ * value ends up centred under a left-aligned heading. One function, read by
+ * both, so they cannot disagree.
+ */
+function columnAlign(k: ComplaintColumnKey): 'start' | 'end' | 'center' {
+  const layout = COMPLAINT_COLUMN_LAYOUT[k];
+  if (layout === 'number') return 'end';
+  if (layout === 'compact') return 'center';
+  return 'start';
+}
 
 export function AgentReportsPage({ report: which }: { report: ReportKind }) {
   const { t } = useTranslation();

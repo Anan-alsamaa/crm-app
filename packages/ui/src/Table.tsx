@@ -514,7 +514,13 @@ export function SortTh({
   active?: boolean;
   dir?: SortDir;
   onSort?: () => void;
-  align?: 'start' | 'end';
+  /**
+   * `center` is for SHORT ORDINAL values — a month number, a week number — as
+   * distinct from `end`, which is for quantities whose digits should line up
+   * down the column so magnitudes can be compared at a glance. Nobody compares
+   * the magnitude of "March".
+   */
+  align?: 'start' | 'end' | 'center';
 }): JSX.Element {
   return (
     <Th
@@ -536,13 +542,15 @@ export function SortTh({
         onClick={onSort}
         className={cn(
           'flex h-12 w-full items-center gap-1 px-4 text-2xs font-semibold uppercase tracking-[0.12em] transition-colors duration-fast ease-out',
-          align === 'end' ? 'justify-end' : 'justify-start',
+          align === 'end' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start',
           active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
         )}
       >
         {align === 'end' && <SortGlyph active={active} dir={dir} />}
         <span className="truncate">{children}</span>
-        {align === 'start' && <SortGlyph active={active} dir={dir} />}
+        {/* Trailing for both start and center: a glyph before a centred label
+            pushes the label off-centre against the cells beneath it. */}
+        {align !== 'end' && <SortGlyph active={active} dir={dir} />}
       </button>
     </Th>
   );

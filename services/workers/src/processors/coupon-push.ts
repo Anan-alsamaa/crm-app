@@ -98,6 +98,8 @@ export interface CouponApprovalRow {
   yiji_coupon_user_id: string | null;
   /** Why the last delivery attempt did not land. Null once it does. */
   yiji_push_error?: string | null;
+  /** Never send this one — a test row, or honoured another way. */
+  delivery_excluded?: boolean | null;
 }
 
 /** Postgres returns `numeric` as a string; Yiji is sent numbers. */
@@ -291,6 +293,12 @@ export type PushOutcome =
   | 'already-assigned'
   | 'no-order'
   /**
+   * Marked never-send. Not a failure and not a refusal — somebody decided this
+   * coupon must not reach Yiji, because it was a test or because the branch
+   * already honoured it in person.
+   */
+  | 'excluded'
+  /**
    * Yiji answered, and the answer was no — for a reason that will not change
    * by asking again ("User already have this coupon", an order it cannot see).
    *
@@ -341,6 +349,8 @@ export async function runCouponDeliverySweep(deps: {
             status: { _in: ['approved', 'edited'] },
             yiji_coupon_user_id: { _null: true },
             yiji_push_error: { _null: true },
+            // Never-send rows are not "owed" — see `delivery_excluded`.
+            delivery_excluded: { _neq: true },
           },
           fields: ['id', 'coupon_code'],
           limit: -1,
@@ -419,6 +429,7 @@ export async function processCouponPushJob(
         { ticket: ['order_id'] },
         'yiji_coupon_user_id',
         'yiji_push_error',
+        'delivery_excluded',
       ],
     } as never),
   )) as unknown as CouponApprovalRow;
@@ -435,6 +446,15 @@ export async function processCouponPushJob(
       'coupon already assigned — nothing to push',
     );
     return 'already-assigned';
+  }
+  /*
+   * Checked BEFORE anything else that could send it, and before the
+   * not-approved check, because an excluded row must be inert no matter what
+   * state it is in or how the job was queued — including a Retry click.
+   */
+  if (row.delivery_excluded) {
+    logger.info({ id, code: row.coupon_code }, 'coupon is marked never-send — not pushing');
+    return 'excluded';
   }
   if (row.status !== 'approved' && row.status !== 'edited') {
     logger.warn({ id, status: row.status }, 'coupon is not approved — refusing to push');

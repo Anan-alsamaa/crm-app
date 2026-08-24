@@ -191,21 +191,34 @@ export const COMPLAINT_COLUMN_LABELS: Record<ComplaintColumnKey, { key: string; 
  * third of a 5085px-wide table and every other value was pushed off-screen.
  * Bounding those two brings the table back to roughly a screen and a half.
  *
- *   narrow — one line, natural width (dates, codes, names, statuses)
- *   text   — free prose: fixed width, clamped to two lines, full value on hover
- *   number — end-aligned and tabular, so magnitudes line up down the column
+ *   narrow  — one line, natural width (codes, names, statuses)
+ *   text    — free prose: fixed width, clamped to two lines, full value on hover
+ *   number  — end-aligned and tabular, so magnitudes line up down the column
+ *   compact — SHORT ORDINAL values, centred: year, month, week, day
+ *
+ * `compact` exists because the four date-part columns were split across two
+ * policies that both looked wrong beside each other — `year` and `week` were
+ * `number`, so they hugged the right edge, while `month` and `day` were
+ * `narrow` and hugged the left. Four adjacent columns of two-to-four
+ * characters, in three different alignments, under headers that did not line
+ * up with any of them.
+ *
+ * They are not quantities. Nobody compares the magnitude of March against the
+ * magnitude of July, so the end-alignment that makes 9 and 10 line up buys
+ * nothing here and costs the eye a ragged left edge. Centred, a short value
+ * sits under its own header and the four columns read as one block.
  *
  * This lives beside the column list rather than in the page so a column added
  * here cannot arrive on screen without a width policy.
  */
-export type ComplaintColumnLayout = 'narrow' | 'text' | 'number';
+export type ComplaintColumnLayout = 'narrow' | 'text' | 'number' | 'compact';
 
 export const COMPLAINT_COLUMN_LAYOUT: Record<ComplaintColumnKey, ComplaintColumnLayout> = {
   date: 'narrow',
-  year: 'number',
-  month: 'narrow',
-  week: 'number',
-  day: 'narrow',
+  year: 'compact',
+  month: 'compact',
+  week: 'compact',
+  day: 'compact',
   chain: 'narrow',
   area: 'narrow',
   brand: 'narrow',

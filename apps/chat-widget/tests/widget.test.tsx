@@ -378,17 +378,56 @@ describe('Widget — empty state and offline fallback', () => {
     expect(screen.getByTestId('yiji-status')).toBeInTheDocument();
   });
 
-  it('renders the offline fallback with call/whatsapp/email when no agents online', () => {
-    renderWidget({ autoOpen: true, fallback: { phone: '+1 222 333', email: 'help@test.io' } });
+  it('offers exactly two ways out — call and WhatsApp, on their own numbers', () => {
+    /*
+     * The call centre and the WhatsApp business account are DIFFERENT lines.
+     * Both chips used to render `fallback.phone`, so WhatsApp pointed at the
+     * landline and opened a chat nobody reads.
+     */
+    renderWidget({
+      autoOpen: true,
+      fallback: { phone: '920012111', whatsapp: '0565266122' },
+    });
     driveReady({ agentsOnline: 0 });
-    const region = screen.getByRole('region', { name: 'Our agents are offline right now' });
-    expect(region).toBeInTheDocument();
-    expect(screen.getByText('Call us')).toBeInTheDocument();
-    expect(screen.getByText('WhatsApp')).toBeInTheDocument();
-    expect(screen.getByText('Email us')).toBeInTheDocument();
-    // Email link uses the configured fallback.
-    const mail = screen.getByText('help@test.io').closest('a');
-    expect(mail).toHaveAttribute('href', 'mailto:help@test.io');
+    expect(
+      screen.getByRole('region', { name: 'Our agents are offline right now' }),
+    ).toBeInTheDocument();
+
+    expect(screen.getByText('920012111').closest('a')).toHaveAttribute('href', 'tel:920012111');
+    // Local number, wa.me link: 05… becomes 9665… or the chat opens with nobody.
+    expect(screen.getByText('0565266122').closest('a')).toHaveAttribute(
+      'href',
+      'https://wa.me/966565266122',
+    );
+  });
+
+  it('does not offer email — the slowest channel, and useless at a counter', () => {
+    renderWidget({ autoOpen: true });
+    driveReady({ agentsOnline: 0 });
+    expect(screen.queryByText('Email us')).not.toBeInTheDocument();
+    expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
+  });
+
+  it('leaves the composer reachable — the message still gets through', () => {
+    /*
+     * The whole point. This block used to be a stacked panel that filled the
+     * widget on a phone, so a customer who only wanted to type a sentence had
+     * to scroll past a wall of contact details. The offline message is "leave
+     * it here and we will reply", and the composer has to be right there for
+     * that to be true.
+     */
+    renderWidget({ autoOpen: true });
+    driveReady({ agentsOnline: 0 });
+    const composer = document.querySelector('textarea, input[type="text"]');
+    expect(composer).not.toBeNull();
+    expect(composer).toBeEnabled();
+  });
+
+  it('falls back to the published numbers when the host configures none', () => {
+    renderWidget({ autoOpen: true });
+    driveReady({ agentsOnline: 0 });
+    expect(screen.getByText('920012111')).toBeInTheDocument();
+    expect(screen.getByText('0565266122')).toBeInTheDocument();
   });
 
   it('shows the offline header status when no agents are online', () => {

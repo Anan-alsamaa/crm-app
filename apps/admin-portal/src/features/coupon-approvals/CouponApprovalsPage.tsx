@@ -635,7 +635,23 @@ function Row({
             </p>
           )}
 
+          {/* Never-send outranks every other delivery state: there is nothing
+              to report on and nothing to retry. */}
+          {approvedNotPending && row.delivery_excluded && (
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              {t('couponApprovals.deliveryExcluded', {
+                defaultValue: 'Not sent to Yiji — {{why}}',
+                why:
+                  row.delivery_excluded_reason?.trim() ||
+                  t('couponApprovals.deliveryExcludedDefault', {
+                    defaultValue: 'marked never-send',
+                  }),
+              })}
+            </p>
+          )}
+
           {approvedNotPending &&
+            !row.delivery_excluded &&
             canBeDelivered &&
             (row.yiji_coupon_user_id ? (
               <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">

@@ -541,6 +541,30 @@ export const collections: CollectionSpec[] = [
        *
        * Cleared the moment a delivery succeeds.
        */
+      /**
+       * Never send this one to Yiji, whatever else is true of it.
+       *
+       * Two real reasons, and both are permanent decisions rather than
+       * failures: a coupon that was only ever a TEST (approved while the
+       * integration was being built, against real customers who were never
+       * meant to receive anything), and a coupon the branch has already
+       * honoured in person so sending it would compensate twice.
+       *
+       * Distinct from `yiji_push_error`, which means "we tried and Yiji said
+       * no" and can be cleared to try again. This one means "do not try", and
+       * the delivery sweep skips it for good.
+       */
+      {
+        field: 'delivery_excluded',
+        type: 'boolean',
+        defaultValue: false,
+        note: 'Never send this coupon to Yiji — a test row, or already honoured another way. Not a failure; see yiji_push_error for those.',
+      },
+      {
+        field: 'delivery_excluded_reason',
+        type: 'string',
+        note: 'Why it is excluded, so the decision is answerable later.',
+      },
       {
         field: 'yiji_push_error',
         type: 'text',

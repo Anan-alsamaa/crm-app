@@ -830,86 +830,134 @@
 }
 
 /* ───── Agent-offline fallback ─────
- * Replaces the composer when no support agent is connected. The two CTAs
- * are real `tel:` / `mailto:` links so the customer can act in one tap.
+ * A STRIP above the composer, not a panel that replaces it.
+ *
+ * This block used to be a stacked card — title, paragraph, and three
+ * full-width rows each carrying a 36px icon chip. On a phone it filled the
+ * widget: a customer who only wanted to type a sentence met a wall of contact
+ * details and had to scroll past it to reach the box. That reads as "go away
+ * and phone us", when the truthful message is "leave it here and we will
+ * reply" — the message IS delivered and answered later.
+ *
+ * So: one line of text, two inline chips, and the conversation stays visible
+ * behind it. The chips are real `tel:` / `wa.me` links, one tap each.
  */
 .yiji-offline {
-  padding: 18px 18px 22px;
-  background: var(--yiji-surface);
+  padding: 10px 14px;
+  /*
+   * NEUTRAL, and deliberately not tinted.
+   *
+   * An amber wash reads as "something has gone wrong"; nothing has — the team
+   * is simply not at their desks and the message will still be answered. A
+   * BRAND tint is no better: this widget is tenant-branded, so 5% of
+   * `--yiji-primary` is a pale lavender for one tenant and a pale red for the
+   * next, and neither was chosen for this strip. The neutral secondary surface
+   * separates the strip from the thread without saying anything about it.
+   */
+  background: var(--yiji-surface-2);
   border-top: 1px solid var(--yiji-border);
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.yiji-offline-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--yiji-ink);
-  line-height: 1.4;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
 }
 .yiji-offline-body {
   margin: 0;
-  font-size: 13px;
-  color: var(--yiji-muted);
-  line-height: 1.5;
+  /* Takes the row on its own when the chips cannot sit beside it, and shrinks
+     rather than pushing them off the edge when they can. */
+  flex: 1 1 min(100%, 15rem);
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--yiji-ink);
 }
 .yiji-offline-actions {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  margin-top: 6px;
+  margin-inline-start: auto;
 }
 .yiji-offline-link {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  padding: 11px 14px;
-  border-radius: 12px;
-  background: var(--yiji-surface-2);
+  gap: 8px;
+  padding: 7px 12px 7px 8px;
+  border-radius: 999px;
+  background: var(--yiji-surface);
+  border: 1px solid var(--yiji-border);
   text-decoration: none;
   color: var(--yiji-ink);
-  transition: background-color 160ms var(--yiji-ease);
+  transition:
+    background-color 160ms var(--yiji-ease),
+    border-color 160ms var(--yiji-ease),
+    transform 160ms var(--yiji-ease);
+}
+[dir='rtl'] .yiji-offline-link {
+  padding: 7px 8px 7px 12px;
 }
 .yiji-offline-link:hover {
-  background: color-mix(in oklab, var(--yiji-primary) 8%, var(--yiji-surface-2));
+  background: color-mix(in oklab, var(--yiji-primary) 8%, var(--yiji-surface));
+  border-color: color-mix(in oklab, var(--yiji-primary) 35%, var(--yiji-border));
+}
+.yiji-offline-link:active {
+  transform: translateY(1px);
+}
+/* A visible ring, because these are the only two ways out of an offline
+   widget and a keyboard user must be able to find them. */
+.yiji-offline-link:focus-visible {
+  outline: 2px solid var(--yiji-primary);
+  outline-offset: 2px;
 }
 .yiji-offline-link-icon {
-  width: 36px;
-  height: 36px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
-  border-radius: 10px;
+  border-radius: 50%;
   background: color-mix(in oklab, var(--yiji-primary) 12%, transparent);
   color: var(--yiji-primary);
   display: grid;
   place-items: center;
 }
 .yiji-offline-link-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 13px;
+  height: 13px;
 }
 .yiji-offline-link-text {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
 }
 .yiji-offline-link-label {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--yiji-muted);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  white-space: nowrap;
 }
 .yiji-offline-link-value {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--yiji-ink);
   font-variant-numeric: tabular-nums;
+  /* A phone number is read left-to-right in every locale. */
   direction: ltr;
+  white-space: nowrap;
 }
 [dir='rtl'] .yiji-offline-link-value {
   unicode-bidi: plaintext;
+}
+
+/* Narrow phones: the label is decoration once the icon has said which channel
+   this is, and dropping it keeps both chips on one row instead of stacking
+   them into the tall block this replaced. */
+@media (max-width: 380px) {
+  .yiji-offline-link-label {
+    display: none;
+  }
+  .yiji-offline-actions {
+    margin-inline-start: 0;
+  }
 }
 
 /* ───── Mobile responsive ─────

@@ -580,3 +580,51 @@ describe('the customer id must be one YIJI issued', () => {
     expect(p.couponUser.userId).toBe('yiji-77');
   });
 });
+
+describe('a coupon marked never-send is inert', () => {
+  /*
+   * Two real reasons, both permanent decisions rather than failures: a coupon
+   * that was only ever a TEST (approved while the integration was being built,
+   * against real customers who were never meant to receive anything), and one
+   * the branch has already honoured in person, where sending it would
+   * compensate twice.
+   *
+   * Distinct from `yiji_push_error`, which means "we tried and Yiji said no"
+   * and can be cleared to try again. This means "do not try".
+   */
+  it('is not pushed, even when everything else about it is deliverable', async () => {
+    const { deps: d, postCoupon, patches } = deps({}, { ...ROW, delivery_excluded: true });
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('excluded');
+    expect(postCoupon).not.toHaveBeenCalled();
+    expect(patches).toHaveLength(0);
+  });
+
+  it('stays inert even if the job is queued by hand', async () => {
+    // The Retry action clears `yiji_push_error` and re-enqueues; an excluded
+    // row must ignore that too, which is why the check runs before every other
+    // gate rather than beside them.
+    const { deps: d, postCoupon } = deps(
+      {},
+      { ...ROW, delivery_excluded: true, yiji_push_error: null, status: 'edited' },
+    );
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('excluded');
+    expect(postCoupon).not.toHaveBeenCalled();
+  });
+
+  it('is left out of the delivery sweep entirely', async () => {
+    const added: Array<{ opts: { jobId?: string } }> = [];
+    const directus = { request: vi.fn(async () => []) };
+    const couponsQueue = {
+      add: vi.fn(async (_n: string, _d: unknown, opts: { jobId?: string }) => {
+        added.push({ opts });
+      }),
+    };
+    await runCouponDeliverySweep({
+      directus: directus as never,
+      logger,
+      couponsQueue: couponsQueue as never,
+    });
+    const arg = directus.request.mock.calls[0]![0] as { opts: { filter: Record<string, unknown> } };
+    expect(arg.opts.filter).toMatchObject({ delivery_excluded: { _neq: true } });
+  });
+});

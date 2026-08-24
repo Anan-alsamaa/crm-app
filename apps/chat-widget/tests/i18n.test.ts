@@ -65,7 +65,6 @@ describe('i18n: t()', () => {
       'offlineBody',
       'offlineCallLabel',
       'offlineWhatsappLabel',
-      'offlineEmailLabel',
     ];
     for (const locale of ['en', 'ar'] as WidgetLocale[]) {
       const s = t(locale);

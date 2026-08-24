@@ -33,15 +33,36 @@ export interface WidgetConfig {
    * Host pages can override per vendor; defaults match the Yiji CS desk.
    */
   fallback?: {
+    /** Voice line. Shown as a `tel:` chip when no agent is connected. */
     phone?: string;
-    email?: string;
+    /**
+     * WhatsApp number, which is NOT the same line as `phone` — the call centre
+     * and the WhatsApp business account are different numbers, and sending a
+     * customer to wa.me for a landline opens a chat nobody reads.
+     */
+    whatsapp?: string;
   };
 }
 
 const DEFAULT_FALLBACK = {
-  phone: '+966 55 598 0402',
-  email: 'cs@anan.sa',
+  phone: '920012111',
+  whatsapp: '0565266122',
 };
+
+/**
+ * A Saudi local number as wa.me wants it: country code, no leading zero, digits
+ * only. `05XXXXXXXX` → `9665XXXXXXXX`.
+ *
+ * Done here rather than asking whoever configures the widget to write it twice,
+ * because the number on a poster is the local one and a mistyped country code
+ * fails silently — wa.me opens a chat with nobody rather than refusing.
+ */
+function waNumber(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('966')) return digits;
+  if (digits.startsWith('0')) return `966${digits.slice(1)}`;
+  return digits;
+}
 
 // An attachment is an image if its MIME says so, OR (when the MIME is missing)
 // its filename has an image extension — otherwise a null-type PNG would render
@@ -183,23 +204,6 @@ function DownloadIcon() {
       aria-hidden
     >
       <path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13h10" />
-    </svg>
-  );
-}
-
-function MailIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
-      <path d="m3 6 9 7 9-7" />
     </svg>
   );
 }
@@ -854,9 +858,21 @@ export function Widget({ config }: { config: WidgetConfig }) {
               {/* Offline: the customer can still leave a message (see send() for
                   the auto-reply) — the direct-contact options are a secondary
                   fallback shown above the composer, not a replacement for it. */}
+              {/*
+                A STRIP, NOT A SCREEN.
+                This used to be a stacked panel — title, paragraph, and three
+                full-width rows each with a 36px icon chip — sitting between the
+                conversation and the composer. On a phone it filled the widget,
+                so a customer who only wanted to type a sentence was met by a
+                wall of contact details and had to scroll past it to reach the
+                box. That reads as "go away and phone us" when the truthful
+                message is "leave it here and we will reply".
+                One line, two inline chips, and the thread stays visible.
+                Email is gone: it is the slowest channel of the three and the
+                one nobody uses from a phone at a counter.
+              */}
               {ready && agentsOnline === 0 && (
                 <div className="yiji-offline" role="region" aria-label={tr.offlineTitle}>
-                  <p className="yiji-offline-title">{tr.offlineTitle}</p>
                   <p className="yiji-offline-body">{tr.offlineBody}</p>
                   <div className="yiji-offline-actions">
                     <a
@@ -874,7 +890,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
                       </span>
                     </a>
                     <a
-                      href={`https://wa.me/${(config.fallback?.phone ?? DEFAULT_FALLBACK.phone).replace(/\D/g, '')}`}
+                      href={`https://wa.me/${waNumber(config.fallback?.whatsapp ?? DEFAULT_FALLBACK.whatsapp)}`}
                       className="yiji-offline-link"
                       target="_blank"
                       rel="noopener noreferrer"
@@ -885,21 +901,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
                       <span className="yiji-offline-link-text">
                         <span className="yiji-offline-link-label">{tr.offlineWhatsappLabel}</span>
                         <span className="yiji-offline-link-value">
-                          {config.fallback?.phone ?? DEFAULT_FALLBACK.phone}
-                        </span>
-                      </span>
-                    </a>
-                    <a
-                      href={`mailto:${config.fallback?.email ?? DEFAULT_FALLBACK.email}`}
-                      className="yiji-offline-link"
-                    >
-                      <span className="yiji-offline-link-icon" aria-hidden>
-                        <MailIcon />
-                      </span>
-                      <span className="yiji-offline-link-text">
-                        <span className="yiji-offline-link-label">{tr.offlineEmailLabel}</span>
-                        <span className="yiji-offline-link-value">
-                          {config.fallback?.email ?? DEFAULT_FALLBACK.email}
+                          {config.fallback?.whatsapp ?? DEFAULT_FALLBACK.whatsapp}
                         </span>
                       </span>
                     </a>
