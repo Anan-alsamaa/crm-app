@@ -282,6 +282,23 @@ function Row({
   /* Delivery only means anything once a decision has been made, and only an
    * APPROVAL is owed to anybody — a rejected coupon was never going to Yiji. */
   const approvedNotPending = row.status === 'approved' || row.status === 'assigned';
+  /*
+   * NO ORDER, NO COUPON — and a supervisor has to know that BEFORE they decide.
+   *
+   * Yiji's endpoint is `CreateCouponUserFromOrder`: it attaches a coupon to an
+   * order, and resolves the customer from it. Without an order number there is
+   * nothing to attach and nobody to attach it to, so the push reports
+   * `no-order` and the request sits approved for ever.
+   *
+   * This is the normal case for a walk-in visitor who scanned the QR code in a
+   * branch: they typed a phone number, they may have no Yiji account at all,
+   * and nothing in the CRM can look one up — Yiji's API is keyed by customer id
+   * and order id, with no lookup by phone. Approving still MEANS something
+   * (the decision is recorded, and the compensation can be honoured in the
+   * branch), but the customer will not receive it in the app, and telling them
+   * otherwise is the failure this warning exists to prevent.
+   */
+  const canBeDelivered = Boolean(row.ticket?.order_id?.trim());
 
   /**
    * What is wrong with the numbers as they now stand — the amended terms while
@@ -605,7 +622,21 @@ function Row({
             Both states are named here, and the refusal carries Yiji's own words
             plus the only action that un-parks it.
           */}
+          {/*
+            Shown while it is still PENDING as well as after, because it changes
+            what the decision means rather than merely reporting on it.
+          */}
+          {!canBeDelivered && (
+            <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
+              {t('couponApprovals.noOrder', {
+                defaultValue:
+                  'No order number on this ticket, so Yiji cannot attach a coupon — their coupon is created FROM an order. Approving still records the decision, but the customer will not receive it in the app. Add the order number to the ticket if they have one.',
+              })}
+            </p>
+          )}
+
           {approvedNotPending &&
+            canBeDelivered &&
             (row.yiji_coupon_user_id ? (
               <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                 <Pill tone="success" size="sm" dot>

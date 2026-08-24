@@ -139,7 +139,32 @@ export const collections: CollectionSpec[] = [
     collection: 'contacts',
     note: 'Customers of vendors; deduped per vendor by phone/email',
     fields: [
-      { field: 'external_customer_id', type: 'string' },
+      {
+        field: 'external_customer_id',
+        type: 'string',
+        note: 'The id YIJI issued for this customer. NULL when we do not know it — a walk-in visitor typed a phone number and their Yiji account, if any, cannot be looked up from it. Never write a value we minted ourselves; see isPhoneDerivedCustomerId.',
+      },
+      /**
+       * How this customer first reached us.
+       *
+       * `walk_in` is somebody who scanned a QR code standing in a branch;
+       * `app` came through the Yiji app with an identity already attached.
+       * Kept because it is worth something later — a walk-in is a customer who
+       * was physically in a shop, which is exactly what a personalised offer
+       * wants to know, and it is the honest counterpart to a null
+       * `external_customer_id`.
+       *
+       * Its own column rather than a key inside `metadata`: Directus cannot
+       * filter inside a json column, so anything that lives only in a blob is
+       * unsearchable — the same reason tickets.order_id is a column.
+       */
+      {
+        field: 'acquisition_channel',
+        type: 'string',
+        choices: ['app', 'walk_in'],
+        index: true,
+        note: 'How the customer first reached us. walk_in = scanned the QR code in a branch and has no known Yiji account.',
+      },
       { field: 'name', type: 'string' },
       { field: 'phone', type: 'string', index: true },
       { field: 'email', type: 'string', index: true },

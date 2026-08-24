@@ -552,3 +552,31 @@ describe('an outage must not park a coupon', () => {
     expect(refused.patches).toHaveLength(1);
   });
 });
+
+describe('the customer id must be one YIJI issued', () => {
+  it('never sends an id our own gateway minted from a phone number', async () => {
+    /*
+     * A walk-in visitor scans the QR code in a branch and types a phone number;
+     * the gateway mints `cust-<digits>` to give the session an identity. That
+     * was being stored in `contacts.external_customer_id` — the column this
+     * payload sends to Yiji as `userId` — so their resolver would have been
+     * handed a value we invented, dressed as an account.
+     *
+     * The gateway no longer writes them. This refuses to send one that predates
+     * that fix, because five such contacts existed when it was found.
+     */
+    const p = yijiCouponPayload({
+      ...ROW,
+      contact: { ...ROW.contact!, external_customer_id: 'cust-966501234567' },
+    }) as { couponUser: Record<string, unknown> };
+    expect(p.couponUser).not.toHaveProperty('userId');
+    // The ORDER still identifies the customer, which is the whole point of
+    // `CreateCouponUserFromOrder` — so the coupon still goes.
+    expect(p.couponUser.orderId).toBe(1187929);
+  });
+
+  it('still sends a genuine Yiji id', () => {
+    const p = yijiCouponPayload(ROW) as { couponUser: Record<string, unknown> };
+    expect(p.couponUser.userId).toBe('yiji-77');
+  });
+});

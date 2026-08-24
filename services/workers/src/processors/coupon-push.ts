@@ -2,7 +2,12 @@ import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
 import { readItem, readItems, updateItem } from '@directus/sdk';
 import type { CouponPushJob, YijiAdminPoster } from '@yiji/shared-types';
-import { couponWindow, isYijiRefused, isYijiUnavailable } from '@yiji/shared-types';
+import {
+  couponWindow,
+  isPhoneDerivedCustomerId,
+  isYijiRefused,
+  isYijiUnavailable,
+} from '@yiji/shared-types';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import { describeError } from '../lib/errors.js';
 
@@ -138,7 +143,15 @@ export function yijiCouponPayload(row: CouponApprovalRow): Record<string, unknow
   const percent = num(row.coupon_percent);
   const cap = num(row.max_discount);
   const limit = num(row.usage_limit) ?? 1;
-  const yijiUserId = row.contact?.external_customer_id?.trim();
+  /*
+   * Only an id YIJI issued. A walk-in contact used to carry `cust-<digits>` —
+   * minted by our own gateway from a typed phone number — in the column that
+   * means "their id in Yiji". Sending that would hand their resolver a value
+   * we invented and dress it as an account. The gateway no longer writes them,
+   * and this refuses to send one that predates that fix.
+   */
+  const stored = row.contact?.external_customer_id?.trim();
+  const yijiUserId = stored && !isPhoneDerivedCustomerId(stored) ? stored : undefined;
 
   return {
     id: 0,

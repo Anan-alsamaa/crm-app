@@ -265,7 +265,14 @@ describe('CouponApprovalsPage — did it actually reach the customer?', () => {
    * looks exactly like one the worker has not got to yet, and an agent tells a
    * customer about compensation that does not exist.
    */
-  const approved = { ...pending, status: 'approved' as const, decided_at: '2026-08-24T10:00:00Z' };
+  /* An order number, because Yiji attaches the coupon TO one — without it the
+   * card correctly says delivery is impossible instead of reporting on it. */
+  const approved = {
+    ...pending,
+    status: 'approved' as const,
+    decided_at: '2026-08-24T10:00:00Z',
+    ticket: { ...pending.ticket, order_id: '1187929' },
+  };
 
   it('shows the Yiji reference once the coupon has actually been delivered', async () => {
     api.useCouponApprovals.mockReturnValue({
@@ -313,5 +320,63 @@ describe('CouponApprovalsPage — did it actually reach the customer?', () => {
     await expandFirst(user);
     expect(screen.queryByText(/waiting to be sent to yiji/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/delivered to yiji/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('CouponApprovalsPage — a coupon with no order can never be delivered', () => {
+  /*
+   * Yiji's endpoint is `CreateCouponUserFromOrder`: it attaches a coupon to an
+   * order and resolves the customer from it. With no order number there is
+   * nothing to attach and nobody to attach it to.
+   *
+   * This is the NORMAL case for a walk-in visitor who scanned the QR code in a
+   * branch — they typed a phone number, may have no Yiji account, and nothing
+   * can look one up (Yiji's API is keyed by customer id and order id, with no
+   * lookup by phone). A supervisor has to know that before deciding, not after.
+   */
+  const noOrder = { ...pending, ticket: { ...pending.ticket, order_id: null } };
+
+  it('warns BEFORE the decision, while it is still pending', async () => {
+    api.useCouponApprovals.mockReturnValue({ data: [noOrder], isLoading: false });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    expect(screen.getByText(/yiji cannot attach a coupon/i)).toBeInTheDocument();
+  });
+
+  it('still lets the decision be made — it is a warning, not a block', async () => {
+    // Approving records a real decision and the branch can honour it; only the
+    // in-app delivery is impossible.
+    api.useCouponApprovals.mockReturnValue({ data: [noOrder], isLoading: false });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    // Two Approve controls once the card is open (the summary line keeps its
+    // one-click action); either being enabled is the point.
+    for (const b of screen.getAllByRole('button', { name: /^approve/i })) {
+      expect(b).toBeEnabled();
+    }
+  });
+
+  it('does not promise delivery for one it cannot deliver', async () => {
+    api.useCouponApprovals.mockReturnValue({
+      data: [{ ...noOrder, status: 'approved' as const, decided_at: '2026-08-24T10:00:00Z' }],
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    expect(screen.queryByText(/waiting to be sent to yiji/i)).not.toBeInTheDocument();
+  });
+
+  it('says nothing when the ticket does carry an order', async () => {
+    api.useCouponApprovals.mockReturnValue({
+      data: [{ ...pending, ticket: { ...pending.ticket, order_id: '1187929' } }],
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    expect(screen.queryByText(/yiji cannot attach a coupon/i)).not.toBeInTheDocument();
   });
 });

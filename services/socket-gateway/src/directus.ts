@@ -9,6 +9,7 @@ import {
 } from '@directus/sdk';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
 import type { SenderType } from '@yiji/shared-types';
+import { isPhoneDerivedCustomerId } from '@yiji/shared-types';
 import type { CustomerClaims } from './auth/customer-jwt.js';
 import type { AttachmentMeta } from './attachments.js';
 import type { AssignmentEntity, AssignmentEntityType } from './assignment-notify.js';
@@ -96,10 +97,34 @@ export class GatewayDirectus {
       };
 
     try {
+      /*
+       * UNKNOWN MUST LOOK UNKNOWN.
+       *
+       * `external_customer_id` means "the id YIJI issued for this customer".
+       * A walk-in visitor typed a phone number into a QR page, so the gateway
+       * minted `cust-<digits>` to give the session an identity — a fine local
+       * handle, and not a Yiji account. Writing it here put a fabricated value
+       * in a column that every reader treats as authoritative, and the coupon
+       * push sends that column to Yiji as `userId`.
+       *
+       * Null instead, which is the truth: we do not know this person's Yiji
+       * id, and for a walk-in we have no way to look it up — their API is
+       * keyed by customer id and order id, with no lookup by phone. It is also
+       * what makes the coupon path correct, because a coupon is attached to an
+       * ORDER, not to a customer we cannot name.
+       */
       const created = (await this.client.request(
         createItem('contacts', {
           vendor: vendorUuid,
-          external_customer_id: claims.customer_id,
+          external_customer_id: isPhoneDerivedCustomerId(claims.customer_id)
+            ? null
+            : claims.customer_id,
+          /* How they reached us, kept because it is worth something later: a
+           * walk-in is somebody who was standing in a branch, which is exactly
+           * the sort of thing an offer wants to know. Its own column rather
+           * than `metadata`, because Directus cannot filter inside json — the
+           * same reason tickets.order_id is a column. */
+          acquisition_channel: claims.walk_in ? 'walk_in' : 'app',
           name,
           phone,
           email,

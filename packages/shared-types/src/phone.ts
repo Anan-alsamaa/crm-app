@@ -59,3 +59,26 @@ export function phoneCustomerId(raw: string | null | undefined): string {
   const digits = normalizePhone(raw).replace(/\D/g, '');
   return `cust-${digits}`;
 }
+
+/**
+ * Is this a customer id WE invented from a phone number, rather than one Yiji
+ * issued?
+ *
+ * Deliberately next to `phoneCustomerId`, because the two are the same fact
+ * read in opposite directions and separating them is how they drift.
+ *
+ * WHY THIS MATTERS. A walk-in visitor types a phone number into a QR page and
+ * the gateway mints `cust-<digits>` so the session has an identity. That is a
+ * perfectly good local handle — and it is NOT a Yiji customer id. It was
+ * nonetheless being written into `contacts.external_customer_id`, a column
+ * whose entire meaning is "the id Yiji issued for this customer", where it
+ * looked exactly like the real thing. Five contacts in this database carried
+ * one.
+ *
+ * The cost is not cosmetic: the coupon push sends that column to Yiji as
+ * `userId`, so a fabricated value would be handed to their resolver as if it
+ * were an account. Unknown has to look unknown.
+ */
+export function isPhoneDerivedCustomerId(id: string | null | undefined): boolean {
+  return typeof id === 'string' && /^cust-\d+$/.test(id.trim());
+}

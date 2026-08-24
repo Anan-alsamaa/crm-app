@@ -1025,7 +1025,8 @@
     "deliveredRef": "reference {{ref}}",
     "deliveryPending": "Approved — waiting to be sent to Yiji.",
     "notDelivered": "Not delivered — Yiji said: {{why}}",
-    "retryDelivery": "Try again"
+    "retryDelivery": "Try again",
+    "noOrder": "No order number on this ticket, so Yiji cannot attach a coupon — their coupon is created FROM an order. Approving still records the decision, but the customer will not receive it in the app. Add the order number to the ticket if they have one."
   },
   "complaintReport": {
     "any": "Any",
