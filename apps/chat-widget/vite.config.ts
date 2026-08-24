@@ -128,6 +128,27 @@ export default defineConfig(({ mode }) => {
       allowedHosts: true,
       proxy: {
         '/socket.io': { target: 'http://localhost:8080', ws: true, changeOrigin: true },
+        /*
+         * The store-QR page's own endpoint, proxied for the same reason.
+         *
+         * `walk-in.html` POSTs to the gateway to mint a session token. It
+         * defaulted to `http://localhost:8081`, which is correct on this
+         * machine and useless through a tunnel: the customer's PHONE resolves
+         * `localhost` to itself, so the form fails on the one device the
+         * feature exists for. Proxied here, the page can call `/walk-in/...`
+         * on its own origin and the request never leaves the tunnel.
+         *
+         * Same lesson as the admin portal's `/directus` proxy: one origin, no
+         * CORS, nothing in the page that names a host the visitor cannot
+         * reach.
+         *
+         * THE TRAILING SLASH IS LOAD-BEARING. Vite matches proxy keys by
+         * prefix, so a bare `/walk-in` also catches `/walk-in.html` — the page
+         * itself — and forwards it to a gateway that has no such route. The QR
+         * page 404s and the whole feature is dead, with nothing to suggest the
+         * proxy is why. `/walk-in/` matches only the endpoint below it.
+         */
+        '/walk-in/': { target: 'http://localhost:8081', changeOrigin: true },
       },
     },
     // OPT-IN ONLY. This plugin inlines YIJI_JWT_SECRET into a static

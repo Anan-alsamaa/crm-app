@@ -363,7 +363,7 @@
     "kpiAvgFirst": "Avg first reply",
     "policyCount": "{{count}} policies",
     "rowFirstReply": "first reply",
-    "rowResolution": "resolution",
+    "rowResolution": "time to solve",
     "rowWarnAt": "warn at",
     "sectionCoverage": "Which tickets it covers",
     "sectionCoverageHint": "Leave a row untouched to ignore it. A ticket must match every row you do use — so priority High plus type Roach found covers only high-priority roach reports, and the most specific matching policy is the one that applies.",
@@ -383,7 +383,15 @@
     "hoursBadWindow": "Each open day needs a closing time after its opening time.",
     "timezone": "Timezone",
     "opensAt": "opens at",
-    "closesAt": "closes at"
+    "closesAt": "closes at",
+    "governs": "What it measures",
+    "governsHint": "A chat policy promises how fast an agent first replies to a customer. A ticket policy promises how fast a complaint is solved.",
+    "governsChat": "Chat",
+    "governsTicket": "Ticket",
+    "governsChatOption": "Chat — first response",
+    "governsTicketOption": "Ticket — time to solve",
+    "firstResponseHint": "Measured from the customer’s first message to the agent’s first reply.",
+    "resolutionHint": "Measured from when the ticket is raised to when it is solved."
   },
   "users": {
     "inactive": "Inactive",
@@ -501,8 +509,8 @@
     "exportCsv": "Export CSV",
     "filteredBy": "Agent:",
     "kpiBreaches": "Breaches",
-    "kpiFirstResponse": "First-response SLA",
-    "kpiResolution": "Resolution SLA",
+    "kpiFirstResponse": "Chat first response",
+    "kpiResolution": "Ticket time to solve",
     "kpiTickets": "Tickets",
     "lastDays": "Last {{days}} days",
     "met": "Met",
@@ -1092,7 +1100,11 @@
     "moreColumns": "{{count}} more columns →",
     "allColumns": "All columns shown",
     "scrollLeft": "Earlier columns",
-    "scrollRight": "Later columns"
+    "scrollRight": "Later columns",
+    "incompleteHidden": "{{count}} tickets are hidden because fields are missing — no branch, service type, channel or order.",
+    "incompleteShown": "Including {{count}} tickets with fields missing — they carry no branch, service type, channel or order.",
+    "showIncomplete": "Show them",
+    "hideIncomplete": "Hide them"
   },
   "lists": {
     "title": "Dropdown values",

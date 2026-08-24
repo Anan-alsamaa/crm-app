@@ -414,7 +414,9 @@ export function SlaReportsPage() {
                 icon={<TicketIcon size={18} />}
               />
               <Kpi
-                label={t('slaReports.kpiFirstResponse', { defaultValue: 'First-response SLA' })}
+                label={t('slaReports.kpiFirstResponse', {
+                  defaultValue: 'Chat first response',
+                })}
                 value={fmtPct(totals?.frPct ?? null)}
                 tone={pctKpiTone(totals?.frPct ?? null)}
                 icon={<ZapIcon size={18} />}
@@ -425,7 +427,7 @@ export function SlaReportsPage() {
                 }
               />
               <Kpi
-                label={t('slaReports.kpiResolution', { defaultValue: 'Resolution SLA' })}
+                label={t('slaReports.kpiResolution', { defaultValue: 'Ticket time to solve' })}
                 value={fmtPct(totals?.resPct ?? null)}
                 tone={pctKpiTone(totals?.resPct ?? null)}
                 icon={<ClockIcon size={18} />}

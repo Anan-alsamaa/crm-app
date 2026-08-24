@@ -121,7 +121,7 @@ describe('runReconcile (T067)', () => {
 
     // The usable policy still wins, and the deadlines still get written.
     expect(patched[0]?.patch.sla_policy).toBe('p1');
-    expect(patched.some((p) => p.patch.first_response_due_at)).toBe(true);
+    expect(patched.some((p) => p.patch.resolution_due_at)).toBe(true);
   });
 
   it('holds a ticket to the most specific policy that covers it, not the first row back', async () => {
@@ -265,11 +265,24 @@ describe('runReconcile (T067)', () => {
       logger,
     });
 
-    expect(patched.some((p) => p.id === 'fine' && p.patch.first_response_due_at)).toBe(true);
-    expect(patched.some((p) => p.id === 'broken' && p.patch.first_response_due_at)).toBe(false);
+    expect(patched.some((p) => p.id === 'fine' && p.patch.resolution_due_at)).toBe(true);
+    expect(patched.some((p) => p.id === 'broken' && p.patch.resolution_due_at)).toBe(false);
   });
 
-  it('assigns SLA policy by priority + computes due dates + schedules 4 jobs', async () => {
+  it('gives a ticket a RESOLUTION deadline only, and schedules its two jobs', async () => {
+    /*
+     * A ticket used to get a first-response deadline too, and that clock could
+     * never be stopped: nothing in this product writes
+     * `tickets.first_responded_at` — every reference is a read. Measured on
+     * live data, six tickets carried the deadline, one first reply was ever
+     * recorded, and all six sat permanently breached, drowning the resolution
+     * breach beside them.
+     *
+     * It was also the wrong object. A ticket is raised out of a conversation an
+     * agent has already answered, so a first response timed from the ticket's
+     * creation re-judges a reply made before the ticket existed. First response
+     * belongs to the CHAT; a ticket's promise is how long it takes to SOLVE.
+     */
     const { repo, patched } = makeRepo([{ ...baseTicket }], [POLICY]);
     const q = makeQueues();
     const deps: SlaDeps = {
@@ -281,23 +294,14 @@ describe('runReconcile (T067)', () => {
     };
     await runReconcile(deps);
 
-    // Policy attached, due dates computed.
-    expect(patched.find((p) => p.patch.sla_policy === 'p1')).toBeTruthy();
-    expect(
-      patched.find(
-        (p) =>
-          p.patch.first_response_due_at !== undefined && p.patch.resolution_due_at !== undefined,
-      ),
-    ).toBeTruthy();
-    // 2 warnings + 2 breaches enqueued (first-response + resolution).
-    expect(q.slaQueue.add).toHaveBeenCalledTimes(4);
+    expect(patched[0]?.patch.sla_policy).toBe('p1');
+    const due = patched.find((p) => p.patch.resolution_due_at);
+    expect(due?.patch.resolution_due_at).toBeTruthy();
+    expect(patched.every((p) => p.patch.first_response_due_at === undefined)).toBe(true);
+
+    // Two jobs, not four: a warning and a breach, for resolution alone.
     const ids = q.sla.map((j) => (j.opts as { jobId: string }).jobId).sort();
-    expect(ids).toEqual([
-      't1-first_response-breach',
-      't1-first_response-warning',
-      't1-resolution-breach',
-      't1-resolution-warning',
-    ]);
+    expect(ids).toEqual(['t1-resolution-breach', 't1-resolution-warning']);
   });
 
   it('skips first-response warning when ticket has already been responded to', async () => {

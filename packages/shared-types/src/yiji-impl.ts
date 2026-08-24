@@ -555,6 +555,75 @@ export class HttpYijiClient implements YijiClient {
   }
 
   /**
+   * POST to the admin API with the service credential, refreshing the token
+   * once on a 401.
+   *
+   * Separate from `adminFetch` because the failure rules are not the same. A
+   * GET that 404s means "nothing there" and answers `null`; a POST that fails
+   * has changed nothing and must say so loudly, because the caller is about to
+   * record that it succeeded. Nothing here interprets the RESPONSE BODY either
+   * — Yiji answers 200 whether it granted or refused, and only the caller knows
+   * which field carries the verdict for its endpoint.
+   *
+   * The point of routing coupon delivery through here is the credential. A
+   * long-lived bearer token pasted into an env file is a secret with no expiry,
+   * no rotation and no owner; this signs in as the service, caches the token in
+   * memory only, and re-signs when it expires — the same way the status-history
+   * integration already talks to this exact host.
+   */
+  async adminPost<T>(
+    path: string,
+    body: unknown,
+    extraHeaders: Record<string, string> = {},
+  ): Promise<T> {
+    if (!this.adminConfigured) {
+      throw new YijiUnavailableError('admin API is not configured');
+    }
+    let token = this.adminToken ?? (await this.adminLogin());
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      try {
+        const res = await fetch(`${this.adminUrl}${path}`, {
+          method: 'POST',
+          headers: {
+            ...extraHeaders,
+            // Last, so a caller cannot accidentally override the credential.
+            authorization: `Bearer ${token}`,
+            'content-type': 'application/json',
+            accept: 'application/json',
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+        if (res.status === 401 && attempt === 0) {
+          this.adminToken = null;
+          token = await this.adminLogin();
+          continue;
+        }
+        if (!res.ok) {
+          const detail = await res.text().catch(() => '');
+          throw new YijiUnavailableError(
+            `admin upstream ${res.status} for ${path}: ${detail.slice(0, 300)}`,
+          );
+        }
+        return (await res.json()) as T;
+      } catch (err) {
+        if (err instanceof YijiUnavailableError) throw err;
+        const reason =
+          err instanceof Error && err.name === 'AbortError'
+            ? `timed out after ${this.timeoutMs}ms`
+            : `network error: ${err instanceof Error ? err.message : String(err)}`;
+        throw new YijiUnavailableError(`${reason} for admin ${path}`, { cause: err });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    // Only reachable if both attempts 401'd, which is a credential problem.
+    throw new YijiUnavailableError(`admin ${path} refused the service credential twice`);
+  }
+
+  /**
    * `null` means the upstream ANSWERED and there is nothing there (404).
    * Anything else throws.
    *
@@ -717,6 +786,44 @@ export interface YijiClientEnv {
   adminPassword?: string;
   /** Override the mock fixtures (tests only). */
   mockFixtures?: MockFixtures;
+}
+
+/**
+ * A function that POSTs to the Yiji ADMIN API as the service account, or null
+ * when no service credential is configured.
+ *
+ * Exists so a caller — the coupon-push worker — can talk to that API without
+ * holding a client instance or knowing how the token is obtained. The
+ * alternative was a long-lived bearer token pasted into an env file: a secret
+ * with no expiry, no rotation and no owner, sitting in a file that gets copied
+ * between machines. This signs in with the same credential the status-history
+ * integration already uses, keeps the token in memory only, and re-signs when
+ * it expires.
+ *
+ * `null` rather than a throwing stub, so the caller can tell "not configured"
+ * from "configured and failing" — those two need opposite handling, and
+ * conflating them is how a disabled integration comes to look like an outage.
+ */
+export type YijiAdminPoster = <T>(
+  path: string,
+  body: unknown,
+  headers?: Record<string, string>,
+) => Promise<T>;
+
+export function createYijiAdminPoster(env: YijiClientEnv = {}): YijiAdminPoster | null {
+  if (!env.adminApiUrl?.trim() || !env.adminEmail?.trim() || !env.adminPassword?.trim()) {
+    return null;
+  }
+  const client = new HttpYijiClient({
+    // The order API is irrelevant here but the constructor wants a base; the
+    // admin half is what this poster uses.
+    baseUrl: env.apiUrl || env.adminApiUrl,
+    token: env.token,
+    adminUrl: env.adminApiUrl,
+    adminEmail: env.adminEmail,
+    adminPassword: env.adminPassword,
+  });
+  return (path, body, headers) => client.adminPost(path, body, headers);
 }
 
 /**

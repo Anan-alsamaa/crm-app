@@ -186,6 +186,37 @@ export const collections: CollectionSpec[] = [
       { field: 'archived_at', type: 'dateTime', index: true },
       { field: 'unread_count_agent', type: 'integer', defaultValue: 0 },
       /**
+       * THE CHAT FIRST-RESPONSE CLOCK.
+       *
+       * This is where first response actually belongs, and where it used to be
+       * measured on the wrong object. A ticket carried `first_response_due_at`
+       * and nothing in the product ever wrote the matching `first_responded_at`
+       * — because the reply that answers a customer happens HERE, in the chat,
+       * usually before anyone has decided a ticket is warranted. Every ticket
+       * with that deadline therefore breached and stayed breached: six tickets,
+       * one recorded reply, 20,381 stale breach events swept out when it was
+       * found. The ticket's promise is now solving time alone; the promise to
+       * answer lives on the conversation, next to the messages that satisfy it.
+       *
+       * `first_responded_at` is stamped by the gateway on the first non-internal
+       * AGENT message — see socket-gateway/src/directus.ts. Indexed because the
+       * agent-performance reports filter on it by date range.
+       */
+      { field: 'first_response_due_at', type: 'dateTime' },
+      { field: 'first_responded_at', type: 'dateTime', index: true },
+      /**
+       * When the promise was recorded as missed — the breach LEDGER, not a
+       * derived flag.
+       *
+       * Stored rather than recomputed because it is what makes the sweep
+       * idempotent: the reconcile runs every few minutes, and without a written
+       * record it would page the agent about the same unanswered chat on every
+       * pass. It also keeps the breach honest after the fact — a chat answered
+       * late still shows that it was late, which a `due_at < responded_at`
+       * comparison would also give but only while both survive.
+       */
+      { field: 'first_response_breached_at', type: 'dateTime' },
+      /**
        * The customer's newest order AT THE TIME THIS CHAT WAS WORKED, stamped
        * by the commerce proxy the first time the sidebar resolves it.
        *
@@ -444,6 +475,28 @@ export const collections: CollectionSpec[] = [
         type: 'text',
         note: 'The supervisor’s reason, required on a rejection — an agent told only "no" cannot answer the customer.',
       },
+      /* THE RECEIPT FROM YIJI.
+       *
+       * `CreateCouponUserFromOrder` answers with
+       * `extendedProperties.CouponUserId` — the id of the coupon Yiji actually
+       * attached to the customer's order. Without it, "assigned" is a claim
+       * this system makes about another system with nothing to check it
+       * against: no way to answer "did the customer really get it?", and no
+       * way to find the row on Yiji's side when they say they did not.
+       *
+       * Also the idempotency evidence. A retry after a timeout that in fact
+       * succeeded would grant a second coupon; a stored id means the push can
+       * see it already went. */
+      {
+        field: 'yiji_coupon_user_id',
+        type: 'string',
+        note: 'CouponUserId returned by Yiji when the coupon was attached to the order. Present only once delivery succeeded.',
+      },
+      {
+        field: 'yiji_pushed_at',
+        type: 'dateTime',
+        note: 'When Yiji accepted the coupon. Paired with yiji_coupon_user_id.',
+      },
     ],
   },
   {
@@ -599,6 +652,14 @@ export const collections: CollectionSpec[] = [
         type: 'json',
         note: 'Brand names this policy covers, matched against the ticket’s frozen store snapshot. Empty = any brand.',
       },
+      /**
+       * Which object this policy's clock runs on — see `SlaGoverns`.
+       *
+       * Defaults to `ticket` so every policy written before this field existed
+       * keeps governing exactly what it governed. A chat policy reads
+       * `first_response_minutes`; a ticket policy reads `resolution_minutes`.
+       */
+      { field: 'governs', type: 'string', choices: ['ticket', 'chat'], defaultValue: 'ticket' },
       { field: 'first_response_minutes', type: 'integer', required: true },
       { field: 'resolution_minutes', type: 'integer', required: true },
       { field: 'warning_threshold_percent', type: 'integer', defaultValue: 80 },

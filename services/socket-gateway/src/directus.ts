@@ -312,6 +312,37 @@ export class GatewayDirectus {
         }
       } else if (input.senderType === 'agent') {
         patch.unread_count_agent = 0;
+        /*
+         * FIRST RESPONSE IS STAMPED HERE, AND ONLY HERE.
+         *
+         * This is the single funnel every agent message passes through — the
+         * inbox composer, quick replies, the AI-assisted send — so a reply
+         * cannot reach the customer without the clock stopping. That is the
+         * whole reason the ticket-side version of this failed: `tickets.
+         * first_responded_at` had readers in four places and no writer
+         * anywhere, so the deadline beside it could only ever be missed.
+         *
+         * Read-before-write so it records the FIRST reply, not the latest: the
+         * promise was to answer, and an agent's fifth message must not reset a
+         * clock that stopped an hour ago. Internal notes are excluded above —
+         * a note the customer cannot see does not answer them.
+         *
+         * `_null` in the filter rather than a comparison in JS, so two replies
+         * landing together cannot both decide they are the first.
+         */
+        const unanswered = (await this.client.request(
+          readItems('conversations', {
+            filter: { id: { _eq: input.conversationId }, first_responded_at: { _null: true } },
+            fields: ['id'],
+            limit: 1,
+          }),
+        )) as Array<{ id: string }> | null;
+        // Shape-guarded rather than destructured: the stamp is bookkeeping and
+        // the reply is the thing the customer is waiting for, so an unexpected
+        // response body must not throw out of the send path.
+        if (Array.isArray(unanswered) && unanswered.length > 0) {
+          patch.first_responded_at = now;
+        }
       }
     }
     await this.client.request(updateItem('conversations', input.conversationId, patch as never));

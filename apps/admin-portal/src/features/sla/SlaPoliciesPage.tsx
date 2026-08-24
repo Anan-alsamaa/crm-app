@@ -15,6 +15,7 @@ import {
   FormField,
   Input,
   Pill,
+  Select,
   Skeleton,
   Textarea,
   toast,
@@ -25,6 +26,7 @@ import {
   businessHoursSummary,
   SLA_WEEKDAYS,
   scopeSpecificity,
+  policyGoverns,
   type Priority,
   type SlaBusinessHours,
 } from '@yiji/shared-types';
@@ -37,6 +39,8 @@ interface SlaPolicy {
   id: string;
   name: string;
   description: string | null;
+  /** 'ticket' | 'chat' — absent on rows written before the field existed. */
+  governs: string | null;
   applies_to_priority: Priority[] | null;
   applies_to_type: string[] | null;
   applies_to_source: string[] | null;
@@ -52,6 +56,7 @@ const POLICY_FIELDS = [
   'id',
   'name',
   'description',
+  'governs',
   'applies_to_priority',
   'applies_to_type',
   'applies_to_source',
@@ -116,6 +121,7 @@ const schema = z
   .object({
     name: z.string().min(1),
     description: z.string().optional(),
+    governs: z.enum(['ticket', 'chat']).default('ticket'),
     first_response_minutes: z.coerce.number().int().positive(),
     resolution_minutes: z.coerce.number().int().positive(),
     warning_threshold_percent: z.coerce.number().int().min(1).max(100),
@@ -143,6 +149,7 @@ type FormValues = z.infer<typeof schema>;
 const DEFAULT_VALUES: FormValues = {
   name: '',
   description: '',
+  governs: 'ticket',
   first_response_minutes: 30,
   resolution_minutes: 240,
   warning_threshold_percent: 80,
@@ -278,6 +285,7 @@ export function SlaPoliciesPage() {
     reset({
       name: p.name,
       description: p.description ?? '',
+      governs: policyGoverns(p),
       first_response_minutes: p.first_response_minutes,
       resolution_minutes: p.resolution_minutes,
       warning_threshold_percent: p.warning_threshold_percent,
@@ -335,8 +343,17 @@ export function SlaPoliciesPage() {
   // governing zero tickets. Counted here because that is exactly the state
   // nobody noticed for the whole life of the feature.
   const inertCount = list.filter((p) => p.active && scopeSpecificity(p) === 0).length;
-  const avgFirst = total
-    ? Math.round(list.reduce((a, p) => a + (p.first_response_minutes ?? 0), 0) / total)
+  /*
+   * Averaged over the policies that MEASURE it, not all of them.
+   * `first_response_minutes` is a required column, so every ticket policy
+   * carries a value it never reads — folding those into the average produced a
+   * headline figure that moved when somebody edited a number nothing used.
+   */
+  const chatPolicies = list.filter((p) => policyGoverns(p) === 'chat');
+  const avgFirst = chatPolicies.length
+    ? Math.round(
+        chatPolicies.reduce((a, p) => a + (p.first_response_minutes ?? 0), 0) / chatPolicies.length,
+      )
     : 0;
 
   return (
@@ -458,11 +475,21 @@ export function SlaPoliciesPage() {
                       <h3 className="min-w-0 truncate text-sm font-semibold tracking-tight text-foreground">
                         {p.name}
                       </h3>
-                      <Pill tone={p.active ? 'success' : 'muted'} size="sm" dot>
-                        {p.active
-                          ? t('sla.active')
-                          : t('sla.inactive', { defaultValue: 'Inactive' })}
-                      </Pill>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {/* Which clock this is. Two policies can carry identical
+                            coverage and mean entirely different promises, so the
+                            object is not an optional detail on this card. */}
+                        <Pill tone={policyGoverns(p) === 'chat' ? 'cyan' : 'purple'} size="sm">
+                          {policyGoverns(p) === 'chat'
+                            ? t('sla.governsChat', { defaultValue: 'Chat' })
+                            : t('sla.governsTicket', { defaultValue: 'Ticket' })}
+                        </Pill>
+                        <Pill tone={p.active ? 'success' : 'muted'} size="sm" dot>
+                          {p.active
+                            ? t('sla.active')
+                            : t('sla.inactive', { defaultValue: 'Inactive' })}
+                        </Pill>
+                      </div>
                     </div>
 
                     {p.description && (
@@ -473,24 +500,40 @@ export function SlaPoliciesPage() {
 
                     <CoverageChips policy={p} t={t} />
 
-                    {/* The deadline trio as three boxed readings — the shape
-                        the owner had before, restored. */}
-                    <div className="mt-4 grid grid-cols-3 gap-2">
-                      {(
-                        [
-                          [
-                            `${p.first_response_minutes}m`,
-                            t('sla.rowFirstReply', { defaultValue: 'first reply' }),
-                          ],
-                          [
-                            `${p.resolution_minutes}m`,
-                            t('sla.rowResolution', { defaultValue: 'resolution' }),
-                          ],
-                          [
-                            `${p.warning_threshold_percent}%`,
-                            t('sla.rowWarnAt', { defaultValue: 'warn at' }),
-                          ],
-                        ] as const
+                    {/*
+                      ONLY THE TARGET THAT IS ACTUALLY MEASURED.
+                      A chat policy's promise is its first reply; a ticket
+                      policy's is its resolution. Showing both — as this card
+                      used to — is how a ticket came to display a first-response
+                      target that nothing in the product could ever satisfy, and
+                      an operator had no way to tell the live number from the
+                      decorative one. The warning threshold is a ticket concern
+                      too: a five-minute chat target warned at 80% would page
+                      twice, a minute apart.
+                    */}
+                    <div
+                      className={cn(
+                        'mt-4 grid gap-2',
+                        policyGoverns(p) === 'chat' ? 'grid-cols-1' : 'grid-cols-2',
+                      )}
+                    >
+                      {(policyGoverns(p) === 'chat'
+                        ? ([
+                            [
+                              `${p.first_response_minutes}m`,
+                              t('sla.rowFirstReply', { defaultValue: 'first reply' }),
+                            ],
+                          ] as const)
+                        : ([
+                            [
+                              `${p.resolution_minutes}m`,
+                              t('sla.rowResolution', { defaultValue: 'time to solve' }),
+                            ],
+                            [
+                              `${p.warning_threshold_percent}%`,
+                              t('sla.rowWarnAt', { defaultValue: 'warn at' }),
+                            ],
+                          ] as const)
                       ).map(([value, label]) => (
                         <div
                           key={label}
@@ -573,6 +616,27 @@ export function SlaPoliciesPage() {
             <FormField label={t('sla.name')} error={errors.name?.message}>
               <Input invalid={!!errors.name} {...register('name')} />
             </FormField>
+            {/*
+              THE FIRST QUESTION, not a detail buried under the deadlines.
+              It decides which of the two targets below is real, which sweep
+              reads the policy, and what the coverage rows are matched against.
+            */}
+            <FormField
+              label={t('sla.governs', { defaultValue: 'What it measures' })}
+              hint={t('sla.governsHint', {
+                defaultValue:
+                  'A chat policy promises how fast an agent first replies to a customer. A ticket policy promises how fast a complaint is solved.',
+              })}
+            >
+              <Select {...register('governs')}>
+                <option value="ticket">
+                  {t('sla.governsTicketOption', { defaultValue: 'Ticket — time to solve' })}
+                </option>
+                <option value="chat">
+                  {t('sla.governsChatOption', { defaultValue: 'Chat — first response' })}
+                </option>
+              </Select>
+            </FormField>
             <FormField label={t('sla.description')}>
               <Textarea rows={2} {...register('description')} />
             </FormField>
@@ -585,16 +649,39 @@ export function SlaPoliciesPage() {
                 'Time targets are in minutes. Warnings fire at the threshold % of each deadline.',
             })}
           >
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <FormField label={`${t('sla.firstResponse')} (min)`}>
-                <Input type="number" {...register('first_response_minutes')} />
-              </FormField>
-              <FormField label={`${t('sla.resolution')} (min)`}>
-                <Input type="number" {...register('resolution_minutes')} />
-              </FormField>
-              <FormField label={`${t('sla.threshold')} (%)`}>
-                <Input type="number" {...register('warning_threshold_percent')} />
-              </FormField>
+            {/*
+              Only the target this policy actually measures is editable. Both
+              columns still exist and both are still written — they are
+              required — but an operator who can only see the live one cannot
+              set a number that quietly does nothing, which is what the
+              three-across row invited.
+            */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {selected.governs === 'chat' ? (
+                <FormField
+                  label={`${t('sla.firstResponse')} (min)`}
+                  hint={t('sla.firstResponseHint', {
+                    defaultValue:
+                      'Measured from the customer’s first message to the agent’s first reply.',
+                  })}
+                >
+                  <Input type="number" {...register('first_response_minutes')} />
+                </FormField>
+              ) : (
+                <>
+                  <FormField
+                    label={`${t('sla.resolution')} (min)`}
+                    hint={t('sla.resolutionHint', {
+                      defaultValue: 'Measured from when the ticket is raised to when it is solved.',
+                    })}
+                  >
+                    <Input type="number" {...register('resolution_minutes')} />
+                  </FormField>
+                  <FormField label={`${t('sla.threshold')} (%)`}>
+                    <Input type="number" {...register('warning_threshold_percent')} />
+                  </FormField>
+                </>
+              )}
             </div>
           </DrawerSection>
 

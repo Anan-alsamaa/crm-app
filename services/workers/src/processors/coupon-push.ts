@@ -1,8 +1,8 @@
 import type { Job } from 'bullmq';
 import type { Logger } from 'pino';
 import { readItem, updateItem } from '@directus/sdk';
-import type { CouponPushJob } from '@yiji/shared-types';
-import { couponWindow } from '@yiji/shared-types';
+import type { CouponPushJob, YijiAdminPoster } from '@yiji/shared-types';
+import { couponWindow, isYijiUnavailable } from '@yiji/shared-types';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 
 /**
@@ -22,14 +22,38 @@ import type { YijiDirectusClient } from '@yiji/shared-config';
  * request reversed between queueing and delivery is dropped rather than sent.
  */
 
+/**
+ * The path on Yiji's ADMIN API that grants a coupon against an order.
+ *
+ * A constant, not configuration: the payload in this file is shaped to THIS
+ * endpoint, so a deployment that pointed it elsewhere would be sending a body
+ * the other endpoint never agreed to. What IS configurable is whether the
+ * service credential exists at all — see `postCoupon`.
+ */
+export const YIJI_COUPON_PATH = '/api/CouponUserOrder/CreateCouponUserFromOrder';
+
 export interface CouponPushDeps {
   directus: YijiDirectusClient;
   logger: Logger;
-  /** Blank disables delivery — see `pushCoupon`. */
-  yijiCouponUrl: string;
-  yijiApiKey: string;
-  /** Injectable for tests. */
-  fetchImpl?: typeof fetch;
+  /**
+   * Sends the coupon to Yiji, signed in as the service account.
+   *
+   * ABSENT MEANS DELIVERY IS NOT CONFIGURED, and the request stays `approved`.
+   * Deliberately not treated as success: marking it `assigned` would tell every
+   * report that Yiji holds a coupon it has never heard of, and the difference
+   * between those two states is the only record of whether the customer can
+   * actually redeem anything.
+   *
+   * Injected rather than built here so the credential handling lives in one
+   * place (`createYijiAdminPoster`) alongside the status-history integration
+   * that talks to the same host — and so this processor never holds a secret.
+   */
+  postCoupon?: YijiAdminPoster;
+  /**
+   * Yiji's `tenantid` header. Their API is multi-tenant and mis-routes a call
+   * without it; the captured request sends `1`.
+   */
+  yijiTenantId: string;
 }
 
 export interface CouponApprovalRow {
@@ -54,8 +78,18 @@ export interface CouponApprovalRow {
   contact: {
     name: string | null;
     phone: string | null;
+    /** The customer's id in YIJI — what their API calls `userId`. */
     external_customer_id: string | null;
   } | null;
+  /**
+   * The ticket the coupon compensates, for its ORDER.
+   *
+   * `CreateCouponUserFromOrder` attaches a coupon to one order — which is
+   * exactly the shape this business wants: a coupon is granted because a
+   * specific order went wrong. No order, no call.
+   */
+  ticket: { order_id: string | null } | null;
+  yiji_coupon_user_id: string | null;
 }
 
 /** Postgres returns `numeric` as a string; Yiji is sent numbers. */
@@ -66,60 +100,147 @@ function num(v: number | string | null | undefined): number | null {
 }
 
 /**
- * The body Yiji receives.
+ * The body Yiji receives, shaped to `CreateCouponUserFromOrder`.
  *
- * ⚠ THE FIELD NAMES BELOW ARE NOT CONFIRMED AGAINST YIJI'S SPEC. Every value is
- * real and comes from the approved request, but what Yiji calls each one has to
- * be checked against their documentation before this is switched on. It is one
- * function on purpose: confirming the contract means editing this and nothing
- * else, and the test alongside it pins the values so a rename cannot quietly
- * change WHICH number is sent.
+ * The field names are no longer a guess: they come from Yiji's own schema and
+ * from a captured request that returned `result: 1`. The endpoint attaches a
+ * coupon to ONE ORDER, which is exactly what this business grants — a coupon
+ * because a specific order went wrong.
  *
- * Dates go as instants rather than the stored `YYYY-MM-DD`, through the same
- * `couponWindow` the rest of the system uses: a coupon runs for whole days, and
- * the end has to be the start of the following day or the last day is lost.
+ * THE ORDER IS THE KEY. The captured call sends `orderId` and no `userId` at
+ * all, and the endpoint is named FromOrder: Yiji resolves the customer from
+ * the order it already owns. So the order is required and the customer id is
+ * not — sending our `external_customer_id` when we hold one is extra
+ * corroboration, not the address. Requiring it would have blocked 18 of the 19
+ * approvals in this database, which is how a correct-looking guard becomes an
+ * outage.
+ *
+ * `couponId: 0` because we are not redeeming a catalogue entry Yiji already
+ * holds; we are asking it to create a compensation coupon. The TERMS the
+ * supervisor approved therefore have to travel with the request — under
+ * `couponUser.coupon`, which is where Yiji's schema defines them. Leaving them
+ * out would mean a supervisor approves 25 SAR and the customer receives
+ * whatever Yiji's default happens to be, with nothing on either side recording
+ * the difference.
+ *
+ * What is deliberately NOT sent: our brand and restaurant ids. Yiji's schema
+ * has `brandId` and `restaurantId` as numbers in ITS namespace; ours are CRM
+ * identifiers their side cannot resolve, and a wrong id is worse than none —
+ * it would scope the coupon to somebody else's branch.
  */
 export function yijiCouponPayload(row: CouponApprovalRow): Record<string, unknown> {
+  const orderId = num(row.ticket?.order_id ?? null);
   const window = row.valid_from && row.valid_to ? couponWindow(row.valid_from, row.valid_to) : null;
+  const amount = num(row.coupon_value);
+  const percent = num(row.coupon_percent);
+  const cap = num(row.max_discount);
+  const limit = num(row.usage_limit) ?? 1;
+  const yijiUserId = row.contact?.external_customer_id?.trim();
+
   return {
-    // The idempotency key. Yiji is asked to treat a repeat of the same code as
-    // the same coupon, because a retry after a timeout must not grant twice.
-    code: row.coupon_code,
-    title: row.title,
-    // Only one of the two is ever set — the category decides which.
-    amount: num(row.coupon_value),
-    percentage: num(row.coupon_percent),
-    max_discount: num(row.max_discount),
-    usage_limit: num(row.usage_limit) ?? 1,
-    valid_from: window?.from ?? null,
-    valid_to: window?.to ?? null,
-    issuing_side: row.issuing_side,
-    delivery_type: row.delivery_type,
-    coupon_type: row.coupon_type,
-    discount_category: row.discount_category,
-    brand_id: row.brand_id,
-    restaurant_id: row.restaurant_id,
-    // The specific order item being compensated, when the coupon is about one.
-    item_name: row.item_name,
-    customer: {
-      phone: row.contact?.phone ?? null,
-      name: row.contact?.name ?? null,
-      external_customer_id: row.contact?.external_customer_id ?? null,
+    id: 0,
+    orderId,
+    usedAmount: 0,
+    status: 0,
+    couponUser: {
+      id: 0,
+      // Yiji creates the coupon; we are not naming one it already holds.
+      couponId: 0,
+      orderId,
+      status: 0,
+      // OUR code, so the two systems can be matched from either side later.
+      couponCode: row.coupon_code ?? '',
+      couponName: row.title ?? '',
+      compensationReason: row.reason ?? '',
+      // So a Yiji-side reader can identify the customer without joining back.
+      customerName: row.contact?.name ?? '',
+      customerPhone: row.contact?.phone ?? '',
+      // Only when we genuinely hold it — an empty string is a value their
+      // resolver would have to interpret, and the order already answers this.
+      ...(yijiUserId ? { userId: yijiUserId } : {}),
+      // The terms the supervisor approved. Only one of amount/percentage is
+      // ever set — the discount category decides which — so the other is left
+      // off rather than sent as zero, which would read as "no discount".
+      coupon: {
+        id: 0,
+        name: row.title ?? '',
+        code: row.coupon_code ?? '',
+        compensationReason: row.reason ?? '',
+        ...(amount != null ? { discount: amount } : {}),
+        ...(percent != null ? { discountPercentage: percent } : {}),
+        ...(cap != null ? { maximumDiscount: cap } : {}),
+        // How many times it may be used, by this customer and in total. A
+        // compensation coupon is a single grant unless somebody said otherwise.
+        reachLimit: limit,
+        limitForUser: limit,
+        ...(window
+          ? {
+              activationDate: window.from,
+              expirationDate: window.to,
+              activationDateTime: window.from,
+              expirationDateTime: window.to,
+            }
+          : {}),
+      },
     },
-    reason: row.reason,
-    source: 'sara-crm',
   };
 }
 
+/**
+ * Yiji answers 200 even when it refused.
+ *
+ * The body carries the verdict: `result: 1` with the new id in
+ * `extendedProperties.CouponUserId`. A failure is a 200 with a different
+ * `result` and a message in `exceptionMessage`. Reading only the HTTP status
+ * would mark a refused coupon as assigned and tell every report the customer
+ * can redeem something they cannot — the exact shape of silent failure this
+ * codebase keeps finding.
+ */
+export interface YijiCouponResponse {
+  result?: number;
+  exceptionMessage?: string | null;
+  errorCode?: string | null;
+  errorMessages?: Record<string, unknown> | null;
+  extendedProperties?: { CouponUserId?: number | string } | null;
+  transactionStatus?: number;
+}
+
+/** The new CouponUserId, or a reason it is not there. */
+export function readCouponUserId(body: YijiCouponResponse): {
+  ok: boolean;
+  couponUserId?: string;
+  error?: string;
+} {
+  if (body?.result !== 1) {
+    const detail =
+      body?.exceptionMessage && body.exceptionMessage !== '0'
+        ? body.exceptionMessage
+        : JSON.stringify(body?.errorMessages ?? body?.errorCode ?? body?.result ?? 'no result');
+    return { ok: false, error: `yiji refused the coupon: ${detail}` };
+  }
+  const id = body?.extendedProperties?.CouponUserId;
+  // `result: 1` with no id is a success we cannot evidence. Treated as a
+  // failure: "assigned" has to mean there is something on Yiji's side to point
+  // at, or the state is worth nothing.
+  if (id === undefined || id === null || id === '') {
+    return { ok: false, error: 'yiji accepted the coupon but returned no CouponUserId' };
+  }
+  return { ok: true, couponUserId: String(id) };
+}
+
 /** What a push attempt concluded, for the log and the tests. */
-export type PushOutcome = 'delivered' | 'disabled' | 'not-approved' | 'already-assigned';
+export type PushOutcome =
+  | 'delivered'
+  | 'disabled'
+  | 'not-approved'
+  | 'already-assigned'
+  | 'no-order';
 
 export async function processCouponPushJob(
   job: Job<CouponPushJob>,
   deps: CouponPushDeps,
 ): Promise<PushOutcome> {
-  const { directus, logger, yijiCouponUrl, yijiApiKey } = deps;
-  const doFetch = deps.fetchImpl ?? fetch;
+  const { directus, logger, postCoupon, yijiTenantId } = deps;
   const id = job.data.couponApprovalId;
 
   const row = (await directus.request(
@@ -144,13 +265,25 @@ export async function processCouponPushJob(
         'item_name',
         'reason',
         { contact: ['name', 'phone', 'external_customer_id'] },
+        // The order is the whole point of the endpoint, and the receipt tells
+        // us whether a previous attempt already succeeded.
+        { ticket: ['order_id'] },
+        'yiji_coupon_user_id',
       ],
     } as never),
   )) as unknown as CouponApprovalRow;
 
-  // Re-read, so a decision reversed since queueing is honoured.
-  if (row.status === 'assigned') {
-    logger.info({ id }, 'coupon already assigned — nothing to push');
+  /*
+   * Re-read, so a decision reversed since queueing is honoured — and so a
+   * coupon Yiji has ALREADY taken is never sent twice. The receipt is the
+   * stronger check of the two: a retry after a timeout that in fact succeeded
+   * would otherwise grant the customer a second coupon.
+   */
+  if (row.status === 'assigned' || row.yiji_coupon_user_id) {
+    logger.info(
+      { id, couponUserId: row.yiji_coupon_user_id },
+      'coupon already assigned — nothing to push',
+    );
     return 'already-assigned';
   }
   if (row.status !== 'approved' && row.status !== 'edited') {
@@ -158,45 +291,91 @@ export async function processCouponPushJob(
     return 'not-approved';
   }
 
+  /*
+   * THE ONE THING THIS CALL CANNOT BE MADE WITHOUT.
+   *
+   * `CreateCouponUserFromOrder` attaches a coupon to an order. Without one
+   * there is nothing to attach it to: Yiji would answer 200 with a refusal,
+   * and the retry would repeat it until the job gave up — a queue full of
+   * failures whose real cause is a blank field on our side.
+   *
+   * The customer's Yiji id is NOT required alongside it. The order already
+   * identifies the customer on Yiji's side, which is what the endpoint's name
+   * says and what their captured request confirms by sending no `userId` at
+   * all. Requiring one would have blocked 18 of the 19 approvals in this
+   * database — the guard would have looked correct and caused an outage.
+   *
+   * Reported as its own outcome and left `approved`, so the coupon is still
+   * visibly owed to the customer and a supervisor can see why it has not gone.
+   */
+  const orderId = row.ticket?.order_id?.trim();
+  if (!orderId) {
+    logger.warn(
+      { id, code: row.coupon_code },
+      'coupon has no order to attach to — staying approved',
+    );
+    return 'no-order';
+  }
   const payload = yijiCouponPayload(row);
 
-  /**
-   * No endpoint configured means no delivery, and the status stays `approved`.
-   *
-   * Deliberately not treated as success: marking it `assigned` would tell every
-   * report that Yiji has a coupon it has never heard of, and the difference
-   * between those two states is the only record of whether the customer can
-   * actually redeem anything.
-   */
-  if (!yijiCouponUrl.trim()) {
+  if (!postCoupon) {
     logger.info(
       { id, code: row.coupon_code, payload },
-      'YIJI_COUPON_URL not set — coupon push is disabled, staying approved',
+      'no Yiji service credential configured — coupon push is disabled, staying approved',
     );
     return 'disabled';
   }
 
-  const res = await doFetch(yijiCouponUrl, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(yijiApiKey ? { authorization: `Bearer ${yijiApiKey}` } : {}),
-      // Same key across retries of the same job, so a timeout that actually
+  let body: YijiCouponResponse;
+  try {
+    body = await postCoupon<YijiCouponResponse>(YIJI_COUPON_PATH, payload, {
+      // Yiji's API is multi-tenant and routes on this.
+      ...(yijiTenantId ? { tenantid: yijiTenantId } : {}),
+      // Stable across retries of the same job, so a timeout that in fact
       // succeeded cannot become a second coupon.
       'idempotency-key': row.coupon_code ?? id,
-    },
-    body: JSON.stringify(payload),
-  });
+    });
+  } catch (err) {
+    // Rethrown, so BullMQ retries with backoff rather than swallowing it. The
+    // status stays `approved`: nothing was delivered, and saying otherwise
+    // would be the one lie this whole file is arranged to prevent.
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `${isYijiUnavailable(err) ? 'yiji unavailable' : 'yiji coupon push failed'}: ${reason}`,
+    );
+  }
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    // Thrown, so BullMQ retries with backoff rather than swallowing it.
-    throw new Error(`yiji coupon push failed (${res.status}): ${body.slice(0, 300)}`);
+  /*
+   * A 200 IS NOT A YES.
+   *
+   * Yiji answers 200 whether it granted the coupon or refused it; the verdict
+   * is `result` in the body, and the evidence is
+   * `extendedProperties.CouponUserId`. Trusting the status code would mark a
+   * refused coupon `assigned` and tell every report the customer can redeem
+   * something they cannot.
+   *
+   * Thrown rather than returned, so a transient refusal gets the same retry as
+   * a network failure. A permanent one exhausts its attempts and stays
+   * `approved`, which is the honest end state: the decision stands, the
+   * delivery did not happen.
+   */
+  const verdict = readCouponUserId(body);
+  if (!verdict.ok) {
+    throw new Error(`${verdict.error} (approval ${id}, code ${row.coupon_code ?? '—'})`);
   }
 
   await directus.request(
-    updateItem('coupon_approvals' as never, id, { status: 'assigned' } as never),
+    updateItem('coupon_approvals' as never, id, {
+      status: 'assigned',
+      // The receipt, written in the SAME patch as the status: a crash between
+      // two writes would otherwise leave "assigned" with nothing to prove it.
+      yiji_coupon_user_id: verdict.couponUserId,
+      yiji_pushed_at: new Date().toISOString(),
+    } as never),
   );
-  logger.info({ id, code: row.coupon_code }, 'coupon pushed to Yiji and marked assigned');
+  logger.info(
+    { id, code: row.coupon_code, orderId, couponUserId: verdict.couponUserId },
+    'coupon attached to the order on Yiji and marked assigned',
+  );
   return 'delivered';
 }

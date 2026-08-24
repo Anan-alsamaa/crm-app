@@ -536,7 +536,11 @@
     "moreColumns": "{{count}} أعمدة أخرى ←",
     "allColumns": "جميع الأعمدة ظاهرة",
     "scrollLeft": "الأعمدة السابقة",
-    "scrollRight": "الأعمدة التالية"
+    "scrollRight": "الأعمدة التالية",
+    "incompleteHidden": "تم إخفاء {{count}} تذكرة لنقص بياناتها — بلا فرع أو نوع خدمة أو قناة أو رقم طلب.",
+    "incompleteShown": "يشمل {{count}} تذكرة ناقصة البيانات — بلا فرع أو نوع خدمة أو قناة أو رقم طلب.",
+    "showIncomplete": "إظهارها",
+    "hideIncomplete": "إخفاؤها"
   },
   "couponApprovals": {
     "agent": "طلبها",
@@ -1132,7 +1136,15 @@
     "hoursBadWindow": "كل يوم مفتوح يحتاج وقت إغلاق بعد وقت الافتتاح.",
     "timezone": "المنطقة الزمنية",
     "opensAt": "يفتح عند",
-    "closesAt": "يغلق عند"
+    "closesAt": "يغلق عند",
+    "governs": "ما الذي تقيسه",
+    "governsHint": "سياسة المحادثة تحدد سرعة أول رد من الموظف على العميل، وسياسة التذكرة تحدد سرعة حل الشكوى.",
+    "governsChat": "محادثة",
+    "governsTicket": "تذكرة",
+    "governsChatOption": "محادثة — أول رد",
+    "governsTicketOption": "تذكرة — زمن الحل",
+    "firstResponseHint": "يُحتسب من أول رسالة للعميل حتى أول رد من الموظف.",
+    "resolutionHint": "يُحتسب من إنشاء التذكرة حتى حلها."
   },
   "slaReports": {
     "breached": "تم الإخلال بها",
@@ -1154,8 +1166,8 @@
     "exportCsv": "تصدير CSV",
     "filteredBy": "الموظف:",
     "kpiBreaches": "الإخلالات",
-    "kpiFirstResponse": "مستوى خدمة الاستجابة الأولى",
-    "kpiResolution": "مستوى خدمة الحل",
+    "kpiFirstResponse": "أول رد في المحادثة",
+    "kpiResolution": "زمن حل التذكرة",
     "kpiTickets": "التذاكر",
     "lastDays": "آخر {{days}} يوم",
     "met": "تم الوفاء بها",

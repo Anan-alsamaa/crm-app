@@ -34,8 +34,22 @@
  * keep in step, and only one of them would get tested.
  */
 
-const GATEWAY_HTTP =
-  (import.meta.env.VITE_GATEWAY_HTTP_URL as string | undefined) ?? 'http://localhost:8081';
+/*
+ * SAME ORIGIN BY DEFAULT.
+ *
+ * This used to default to `http://localhost:8081`. That is right on the
+ * machine running the stack and wrong on the only device that matters: a
+ * customer standing in a branch scans the code on their PHONE, where
+ * `localhost` is the phone. The form failed for every real visitor and worked
+ * for everyone testing it.
+ *
+ * Empty means "my own origin", and the dev server proxies `/walk-in` to the
+ * gateway (see vite.config.ts). Behind a tunnel or a real host the request
+ * never names a machine the visitor cannot reach. Set
+ * VITE_GATEWAY_HTTP_URL only when the gateway genuinely lives somewhere else
+ * and is reachable from the public internet.
+ */
+const GATEWAY_HTTP = (import.meta.env.VITE_GATEWAY_HTTP_URL as string | undefined) ?? '';
 const VENDOR_ID = (import.meta.env.VITE_WALK_IN_VENDOR_ID as string | undefined) ?? '1';
 /** The chat page this hands off to — same origin, so `/` is the whole answer. */
 const CHAT_URL = (import.meta.env.VITE_WALK_IN_CHAT_URL as string | undefined) ?? '/';

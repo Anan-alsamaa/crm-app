@@ -820,7 +820,38 @@ function ComplaintsReport({
     [rows, storeIndex],
   );
   const unmapped = useMemo(() => countUnmappedComplaints(joined), [joined]);
-  const visible = useMemo(() => filterTickets(joined, criteria), [joined, criteria]);
+
+  /*
+   * COMPLETE ROWS ONLY, by default.
+   *
+   * This is the operations report — one row per complaint, in the shape the
+   * team already files them. A row missing its branch, its service type, how
+   * it reached us or the order it is about is not a lighter version of that:
+   * it is a row that falls out of every cut on the dashboard and exports as a
+   * line of empty cells. Sixty-eight of them arrived from the end-to-end test
+   * suite, which seeds against this same database.
+   *
+   * SHOWN, NOT SWALLOWED. Filtering silently is the failure this codebase
+   * keeps repeating: something matches nothing and the result reads as a
+   * plausible answer. So the count of hidden rows is stated above the table
+   * with a control to show them, and the export follows whatever is on screen.
+   */
+  const isComplete = (r: (typeof joined)[number]) =>
+    Boolean(
+      r.restaurantName &&
+      r.complaintType &&
+      r.serviceType &&
+      r.complaintSource &&
+      r.orderNumber &&
+      r.date,
+    );
+  const [showIncomplete, setShowIncomplete] = useState(false);
+  const incompleteCount = useMemo(() => joined.filter((r) => !isComplete(r)).length, [joined]);
+  const complete = useMemo(
+    () => (showIncomplete ? joined : joined.filter(isComplete)),
+    [joined, showIncomplete],
+  );
+  const visible = useMemo(() => filterTickets(complete, criteria), [complete, criteria]);
 
   /**
    * Dropdown options built from the ROWS IN RANGE rather than from the enums.
@@ -885,7 +916,10 @@ function ComplaintsReport({
    * not data they filtered out, it is data they said they did not want to see.
    */
   const onExport = (scope: 'view' | 'all') => {
-    const rowsOut = scope === 'all' ? joined : visible;
+    /* "All" means every row the page is SHOWING, not every row in the join.
+       Exporting past the completeness filter would hand somebody a file with
+       the empty rows the screen just told them were hidden. */
+    const rowsOut = scope === 'all' ? complete : visible;
     if (rowsOut.length === 0) {
       toast.error(t('agentReports.nothingToExport', { defaultValue: 'Nothing to export.' }));
       return;
@@ -1011,11 +1045,11 @@ function ComplaintsReport({
           label={t('agentReports.kpiTickets', { defaultValue: 'Tickets' })}
           value={String(visible.length)}
           hint={
-            visible.length === joined.length
+            visible.length === complete.length
               ? undefined
               : String(
                   t('complaintReport.ofTotal', {
-                    total: joined.length,
+                    total: complete.length,
                     defaultValue: 'of {{total}} in range',
                   }),
                 )
@@ -1045,6 +1079,42 @@ function ComplaintsReport({
           icon={<InboxIcon size={18} />}
         />
       </ReportKpiStrip>
+
+      {/* WHAT IS BEING HIDDEN, said out loud.
+          Filtering incomplete rows away silently is the failure this codebase
+          keeps repeating — something matches nothing and the shortfall reads
+          as a plausible answer. The count is stated and the rows are one click
+          away. */}
+      {incompleteCount > 0 && (
+        <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-center gap-2 rounded-xl bg-warning-tint px-3.5 py-2 text-2xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
+          <span>
+            {showIncomplete
+              ? t('complaintReport.incompleteShown', {
+                  count: incompleteCount,
+                  defaultValue:
+                    'Including {{count}} tickets with fields missing — they carry no branch, service type, channel or order.',
+                })
+              : t('complaintReport.incompleteHidden', {
+                  count: incompleteCount,
+                  defaultValue:
+                    '{{count}} tickets are hidden because fields are missing — no branch, service type, channel or order.',
+                })}
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="ms-auto h-7"
+            onClick={() => {
+              setShowIncomplete((v) => !v);
+              setPage(1);
+            }}
+          >
+            {showIncomplete
+              ? t('complaintReport.hideIncomplete', { defaultValue: 'Hide them' })
+              : t('complaintReport.showIncomplete', { defaultValue: 'Show them' })}
+          </Button>
+        </div>
+      )}
 
       {/* The filter bar. Free text first because it answers most questions on
           its own; the dropdowns are for slicing rather than finding. */}
@@ -1369,7 +1439,7 @@ function ComplaintsReport({
               that gets re-tested by hand every single time. */}
           <ExportButtons
             visibleCount={visible.length}
-            totalCount={joined.length}
+            totalCount={complete.length}
             onExportView={() => onExport('view')}
             onExportAll={() => onExport('all')}
             labelPlain={t('agentReports.exportCsvCount', {
@@ -1381,7 +1451,7 @@ function ComplaintsReport({
               defaultValue: 'Export {{count}} shown',
             })}
             labelAll={t('agentReports.exportCsvAll', {
-              count: joined.length,
+              count: complete.length,
               defaultValue: 'Export all {{count}}',
             })}
           />
@@ -1563,12 +1633,12 @@ function ComplaintsReport({
           <span className="font-medium tabular-nums">
             {isEmptyFilter(criteria)
               ? t('complaintReport.rowCount', {
-                  count: joined.length,
+                  count: complete.length,
                   defaultValue: '{{count}} rows',
                 })
               : t('complaintReport.matches', {
                   count: visible.length,
-                  total: joined.length,
+                  total: complete.length,
                   defaultValue: '{{count}} of {{total}}',
                 })}
           </span>

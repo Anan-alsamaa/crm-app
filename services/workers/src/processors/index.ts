@@ -2,6 +2,7 @@ import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
 import {
   QUEUES,
+  createYijiAdminPoster,
   type QueueName,
   type NotificationJob,
   type SlaJob,
@@ -31,6 +32,7 @@ import { processCustomerPushJob } from './customer-push.js';
 import { handleRouting } from '../routing.js';
 import {
   createTicketRepo,
+  createConversationRepo,
   createNotificationsRepo,
   createRoutingRepo,
   createTeamRepo,
@@ -56,10 +58,24 @@ export interface ProcessorDeps {
 
 export type Processor = (job: Job, deps: ProcessorDeps) => Promise<void>;
 
+/**
+ * One poster for the process, because it CACHES ITS TOKEN.
+ *
+ * Rebuilt per job it would sign into Yiji again on every coupon — a login per
+ * delivery, and a burst of them the moment a supervisor approves a batch.
+ */
+const yijiAdminPoster = createYijiAdminPoster({
+  apiUrl: process.env.YIJI_API_URL ?? '',
+  adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
+  adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
+  adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
+});
+
 export const processors: Record<QueueName, Processor> = {
   [QUEUES.sla]: async (job, deps) => {
     const slaDeps: SlaDeps = {
       tickets: createTicketRepo(deps.directus),
+      conversations: createConversationRepo(deps.directus),
       teams: createTeamRepo(deps.directus),
       slaQueue: deps.queues[QUEUES.sla],
       notificationsQueue: deps.queues[QUEUES.notifications],
@@ -157,10 +173,23 @@ export const processors: Record<QueueName, Processor> = {
     await processCouponPushJob(job as Job<CouponPushJob>, {
       directus: deps.directus,
       logger: deps.logger,
-      // Blank disables delivery and leaves the request `approved` — see the
-      // note in coupon-push.ts on why that is not treated as a success.
-      yijiCouponUrl: process.env.YIJI_COUPON_URL ?? '',
-      yijiApiKey: process.env.YIJI_API_KEY ?? '',
+      /*
+       * Signed in as the service account, with the SAME credential the
+       * status-history integration already uses against this host — the coupon
+       * endpoint lives on the Yiji admin API too.
+       *
+       * Not a bearer token in an env file. That is a secret with no expiry, no
+       * rotation and no owner, copied between machines every time the stack is
+       * deployed; this signs in, holds the token in memory, and re-signs when
+       * it expires. `null` when the credential is absent, which leaves the
+       * request `approved` rather than pretending it was delivered.
+       */
+      postCoupon: yijiAdminPoster ?? undefined,
+      // Yiji's API is multi-tenant and routes on this header. Defaulted to the
+      // tenant the captured request used rather than left blank: a missing
+      // tenant is a refusal Yiji reports as a 200, which is the hardest kind
+      // of failure to read.
+      yijiTenantId: process.env.YIJI_TENANT_ID ?? '1',
     });
   },
   [QUEUES.customerPush]: async (job, deps) => {

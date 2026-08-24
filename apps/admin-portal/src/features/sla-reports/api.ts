@@ -13,8 +13,15 @@ import { directus } from '../../lib/directus.js';
  *   - per TICKET → every ticket with its first-response + resolution SLA state.
  *
  * "Met vs breached" is judged from the ticket's own SLA timestamps:
- *   first response: first_responded_at  vs first_response_due_at
- *   resolution:     resolved_at          vs resolution_due_at
+ *   resolution: resolved_at vs resolution_due_at
+ *
+ * FIRST RESPONSE IS NOT A TICKET MEASURE HERE, and the headline reads it from
+ * the CHATS instead. A ticket is raised out of a conversation an agent has
+ * already answered, so a first response timed from the ticket's creation
+ * re-judges a reply made before the ticket existed. The columns are still on
+ * the ticket and are now always null; reading them produced a tile that showed
+ * a confident percentage of nothing. The promise to answer is measured where it
+ * is kept — see `conversations.first_response_due_at`.
  */
 
 export type SlaState = 'met' | 'breached' | 'pending' | 'na';
@@ -60,7 +67,20 @@ export interface AgentSla {
 export interface SlaReport {
   tickets: TicketSla[];
   agents: AgentSla[];
-  totals: { tickets: number; frPct: number | null; resPct: number | null; breaches: number };
+  totals: {
+    tickets: number;
+    /**
+     * Chat first-response compliance over the same window — how often an agent
+     * answered a customer inside the target, judged on the conversations.
+     * Null when no chat in the range had a first-response clock at all, which
+     * the tile must say out loud rather than render as 0%.
+     */
+    frPct: number | null;
+    /** How many chats that percentage is computed over, so the tile can say. */
+    frChats: number;
+    resPct: number | null;
+    breaches: number;
+  };
 }
 
 interface RawTicket {
@@ -108,7 +128,7 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
       const dateFilter: Record<string, unknown> = { _gte: since };
       if (to) dateFilter._lte = `${to}T23:59:59`;
 
-      const [tickets, users] = await Promise.all([
+      const [tickets, chats, users] = await Promise.all([
         directus.request(
           readItems('tickets', {
             filter: { date_created: dateFilter },
@@ -128,6 +148,28 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
             sort: ['-date_created'],
           }),
         ) as Promise<RawTicket[]>,
+        /*
+         * The chats whose first-response promise falls in this window.
+         *
+         * Only those with a deadline: a conversation that started before the
+         * chat policy was written was never promised anything, and folding it
+         * in as "not met" would report a failure that never happened. Filtered
+         * in the query so the count and the percentage are computed over the
+         * same set.
+         */
+        directus.request(
+          readItems('conversations', {
+            filter: { date_created: dateFilter, first_response_due_at: { _nnull: true } },
+            fields: ['id', 'first_response_due_at', 'first_responded_at'],
+            limit: -1,
+          }),
+        ) as Promise<
+          Array<{
+            id: string;
+            first_response_due_at: string | null;
+            first_responded_at: string | null;
+          }>
+        >,
         directus.request(
           readUsers({ fields: ['id', 'first_name', 'last_name', 'email'], limit: -1 }),
         ) as Promise<
@@ -155,6 +197,9 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
         agentId: t.assigned_agent,
         agentName: t.assigned_agent ? (userName.get(t.assigned_agent) ?? '—') : 'Unassigned',
         created: t.date_created,
+        // Always `na` now — the columns behind it are never written. Kept on
+        // the row so the per-agent aggregate below still compiles and reports
+        // zero rather than silently dropping a field other code may read.
         firstResponse: classify(t.first_response_due_at, t.first_responded_at, now),
         resolution: classify(t.resolution_due_at, t.resolved_at, now),
         responseMinutes:
@@ -218,17 +263,30 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
         })
         .sort((a, b) => b.breaches - a.breaches || b.tickets - a.tickets);
 
-      let frMet = 0;
-      let frBr = 0;
+      /*
+       * Chat first response, judged the same way the sweep does: answered
+       * inside the deadline is met, answered after it or still unanswered past
+       * it is breached, still unanswered inside it is undecided and counts
+       * towards neither.
+       */
+      let chatMet = 0;
+      let chatBreached = 0;
+      for (const c of chats) {
+        if (!c.first_response_due_at) continue;
+        const due = new Date(c.first_response_due_at).getTime();
+        if (c.first_responded_at) {
+          if (new Date(c.first_responded_at).getTime() <= due) chatMet += 1;
+          else chatBreached += 1;
+        } else if (due < now) {
+          chatBreached += 1;
+        }
+      }
+      const chatDecided = chatMet + chatBreached;
+
       let resMet = 0;
       let resBr = 0;
       let breaches = 0;
       for (const t of ticketSla) {
-        if (t.firstResponse.state === 'met') frMet += 1;
-        else if (t.firstResponse.state === 'breached') {
-          frBr += 1;
-          breaches += 1;
-        }
         if (t.resolution.state === 'met') resMet += 1;
         else if (t.resolution.state === 'breached') {
           resBr += 1;
@@ -241,7 +299,8 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
         agents,
         totals: {
           tickets: ticketSla.length,
-          frPct: frMet + frBr ? (frMet / (frMet + frBr)) * 100 : null,
+          frPct: chatDecided ? (chatMet / chatDecided) * 100 : null,
+          frChats: chatDecided,
           resPct: resMet + resBr ? (resMet / (resMet + resBr)) * 100 : null,
           breaches,
         },

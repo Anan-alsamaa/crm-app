@@ -155,6 +155,7 @@ describe('GatewayDirectus.persistMessage', () => {
   it('creates the message then bumps last_message_at', async () => {
     request
       .mockResolvedValueOnce({ id: 'msg-1' }) // createItem(messages)
+      .mockResolvedValueOnce([{ id: 'conv-1' }]) // read: still unanswered
       .mockResolvedValueOnce(undefined); // updateItem(conversations)
     const saved = await makeGateway().persistMessage({
       conversationId: 'conv-1',
@@ -164,7 +165,82 @@ describe('GatewayDirectus.persistMessage', () => {
     });
     expect(saved.id).toBe('msg-1');
     expect(typeof saved.createdAt).toBe('string');
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  /*
+   * THE FIRST-RESPONSE STAMP.
+   *
+   * This is the writer whose absence broke the previous SLA outright: tickets
+   * carried `first_response_due_at` and NOTHING anywhere set the matching
+   * `first_responded_at`, so every ticket under that deadline breached and
+   * stayed breached. The clock now lives on the conversation and is stopped
+   * here, in the one funnel every agent message passes through.
+   */
+  it('stamps the first reply, so the chat SLA has something to measure', async () => {
+    request
+      .mockResolvedValueOnce({ id: 'msg-fr' })
+      .mockResolvedValueOnce([{ id: 'conv-1' }]) // no first_responded_at yet
+      .mockResolvedValueOnce(undefined);
+    await makeGateway().persistMessage({
+      conversationId: 'conv-1',
+      senderType: 'agent',
+      senderUser: 'agent-1',
+      content: 'on it',
+    });
+    const { params } = await sentAt(1);
+    // Decided by the FILTER, not in JS, so two replies landing together cannot
+    // both conclude they were first.
+    expect(params.filter).toMatchObject({ first_responded_at: { _null: true } });
+    expect((await sentAt(2)).body).toMatchObject({ first_responded_at: expect.any(String) });
+  });
+
+  it('does not move the stamp when the agent replies again', async () => {
+    // The promise was to ANSWER. An agent's fifth message must not reset a
+    // clock that stopped an hour ago, or every chat would report as answered
+    // at whatever moment the conversation last happened to move.
+    request
+      .mockResolvedValueOnce({ id: 'msg-fr2' })
+      .mockResolvedValueOnce([]) // already answered — the filter matches nothing
+      .mockResolvedValueOnce(undefined);
+    await makeGateway().persistMessage({
+      conversationId: 'conv-1',
+      senderType: 'agent',
+      senderUser: 'agent-1',
+      content: 'anything else?',
+    });
+    expect((await sentAt(2)).body).not.toHaveProperty('first_responded_at');
+  });
+
+  it('does not let an unreadable response body block the reply', async () => {
+    // Bookkeeping must never cost the customer their message.
+    request
+      .mockResolvedValueOnce({ id: 'msg-fr3' })
+      .mockResolvedValueOnce(undefined) // not a list
+      .mockResolvedValueOnce(undefined);
+    const saved = await makeGateway().persistMessage({
+      conversationId: 'conv-1',
+      senderType: 'agent',
+      senderUser: 'agent-1',
+      content: 'still here',
+    });
+    expect(saved.id).toBe('msg-fr3');
+    expect((await sentAt(2)).body).not.toHaveProperty('first_responded_at');
+  });
+
+  it('does not stamp a first response for an INTERNAL note', async () => {
+    // A note the customer cannot see does not answer them, so it must not stop
+    // their clock — and it must not read the conversation back at all.
+    request.mockResolvedValueOnce({ id: 'msg-note' }).mockResolvedValueOnce(undefined);
+    await makeGateway().persistMessage({
+      conversationId: 'conv-1',
+      senderType: 'agent',
+      senderUser: 'agent-1',
+      content: 'checking with the branch',
+      isInternalNote: true,
+    });
     expect(request).toHaveBeenCalledTimes(2);
+    expect((await sentAt(1)).body).not.toHaveProperty('first_responded_at');
   });
 
   it('reopens a solved conversation when the customer writes into it', async () => {
@@ -201,16 +277,17 @@ describe('GatewayDirectus.persistMessage', () => {
   });
 
   it('never reopens on an agent reply', async () => {
-    request.mockResolvedValueOnce({ id: 'msg-11' }).mockResolvedValueOnce(undefined);
+    request
+      .mockResolvedValueOnce({ id: 'msg-11' })
+      .mockResolvedValueOnce([]) // the first-response probe
+      .mockResolvedValueOnce(undefined);
     await makeGateway().persistMessage({
       conversationId: 'conv-1',
       senderType: 'agent',
       senderUser: 'agent-1',
       content: 'sorted for you',
     });
-    // Agent branch does not even read the conversation back.
-    expect(request).toHaveBeenCalledTimes(2);
-    const { body } = await sentAt(1);
+    const { body } = await sentAt(2);
     expect(body.status).toBeUndefined();
   });
 

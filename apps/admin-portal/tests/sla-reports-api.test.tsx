@@ -6,6 +6,11 @@ import React from 'react';
 
 const { request } = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock('../src/lib/directus.js', () => ({ directus: { request } }));
+// So the stub can answer by COLLECTION rather than by call order — see mockData.
+vi.mock('@directus/sdk', () => ({
+  readItems: (collection: string, opts: unknown) => ({ collection, opts }),
+  readUsers: (opts: unknown) => ({ collection: 'directus_users', opts }),
+}));
 
 import { useSlaReports } from '../src/features/sla-reports/api.js';
 
@@ -28,12 +33,30 @@ beforeEach(() => {
   vi.spyOn(Date, 'now').mockReturnValue(NOW);
 });
 
-/** Queue the two directus.request calls (tickets, then users) in order. */
+/**
+ * Answer each read by COLLECTION, never by call order.
+ *
+ * This stub used to queue two resolutions positionally, so adding the
+ * conversations read for chat first response silently handed the tickets
+ * fixture to the wrong query and every assertion in the file failed with
+ * "expected false to be true" — a message that says nothing about the cause.
+ * Dispatching by collection removes the coupling: a new read defaults to `[]`
+ * and the suite keeps passing.
+ */
 function mockData(
   tickets: unknown[],
   users: unknown[] = [{ id: 'u1', first_name: 'Ann', last_name: 'Lee', email: 'a@x.com' }],
+  chats: unknown[] = [],
 ) {
-  request.mockResolvedValueOnce(tickets).mockResolvedValueOnce(users);
+  const byCollection: Record<string, unknown[]> = {
+    tickets,
+    conversations: chats,
+    directus_users: users,
+  };
+  request.mockImplementation(async (arg: unknown) => {
+    const key = (arg as { collection?: string } | null)?.collection ?? '';
+    return byCollection[key] ?? [];
+  });
 }
 
 describe('sla-reports api', () => {
@@ -44,9 +67,17 @@ describe('sla-reports api', () => {
     const data = result.current.data!;
     expect(data.tickets).toEqual([]);
     expect(data.agents).toEqual([]);
-    expect(data.totals).toEqual({ tickets: 0, frPct: null, resPct: null, breaches: 0 });
-    // Both collections queried (tickets + users).
-    expect(request).toHaveBeenCalledTimes(2);
+    expect(data.totals).toEqual({
+      tickets: 0,
+      // Null, not 0%. No chat in the range carried a first-response clock, and
+      // a confident "0%" would report a failure that never happened.
+      frPct: null,
+      frChats: 0,
+      resPct: null,
+      breaches: 0,
+    });
+    // tickets + conversations + users.
+    expect(request).toHaveBeenCalledTimes(3);
   });
 
   it('classifies met / breached-late / breached-overdue / pending / na across all branches', async () => {
@@ -114,11 +145,49 @@ describe('sla-reports api', () => {
     expect(t3.agentId).toBeNull();
     expect(t3.responseMinutes).toBeNull();
 
-    // Totals: FR met=1, breached=1 -> 50%; Res met=1, breached=1 -> 50%; breaches=2.
+    /*
+     * Resolution met=1, breached=1 -> 50%, and ONE breach in the headline.
+     *
+     * The ticket first-response states above are still computed from the
+     * ticket's own columns, but they no longer reach the headline: those
+     * columns are never written any more, so counting them added a confident
+     * percentage of nothing to the tile and a breach the reader could not find
+     * in any row beneath it. First response is now a CHAT measure — see the
+     * test below.
+     */
     expect(data.totals.tickets).toBe(3);
-    expect(data.totals.frPct).toBe(50);
     expect(data.totals.resPct).toBe(50);
-    expect(data.totals.breaches).toBe(2);
+    expect(data.totals.breaches).toBe(1);
+    expect(data.totals.frPct).toBeNull();
+  });
+
+  it('measures first response on the CHATS, which is where the promise is kept', async () => {
+    /*
+     * A ticket is raised out of a conversation an agent has already answered,
+     * so a first response timed from the ticket's creation re-judges a reply
+     * made before the ticket existed. That is how the previous version came to
+     * report six permanent breaches nobody could act on.
+     *
+     * Answered inside the deadline is met; answered after it, or still
+     * unanswered past it, is breached; still unanswered INSIDE it is undecided
+     * and counts towards neither, because nothing has gone wrong yet.
+     */
+    mockData([], undefined, [
+      { id: 'c-met', first_response_due_at: past(4), first_responded_at: past(5) },
+      { id: 'c-late', first_response_due_at: past(4), first_responded_at: past(3) },
+      { id: 'c-overdue', first_response_due_at: past(1), first_responded_at: null },
+      { id: 'c-waiting', first_response_due_at: future(1), first_responded_at: null },
+      // No clock at all: it started before the policy existed, so it was
+      // never promised anything and must not count as a miss.
+      { id: 'c-unpromised', first_response_due_at: null, first_responded_at: null },
+    ]);
+    const { result } = renderHook(() => useSlaReports(30), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const totals = result.current.data!.totals;
+
+    // 1 met out of 3 decided.
+    expect(totals.frChats).toBe(3);
+    expect(totals.frPct).toBeCloseTo(33.33, 1);
   });
 
   it('groups per agent, buckets unassigned, and sorts by breaches then tickets', async () => {

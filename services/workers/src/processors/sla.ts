@@ -8,7 +8,14 @@ import {
   type SlaJob,
 } from '@yiji/shared-types';
 import { computeDueAt, warningAt, type BusinessHours } from '../lib/sla-clock.js';
-import type { TicketRepo, TicketRow, SlaPolicyRow, TeamRepo } from './repos.js';
+import type {
+  ConversationRepo,
+  ConversationRow,
+  SlaPolicyRow,
+  TeamRepo,
+  TicketRepo,
+  TicketRow,
+} from './repos.js';
 
 /**
  * SLA processor (T071) — handles three job kinds:
@@ -26,6 +33,12 @@ type Deadline = 'first_response' | 'resolution';
 
 export interface SlaDeps {
   tickets: TicketRepo;
+  /**
+   * Optional so the ticket tests, and any deployment that has not yet applied
+   * the conversation columns, keep working: the chat sweep skips itself rather
+   * than taking the whole reconcile down with it.
+   */
+  conversations?: ConversationRepo;
   teams: TeamRepo;
   slaQueue: Queue;
   notificationsQueue: Queue;
@@ -63,6 +76,25 @@ function pickPolicy(ticket: TicketRow, policies: SlaPolicyRow[]): SlaPolicyRow |
       complaintSource: ticket.complaint_source,
       brandName: ticket.store_snapshot?.brandName ?? null,
     },
+    'ticket',
+  );
+}
+
+/**
+ * The policy that governs a CHAT's first response, or none.
+ *
+ * A chat is matched on priority alone. It has no complaint type, no arrival
+ * channel recorded against it and no branch — those are facts a ticket acquires
+ * when an agent classifies the complaint, and the promise to answer is over
+ * well before that happens. Passing them as nulls is not a shortcut: a policy
+ * that DID narrow by brand would then correctly cover no chats at all, which is
+ * the honest answer rather than a promise made on a blank.
+ */
+function pickChatPolicy(c: ConversationRow, policies: SlaPolicyRow[]): SlaPolicyRow | null {
+  return pickSlaPolicy(
+    policies.filter((p) => p.active),
+    { priority: c.priority ?? null },
+    'chat',
   );
 }
 
@@ -277,10 +309,26 @@ export async function runReconcile(deps: SlaDeps): Promise<void> {
      * policy should cost its own tickets and nothing else. */
     const patch: Partial<TicketRow> = {};
     try {
-      if (!t.first_response_due_at) {
-        const due = computeDueAt(start, policy.first_response_minutes, policy.business_hours);
-        patch.first_response_due_at = due.toISOString();
-      }
+      /*
+       * NO FIRST-RESPONSE DEADLINE ON A TICKET.
+       *
+       * Nothing in this product ever writes `tickets.first_responded_at` —
+       * every reference to it is a read. So the clock started and nothing
+       * could stop it, and every ticket carrying the deadline breached it and
+       * stayed breached. Measured on live data: six tickets with a
+       * first-response deadline, one first reply ever recorded, six
+       * first_response breach events. An SLA nothing can satisfy is not a
+       * target, it is a permanent alarm — and it drowns the resolution breach
+       * beside it, which is real.
+       *
+       * It is also the wrong OBJECT. A ticket is raised out of a conversation
+       * that an agent has already answered, so a "first response" measured
+       * from the ticket's creation re-judges a reply made before the ticket
+       * existed. First response belongs to the CHAT; the ticket's promise is
+       * how long it takes to SOLVE. The SLA report reached the same conclusion
+       * and dropped the first-response column some time ago — this is the
+       * engine catching up with it.
+       */
       if (!t.resolution_due_at) {
         const due = computeDueAt(start, policy.resolution_minutes, policy.business_hours);
         patch.resolution_due_at = due.toISOString();
@@ -299,17 +347,178 @@ export async function runReconcile(deps: SlaDeps): Promise<void> {
     }
     if (Object.keys(patch).length > 0) await deps.tickets.patchTicket(t.id, patch);
 
-    // Schedule warning + breach for each deadline (idempotent via jobId).
-    const frDue = new Date(patch.first_response_due_at ?? t.first_response_due_at!);
+    // Schedule warning + breach for the resolution deadline (idempotent via
+    // jobId). Only resolution: see above for why a ticket has no first-response
+    // clock.
     const resDue = new Date(patch.resolution_due_at ?? t.resolution_due_at!);
     const pct = policy.warning_threshold_percent;
     const hours = policy.business_hours;
-    if (!t.first_responded_at) {
-      const warn = warningInstant(start, frDue, pct, policy.first_response_minutes, hours);
-      await schedule(deps, t.id, 'first_response', frDue, warn);
-    }
     const resWarn = warningInstant(start, resDue, pct, policy.resolution_minutes, hours);
     await schedule(deps, t.id, 'resolution', resDue, resWarn);
+  }
+}
+
+// ---------------- chat first response ----------------
+
+/**
+ * THE CHAT FIRST-RESPONSE SWEEP.
+ *
+ * Runs on the same reconcile tick as the ticket sweep, over the chats that are
+ * open and still unanswered — the only ones with a live clock. Two things
+ * happen per chat, both idempotent:
+ *
+ *   1. If it has no deadline yet, one is computed from the governing chat
+ *      policy and written. Written ONCE and never recomputed: editing a policy
+ *      changes what future chats are promised, not what was promised to a
+ *      customer already waiting.
+ *   2. If the deadline has passed, the breach is recorded and the agent paged.
+ *
+ * WHY THIS IS NOT SCHEDULED THE WAY TICKETS ARE. A ticket's deadline gets a
+ * pair of delayed BullMQ jobs because a resolution promise runs for hours and
+ * the warning has to arrive partway through. A chat first-response promise is
+ * minutes long, so the warning would land a minute before the breach — two
+ * pages, one minute apart, about the same unanswered chat. There is one signal
+ * worth sending and the sweep is frequent enough to send it.
+ *
+ * `first_response_breached_at` is the ledger. Without a written record the
+ * sweep would re-page every few minutes for as long as the chat sat unanswered,
+ * which is exactly the alert fatigue that made the old ticket first-response
+ * breaches worthless.
+ */
+export async function runChatReconcile(deps: SlaDeps): Promise<void> {
+  const repo = deps.conversations;
+  if (!repo) return;
+
+  let chats: ConversationRow[];
+  let policies: SlaPolicyRow[];
+  try {
+    [chats, policies] = await Promise.all([
+      repo.listUnansweredConversations(),
+      deps.tickets.listActiveSlaPolicies(),
+    ]);
+  } catch (err) {
+    // The ticket sweep has already run by this point and must keep its result.
+    deps.logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      'could not read chats for the first-response sweep — tickets were unaffected',
+    );
+    return;
+  }
+
+  const now = Date.now();
+  for (const c of chats) {
+    // Defensive: the repo filters on this, but a chat answered between the read
+    // and this line must not be judged.
+    if (c.first_responded_at) continue;
+
+    let dueAt = c.first_response_due_at;
+    if (!dueAt) {
+      const policy = pickChatPolicy(c, policies);
+      if (!policy) continue;
+      const start = c.date_created ? new Date(c.date_created) : new Date();
+      /*
+       * A PROMISE CANNOT BE MADE RETROACTIVELY.
+       *
+       * The moment a chat policy is created, every conversation already sitting
+       * unanswered in the database becomes overdue against it — 123 of them
+       * here, none of which anyone could have known about when they arrived.
+       * Judging those would page the whole team at once and open the chat SLA
+       * report on a wall of breaches that describe seeding, not service.
+       *
+       * So the policy governs chats that started AFTER it did. This is not a
+       * migration convenience that can be deleted later: it is true every time
+       * somebody writes a new policy, and doing it here rather than in a
+       * one-off backfill means the next one behaves correctly too.
+       */
+      if (policy.date_created && start.getTime() < new Date(policy.date_created).getTime()) {
+        continue;
+      }
+      try {
+        dueAt = computeDueAt(
+          start,
+          policy.first_response_minutes,
+          policy.business_hours,
+        ).toISOString();
+      } catch (err) {
+        // One unusable policy costs its own chats and nothing else — the same
+        // containment the ticket sweep needed after a policy with no open
+        // windows once killed the whole run.
+        deps.logger.error(
+          {
+            conversationId: c.id,
+            policy: policy.id,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          'could not compute a chat first-response deadline — check the policy working hours',
+        );
+        continue;
+      }
+      await repo.patchConversation(c.id, { first_response_due_at: dueAt });
+    }
+
+    if (c.first_response_breached_at) continue;
+    if (new Date(dueAt).getTime() > now) continue;
+
+    // Ledger first, then notify: a crash between the two costs one page, while
+    // the reverse would re-page on every sweep forever.
+    await repo.patchConversation(c.id, {
+      first_response_breached_at: new Date().toISOString(),
+    });
+
+    const recipients = new Set<string>();
+    if (c.assigned_agent) recipients.add(c.assigned_agent);
+    if (recipients.size === 0 && c.assigned_team) {
+      /*
+       * An UNASSIGNED chat is the case that matters most — nobody has picked it
+       * up, which is usually why it went unanswered — so the team is told. When
+       * there IS an owner the team is not copied: that would page eight people
+       * about one agent's late reply, and the noise is what stops anyone reading
+       * these at all.
+       */
+      try {
+        for (const id of await deps.teams.listMemberIds(c.assigned_team)) recipients.add(id);
+      } catch (err) {
+        deps.logger.warn(
+          { conversationId: c.id, err: err instanceof Error ? err.message : String(err) },
+          'could not read team members for an unanswered chat',
+        );
+      }
+    }
+
+    for (const recipient of recipients) {
+      const job: NotificationJob = {
+        recipientId: recipient,
+        type: 'sla_breach',
+        title: 'Chat still unanswered',
+        body: c.assigned_agent
+          ? 'A customer has been waiting past the first-response target. Reply now.'
+          : 'A customer has been waiting past the first-response target and the chat is unassigned — please pick it up.',
+        link: `/inbox/${c.id}`,
+        payload: { conversationId: c.id, deadline: 'first_response', object: 'chat' },
+      };
+      try {
+        await deps.notificationsQueue.add('sla_breach', job, {
+          // Once per (chat, recipient), so a retried sweep cannot double-page.
+          jobId: `chatsla-${c.id}-${recipient}`,
+        });
+      } catch (err) {
+        deps.logger.error(
+          {
+            conversationId: c.id,
+            recipient,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          'failed to enqueue a chat first-response notification',
+        );
+      }
+    }
+
+    if (recipients.size === 0) {
+      deps.logger.warn(
+        { conversationId: c.id },
+        'chat first-response target missed but there is nobody to notify',
+      );
+    }
   }
 }
 
@@ -439,7 +648,14 @@ export async function processSlaJob(
   deps: SlaDeps,
 ): Promise<void> {
   const { kind } = job.data;
-  if (kind === 'reconcile') return runReconcile(deps);
+  if (kind === 'reconcile') {
+    await runReconcile(deps);
+    // Both promises this business makes are swept on one tick. The chat sweep
+    // guards its own reads, so a conversations failure cannot undo the ticket
+    // work that has already landed.
+    await runChatReconcile(deps);
+    return;
+  }
   const deadline = (job.data.deadline ?? 'first_response') as Deadline;
   if (kind === 'warning') return runWarning(deps, job.data.ticketId, deadline);
   if (kind === 'breach') return runBreach(deps, job.data.ticketId, deadline);

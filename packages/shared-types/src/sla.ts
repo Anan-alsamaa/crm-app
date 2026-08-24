@@ -23,6 +23,58 @@
  * places is a rule that will disagree with itself.
  */
 
+/**
+ * WHICH OBJECT a policy governs.
+ *
+ * Until now every policy was a ticket policy, because a ticket was the only
+ * thing with a clock. But the two promises this business actually makes are not
+ * both about tickets:
+ *
+ *   - "we answer a chat within N minutes" — a CHAT promise. It is measured from
+ *     the customer's first message to the agent's first reply, and it is over
+ *     long before anyone decides whether a ticket is warranted.
+ *   - "we solve a complaint within N hours" — a TICKET promise.
+ *
+ * Holding both in one policy row is what produced the earlier failure: the
+ * ticket carried a first-response deadline that nothing in the product could
+ * ever satisfy, because the reply that answered the customer happened in the
+ * chat, before the ticket existed. Every such ticket breached and stayed
+ * breached. Separating the objects is the fix — a policy now says which clock
+ * it is, and only the matching sweep reads it.
+ *
+ * Absent means `ticket`: every policy written before this field existed was a
+ * ticket policy, and silently re-reading them as chat policies would move live
+ * promises onto a different object.
+ */
+export type SlaGoverns = 'ticket' | 'chat';
+
+/** The two objects a policy can govern, in the order the console lists them. */
+export const SLA_GOVERNS = ['ticket', 'chat'] as const;
+
+/** What this policy governs, defaulting an unset or unrecognised value to `ticket`. */
+export function policyGoverns(policy: { governs?: string | null }): SlaGoverns {
+  return policy?.governs === 'chat' ? 'chat' : 'ticket';
+}
+
+/**
+ * Which of a policy's two targets is the one that matters for what it governs.
+ *
+ * A chat policy's promise is its first-response minutes; a ticket policy's is
+ * its resolution minutes. The other number is still stored — the column is
+ * required and a policy row is edited by hand — but nothing reads it, and a
+ * console that displayed both would be showing an operator a promise that is
+ * not being kept because it is not being measured.
+ */
+export function policyTargetMinutes(policy: {
+  governs?: string | null;
+  first_response_minutes?: number | null;
+  resolution_minutes?: number | null;
+}): number | null {
+  return policyGoverns(policy) === 'chat'
+    ? (policy.first_response_minutes ?? null)
+    : (policy.resolution_minutes ?? null);
+}
+
 /** One dimension of coverage: null / empty both mean "any value". */
 export type SlaScopeList = readonly string[] | null | undefined;
 
@@ -36,6 +88,8 @@ export type SlaScopeList = readonly string[] | null | undefined;
  * how the tickets store it too.
  */
 export interface SlaPolicyScope {
+  /** See `SlaGoverns`. Absent means `ticket`. */
+  governs?: string | null;
   applies_to_priority?: SlaScopeList;
   applies_to_type?: SlaScopeList;
   applies_to_source?: SlaScopeList;
@@ -121,8 +175,15 @@ export function policyCovers(policy: SlaPolicyScope, ticket: SlaTicketFacts): bo
 export function pickSlaPolicy<T extends SlaPolicyScope & { id: string; name?: string | null }>(
   policies: readonly T[],
   ticket: SlaTicketFacts,
+  /**
+   * Which clock is being set. A chat policy and a ticket policy can carry
+   * identical coverage — in this deployment they deliberately do, both covering
+   * all four priorities — so without this the ticket sweep would happily attach
+   * the chat's five-minute promise to a complaint and breach it instantly.
+   */
+  governs: SlaGoverns = 'ticket',
 ): T | null {
-  const matches = policies.filter((p) => policyCovers(p, ticket));
+  const matches = policies.filter((p) => policyGoverns(p) === governs && policyCovers(p, ticket));
   if (matches.length === 0) return null;
   return [...matches].sort(
     (a, b) =>

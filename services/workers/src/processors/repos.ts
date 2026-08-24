@@ -34,11 +34,53 @@ export interface SlaPolicyRow extends SlaPolicyScope {
   id: string;
   name: string;
   applies_to_priority: Priority[];
+  /** 'ticket' | 'chat'; absent means ticket. See `policyGoverns`. */
+  governs?: string | null;
   first_response_minutes: number;
   resolution_minutes: number;
   warning_threshold_percent: number;
   business_hours: import('../lib/sla-clock.js').BusinessHours | null;
   active: boolean;
+  /**
+   * When the policy was written — the earliest moment it can promise anything.
+   *
+   * See the chat sweep: a promise cannot be made retroactively, and without
+   * this a newly created policy would judge every conversation already in the
+   * database against a target nobody could have known about.
+   */
+  date_created?: string | null;
+}
+
+/**
+ * A chat, as the first-response sweep needs to see it.
+ *
+ * Deliberately thin: the sweep sets ONE clock and reads three timestamps. It
+ * does not need the messages, and reading them would turn a sweep over the open
+ * inbox into a scan of the whole message table.
+ */
+export interface ConversationRow {
+  id: string;
+  status: string | null;
+  priority: Priority | null;
+  first_response_due_at: string | null;
+  first_responded_at: string | null;
+  first_response_breached_at: string | null;
+  assigned_agent: string | null;
+  assigned_team: string | null;
+  /**
+   * When the customer first wrote — the moment the promise starts.
+   *
+   * `date_created` rather than `last_message_at`: the promise is to answer the
+   * customer who has been waiting, and a customer who writes again while
+   * waiting must not push their own deadline further away.
+   */
+  date_created: string | null;
+}
+
+export interface ConversationRepo {
+  /** Open, unanswered chats — the only ones with a live first-response clock. */
+  listUnansweredConversations(): Promise<ConversationRow[]>;
+  patchConversation(id: string, patch: Partial<ConversationRow>): Promise<void>;
 }
 
 export type TicketEventType =

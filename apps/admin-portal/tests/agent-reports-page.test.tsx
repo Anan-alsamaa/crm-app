@@ -329,13 +329,56 @@ const complaints = [
     responseDesc: '',
     complaintSource: 'Comp. WhatsApp',
     orderAmount: null,
-    orderNumber: '',
+    // Present, so this row is COMPLETE: it exists to prove an unmapped store
+    // still shows, and it cannot do that from behind the completeness filter.
+    orderNumber: '946700',
     communicationMethod: 'Comp. WhatsApp',
     couponCode: '',
     couponValue: null,
     couponPercent: null,
     complaintStatus: 'open',
     agent: 'Ali',
+    compensation: 'Not Compensated',
+  },
+  {
+    /*
+     * A HALF-FILLED ROW — the reason the completeness filter exists.
+     *
+     * Rows like this arrive from the widget before an agent has classified the
+     * complaint. Left in the table they read as real reports of nothing: a
+     * branch with no service type, a complaint with no source, counted in every
+     * total beside rows that were actually worked.
+     */
+    id: 'k3',
+    date: '2026-03-16',
+    year: 2026,
+    month: 3,
+    week: 11,
+    day: 16,
+    time: '11:40',
+    chain: '',
+    area: '',
+    brand: 'Casa Pasta',
+    city: '',
+    restaurantName: 'LCP-006 Panorama Mall',
+    storeCode: '',
+    yijiRestaurantId: '',
+    storeMapped: false,
+    serviceType: '',
+    complaintType: '',
+    customerName: '',
+    customerMobile: '0522222222',
+    complaintDescription: 'Half-filled row',
+    responseDesc: '',
+    complaintSource: '',
+    orderAmount: null,
+    orderNumber: '',
+    communicationMethod: '',
+    couponCode: '',
+    couponValue: null,
+    couponPercent: null,
+    complaintStatus: 'open',
+    agent: '',
     compensation: 'Not Compensated',
   },
 ];
@@ -821,6 +864,45 @@ describe('AgentReportsPage — ticket breakdown', () => {
     // format. Asserting the rendered form is the point of the column.
     expect(screen.getByText('14/03/2026')).toBeInTheDocument();
     expect(screen.getByText('19:11')).toBeInTheDocument();
+  });
+
+  /*
+   * ONLY FULLY-POPULATED ROWS, AND THE HIDING SAID OUT LOUD.
+   *
+   * Rows arrive from the widget before an agent has classified the complaint —
+   * no branch, no service type, no channel, no order. Left in the table they
+   * read as real reports of nothing and are counted in every total beside rows
+   * that were actually worked. Hidden SILENTLY they would be the failure this
+   * codebase keeps repeating: something matches nothing and the shortfall
+   * reads as a plausible answer. So they are hidden, counted, and one click
+   * away.
+   */
+  it('shows only tickets with every field populated', () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    const { container } = renderPage('complaints');
+    const rows = container.querySelectorAll('tbody tr');
+    expect(rows).toHaveLength(2);
+    expect(screen.queryByText('Half-filled row')).not.toBeInTheDocument();
+  });
+
+  it('says how many it is hiding, rather than quietly showing fewer', () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    renderPage('complaints');
+    expect(screen.getByText(/1 tickets? are hidden because fields are missing/i)).toBeTruthy();
+  });
+
+  it('shows them on request, and says that it is', async () => {
+    const user = userEvent.setup();
+    api.useAgentReportData.mockReturnValue(ok);
+    const { container } = renderPage('complaints');
+    await user.click(screen.getByRole('button', { name: /show them/i }));
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(3);
+    expect(screen.getByText('Half-filled row')).toBeInTheDocument();
+    // The notice flips rather than disappearing: what is on screen is never
+    // left unexplained in either direction.
+    expect(screen.getByText(/including 1 tickets? with fields missing/i)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /hide them/i }));
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
   });
 
   it('resolves a branch whose name drifted, via its store code', () => {

@@ -1,6 +1,8 @@
 import { readItems, updateItem, createItem, readUser, readUsers } from '@directus/sdk';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import type {
+  ConversationRepo,
+  ConversationRow,
   NotificationsRepo,
   SlaPolicyRow,
   TeamRepo,
@@ -63,11 +65,13 @@ export function createTicketRepo(client: YijiDirectusClient): TicketRepo {
             'applies_to_type',
             'applies_to_source',
             'applies_to_brand',
+            'governs',
             'first_response_minutes',
             'resolution_minutes',
             'warning_threshold_percent',
             'business_hours',
             'active',
+            'date_created',
           ],
           limit: -1,
         }),
@@ -119,6 +123,46 @@ export function createTicketRepo(client: YijiDirectusClient): TicketRepo {
           limit: 100,
         }),
       )) as TicketEventRow[];
+    },
+  };
+}
+
+/**
+ * Chats with a live first-response promise.
+ *
+ * Filtered in the QUERY, not in JS: an answered chat can never breach, and a
+ * solved one is finished, so pulling the whole inbox back to discard most of it
+ * would make the sweep's cost grow with history rather than with the work
+ * actually outstanding. Retired status values are matched alongside `open`
+ * because rows written before the status migration still carry them.
+ */
+export function createConversationRepo(client: YijiDirectusClient): ConversationRepo {
+  return {
+    async listUnansweredConversations() {
+      return (await client.request(
+        readItems('conversations', {
+          filter: {
+            status: { _in: ['open', 'pending'] },
+            first_responded_at: { _null: true },
+            archived_at: { _null: true },
+          },
+          fields: [
+            'id',
+            'status',
+            'priority',
+            'first_response_due_at',
+            'first_responded_at',
+            'first_response_breached_at',
+            'assigned_agent',
+            'assigned_team',
+            'date_created',
+          ],
+          limit: -1,
+        }),
+      )) as ConversationRow[];
+    },
+    async patchConversation(id, patch) {
+      await client.request(updateItem('conversations', id, patch as never));
     },
   };
 }
