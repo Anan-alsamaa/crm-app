@@ -210,19 +210,19 @@ describe('a personal link starts the chat without the form', () => {
    * edited into somebody else's number because the signature would not survive
    * it, and the number never appears in the URL at all.
    */
-  it('posts the TOKEN, and never a phone number', async () => {
-    await loadPage('?t=signed-link-token');
+  it('posts the CODE, and never a phone number', async () => {
+    await loadPage('?c=A7K9F2M4XQ');
     await new Promise((r) => setTimeout(r, 0));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(init.body));
-    expect(body).toEqual({ token: 'signed-link-token' });
+    expect(body).toEqual({ code: 'A7K9F2M4XQ' });
     expect(body).not.toHaveProperty('phone');
   });
 
   it('hides the form — the customer was already identified', async () => {
-    await loadPage('?t=signed-link-token');
+    await loadPage('?c=A7K9F2M4XQ');
     await new Promise((r) => setTimeout(r, 0));
     expect(form().hasAttribute('hidden')).toBe(true);
   });
@@ -231,14 +231,14 @@ describe('a personal link starts the chat without the form', () => {
     // It authenticates a session, and a URL carrying one lands in history, in
     // screenshots, and in the Referer of anything the page later loads.
     const spy = vi.spyOn(window.history, 'replaceState');
-    await loadPage('?t=signed-link-token');
+    await loadPage('?c=A7K9F2M4XQ');
     await new Promise((r) => setTimeout(r, 0));
     expect(spy).toHaveBeenCalledWith(null, '', '/walk-in.html');
     spy.mockRestore();
   });
 
   it('hands off to the chat exactly as a typed number does', async () => {
-    await loadPage('?t=signed-link-token');
+    await loadPage('?c=A7K9F2M4XQ');
     await new Promise((r) => setTimeout(r, 0));
     expect(sessionStorage.getItem('yiji.walkInToken')).toBe('walk-in-token');
     expect(location.replace).toHaveBeenCalledWith('/');
@@ -246,7 +246,7 @@ describe('a personal link starts the chat without the form', () => {
 
   it('puts the form back when the link has expired, rather than stranding them', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({ ok: false }) });
-    await loadPage('?t=stale');
+    await loadPage('?c=STALE00000');
     await new Promise((r) => setTimeout(r, 0));
     expect(error().textContent).toMatch(/expired/i);
     expect(form().hasAttribute('hidden')).toBe(false);

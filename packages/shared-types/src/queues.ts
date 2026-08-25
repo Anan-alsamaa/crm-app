@@ -157,8 +157,8 @@ export type WalkInSessionRequest = z.infer<typeof WalkInSessionRequest>;
  * Ask for a personal walk-in link for ONE customer.
  *
  * Admin-only. The response carries a signed token, never the number: see
- * `WalkInLinkClaims` for why a phone in the query string would be the wrong
- * shape entirely.
+ * `WalkInCode` for why a short code beats both a phone number and a signed
+ * token in the query string.
  */
 export const WalkInLinkRequest = z.object({
   phone: WalkInSessionRequest.shape.phone,
@@ -169,29 +169,30 @@ export const WalkInLinkRequest = z.object({
 export type WalkInLinkRequest = z.infer<typeof WalkInLinkRequest>;
 
 /**
- * What a personal walk-in link actually carries.
+ * Crockford base32 — no I, L, O or U.
  *
- * THE PHONE NUMBER IS NOT IN THE URL, and that is the whole point.
- *
- * A link like `?phone=0537301009` is editable. Saudi mobiles are `05` plus
- * eight digits, so anyone holding one such link can walk the number space from
- * a browser bar and open a session as any customer they like — no signing in,
- * no rate limit that means anything, no trace that it was not the customer. It
- * also puts a real person's phone number into browser history, `Referer`
- * headers and every proxy log between them and us.
- *
- * A signed token fixes both at once: it cannot be edited into somebody else's
- * number because the signature would not survive it, it expires, and the number
- * itself never leaves the server.
+ * Those four are what turn a code read off a printed card, or over the phone,
+ * into a support call: 1/I/l and 0/O are indistinguishable in most typefaces.
+ * Dropping them costs a little keyspace and removes the whole class of problem.
  */
-export const WalkInLinkClaims = z.object({
-  /** Canonical `05XXXXXXXX`. */
-  phone: z.string().min(7),
-  vendor_id: z.string().min(1),
-  /** Marks this as a LINK token, so it can never be replayed as a session. */
-  kind: z.literal('walk_in_link'),
-});
-export type WalkInLinkClaims = z.infer<typeof WalkInLinkClaims>;
+export const WALK_IN_CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+export const WALK_IN_CODE_LENGTH = 10;
+
+/** The code as it appears in a link. Upper-cased, so a typed link still works. */
+export const WalkInCode = z
+  .string()
+  .trim()
+  .transform((v) => v.toUpperCase())
+  .pipe(
+    z
+      .string()
+      .length(WALK_IN_CODE_LENGTH)
+      .regex(new RegExp(`^[${WALK_IN_CODE_ALPHABET}]+$`), 'not a walk-in code'),
+  );
+
+/** Open a session from a personal link. */
+export const WalkInCodeRequest = z.object({ code: WalkInCode });
+export type WalkInCodeRequest = z.infer<typeof WalkInCodeRequest>;
 
 // --- customer-push ---
 /**

@@ -94,6 +94,25 @@ function SectionLabel({ children, count }: { children: React.ReactNode; count?: 
   );
 }
 
+/** Why the phone cannot be edited, said in a glyph beside the number. */
+function LockIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3 w-3 shrink-0"
+      aria-hidden
+    >
+      <rect x="3.5" y="7" width="9" height="6" rx="1.5" />
+      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+    </svg>
+  );
+}
+
 function PencilIcon() {
   return (
     <svg
@@ -142,7 +161,7 @@ export function ConversationSidebar({
   // early returns; the query is disabled until a contact id exists.
   const contact = useContact(convo.data?.contact?.id ?? '');
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({ name: '', email: '', phone: '' });
+  const [draft, setDraft] = useState({ name: '', email: '' });
   // Drop out of edit mode when switching conversations so a stale draft never
   // overwrites a different customer.
   useEffect(() => setEditing(false), [conversationId]);
@@ -183,7 +202,6 @@ export function ConversationSidebar({
     setDraft({
       name: c.contact?.name ?? '',
       email: c.contact?.email ?? '',
-      phone: c.contact?.phone ?? '',
     });
     setEditing(true);
   };
@@ -195,7 +213,9 @@ export function ConversationSidebar({
         patch: {
           name: draft.name.trim() || null,
           email: draft.email.trim() || null,
-          phone: draft.phone.trim() || null,
+          /* Never sent. The phone is the identity key and the field above is
+             read-only; writing it here anyway would reintroduce the bug the
+             moment somebody re-adds an input. */
         },
       });
       toast.success(
@@ -272,8 +292,14 @@ export function ConversationSidebar({
         />
       </div>
 
-      {/* Contact details — editable: agents can correct the customer's name,
-          email or phone; saving persists to Directus and updates everywhere. */}
+      {/* Contact details — name and email are editable so an agent can correct
+          what a customer tells them. THE PHONE IS NOT: it is the identity this
+          whole product is keyed on. `upsertContact` matches an incoming chat by
+          exact phone, the walk-in page opens a session by it, and the contact
+          is deduped on it — so editing it does not correct a record, it points
+          this conversation's history at a different person and leaves the real
+          customer's next message to create a fresh contact. Shown read-only
+          below instead, because an agent still needs to read it out. */}
       <section className="px-5 py-4">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -312,15 +338,20 @@ export function ConversationSidebar({
                 aria-label={t('sidebar.email')}
               />
             </label>
-            <label className="block">
-              <span className="mb-1 block text-muted-foreground">{t('sidebar.phone')}</span>
-              <Input
-                type="tel"
-                value={draft.phone}
-                onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
-                aria-label={t('sidebar.phone')}
-              />
-            </label>
+            {/* Read-only, and visibly so — an agent reads this number back on a
+                call, so hiding it while editing would be worse than useless. */}
+            {c.contact?.phone && (
+              <div className="block">
+                <span className="mb-1 block text-muted-foreground">{t('sidebar.phone')}</span>
+                <p
+                  className="flex items-center gap-1.5 rounded-lg bg-secondary/60 px-3 py-2 text-xs tabular-nums text-muted-foreground ring-1 ring-inset ring-foreground/[0.04]"
+                  dir="ltr"
+                >
+                  <LockIcon />
+                  <span>{c.contact.phone}</span>
+                </p>
+              </div>
+            )}
             <div className="flex items-center gap-2 pt-1">
               <Button
                 size="sm"

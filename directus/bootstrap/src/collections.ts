@@ -271,6 +271,42 @@ export const collections: CollectionSpec[] = [
     ],
   },
   {
+    collection: 'walk_in_links',
+    note: 'Personal chat links. A short CODE stands for a phone number, so the number never travels in a URL and the link can be revoked by deleting the row.',
+    fields: [
+      /**
+       * The code that appears in the link, and the only part a customer sees.
+       *
+       * A SHORT OPAQUE CODE rather than a signed token in the query string.
+       * The token version worked and was 200 characters of base64 — unusable in
+       * print, in a WhatsApp message, or read aloud. More importantly a signed
+       * token cannot be REVOKED: it is valid until it expires, whatever anyone
+       * later wishes. A row can be deleted.
+       *
+       * Ten characters of Crockford base32 is 32^10 — about 1.1 quadrillion.
+       * That matters because opening this link opens a chat AS that customer,
+       * so a guessable code is the same enumeration hole a `?phone=` would have
+       * been. Crockford omits I, L, O and U, so nothing is misread off a card
+       * or misheard on a call.
+       */
+      { field: 'code', type: 'string', index: true, required: true },
+      {
+        field: 'phone',
+        type: 'string',
+        index: true,
+        note: 'Canonical 05XXXXXXXX. The whole point: this stays server-side.',
+      },
+      { field: 'expires_at', type: 'dateTime', index: true },
+      /**
+       * When it was first opened. Not a limit — a customer may reopen their own
+       * chat, and a link that dies on first use dies when a preview fetches it.
+       * It is here so an operator can see whether the link ever landed.
+       */
+      { field: 'used_at', type: 'dateTime' },
+      { field: 'revoked_at', type: 'dateTime', note: 'Set to kill a link early.' },
+    ],
+  },
+  {
     collection: 'messages',
     fields: [
       { field: 'sender_type', type: 'string', choices: ['customer', 'agent', 'system'] },
@@ -864,6 +900,13 @@ export const relations: RelationSpec[] = [
     collection: 'conversations',
     field: 'csat_response',
     related: 'csat_responses',
+    onDelete: 'SET NULL',
+  },
+  { collection: 'walk_in_links', field: 'vendor', related: 'vendors', onDelete: 'CASCADE' },
+  {
+    collection: 'walk_in_links',
+    field: 'created_by',
+    related: 'directus_users',
     onDelete: 'SET NULL',
   },
   { collection: 'messages', field: 'conversation', related: 'conversations', onDelete: 'CASCADE' },

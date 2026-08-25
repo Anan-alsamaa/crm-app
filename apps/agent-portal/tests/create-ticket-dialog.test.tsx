@@ -25,7 +25,10 @@ const hooks = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/tickets/api.js', () => hooks);
 
-const coupons = vi.hoisted(() => ({ useRequestCouponApproval: vi.fn() }));
+const coupons = vi.hoisted(() => ({
+  useRequestCouponApproval: vi.fn(),
+  useCouponCodeTaken: vi.fn(() => ({ data: false })),
+}));
 vi.mock('../src/features/coupons/api.js', () => coupons);
 
 import { CreateTicketDialog } from '../src/features/tickets/CreateTicketDialog.js';

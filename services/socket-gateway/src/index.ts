@@ -26,7 +26,9 @@ import {
   normalizePhone,
   phoneCustomerId,
   ReportJob,
-  WalkInLinkClaims,
+  WALK_IN_CODE_ALPHABET,
+  WALK_IN_CODE_LENGTH,
+  WalkInCodeRequest,
   WalkInLinkRequest,
   WalkInSessionRequest,
 } from '@yiji/shared-types';
@@ -34,6 +36,7 @@ import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
 import { createHs256Verifier } from './auth/customer-jwt.js';
 import jwt from 'jsonwebtoken';
+import { randomBytes } from 'node:crypto';
 import { createTokenBucket } from './rate-limit.js';
 import { validateAgentToken } from './auth/agent-jwt.js';
 import { createProducer } from './queue.js';
@@ -43,6 +46,28 @@ import { Registry } from './metrics.js';
 import { parseAttachmentPolicy } from './attachments.js';
 import { verifyWebhookSignature } from './webhook.js';
 import { notifyAssignment } from './assignment-notify.js';
+
+/**
+ * A link code: ten characters of Crockford base32, from a CSPRNG.
+ *
+ * `Math.random` is not acceptable here. Opening one of these links opens a chat
+ * AS that customer, so a predictable generator is the same enumeration hole a
+ * `?phone=` would have been — just harder to notice.
+ *
+ * Rejection sampling rather than `% 32`: the alphabet is exactly 32 characters
+ * so a byte modulo 32 is uniform, but writing it that way invites the next
+ * person to change the alphabet length and quietly introduce bias.
+ */
+function walkInCode(): string {
+  const bytes = randomBytes(WALK_IN_CODE_LENGTH * 2);
+  let out = '';
+  for (const b of bytes) {
+    if (out.length === WALK_IN_CODE_LENGTH) break;
+    if (b >= 256 - (256 % WALK_IN_CODE_ALPHABET.length)) continue;
+    out += WALK_IN_CODE_ALPHABET[b % WALK_IN_CODE_ALPHABET.length];
+  }
+  return out.padEnd(WALK_IN_CODE_LENGTH, WALK_IN_CODE_ALPHABET[0]);
+}
 
 /** Reachability ping to Directus /server/health with a hard timeout. */
 async function pingDirectus(url: string, timeoutMs = 2000): Promise<boolean> {
@@ -495,29 +520,28 @@ async function main(): Promise<void> {
     /*
      * TWO WAYS IN, one of which the customer did not type.
      *
-     * A personal link carries a signed token instead of a number. Verifying it
-     * here — rather than trusting a `?phone=` the page read off its own URL —
-     * is what stops the link being edited into somebody else's chat.
+     * A personal link carries a short CODE, and the number it stands for is
+     * looked up here. That is what stops the link being edited into somebody
+     * else's chat: `?phone=05…` would be guessable across a keyspace of eight
+     * digits, while a code is ten Crockford base32 characters and means
+     * nothing without the row behind it.
      *
-     * `kind` is checked explicitly: both tokens are signed with the same
-     * secret, so without it a SESSION token would be accepted as a link and a
-     * link as a session, and the expiry difference between them (2 hours
-     * against 7 days) would quietly become the longer one.
+     * The lookup also owns expiry and revocation, so a link can be killed by
+     * deleting a row — which a signed token could never offer.
      */
-    const body = (req.body ?? {}) as { token?: unknown };
+    const asCode = WalkInCodeRequest.safeParse(req.body);
     let phone: string;
     let vendorId: string;
-    if (typeof body.token === 'string' && body.token) {
-      try {
-        const claims = WalkInLinkClaims.parse(
-          jwt.verify(body.token, config.YIJI_JWT_SECRET, { algorithms: ['HS256'] }),
-        );
-        phone = claims.phone;
-        vendorId = claims.vendor_id;
-      } catch {
-        // Expired, tampered with, or a session token replayed as a link.
+    if (asCode.success) {
+      const link = await directus.resolveWalkInLink(asCode.data.code).catch(() => null);
+      if (!link) {
+        // Unknown, expired or revoked — one message for all three, because
+        // telling a caller WHICH is telling them their guess had the right
+        // shape.
         return reply.code(401).send({ ok: false, error: 'this link is no longer valid' });
       }
+      phone = link.phone;
+      vendorId = link.vendorId;
     } else {
       const parsed = WalkInSessionRequest.safeParse(req.body);
       if (!parsed.success) {
@@ -580,23 +604,27 @@ async function main(): Promise<void> {
     const vendor = await directus.resolveVendor(vendorId).catch(() => null);
     if (!vendor) return reply.code(404).send({ ok: false, error: 'unknown or inactive vendor' });
 
-    // Normalised before signing, so the link and a typed-in session resolve to
+    // Normalised before storing, so the link and a typed-in session resolve to
     // exactly the same contact rather than two spellings of one customer.
     const normalized = normalizePhone(phone);
-    const token = jwt.sign(
-      { phone: normalized, vendor_id: vendorId, kind: 'walk_in_link' },
-      config.YIJI_JWT_SECRET,
-      { algorithm: 'HS256', expiresIn: `${days}d` },
-    );
-    logger.info({ vendorId, days }, 'walk-in link minted');
+    const code = walkInCode();
+    const expiresAt = new Date(Date.now() + days * 86_400_000).toISOString();
+    await directus.createWalkInLink({
+      code,
+      phone: normalized,
+      vendorUuid: vendor.id,
+      expiresAt,
+      createdBy: null,
+    });
+    logger.info({ vendorId, days, code }, 'walk-in link minted');
     return reply.send({
       ok: true,
-      token,
-      expiresInDays: days,
+      code,
+      expiresAt,
       /* The path is the caller's to assemble — the gateway does not know which
          public host the widget is served from, and guessing would produce a
          link that works from our network and nowhere else. */
-      path: `/walk-in.html?t=${encodeURIComponent(token)}`,
+      path: `/walk-in.html?c=${code}`,
     });
   });
 

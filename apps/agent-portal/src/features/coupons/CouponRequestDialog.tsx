@@ -22,7 +22,7 @@ import {
   type CouponRequestDraft,
 } from '@yiji/shared-types';
 import { optionsFor, useOptionLists } from '../tickets/option-lists.js';
-import { useRequestCouponApproval } from './api.js';
+import { useCouponCodeTaken, useRequestCouponApproval } from './api.js';
 
 /**
  * The coupon an agent asks a supervisor to approve.
@@ -141,6 +141,13 @@ export function CouponRequestDialog({
    * This lives in the setter rather than an effect so the draft is never
    * briefly inconsistent — the validator reads it on every render.
    */
+  /*
+   * A duplicate code is not cosmetic. The coupon push sends it to Yiji as the
+   * `idempotency-key`, so a second request carrying an existing code reads as a
+   * RETRY of the first and silently delivers nothing.
+   */
+  const { data: codeTaken = false } = useCouponCodeTaken(draft.code);
+
   const set = <K extends keyof CouponRequestDraft>(key: K, value: CouponRequestDraft[K]) =>
     setDraft((d) => {
       const next = { ...d, [key]: value } as CouponRequestDraft;
@@ -293,7 +300,9 @@ export function CouponRequestDialog({
           <Button
             type="button"
             loading={create.isPending}
-            disabled={!parsed.success}
+            /* A taken code blocks the send outright. Letting it through would
+               hand Yiji a duplicate idempotency-key and deliver nothing. */
+            disabled={!parsed.success || codeTaken}
             onClick={submit}
           >
             {onCollect
@@ -314,13 +323,25 @@ export function CouponRequestDialog({
         <FormField
           label={t('coupons.code', { defaultValue: 'Coupon code' })}
           hint={t('coupons.codeHint', {
-            defaultValue: 'Generated, and readable down a phone line. Regenerate if you prefer.',
+            defaultValue: 'Generated, and readable down a phone line. Type your own or regenerate.',
           })}
+          error={
+            codeTaken
+              ? t('coupons.codeTaken', {
+                  defaultValue: 'That code is already in use. Pick another.',
+                })
+              : undefined
+          }
         >
           <div className="flex gap-2">
+            {/* Typed, not just generated — agents reuse a code a branch already
+                printed, or match one from the ops sheet. Upper-cased as they
+                type because every stored code is, and a lower-case twin would
+                pass the duplicate check and then collide anyway. */}
             <Input
               value={draft.code}
-              readOnly
+              invalid={codeTaken}
+              onChange={(e) => set('code', e.target.value.toUpperCase().replace(/\s+/g, ''))}
               aria-label={t('coupons.code', { defaultValue: 'Coupon code' })}
               className="flex-1 font-mono"
             />
@@ -534,27 +555,44 @@ export function CouponRequestDialog({
               />
             </FormField>
           )}
-          {/* The cap is only a question for a PERCENTAGE. For a flat amount the
-              most it can ever be worth IS the amount, so asking again invites
-              the two to disagree — and they did: an amount of 568 was approved
-              with a 55 cap, and whichever number the customer was promised, one
-              of them was a lie. Here it is derived instead of asked. */}
-          {draft.discount_category === 'Percentage' ? (
-            <FormField
-              label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
-              hint={t('coupons.maxDiscountHint', {
-                defaultValue: 'The most this coupon can ever be worth.',
-              })}
-            >
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                value={String(draft.max_discount)}
-                onChange={(e) => set('max_discount', Number(e.target.value))}
-              />
-            </FormField>
-          ) : null}
+          {/* ALWAYS SHOWN — it is the number the supervisor approves against and
+              the ceiling the customer is held to, so a coupon that does not
+              display one reads as uncapped.
+
+              Only EDITABLE for a percentage, though. For a flat amount the most
+              it can ever be worth IS the amount, and asking twice invites the
+              two to disagree — which they did: an amount of 568 was approved
+              with a cap of 55, and whichever number that customer was promised,
+              one of them was a lie. So for an amount it tracks the value
+              instead, visible and locked rather than hidden. */}
+          <FormField
+            label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
+            hint={
+              isPercentageCategory(draft.discount_category)
+                ? t('coupons.maxDiscountHint', {
+                    defaultValue: 'The most this coupon can ever be worth.',
+                  })
+                : t('coupons.maxDiscountFixedHint', {
+                    defaultValue:
+                      'A flat amount is its own ceiling, so this follows the coupon value.',
+                  })
+            }
+          >
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              readOnly={!isPercentageCategory(draft.discount_category)}
+              aria-readonly={!isPercentageCategory(draft.discount_category)}
+              className={
+                isPercentageCategory(draft.discount_category)
+                  ? undefined
+                  : 'bg-secondary/60 text-muted-foreground'
+              }
+              value={String(draft.max_discount)}
+              onChange={(e) => set('max_discount', Number(e.target.value))}
+            />
+          </FormField>
           <FormField
             label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
             hint={t('coupons.usageLimitHint', {

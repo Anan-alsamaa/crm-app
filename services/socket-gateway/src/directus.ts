@@ -269,6 +269,69 @@ export class GatewayDirectus {
     };
   }
 
+  /**
+   * Store a personal chat link and hand back its code.
+   *
+   * The CODE is what appears in the link; the PHONE stays here. That is the
+   * whole reason this is a row rather than a signed token in the URL: the
+   * number never travels, and the link can be revoked by deleting the row —
+   * a token is valid until it expires, whatever anyone later wishes.
+   */
+  async createWalkInLink(input: {
+    code: string;
+    phone: string;
+    vendorUuid: string;
+    expiresAt: string;
+    createdBy?: string | null;
+  }): Promise<void> {
+    await this.client.request(
+      createItem('walk_in_links', {
+        code: input.code,
+        phone: input.phone,
+        vendor: input.vendorUuid,
+        expires_at: input.expiresAt,
+        created_by: input.createdBy ?? null,
+      } as never),
+    );
+  }
+
+  /**
+   * Resolve a link code, or null when it cannot be used.
+   *
+   * Expiry and revocation are checked HERE rather than by the caller, so there
+   * is one place that decides whether a link is alive and no route can forget
+   * to ask. `used_at` is stamped but never gates: a customer may reopen their
+   * own chat, and a link that dies on first open dies when a messaging app
+   * fetches it for a preview.
+   */
+  async resolveWalkInLink(code: string): Promise<{ phone: string; vendorId: string } | null> {
+    const rows = (await this.client.request(
+      readItems('walk_in_links', {
+        filter: { code: { _eq: code } },
+        fields: ['id', 'phone', 'expires_at', 'revoked_at', 'vendor.yiji_vendor_id'],
+        limit: 1,
+      }),
+    )) as Array<{
+      id: string;
+      phone: string | null;
+      expires_at: string | null;
+      revoked_at: string | null;
+      vendor: { yiji_vendor_id: string | null } | null;
+    }>;
+    const row = rows[0];
+    if (!row?.phone || !row.vendor?.yiji_vendor_id) return null;
+    if (row.revoked_at) return null;
+    if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) return null;
+
+    // Best-effort: knowing whether a link was ever opened is worth having, and
+    // failing to record it must not stop the customer getting their chat.
+    void this.client
+      .request(updateItem('walk_in_links', row.id, { used_at: new Date().toISOString() } as never))
+      .catch(() => {});
+
+    return { phone: row.phone, vendorId: row.vendor.yiji_vendor_id };
+  }
+
   /** Persist a message and bump conversation activity. Returns the new message. */
   async persistMessage(input: {
     conversationId: string;

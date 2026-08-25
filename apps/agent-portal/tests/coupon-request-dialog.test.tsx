@@ -6,8 +6,13 @@ import { CouponRequestDialog } from '../src/features/coupons/CouponRequestDialog
 
 const mutateAsync = vi.fn();
 
+/** The one code the mocked lookup reports as already issued. */
+const { TAKEN_CODE } = vi.hoisted(() => ({ TAKEN_CODE: 'OPS-TAKEN01' }));
+
 vi.mock('../src/features/coupons/api.js', () => ({
   useRequestCouponApproval: () => ({ mutateAsync, isPending: false }),
+  // Every code is free except the one the duplicate test types.
+  useCouponCodeTaken: (code: string) => ({ data: code === TAKEN_CODE }),
 }));
 
 vi.mock('../src/features/tickets/option-lists.js', async () => {
@@ -220,15 +225,46 @@ describe('CouponRequestDialog', () => {
     expect(screen.getByText(/coupon worth 0 is not a coupon/i)).toBeInTheDocument();
   });
 
-  it('does not ask for a ceiling on a flat amount — the amount IS the ceiling', async () => {
-    // Asking twice is how 568 came to be approved with a 55 cap. The field is
-    // only shown for a percentage, where a ceiling is a real question.
+  it('shows the ceiling always, but only lets a PERCENTAGE set it', async () => {
+    /*
+     * Both halves matter. Hiding it entirely was the wrong answer — the cap is
+     * what the supervisor approves against, so a coupon showing none reads as
+     * uncapped. But letting a flat amount carry its own separate cap is how 568
+     * came to be approved with a ceiling of 55, and one of those two numbers
+     * was a lie to the customer.
+     */
     renderDialog();
-    expect(screen.queryByLabelText(/maximum discount/i)).toBeNull();
+    const cap = screen.getByLabelText(/maximum discount/i);
+    expect(cap).toBeInTheDocument();
+    expect(cap).toHaveAttribute('readonly');
 
     await userEvent.click(screen.getByLabelText(/discount category/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Percentage' }));
-    expect(screen.getByLabelText(/maximum discount/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/maximum discount/i)).not.toHaveAttribute('readonly');
+  });
+
+  it('follows the coupon value as the ceiling for a flat amount', async () => {
+    // Derived, not asked — so the two can never disagree.
+    renderDialog();
+    await userEvent.clear(screen.getByLabelText(/coupon value/i));
+    await userEvent.type(screen.getByLabelText(/coupon value/i), '75');
+    expect(screen.getByLabelText(/maximum discount/i)).toHaveValue(75);
+  });
+
+  it('refuses a coupon code another coupon already carries', async () => {
+    /*
+     * The code is typed now, so two coupons can be given the same one — and a
+     * duplicate is not cosmetic: the push sends it to Yiji as the idempotency
+     * key, so the second request reads as a RETRY of the first and the customer
+     * is told about a coupon that was never created.
+     */
+    renderDialog();
+    const code = screen.getByLabelText(/coupon code/i);
+    await userEvent.clear(code);
+    await userEvent.type(code, TAKEN_CODE);
+
+    expect(await screen.findByText(/already in use/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /send|request/i })).toBeDisabled();
   });
 
   it('still works for a ticket with no order behind it', async () => {

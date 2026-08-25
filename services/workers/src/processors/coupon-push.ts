@@ -411,9 +411,23 @@ export async function runCouponDeliverySweep(deps: {
       await couponsQueue.add(
         'push',
         { couponApprovalId: row.id },
-        // Same id the approval click uses, so a coupon already waiting in the
-        // queue is not queued twice.
-        { jobId: `coupon-push-${row.id}`, removeOnComplete: true, removeOnFail: false },
+        /*
+         * NO CUSTOM JOB ID, deliberately.
+         *
+         * It used to reuse the approval click's id so a coupon already waiting
+         * could not be queued twice. That looked careful and made the sweep
+         * useless: BullMQ ignores an `add` whose id already exists, and a
+         * COMPLETED job keeps its id, so once any push had finished — including
+         * one that finished as `disabled` because delivery was off — this
+         * silently enqueued nothing for ever after.
+         *
+         * Duplicate work is not the risk worth guarding here anyway. The
+         * processor re-reads the row and stops on a receipt, on a recorded
+         * refusal, on `delivery_excluded` and on a status that is not approved;
+         * the selection above already excludes everything settled. The worst a
+         * duplicate costs is one wasted read.
+         */
+        { removeOnComplete: true, removeOnFail: false },
       );
       queued++;
     } catch (err) {

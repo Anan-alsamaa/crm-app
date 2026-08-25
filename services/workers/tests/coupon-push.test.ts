@@ -479,9 +479,16 @@ describe('runCouponDeliverySweep', () => {
       couponsQueue: h.couponsQueue as never,
     });
     expect(queued).toBe(2);
-    // Same id the Approve click uses, so a coupon already waiting is not
-    // queued twice.
-    expect(h.added.map((a) => a.opts.jobId)).toEqual(['coupon-push-ca-1', 'coupon-push-ca-2']);
+    /*
+     * NO custom job id — and this is the regression that matters most here.
+     * It used to reuse the Approve click's `coupon-push-<id>`, which BullMQ
+     * refuses to add twice; a completed job keeps its id, so once any push had
+     * finished — including one that finished as `disabled` because delivery was
+     * switched off — the sweep silently enqueued nothing for ever after. It
+     * reported "queued: 1" while queueing none.
+     */
+    for (const a of h.added) expect(a.opts.jobId).toBeUndefined();
+    expect(h.added.every((a) => a.opts.removeOnComplete === true)).toBe(true);
   });
 
   it('asks only for coupons that are owed and unanswered', async () => {

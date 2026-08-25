@@ -158,3 +158,57 @@ export function useTicketCoupons(ticketId: string | null | undefined) {
       )) as unknown as CouponRequestRow[],
   });
 }
+
+/**
+ * Is this coupon code already taken?
+ *
+ * The code was generated and read-only until agents asked to type their own —
+ * they reuse a code a branch already printed, or match one from the ops sheet.
+ * Letting them type it means letting them collide with one, and a duplicate
+ * code is not a cosmetic problem: the coupon push sends it to Yiji as the
+ * `idempotency-key`, so a second request carrying an existing code would be
+ * treated as a retry of the FIRST and silently deliver nothing.
+ *
+ * Both places a code can live are checked. `coupon_approvals` holds every
+ * request ever made; `tickets.coupon_code` is where an APPROVED one lands, and
+ * a coupon approved before this collection existed lives only there.
+ *
+ * `ignoreId` is the request being edited, so a row never collides with itself.
+ */
+export function useCouponCodeTaken(code: string | null | undefined, ignoreId?: string) {
+  const trimmed = (code ?? '').trim().toUpperCase();
+  return useQuery({
+    queryKey: ['coupon-code-taken', trimmed, ignoreId ?? ''],
+    // Nothing to ask about an empty box, and a code is not a code until it has
+    // some length — querying on every keystroke from the first character is a
+    // request per letter for an answer that is always "free".
+    enabled: trimmed.length >= 4,
+    staleTime: 10_000,
+    queryFn: async (): Promise<boolean> => {
+      const [approvals, tickets] = await Promise.all([
+        directus.request(
+          readItems(
+            'coupon_approvals' as never,
+            {
+              filter: { coupon_code: { _eq: trimmed } },
+              fields: ['id'],
+              limit: 2,
+            } as never,
+          ),
+        ) as Promise<Array<{ id: string }>>,
+        directus.request(
+          readItems(
+            'tickets' as never,
+            {
+              filter: { coupon_code: { _eq: trimmed } },
+              fields: ['id'],
+              limit: 1,
+            } as never,
+          ),
+        ) as Promise<Array<{ id: string }>>,
+      ]);
+      const others = approvals.filter((r) => r.id !== ignoreId);
+      return others.length > 0 || tickets.length > 0;
+    },
+  });
+}

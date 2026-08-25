@@ -146,6 +146,20 @@ class BullProducer implements SideEffectProducer {
   async enqueueCouponPush(job: CouponPushJob): Promise<string | null> {
     const added = await this.coupons.add('push', job, {
       ...DEFAULT_JOB_OPTIONS,
+      /*
+       * The id dedupes two rapid clicks on Approve. It must NOT outlive the
+       * job, and this is where that went wrong: the default keeps the last
+       * thousand COMPLETED jobs, and BullMQ silently ignores an `add` whose id
+       * already exists. So the first push — which completed as `disabled`
+       * because delivery was switched off — permanently blocked every later
+       * attempt for that coupon. The sweep reported "queued: 1" and nothing
+       * was queued; the Retry button was dead for the same reason.
+       *
+       * Removing on completion frees the id the moment the work is done. The
+       * real double-send guard was never this: it is the RECEIPT, re-read
+       * inside the processor, which no queue trick can substitute for.
+       */
+      removeOnComplete: true,
       jobId: `coupon-push-${job.couponApprovalId}`,
     });
     return added.id ?? null;
