@@ -75,6 +75,11 @@ function showError(message: string): void {
   error.hidden = false;
 }
 
+/** Put the form back after a link fails, so nobody is stranded. */
+function revealForm(): void {
+  form?.removeAttribute('hidden');
+}
+
 function setBusy(busy: boolean): void {
   if (submit) {
     submit.disabled = busy;
@@ -82,14 +87,26 @@ function setBusy(busy: boolean): void {
   }
 }
 
-async function start(phone: string): Promise<void> {
+/**
+ * Open a session, either from a number the customer typed or from a personal
+ * link they were sent.
+ *
+ * `link` carries a SIGNED TOKEN, not a phone number. The page never learns
+ * whose chat it is opening and could not lie about it if it tried — the
+ * gateway reads the number out of the signature. A `?phone=` would have been
+ * simpler and editable, which on a keyspace of `05` plus eight digits means
+ * anybody holding one link could open anybody's chat.
+ */
+async function start(input: { phone: string } | { link: string }): Promise<void> {
   setBusy(true);
   if (error) error.hidden = true;
   try {
     const res = await fetch(`${GATEWAY_HTTP}/walk-in/session`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ phone, vendorId: VENDOR_ID }),
+      body: JSON.stringify(
+        'link' in input ? { token: input.link } : { phone: input.phone, vendorId: VENDOR_ID },
+      ),
     });
     const body = (await res.json().catch(() => ({}))) as { ok?: boolean; token?: string };
     if (res.status === 429) {
@@ -97,8 +114,17 @@ async function start(phone: string): Promise<void> {
       setBusy(false);
       return;
     }
+    if (res.status === 401) {
+      // An expired or tampered link. Say so plainly and leave the form usable,
+      // so the customer is not stranded on a dead link.
+      showError('This link has expired. Please enter your number to start a chat.');
+      revealForm();
+      setBusy(false);
+      return;
+    }
     if (!res.ok || !body.ok || !body.token) {
       showError('We could not start the chat. Please check the number and try again.');
+      revealForm();
       setBusy(false);
       return;
     }
@@ -162,5 +188,24 @@ form?.addEventListener('submit', (e) => {
     showError('Please enter the full mobile number — 05 and eight more digits.');
     return;
   }
-  void start(phone);
+  void start({ phone });
 });
+
+/*
+ * A PERSONAL LINK SKIPS THE FORM.
+ *
+ * `?t=<token>` means an operator minted this link for one customer, so asking
+ * them to type the number they were already identified by is a step that only
+ * loses people. The form is hidden rather than removed: if the token has
+ * expired, `start` puts it back and they can carry on by hand.
+ *
+ * The token is dropped from the address bar immediately. It authenticates a
+ * chat session, and a URL carrying one is a URL that lands in history, in a
+ * screenshot, and in the `Referer` of anything the page later loads.
+ */
+const linkToken = new URLSearchParams(window.location.search).get('t');
+if (linkToken) {
+  form?.setAttribute('hidden', '');
+  history.replaceState(null, '', window.location.pathname);
+  void start({ link: linkToken });
+}

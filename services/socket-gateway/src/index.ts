@@ -26,6 +26,8 @@ import {
   normalizePhone,
   phoneCustomerId,
   ReportJob,
+  WalkInLinkClaims,
+  WalkInLinkRequest,
   WalkInSessionRequest,
 } from '@yiji/shared-types';
 import { loadConfig } from './config.js';
@@ -490,11 +492,40 @@ async function main(): Promise<void> {
       return reply.code(429).send({ ok: false, error: 'too many attempts, try again shortly' });
     }
 
-    const parsed = WalkInSessionRequest.safeParse(req.body);
-    if (!parsed.success) {
-      return reply.code(400).send({ ok: false, error: 'a valid phone number is required' });
+    /*
+     * TWO WAYS IN, one of which the customer did not type.
+     *
+     * A personal link carries a signed token instead of a number. Verifying it
+     * here — rather than trusting a `?phone=` the page read off its own URL —
+     * is what stops the link being edited into somebody else's chat.
+     *
+     * `kind` is checked explicitly: both tokens are signed with the same
+     * secret, so without it a SESSION token would be accepted as a link and a
+     * link as a session, and the expiry difference between them (2 hours
+     * against 7 days) would quietly become the longer one.
+     */
+    const body = (req.body ?? {}) as { token?: unknown };
+    let phone: string;
+    let vendorId: string;
+    if (typeof body.token === 'string' && body.token) {
+      try {
+        const claims = WalkInLinkClaims.parse(
+          jwt.verify(body.token, config.YIJI_JWT_SECRET, { algorithms: ['HS256'] }),
+        );
+        phone = claims.phone;
+        vendorId = claims.vendor_id;
+      } catch {
+        // Expired, tampered with, or a session token replayed as a link.
+        return reply.code(401).send({ ok: false, error: 'this link is no longer valid' });
+      }
+    } else {
+      const parsed = WalkInSessionRequest.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ ok: false, error: 'a valid phone number is required' });
+      }
+      phone = parsed.data.phone;
+      vendorId = parsed.data.vendorId;
     }
-    const { phone, vendorId } = parsed.data;
 
     const vendor = await directus.resolveVendor(vendorId).catch(() => null);
     if (!vendor) return reply.code(404).send({ ok: false, error: 'unknown or inactive vendor' });
@@ -523,6 +554,50 @@ async function main(): Promise<void> {
 
     logger.info({ vendorId, walkIn: true }, 'walk-in session issued');
     return reply.send({ ok: true, token });
+  });
+
+  /**
+   * Mint a personal walk-in link for one customer. ADMIN ONLY.
+   *
+   * The link auto-starts a chat, so minting one is handing out a session for a
+   * number nobody proved. That is acceptable when an operator does it
+   * deliberately for a customer they are already talking to, and unacceptable
+   * as something the internet can do — hence the admin guard, which is the only
+   * reason this is not simply a public endpoint taking a phone number.
+   *
+   * The response is a URL carrying a SIGNED TOKEN, never the number itself.
+   * See `WalkInLinkClaims` for the two reasons that matters.
+   */
+  app.post('/walk-in/link', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return reply;
+    const parsed = WalkInLinkRequest.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, error: 'a valid phone number is required' });
+    }
+    const { phone, vendorId } = parsed.data;
+    const days = parsed.data.days ?? 7;
+
+    const vendor = await directus.resolveVendor(vendorId).catch(() => null);
+    if (!vendor) return reply.code(404).send({ ok: false, error: 'unknown or inactive vendor' });
+
+    // Normalised before signing, so the link and a typed-in session resolve to
+    // exactly the same contact rather than two spellings of one customer.
+    const normalized = normalizePhone(phone);
+    const token = jwt.sign(
+      { phone: normalized, vendor_id: vendorId, kind: 'walk_in_link' },
+      config.YIJI_JWT_SECRET,
+      { algorithm: 'HS256', expiresIn: `${days}d` },
+    );
+    logger.info({ vendorId, days }, 'walk-in link minted');
+    return reply.send({
+      ok: true,
+      token,
+      expiresInDays: days,
+      /* The path is the caller's to assemble — the gateway does not know which
+         public host the widget is served from, and guessing would produce a
+         link that works from our network and nowhere else. */
+      path: `/walk-in.html?t=${encodeURIComponent(token)}`,
+    });
   });
 
   app.get('/debug/presence', async () => getAgentPresenceSnapshot());

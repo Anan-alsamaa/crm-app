@@ -153,6 +153,46 @@ export const WalkInSessionRequest = z.object({
 });
 export type WalkInSessionRequest = z.infer<typeof WalkInSessionRequest>;
 
+/**
+ * Ask for a personal walk-in link for ONE customer.
+ *
+ * Admin-only. The response carries a signed token, never the number: see
+ * `WalkInLinkClaims` for why a phone in the query string would be the wrong
+ * shape entirely.
+ */
+export const WalkInLinkRequest = z.object({
+  phone: WalkInSessionRequest.shape.phone,
+  vendorId: z.string().min(1),
+  /** How long the link should work for. Default 7 days, capped at 30. */
+  days: z.coerce.number().int().min(1).max(30).optional(),
+});
+export type WalkInLinkRequest = z.infer<typeof WalkInLinkRequest>;
+
+/**
+ * What a personal walk-in link actually carries.
+ *
+ * THE PHONE NUMBER IS NOT IN THE URL, and that is the whole point.
+ *
+ * A link like `?phone=0537301009` is editable. Saudi mobiles are `05` plus
+ * eight digits, so anyone holding one such link can walk the number space from
+ * a browser bar and open a session as any customer they like — no signing in,
+ * no rate limit that means anything, no trace that it was not the customer. It
+ * also puts a real person's phone number into browser history, `Referer`
+ * headers and every proxy log between them and us.
+ *
+ * A signed token fixes both at once: it cannot be edited into somebody else's
+ * number because the signature would not survive it, it expires, and the number
+ * itself never leaves the server.
+ */
+export const WalkInLinkClaims = z.object({
+  /** Canonical `05XXXXXXXX`. */
+  phone: z.string().min(7),
+  vendor_id: z.string().min(1),
+  /** Marks this as a LINK token, so it can never be replayed as a session. */
+  kind: z.literal('walk_in_link'),
+});
+export type WalkInLinkClaims = z.infer<typeof WalkInLinkClaims>;
+
 // --- customer-push ---
 /**
  * Tell a customer's PHONE that an agent replied while they were away.

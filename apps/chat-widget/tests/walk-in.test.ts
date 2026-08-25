@@ -23,8 +23,20 @@ const PAGE = `
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-async function loadPage(): Promise<void> {
+async function loadPage(search = ''): Promise<void> {
   document.body.innerHTML = PAGE;
+  /*
+   * The page reads `?t=` on load, so the URL is part of the fixture. jsdom
+   * refuses a real navigation, so `location` is stubbed — and the stub has to
+   * carry `search` and `pathname`, not just `replace`: the page reads the first
+   * to find a link token and the second to strip it out again.
+   */
+  vi.stubGlobal('location', {
+    replace: vi.fn(),
+    href: `http://localhost/walk-in.html${search}`,
+    pathname: '/walk-in.html',
+    search,
+  });
   vi.resetModules();
   await import('../src/walk-in.js');
 }
@@ -53,8 +65,14 @@ beforeEach(() => {
   }));
   vi.stubGlobal('fetch', fetchMock);
   sessionStorage.clear();
-  // jsdom refuses a real navigation; the page only ever calls replace().
-  vi.stubGlobal('location', { replace: vi.fn(), href: 'http://localhost/walk-in.html' });
+  // A default for the tests that never call loadPage with a query string;
+  // loadPage replaces it with one carrying the right search.
+  vi.stubGlobal('location', {
+    replace: vi.fn(),
+    href: 'http://localhost/walk-in.html',
+    pathname: '/walk-in.html',
+    search: '',
+  });
 });
 
 afterEach(() => {
@@ -181,5 +199,63 @@ describe('walk-in submit', () => {
     await send();
     expect(error().textContent).toMatch(/could not reach support/i);
     expect(submit().disabled).toBe(false);
+  });
+});
+
+describe('a personal link starts the chat without the form', () => {
+  /*
+   * `?t=<signed token>` — never `?phone=`. Saudi mobiles are `05` plus eight
+   * digits, so an editable link means anyone holding one can walk the number
+   * space and open any customer's chat from a browser bar. The token cannot be
+   * edited into somebody else's number because the signature would not survive
+   * it, and the number never appears in the URL at all.
+   */
+  it('posts the TOKEN, and never a phone number', async () => {
+    await loadPage('?t=signed-link-token');
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body).toEqual({ token: 'signed-link-token' });
+    expect(body).not.toHaveProperty('phone');
+  });
+
+  it('hides the form — the customer was already identified', async () => {
+    await loadPage('?t=signed-link-token');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(form().hasAttribute('hidden')).toBe(true);
+  });
+
+  it('strips the token from the address bar straight away', async () => {
+    // It authenticates a session, and a URL carrying one lands in history, in
+    // screenshots, and in the Referer of anything the page later loads.
+    const spy = vi.spyOn(window.history, 'replaceState');
+    await loadPage('?t=signed-link-token');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(spy).toHaveBeenCalledWith(null, '', '/walk-in.html');
+    spy.mockRestore();
+  });
+
+  it('hands off to the chat exactly as a typed number does', async () => {
+    await loadPage('?t=signed-link-token');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sessionStorage.getItem('yiji.walkInToken')).toBe('walk-in-token');
+    expect(location.replace).toHaveBeenCalledWith('/');
+  });
+
+  it('puts the form back when the link has expired, rather than stranding them', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({ ok: false }) });
+    await loadPage('?t=stale');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(error().textContent).toMatch(/expired/i);
+    expect(form().hasAttribute('hidden')).toBe(false);
+    expect(submit().disabled).toBe(false);
+  });
+
+  it('asks nothing of the gateway when there is no link', async () => {
+    await loadPage();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(form().hasAttribute('hidden')).toBe(false);
   });
 });
