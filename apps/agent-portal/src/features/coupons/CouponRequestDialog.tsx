@@ -17,6 +17,8 @@ import {
   defaultCouponDates,
   generateCouponCode,
   isPercentageCategory,
+  isHighValueCoupon,
+  COUPON_ALERT_THRESHOLD_SAR,
   parseDeliveryTypes,
   toggleDeliveryType,
   type CouponRequestDraft,
@@ -148,6 +150,14 @@ export function CouponRequestDialog({
    */
   const { data: codeTaken = false } = useCouponCodeTaken(draft.code);
 
+  // Same function the Directus hook mirrors, so the notice and the alert agree
+  // on what "high value" means — see COUPON_ALERT_THRESHOLD_SAR.
+  const highValue = isHighValueCoupon(draft);
+
+  /* Whether the agent has typed in the code field. Guards the automatic
+     re-stamp in `setIssuingSide` — see the note there. */
+  const [codeTouched, setCodeTouched] = useState(false);
+
   const set = <K extends keyof CouponRequestDraft>(key: K, value: CouponRequestDraft[K]) =>
     setDraft((d) => {
       const next = { ...d, [key]: value } as CouponRequestDraft;
@@ -258,12 +268,27 @@ export function CouponRequestDialog({
       );
   };
 
+  /**
+   * The code is auto-generated but hand-editable, and this is where those two
+   * meet.
+   *
+   * The code carries the issuing side as a prefix, so changing the side used to
+   * re-stamp the code unconditionally. That was safe while the field was
+   * read-only and is data loss now: an agent who typed the code a branch had
+   * already printed, then corrected the issuing side, watched their code
+   * silently vanish — with no way to get it back, because it was never theirs
+   * to begin with.
+   *
+   * So: re-stamp only a code this dialog itself generated and the agent has not
+   * touched. `codeTouched` is set by the input's own onChange, which fires for
+   * typing and pasting but not for the two programmatic writes here and in the
+   * regenerate button.
+   */
   const setIssuingSide = (v: string) =>
     setDraft((d) => ({
       ...d,
       issuing_side: v,
-      // The code carries the issuing side, so changing one re-stamps the other.
-      code: generateCouponCode(Math.random, couponPrefix(v)),
+      code: codeTouched ? d.code : generateCouponCode(Math.random, couponPrefix(v)),
     }));
 
   const sel = (key: keyof CouponRequestDraft, list: string, label: string) => (
@@ -341,7 +366,10 @@ export function CouponRequestDialog({
             <Input
               value={draft.code}
               invalid={codeTaken}
-              onChange={(e) => set('code', e.target.value.toUpperCase().replace(/\s+/g, ''))}
+              onChange={(e) => {
+                setCodeTouched(true);
+                set('code', e.target.value.toUpperCase().replace(/\s+/g, ''));
+              }}
               aria-label={t('coupons.code', { defaultValue: 'Coupon code' })}
               className="flex-1 font-mono"
             />
@@ -352,9 +380,12 @@ export function CouponRequestDialog({
               // has to carry it too. Without this the button handed back a
               // SARA- code on an Operations coupon, and the prefix is how
               // anyone reading a code aloud knows who issued it.
-              onClick={() =>
-                set('code', generateCouponCode(Math.random, couponPrefix(draft.issuing_side)))
-              }
+              onClick={() => {
+                // Explicitly asking for a new code hands the field back to the
+                // generator, so the issuing side re-stamps it again after this.
+                setCodeTouched(false);
+                set('code', generateCouponCode(Math.random, couponPrefix(draft.issuing_side)));
+              }}
             >
               {t('coupons.regenerate', { defaultValue: 'New code' })}
             </Button>
@@ -608,6 +639,23 @@ export function CouponRequestDialog({
             />
           </FormField>
         </div>
+        {/* Said BEFORE sending, not discovered afterwards.
+            The alert fires server-side either way (a Directus hook — the agent
+            portal cannot be the enforcement point when the row is written
+            straight from the browser). This is only so the agent is not
+            surprised to hear an admin was paged about their coupon. It is not a
+            block: large compensations are legitimate, they just get watched. */}
+        {highValue && (
+          <p className="mt-3 flex items-start gap-2 rounded-xl bg-warning/10 px-3 py-2 text-2xs leading-relaxed text-warning-foreground ring-1 ring-inset ring-warning/25">
+            <span aria-hidden>!</span>
+            <span>
+              {t('coupons.highValueNotice', {
+                threshold: COUPON_ALERT_THRESHOLD_SAR,
+                defaultValue: `Above SAR ${COUPON_ALERT_THRESHOLD_SAR}, so an admin is alerted as soon as this is sent. It still goes through the normal approval.`,
+              })}
+            </span>
+          </p>
+        )}
       </DrawerSection>
 
       <DrawerSection

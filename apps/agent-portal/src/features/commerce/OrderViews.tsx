@@ -111,7 +111,11 @@ function OrderHeader({ order, onCreateTicket }: { order: YijiOrder; onCreateTick
   return (
     <div className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
       <div className="min-w-0">
-        <div className="flex items-center gap-2">
+        {/* `min-w-0` on the row AND on the pill's wrapper below. The parent
+            already had it; the children did not, so neither could shrink and a
+            long status ran straight under the total on the right — "Force
+            canceled" against SAR 1.00 was unreadable in a narrow inbox. */}
+        <div className="flex min-w-0 items-center gap-2">
           {onCreateTicket ? (
             // The order id is the way into a complaint about THAT order. A real
             // button, so it is reachable by keyboard and named for the order it
@@ -133,15 +137,25 @@ function OrderHeader({ order, onCreateTicket }: { order: YijiOrder; onCreateTick
           ) : (
             <span className="font-mono text-xs text-foreground">#{order.orderId}</span>
           )}
-          <Pill tone={orderTone(order.status)} size="sm">
-            {titleize(order.status)}
+          {/* The status is the part that gives way: the order id is a fixed
+              short token and is what the agent is looking for, so it keeps its
+              width and the status truncates with a tooltip carrying the full
+              text. */}
+          <Pill tone={orderTone(order.status)} size="sm" className="min-w-0 max-w-full">
+            {/* `min-w-0` because Pill is an inline-flex row: without it this
+                span keeps its full content width and truncate never fires. */}
+            <span className="block min-w-0 truncate" title={titleize(order.status)}>
+              {titleize(order.status)}
+            </span>
           </Pill>
         </div>
         <div className="mt-0.5 text-2xs text-muted-foreground tabular-nums">
           {fmtDateTime(order.placedAt)}
         </div>
       </div>
-      <div className="shrink-0 text-sm font-semibold tabular-nums tracking-tight text-foreground">
+      {/* Never shrinks and never gets overlapped — the money is the one number
+          on this row an agent must read exactly. */}
+      <div className="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums tracking-tight text-foreground">
         {money(order.total, order.currency)}
       </div>
     </div>

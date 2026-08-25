@@ -207,6 +207,64 @@ describe('CouponRequestDialog', () => {
     await waitFor(() => expect(code.value.startsWith('OPS-')).toBe(true));
   });
 
+  it('keeps a HAND-TYPED code when the issuing side changes afterwards', async () => {
+    /*
+     * The regression the editable field created. The code carries the issuing
+     * side as a prefix, so changing the side used to re-stamp the code — which
+     * was harmless while the field was read-only and is data loss now: an agent
+     * types the code a branch already printed, corrects the issuing side, and
+     * watches it silently vanish with no way to get it back.
+     */
+    renderDialog();
+    const code = screen.getByLabelText(/coupon code/i) as HTMLInputElement;
+    await userEvent.clear(code);
+    await userEvent.type(code, 'BRANCH-PRINTED-42');
+
+    await userEvent.click(screen.getByLabelText(/issuing side/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
+
+    expect(code.value).toBe('BRANCH-PRINTED-42');
+  });
+
+  it('hands the field back to the generator once New code is pressed', async () => {
+    // Asking for a generated code is asking to stop hand-editing, so the
+    // issuing side may re-stamp it again after that.
+    renderDialog();
+    const code = screen.getByLabelText(/coupon code/i) as HTMLInputElement;
+    await userEvent.clear(code);
+    await userEvent.type(code, 'MINE-1');
+
+    await userEvent.click(screen.getByRole('button', { name: /new code/i }));
+    await userEvent.click(screen.getByLabelText(/issuing side/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
+
+    await waitFor(() => expect(code.value.startsWith('OPS-')).toBe(true));
+  });
+
+  it('warns before sending that a coupon over SAR 200 alerts an admin', async () => {
+    /*
+     * The alert itself fires server-side — the row is written straight to
+     * Directus from the browser, so the dialog can never be the enforcement
+     * point. This is only so the agent is not surprised to hear an admin was
+     * paged about their coupon. It must NOT block: large compensations are
+     * legitimate, they are just watched.
+     */
+    renderDialog();
+    expect(screen.queryByText(/an admin is alerted/i)).toBeNull();
+
+    const value = screen.getByLabelText(/coupon value/i);
+    await userEvent.clear(value);
+    await userEvent.type(value, '500');
+
+    expect(await screen.findByText(/an admin is alerted/i)).toBeInTheDocument();
+    /*
+     * And it is a NOTICE, not a gate. Asserted by the absence of a blocking
+     * message rather than on the button, which a fresh draft leaves disabled
+     * for unrelated reasons (the dropdowns operations owns are still empty).
+     */
+    expect(screen.queryByText(/maximum discount is below|worth 0|worth nothing/i)).toBeNull();
+  });
+
   it('will not send a coupon worth nothing, and says which field is wrong', async () => {
     // One was approved worth 0 SAR because the form let it through. The amount
     // now has to be present and positive before the request can leave.

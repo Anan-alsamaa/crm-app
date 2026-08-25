@@ -1492,5 +1492,13 @@
     "minutes": "{{count}} دقيقة",
     "noneWaiting": "لا أحد ينتظر ردًا أول.",
     "noneOpen": "كل التذاكر منجزة."
+  },
+  "notifications": {
+    "title": "الإشعارات",
+    "open": "الإشعارات",
+    "openWithCount": "الإشعارات، {{count}} غير مقروء",
+    "markAllRead": "تعليم الكل كمقروء",
+    "empty": "لا يوجد ما تقرأه.",
+    "unread": "غير مقروء"
   }
 }

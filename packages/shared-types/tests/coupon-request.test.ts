@@ -5,6 +5,9 @@ import {
   couponWindow,
   defaultCouponDates,
   couponTermsProblems,
+  couponExposure,
+  isHighValueCoupon,
+  COUPON_ALERT_THRESHOLD_SAR,
   generateCouponCode,
   isPercentageCategory,
   parseDeliveryTypes,
@@ -238,5 +241,50 @@ describe('delivery types', () => {
   it('keeps a value the list no longer offers rather than dropping it silently', () => {
     // A retired channel on an old coupon is history, not a mistake to erase.
     expect(toggleDeliveryType('Retired', 'Delivery', OFFERED)).toBe('Delivery, Retired');
+  });
+});
+
+describe('high-value coupon alert', () => {
+  it('measures a flat amount as its own exposure', () => {
+    expect(
+      couponExposure({ discount_category: 'Amount', coupon_value: 250, max_discount: 250 }),
+    ).toBe(250);
+  });
+
+  it('measures a PERCENTAGE by its cap, not its percentage', () => {
+    /*
+     * 20 is not 20 riyals. The cap is the only bound on what a percentage
+     * actually pays out — which is why `couponTermsProblems` refuses a
+     * percentage that has none.
+     */
+    expect(
+      couponExposure({ discount_category: 'Percentage', coupon_percent: 20, max_discount: 300 }),
+    ).toBe(300);
+  });
+
+  it('reads a half-filled draft as zero rather than guessing', () => {
+    // Otherwise the alert fires while the agent is still typing.
+    expect(
+      couponExposure({ discount_category: 'Amount', coupon_value: null, max_discount: null }),
+    ).toBe(0);
+  });
+
+  it('fires ABOVE the threshold, not at it', () => {
+    const at = { discount_category: 'Amount', coupon_value: 200, max_discount: 200 };
+    const above = { discount_category: 'Amount', coupon_value: 200.01, max_discount: 200.01 };
+    expect(isHighValueCoupon(at)).toBe(false);
+    expect(isHighValueCoupon(above)).toBe(true);
+  });
+
+  it('pins the threshold the Directus hook hardcodes', () => {
+    /*
+     * THIS TEST IS THE CONTRACT. `directus/extensions/notify-on-change/index.js`
+     * re-declares COUPON_ALERT_THRESHOLD_SAR and its own `couponExposure`,
+     * because extensions load in the stock Directus image with no bundler and
+     * cannot import this package. That duplication is only safe while something
+     * fails when the two drift — this is that something. If you change the
+     * threshold here, change it there too.
+     */
+    expect(COUPON_ALERT_THRESHOLD_SAR).toBe(200);
   });
 });

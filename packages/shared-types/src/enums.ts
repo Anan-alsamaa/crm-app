@@ -146,6 +146,11 @@ export const NotificationType = z.enum([
   'reminder',
   'escalation',
   'automation',
+  /* A single coupon large enough to want an admin's attention on its own.
+     Distinct from the approval queue, which is a work list someone opens; this
+     is the case where nobody should have to be on the right screen to find
+     out. See COUPON_ALERT_THRESHOLD_SAR. */
+  'high_value_coupon',
 ]);
 export type NotificationType = z.infer<typeof NotificationType>;
 

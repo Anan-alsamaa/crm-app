@@ -163,6 +163,39 @@ export function couponTermsProblems(terms: CouponTerms): CouponTermsProblem[] {
 }
 
 /**
+ * The most this coupon can ever cost, in SAR.
+ *
+ * For a flat amount that is the amount. For a percentage it is the CAP, not the
+ * percentage — 20% is not a number of riyals, and the cap is the only bound on
+ * what a percentage actually pays out (see `couponTermsProblems`, which refuses
+ * a percentage with no cap for exactly this reason).
+ *
+ * Returns 0 when neither is set rather than guessing, so a half-filled draft
+ * cannot trip an alert while the agent is still typing.
+ */
+export function couponExposure(terms: CouponTerms): number {
+  const cap = terms.max_discount ?? 0;
+  if (isPercentageCategory(terms.discount_category)) return cap > 0 ? cap : 0;
+  const value = terms.coupon_value ?? 0;
+  return Math.max(value, cap > 0 ? cap : 0);
+}
+
+/**
+ * Above this, in SAR, a coupon is worth an admin's attention on its own.
+ *
+ * This is NOT the approval threshold — every coupon already needs a supervisor,
+ * and that queue is a work list someone opens when they get to it. This is the
+ * separate question of whether a single coupon is large enough that nobody
+ * should have to be looking at the right screen to find out about it.
+ */
+export const COUPON_ALERT_THRESHOLD_SAR = 200;
+
+/** Whether this coupon is large enough to raise an admin alert on its own. */
+export function isHighValueCoupon(terms: CouponTerms): boolean {
+  return couponExposure(terms) > COUPON_ALERT_THRESHOLD_SAR;
+}
+
+/**
  * `valid_to` cannot precede `valid_from`, and the numbers have to add up —
  * see `couponTermsProblems` for why each of those clauses exists.
  */

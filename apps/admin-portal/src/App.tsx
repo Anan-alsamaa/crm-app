@@ -30,6 +30,7 @@ import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
 import { ResetPassword, RESET_PASSWORD_PATH } from './pages/ResetPassword.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
+import { NotificationBell } from './features/notifications/NotificationBell.js';
 import { PageRefresh } from './components/PageRefresh.js';
 import { HelpAssistant } from './features/help-assistant/HelpAssistant.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
@@ -534,6 +535,10 @@ function Shell({ children }: { children: React.ReactNode }) {
                   thing. */}
               <PageRefresh />
               <HelpAssistant />
+              {/* The bell belongs on the masthead for the same reason as the
+                  rest of this bar: an alert nobody can see without opening the
+                  right page is not an alert. */}
+              <NotificationBell />
               <LanguageToggle />
             </div>
             <span className="hidden items-center gap-2 rounded-full bg-ink-foreground/10 py-1 pe-1 ps-1 ring-1 ring-ink-foreground/15 sm:flex">
