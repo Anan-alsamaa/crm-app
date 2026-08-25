@@ -206,6 +206,7 @@ services:
       <<: *otel-env
       NODE_ENV: production
       PORT: 8080
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       DIRECTUS_URL: ${DIRECTUS_PUBLIC_URL:?set DIRECTUS_PUBLIC_URL}
       DIRECTUS_INTERNAL_URL: ${DIRECTUS_INTERNAL_URL:-http://directus:8055}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
@@ -237,10 +238,33 @@ services:
       redis:
         condition: service_healthy
     environment:
-      YIJI_API_KEY: ${YIJI_API_KEY:-}
-      YIJI_COUPON_URL: ${YIJI_COUPON_URL:-}
       <<: *otel-env
       NODE_ENV: production
+      # ── Yiji ────────────────────────────────────────────────────────────
+      # The ORDER api, read-only. The coupon push reads the order back for the
+      # customer id, their phone formatting and their brand/branch ids — see
+      # `createYijiOrderReader`. Blank means the coupon still goes on the order
+      # id alone, with less corroboration.
+      YIJI_API_URL: ${YIJI_API_URL:-}
+      # The ADMIN api + its service credential. This is what actually
+      # authenticates the coupon push; the endpoint path is fixed in code, so
+      # there is deliberately no URL to configure any more. Blank here means
+      # every push reports `disabled` and the coupon stays `approved` — which is
+      # honest, and silent. Set them.
+      YIJI_ADMIN_API_URL: ${YIJI_ADMIN_API_URL:-}
+      YIJI_ADMIN_EMAIL: ${YIJI_ADMIN_EMAIL:-}
+      YIJI_ADMIN_PASSWORD: ${YIJI_ADMIN_PASSWORD:-}
+      # Their API is multi-tenant and routes on this header.
+      YIJI_TENANT_ID: ${YIJI_TENANT_ID:-1}
+      # OFF unless exactly `on`. Coupon delivery hands real money to real
+      # customers and works from a BACKLOG, so the first tick after it goes live
+      # sends every approved-and-undelivered coupon at once. That has to be a
+      # decision, not a side effect of a deploy.
+      YIJI_COUPON_DELIVERY: ${YIJI_COUPON_DELIVERY:-off}
+      # Customer push-notification endpoint. Blank disables it and logs the
+      # payload, which is the concrete thing to hand the mobile developer.
+      YIJI_NOTIFY_URL: ${YIJI_NOTIFY_URL:-}
+      YIJI_API_KEY: ${YIJI_API_KEY:-}
       DIRECTUS_INTERNAL_URL: ${DIRECTUS_INTERNAL_URL:-http://directus:8055}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       SVC_WORKERS_TOKEN: ${SVC_WORKERS_TOKEN:?set SVC_WORKERS_TOKEN}
@@ -251,6 +275,15 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-Yiji Support <support@example.com>}
+      # Tuning. Left at the code defaults unless set, but named here so a
+      # deployment can reach them without reading the source.
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
+      WORKER_LOCK_MS: ${WORKER_LOCK_MS:-30000}
+      INACTIVITY_MINUTES: ${INACTIVITY_MINUTES:-120}
+      # The Directus user the AI worker writes as. Without it, AI-generated
+      # replies have no author on the audit trail.
+      AI_WORKER_USER_ID: ${AI_WORKER_USER_ID:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       OTEL_SERVICE_NAME: workers
 
   ai-gateway:
@@ -279,6 +312,14 @@ services:
       # Yiji commerce proxy (C-2) — key stays server-side, never in the browser.
       YIJI_API_URL: ${YIJI_API_URL:-}
       YIJI_API_KEY: ${YIJI_API_KEY:-}
+      # The ADMIN api carries the ORDER STATUS HISTORY, which is what makes the
+      # tracking timeline real rather than derived from the order record. These
+      # were missing here: without them the panel silently falls back to the
+      # derived timeline and nothing says why.
+      YIJI_ADMIN_API_URL: ${YIJI_ADMIN_API_URL:-}
+      YIJI_ADMIN_EMAIL: ${YIJI_ADMIN_EMAIL:-}
+      YIJI_ADMIN_PASSWORD: ${YIJI_ADMIN_PASSWORD:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal hostnames}
       OTEL_SERVICE_NAME: ai-gateway
 
