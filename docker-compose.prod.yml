@@ -339,6 +339,19 @@ services:
         VITE_AI_GATEWAY_URL: ${VITE_AI_GATEWAY_URL:-http://localhost:8081}
         # Enqueue endpoint = the socket-gateway HTTP port (assignment notifications).
         VITE_JOB_PRODUCER_URL: ${VITE_JOB_PRODUCER_URL:-http://localhost:8082}
+    # RUNTIME configuration, which is what makes ONE image serve every
+    # environment. `docker-entrypoint.sh` writes these into /config.js at
+    # start-up and the portal reads them there first, falling back to the
+    # build-time value (see resolveUrl). The same variables drive both, so a
+    # deployer sets each URL once whether the image was built here or pulled
+    # from the registry — and the artifact that passed staging is the artifact
+    # that ships, byte for byte.
+    environment:
+      DIRECTUS_URL: ${VITE_DIRECTUS_URL:-}
+      SOCKET_URL: ${VITE_SOCKET_URL:-}
+      AI_GATEWAY_URL: ${VITE_AI_GATEWAY_URL:-}
+      JOB_PRODUCER_URL: ${VITE_JOB_PRODUCER_URL:-}
+      COMPENSATION_DIRECTUS_URL: ${VITE_COMPENSATION_DIRECTUS_URL:-}
     restart: unless-stopped
     ports:
       - '127.0.0.1:${AGENT_PORTAL_PORT:-8090}:80' # loopback only; public edge is Caddy
@@ -357,6 +370,18 @@ services:
         VITE_AI_GATEWAY_URL: ${VITE_AI_GATEWAY_URL:-http://localhost:8081}
         # Enqueue endpoint = the socket-gateway HTTP port (Import CSV / Run report).
         VITE_JOB_PRODUCER_URL: ${VITE_JOB_PRODUCER_URL:-http://localhost:8082}
+    # RUNTIME configuration, which is what makes ONE image serve every
+    # environment. `docker-entrypoint.sh` writes these into /config.js at
+    # start-up and the portal reads them there first, falling back to the
+    # build-time value (see resolveUrl). The same variables drive both, so a
+    # deployer sets each URL once whether the image was built here or pulled
+    # from the registry — and the artifact that passed staging is the artifact
+    # that ships, byte for byte.
+    environment:
+      DIRECTUS_URL: ${VITE_DIRECTUS_URL:-}
+      SOCKET_URL: ${VITE_SOCKET_URL:-}
+      AI_GATEWAY_URL: ${VITE_AI_GATEWAY_URL:-}
+      JOB_PRODUCER_URL: ${VITE_JOB_PRODUCER_URL:-}
     restart: unless-stopped
     ports:
       - '127.0.0.1:${ADMIN_PORTAL_PORT:-8092}:80' # loopback only; public edge is Caddy

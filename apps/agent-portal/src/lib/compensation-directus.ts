@@ -1,4 +1,5 @@
 import { createDirectus, rest, staticToken } from '@directus/sdk';
+import { resolveOptionalUrl } from '@yiji/shared-config';
 import { directus } from './directus.js';
 
 /**
@@ -25,7 +26,12 @@ import { directus } from './directus.js';
  * Unset (the default) → fall back to the CRM client, so local development and
  * the existing tests keep working against the cloned schema on :8055.
  */
-const URL_ = import.meta.env.VITE_COMPENSATION_DIRECTUS_URL?.trim();
+/* Optional on purpose: unset falls back to the CRM client, so this must be
+ * able to stay undefined rather than take a loopback default. */
+const URL_ = resolveOptionalUrl(
+  'COMPENSATION_DIRECTUS_URL',
+  import.meta.env.VITE_COMPENSATION_DIRECTUS_URL,
+);
 const TOKEN = import.meta.env.VITE_COMPENSATION_DIRECTUS_TOKEN?.trim();
 
 /** True when a dedicated compensation instance is configured. */

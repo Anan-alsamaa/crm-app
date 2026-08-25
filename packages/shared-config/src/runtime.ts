@@ -75,6 +75,19 @@ export interface RuntimeConfig {
   DIRECTUS_URL?: string;
   SOCKET_URL?: string;
   AI_GATEWAY_URL?: string;
+  /**
+   * Where the portals enqueue background jobs — the socket-gateway's HTTP port.
+   * It is what the admin console calls to push an approved coupon to Yiji and
+   * to run a report now, so a baked value would have staging enqueueing into
+   * whichever environment the image happened to be built for.
+   */
+  JOB_PRODUCER_URL?: string;
+  /**
+   * The SEPARATE Directus holding the compensation clone, when there is one.
+   * Optional by design: unset means "fall back to the CRM client", so it is
+   * resolved with `resolveOptionalUrl` rather than given a loopback default.
+   */
+  COMPENSATION_DIRECTUS_URL?: string;
 }
 
 /**
@@ -104,4 +117,21 @@ export function resolveUrl(
   const injected = (globalThis as { __SARA_CONFIG__?: RuntimeConfig }).__SARA_CONFIG__;
   const chosen = injected?.[key]?.trim() || buildTime?.trim() || fallback;
   return onPageHost(chosen);
+}
+
+/**
+ * Same resolution, but ABSENCE stays absence.
+ *
+ * For settings where "not set" is a meaningful state rather than a missing
+ * value — the compensation Directus, where unset means "use the CRM client".
+ * Handing those a loopback default would silently switch a feature ON and point
+ * it at nothing, which is worse than leaving it off.
+ */
+export function resolveOptionalUrl(
+  key: keyof RuntimeConfig,
+  buildTime: string | undefined,
+): string | undefined {
+  const injected = (globalThis as { __SARA_CONFIG__?: RuntimeConfig }).__SARA_CONFIG__;
+  const chosen = injected?.[key]?.trim() || buildTime?.trim();
+  return chosen ? onPageHost(chosen) : undefined;
 }

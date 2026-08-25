@@ -18,6 +18,7 @@ CONFIG=/usr/share/nginx/html/config.js
   [ -n "${DIRECTUS_URL:-}" ]    && echo "  DIRECTUS_URL: '${DIRECTUS_URL}',"
   [ -n "${SOCKET_URL:-}" ]      && echo "  SOCKET_URL: '${SOCKET_URL}',"
   [ -n "${AI_GATEWAY_URL:-}" ]  && echo "  AI_GATEWAY_URL: '${AI_GATEWAY_URL}',"
+  [ -n "${JOB_PRODUCER_URL:-}" ] && echo "  JOB_PRODUCER_URL: '${JOB_PRODUCER_URL}',"
   echo '};'
 } > "$CONFIG"
 

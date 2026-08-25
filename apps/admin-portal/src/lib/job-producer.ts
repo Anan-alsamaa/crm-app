@@ -13,10 +13,17 @@
  *
  * Throws on non-2xx so TanStack Query / mutations can surface the error.
  */
+import { resolveUrl } from '@yiji/shared-config';
 import { auth } from './directus.js';
 
-const PRODUCER_URL =
-  (import.meta.env.VITE_JOB_PRODUCER_URL as string | undefined) ?? 'http://localhost:3031';
+/* Resolved at page load, not baked in — see resolveUrl. This is the endpoint
+ * that enqueues a coupon push and a report run, so a build-time value would
+ * have one environment's console enqueueing into another's queue. */
+const PRODUCER_URL = resolveUrl(
+  'JOB_PRODUCER_URL',
+  import.meta.env.VITE_JOB_PRODUCER_URL as string | undefined,
+  'http://localhost:3031',
+);
 const PRODUCER_TOKEN = (import.meta.env.VITE_JOB_PRODUCER_TOKEN as string | undefined) ?? '';
 
 interface EnqueueResult {
