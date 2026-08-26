@@ -775,161 +775,180 @@ export function Inbox() {
                 .sort((a, b) => (a.last_message_at ?? '').localeCompare(b.last_message_at ?? ''))
                 .slice(0, 5);
               return (
-                <div className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-5 p-6">
-                  {/* The agent's morning glance, on the brand sweep the admin
+                /*
+                 * CENTRED BY AUTO MARGINS, NOT `justify-center`.
+                 *
+                 * This was `h-full … justify-center` with no overflow, so on a
+                 * short laptop the content was taller than the pane and got
+                 * SLICED at both ends — the hero's heading cut through the
+                 * middle, which reads as the stat cards overlapping it. Nothing
+                 * was ever stacked; it was being clipped.
+                 *
+                 * `justify-center` on a scrollable container is the trap: it
+                 * pushes overflow past the top edge where no scroll can reach
+                 * it. Auto margins on the first and last child centre the block
+                 * when there IS room and collapse to nothing when there is not,
+                 * so the content simply scrolls. `min-h-full` rather than
+                 * `h-full` lets it grow past the pane instead of being trapped
+                 * inside it.
+                 */
+                <div className="h-full overflow-y-auto">
+                  <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-5 p-6 [&>*:first-child]:mt-auto [&>*:last-child]:mb-auto">
+                    {/* The agent's morning glance, on the brand sweep the admin
                       Overview opens with — the same welcome language in both
                       portals. White ink: the fill is saturated in both themes. */}
-                  <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-violet to-brand-glow p-6 shadow-float motion-safe:animate-rise-in">
-                    <div
-                      aria-hidden
-                      className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.25),transparent_60%)]"
-                    />
-                    <h2 className="relative font-display text-3xl font-extrabold leading-[1.25] tracking-[-0.03em] text-balance text-white">
-                      {openCount === 0
-                        ? `${t('inbox.welcome.zeroTitle')} ${t('inbox.welcome.zeroAccent')}`
-                        : `${t('inbox.welcome.waiting', { count: openCount })} ${
-                            urgentCount > 0
-                              ? t('inbox.welcome.urgentAccent', { count: urgentCount })
-                              : t('inbox.welcome.pace')
-                          }`}
-                    </h2>
-                    <p className="relative mt-2 max-w-prose text-sm text-white/85">
-                      {t('inbox.welcomeHint', {
-                        defaultValue:
-                          'Pick the next thread on the left, or filter by what needs attention first.',
-                      })}
-                    </p>
-                  </div>
+                    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-violet to-brand-glow p-6 shadow-float motion-safe:animate-rise-in">
+                      <div
+                        aria-hidden
+                        className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.25),transparent_60%)]"
+                      />
+                      <h2 className="relative font-display text-3xl font-extrabold leading-[1.25] tracking-[-0.03em] text-balance text-white">
+                        {openCount === 0
+                          ? `${t('inbox.welcome.zeroTitle')} ${t('inbox.welcome.zeroAccent')}`
+                          : `${t('inbox.welcome.waiting', { count: openCount })} ${
+                              urgentCount > 0
+                                ? t('inbox.welcome.urgentAccent', { count: urgentCount })
+                                : t('inbox.welcome.pace')
+                            }`}
+                      </h2>
+                      <p className="relative mt-2 max-w-prose text-sm text-white/85">
+                        {t('inbox.welcomeHint', {
+                          defaultValue:
+                            'Pick the next thread on the left, or filter by what needs attention first.',
+                        })}
+                      </p>
+                    </div>
 
-                  {/* Board KPI tiles — the shared StatCard anatomy: hero numeral,
+                    {/* Board KPI tiles — the shared StatCard anatomy: hero numeral,
                       tinted icon chip, uppercase micro-label. Urgent is magenta
                       to match the list strip's urgent numeral (one number, one
                       hue everywhere); unread is jade to match the list's unread
                       dot. Colour stays an accent, never a surface fill. */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <StatCard
-                      label={t('inbox.stats.open', { defaultValue: 'open' })}
-                      value={openCount}
-                      tone="success"
-                      icon={
-                        <svg
-                          viewBox="0 0 16 16"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="h-4 w-4"
-                          aria-hidden
-                        >
-                          <path d="M13.5 7.5a5.5 5.5 0 0 1-8.03 4.9L2.5 13.5l1.03-3A5.5 5.5 0 1 1 13.5 7.5Z" />
-                        </svg>
-                      }
-                    />
-                    <StatCard
-                      label={t('inbox.stats.urgent', { defaultValue: 'urgent' })}
-                      value={urgentCount}
-                      tone="pink"
-                      icon={
-                        <svg
-                          viewBox="0 0 16 16"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="h-4 w-4"
-                          aria-hidden
-                        >
-                          <path d="M8.9 1.8 3.8 9h3.1l-.8 5.2L11.2 7H8.1l.8-5.2Z" />
-                        </svg>
-                      }
-                    />
-                    <StatCard
-                      label={t('inbox.stats.unread', { defaultValue: 'unread' })}
-                      value={unreadCount}
-                      tone="primary"
-                      icon={
-                        <svg
-                          viewBox="0 0 16 16"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="h-4 w-4"
-                          aria-hidden
-                        >
-                          <path d="M12.6 11.2H3.4c.9-1 1.35-2.5 1.35-4.45a3.25 3.25 0 0 1 6.5 0c0 1.95.45 3.45 1.35 4.45Z" />
-                          <path d="M6.7 13.2a1.45 1.45 0 0 0 2.6 0" />
-                        </svg>
-                      }
-                    />
-                  </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <StatCard
+                        label={t('inbox.stats.open', { defaultValue: 'open' })}
+                        value={openCount}
+                        tone="success"
+                        icon={
+                          <svg
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="h-4 w-4"
+                            aria-hidden
+                          >
+                            <path d="M13.5 7.5a5.5 5.5 0 0 1-8.03 4.9L2.5 13.5l1.03-3A5.5 5.5 0 1 1 13.5 7.5Z" />
+                          </svg>
+                        }
+                      />
+                      <StatCard
+                        label={t('inbox.stats.urgent', { defaultValue: 'urgent' })}
+                        value={urgentCount}
+                        tone="pink"
+                        icon={
+                          <svg
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="h-4 w-4"
+                            aria-hidden
+                          >
+                            <path d="M8.9 1.8 3.8 9h3.1l-.8 5.2L11.2 7H8.1l.8-5.2Z" />
+                          </svg>
+                        }
+                      />
+                      <StatCard
+                        label={t('inbox.stats.unread', { defaultValue: 'unread' })}
+                        value={unreadCount}
+                        tone="primary"
+                        icon={
+                          <svg
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="h-4 w-4"
+                            aria-hidden
+                          >
+                            <path d="M12.6 11.2H3.4c.9-1 1.35-2.5 1.35-4.45a3.25 3.25 0 0 1 6.5 0c0 1.95.45 3.45 1.35 4.45Z" />
+                            <path d="M6.7 13.2a1.45 1.45 0 0 0 2.6 0" />
+                          </svg>
+                        }
+                      />
+                    </div>
 
-                  {/* Oldest-waiting, not most-recent: the rail beside this is
+                    {/* Oldest-waiting, not most-recent: the rail beside this is
                       already sorted newest-first, so repeating it here was a
                       mirror. What an agent cannot see there is who has been
                       waiting longest, which is where to start. */}
-                  {waiting.length > 0 ? (
-                    <SectionCard
-                      title={t('inbox.welcome.waitingLongest', {
-                        defaultValue: 'Waiting longest',
-                      })}
-                    >
-                      <ul className="divide-y divide-foreground/[0.06]">
-                        {waiting.map((c) => {
-                          const name =
-                            c.contact?.name ||
-                            c.contact?.phone ||
-                            c.contact?.email ||
-                            t('inbox.unknownContact');
-                          // Same last-message line as the inbox list — without
-                          // it each row is a name and a void of unused width.
-                          const preview = previewFor(c.id);
-                          return (
-                            <li key={c.id}>
-                              <button
-                                type="button"
-                                onClick={() => setSelected(c.id)}
-                                className="group flex w-full items-center gap-3 rounded-lg px-1 py-2.5 text-start transition-colors duration-fast ease-out hover:bg-foreground/[0.04]"
-                              >
-                                <Avatar
-                                  name={c.contact?.name}
-                                  email={c.contact?.email}
-                                  phone={c.contact?.phone}
-                                  size="md"
-                                />
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-sm font-semibold text-foreground">
-                                    {name}
-                                  </span>
-                                  {preview && (
-                                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                                      {preview}
-                                    </span>
-                                  )}
-                                </span>
-                                <Pill tone={STATUS_TONE[c.status]} size="sm">
-                                  {t(`status.${c.status}`, { ns: 'common' })}
-                                </Pill>
-                                <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-                                  {formatRelative(c.last_message_at)}
-                                </span>
-                              </button>
-                            </li>
-                          );
+                    {waiting.length > 0 ? (
+                      <SectionCard
+                        title={t('inbox.welcome.waitingLongest', {
+                          defaultValue: 'Waiting longest',
                         })}
-                      </ul>
-                    </SectionCard>
-                  ) : (
-                    <div className="flex items-center gap-4 rounded-2xl bg-card p-6 shadow-soft ring-1 ring-foreground/[0.06]">
-                      <ConversationPlaceholderArt size={96} />
-                      <p className="max-w-xs text-sm text-muted-foreground">
-                        {t('inbox.welcome.zeroArt')}
-                      </p>
-                    </div>
-                  )}
+                      >
+                        <ul className="divide-y divide-foreground/[0.06]">
+                          {waiting.map((c) => {
+                            const name =
+                              c.contact?.name ||
+                              c.contact?.phone ||
+                              c.contact?.email ||
+                              t('inbox.unknownContact');
+                            // Same last-message line as the inbox list — without
+                            // it each row is a name and a void of unused width.
+                            const preview = previewFor(c.id);
+                            return (
+                              <li key={c.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelected(c.id)}
+                                  className="group flex w-full items-center gap-3 rounded-lg px-1 py-2.5 text-start transition-colors duration-fast ease-out hover:bg-foreground/[0.04]"
+                                >
+                                  <Avatar
+                                    name={c.contact?.name}
+                                    email={c.contact?.email}
+                                    phone={c.contact?.phone}
+                                    size="md"
+                                  />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-sm font-semibold text-foreground">
+                                      {name}
+                                    </span>
+                                    {preview && (
+                                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                        {preview}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <Pill tone={STATUS_TONE[c.status]} size="sm">
+                                    {t(`status.${c.status}`, { ns: 'common' })}
+                                  </Pill>
+                                  <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                                    {formatRelative(c.last_message_at)}
+                                  </span>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </SectionCard>
+                    ) : (
+                      <div className="flex items-center gap-4 rounded-2xl bg-card p-6 shadow-soft ring-1 ring-foreground/[0.06]">
+                        <ConversationPlaceholderArt size={96} />
+                        <p className="max-w-xs text-sm text-muted-foreground">
+                          {t('inbox.welcome.zeroArt')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })()

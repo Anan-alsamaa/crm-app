@@ -9,6 +9,7 @@ import {
   couponPrefix,
   yijiIssuingSideId,
   findIssuingSide,
+  ISSUING_SIDES,
   isHighValueCoupon,
   yijiDeliveryTypes,
   COUPON_ALERT_THRESHOLD_SAR,
@@ -363,17 +364,32 @@ describe('couponPrefix', () => {
     expect(couponPrefix(null)).toBe('SARA');
   });
 
-  it('names each delivery company in full, never truncated mid-word', () => {
+  it('gives the delivery companies SHORT codes, like every other side', () => {
     /*
-     * These are seven characters. The old six-character cap produced "SHUROU"
-     * and "LEAJLA" — prefixes an agent cannot read out and a courier would not
-     * recognise on an invoice.
+     * They are ordinary issuing sides, not a category of their own. Their whole
+     * name in caps made "SHUROUQ-9U7KNSDF" a different shape from
+     * "OPS-9U7KNSDF" and half again as long to read down a phone line.
      */
-    expect(couponPrefix('Shadh')).toBe('SHADH');
-    expect(couponPrefix('Taker')).toBe('TAKER');
-    expect(couponPrefix('Shurouq')).toBe('SHUROUQ');
-    expect(couponPrefix('Leajlak')).toBe('LEAJLAK');
-    expect(couponPrefix('Parcel')).toBe('PARCEL');
+    expect(couponPrefix('Shadh')).toBe('SHD');
+    expect(couponPrefix('Taker')).toBe('TKR');
+    expect(couponPrefix('Shurouq')).toBe('SHQ');
+    expect(couponPrefix('Leajlak')).toBe('LJK');
+    expect(couponPrefix('Parcel')).toBe('PRC');
+  });
+
+  it('gives every issuing side a UNIQUE prefix', () => {
+    /*
+     * A collision is not cosmetic: the prefix is how anyone reading a code
+     * knows who is paying, and two sides sharing one makes that unanswerable
+     * from the code alone. Asserted over the whole table so adding a side
+     * cannot quietly introduce a clash.
+     */
+    const prefixes = ISSUING_SIDES.map((s) => s.prefix);
+    expect(new Set(prefixes).size).toBe(prefixes.length);
+  });
+
+  it('keeps every prefix short enough to read aloud', () => {
+    for (const s of ISSUING_SIDES) expect(s.prefix.length).toBeLessThanOrEqual(3);
   });
 
   it('still derives a prefix for a side nobody has coded for', () => {
@@ -404,6 +420,6 @@ describe('yijiIssuingSideId', () => {
     // The table is the single place a correction has to land.
     expect(findIssuingSide('customer care')?.prefix).toBe('CC');
     expect(findIssuingSide('Call Centre')?.value).toBe('Customer Care');
-    expect(findIssuingSide('Shurouq')?.prefix).toBe('SHUROUQ');
+    expect(findIssuingSide('Shurouq')?.prefix).toBe('SHQ');
   });
 });

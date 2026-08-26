@@ -255,13 +255,22 @@ export const ISSUING_SIDES: readonly IssuingSide[] = [
   { value: 'Customer Care', prefix: 'CC', yijiId: null },
   { value: 'Operations', prefix: 'OPS', yijiId: null },
   { value: 'Marketing', prefix: 'MKT', yijiId: null },
-  // The delivery companies. Prefixes are the name, uppercased — an agent
-  // reading "SHADH-4K2P" knows who is paying without a lookup.
-  { value: 'Shadh', prefix: 'SHADH', yijiId: null },
-  { value: 'Taker', prefix: 'TAKER', yijiId: null },
-  { value: 'Shurouq', prefix: 'SHUROUQ', yijiId: null },
-  { value: 'Leajlak', prefix: 'LEAJLAK', yijiId: null },
-  { value: 'Parcel', prefix: 'PARCEL', yijiId: null },
+  /*
+   * The delivery companies are ordinary issuing sides — peers of the three
+   * above, not a category of their own — so they get SHORT CODES in the same
+   * register rather than their whole name in caps.
+   *
+   * These were SHADH / SHUROUQ / LEAJLAK, i.e. five to seven characters, which
+   * made "SHUROUQ-9U7KNSDF" a visibly different shape from "OPS-9U7KNSDF" and
+   * half again as long to read down a phone line. Each is now the consonant
+   * skeleton of its name: guessable from the name, distinct from each other,
+   * and unambiguous read aloud.
+   */
+  { value: 'Shadh', prefix: 'SHD', yijiId: null },
+  { value: 'Taker', prefix: 'TKR', yijiId: null },
+  { value: 'Shurouq', prefix: 'SHQ', yijiId: null },
+  { value: 'Leajlak', prefix: 'LJK', yijiId: null },
+  { value: 'Parcel', prefix: 'PRC', yijiId: null },
 ];
 
 /**
@@ -310,14 +319,14 @@ export function couponPrefix(issuingSide: string | null | undefined): string {
    * A side nobody has coded for yet: derive from its own name.
    *
    * `option_lists` is operations-editable, so a new courier must not need a
-   * deploy to issue coupons. Ten characters rather than six — "SHUROUQ" and
-   * "LEAJLAK" are seven, and truncating a courier's name mid-word produces a
-   * prefix nobody recognises read aloud.
+   * deploy to issue coupons. Six characters keeps an unlisted side roughly in
+   * the register of the coded ones above — add it to ISSUING_SIDES with a
+   * proper short code when it becomes permanent.
    */
   return (
     s
       .replace(/[^a-z0-9]+/g, '')
-      .slice(0, 10)
+      .slice(0, 6)
       .toUpperCase() || 'SARA'
   );
 }
