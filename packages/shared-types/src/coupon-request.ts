@@ -268,6 +268,71 @@ export function generateCouponCode(
  * ───────────────────────────────────────────────────────────────────────────
  */
 
+/**
+ * Yiji's `deliveryTypes`: which channels a coupon may be redeemed through.
+ *
+ * ⚠ THE NUMBERING IS THE ONE THING HERE THAT IS NOT PROVEN. Everything else in
+ * this file was read off real coupons; this was not, and it is the reason
+ * `deliveryTypes` went unsent for so long.
+ *
+ * What IS known: Yiji's own correctly-built coupon 70644 carries `[3,1,2]` —
+ * three values, and no 0. Their ORDER api uses a 0-based vocabulary
+ * (0=delivery, 1=pickup, 2=carhop, 3=in_restaurant — verified independently:
+ * order 1234535 is deliveryType 2 and renders as Carhop). Under that map
+ * `[3,1,2]` would mean "everything except delivery", which is a strange thing
+ * for a general coupon to be — so the coupon vocabulary is most likely 1-BASED
+ * with 0 meaning unset, which is what the absence of 0 suggests.
+ *
+ * The table below encodes that reading. If Yiji confirms different numbers,
+ * THIS IS THE ONLY PLACE TO CHANGE — the payload builder and the console both
+ * go through it.
+ *
+ * Getting it wrong is not cosmetic: a coupon restricted to channels the
+ * customer cannot order through is a coupon that silently never works. That is
+ * why an unmapped word is dropped rather than guessed at, and why "All" sends
+ * NOTHING — an empty list is how Yiji already spells "no restriction", so the
+ * unrestricted case needs no numbering to be correct.
+ */
+export const YIJI_DELIVERY_TYPE_CODE: Record<string, number> = {
+  delivery: 1,
+  pickup: 2,
+  carhop: 3,
+  'drive thru': 3,
+  'drive-thru': 3,
+  takeout: 4,
+  takeaway: 4,
+  'dine-in': 5,
+  'dine in': 5,
+  dinning: 5,
+  dining: 5,
+};
+
+/**
+ * The `deliveryTypes` array for a stored CRM selection.
+ *
+ * Returns null — meaning "send no `deliveryTypes` at all" — for the two cases
+ * where an array would be wrong rather than merely empty:
+ *   - "All", because an empty list is Yiji's own spelling of unrestricted, and
+ *     enumerating every channel would break the moment they add one.
+ *   - nothing recognised, because a partial list silently REMOVES the channels
+ *     it failed to map.
+ */
+export function yijiDeliveryTypes(stored: string | null | undefined): number[] | null {
+  const picked = parseDeliveryTypes(stored);
+  if (picked.length === 0) return null;
+  if (picked.some((p) => p.trim().toLowerCase() === 'all')) return null;
+
+  const codes: number[] = [];
+  for (const p of picked) {
+    const code = YIJI_DELIVERY_TYPE_CODE[p.trim().toLowerCase()];
+    // One unrecognised channel invalidates the whole list: sending the rest
+    // would quietly narrow the coupon to fewer channels than were approved.
+    if (code == null) return null;
+    if (!codes.includes(code)) codes.push(code);
+  }
+  return codes.length > 0 ? codes : null;
+}
+
 /** Yiji's `type`: what audience the coupon is for. */
 export const YIJI_COUPON_TYPE: Record<string, number> = {
   general: 0,

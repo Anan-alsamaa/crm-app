@@ -14,6 +14,7 @@ import {
   isYijiRefused,
   isYijiUnavailable,
   yijiCouponEnum,
+  yijiDeliveryTypes,
   YIJI_COUPON_CATEGORY,
   YIJI_COUPON_TYPE,
 } from '@yiji/shared-types';
@@ -175,6 +176,7 @@ export function yijiCouponPayload(
   const percent = num(row.coupon_percent);
   const cap = num(row.max_discount);
   const limit = num(row.usage_limit) ?? 1;
+  const deliveryTypes = yijiDeliveryTypes(row.delivery_type);
 
   /*
    * Their id first, ours only if it is genuinely theirs.
@@ -243,10 +245,38 @@ export function yijiCouponPayload(
         ...(amount != null ? { discount: amount } : {}),
         ...(percent != null ? { discountPercentage: percent } : {}),
         ...(cap != null ? { maximumDiscount: cap } : {}),
-        // How many times it may be used, by this customer and in total. A
-        // compensation coupon is a single grant unless somebody said otherwise.
+        /*
+         * HOW MANY TIMES IT MAY BE USED.
+         *
+         * Yiji has three separate limit fields and the CRM has one box, so all
+         * three carry the same number rather than leaving any of them at its
+         * default:
+         *   reachLimit        total redemptions
+         *   limitForUser      per-customer cap
+         *   monthlyReachLimit what their console labels "Monthly coupon use"
+         *
+         * `monthlyReachLimit` was NOT being sent, so it sat at 0 in their UI
+         * while the CRM said 1 — the owner reads that field, and a blank there
+         * reads as "no limit" on a coupon that is meant to be a single grant.
+         *
+         * A compensation coupon is one grant unless somebody said otherwise, so
+         * the same figure in all three is the honest encoding: use it once, by
+         * this customer, this month.
+         */
         reachLimit: limit,
         limitForUser: limit,
+        monthlyReachLimit: limit,
+        /*
+         * Which channels it may be redeemed through.
+         *
+         * Omitted entirely for "All" and for anything unrecognised — an empty
+         * `deliveryTypes` is Yiji's own spelling of "no restriction", so the
+         * unrestricted case is correct by saying nothing, and a partial list
+         * would silently narrow a coupon to fewer channels than were approved.
+         * See `yijiDeliveryTypes`, which also carries the caveat that the
+         * NUMBERING is inferred rather than confirmed.
+         */
+        ...(deliveryTypes ? { deliveryTypes } : {}),
         /*
          * Every day of the week.
          *

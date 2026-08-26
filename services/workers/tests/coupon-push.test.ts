@@ -168,24 +168,51 @@ describe('yijiCouponPayload — what KIND of coupon this is', () => {
       expect(c[d]).toBe(true);
   });
 
-  it('still does NOT send deliveryTypes or itemsDiscountReduction', () => {
+  it('sends the number of uses to all THREE of Yiji limit fields', () => {
     /*
-     * Deliberate, and this test exists so removing it is a decision rather than
-     * an accident.
-     *
-     * deliveryTypes: a correct Yiji coupon carries [3,1,2] — three values and
-     * no 0 — which does not fit the 0-based vocabulary their ORDER api uses
-     * (verified: order 1234535 is deliveryType 2 = Carhop). Sending the wrong
-     * numbers would restrict a coupon to channels the customer cannot order
-     * through, which is strictly worse than the empty list Yiji treats as
-     * unrestricted.
-     *
-     * itemsDiscountReduction: empty even on Yiji's own correct compensation
-     * coupon, so it is not how an item is attached. The order line does carry
-     * a real item id, so the data is there the moment the field is known.
+     * `monthlyReachLimit` is what their console labels "Monthly coupon use",
+     * and it was not being sent — so it sat at 0 there while the CRM said 1.
+     * A blank reads as "no limit" on a coupon meant to be a single grant.
      */
-    const c = coupon({ ...ROW, delivery_type: 'All', item_name: 'Water' });
+    const c = coupon({ ...ROW, usage_limit: '1' });
+    expect(c.reachLimit).toBe(1);
+    expect(c.limitForUser).toBe(1);
+    expect(c.monthlyReachLimit).toBe(1);
+  });
+
+  it('sends NO deliveryTypes for "All" — an empty list is how Yiji spells that', () => {
+    /*
+     * Not an oversight: enumerating every channel would break the moment Yiji
+     * adds one, and their own coupons treat an absent list as unrestricted.
+     */
+    const c = coupon({ ...ROW, delivery_type: 'All' });
     expect(c).not.toHaveProperty('deliveryTypes');
+  });
+
+  it('maps a specific channel selection onto their codes', () => {
+    const c = coupon({ ...ROW, delivery_type: 'Delivery, Pickup' });
+    expect(c.deliveryTypes).toEqual([1, 2]);
+  });
+
+  it('drops the WHOLE list when one channel cannot be mapped', () => {
+    /*
+     * The important half. Sending the channels that did map would silently
+     * narrow the coupon to fewer than were approved — a coupon that works in
+     * some places and not others, with nothing saying why. Better to send no
+     * restriction than a wrong one.
+     */
+    const c = coupon({ ...ROW, delivery_type: 'Delivery, Teleport' });
+    expect(c).not.toHaveProperty('deliveryTypes');
+  });
+
+  it('still does NOT send itemsDiscountReduction', () => {
+    /*
+     * Empty even on Yiji's own correct compensation coupon, so it is not how an
+     * item is attached — and the item only matters when a coupon is REDEEMED,
+     * not when it is granted. The order line does carry a real item id, so the
+     * data is ready the moment the right field is known.
+     */
+    const c = coupon({ ...ROW, item_name: 'Water' });
     expect(c).not.toHaveProperty('itemsDiscountReduction');
   });
 });

@@ -7,6 +7,7 @@ import {
   couponTermsProblems,
   couponExposure,
   isHighValueCoupon,
+  yijiDeliveryTypes,
   COUPON_ALERT_THRESHOLD_SAR,
   generateCouponCode,
   isPercentageCategory,
@@ -286,5 +287,37 @@ describe('high-value coupon alert', () => {
      * threshold here, change it there too.
      */
     expect(COUPON_ALERT_THRESHOLD_SAR).toBe(200);
+  });
+});
+
+describe('yijiDeliveryTypes', () => {
+  it('returns null for "All" — Yiji spells unrestricted as an ABSENT list', () => {
+    /*
+     * Enumerating every channel would look more explicit and be worse: it
+     * breaks silently the moment Yiji adds a channel, whereas an absent list
+     * keeps meaning "all of them" for ever.
+     */
+    expect(yijiDeliveryTypes('All')).toBeNull();
+    expect(yijiDeliveryTypes('')).toBeNull();
+    expect(yijiDeliveryTypes(null)).toBeNull();
+  });
+
+  it('maps a specific selection, de-duplicated', () => {
+    expect(yijiDeliveryTypes('Delivery, Pickup')).toEqual([1, 2]);
+    // Carhop and Drive Thru are the same service under two names.
+    expect(yijiDeliveryTypes('Carhop, Drive Thru')).toEqual([3]);
+  });
+
+  it('drops the WHOLE list when any one channel is unrecognised', () => {
+    /*
+     * The case that matters. A partial list silently narrows the coupon to
+     * fewer channels than were approved — it would work in some places and not
+     * others with nothing explaining why. No restriction beats a wrong one.
+     */
+    expect(yijiDeliveryTypes('Delivery, Teleport')).toBeNull();
+  });
+
+  it('is case and spacing insensitive, because the list is operations-edited', () => {
+    expect(yijiDeliveryTypes('  delivery ,  PICKUP ')).toEqual([1, 2]);
   });
 });
