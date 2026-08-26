@@ -50,21 +50,37 @@ describe('generateCouponCode', () => {
 });
 
 describe('couponWindow', () => {
-  it('covers both end days in full', () => {
-    // The owner's example: 17th to 18th is live from 17th 00:00 to 19th 00:00.
+  it('covers both end days in full, in LOCAL wall-clock like Yiji sends', () => {
+    // The owner's example: 17th to 18th is live from the 17th at 00:00 until
+    // the 18th at 23:59 — both days whole.
     expect(couponWindow('2026-08-17', '2026-08-18')).toEqual({
-      from: '2026-08-17T00:00:00.000Z',
-      to: '2026-08-19T00:00:00.000Z',
+      from: '2026-08-17T00:00:00',
+      to: '2026-08-18T23:59:00',
     });
   });
 
+  it('carries NO timezone marker — that is the point', () => {
+    /*
+     * Yiji's own coupons carry `2026-08-26T00:00:00` with no `Z`: local times.
+     * We used to send UTC, and Saudi is UTC+3, so a consumer honouring the Z
+     * read our window three hours late at BOTH ends — survivable at the start,
+     * and at the end it expires a coupon during its last day. That reads as
+     * "the coupon just disappeared".
+     */
+    const { from, to } = couponWindow('2026-08-17', '2026-08-18');
+    expect(from.endsWith('Z')).toBe(false);
+    expect(to.endsWith('Z')).toBe(false);
+  });
+
   it('gives a single-day coupon a whole day, not zero', () => {
-    const { from, to } = couponWindow('2026-08-17', '2026-08-17');
-    expect(new Date(to).getTime() - new Date(from).getTime()).toBe(24 * 60 * 60 * 1000);
+    expect(couponWindow('2026-08-17', '2026-08-17')).toEqual({
+      from: '2026-08-17T00:00:00',
+      to: '2026-08-17T23:59:00',
+    });
   });
 
   it('crosses a month end without losing a day', () => {
-    expect(couponWindow('2026-08-30', '2026-08-31').to).toBe('2026-09-01T00:00:00.000Z');
+    expect(couponWindow('2026-08-30', '2026-08-31').to).toBe('2026-08-31T23:59:00');
   });
 });
 

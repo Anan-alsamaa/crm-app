@@ -309,12 +309,22 @@ describe('yijiCouponPayload', () => {
     expect(p.couponUser.coupon.limitForUser).toBe(1);
   });
 
-  it('sends only the discount kind that was actually approved', () => {
-    // An amount coupon with `discountPercentage: 0` alongside it reads as "no
-    // percentage discount" to some parsers and "0% off" to others. Neither is
-    // what was approved, so the unused one is left off.
+  it('sends BOTH discount fields, the unused one as 0 — as Yiji does', () => {
+    /*
+     * This asserted the opposite until 2026-08-26, on the reasoning that
+     * `discountPercentage: 0` beside an amount could read as "0% off". Their
+     * own working AMOUNT coupon (70644) settles it: `discount: 5,
+     * discountPercentage: 0`. They state the irrelevant one rather than omit
+     * it, and `category` already says which is authoritative.
+     *
+     * Omitting it left a validator reading `discountPercentage` to find null
+     * where it expected a number — and null is not 0 in any arithmetic that
+     * matters. That failure mode is invisible from our side: the coupon is
+     * created, the customer is notified, nothing is redeemable.
+     */
     const amount = yijiCouponPayload(ROW) as { couponUser: { coupon: Record<string, unknown> } };
-    expect(amount.couponUser.coupon).not.toHaveProperty('discountPercentage');
+    expect(amount.couponUser.coupon.discount).toBe(25);
+    expect(amount.couponUser.coupon.discountPercentage).toBe(0);
 
     const pct = yijiCouponPayload({
       ...ROW,
@@ -323,15 +333,22 @@ describe('yijiCouponPayload', () => {
       coupon_percent: '15',
     }) as { couponUser: { coupon: Record<string, unknown> } };
     expect(pct.couponUser.coupon.discountPercentage).toBe(15);
-    expect(pct.couponUser.coupon).not.toHaveProperty('discount');
+    expect(pct.couponUser.coupon.discount).toBe(0);
   });
 
-  it('sends the validity window as instants that cover the final day in full', () => {
-    // Stored as dates; a coupon valid "to 18 Sep" that expires at 00:00 on the
-    // 18th is short by a day, and that is a support call.
+  it('sends the window in LOCAL wall-clock, covering the final day in full', () => {
+    /*
+     * Stored as dates; a coupon valid "to 18 Sep" that expires at 00:00 on the
+     * 18th is short by a day, and that is a support call.
+     *
+     * No `Z`, matching what Yiji's own coupons carry. We sent UTC before, and
+     * Saudi is UTC+3 — a consumer honouring the Z read the window three hours
+     * late at both ends, which at the END expires a coupon during its last day.
+     */
     const p = yijiCouponPayload(ROW) as { couponUser: { coupon: Record<string, unknown> } };
-    expect(p.couponUser.coupon.activationDate).toBe('2026-08-18T00:00:00.000Z');
-    expect(p.couponUser.coupon.expirationDate).toBe('2026-09-19T00:00:00.000Z');
+    expect(p.couponUser.coupon.activationDate).toBe('2026-08-18T00:00:00');
+    expect(p.couponUser.coupon.expirationDate).toBe('2026-09-18T23:59:00');
+    expect(String(p.couponUser.coupon.expirationDate).endsWith('Z')).toBe(false);
   });
 
   it('invents no field their schema does not define', () => {

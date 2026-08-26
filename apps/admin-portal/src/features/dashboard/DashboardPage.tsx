@@ -124,6 +124,33 @@ export function DashboardPage() {
             </div>
           </>
         )}
+        {active === 'operations' && (
+          /* Operations gets a hero too, and a DIFFERENT sweep.
+             Only the Agent tab had one, so switching to Operations dropped from
+             a saturated band straight into pale cards and the page read as the
+             emptier of the two — when it is the one an operations lead opens
+             daily. Sky→violet rather than violet→jade so the two boards are
+             told apart by colour before a word is read.
+             White ink deliberately: the fill is saturated in BOTH themes, and
+             theme tokens would flip to unreadable on it. */
+          <div className="relative mb-5 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-r from-sky via-primary to-violet p-6 shadow-float">
+            <div
+              aria-hidden
+              className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.28),transparent_60%)]"
+            />
+            <div className="relative min-w-0">
+              <h2 className="font-display text-2xl font-bold tracking-tight text-white">
+                {t('dashboard.opsHero', { defaultValue: 'Operations' })}
+              </h2>
+              <p className="mt-1 max-w-prose text-sm leading-relaxed text-white/85">
+                {t('dashboard.opsHeroHint', {
+                  defaultValue:
+                    'Which branches customers are complaining about, and which area managers own them.',
+                })}
+              </p>
+            </div>
+          </div>
+        )}
         <ComplaintDashboard view={active} />
       </div>
     </div>

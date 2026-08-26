@@ -243,8 +243,24 @@ export function yijiCouponPayload(
         ...(yijiCouponEnum(YIJI_COUPON_CATEGORY, row.discount_category) != null
           ? { category: yijiCouponEnum(YIJI_COUPON_CATEGORY, row.discount_category) }
           : {}),
-        ...(amount != null ? { discount: amount } : {}),
-        ...(percent != null ? { discountPercentage: percent } : {}),
+        /*
+         * BOTH discount fields, always — the unused one as 0, never omitted.
+         *
+         * Their own working AMOUNT coupon (70644) carries
+         * `discount: 5, discountPercentage: 0`. It states the irrelevant one
+         * rather than leaving it out, and we were omitting it entirely. A
+         * validator that reads `discountPercentage` unconditionally sees null
+         * where it expects a number, and null is not 0 in any arithmetic that
+         * matters — it is the difference between "no percentage discount" and
+         * "unknown", and the second can nullify a calculation.
+         *
+         * `category` already says which one is authoritative, so stating both
+         * cannot make the coupon ambiguous. This is cheap insurance against a
+         * class of failure that is invisible from our side: the coupon exists,
+         * the customer is notified, and nothing is redeemable.
+         */
+        discount: amount ?? 0,
+        discountPercentage: percent ?? 0,
         ...(cap != null ? { maximumDiscount: cap } : {}),
         /*
          * HOW MANY TIMES IT MAY BE USED.

@@ -731,7 +731,9 @@
     "heroTickets": "تقرير التذاكر",
     "heroAgents": "أداء الموظفين",
     "tabOperations": "العمليات",
-    "tabAgent": "الموظفون"
+    "tabAgent": "الموظفون",
+    "opsHero": "العمليات",
+    "opsHeroHint": "الفروع التي يشتكي منها العملاء، ومديرو المناطق المسؤولون عنها."
   },
   "helpAssistant": {
     "launch": "أورا",

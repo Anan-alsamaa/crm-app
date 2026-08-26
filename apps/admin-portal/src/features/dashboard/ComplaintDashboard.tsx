@@ -65,14 +65,44 @@ const KPI_CHIPS = {
   destructive: 'bg-destructive-tint text-destructive',
 } as const;
 
-/* The card surface carries the hue — see StatCard for the reasoning. */
+/*
+ * The card surface carries the hue.
+ *
+ * These used to fade from `tint/70` to `card`, which meant most of every card
+ * was white and the colour was a suggestion in one corner — a dashboard of
+ * near-white rectangles with nothing for the eye to land on.
+ *
+ * Now the tint holds at FULL strength across the whole card and the gradient
+ * deepens toward the bottom-right instead of washing out, the ring is twice as
+ * present, and the shadow is tinted with the card's own hue rather than neutral
+ * grey — so a card is lit by its colour instead of sitting in a grey pool.
+ *
+ * The text on top is unaffected: these are the same `*-tint` tokens, which are
+ * defined light enough in both themes that the numerals below still clear
+ * 4.5:1. Contrast comes from KPI_NUMERALS, and that is measured separately.
+ */
 const KPI_SURFACES = {
-  neutral: 'bg-gradient-to-br from-secondary/60 to-card ring-foreground/[0.06]',
-  sky: 'bg-gradient-to-br from-sky-tint/70 to-card ring-sky/15',
-  violet: 'bg-gradient-to-br from-violet-tint/70 to-card ring-violet/15',
-  success: 'bg-gradient-to-br from-success-tint/70 to-card ring-success/15',
-  primary: 'bg-gradient-to-br from-primary-tint/70 to-card ring-primary/15',
-  destructive: 'bg-gradient-to-br from-destructive-tint/70 to-card ring-destructive/15',
+  neutral: 'bg-gradient-to-br from-secondary to-secondary/40 ring-foreground/[0.10]',
+  sky: 'bg-gradient-to-br from-sky-tint to-sky-tint/45 ring-sky/30 shadow-sky/20',
+  violet: 'bg-gradient-to-br from-violet-tint to-violet-tint/45 ring-violet/30 shadow-violet/20',
+  success:
+    'bg-gradient-to-br from-success-tint to-success-tint/45 ring-success/30 shadow-success/20',
+  primary:
+    'bg-gradient-to-br from-primary-tint to-primary-tint/45 ring-primary/30 shadow-primary/20',
+  destructive:
+    'bg-gradient-to-br from-destructive-tint to-destructive-tint/45 ring-destructive/30 shadow-destructive/20',
+} as const;
+
+/* The saturated top edge — the single most visible piece of hue on the card,
+   and what makes a row of KPIs read as distinct at a glance rather than as one
+   pastel band. `before` rather than a border so it cannot shift the layout. */
+const KPI_EDGES = {
+  neutral: 'before:bg-foreground/25',
+  sky: 'before:bg-sky',
+  violet: 'before:bg-violet',
+  success: 'before:bg-success',
+  primary: 'before:bg-primary',
+  destructive: 'before:bg-destructive',
 } as const;
 
 /* The numeral is the one place a hue is written as a literal instead of a
@@ -132,11 +162,13 @@ function Kpi({
       {...(onOpen ? { type: 'button', onClick: onOpen } : {})}
       style={{ animationDelay: `${Math.min(order, 6) * 55}ms` }}
       className={cn(
-        'group flex flex-col rounded-2xl p-5 shadow-soft ring-1',
+        'group relative flex flex-col overflow-hidden rounded-2xl p-5 shadow-soft ring-1',
         KPI_SURFACES[tone],
+        'before:absolute before:inset-x-0 before:top-0 before:h-1 before:content-[""]',
+        KPI_EDGES[tone],
         'motion-safe:animate-rise-in',
         'transition-[box-shadow,transform,border-color] duration-base ease-out',
-        'hover:shadow-float hover:ring-foreground/[0.12] motion-safe:hover:-translate-y-1',
+        'hover:shadow-float motion-safe:hover:-translate-y-1',
         onOpen &&
           'w-full cursor-pointer text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
       )}
@@ -906,8 +938,13 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             <div className="grid gap-3 sm:grid-cols-2">
               {/* The thing to go and FIX. Named, because "66" is a number to
                   look up and "66 — Cleanness" is this week's job. */}
+              {/* destructive, not primary: this names the thing going WRONG most
+                  often, and it should read as a problem. It also has to be
+                  told apart from the tile beside it — `primary` (hue 277) and
+                  `violet` (285) are eight degrees apart, so the two cards were
+                  the same lilac and the row read as one block. */}
               <Kpi
-                tone="primary"
+                tone="destructive"
                 icon={<ZapIcon size={17} />}
                 order={0}
                 value={ops.topProblem ? String(ops.topProblem.count) : '—'}
@@ -931,7 +968,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                   at rather than counting tickets or ranking branches, and the
                   answer changes who you talk to on Monday. */}
               <Kpi
-                tone="violet"
+                tone="sky"
                 icon={<StoreIcon size={17} />}
                 order={1}
                 value={ops.topService ? String(ops.topService.count) : '—'}
@@ -1055,7 +1092,10 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                   }
                 />
                 <Kpi
-                  tone="success"
+                  /* violet, not a second green: "Solved tickets" sits directly
+                     beside this one, and two success-toned cards in a row read
+                     as one wide card rather than two readings. */
+                  tone="violet"
                   icon={<SparkleIcon size={17} />}
                   order={3}
                   value={
@@ -1138,7 +1178,10 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                   }
                 />
                 <Kpi
-                  tone="violet"
+                  /* sky, not violet: `primary` (hue 277) sits beside it and
+                     violet is 285 — eight degrees apart and indistinguishable
+                     at tint strength. */
+                  tone="sky"
                   icon={<SparkleIcon size={17} />}
                   order={7}
                   value={String(coupons.count)}

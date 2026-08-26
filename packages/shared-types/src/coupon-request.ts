@@ -401,11 +401,30 @@ export function yijiCouponEnum(
  * happens to be looking at it.
  */
 export function couponWindow(validFrom: string, validTo: string): { from: string; to: string } {
-  const from = new Date(`${validFrom}T00:00:00.000Z`);
+  /*
+   * LOCAL WALL-CLOCK, no `Z` — matching the format Yiji's own coupons carry.
+   *
+   * This used to return `toISOString()`, so every date went out as UTC with a
+   * `Z`. Their working coupon (70644) carries `2026-08-26T00:00:00` with no
+   * timezone marker at all: these are local times, and Saudi is UTC+3. A
+   * consumer that parses our string as local reads 00:00 correctly; one that
+   * honours the Z reads 03:00 local. Either is survivable at the START of a
+   * window, but the same three-hour shift at the END silently expires a coupon
+   * on its last day — the sort of thing that looks like "the coupon just
+   * disappeared".
+   *
+   * Sending exactly what they send removes the question. The window is still
+   * whole days, inclusive of both ends, and the end is 23:59:00 on the last
+   * valid day rather than 00:00 on the day after — again theirs, and it cannot
+   * be read as belonging to the following day.
+   */
+  const pad = (n: number) => String(n).padStart(2, '0');
+  // Parsed as UTC deliberately: the input is a plain `YYYY-MM-DD` with no zone,
+  // and reading it as UTC keeps the arithmetic free of the running machine's
+  // offset. Only the FORMATTING below is local-shaped.
   const end = new Date(`${validTo}T00:00:00.000Z`);
-  // One day past the last valid day, so the final day is covered in full.
-  end.setUTCDate(end.getUTCDate() + 1);
-  return { from: from.toISOString(), to: end.toISOString() };
+  const day = `${end.getUTCFullYear()}-${pad(end.getUTCMonth() + 1)}-${pad(end.getUTCDate())}`;
+  return { from: `${validFrom}T00:00:00`, to: `${day}T23:59:00` };
 }
 
 /**
