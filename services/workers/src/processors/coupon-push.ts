@@ -15,6 +15,7 @@ import {
   isYijiUnavailable,
   yijiCouponEnum,
   yijiDeliveryTypes,
+  YIJI_ORDER_MAXIMUM,
   YIJI_COUPON_CATEGORY,
   YIJI_COUPON_TYPE,
 } from '@yiji/shared-types';
@@ -266,6 +267,20 @@ export function yijiCouponPayload(
         reachLimit: limit,
         limitForUser: limit,
         monthlyReachLimit: limit,
+        /*
+         * The order-value window this coupon may be applied to.
+         *
+         * `orderMaximum` was NOT being sent, so Yiji defaulted it to 0 — a
+         * ceiling of zero, meaning the coupon could never apply to any order.
+         * That is why a customer got the notification and then found nothing in
+         * the app: the grant existed and was unusable.
+         *
+         * `orderMinimum: 0` is sent explicitly rather than left to default, so
+         * both ends of the window are stated. 0 on a FLOOR is permissive (no
+         * minimum spend); 0 on a CEILING is not. See YIJI_ORDER_MAXIMUM.
+         */
+        orderMinimum: 0,
+        orderMaximum: YIJI_ORDER_MAXIMUM,
         /*
          * Which channels it may be redeemed through.
          *

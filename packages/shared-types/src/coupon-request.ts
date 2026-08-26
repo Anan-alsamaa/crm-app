@@ -337,6 +337,31 @@ export function yijiDeliveryTypes(stored: string | null | undefined): number[] |
   return codes.length > 0 ? codes : null;
 }
 
+/**
+ * The order-value ceiling Yiji applies to a coupon.
+ *
+ * THIS IS WHY A COUPON ARRIVED AS A NOTIFICATION AND THEN WAS NOT IN THE APP.
+ *
+ * `orderMaximum` is the largest order the coupon may be applied to, and Yiji
+ * defaults it to 0 when it is not sent — which is a ceiling of ZERO, so the
+ * coupon can never apply to anything. The row is created, the customer is
+ * notified, and the coupon is unusable. Their own working coupon (70644)
+ * carries 10000; ours (70640) carried 0, and that was the only term differing
+ * in a way that could nullify it.
+ *
+ * Note the asymmetry that makes this easy to get wrong: 0 is PERMISSIVE on a
+ * floor (`orderMinimum: 0` = no minimum spend, `limitForUser: 0` = no per-user
+ * cap) and RESTRICTIVE on a ceiling. Same number, opposite meaning, depending
+ * on which end of the range it bounds.
+ *
+ * 10000 is Yiji's own "no practical ceiling" sentinel rather than a considered
+ * business number — it is what a coupon built in their console gets. Matching
+ * a known-working coupon is a smaller leap than keeping a value we have
+ * evidence is broken, but it IS matched rather than derived, so it lives here
+ * as one named constant.
+ */
+export const YIJI_ORDER_MAXIMUM = 10000;
+
 /** Yiji's `type`: what audience the coupon is for. */
 export const YIJI_COUPON_TYPE: Record<string, number> = {
   general: 0,

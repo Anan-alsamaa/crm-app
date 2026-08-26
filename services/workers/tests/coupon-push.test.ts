@@ -168,6 +168,24 @@ describe('yijiCouponPayload — what KIND of coupon this is', () => {
       expect(c[d]).toBe(true);
   });
 
+  it('sends an order CEILING — a coupon with orderMaximum 0 can never be used', () => {
+    /*
+     * THE BUG THAT REACHED A CUSTOMER. `orderMaximum` was not sent, so Yiji
+     * defaulted it to 0 — a ceiling of zero, so the coupon applied to no order
+     * at all. The grant was created, the customer was notified, and there was
+     * nothing in the app.
+     *
+     * The trap worth remembering: 0 is PERMISSIVE on a floor (orderMinimum 0 =
+     * no minimum spend) and RESTRICTIVE on a ceiling. Same number, opposite
+     * meaning, and only one of them silently nullifies the coupon.
+     */
+    const c = coupon();
+    expect(c.orderMaximum).toBe(10000);
+    expect(c.orderMaximum).not.toBe(0);
+    // Both ends stated rather than left to a default, so neither can drift.
+    expect(c.orderMinimum).toBe(0);
+  });
+
   it('sends the number of uses to all THREE of Yiji limit fields', () => {
     /*
      * `monthlyReachLimit` is what their console labels "Monthly coupon use",
