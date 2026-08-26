@@ -471,7 +471,11 @@ export async function runCouponDeliverySweep(deps: {
          * the selection above already excludes everything settled. The worst a
          * duplicate costs is one wasted read.
          */
-        { removeOnComplete: true, removeOnFail: false },
+        /* Neither outcome is kept. The sweep carries no custom id, so nothing
+           here can block a later attempt — but a queue that hoards every failed
+           coupon job grows without bound and tells nobody anything the
+           `yiji_push_error` column does not already say. */
+        { removeOnComplete: true, removeOnFail: true },
       );
       queued++;
     } catch (err) {

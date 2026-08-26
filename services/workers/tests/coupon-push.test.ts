@@ -526,12 +526,21 @@ describe('a refusal is an answer, not an outage', () => {
 
 describe('runCouponDeliverySweep', () => {
   function sweepHarness(rows: Array<Record<string, unknown>>) {
-    const added: Array<{ data: unknown; opts: { jobId?: string } }> = [];
+    const added: Array<{
+      data: unknown;
+      opts: { jobId?: string; removeOnComplete?: unknown; removeOnFail?: unknown };
+    }> = [];
     const directus = { request: vi.fn(async () => rows) };
     const couponsQueue = {
-      add: vi.fn(async (_n: string, data: unknown, opts: { jobId?: string }) => {
-        added.push({ data, opts });
-      }),
+      add: vi.fn(
+        async (
+          _n: string,
+          data: unknown,
+          opts: { jobId?: string; removeOnComplete?: unknown; removeOnFail?: unknown },
+        ) => {
+          added.push({ data, opts });
+        },
+      ),
     };
     return { added, directus, couponsQueue, filter: directus.request };
   }
@@ -563,6 +572,15 @@ describe('runCouponDeliverySweep', () => {
      */
     for (const a of h.added) expect(a.opts.jobId).toBeUndefined();
     expect(h.added.every((a) => a.opts.removeOnComplete === true)).toBe(true);
+    /*
+     * Failures are dropped too. `removeOnFail: false` keeps a failed job — and
+     * its id — for ever, which is the completed-job bug in different clothes:
+     * a coupon whose push genuinely failed would keep its id and Retry would
+     * silently enqueue nothing. An orphan of exactly this shape was found in
+     * Redis, outliving the approval row it belonged to. The failure is recorded
+     * on the row as `yiji_push_error`; the queue is transport, not the record.
+     */
+    expect(h.added.every((a) => a.opts.removeOnFail === true)).toBe(true);
   });
 
   it('asks only for coupons that are owed and unanswered', async () => {

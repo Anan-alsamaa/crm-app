@@ -160,6 +160,21 @@ class BullProducer implements SideEffectProducer {
        * inside the processor, which no queue trick can substitute for.
        */
       removeOnComplete: true,
+      /*
+       * And on FAILURE too, for exactly the same reason.
+       *
+       * `DEFAULT_JOB_OPTIONS` sets `removeOnFail: false`, which keeps a failed
+       * job — and therefore its id — for ever. That is the completed-job bug
+       * again wearing different clothes: a coupon whose push genuinely failed
+       * would keep its id, and the Retry button would silently enqueue nothing.
+       * An orphan of exactly this shape was found in Redis, outliving the
+       * approval row it belonged to.
+       *
+       * Nothing is lost by dropping it: the FAILURE is recorded on the approval
+       * row as `yiji_push_error`, which is what the console reads and what a
+       * supervisor acts on. The queue is transport, not the record.
+       */
+      removeOnFail: true,
       jobId: `coupon-push-${job.couponApprovalId}`,
     });
     return added.id ?? null;
