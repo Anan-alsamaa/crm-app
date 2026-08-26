@@ -256,21 +256,23 @@ export const ISSUING_SIDES: readonly IssuingSide[] = [
   { value: 'Operations', prefix: 'OPS', yijiId: null },
   { value: 'Marketing', prefix: 'MKT', yijiId: null },
   /*
-   * The delivery companies are ordinary issuing sides — peers of the three
-   * above, not a category of their own — so they get SHORT CODES in the same
-   * register rather than their whole name in caps.
+   * The delivery companies carry their FULL NAME, by the owner's decision.
    *
-   * These were SHADH / SHUROUQ / LEAJLAK, i.e. five to seven characters, which
-   * made "SHUROUQ-9U7KNSDF" a visibly different shape from "OPS-9U7KNSDF" and
-   * half again as long to read down a phone line. Each is now the consonant
-   * skeleton of its name: guessable from the name, distinct from each other,
-   * and unambiguous read aloud.
+   * The three above are internal departments and abbreviate naturally — an
+   * agent knows OPS is Operations. A courier is an outside company being
+   * charged for the coupon, and the name is the point: "SHUROUQ-9U7KNSDF"
+   * says who is paying to anyone reading it, on an invoice or down a phone,
+   * without a lookup table only this team has. Length is the smaller cost.
+   *
+   * (I shortened these to SHD/TKR/SHQ/LJK/PRC for visual consistency with the
+   * departments; the owner reversed it. Consistency of SHAPE was the wrong
+   * thing to optimise for against being able to read who owes the money.)
    */
-  { value: 'Shadh', prefix: 'SHD', yijiId: null },
-  { value: 'Taker', prefix: 'TKR', yijiId: null },
-  { value: 'Shurouq', prefix: 'SHQ', yijiId: null },
-  { value: 'Leajlak', prefix: 'LJK', yijiId: null },
-  { value: 'Parcel', prefix: 'PRC', yijiId: null },
+  { value: 'Shadh', prefix: 'SHADH', yijiId: null },
+  { value: 'Taker', prefix: 'TAKER', yijiId: null },
+  { value: 'Shurouq', prefix: 'SHUROUQ', yijiId: null },
+  { value: 'Leajlak', prefix: 'LEAJLAK', yijiId: null },
+  { value: 'Parcel', prefix: 'PARCEL', yijiId: null },
 ];
 
 /**
@@ -319,14 +321,14 @@ export function couponPrefix(issuingSide: string | null | undefined): string {
    * A side nobody has coded for yet: derive from its own name.
    *
    * `option_lists` is operations-editable, so a new courier must not need a
-   * deploy to issue coupons. Six characters keeps an unlisted side roughly in
-   * the register of the coded ones above — add it to ISSUING_SIDES with a
-   * proper short code when it becomes permanent.
+   * deploy to issue coupons. Twelve characters, because an unlisted side is
+   * most likely a new DELIVERY COMPANY and those carry their full name — six
+   * would have cut "SHUROUQ" to "SHUROU", which is neither the name nor a code.
    */
   return (
     s
       .replace(/[^a-z0-9]+/g, '')
-      .slice(0, 6)
+      .slice(0, 12)
       .toUpperCase() || 'SARA'
   );
 }

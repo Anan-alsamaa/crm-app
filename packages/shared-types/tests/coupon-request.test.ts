@@ -364,17 +364,26 @@ describe('couponPrefix', () => {
     expect(couponPrefix(null)).toBe('SARA');
   });
 
-  it('gives the delivery companies SHORT codes, like every other side', () => {
+  it('gives each delivery company its FULL NAME, never an abbreviation', () => {
     /*
-     * They are ordinary issuing sides, not a category of their own. Their whole
-     * name in caps made "SHUROUQ-9U7KNSDF" a different shape from
-     * "OPS-9U7KNSDF" and half again as long to read down a phone line.
+     * Owner's decision, and the reasoning is worth keeping: a department
+     * abbreviates naturally because everyone here knows OPS is Operations. A
+     * courier is an outside company being charged, and the name is the point —
+     * it says who is paying to anyone reading the code on an invoice or down a
+     * phone, with no lookup table only this team has.
      */
-    expect(couponPrefix('Shadh')).toBe('SHD');
-    expect(couponPrefix('Taker')).toBe('TKR');
-    expect(couponPrefix('Shurouq')).toBe('SHQ');
-    expect(couponPrefix('Leajlak')).toBe('LJK');
-    expect(couponPrefix('Parcel')).toBe('PRC');
+    expect(couponPrefix('Shadh')).toBe('SHADH');
+    expect(couponPrefix('Taker')).toBe('TAKER');
+    expect(couponPrefix('Shurouq')).toBe('SHUROUQ');
+    expect(couponPrefix('Leajlak')).toBe('LEAJLAK');
+    expect(couponPrefix('Parcel')).toBe('PARCEL');
+  });
+
+  it('does not truncate a courier name it has never seen', () => {
+    // The fallback used to cut at six, which turns a name into neither a name
+    // nor a code. A new courier must read as itself without a deploy.
+    expect(couponPrefix('Jahez')).toBe('JAHEZ');
+    expect(couponPrefix('Mrsool Express')).toBe('MRSOOLEXPRES');
   });
 
   it('gives every issuing side a UNIQUE prefix', () => {
@@ -388,8 +397,17 @@ describe('couponPrefix', () => {
     expect(new Set(prefixes).size).toBe(prefixes.length);
   });
 
-  it('keeps every prefix short enough to read aloud', () => {
-    for (const s of ISSUING_SIDES) expect(s.prefix.length).toBeLessThanOrEqual(3);
+  it('keeps every prefix readable — no punctuation, no spaces, upper case', () => {
+    /*
+     * NOT a length cap. That was the wrong rule: departments abbreviate (CC,
+     * OPS, MKT) and couriers carry their whole name (SHUROUQ), and a coupon
+     * code has room for both. What must hold is that a prefix survives being
+     * read aloud and typed back — so no spaces, punctuation or lower case.
+     */
+    for (const side of ISSUING_SIDES) {
+      expect(side.prefix).toMatch(/^[A-Z0-9]+$/);
+      expect(side.prefix.length).toBeGreaterThan(1);
+    }
   });
 
   it('still derives a prefix for a side nobody has coded for', () => {
@@ -420,6 +438,6 @@ describe('yijiIssuingSideId', () => {
     // The table is the single place a correction has to land.
     expect(findIssuingSide('customer care')?.prefix).toBe('CC');
     expect(findIssuingSide('Call Centre')?.value).toBe('Customer Care');
-    expect(findIssuingSide('Shurouq')?.prefix).toBe('SHQ');
+    expect(findIssuingSide('Shurouq')?.prefix).toBe('SHUROUQ');
   });
 });
