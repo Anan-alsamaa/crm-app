@@ -116,6 +116,80 @@ function deps(
 const job = (id = 'ca-1') =>
   ({ data: { couponApprovalId: id } }) as Job<{ couponApprovalId: string }>;
 
+describe('yijiCouponPayload — what KIND of coupon this is', () => {
+  /*
+   * These four fields were absent from the payload entirely until 2026-08-26,
+   * so Yiji applied its own defaults and a coupon the supervisor approved as
+   * Private/Amount was created as General/Percentage. The money was always
+   * right, which is exactly why nobody noticed: the customer got the correct
+   * discount off a coupon described as something else.
+   *
+   * Read off two real coupons — 70640 (ours, sent without these) and 70644
+   * (built correctly inside Yiji) — not guessed.
+   */
+  const coupon = (row = ROW) =>
+    (yijiCouponPayload(row) as { couponUser: { coupon: Record<string, unknown> } }).couponUser
+      .coupon;
+
+  it('sends Private as type 1, not Yiji default 0 (General)', () => {
+    expect(coupon().type).toBe(1);
+  });
+
+  it('sends Amount as category 1, not Yiji default 0 (Percentage)', () => {
+    expect(coupon().category).toBe(1);
+  });
+
+  it('maps Public and Percentage to 0 — a real value, not a fallback', () => {
+    const c = coupon({ ...ROW, coupon_type: 'Public', discount_category: 'Percentage' });
+    expect(c.type).toBe(0);
+    expect(c.category).toBe(0);
+  });
+
+  it('OMITS an unmapped word rather than defaulting it to 0', () => {
+    /*
+     * The critical case. 0 means General and Percentage — both real values — so
+     * falling back to it would assert the OPPOSITE of a coupon somebody
+     * approved as Private/Amount. Better to let Yiji default than to state
+     * something false with confidence.
+     */
+    const c = coupon({ ...ROW, coupon_type: 'Bundle', discount_category: 'Tiered' });
+    expect(c).not.toHaveProperty('type');
+    expect(c).not.toHaveProperty('category');
+  });
+
+  it('is valid on every day of the week', () => {
+    /*
+     * Yiji defaults all seven weekday flags to FALSE, and ours went out that
+     * way. A correctly-built coupon in their console has all seven true.
+     * "Valid on no day" is not something anyone approved.
+     */
+    const c = coupon();
+    for (const d of ['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday'])
+      expect(c[d]).toBe(true);
+  });
+
+  it('still does NOT send deliveryTypes or itemsDiscountReduction', () => {
+    /*
+     * Deliberate, and this test exists so removing it is a decision rather than
+     * an accident.
+     *
+     * deliveryTypes: a correct Yiji coupon carries [3,1,2] — three values and
+     * no 0 — which does not fit the 0-based vocabulary their ORDER api uses
+     * (verified: order 1234535 is deliveryType 2 = Carhop). Sending the wrong
+     * numbers would restrict a coupon to channels the customer cannot order
+     * through, which is strictly worse than the empty list Yiji treats as
+     * unrestricted.
+     *
+     * itemsDiscountReduction: empty even on Yiji's own correct compensation
+     * coupon, so it is not how an item is attached. The order line does carry
+     * a real item id, so the data is there the moment the field is known.
+     */
+    const c = coupon({ ...ROW, delivery_type: 'All', item_name: 'Water' });
+    expect(c).not.toHaveProperty('deliveryTypes');
+    expect(c).not.toHaveProperty('itemsDiscountReduction');
+  });
+});
+
 describe('yijiCouponPayload', () => {
   it('sends the YIJI customer id when we hold one — never ours, never their phone', () => {
     // `userId` is the value Yiji issued for this customer. Sending our contact

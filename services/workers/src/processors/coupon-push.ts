@@ -13,6 +13,9 @@ import {
   isPhoneDerivedCustomerId,
   isYijiRefused,
   isYijiUnavailable,
+  yijiCouponEnum,
+  YIJI_COUPON_CATEGORY,
+  YIJI_COUPON_TYPE,
 } from '@yiji/shared-types';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import { describeError } from '../lib/errors.js';
@@ -217,6 +220,26 @@ export function yijiCouponPayload(
         name: row.title ?? '',
         code: row.coupon_code ?? '',
         compensationReason: row.reason ?? '',
+        /*
+         * WHAT KIND of coupon this is.
+         *
+         * Sent because it used to not be. Yiji defaults both of these to 0 —
+         * General and Percentage — so a coupon the supervisor approved as
+         * Private/Amount arrived in Yiji as General/Percentage. The MONEY was
+         * always right (`discount`/`maximumDiscount` below), which is why this
+         * went unnoticed: the customer got the correct amount off a coupon
+         * described as something else entirely.
+         *
+         * Omitted rather than defaulted when the CRM word is not in the map:
+         * 0 means something in both vocabularies, so sending it as a fallback
+         * would assert the opposite of what was approved.
+         */
+        ...(yijiCouponEnum(YIJI_COUPON_TYPE, row.coupon_type) != null
+          ? { type: yijiCouponEnum(YIJI_COUPON_TYPE, row.coupon_type) }
+          : {}),
+        ...(yijiCouponEnum(YIJI_COUPON_CATEGORY, row.discount_category) != null
+          ? { category: yijiCouponEnum(YIJI_COUPON_CATEGORY, row.discount_category) }
+          : {}),
         ...(amount != null ? { discount: amount } : {}),
         ...(percent != null ? { discountPercentage: percent } : {}),
         ...(cap != null ? { maximumDiscount: cap } : {}),
@@ -224,6 +247,27 @@ export function yijiCouponPayload(
         // compensation coupon is a single grant unless somebody said otherwise.
         reachLimit: limit,
         limitForUser: limit,
+        /*
+         * Every day of the week.
+         *
+         * Yiji carries a per-weekday flag and defaults them all to FALSE. A
+         * correctly-built coupon in their console (70644) has all seven true;
+         * ours (70640) had all seven false. Nobody has reported a coupon being
+         * refused on a given day, so this may be inert for compensation
+         * coupons — but "valid on no day of the week" is not a thing anyone
+         * approved, and matching a known-good coupon is the safer default.
+         *
+         * A compensation coupon is an apology; restricting it to certain days
+         * is not a decision the CRM offers, so all seven is the honest encoding
+         * of "whenever they like".
+         */
+        saturday: true,
+        sunday: true,
+        monday: true,
+        tuesday: true,
+        wednesday: true,
+        thursday: true,
+        friday: true,
         // Only ever THEIR ids, and only when the order supplied them.
         ...(order?.restaurantId != null ? { restaurantId: order.restaurantId } : {}),
         ...(order?.brandId != null ? { brandId: order.brandId } : {}),

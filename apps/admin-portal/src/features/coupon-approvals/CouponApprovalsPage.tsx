@@ -564,6 +564,15 @@ function Row({
               label={t('lists.discountCategory', { defaultValue: 'Discount category' })}
               value={row.discount_category}
             />
+            {/* ALWAYS rendered, never hidden when empty.
+                It used to be wrapped in `row.item_name && …`, so a coupon with
+                no item simply had no Item row — indistinguishable from a page
+                that does not carry the field at all, which is how it read as
+                missing. `Term` already prints an em dash for an empty value,
+                so "no item" now says so out loud. This is also the field the
+                supervisor is most likely to be checking the coupon against:
+                a coupon raised for one item should be worth that item. */}
+            <Term label={t('coupons.itemShort', { defaultValue: 'Item' })} value={row.item_name} />
             <Term
               label={t('couponApprovals.validity', { defaultValue: 'Valid' })}
               value={
@@ -580,12 +589,6 @@ function Row({
               label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
               value={row.usage_limit}
             />
-            {row.item_name && (
-              <Term
-                label={t('coupons.itemShort', { defaultValue: 'Item' })}
-                value={row.item_name}
-              />
-            )}
             {(row.brand_id || row.restaurant_id) && (
               <Term
                 label={t('couponApprovals.branch', { defaultValue: 'Brand / branch' })}

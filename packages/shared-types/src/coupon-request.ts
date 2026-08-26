@@ -249,6 +249,55 @@ export function generateCouponCode(
   return `${prefix}-${out}`;
 }
 
+/*
+ * ───────────────────────────────────────────────────────────────────────────
+ * HOW YIJI ENCODES A COUPON
+ *
+ * The CRM stores these as the words operations edits in `option_lists`; Yiji
+ * stores them as integers. Until 2026-08-26 the push sent NONE of them, so
+ * every coupon we created inherited Yiji's defaults — a coupon the CRM called
+ * Private/Amount/All/Water arrived as General/Percentage/none/none. The money
+ * was right (`discount` and `maximumDiscount` were always sent); everything
+ * describing WHAT KIND of coupon it was, was not.
+ *
+ * The two mappings below are read off real coupons, not guessed:
+ *   70640 — ours, sent without these fields: type 0, category 0
+ *           and Yiji's console showed it as General / Percentage.
+ *   70644 — created correctly inside Yiji as Private / Amount:
+ *           type 1, category 1.
+ * ───────────────────────────────────────────────────────────────────────────
+ */
+
+/** Yiji's `type`: what audience the coupon is for. */
+export const YIJI_COUPON_TYPE: Record<string, number> = {
+  general: 0,
+  public: 0,
+  private: 1,
+};
+
+/** Yiji's `category`: how the discount is computed. */
+export const YIJI_COUPON_CATEGORY: Record<string, number> = {
+  percentage: 0,
+  percent: 0,
+  amount: 1,
+};
+
+/**
+ * Map a CRM option-list word onto a Yiji integer.
+ *
+ * Returns undefined for anything not in the table rather than defaulting to 0 —
+ * 0 is a MEANINGFUL value in both maps (General, Percentage), so guessing it
+ * would silently create exactly the wrong coupon. An unmapped word is better
+ * left for Yiji to default, and is logged by the caller.
+ */
+export function yijiCouponEnum(
+  table: Record<string, number>,
+  word: string | null | undefined,
+): number | undefined {
+  const key = (word ?? '').trim().toLowerCase();
+  return key ? table[key] : undefined;
+}
+
 /**
  * The instants a coupon is actually live between.
  *
