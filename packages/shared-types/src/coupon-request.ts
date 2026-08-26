@@ -81,8 +81,25 @@ export const CouponRequestDraft = z.object({
    * The specific order line the compensation is about (e.g. the missing item),
    * chosen from the order's item names. Optional — not every complaint is about
    * one item.
+   *
+   * This is the HUMAN label: it is what a supervisor reads on the approval and
+   * what an agent typed when there was no order to pick from. It is deliberately
+   * not the thing to group or report by — see `item_sku`.
    */
   item_name: z.string().nullish(),
+  /**
+   * Yiji's item id for the line above, when it was PICKED from a real order.
+   *
+   * The name cannot be the key. `item_name` already holds `Vegetable Pasta.yy`
+   * in this database — one typo, permanently its own distinct value — so
+   * "which customers complained about the pasta" splits across spellings and
+   * quietly under-reports. An id has no spellings.
+   *
+   * Null when the agent typed the item by hand (a phoned-in complaint with no
+   * order attached). That is honest: there is no id to record, and inventing
+   * one from the name would recreate the problem it exists to solve.
+   */
+  item_sku: z.string().nullish(),
 });
 export type CouponRequestDraft = z.infer<typeof CouponRequestDraft>;
 

@@ -14,6 +14,21 @@ import { useOrderStore } from './useStoreMatch.js';
  * a real order card instead of pasting prose into the ticket description.
  */
 export interface TicketOrderSnapshotItem {
+  /**
+   * Yiji's own item id (`idChooseableItem`), for the SAME reason
+   * `restaurantId` below is kept: it is the only stable key for an item, and
+   * the name is not one.
+   *
+   * "Which customers complained about the Vegetable Pasta" is a real question
+   * and grouping by NAME cannot answer it — the coupon `item_name` column
+   * already holds `Vegetable Pasta.yy`, a typo that is now permanently its own
+   * distinct value. An id has no spellings.
+   *
+   * Optional because a snapshot written before this existed has none, and a
+   * seeded/demo order may not carry one. Absent means "not captured", never
+   * "no item".
+   */
+  sku?: string;
   name: string;
   qty: number;
   price: number;
@@ -54,6 +69,10 @@ export function orderToSnapshot(order: YijiOrder): TicketOrderSnapshot {
     currency: order.currency,
     placedAt: order.placedAt,
     items: order.items.map((it) => ({
+      // Kept, not dropped. `YijiOrderItem.sku` is already mapped from their
+      // `idChooseableItem` upstream — it was being parsed and then thrown away
+      // here, which is what made item-level reporting a text search.
+      ...(it.sku ? { sku: it.sku } : {}),
       name: it.name,
       qty: it.qty,
       price: it.price,

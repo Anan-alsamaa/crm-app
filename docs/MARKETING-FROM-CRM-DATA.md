@@ -26,7 +26,7 @@ Measured over 64 tickets:
 | Branch               | `tickets.store` + snapshot          | most     | **Yes**                                              |
 | Area / chain manager | via the store master                | most     | Yes, for operational campaigns                       |
 | Compensated or not   | `tickets.compensation`              | all      | **Yes** — "we already paid them" is a real segment   |
-| **Specific item**    | `order_snapshot->items`             | **9/64** | **Weak — see below**                                 |
+| **Specific item**    | `…items[].sku` + `item_sku`         | new      | **Fixed — accumulates from 2026-08-26**              |
 
 A realistic segment right now, by complaint type:
 
@@ -53,11 +53,23 @@ You asked specifically about "a specific item", and that is the weakest column:
   and `Vegetable Pasta.yy` — a typo that is now a permanent distinct value. Any
   "customers who complained about X" query splits across spellings.
 
-**If item-level campaigns matter, that is the thing to fix first**, and it is a
-small fix: the order line already carries a real Yiji item id
-(`idChooseableItem`, e.g. 1047 = Water). Storing that id beside the name would
-make items groupable properly and immune to typos. Until then, item targeting is
-best-effort on a tenth of the data.
+**DONE, 2026-08-26.** Yiji's item id is now stored beside the name, in both
+places:
+
+- `tickets.order_snapshot.items[].sku` — it was already being parsed from their
+  `idChooseableItem` and then thrown away in `orderToSnapshot`. Now kept.
+- `coupon_approvals.item_sku` — a new column, set when the agent PICKS an item
+  from the order, null when they typed one by hand.
+
+That makes "which customers complained about item 1047" a real query instead of
+a text search across spellings. Two caveats worth knowing:
+
+- **It applies from now on.** Existing rows keep their names and no id, and
+  there is nothing to backfill from — the snapshot was frozen without one.
+  Item-level reporting gets more useful the longer it runs.
+- **Typed items still have no id**, deliberately. A phoned-in complaint with no
+  order attached has nothing to reference, and deriving an id from the name
+  would recreate the exact problem this solves.
 
 ---
 
@@ -114,9 +126,8 @@ A campaign tool built before this exists is a liability, so I have not built one
 
 ## What I would build, in order
 
-1. **Store the Yiji item id** on tickets and coupon approvals. Small, and it is
-   what makes "customers who complained about item X" a real query rather than a
-   text search. Fixes the weakest column.
+1. ~~**Store the Yiji item id** on tickets and coupon approvals.~~ **Done** —
+   see above. Accumulates from here; nothing to backfill.
 2. **Consent fields + opt-out**, per above. The gate on everything else.
 3. **A saved-segment view** in the admin portal. The reports layer already has
    the filters (type, service, brand, branch, date) — this is mostly exposing

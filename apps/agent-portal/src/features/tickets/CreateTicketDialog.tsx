@@ -735,7 +735,13 @@ export function CreateTicketDialog({
                 // what that item actually cost.
                 orderItems={
                   includeOrder && latestOrder
-                    ? latestOrder.items.map((it) => ({ name: it.name, price: it.price ?? null }))
+                    ? latestOrder.items.map((it) => ({
+                        name: it.name,
+                        price: it.price ?? null,
+                        // Yiji's item id, so a picked item is recorded by a key
+                        // that has no spellings — see `item_sku`.
+                        sku: it.sku ?? null,
+                      }))
                     : []
                 }
                 requestedBy={user?.id ?? null}

@@ -449,6 +449,62 @@ describe('the item a coupon compensates', () => {
     await waitFor(() => expect(amount.value).toBe('15'));
   });
 
+  it('records the item ID beside the name when the item was PICKED', async () => {
+    /*
+     * The name is the label; the id is the key. Grouping by name cannot answer
+     * "which customers complained about the pasta" — this database already
+     * holds `Vegetable Pasta.yy` in an `item_name`, one typo that is now
+     * permanently its own distinct value.
+     */
+    renderDialog({ orderItems: [{ name: 'Vegetable Pasta', price: 26, sku: '1047' }] });
+    await userEvent.click(screen.getByLabelText(/item/i));
+    await userEvent.click(await screen.findByRole('button', { name: /Vegetable Pasta/ }));
+
+    // The dropdowns operations owns, plus a value — the same minimum the
+    // "sends the branch it resolved" test above establishes.
+    await userEvent.click(screen.getByLabelText(/issuing side/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
+    await userEvent.click(screen.getByLabelText(/delivery type/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
+    await userEvent.click(screen.getByRole('button', { name: /send for approval/i }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    /* The LAST call, not the first. The spy is shared across this file and an
+       earlier test in the same run may already have sent one — reading
+       `calls[0]` then asserts against somebody else's payload. */
+    const sent = mutateAsync.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(sent.item_name).toBe('Vegetable Pasta');
+    expect(sent.item_sku).toBe('1047');
+  });
+
+  it('clears the id when the agent says it is NOT about one item', async () => {
+    // Otherwise a stale sku outlives the name it belonged to and files the
+    // coupon under an item nobody chose.
+    renderDialog({ orderItems: [{ name: 'Vegetable Pasta', price: 26, sku: '1047' }] });
+    const itemBox = screen.getByLabelText(/item \(optional\)/i);
+    await userEvent.click(itemBox);
+    await userEvent.click(await screen.findByRole('button', { name: /Vegetable Pasta/ }));
+    // Reopen and choose the explicit "no single item" option.
+    await userEvent.click(itemBox);
+    await userEvent.click(await screen.findByRole('button', { name: /not about one item/i }));
+
+    // The dropdowns operations owns, plus a value — the same minimum the
+    // "sends the branch it resolved" test above establishes.
+    await userEvent.click(screen.getByLabelText(/issuing side/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
+    await userEvent.click(screen.getByLabelText(/delivery type/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
+    await userEvent.click(screen.getByRole('button', { name: /send for approval/i }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    /* The LAST call, not the first. The spy is shared across this file and an
+       earlier test in the same run may already have sent one — reading
+       `calls[0]` then asserts against somebody else's payload. */
+    const sent = mutateAsync.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(sent.item_name).toBeNull();
+    expect(sent.item_sku).toBeNull();
+  });
+
   it('offers the same line once however many were ordered', async () => {
     // 2x the same dish is one item to compensate, not two identical choices.
     renderDialog({

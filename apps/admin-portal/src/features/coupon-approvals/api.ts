@@ -34,6 +34,8 @@ export interface CouponApprovalRow {
   usage_limit: number | null;
   /** The specific order item the coupon compensates, when it is about one. */
   item_name: string | null;
+  /** Yiji's item id for that line — groupable where the name is not. */
+  item_sku: string | null;
   brand_id: string | null;
   restaurant_id: string | null;
   /** True when a supervisor changed those terms before approving. */
@@ -109,6 +111,7 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
               'max_discount',
               'usage_limit',
               'item_name',
+              'item_sku',
               'brand_id',
               'restaurant_id',
               'edited_by_admin',

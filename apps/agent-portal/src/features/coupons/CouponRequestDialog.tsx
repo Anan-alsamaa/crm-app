@@ -64,7 +64,9 @@ export interface CouponRequestDialogProps {
    * The order's lines. Carries the PRICE as well as the name so that choosing
    * an item can fill the coupon value with what that item actually cost.
    */
-  orderItems?: Array<{ name: string; price?: number | null }>;
+  /* `sku` rides along so a PICKED item records Yiji's id, not just its name —
+     see `item_sku` in the draft for why a name cannot be the key. */
+  orderItems?: Array<{ name: string; price?: number | null; sku?: string | null }>;
   requestedBy: string | null;
   onCreated?: () => void;
   /**
@@ -122,6 +124,7 @@ export function CouponRequestDialog({
     brand_id: brandId,
     restaurant_id: restaurantId,
     item_name: null,
+    item_sku: null,
   }));
   /**
    * Whether the agent has typed into the reason themselves. Until they do, the
@@ -253,6 +256,7 @@ export function CouponRequestDialog({
         brand_id: d.brand_id ?? null,
         restaurant_id: d.restaurant_id ?? null,
         item_name: d.item_name ?? null,
+        item_sku: d.item_sku ?? null,
       })
       .then(() => {
         toast.success(
@@ -489,12 +493,16 @@ export function CouponRequestDialog({
               fullWidth
               value={draft.item_name ?? ''}
               onChange={(v) => {
+                const picked = orderItems?.find((it) => it.name === v);
                 set('item_name', v || null);
+                // The id travels with the name. Cleared alongside it, so
+                // "not about one item" cannot leave a stale sku behind.
+                set('item_sku', (v && picked?.sku) || null);
                 // Compensating for one item means compensating what that item
                 // cost, so the amount follows the choice. It stays editable —
                 // this is the agent's starting point, not the answer, and a
                 // supervisor can still amend it on the way through.
-                const price = orderItems?.find((it) => it.name === v)?.price;
+                const price = picked?.price;
                 if (v && typeof price === 'number' && price > 0) set('coupon_value', price);
               }}
               options={[
@@ -520,7 +528,12 @@ export function CouponRequestDialog({
             // heard the item down a phone line, so they type it.
             <Input
               value={draft.item_name ?? ''}
-              onChange={(e) => set('item_name', e.target.value || null)}
+              onChange={(e) => {
+                set('item_name', e.target.value || null);
+                /* No order to pick from, so there is no id — and a typed name
+                   must never inherit one from a previous pick. */
+                set('item_sku', null);
+              }}
               placeholder={t('coupons.itemPlaceholder', {
                 defaultValue: 'e.g. Vegetable Pasta',
               })}

@@ -98,10 +98,36 @@ describe('orderToSnapshot', () => {
       paymentStatus: 'paid',
       paymentMode: 'apple_pay',
     });
+    /*
+     * The SKU is kept, and this assertion used to prove the opposite.
+     *
+     * It was parsed from Yiji's `idChooseableItem` and then dropped here, which
+     * left the item name as the only record — and a name is not a key. This
+     * database already holds `Vegetable Pasta.yy` in a coupon's `item_name`:
+     * one typo, permanently its own distinct value, so "who complained about
+     * the pasta" splits across spellings and under-reports.
+     */
     expect(snap.items).toEqual([
-      { name: 'Vegetable Pasta', qty: 1, price: 26, category: 'Original Pasta' },
+      { sku: 'X', name: 'Vegetable Pasta', qty: 1, price: 26, category: 'Original Pasta' },
     ]);
     // Optionals the order didn't carry must not appear as undefined keys.
     expect('deliveryAddress' in snap).toBe(false);
+  });
+
+  it('omits the sku rather than writing an empty one', () => {
+    /*
+     * A demo or seeded order may have no item id. An empty string would be a
+     * value that groups — every id-less item collapsing into one bogus bucket —
+     * whereas an absent key reads as "not captured", which is the truth.
+     */
+    const snap = orderToSnapshot({
+      orderId: '1',
+      status: 'closed',
+      total: 5,
+      currency: 'SAR',
+      placedAt: '2026-06-25T12:25:32.483926',
+      items: [{ sku: '', name: 'Water', qty: 1, price: 5 }],
+    } as YijiOrder);
+    expect('sku' in snap.items[0]!).toBe(false);
   });
 });

@@ -32,6 +32,8 @@ export interface CouponRequestRow {
   usage_limit: number | null;
   /** The specific order item the coupon compensates, when it is about one. */
   item_name: string | null;
+  /** Yiji's item id for that line — the key, where the name is the label. */
+  item_sku: string | null;
   /** True when an admin changed the agent's values before approving. */
   edited_by_admin: boolean | null;
   decided_at: string | null;
@@ -64,6 +66,7 @@ export const COUPON_REQUEST_FIELDS = [
   'max_discount',
   'usage_limit',
   'item_name',
+  'item_sku',
   'edited_by_admin',
   { ticket: ['id', 'subject', 'order_id'] },
   { contact: ['id', 'name', 'phone'] },
@@ -106,6 +109,7 @@ export interface CreateCouponRequestInput extends CouponFields {
   usage_limit?: number;
   /** The specific order item the coupon compensates, when it is about one. */
   item_name?: string | null;
+  item_sku?: string | null;
   /* Resolved from the ticket's order, never chosen in the form. */
   brand_id?: string | null;
   restaurant_id?: string | null;
