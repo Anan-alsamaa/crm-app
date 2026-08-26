@@ -532,6 +532,85 @@ function CutCard({
 // read.
 
 /**
+ * Tickets per month, as bars.
+ *
+ * Bars rather than a line: months are discrete buckets, and a curve drawn
+ * between them implies readings in between that were never taken. Six months of
+ * data is also too few points for a curve to be anything but decoration.
+ *
+ * The tallest month sets the scale, so the shape is a comparison BETWEEN the
+ * months shown rather than against an absolute nobody has. The last bar is
+ * emphasised because it is the one still being written — a partial month at
+ * full weight reads as a real drop.
+ */
+export function MonthBars({ months }: { months: readonly { month: string; count: number }[] }) {
+  const { t, i18n } = useTranslation();
+  /* `i18n?.language` and not `i18n.language`: a locale is a nicety here — the
+     month name falls back to the runtime default — and a chart must not throw
+     because the i18n instance is absent. It is, in the render tests. */
+  const locale = i18n?.language || undefined;
+  // At most twelve, most recent last: beyond that the bars are too thin to
+  // compare and the older half is not what anyone is acting on.
+  const shown = months.slice(-12);
+  const peak = Math.max(...shown.map((m) => m.count), 1);
+
+  const label = (ym: string) => {
+    const [y, mo] = ym.split('-').map(Number);
+    if (!y || !mo) return ym;
+    // Month name in the reader's language; the year only on January, so a
+    // twelve-month run does not repeat it under every bar.
+    const d = new Date(Date.UTC(y, mo - 1, 1));
+    const name = d.toLocaleDateString(locale, {
+      month: 'short',
+      timeZone: 'UTC',
+    });
+    return mo === 1 ? `${name} ${String(y).slice(2)}` : name;
+  };
+
+  return (
+    /* `max-w-[4.5rem]` per bar and a left-aligned row, NOT `flex-1`.
+       Distributing the width meant two months drew as two enormous slabs and
+       ONE month drew as a full-width rule that read like a divider. A bar has a
+       natural width; the row fills from the start and stops. */
+    <div className="flex h-44 items-end gap-2" dir="ltr">
+      {shown.map((m, i) => {
+        const last = i === shown.length - 1;
+        const pct = (m.count / peak) * 100;
+        return (
+          <div
+            key={m.month}
+            className="flex min-w-0 max-w-[4.5rem] flex-1 flex-col items-center gap-1.5"
+          >
+            <span className="text-2xs font-semibold tabular-nums text-foreground">{m.count}</span>
+            <div className="flex w-full flex-1 items-end">
+              <div
+                className={cn(
+                  'w-full rounded-t-md transition-[height] duration-slow ease-out',
+                  last ? 'bg-sky' : 'bg-sky/45',
+                )}
+                /* `minHeight` so a month with one ticket is still a visible
+                   bar — a sliver of nothing reads as zero, and zero and one
+                   are different answers. */
+                style={{ height: `${pct}%`, minHeight: m.count > 0 ? 4 : 0 }}
+                title={`${label(m.month)} — ${m.count}`}
+              />
+            </div>
+            <span className="w-full truncate text-center text-2xs text-muted-foreground">
+              {label(m.month)}
+            </span>
+          </div>
+        );
+      })}
+      <span className="sr-only">
+        {t('complaintDash.opsTrendSr', {
+          defaultValue: 'Tickets per month for the current selection.',
+        })}
+      </span>
+    </div>
+  );
+}
+
+/**
  * The complaints behind one number.
  *
  * A dashboard that only aggregates asks the reader to trust it; "12 late orders
@@ -1342,6 +1421,61 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                       (r) => r.isOpen,
                     )}
                   />
+                )}
+              </SectionCard>
+            )}
+            {view === 'operations' && (
+              /*
+               * IS IT GETTING BETTER?
+               *
+               * Every other panel on this board is a RANKING — which branch,
+               * which brand, which area manager is worst right now. All of them
+               * answer "where do I go today" and none of them answers whether
+               * yesterday's visit worked. A branch at the top of the list two
+               * months running is a different conversation from one that has
+               * just arrived there, and the ranking cannot tell them apart.
+               *
+               * Deliberately the OPERATIONS cut of the same filters: whatever
+               * brand, city, area manager or branch is selected above, this is
+               * that selection's own trend, not a global one. A chart showing
+               * something other than what the filters say would be worse than
+               * no chart.
+               *
+               * A bar per month rather than a line: months are discrete
+               * buckets, and a smooth curve between them implies readings
+               * in between that do not exist.
+               */
+              <SectionCard
+                /* Full width. A trend is read left-to-right across time, and
+                   twelve bars squeezed into half a grid column are too narrow
+                   to compare — the ranking panels below are lists and are
+                   perfectly happy in a column; this is not. */
+                className="md:col-span-2"
+                title={t('complaintDash.opsTrend', { defaultValue: 'Tickets per month' })}
+                hint={t('complaintDash.opsTrendHint', {
+                  defaultValue:
+                    'The selection above, month by month — whether the branches you are working on are improving.',
+                })}
+                tone="sky"
+                index={2}
+              >
+                {/* TWO months, not one. A trend needs two points to be a
+                    trend; a single bar is at 100% of a scale set by itself,
+                    which reads as "this is the maximum" when there is nothing
+                    to be maximal against. The count already has a KPI. */}
+                {d.months.length < 2 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    {d.months.length === 0
+                      ? t('complaintDash.opsTrendEmpty', {
+                          defaultValue: 'No tickets in this range yet.',
+                        })
+                      : t('complaintDash.opsTrendOneMonth', {
+                          defaultValue:
+                            'Only one month in this range — widen the dates to compare months.',
+                        })}
+                  </p>
+                ) : (
+                  <MonthBars months={d.months} />
                 )}
               </SectionCard>
             )}

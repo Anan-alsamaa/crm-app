@@ -15,6 +15,7 @@ import {
   isYijiUnavailable,
   yijiCouponEnum,
   yijiDeliveryTypes,
+  yijiIssuingSideId,
   YIJI_ORDER_MAXIMUM,
   YIJI_COUPON_CATEGORY,
   YIJI_COUPON_TYPE,
@@ -297,6 +298,20 @@ export function yijiCouponPayload(
          */
         orderMinimum: 0,
         orderMaximum: YIJI_ORDER_MAXIMUM,
+        /*
+         * WHO PAYS FOR THIS COUPON.
+         *
+         * Sent only when the CRM issuing side has a known Yiji id — see
+         * ISSUING_SIDES, where every id is currently null and therefore
+         * nothing is sent yet. Omitting it leaves Yiji to default, which is
+         * what happens today; sending a GUESSED id would silently book real
+         * money to the wrong department in their reporting and never announce
+         * itself. Fill the ids in that one table and this starts working with
+         * no change here.
+         */
+        ...(yijiIssuingSideId(row.issuing_side) != null
+          ? { issuingSideId: yijiIssuingSideId(row.issuing_side) }
+          : {}),
         /*
          * Which channels it may be redeemed through.
          *

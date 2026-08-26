@@ -222,21 +222,102 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
  * aloud. Uniqueness is the caller's job — generate, check against the store,
  * regenerate on the rare collision.
  */
+/**
+ * WHO ISSUED A COUPON — the CRM word, its code prefix, and Yiji's id.
+ *
+ * One table because these three must never disagree: the prefix is what an
+ * agent reads down a phone line, and `yijiId` is what attributes the cost to a
+ * department in Yiji's own reporting. Deriving them in two places is how a
+ * coupon ends up prefixed CC and booked to Operations.
+ *
+ * ⚠ `yijiId` IS NOT CONFIRMED for any row. The only id ever observed is 6, on
+ * a coupon of unknown issuing side (70644). Every value below is null, and a
+ * null is NOT SENT — Yiji then applies its own default, exactly as today.
+ * That is deliberate: a wrong id does not fail loudly, it silently books real
+ * money to the wrong department in the reports the owner reads, and stays
+ * wrong for ever. Fill these in the moment Yiji supplies the list; nothing
+ * else needs to change.
+ *
+ * The delivery companies are named individually rather than a single
+ * "Delivery", because a coupon issued because Shadh lost the order is not the
+ * same cost centre as one issued because Taker did.
+ */
+export interface IssuingSide {
+  /** The word in `option_lists`, exactly as operations typed it. */
+  value: string;
+  /** Leads the coupon code. Short, and unambiguous read aloud. */
+  prefix: string;
+  /** Yiji's `issuingSideId`. Null = unknown, and therefore not sent. */
+  yijiId: number | null;
+}
+
+export const ISSUING_SIDES: readonly IssuingSide[] = [
+  { value: 'Customer Care', prefix: 'CC', yijiId: null },
+  { value: 'Operations', prefix: 'OPS', yijiId: null },
+  { value: 'Marketing', prefix: 'MKT', yijiId: null },
+  // The delivery companies. Prefixes are the name, uppercased — an agent
+  // reading "SHADH-4K2P" knows who is paying without a lookup.
+  { value: 'Shadh', prefix: 'SHADH', yijiId: null },
+  { value: 'Taker', prefix: 'TAKER', yijiId: null },
+  { value: 'Shurouq', prefix: 'SHUROUQ', yijiId: null },
+  { value: 'Leajlak', prefix: 'LEAJLAK', yijiId: null },
+  { value: 'Parcel', prefix: 'PARCEL', yijiId: null },
+];
+
+/**
+ * Find an issuing side by its CRM word.
+ *
+ * Matched case- and punctuation-insensitively because `option_lists` is edited
+ * by hand: "Customer care", "customer-care" and "Customer Care" are the same
+ * department, and a coupon must not be prefixed differently for a stray capital.
+ * Also accepts the historical spellings ("Call Centre", "Delivery") so coupons
+ * raised before the list was renamed still resolve.
+ */
+export function findIssuingSide(word: string | null | undefined): IssuingSide | undefined {
+  const key = (word ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+  if (!key) return undefined;
+  const ALIASES: Record<string, string> = {
+    // Renamed 2026-08-26; rows written before that still say these.
+    callcentre: 'Customer Care',
+    callcenter: 'Customer Care',
+    cc: 'Customer Care',
+    customercare: 'Customer Care',
+  };
+  const target = (ALIASES[key] ?? word ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+  return ISSUING_SIDES.find((s) => s.value.toLowerCase().replace(/[^a-z0-9]+/g, '') === target);
+}
+
+/** Yiji's `issuingSideId` for a CRM issuing side, or undefined when unknown. */
+export function yijiIssuingSideId(word: string | null | undefined): number | undefined {
+  return findIssuingSide(word)?.yijiId ?? undefined;
+}
+
 export function couponPrefix(issuingSide: string | null | undefined): string {
+  // The table first, so a prefix and a Yiji id can never come from different
+  // rules — see ISSUING_SIDES.
+  const known = findIssuingSide(issuingSide);
+  if (known) return known.prefix;
+
   const s = (issuingSide ?? '').trim().toLowerCase();
   if (!s) return 'SARA';
-  if (s.startsWith('op')) return 'OPS';
-  if (s.startsWith('mk') || s.startsWith('mar')) return 'MKT';
-  /* Call Centre — "CC", not the CALLCE the fallback would have produced.
-     Both spellings, because the list is edited by hand and an agent reading a
-     code down the line should get the same prefix either way. */
-  if (s.startsWith('call c') || s.startsWith('callc') || s === 'cc') return 'CC';
-  // Anything else is the delivery company itself, so its own name leads: the
-  // list is editable, and a new courier should not need a code change.
+  /*
+   * A side nobody has coded for yet: derive from its own name.
+   *
+   * `option_lists` is operations-editable, so a new courier must not need a
+   * deploy to issue coupons. Ten characters rather than six — "SHUROUQ" and
+   * "LEAJLAK" are seven, and truncating a courier's name mid-word produces a
+   * prefix nobody recognises read aloud.
+   */
   return (
     s
       .replace(/[^a-z0-9]+/g, '')
-      .slice(0, 6)
+      .slice(0, 10)
       .toUpperCase() || 'SARA'
   );
 }

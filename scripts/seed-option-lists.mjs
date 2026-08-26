@@ -41,7 +41,20 @@ const LISTS = {
   communication_method: ['Comp. WhatsApp', 'Comp. Phone Call', 'Comp.Instgram', 'Comp. Twiter'],
   compensation: ['Initial', 'Compensated', 'Not Compensated'],
   // The coupon-request dropdowns. "All" means every delivery channel at once.
-  issuing_side: ['Marketing', 'Operations', 'Delivery', 'Call Centre'],
+  /* Who pays for a coupon. The delivery companies are named individually — a
+     coupon issued because Shadh lost an order is not the same cost centre as
+     one issued because Taker did. Prefixes and Yiji ids live beside these in
+     ISSUING_SIDES (@yiji/shared-types); keep the two in step. */
+  issuing_side: [
+    'Customer Care',
+    'Operations',
+    'Marketing',
+    'Shadh',
+    'Taker',
+    'Shurouq',
+    'Leajlak',
+    'Parcel',
+  ],
   delivery_type: ['All', 'Delivery', 'Pickup', 'Carhop', 'Takeout', 'Dine-in'],
   // Which AI actions the inbox panel offers, in this order. Action KEYS, not
   // labels — the labels are translated and editing one in Arabic would switch

@@ -7,6 +7,8 @@ import {
   couponTermsProblems,
   couponExposure,
   couponPrefix,
+  yijiIssuingSideId,
+  findIssuingSide,
   isHighValueCoupon,
   yijiDeliveryTypes,
   COUPON_ALERT_THRESHOLD_SAR,
@@ -340,15 +342,19 @@ describe('yijiDeliveryTypes', () => {
 });
 
 describe('couponPrefix', () => {
-  it('gives Call Centre the CC prefix, not the CALLCE the fallback would make', () => {
-    /*
-     * The fallback strips non-alphanumerics and takes six characters, which
-     * would have produced "CALLCE" — a prefix nobody asked for and nobody
-     * would recognise read down a phone line.
-     */
+  it('gives Customer Care the CC prefix, not the CALLCE the fallback would make', () => {
+    // The fallback would strip and truncate to something nobody recognises
+    // read down a phone line.
+    expect(couponPrefix('Customer Care')).toBe('CC');
+    expect(couponPrefix('customer-care')).toBe('CC');
+    expect(couponPrefix('CC')).toBe('CC');
+  });
+
+  it('still answers for "Call Centre", the name this used to have', () => {
+    // Coupons raised before the 2026-08-26 rename still say it, and they must
+    // keep resolving to the same prefix.
     expect(couponPrefix('Call Centre')).toBe('CC');
     expect(couponPrefix('call center')).toBe('CC');
-    expect(couponPrefix('CC')).toBe('CC');
   });
 
   it('keeps the established prefixes', () => {
@@ -357,8 +363,47 @@ describe('couponPrefix', () => {
     expect(couponPrefix(null)).toBe('SARA');
   });
 
+  it('names each delivery company in full, never truncated mid-word', () => {
+    /*
+     * These are seven characters. The old six-character cap produced "SHUROU"
+     * and "LEAJLA" — prefixes an agent cannot read out and a courier would not
+     * recognise on an invoice.
+     */
+    expect(couponPrefix('Shadh')).toBe('SHADH');
+    expect(couponPrefix('Taker')).toBe('TAKER');
+    expect(couponPrefix('Shurouq')).toBe('SHUROUQ');
+    expect(couponPrefix('Leajlak')).toBe('LEAJLAK');
+    expect(couponPrefix('Parcel')).toBe('PARCEL');
+  });
+
   it('still derives a prefix for a side nobody has coded for', () => {
     // The list is operations-editable; a new courier must not need a deploy.
     expect(couponPrefix('Jahez')).toBe('JAHEZ');
+  });
+});
+
+describe('yijiIssuingSideId', () => {
+  it('sends NOTHING while the ids are unknown', () => {
+    /*
+     * Every `yijiId` in ISSUING_SIDES is null until Yiji supplies the list.
+     * Undefined here means the field is omitted from the payload and Yiji
+     * defaults it — exactly what happens today. A GUESSED id would not fail
+     * loudly; it would book real money to the wrong department in their
+     * reporting and stay wrong for ever.
+     */
+    expect(yijiIssuingSideId('Operations')).toBeUndefined();
+    expect(yijiIssuingSideId('Shadh')).toBeUndefined();
+  });
+
+  it('is undefined for a side that is not in the table at all', () => {
+    expect(yijiIssuingSideId('Jahez')).toBeUndefined();
+    expect(yijiIssuingSideId(null)).toBeUndefined();
+  });
+
+  it('resolves the row so filling one id in is all it takes', () => {
+    // The table is the single place a correction has to land.
+    expect(findIssuingSide('customer care')?.prefix).toBe('CC');
+    expect(findIssuingSide('Call Centre')?.value).toBe('Customer Care');
+    expect(findIssuingSide('Shurouq')?.prefix).toBe('SHUROUQ');
   });
 });
