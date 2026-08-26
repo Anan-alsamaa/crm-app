@@ -109,13 +109,19 @@ function Chevron({ open }: { open: boolean }) {
 function OrderHeader({ order, onCreateTicket }: { order: YijiOrder; onCreateTicket?: () => void }) {
   const { t } = useTranslation();
   return (
-    <div className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
+    <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
       <div className="min-w-0">
-        {/* `min-w-0` on the row AND on the pill's wrapper below. The parent
-            already had it; the children did not, so neither could shrink and a
-            long status ran straight under the total on the right — "Force
-            canceled" against SAR 1.00 was unreadable in a narrow inbox. */}
-        <div className="flex min-w-0 items-center gap-2">
+        {/* WRAPS rather than truncates.
+            The status used to run straight under the total — "Force canceled"
+            over SAR 1.00, unreadable. Truncating it fixed the overlap but paid
+            for it in meaning: "Force can…" and "Force cancel…" are not
+            statuses anyone can act on, and this panel gets genuinely narrow
+            when an agent shrinks the inbox.
+            So `flex-wrap`: on a wide panel the id and status sit side by side
+            as before; when there is not room, the status drops to its own line
+            and keeps every character. `items-start` on the row so a wrapped
+            two-line block still aligns with the price beside it. */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           {onCreateTicket ? (
             // The order id is the way into a complaint about THAT order. A real
             // button, so it is reachable by keyboard and named for the order it
@@ -137,16 +143,11 @@ function OrderHeader({ order, onCreateTicket }: { order: YijiOrder; onCreateTick
           ) : (
             <span className="font-mono text-xs text-foreground">#{order.orderId}</span>
           )}
-          {/* The status is the part that gives way: the order id is a fixed
-              short token and is what the agent is looking for, so it keeps its
-              width and the status truncates with a tooltip carrying the full
-              text. */}
-          <Pill tone={orderTone(order.status)} size="sm" className="min-w-0 max-w-full">
-            {/* `min-w-0` because Pill is an inline-flex row: without it this
-                span keeps its full content width and truncate never fires. */}
-            <span className="block min-w-0 truncate" title={titleize(order.status)}>
-              {titleize(order.status)}
-            </span>
+          {/* `max-w-full` so a very long status cannot itself force the row
+              wider than the panel; it wraps to its own line instead. No
+              truncation — the whole point is that the status stays readable. */}
+          <Pill tone={orderTone(order.status)} size="sm" className="max-w-full">
+            {titleize(order.status)}
           </Pill>
         </div>
         <div className="mt-0.5 text-2xs text-muted-foreground tabular-nums">
@@ -706,16 +707,28 @@ function ManualOrderLookup({
           const v = input.trim();
           if (v) setOrderId(v);
         }}
-        className="flex items-center gap-2"
+        // Wraps: with a minimum width on the input, a narrow panel has to put
+        // the heading on its own line rather than crush the field.
+        className="flex flex-wrap items-center gap-x-2 gap-y-1.5"
       >
         {heading}
+        {/* Wide enough to SHOW a whole order id.
+            It was `flex-1` next to a heading and a button, which on a narrow
+            panel left room for about six digits of a seven-digit number — so
+            an agent reading "1234535" down the line saw "123453" and could not
+            tell whether they had mistyped it. Both are real orders, so the
+            lookup answered confidently with the wrong one.
+            `min-w-[7.5rem]` keeps room for the id itself, and the heading
+            above it wraps instead of squeezing this. `font-mono` +
+            `tabular-nums` so every digit is the same width and a transposed
+            one is visible. */}
         <input
           value={input}
           onChange={(e) => setInput(e.currentTarget.value)}
           inputMode="numeric"
           aria-label={t('commerce.lookupLabel', { defaultValue: 'Look up an order by ID' })}
           placeholder={t('commerce.lookupPlaceholder', { defaultValue: 'Order ID…' })}
-          className="h-8 min-w-0 flex-1 rounded-lg bg-card px-2.5 text-xs text-foreground ring-1 ring-border placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+          className="h-8 min-w-[7.5rem] flex-1 rounded-lg bg-card px-2.5 font-mono text-xs tabular-nums text-foreground ring-1 ring-border placeholder:font-sans placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
         />
         <button
           type="submit"

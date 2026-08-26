@@ -19,6 +19,7 @@ export {
   AddTicketIcon,
   TicketIcon,
   BellIcon,
+  LockIcon,
   SettingsIcon,
   UsersIcon,
   TeamIcon,

@@ -144,14 +144,37 @@ export function optionLabel(value: string): string {
  * PRE-FILL — the agent can always override it, because the order's fulfilment
  * and the thing being complained about are not always the same.
  */
+/*
+ * THE WORDS YIJI ACTUALLY SENDS.
+ *
+ * This matched on English descriptions of a service — "drivethru", "eatin" —
+ * but Yiji's order API does not use those. It sends `carhop` and
+ * `in_restaurant` (see YIJI_DELIVERY_TYPE in @yiji/shared-types, which maps
+ * their integers), so the two cases that mattered most fell through to '' and
+ * the agent was left to pick a service type by hand on a ticket raised from an
+ * order that already knew the answer. Verified against order 1234535, which is
+ * `carhop` and now fills in Drive Thru.
+ *
+ * The loose `includes` matching is kept deliberately: it costs nothing and
+ * absorbs whatever spelling arrives next. `TakeOut` stays reachable only from
+ * a literal takeaway/takeout, because Yiji has no delivery type meaning it and
+ * a confident wrong answer in a visible field is worse than an empty one.
+ */
 export function serviceTypeFromOrder(order: TicketOrderSnapshot | null | undefined): string {
   const d = order?.deliveryType?.toLowerCase().replace(/[\s_-]/g, '');
   if (!d) return '';
   if (d.includes('deliver')) return 'Delivery';
   if (d.includes('pickup') || d.includes('collect')) return 'Pickup';
   if (d.includes('takeaway') || d.includes('takeout')) return 'TakeOut';
-  if (d.includes('drivethru') || d.includes('drivethrough')) return 'Drive Thru';
-  if (d.includes('din') || d.includes('instore') || d.includes('eatin')) return 'Dinning';
+  if (d.includes('drivethru') || d.includes('drivethrough') || d.includes('carhop'))
+    return 'Drive Thru';
+  if (
+    d.includes('din') ||
+    d.includes('instore') ||
+    d.includes('eatin') ||
+    d.includes('inrestaurant')
+  )
+    return 'Dinning';
   return '';
 }
 

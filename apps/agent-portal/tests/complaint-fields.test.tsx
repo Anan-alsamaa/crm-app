@@ -158,8 +158,24 @@ describe('serviceTypeFromOrder', () => {
     items: [],
   };
 
-  it('maps the order delivery type onto their vocabulary', () => {
+  it('maps the words YIJI ACTUALLY SENDS, not plausible English ones', () => {
+    /*
+     * This test used to assert `drive_thru` and `dine_in` — words nobody sends.
+     * Yiji's order API emits `carhop` and `in_restaurant` (YIJI_DELIVERY_TYPE
+     * in @yiji/shared-types maps their integers), and neither was handled, so
+     * the agent picked a service type by hand on tickets raised from orders
+     * that already knew it. Order 1234535 is `carhop`.
+     *
+     * Asserting the real vocabulary is the whole point: a green test over
+     * invented inputs is what let this survive.
+     */
+    expect(serviceTypeFromOrder({ ...base, deliveryType: 'carhop' })).toBe('Drive Thru');
+    expect(serviceTypeFromOrder({ ...base, deliveryType: 'in_restaurant' })).toBe('Dinning');
     expect(serviceTypeFromOrder({ ...base, deliveryType: 'delivery' })).toBe('Delivery');
+    expect(serviceTypeFromOrder({ ...base, deliveryType: 'pickup' })).toBe('Pickup');
+  });
+
+  it('still accepts the descriptive spellings, so a relabel does not regress it', () => {
     expect(serviceTypeFromOrder({ ...base, deliveryType: 'drive_thru' })).toBe('Drive Thru');
     expect(serviceTypeFromOrder({ ...base, deliveryType: 'dine_in' })).toBe('Dinning');
   });

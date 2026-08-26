@@ -14,6 +14,7 @@ import {
   toast,
   Toolbar,
   ToolbarSpacer,
+  LockIcon,
 } from '@yiji/ui';
 import {
   useContact,
@@ -83,14 +84,14 @@ export function ContactProfilePage() {
   const tickets = useContactTickets(id);
   const updateContact = useUpdateContact();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({ name: '', email: '', phone: '' });
+  const [draft, setDraft] = useState({ name: '', email: '' });
   // Leave edit mode when navigating to a different contact.
   useEffect(() => setEditing(false), [id]);
 
   const startEdit = () => {
     const c = contact.data;
     if (!c) return;
-    setDraft({ name: c.name ?? '', email: c.email ?? '', phone: c.phone ?? '' });
+    setDraft({ name: c.name ?? '', email: c.email ?? '' });
     setEditing(true);
   };
   const saveContact = async () => {
@@ -102,7 +103,8 @@ export function ContactProfilePage() {
         patch: {
           name: draft.name.trim() || null,
           email: draft.email.trim() || null,
-          phone: draft.phone.trim() || null,
+          /* Never sent. The field above is read-only; writing it here anyway
+             would reintroduce the bug the moment somebody re-adds an input. */
         },
       });
       toast.success(t('contacts.saved', { defaultValue: 'Customer details saved.' }));
@@ -238,17 +240,29 @@ export function ContactProfilePage() {
                       aria-label={t('contacts.email', { defaultValue: 'Email' })}
                     />
                   </label>
-                  <label className="block text-xs">
-                    <span className="mb-1 block text-muted-foreground">
-                      {t('contacts.phone', { defaultValue: 'Phone' })}
-                    </span>
-                    <Input
-                      type="tel"
-                      value={draft.phone}
-                      onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
-                      aria-label={t('contacts.phone', { defaultValue: 'Phone' })}
-                    />
-                  </label>
+                  {/* READ-ONLY, like the inbox sidebar and for the same reason.
+                      The phone is the identity this product is keyed on:
+                      incoming chats match a contact by exact phone, the walk-in
+                      page opens a session by it, and contacts dedupe on it. So
+                      editing it does not correct a record — it points this
+                      contact's whole history at a different person and leaves
+                      the real customer's next message to create a fresh
+                      contact. Still shown, because an agent reads it back on a
+                      call. */}
+                  {contact.data?.phone && (
+                    <div className="block text-xs">
+                      <span className="mb-1 block text-muted-foreground">
+                        {t('contacts.phone', { defaultValue: 'Phone' })}
+                      </span>
+                      <p
+                        className="flex items-center gap-1.5 rounded-lg bg-secondary/60 px-3 py-2 text-xs tabular-nums text-muted-foreground ring-1 ring-inset ring-foreground/[0.04]"
+                        dir="ltr"
+                      >
+                        <LockIcon />
+                        <span>{contact.data.phone}</span>
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 pt-1">
                   <Button

@@ -65,6 +65,22 @@ export function BellIcon({ size = 18, className, ...rest }: IconProps): JSX.Elem
   );
 }
 
+/**
+ * A closed padlock — "this is deliberately not editable".
+ *
+ * Shared because two portals now show a read-only phone for the same reason,
+ * and two hand-rolled padlocks would drift apart the first time one is
+ * touched.
+ */
+export function LockIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
+  return (
+    <svg {...svgProps(size, className)} {...rest}>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
+  );
+}
+
 export function SettingsIcon({ size = 18, className, ...rest }: IconProps): JSX.Element {
   return (
     <svg {...svgProps(size, className)} {...rest}>

@@ -216,9 +216,9 @@ describe('CouponRequestDialog', () => {
      * watches it silently vanish with no way to get it back.
      */
     renderDialog();
+    // One commit — see the duplicate-code test for why typing races on CI.
     const code = screen.getByLabelText(/coupon code/i) as HTMLInputElement;
-    await userEvent.clear(code);
-    await userEvent.type(code, 'BRANCH-PRINTED-42');
+    fireEvent.change(code, { target: { value: 'BRANCH-PRINTED-42' } });
 
     await userEvent.click(screen.getByLabelText(/issuing side/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
@@ -231,8 +231,7 @@ describe('CouponRequestDialog', () => {
     // issuing side may re-stamp it again after that.
     renderDialog();
     const code = screen.getByLabelText(/coupon code/i) as HTMLInputElement;
-    await userEvent.clear(code);
-    await userEvent.type(code, 'MINE-1');
+    fireEvent.change(code, { target: { value: 'MINE-1' } });
 
     await userEvent.click(screen.getByRole('button', { name: /new code/i }));
     await userEvent.click(screen.getByLabelText(/issuing side/i));
@@ -252,9 +251,9 @@ describe('CouponRequestDialog', () => {
     renderDialog();
     expect(screen.queryByText(/an admin is alerted/i)).toBeNull();
 
-    const value = screen.getByLabelText(/coupon value/i);
-    await userEvent.clear(value);
-    await userEvent.type(value, '500');
+    // One commit — a partially-typed "5" is below the threshold and the notice
+    // would not be showing yet.
+    fireEvent.change(screen.getByLabelText(/coupon value/i), { target: { value: '500' } });
 
     expect(await screen.findByText(/an admin is alerted/i)).toBeInTheDocument();
     /*
@@ -304,8 +303,8 @@ describe('CouponRequestDialog', () => {
   it('follows the coupon value as the ceiling for a flat amount', async () => {
     // Derived, not asked — so the two can never disagree.
     renderDialog();
-    await userEvent.clear(screen.getByLabelText(/coupon value/i));
-    await userEvent.type(screen.getByLabelText(/coupon value/i), '75');
+    // One commit, for the reason spelled out in the duplicate-code test below.
+    fireEvent.change(screen.getByLabelText(/coupon value/i), { target: { value: '75' } });
     expect(screen.getByLabelText(/maximum discount/i)).toHaveValue(75);
   });
 
@@ -317,9 +316,20 @@ describe('CouponRequestDialog', () => {
      * is told about a coupon that was never created.
      */
     renderDialog();
+    /*
+     * `fireEvent.change`, NOT `userEvent.type`. This test failed on CI and
+     * passed locally: the DOM dump showed the input holding "O" — one
+     * character — because `userEvent.type` dispatches a keystroke at a time and
+     * the slow runner let the assertion overtake the remaining ten. The mock
+     * reports "taken" only for the exact full code, so the error had not
+     * rendered yet.
+     *
+     * A longer timeout would only move the race. `fireEvent.change` commits the
+     * whole value in a single React update, so there is no intermediate state
+     * to lose to. Same reason the date fields below use it.
+     */
     const code = screen.getByLabelText(/coupon code/i);
-    await userEvent.clear(code);
-    await userEvent.type(code, TAKEN_CODE);
+    fireEvent.change(code, { target: { value: TAKEN_CODE } });
 
     expect(await screen.findByText(/already in use/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /send|request/i })).toBeDisabled();

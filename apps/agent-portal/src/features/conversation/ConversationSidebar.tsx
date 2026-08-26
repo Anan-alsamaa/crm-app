@@ -14,6 +14,7 @@ import {
   formatRelative,
   toast,
   useResizable,
+  LockIcon,
 } from '@yiji/ui';
 import type { YijiOrder } from '@yiji/shared-types';
 import {
@@ -91,25 +92,6 @@ function SectionLabel({ children, count }: { children: React.ReactNode; count?: 
         </span>
       )}
     </h3>
-  );
-}
-
-/** Why the phone cannot be edited, said in a glyph beside the number. */
-function LockIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-3 w-3 shrink-0"
-      aria-hidden
-    >
-      <rect x="3.5" y="7" width="9" height="6" rx="1.5" />
-      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
-    </svg>
   );
 }
 
