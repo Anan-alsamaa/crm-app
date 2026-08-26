@@ -6,6 +6,7 @@ import {
   defaultCouponDates,
   couponTermsProblems,
   couponExposure,
+  couponPrefix,
   isHighValueCoupon,
   yijiDeliveryTypes,
   COUPON_ALERT_THRESHOLD_SAR,
@@ -319,5 +320,29 @@ describe('yijiDeliveryTypes', () => {
 
   it('is case and spacing insensitive, because the list is operations-edited', () => {
     expect(yijiDeliveryTypes('  delivery ,  PICKUP ')).toEqual([1, 2]);
+  });
+});
+
+describe('couponPrefix', () => {
+  it('gives Call Centre the CC prefix, not the CALLCE the fallback would make', () => {
+    /*
+     * The fallback strips non-alphanumerics and takes six characters, which
+     * would have produced "CALLCE" — a prefix nobody asked for and nobody
+     * would recognise read down a phone line.
+     */
+    expect(couponPrefix('Call Centre')).toBe('CC');
+    expect(couponPrefix('call center')).toBe('CC');
+    expect(couponPrefix('CC')).toBe('CC');
+  });
+
+  it('keeps the established prefixes', () => {
+    expect(couponPrefix('Operations')).toBe('OPS');
+    expect(couponPrefix('Marketing')).toBe('MKT');
+    expect(couponPrefix(null)).toBe('SARA');
+  });
+
+  it('still derives a prefix for a side nobody has coded for', () => {
+    // The list is operations-editable; a new courier must not need a deploy.
+    expect(couponPrefix('Jahez')).toBe('JAHEZ');
   });
 });

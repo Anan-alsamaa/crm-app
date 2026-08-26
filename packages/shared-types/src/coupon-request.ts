@@ -227,6 +227,10 @@ export function couponPrefix(issuingSide: string | null | undefined): string {
   if (!s) return 'SARA';
   if (s.startsWith('op')) return 'OPS';
   if (s.startsWith('mk') || s.startsWith('mar')) return 'MKT';
+  /* Call Centre — "CC", not the CALLCE the fallback would have produced.
+     Both spellings, because the list is edited by hand and an agent reading a
+     code down the line should get the same prefix either way. */
+  if (s.startsWith('call c') || s.startsWith('callc') || s === 'cc') return 'CC';
   // Anything else is the delivery company itself, so its own name leads: the
   // list is editable, and a new courier should not need a code change.
   return (

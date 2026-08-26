@@ -738,7 +738,10 @@
     "whatHappenedHint": "التذكرة كما ذكرها العميل",
     "resolutionHint": "اختياري — ما تم عمله بشأنها",
     "savedCouponPending": "تم الحفظ. القسيمة بانتظار مشرف.",
-    "couponsAssigned": "القسيمة الممنوحة"
+    "couponsAssigned": "القسيمة الممنوحة",
+    "otherName": "عن ماذا هذه الشكوى؟",
+    "otherNameHint": "مطلوب — سيصبح هذا اسم التذكرة.",
+    "otherNamePlaceholder": "مثال: لم تُضَف نقاط الولاء"
   },
   "complaints": {
     "title": "شكاواي",

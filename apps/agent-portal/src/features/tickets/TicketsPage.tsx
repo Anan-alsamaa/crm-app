@@ -70,6 +70,8 @@ import {
   storeLabel,
   toDateInput,
   type ComplaintValues,
+  needsOtherName,
+  complaintSubject,
 } from './ComplaintFields.js';
 import { useStoreIndex, useStores } from './useStoreMatch.js';
 import {
@@ -1371,6 +1373,10 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
     () => ({
       complaint_date: toDateInput(ticket.complaint_date),
       complaint_type: ticket.complaint_type ?? '',
+      /* An "Other" ticket keeps its typed name in `subject` — there is no
+         column for it — so editing one has to read it back from there, or the
+         field opens blank and re-saving would rename the ticket "Other". */
+      complaint_type_other: needsOtherName(ticket.complaint_type) ? (ticket.subject ?? '') : '',
       service_type: ticket.service_type ?? '',
       complaint_source: ticket.complaint_source ?? '',
       communication_method: ticket.communication_method ?? '',
@@ -1493,6 +1499,11 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           // text. Withheld only while a NEW coupon is pending.
           compensation: request ? null : draft.compensation.trim() || null,
           store: storeId || null,
+          /* The ticket's NAME follows its type — and for "Other" it follows the
+             typed name instead. Without this, renaming an Other ticket changed
+             the field and left the old name on the ticket everywhere it is
+             listed. */
+          subject: complaintSubject(draft),
         },
       });
 

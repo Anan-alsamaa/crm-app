@@ -61,6 +61,7 @@ import {
   emptyComplaint,
   optionLabel,
   serviceTypeFromOrder,
+  complaintSubject,
   storeLabel,
   type ComplaintValues,
 } from '../src/features/tickets/ComplaintFields.js';
@@ -169,15 +170,20 @@ describe('serviceTypeFromOrder', () => {
      * Asserting the real vocabulary is the whole point: a green test over
      * invented inputs is what let this survive.
      */
-    expect(serviceTypeFromOrder({ ...base, deliveryType: 'carhop' })).toBe('Drive Thru');
-    expect(serviceTypeFromOrder({ ...base, deliveryType: 'in_restaurant' })).toBe('Dinning');
+    expect(serviceTypeFromOrder({ ...base, deliveryType: 'carhop' })).toBe('Carhop');
+    expect(serviceTypeFromOrder({ ...base, deliveryType: 'in_restaurant' })).toBe('Dine-in');
     expect(serviceTypeFromOrder({ ...base, deliveryType: 'delivery' })).toBe('Delivery');
     expect(serviceTypeFromOrder({ ...base, deliveryType: 'pickup' })).toBe('Pickup');
   });
 
-  it('still accepts the descriptive spellings, so a relabel does not regress it', () => {
-    expect(serviceTypeFromOrder({ ...base, deliveryType: 'drive_thru' })).toBe('Drive Thru');
-    expect(serviceTypeFromOrder({ ...base, deliveryType: 'dine_in' })).toBe('Dinning');
+  it('still accepts the descriptive spellings, so an old snapshot still resolves', () => {
+    /*
+     * A ticket raised from an order captured before the list rename must still
+     * map — the words differ, the service does not.
+     */
+    expect(serviceTypeFromOrder({ ...base, deliveryType: 'drive_thru' })).toBe('Carhop');
+    expect(serviceTypeFromOrder({ ...base, deliveryType: 'dine_in' })).toBe('Dine-in');
+    expect(serviceTypeFromOrder({ ...base, deliveryType: 'takeaway' })).toBe('Takeout');
   });
 
   it('returns blank for an order with no or unknown delivery type', () => {
@@ -317,5 +323,44 @@ describe('StorePicker — his locked restaurant field, over our store master', (
 
   it('labels a branch the way operations say it out loud', () => {
     expect(storeLabel(STORES[0]!)).toBe('LCP-002 Dhahran Mall');
+  });
+});
+
+describe('a ticket typed as "Other" has to say what it is about', () => {
+  /*
+   * A ticket has no subject box — its NAME is its complaint type. That works
+   * for the thirteen real types and collapses for the fourteenth: every
+   * "Other" ticket was called "Other", so a queue of them could not be told
+   * apart and a report grouped them into one useless bucket.
+   */
+  const other = { ...emptyComplaint, complaint_type: 'Other' };
+
+  it('names the ticket with the typed text, not "Other"', () => {
+    expect(complaintSubject({ ...other, complaint_type_other: 'Loyalty points missing' })).toBe(
+      'Loyalty points missing',
+    );
+  });
+
+  it('blocks saving while the name is empty', () => {
+    expect(complaintHasErrors(other)).toBe(true);
+    expect(complaintHasErrors({ ...other, complaint_type_other: 'x' })).toBe(false);
+  });
+
+  it('leaves every other type exactly as it was', () => {
+    const late = { ...emptyComplaint, complaint_type: 'Late order' };
+    expect(complaintSubject(late)).toBe('Late order');
+    expect(complaintHasErrors(late)).toBe(false);
+    // Even with stray text in the field — it is ignored unless the type is Other.
+    expect(complaintSubject({ ...late, complaint_type_other: 'ignored' })).toBe('Late order');
+  });
+
+  it('matches "other" whatever its casing, since the list is hand-edited', () => {
+    expect(
+      complaintSubject({
+        ...emptyComplaint,
+        complaint_type: 'other',
+        complaint_type_other: 'Typed',
+      }),
+    ).toBe('Typed');
   });
 });

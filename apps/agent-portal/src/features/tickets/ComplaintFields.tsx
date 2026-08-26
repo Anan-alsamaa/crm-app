@@ -24,6 +24,16 @@ export interface ComplaintValues {
   /** `datetime-local` value — when the complaint HAPPENED, not when it was typed. */
   complaint_date: string;
   complaint_type: string;
+  /**
+   * What to call a ticket whose type is "Other".
+   *
+   * A ticket has no subject box — its NAME is its complaint type, which works
+   * for the thirteen real types and collapses for the fourteenth: every "Other"
+   * ticket was called "Other", so a queue of them was unreadable and a report
+   * grouped them into one meaningless bucket. Only used when the type is Other;
+   * ignored otherwise.
+   */
+  complaint_type_other: string;
   service_type: string;
   complaint_source: string;
   communication_method: string;
@@ -55,6 +65,7 @@ export function toDateInput(iso: string | null | undefined): string {
 export const emptyComplaint: ComplaintValues = {
   complaint_date: '',
   complaint_type: '',
+  complaint_type_other: '',
   service_type: '',
   complaint_source: '',
   communication_method: '',
@@ -103,6 +114,10 @@ export function complaintPatch(v: ComplaintValues): Record<string, string | numb
         })()
       : null,
     complaint_type: str(v.complaint_type),
+    /* NOT sent. `complaint_type_other` is form state, not a column — it exists
+       to build the ticket's `subject` (see `complaintSubject`), which is where
+       the typed name is actually stored. Patching it here would 403 on an
+       unknown field and take the whole save with it. */
     service_type: str(v.service_type),
     complaint_source: str(v.complaint_source),
     communication_method: str(v.communication_method),
@@ -155,26 +170,34 @@ export function optionLabel(value: string): string {
  * order that already knew the answer. Verified against order 1234535, which is
  * `carhop` and now fills in Drive Thru.
  *
+ * The RETURNED words are the option list's own, and that list has been aligned
+ * with the order vocabulary (scripts/migrate-service-types.mjs): Delivery,
+ * Pickup, Carhop, Takeout, Dine-in. It used to answer "Drive Thru", "Dinning"
+ * and "TakeOut" — spellings no order ever carries — so the value it produced
+ * had to be translated by hand anyway.
+ *
  * The loose `includes` matching is kept deliberately: it costs nothing and
- * absorbs whatever spelling arrives next. `TakeOut` stays reachable only from
- * a literal takeaway/takeout, because Yiji has no delivery type meaning it and
- * a confident wrong answer in a visible field is worse than an empty one.
+ * absorbs whatever spelling arrives next, including the old ones, so a ticket
+ * raised from an order captured before the rename still resolves. `Takeout`
+ * stays reachable only from a literal takeaway/takeout, because Yiji has no
+ * delivery type meaning it and a confident wrong answer in a visible field is
+ * worse than an empty one.
  */
 export function serviceTypeFromOrder(order: TicketOrderSnapshot | null | undefined): string {
   const d = order?.deliveryType?.toLowerCase().replace(/[\s_-]/g, '');
   if (!d) return '';
   if (d.includes('deliver')) return 'Delivery';
   if (d.includes('pickup') || d.includes('collect')) return 'Pickup';
-  if (d.includes('takeaway') || d.includes('takeout')) return 'TakeOut';
-  if (d.includes('drivethru') || d.includes('drivethrough') || d.includes('carhop'))
-    return 'Drive Thru';
+  if (d.includes('takeaway') || d.includes('takeout')) return 'Takeout';
+  if (d.includes('carhop') || d.includes('drivethru') || d.includes('drivethrough'))
+    return 'Carhop';
   if (
+    d.includes('inrestaurant') ||
     d.includes('din') ||
     d.includes('instore') ||
-    d.includes('eatin') ||
-    d.includes('inrestaurant')
+    d.includes('eatin')
   )
-    return 'Dinning';
+    return 'Dine-in';
   return '';
 }
 
@@ -685,6 +708,28 @@ export function ComplaintClassification({
           placeholder={t('complaint.search', { defaultValue: 'Type to search…' })}
         />
       </FormField>
+      {/* Only for "Other", and REQUIRED there.
+          A ticket has no subject box — its name is its complaint type. That
+          works for the thirteen real types and collapses for the fourteenth:
+          every "Other" ticket was called "Other", so a queue of them could not
+          be told apart and a report grouped them into one useless bucket. */}
+      {needsOtherName(values.complaint_type) && (
+        <FormField
+          label={t('complaint.otherName', { defaultValue: 'What is it about?' })}
+          hint={t('complaint.otherNameHint', {
+            defaultValue: 'Required — this becomes the ticket name.',
+          })}
+        >
+          <Input
+            value={values.complaint_type_other}
+            onChange={(e) => onChange({ complaint_type_other: e.target.value })}
+            placeholder={t('complaint.otherNamePlaceholder', {
+              defaultValue: 'e.g. Loyalty points not credited',
+            })}
+            aria-label={t('complaint.otherName', { defaultValue: 'What is it about?' })}
+          />
+        </FormField>
+      )}
       <FormField label={t('complaint.serviceType', { defaultValue: 'Service type' })}>
         <Combobox
           value={values.service_type}
@@ -826,12 +871,36 @@ export function ComplaintResolution({
   );
 }
 
+/**
+ * Whether this complaint type needs a name typed for it.
+ *
+ * Matched case-insensitively on the WORD rather than an id, because
+ * `complaint_type` is a free string operations edit in `option_lists` — there
+ * is no enum to compare against, and "other" is what they call it.
+ */
+export function needsOtherName(complaintType: string | null | undefined): boolean {
+  return (complaintType ?? '').trim().toLowerCase() === 'other';
+}
+
+/** The ticket's name: the complaint type, or the typed one when it is "Other". */
+export function complaintSubject(v: ComplaintValues): string {
+  const type = v.complaint_type.trim();
+  if (!needsOtherName(type)) return type;
+  const typed = v.complaint_type_other.trim();
+  // Falls back to "Other" rather than to empty — a nameless ticket cannot be
+  // saved at all, and losing the ticket is worse than a vague name.
+  return typed || type;
+}
+
 /** True when either coupon number is out of range — callers block submit on it. */
 export function complaintHasErrors(v: ComplaintValues): boolean {
   const pct = Number(v.coupon_percent);
   const val = Number(v.coupon_value);
   return (
     (v.coupon_percent.trim() !== '' && (!Number.isFinite(pct) || pct < 0 || pct > 100)) ||
-    (v.coupon_value.trim() !== '' && (!Number.isFinite(val) || val < 0))
+    (v.coupon_value.trim() !== '' && (!Number.isFinite(val) || val < 0)) ||
+    // "Other" with nothing typed would name every such ticket "Other" — the
+    // exact thing the field exists to prevent.
+    (needsOtherName(v.complaint_type) && v.complaint_type_other.trim() === '')
   );
 }

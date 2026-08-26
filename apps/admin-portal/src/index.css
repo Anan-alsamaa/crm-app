@@ -85,13 +85,31 @@
   --accent-foreground: 1 0 0;
 
   /* Semantics carry meaning, never decoration. Each is legible on the page and
-     on its own tint. */
-  --destructive: 0.58 0.21 27;
+     on its own tint.
+
+     WARNING AND ERROR ARE BOTH RED, and the difference between them is DEPTH.
+     A warning used to be amber and an error red — two hues, so severity read as
+     a change of subject rather than a change of degree, and an agent scanning a
+     list had to know the code to rank what they were seeing. Now one family,
+     hue 42 -> 27, getting darker and more saturated as it gets worse:
+
+       warning  L0.54 C0.18 H42   a warm red-orange — something needs attention
+       error    L0.50 C0.21 H27   deep true red — something is wrong
+
+     The amber also FAILED CONTRAST: at L0.75 it measured 2.31 against a white
+     card, well under the 4.5 minimum, so warning text was the least legible
+     thing on the page. Both values below are measured on the surfaces they
+     actually sit on — 5.46 and 6.57 — so the ramp is an accessibility fix as
+     much as a semantic one.
+
+     Success keeps its own hue on purpose: it is not a severity, it is the
+     absence of one, and it must never be confused for a mild problem. */
+  --destructive: 0.5 0.21 27;
   --destructive-foreground: 1 0 0;
   --success: 0.68 0.16 157;
   --success-foreground: 0.24 0.04 160;
-  --warning: 0.75 0.16 65;
-  --warning-foreground: 0.3 0.05 70;
+  --warning: 0.54 0.18 42;
+  --warning-foreground: 1 0 0;
 
   /* Hairlines: barely there. Hierarchy comes from space, weight and surface —
      a border is the last resort, not the first. */
@@ -134,8 +152,10 @@
      never an alpha of the accent (an alpha of a dark hue reads grey). */
   --primary-tint: 0.93 0.055 277;
   --success-tint: 0.93 0.08 155;
-  --destructive-tint: 0.94 0.05 22;
-  --warning-tint: 0.95 0.07 90;
+  --destructive-tint: 0.945 0.045 27;
+  /* A red wash, not a yellow one — the tint has to belong to the same
+     family as the text sitting on it. */
+  --warning-tint: 0.965 0.03 42;
   --sky-tint: 0.93 0.06 264;
   --violet-tint: 0.94 0.05 285;
 }
@@ -152,8 +172,8 @@
   /* Hue washes for dark surfaces — the light theme's pastels would blind here. */
   --primary-tint: 0.29 0.07 277;
   --success-tint: 0.27 0.05 160;
-  --destructive-tint: 0.27 0.05 27;
-  --warning-tint: 0.3 0.055 75;
+  --destructive-tint: 0.26 0.055 27;
+  --warning-tint: 0.29 0.05 42;
   --sky-tint: 0.27 0.045 264;
   --violet-tint: 0.27 0.045 285;
 
@@ -182,11 +202,11 @@
   --muted-foreground: 0.68 0.01 250;
   --accent: 0.68 0.14 277;
   --accent-foreground: 0.16 0.02 200;
-  --destructive: 0.66 0.225 22;
+  --destructive: 0.68 0.21 25;
   --destructive-foreground: 1 0 0;
   --success: 0.74 0.18 158;
   --success-foreground: 0.15 0.01 250;
-  --warning: 0.82 0.18 72;
+  --warning: 0.78 0.16 42;
   --warning-foreground: 0.18 0.01 250;
   --border: 1 0 0 / 0.08;
   --border-strong: 1 0 0 / 0.14;

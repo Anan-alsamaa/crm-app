@@ -35,6 +35,7 @@ import {
   optionLabel,
   serviceTypeFromOrder,
   type ComplaintValues,
+  complaintSubject,
 } from './ComplaintFields.js';
 import { useOrderStore, useStores, toStoreRecord } from './useStoreMatch.js';
 import { useRequestCouponApproval } from '../coupons/api.js';
@@ -289,7 +290,9 @@ export function CreateTicketDialog({
   // The ticket's name. Always the complaint type — never a free-text title —
   // so the ticket list, the reports and the ops spreadsheet all say the same
   // thing about the same ticket.
-  const subject = complaint.complaint_type.trim();
+  /* The complaint type names the ticket — except for "Other", where the agent
+     types the name. Without this every Other ticket is called "Other". */
+  const subject = complaintSubject(complaint);
 
   // Whether this complaint reaches the branch, known BEFORE saving. The agent
   // is writing the description and the resolution notes that get forwarded, so

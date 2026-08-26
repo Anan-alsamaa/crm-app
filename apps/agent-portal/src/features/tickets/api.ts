@@ -416,6 +416,9 @@ export function useCreateTicketFromConversation() {
 }
 
 export interface UpdateTicketInput extends Partial<TicketComplaintFields> {
+  /** The ticket's name. Normally its complaint type; the typed name when that
+      type is "Other" — see `complaintSubject`. */
+  subject?: string;
   store?: string | null;
   status?: TicketStatus;
   priority?: Priority;
