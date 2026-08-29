@@ -201,6 +201,49 @@ through", `[]` hides it — created, notified, invisible.
 
 ---
 
+## Attempted 2026-08-29: observe Yiji's own `deliveryTypes`
+
+Asked to read the values Yiji sends for "all" or multiple delivery types, so we
+could copy them. **I could not.** Every coupon read is 403 for our service
+account:
+
+| endpoint                                 | result                           |
+| ---------------------------------------- | -------------------------------- |
+| `Coupon/GetAllCoupons`                   | 403                              |
+| `Coupon/GetFilteredData` (by `Code`)     | 403                              |
+| `CouponUser/GetAllUserCoupons`           | 403                              |
+| mobile `CouponUser/GetAllGeneralCoupon`  | 403 — wants a _customer's_ token |
+| `CouponUserOrder/GetAllCouponUserOrders` | **200**                          |
+| `Brand/GetFilteredData`                  | 200                              |
+
+So the only sample of a real coupon's `deliveryTypes` is still the one pasted
+into this conversation: `[3,1,2]` on coupon 70644. Read access is now on the
+critical path for two separate questions, which is why it moved up the ask list.
+
+### But `GetAllCouponUserOrders` showed something
+
+12,973 rows. Coupon-user ids either side of ours are present — 21224, 21226,
+21227, 21228 — and **not one of ours is**:
+
+```
+owner's:  21207  21223  21225  21229     none present
+mine:     21209  21218  21219  21220  21221  21222     none present
+```
+
+Read carefully, though. Those rows carry `usedAmount` and a real `orderId`
+(12,972 of 12,973 have one), so this table records coupons **redeemed against an
+order**, not merely granted. Our absence is therefore _consistent with_ "nobody
+has ever been able to spend them" — which is the reported symptom — but it is
+**not proof of the cause**. A coupon nobody spent would look identical whether
+it was invisible or simply unused.
+
+Worth noting for later: on those orders, `order.couponId` holds the
+**couponUserId** (21224 → order 1242998, and so on), not the coupon-definition
+id. That is the join to use if we ever get read access and want to check whether
+one of ours was redeemed.
+
+---
+
 ## What to ask Yiji
 
 Six questions. The first is the blocker; the rest are cheap while asking.
@@ -217,8 +260,14 @@ Six questions. The first is the blocker; the rest are cheap while asking.
    0 for Percentage, inferred from a working coupon.)
 5. `DeliveryType` `{1,2,3,4,5}` — which is which?
 6. `issuingSideId` — the list of ids, so a coupon is attributed to the right
-   department. And read access on `GetAllUserCoupons` for our service account,
-   so we can verify a coupon after issuing it instead of asking you to look.
+   department.
+7. **READ ACCESS for our service account** — `Coupon/GetFilteredData` and
+   `CouponUser/GetAllUserCoupons` are both 403. This has stopped being a
+   convenience: without it we cannot see what a coupon looks like on their side,
+   cannot copy the `deliveryTypes` a working coupon uses, and cannot verify a
+   fix without issuing a real coupon to a real customer and asking someone to
+   look in the app. It is the cheapest thing on this list to grant and it
+   unblocks the rest.
 
 ---
 
