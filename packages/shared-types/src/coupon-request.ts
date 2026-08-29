@@ -471,7 +471,22 @@ export function yijiDeliveryTypes(stored: string | null | undefined): number[] |
  */
 export const YIJI_ORDER_MAXIMUM = 10000;
 
-/** Yiji's `type`: what audience the coupon is for. */
+/**
+ * Yiji's `type`: what audience the coupon is for.
+ *
+ * CONFIRMED by the owner 2026-08-29 — 0 General, 1 Private, 2 GeneralExclusive.
+ * The Swagger carries the enum as bare integers with no names, so this was
+ * inferred from two real coupons until they said so; the inference matched.
+ *
+ * `GeneralExclusive` (2) is deliberately absent: it is unused for now, and a
+ * value nobody has asked for is a value nobody has defined the behaviour of.
+ *
+ * ⚠ OPEN: a compensation coupon sent as `private` reaches the customer as a
+ * NOTIFICATION but does not appear in their app — the only mobile endpoint that
+ * lists coupons is `GetAllGeneralCoupon`. See docs/YIJI-COUPON-NOT-VISIBLE.md.
+ * If Yiji confirms compensation coupons must be General, `private` moves to 0
+ * and this is the only line that changes.
+ */
 export const YIJI_COUPON_TYPE: Record<string, number> = {
   general: 0,
   public: 0,

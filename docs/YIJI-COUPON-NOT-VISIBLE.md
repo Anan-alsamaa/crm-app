@@ -50,11 +50,17 @@ list; its name and summary both say "General"; `CouponType` is an enum of
 `0, 1, 2`.
 
 **What it does not prove.** The specs carry **no enum names** — no
-`x-enumNames`, nothing. So `CouponType` is `{0,1,2}` and `CouponCategory` is
-`{0,1,2,3,4,5}` with no labels attached. My earlier reading that `0 = General`
-and `1 = Private` was inferred by comparing two real coupons against what Yiji's
-console displayed. That inference is consistent, but it is an inference, and
-there is a **third type value (2) nobody has explained**.
+`x-enumNames`, nothing.
+
+`CouponType` is now **confirmed by the owner (2026-08-29)**:
+
+```
+0 = General        1 = Private        2 = GeneralExclusive (unused for now)
+```
+
+which matches what was inferred from comparing two real coupons, and removes the
+unexplained third value. `CouponCategory` `{0,1,2,3,4,5}` is still unlabelled —
+we use 1 for Amount and 0 for Percentage, inferred the same way.
 
 I also could not read a coupon back to confirm: `GetAllUserCoupons` returns
 **403** for our service account, and `GetAllGeneralCoupon` returns **403**
@@ -95,14 +101,30 @@ visibility, and it should be named when asking.
   body:    CouponUserVM
 ```
 
-We use `/api/CouponUserOrder/CreateCouponUserFromOrder` instead, which takes
-`CouponUserOrderVM` (an envelope _containing_ a `CouponUserVM`). Both create a
-grant; ours is proven to work as far as the notification.
+**It is an ALTERNATIVE, not a second step.** Worth stating plainly because the
+names invite the opposite reading: you do not create a coupon and then
+"register" it with this. There are three sibling create endpoints on the admin
+API, and each one makes a grant on its own:
 
-It is worth asking whether `AddCompensationCoupon` is the intended path for what
-we are doing, because an endpoint named for compensation may well set the type,
-visibility and reporting bucket correctly by itself — and none of that is
-guessable from the schema.
+| endpoint                                    | body                | shape                  |
+| ------------------------------------------- | ------------------- | ---------------------- |
+| `CouponUserOrder/CreateCouponUserFromOrder` | `CouponUserOrderVM` | grant **+ order link** |
+| `CouponUser/AddCompensationCoupon`          | `CouponUserVM`      | grant only             |
+| `CouponUser/AddUserCoupon`                  | `CouponUserVM`      | grant only             |
+
+`CouponUserOrderVM` is `{ couponUserId, couponUser, orderId, usedAmount, … }` —
+it is the _join_ between a coupon-user grant and an order. That is precisely why
+ours works without a Yiji customer id: the order identifies the customer.
+
+So calling `AddCompensationCoupon` after our existing call would create a
+SECOND, separate grant, not make the first one visible. If it turns out to be
+the right endpoint we would **switch** to it, and lose the order link — which is
+the one thing making walk-ins reachable. That trade is exactly why this is a
+question for Yiji rather than a change to make.
+
+The reason it is worth asking at all: an endpoint named for compensation may set
+the type, visibility and reporting bucket correctly by itself, and none of that
+is guessable from the schema.
 
 ---
 
@@ -133,7 +155,8 @@ Six questions. The first is the blocker; the rest are cheap while asking.
    visible, or is there another endpoint the app uses?**
 2. Is `AddCompensationCoupon` the intended endpoint for CRM-issued compensation,
    rather than `CreateCouponUserFromOrder`?
-3. `CouponType` `{0,1,2}` — names for each?
+3. ~~`CouponType` names~~ — **answered**: 0 General, 1 Private,
+   2 GeneralExclusive.
 4. `CouponCategory` `{0,1,2,3,4,5}` — names for each? (We use 1 for Amount and
    0 for Percentage, inferred from a working coupon.)
 5. `DeliveryType` `{1,2,3,4,5}` — which is which?
