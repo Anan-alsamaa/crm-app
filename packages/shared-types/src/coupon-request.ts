@@ -403,8 +403,16 @@ export function generateCouponCode(
  * Getting it wrong is not cosmetic: a coupon restricted to channels the
  * customer cannot order through is a coupon that silently never works. That is
  * why an unmapped word is dropped rather than guessed at, and why "All" sends
- * NOTHING — an empty list is how Yiji already spells "no restriction", so the
- * unrestricted case needs no numbering to be correct.
+ * NOTHING.
+ *
+ * ⚠ AND THAT LAST PART IS AN ASSUMPTION, not a fact. An empty list is read here
+ * as "no restriction"; it could equally mean "valid on NO channel". This API has
+ * already burned us once on exactly that ambiguity — `orderMaximum: 0` is a
+ * ceiling of zero, not "unlimited", and it made every coupon unusable while the
+ * notification still fired. `deliveryTypes: []` is the same shape, and is the
+ * second suspect for why a coupon notifies but is not in the app.
+ * See docs/YIJI-COUPON-NOT-VISIBLE.md. Yiji's own working coupon carries
+ * [3,1,2] — it never sends an empty list.
  */
 export const YIJI_DELIVERY_TYPE_CODE: Record<string, number> = {
   delivery: 1,

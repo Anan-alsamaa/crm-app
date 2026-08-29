@@ -145,6 +145,62 @@ we do not know which is which. Still one question, not two.
 
 ---
 
+## The owner's test, and how to make it conclusive
+
+The owner (2026-08-29) says a **Private coupon should be visible too**, and
+proposes creating one by hand in the Yiji console as General and asking the
+customer to look. That is a good test — it isolates the question and costs one
+coupon.
+
+One thing to watch, or the result will not be decidable. A coupon built by hand
+in their console will almost certainly come out with **`deliveryTypes`
+populated** (their own working coupon 70644 carries `[3,1,2]`), while ours sends
+**nothing** for "All" and Yiji stores `[]`.
+
+So a hand-built General coupon differs from ours in **two** ways, not one. If it
+appears in the app, we still would not know whether `type` or `deliveryTypes`
+was responsible.
+
+**To make it conclusive, build the manual coupon to match ours in every respect
+except the one being tested:**
+
+| field                                         | set it to                   |
+| --------------------------------------------- | --------------------------- |
+| type                                          | **General** ← the variable  |
+| deliveryTypes                                 | **leave empty**, as ours is |
+| category                                      | Amount                      |
+| discount / maximumDiscount                    | any small equal pair        |
+| orderMinimum / orderMaximum                   | 0 / 10000                   |
+| reachLimit / limitForUser / monthlyReachLimit | 1                           |
+| all seven weekdays                            | true                        |
+
+Then:
+
+- **Visible** → `type` is the cause. `private` moves to `0` in
+  `YIJI_COUPON_TYPE`, one line.
+- **Not visible** → `type` is NOT the cause, and `deliveryTypes: []` becomes the
+  leading suspect. That would be worth knowing on its own, because it is the
+  same trap as `orderMaximum: 0`.
+
+### Why `deliveryTypes: []` is a real suspect
+
+We already learned once, painfully, that `0` is permissive on a floor and
+**restrictive** on a ceiling in this API:
+
+```
+orderMinimum   0    no minimum spend       harmless
+orderMaximum   0    ceiling of zero        KILLED THE COUPON
+deliveryTypes  []   ??? no restriction, or valid on NO channel?
+```
+
+I assumed "no restriction" and said so in the code. That was the generous
+reading and it may be wrong for exactly the same reason `orderMaximum` was: an
+empty set of allowed channels can mean "any" or "none", and only one of those is
+survivable. If the app asks "is this coupon valid for a channel I can order
+through", `[]` hides it — created, notified, invisible.
+
+---
+
 ## What to ask Yiji
 
 Six questions. The first is the blocker; the rest are cheap while asking.
