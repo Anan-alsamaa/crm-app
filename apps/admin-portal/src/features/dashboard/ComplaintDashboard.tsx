@@ -66,6 +66,22 @@ const KPI_CHIPS = {
 } as const;
 
 /*
+ * The card surface carries the hue, and carries it PROPERLY.
+ *
+ * Twice now these have been too pale. The tints themselves were 0.04-0.06
+ * chroma — barely tinted, so a "coloured" card rendered as off-white — and the
+ * gradient then faded to 45% of even that, leaving most of the card white with
+ * a hint of colour in one corner. Measured, not eyeballed: the old sky tint was
+ * #d4e8ff.
+ *
+ * The tint tokens are now roughly double the chroma (see `--sky-tint` and
+ * friends in index.css) and the gradient bottoms out at 75% rather than 45%, so
+ * the hue holds across the whole card instead of washing out.
+ *
+ * The numerals were re-measured against the new grounds and all five still
+ * clear 4.5:1 — that is the constraint that caps how dark these can go, and it
+ * is why the answer is more CHROMA rather than less lightness.
+ *
  * The card surface carries the hue.
  *
  * These used to fade from `tint/70` to `card`, which meant most of every card
@@ -82,15 +98,15 @@ const KPI_CHIPS = {
  * 4.5:1. Contrast comes from KPI_NUMERALS, and that is measured separately.
  */
 const KPI_SURFACES = {
-  neutral: 'bg-gradient-to-br from-secondary to-secondary/40 ring-foreground/[0.10]',
-  sky: 'bg-gradient-to-br from-sky-tint to-sky-tint/45 ring-sky/30 shadow-sky/20',
-  violet: 'bg-gradient-to-br from-violet-tint to-violet-tint/45 ring-violet/30 shadow-violet/20',
+  neutral: 'bg-gradient-to-br from-secondary to-secondary/60 ring-foreground/[0.12]',
+  sky: 'bg-gradient-to-br from-sky-tint to-sky-tint/75 ring-sky/40 shadow-sky/25',
+  violet: 'bg-gradient-to-br from-violet-tint to-violet-tint/75 ring-violet/40 shadow-violet/25',
   success:
-    'bg-gradient-to-br from-success-tint to-success-tint/45 ring-success/30 shadow-success/20',
+    'bg-gradient-to-br from-success-tint to-success-tint/75 ring-success/40 shadow-success/25',
   primary:
-    'bg-gradient-to-br from-primary-tint to-primary-tint/45 ring-primary/30 shadow-primary/20',
+    'bg-gradient-to-br from-primary-tint to-primary-tint/75 ring-primary/40 shadow-primary/25',
   destructive:
-    'bg-gradient-to-br from-destructive-tint to-destructive-tint/45 ring-destructive/30 shadow-destructive/20',
+    'bg-gradient-to-br from-destructive-tint to-destructive-tint/75 ring-destructive/40 shadow-destructive/25',
 } as const;
 
 /* The saturated top edge — the single most visible piece of hue on the card,
@@ -121,6 +137,7 @@ const KPI_NUMERALS = {
 
 function Kpi({
   value,
+  unit,
   label,
   sub,
   tone,
@@ -132,6 +149,15 @@ function Kpi({
   onOpen,
 }: {
   value: string;
+  /**
+   * A unit rendered beside the numeral — "SAR", not part of the label.
+   *
+   * It used to live in the label ("Compensation approved (SAR)"), which put the
+   * currency in the quietest text on the card and left the hero numeral
+   * unitless: "255" reads as a count, not money. A unit belongs to the number
+   * it qualifies.
+   */
+  unit?: string;
   label: string;
   sub?: string;
   tone: keyof typeof KPI_CHIPS;
@@ -203,6 +229,15 @@ function Kpi({
             )}
           >
             {value}
+            {/* Smaller and quieter than the numeral, and NOT tabular — a unit is
+                a word, so it should not be forced onto digit-width columns.
+                Hidden when the value is a phrase ("No ratings yet"), where a
+                trailing "SAR" would be nonsense. */}
+            {unit && !empty && (
+              <span className="ms-1.5 align-baseline text-lg font-semibold tracking-normal text-muted-foreground">
+                {unit}
+              </span>
+            )}
           </div>
           {delta && <div className="mt-2">{delta}</div>}
         </div>
@@ -1244,8 +1279,9 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                   icon={<ChartIcon size={17} />}
                   order={6}
                   value={coupons.sar.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  label={t('complaintDash.kpiCompensation', {
-                    defaultValue: 'Compensation approved (SAR)',
+                  unit={t('common.sar', { defaultValue: 'SAR' })}
+                  label={t('complaintDash.kpiCompensationShort', {
+                    defaultValue: 'Compensation approved',
                   })}
                   sub={
                     coupons.count > 0

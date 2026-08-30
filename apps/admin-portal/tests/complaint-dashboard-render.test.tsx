@@ -368,7 +368,11 @@ describe('ComplaintDashboard — a capped list admits what it hides', () => {
      * entirely rather than left computed for somebody to re-display.
      */
     render(<ComplaintDashboard />);
-    expect(screen.getByText('Compensation approved (SAR)')).toBeInTheDocument();
+    /* The currency moved OUT of the label and onto the numeral, where a unit
+       belongs — "255 SAR" rather than a hero number with no unit and "(SAR)"
+       whispered in the smallest text on the card. */
+    expect(screen.getByText('Compensation approved')).toBeInTheDocument();
+    expect(screen.getByText('SAR')).toBeInTheDocument();
     expect(screen.queryByText(/avg each/)).not.toBeInTheDocument();
   });
 });

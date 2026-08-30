@@ -150,14 +150,14 @@
 
   /* TINT RAMP — saturated pastel fills for coloured surfaces. Separate tokens,
      never an alpha of the accent (an alpha of a dark hue reads grey). */
-  --primary-tint: 0.93 0.055 277;
-  --success-tint: 0.93 0.08 155;
-  --destructive-tint: 0.945 0.045 27;
+  --primary-tint: 0.905 0.105 277;
+  --success-tint: 0.915 0.105 163;
+  --destructive-tint: 0.91 0.09 25;
   /* A red wash, not a yellow one — the tint has to belong to the same
      family as the text sitting on it. */
   --warning-tint: 0.965 0.03 42;
-  --sky-tint: 0.93 0.06 264;
-  --violet-tint: 0.94 0.05 285;
+  --sky-tint: 0.905 0.105 250;
+  --violet-tint: 0.905 0.105 300;
 }
 
 /* DEFAULT THEME — "midnight ink" (mirrors agent portal). Light via
