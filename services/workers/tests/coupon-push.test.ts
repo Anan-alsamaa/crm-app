@@ -180,7 +180,9 @@ describe('yijiCouponPayload — what KIND of coupon this is', () => {
      * meaning, and only one of them silently nullifies the coupon.
      */
     const c = coupon();
-    expect(c.orderMaximum).toBe(10000);
+    // The exact figure is the owner's call (100000); what this test guards is
+    // that it is SENT and is not 0 — a ceiling of zero is the failing case.
+    expect(c.orderMaximum).toBe(100000);
     expect(c.orderMaximum).not.toBe(0);
     // Both ends stated rather than left to a default, so neither can drift.
     expect(c.orderMinimum).toBe(0);

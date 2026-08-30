@@ -486,13 +486,20 @@ export function yijiDeliveryTypes(stored: string | null | undefined): number[] |
  * cap) and RESTRICTIVE on a ceiling. Same number, opposite meaning, depending
  * on which end of the range it bounds.
  *
- * 10000 is Yiji's own "no practical ceiling" sentinel rather than a considered
- * business number — it is what a coupon built in their console gets. Matching
- * a known-working coupon is a smaller leap than keeping a value we have
- * evidence is broken, but it IS matched rather than derived, so it lives here
- * as one named constant.
+ * 100000 at the owner's direction (2026-08-29): "we don't need a value, but if
+ * we have to send one, any value like 100000, as long as it causes no issue."
+ *
+ * Sending SOMETHING is not optional, and that is the part worth remembering.
+ * Omitting it is not neutral — it is the failing case, already observed: Yiji
+ * defaults the field to 0, and a ceiling of zero created coupons that notified
+ * the customer and could never be redeemed.
+ *
+ * The value only has to be high enough never to bind. It was 10000, copied from
+ * a coupon built in Yiji's own console; 100000 is the same idea with more
+ * headroom, and headroom is the safe direction — a ceiling that is too high
+ * does nothing, while one that is too low silently caps a legitimate order.
  */
-export const YIJI_ORDER_MAXIMUM = 10000;
+export const YIJI_ORDER_MAXIMUM = 100000;
 
 /**
  * Yiji's `type`: what audience the coupon is for.
