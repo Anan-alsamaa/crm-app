@@ -573,6 +573,19 @@ function Row({
                 supervisor is most likely to be checking the coupon against:
                 a coupon raised for one item should be worth that item. */}
             <Term label={t('coupons.itemShort', { defaultValue: 'Item' })} value={row.item_name} />
+            {/* A real term of the coupon, so the supervisor approves it rather
+                than discovering it. Plain Yes/No, because the column is a
+                NEGATIVE — "Yes" here means the customer is restricted. */}
+            <Term
+              label={t('coupons.noOtherDiscounts', {
+                defaultValue: 'Cannot be used with other discounts',
+              })}
+              value={
+                row.no_other_discounts
+                  ? t('common.yes', { defaultValue: 'Yes' })
+                  : t('common.no', { defaultValue: 'No' })
+              }
+            />
             <Term
               label={t('couponApprovals.validity', { defaultValue: 'Valid' })}
               value={

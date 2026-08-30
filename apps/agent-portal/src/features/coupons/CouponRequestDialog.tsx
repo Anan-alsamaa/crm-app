@@ -125,6 +125,7 @@ export function CouponRequestDialog({
     restaurant_id: restaurantId,
     item_name: null,
     item_sku: null,
+    no_other_discounts: false,
   }));
   /**
    * Whether the agent has typed into the reason themselves. Until they do, the
@@ -257,6 +258,7 @@ export function CouponRequestDialog({
         restaurant_id: d.restaurant_id ?? null,
         item_name: d.item_name ?? null,
         item_sku: d.item_sku ?? null,
+        no_other_discounts: d.no_other_discounts,
       })
       .then(() => {
         toast.success(
@@ -652,6 +654,34 @@ export function CouponRequestDialog({
             />
           </FormField>
         </div>
+        {/* Whether the coupon stacks on an already-discounted item.
+            Phrased as a NEGATIVE to match Yiji's own two flags — theirs are
+            `dontApplyLoyality` / `dontApplyOffer`, so a positively-worded
+            question here would default to Yes and need inverting on the way
+            out. Unticked is the generous answer, which is the right default for
+            an apology: a coupon that stops working during a promotion is a
+            worse apology. */}
+        <label className="mt-4 flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+            checked={draft.no_other_discounts === true}
+            onChange={(e) => set('no_other_discounts', e.target.checked)}
+          />
+          <span className="min-w-0">
+            <span className="block text-xs font-medium text-foreground">
+              {t('coupons.noOtherDiscounts', {
+                defaultValue: 'Cannot be used with other discounts',
+              })}
+            </span>
+            <span className="mt-0.5 block text-2xs leading-relaxed text-muted-foreground">
+              {t('coupons.noOtherDiscountsHint', {
+                defaultValue:
+                  'Tick this and the customer cannot use it on an item that is already discounted. Left unticked, it applies on top.',
+              })}
+            </span>
+          </span>
+        </label>
         {/* Said BEFORE sending, not discovered afterwards.
             The alert fires server-side either way (a Directus hook — the agent
             portal cannot be the enforcement point when the row is written

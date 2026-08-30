@@ -647,7 +647,8 @@
     "why": "السبب",
     "couponPercent": "نسبة الكوبون %",
     "couponValue": "قيمة الكوبون (ر.س)",
-    "itemShort": "الصنف"
+    "itemShort": "الصنف",
+    "noOtherDiscounts": "لا يمكن استخدامها مع خصومات أخرى"
   },
   "customFields": {
     "title": "حقول مخصّصة",
@@ -1507,5 +1508,9 @@
     "markAllRead": "تعليم الكل كمقروء",
     "empty": "لا يوجد ما تقرأه.",
     "unread": "غير مقروء"
+  },
+  "common": {
+    "yes": "نعم",
+    "no": "لا"
   }
 }

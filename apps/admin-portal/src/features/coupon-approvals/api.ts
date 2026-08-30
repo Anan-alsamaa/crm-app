@@ -36,6 +36,8 @@ export interface CouponApprovalRow {
   item_name: string | null;
   /** Yiji's item id for that line — groupable where the name is not. */
   item_sku: string | null;
+  /** Yes = cannot be used on an already-discounted item. */
+  no_other_discounts: boolean | null;
   brand_id: string | null;
   restaurant_id: string | null;
   /** True when a supervisor changed those terms before approving. */
@@ -112,6 +114,7 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
               'usage_limit',
               'item_name',
               'item_sku',
+              'no_other_discounts',
               'brand_id',
               'restaurant_id',
               'edited_by_admin',

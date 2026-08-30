@@ -100,6 +100,24 @@ export const CouponRequestDraft = z.object({
    * one from the name would recreate the problem it exists to solve.
    */
   item_sku: z.string().nullish(),
+  /**
+   * Whether this coupon may be used on something ALREADY discounted.
+   *
+   * Drives Yiji's `dontApplyLoyality` and `dontApplyOffer`, which always move
+   * together (owner, 2026-08-29): true means the customer cannot use the coupon
+   * when the item already carries a discount; false means it stacks on top.
+   *
+   * Phrased as a NEGATIVE on purpose, and this is the whole reason for the
+   * awkward name. Yiji's fields are negatives — "do NOT apply" — so a
+   * positively-phrased CRM field ("allow with other offers") would have to
+   * default to Yes and be inverted on the way out. Two inversions is where a
+   * flag ends up meaning its own opposite. Sharing their polarity means
+   * No -> false and Yes -> true, with nothing to reason about at either end.
+   *
+   * Defaults FALSE: an apology that cannot be used alongside a promotion is a
+   * worse apology, and the permissive reading is the one to fall into.
+   */
+  no_other_discounts: z.boolean().default(false),
 });
 export type CouponRequestDraft = z.infer<typeof CouponRequestDraft>;
 
@@ -247,13 +265,16 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
  * department in Yiji's own reporting. Deriving them in two places is how a
  * coupon ends up prefixed CC and booked to Operations.
  *
- * ⚠ `yijiId` IS NOT CONFIRMED for any row. The only id ever observed is 6, on
- * a coupon of unknown issuing side (70644). Every value below is null, and a
- * null is NOT SENT — Yiji then applies its own default, exactly as today.
- * That is deliberate: a wrong id does not fail loudly, it silently books real
- * money to the wrong department in the reports the owner reads, and stays
- * wrong for ever. Fill these in the moment Yiji supplies the list; nothing
- * else needs to change.
+ * `yijiId` was supplied by the owner on 2026-08-29 from Yiji's own list:
+ *
+ *   6  OPS - Compensation        8  CC - Compensation
+ *   3  MKT - Activity           28  Shadh - Compensation
+ *  11  Taker - Compensation     22  Alshrouq - Compensation
+ *  20  Parcel - Compensation     2  Other
+ *
+ * A null `yijiId` is NOT SENT, and Yiji applies its own default. That matters
+ * for the one row still null: a wrong id does not fail loudly, it silently
+ * books real money to the wrong department in the reports somebody reads.
  *
  * The delivery companies are named individually rather than a single
  * "Delivery", because a coupon issued because Shadh lost the order is not the
@@ -269,9 +290,10 @@ export interface IssuingSide {
 }
 
 export const ISSUING_SIDES: readonly IssuingSide[] = [
-  { value: 'Customer Care', prefix: 'CC', yijiId: null },
-  { value: 'Operations', prefix: 'OPS', yijiId: null },
-  { value: 'Marketing', prefix: 'MKT', yijiId: null },
+  { value: 'Customer Care', prefix: 'CC', yijiId: 8 },
+  { value: 'Operations', prefix: 'OPS', yijiId: 6 },
+  // Their label is "MKT - Activity", not "- Compensation" like the rest.
+  { value: 'Marketing', prefix: 'MKT', yijiId: 3 },
   /*
    * The delivery companies carry their FULL NAME, by the owner's decision.
    *
@@ -285,11 +307,24 @@ export const ISSUING_SIDES: readonly IssuingSide[] = [
    * departments; the owner reversed it. Consistency of SHAPE was the wrong
    * thing to optimise for against being able to read who owes the money.)
    */
-  { value: 'Shadh', prefix: 'SHADH', yijiId: null },
-  { value: 'Taker', prefix: 'TAKER', yijiId: null },
-  { value: 'Shurouq', prefix: 'SHUROUQ', yijiId: null },
+  { value: 'Shadh', prefix: 'SHADH', yijiId: 28 },
+  { value: 'Taker', prefix: 'TAKER', yijiId: 11 },
+  // Yiji spell it "Alshrouq"; same courier.
+  { value: 'Shurouq', prefix: 'SHUROUQ', yijiId: 22 },
+  /*
+   * LEAJLAK HAS NO ID YET — deliberately still null.
+   *
+   * The list supplied on 2026-08-29 covers every other side and simply does not
+   * include this courier. Either Yiji have one and it was missed, or they do
+   * not carry Leajlak at all.
+   *
+   * The tempting fallback is 2 ("Other"), and it is the wrong answer: "Other"
+   * means UNKNOWN, so it would file a courier we can name under a bucket that
+   * says we cannot — a quiet, permanent error in the reports somebody reads to
+   * bill couriers. Sending nothing is honest; sending "Other" is a claim.
+   */
   { value: 'Leajlak', prefix: 'LEAJLAK', yijiId: null },
-  { value: 'Parcel', prefix: 'PARCEL', yijiId: null },
+  { value: 'Parcel', prefix: 'PARCEL', yijiId: 20 },
 ];
 
 /**

@@ -64,6 +64,8 @@ const ROW: CouponApprovalRow = {
   brand_id: 'Casa Pasta',
   restaurant_id: 'store-4',
   item_name: null,
+  // The permissive default an agent gets unless they tick the box.
+  no_other_discounts: false,
   reason: 'Order arrived cold.',
   contact: { name: 'Saad Al-Harbi', phone: '+966500000000', external_customer_id: 'yiji-77' },
   ticket: { order_id: '1187929' },
@@ -224,9 +226,25 @@ describe('yijiCouponPayload — what KIND of coupon this is', () => {
      * permissive reading, and the wrong one for an apology.
      */
     const c = coupon();
-    expect(c.dontApplyLoyality).toBe(true);
-    expect(c.dontApplyOffer).toBe(true);
     expect(c.posDisountCode).toBe(0);
+
+    /*
+     * `dontApplyLoyality` / `dontApplyOffer` are NOT hardcoded true any more.
+     * They were, copied from one console coupon — which would have made every
+     * apology unusable during a promotion. They always move together (owner,
+     * 2026-08-29) and the agent decides, via `no_other_discounts`.
+     */
+    expect(c.dontApplyLoyality).toBe(false);
+    expect(c.dontApplyOffer).toBe(false);
+
+    const strict = coupon({ ...ROW, no_other_discounts: true });
+    expect(strict.dontApplyLoyality).toBe(true);
+    expect(strict.dontApplyOffer).toBe(true);
+
+    // Null (a row written before the column existed) reads as the permissive
+    // answer, never as "restricted".
+    const legacy = coupon({ ...ROW, no_other_discounts: null });
+    expect(legacy.dontApplyLoyality).toBe(false);
     // The reason under the name their own UI uses, alongside the documented one.
     expect(c.compensation).toBe(ROW.reason);
     expect(c.compensationReason).toBe(ROW.reason);

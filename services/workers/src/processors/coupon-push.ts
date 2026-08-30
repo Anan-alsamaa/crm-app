@@ -9,6 +9,7 @@ import type {
 } from '@yiji/shared-types';
 import {
   couponWindow,
+  isPercentageCategory,
   internationalPhone,
   isPhoneDerivedCustomerId,
   isYijiRefused,
@@ -101,6 +102,13 @@ export interface CouponApprovalRow {
   brand_id: string | null;
   restaurant_id: string | null;
   item_name: string | null;
+  /**
+   * One CRM answer driving Yiji's `dontApplyLoyality` AND `dontApplyOffer`,
+   * which always move together. True = cannot be used on an already-discounted
+   * item. Null on rows written before the field existed, and `=== true` below
+   * treats that as false — the permissive reading.
+   */
+  no_other_discounts: boolean | null;
   reason: string | null;
   contact: {
     name: string | null;
@@ -179,6 +187,8 @@ export function yijiCouponPayload(
   const cap = num(row.max_discount);
   const limit = num(row.usage_limit) ?? 1;
   const deliveryTypes = yijiDeliveryTypes(row.delivery_type);
+  /* Which of the two money fields is authoritative — see the discount pair. */
+  const isPct = isPercentageCategory(row.discount_category);
 
   /*
    * Their id first, ours only if it is genuinely theirs.
@@ -271,8 +281,24 @@ export function yijiCouponPayload(
          * class of failure that is invisible from our side: the coupon exists,
          * the customer is notified, and nothing is redeemable.
          */
-        discount: amount ?? 0,
-        discountPercentage: percent ?? 0,
+        /*
+         * THE CATEGORY DECIDES, and the other field is forced to 0.
+         *
+         * These used to be `amount ?? 0` and `percent ?? 0` independently,
+         * which is right whenever exactly one column is set — and wrong when
+         * both are. An agent who types an amount, switches the category to
+         * Percentage and types a percentage leaves BOTH columns populated, and
+         * we would then send `discount: 25, discountPercentage: 15` on a coupon
+         * approved as one or the other. Yiji would be free to apply either.
+         *
+         * `category` is already the authority on which reading is correct — it
+         * is sent immediately above — so deriving both values from it is the
+         * only way the three can never contradict each other. Confirmed against
+         * two real coupons: an Amount coupon carries `discount: N,
+         * discountPercentage: 0`, and both fields are always present.
+         */
+        discount: isPct ? 0 : (amount ?? 0),
+        discountPercentage: isPct ? (percent ?? 0) : 0,
         ...(cap != null ? { maximumDiscount: cap } : {}),
         /*
          * HOW MANY TIMES IT MAY BE USED.
@@ -319,18 +345,22 @@ export function yijiCouponPayload(
          * (`orderMaximum: 0` is a ceiling of zero; `deliveryTypes: []` is not
          * "any channel").
          *
-         * `dontApplyLoyality` / `dontApplyOffer`: their console sets BOTH true,
-         * i.e. this coupon does not stack with loyalty rewards or promotions.
-         * We defaulted them to false, which is the permissive reading and the
-         * opposite of what a compensation coupon should be — an apology is not
-         * meant to combine with a running promotion. Matching them is both
-         * safer commercially and closer to a known-good request.
+         * `dontApplyLoyality` / `dontApplyOffer` ALWAYS MOVE TOGETHER (owner,
+         * 2026-08-29) — one CRM answer drives both. True means the customer
+         * cannot use this coupon on an item that already carries a discount;
+         * false means it stacks on top.
          *
-         * `posDisountCode: 0` is what they send; it is stated rather than left
-         * to default so the payload is identical to one that works.
+         * Both were briefly hardcoded `true` here, copied from a console
+         * coupon. That was the console's choice for one test coupon, not a rule
+         * — and hardcoding it would have quietly made every apology unusable
+         * during a promotion. It is a decision the agent raising the coupon
+         * should make, so it is now `no_other_discounts` on the request.
+         *
+         * `posDisountCode: 0` is what they send; stated rather than left to
+         * default so the payload is identical to one that works.
          */
-        dontApplyLoyality: true,
-        dontApplyOffer: true,
+        dontApplyLoyality: row.no_other_discounts === true,
+        dontApplyOffer: row.no_other_discounts === true,
         posDisountCode: 0,
         /*
          * WHO PAYS FOR THIS COUPON.
@@ -630,6 +660,7 @@ export async function processCouponPushJob(
         'brand_id',
         'restaurant_id',
         'item_name',
+        'no_other_discounts',
         'reason',
         { contact: ['name', 'phone', 'external_customer_id'] },
         // The order is the whole point of the endpoint, and the receipt tells

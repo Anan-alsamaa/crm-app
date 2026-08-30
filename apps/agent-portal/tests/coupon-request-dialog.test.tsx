@@ -428,7 +428,7 @@ describe('the item a coupon compensates', () => {
         { name: 'Garlic Bread', price: 26 },
       ],
     });
-    await userEvent.click(screen.getByLabelText(/item/i));
+    await userEvent.click(screen.getByLabelText(/item \(optional\)/i));
     expect(await screen.findByRole('button', { name: /Vegetable Pasta/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Garlic Bread/ })).toBeInTheDocument();
     // Optional: an explicit way to say the coupon is not about one line.
@@ -437,7 +437,7 @@ describe('the item a coupon compensates', () => {
 
   it('fills the coupon with what the chosen item cost, still editable', async () => {
     renderDialog({ orderItems: [{ name: 'Vegetable Pasta', price: 26 }] });
-    await userEvent.click(screen.getByLabelText(/item/i));
+    await userEvent.click(screen.getByLabelText(/item \(optional\)/i));
     await userEvent.click(await screen.findByRole('button', { name: /Vegetable Pasta/ }));
 
     const amount = screen.getByLabelText(/coupon value/i) as HTMLInputElement;
@@ -457,7 +457,7 @@ describe('the item a coupon compensates', () => {
      * permanently its own distinct value.
      */
     renderDialog({ orderItems: [{ name: 'Vegetable Pasta', price: 26, sku: '1047' }] });
-    await userEvent.click(screen.getByLabelText(/item/i));
+    await userEvent.click(screen.getByLabelText(/item \(optional\)/i));
     await userEvent.click(await screen.findByRole('button', { name: /Vegetable Pasta/ }));
 
     // The dropdowns operations owns, plus a value — the same minimum the
@@ -513,7 +513,7 @@ describe('the item a coupon compensates', () => {
         { name: 'Vegetable Pasta', price: 26 },
       ],
     });
-    await userEvent.click(screen.getByLabelText(/item/i));
+    await userEvent.click(screen.getByLabelText(/item \(optional\)/i));
     await screen.findByRole('button', { name: /Vegetable Pasta/ });
     expect(screen.getAllByRole('button', { name: /Vegetable Pasta/ })).toHaveLength(1);
   });
@@ -521,7 +521,7 @@ describe('the item a coupon compensates', () => {
   it('takes a typed item when the ticket was raised by hand', async () => {
     // No order behind it — the agent heard the item down a phone line.
     renderDialog({ orderItems: [] });
-    const typed = screen.getByLabelText(/item/i);
+    const typed = screen.getByLabelText(/item \(optional\)/i);
     expect(typed.tagName).toBe('INPUT');
     /*
      * One atomic change, not a per-character `userEvent.type`.
@@ -544,7 +544,7 @@ describe('the item a coupon compensates', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
     await userEvent.click(screen.getByLabelText(/delivery type/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
-    await userEvent.click(screen.getByLabelText(/item/i));
+    await userEvent.click(screen.getByLabelText(/item \(optional\)/i));
     await userEvent.click(await screen.findByRole('button', { name: /Vegetable Pasta/ }));
 
     // A coupon needs an amount before it can be sent — see couponTermsProblems.

@@ -423,16 +423,27 @@ describe('couponPrefix', () => {
 });
 
 describe('yijiIssuingSideId', () => {
-  it('sends NOTHING while the ids are unknown', () => {
+  it('resolves the ids Yiji supplied', () => {
+    // From their own list, 2026-08-29: "OPS - Compensation" 6, "CC -
+    // Compensation" 8, "MKT - Activity" 3, and one id per courier.
+    expect(yijiIssuingSideId('Operations')).toBe(6);
+    expect(yijiIssuingSideId('Customer Care')).toBe(8);
+    expect(yijiIssuingSideId('Marketing')).toBe(3);
+    expect(yijiIssuingSideId('Shadh')).toBe(28);
+    expect(yijiIssuingSideId('Taker')).toBe(11);
+    expect(yijiIssuingSideId('Shurouq')).toBe(22);
+    expect(yijiIssuingSideId('Parcel')).toBe(20);
+  });
+
+  it('sends NOTHING for Leajlak, whose id was not supplied', () => {
     /*
-     * Every `yijiId` in ISSUING_SIDES is null until Yiji supplies the list.
-     * Undefined here means the field is omitted from the payload and Yiji
-     * defaults it — exactly what happens today. A GUESSED id would not fail
-     * loudly; it would book real money to the wrong department in their
-     * reporting and stay wrong for ever.
+     * The list covers every other side and simply omits this courier. The
+     * tempting fallback is 2 ("Other") and it is wrong: "Other" means UNKNOWN,
+     * so it would file a courier we can name under a bucket that says we
+     * cannot — a quiet, permanent error in the reports used to bill couriers.
+     * Undefined omits the field and lets Yiji default it.
      */
-    expect(yijiIssuingSideId('Operations')).toBeUndefined();
-    expect(yijiIssuingSideId('Shadh')).toBeUndefined();
+    expect(yijiIssuingSideId('Leajlak')).toBeUndefined();
   });
 
   it('is undefined for a side that is not in the table at all', () => {
