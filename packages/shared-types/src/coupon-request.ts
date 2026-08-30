@@ -402,18 +402,24 @@ export function generateCouponCode(
  *
  * Getting it wrong is not cosmetic: a coupon restricted to channels the
  * customer cannot order through is a coupon that silently never works. That is
- * why an unmapped word is dropped rather than guessed at, and why "All" sends
- * NOTHING.
+ * why an unmapped word is dropped rather than guessed at.
  *
- * ⚠ AND THAT LAST PART IS AN ASSUMPTION, not a fact. An empty list is read here
- * as "no restriction"; it could equally mean "valid on NO channel". This API has
- * already burned us once on exactly that ambiguity — `orderMaximum: 0` is a
- * ceiling of zero, not "unlimited", and it made every coupon unusable while the
- * notification still fired. `deliveryTypes: []` is the same shape, and is the
- * second suspect for why a coupon notifies but is not in the app.
- * See docs/YIJI-COUPON-NOT-VISIBLE.md. Yiji's own working coupon carries
- * [3,1,2] — it never sends an empty list.
+ * ⚠ RESOLVED 2026-08-29. "All" used to send NOTHING, on my assumption that an
+ * empty list reads as "no restriction". A coupon built in Yiji's own console
+ * settled it: "all delivery types" carries `[3,1,2,4,5]` — every value,
+ * enumerated. See YIJI_ALL_DELIVERY_TYPES.
  */
+/**
+ * Every delivery type, in the order Yiji's own console sends them for "all".
+ *
+ * Taken verbatim from a coupon created in their console against the same order
+ * and customer as ours (`CouponUserId` 21486): `deliveryTypes: [3,1,2,4,5]`.
+ * The order looks arbitrary and is preserved anyway — matching a known-good
+ * request exactly costs nothing, and any deviation is one more thing to rule
+ * out the next time something does not work.
+ */
+export const YIJI_ALL_DELIVERY_TYPES: readonly number[] = [3, 1, 2, 4, 5];
+
 export const YIJI_DELIVERY_TYPE_CODE: Record<string, number> = {
   delivery: 1,
   pickup: 2,
@@ -441,7 +447,16 @@ export const YIJI_DELIVERY_TYPE_CODE: Record<string, number> = {
 export function yijiDeliveryTypes(stored: string | null | undefined): number[] | null {
   const picked = parseDeliveryTypes(stored);
   if (picked.length === 0) return null;
-  if (picked.some((p) => p.trim().toLowerCase() === 'all')) return null;
+  /*
+   * "All" ENUMERATES every channel. It used to send nothing, on my assumption
+   * that an absent list reads as "no restriction" — that was wrong, and a real
+   * coupon built in Yiji's own console proved it: an "all delivery types"
+   * coupon carries `[3,1,2,4,5]`, every value in the enum, in that order.
+   *
+   * Same trap as `orderMaximum: 0`, which is a ceiling of zero rather than
+   * "unlimited". An empty collection in this API is not the generous reading.
+   */
+  if (picked.some((p) => p.trim().toLowerCase() === 'all')) return [...YIJI_ALL_DELIVERY_TYPES];
 
   const codes: number[] = [];
   for (const p of picked) {

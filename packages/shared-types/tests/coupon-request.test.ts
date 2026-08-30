@@ -311,13 +311,19 @@ describe('high-value coupon alert', () => {
 });
 
 describe('yijiDeliveryTypes', () => {
-  it('returns null for "All" — Yiji spells unrestricted as an ABSENT list', () => {
+  it('ENUMERATES every channel for "All"', () => {
     /*
-     * Enumerating every channel would look more explicit and be worse: it
-     * breaks silently the moment Yiji adds a channel, whereas an absent list
-     * keeps meaning "all of them" for ever.
+     * This asserted the opposite until 2026-08-29. I reasoned that an absent
+     * list keeps meaning "all of them" even if Yiji adds a channel, which is
+     * true and irrelevant — a coupon built in their own console for "all
+     * delivery types" sends `[3,1,2,4,5]`, and matching a request that works
+     * beats a tidier one that may not.
      */
-    expect(yijiDeliveryTypes('All')).toBeNull();
+    expect(yijiDeliveryTypes('All')).toEqual([3, 1, 2, 4, 5]);
+  });
+
+  it('still sends nothing when NOTHING was chosen', () => {
+    // Absent is right here: no selection is not the same as every selection.
     expect(yijiDeliveryTypes('')).toBeNull();
     expect(yijiDeliveryTypes(null)).toBeNull();
   });

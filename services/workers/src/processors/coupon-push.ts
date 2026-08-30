@@ -225,6 +225,17 @@ export function yijiCouponPayload(
         code: row.coupon_code ?? '',
         compensationReason: row.reason ?? '',
         /*
+         * The reason, AGAIN, under the name their console uses.
+         *
+         * Their request carries `compensation: "testing"` on the coupon while
+         * ALSO carrying `compensationReason` on the couponUser — the same text
+         * in two places. `compensation` is not in the published CouponVM
+         * schema, so it is an extra their own UI sends; harmless if ignored,
+         * and the alternative is a field their reporting may read sitting
+         * empty on every coupon we create.
+         */
+        compensation: row.reason ?? '',
+        /*
          * WHAT KIND of coupon this is.
          *
          * Sent because it used to not be. Yiji defaults both of these to 0 —
@@ -298,6 +309,29 @@ export function yijiCouponPayload(
          */
         orderMinimum: 0,
         orderMaximum: YIJI_ORDER_MAXIMUM,
+        /*
+         * FIELDS YIJI'S OWN CONSOLE SENDS AND WE DID NOT.
+         *
+         * Taken from a coupon built by hand in their console against the same
+         * order and customer as ours (CouponUserId 21486). Each of these was
+         * absent from our request and therefore defaulted — and this API has
+         * already shown twice that its defaults are not the generous reading
+         * (`orderMaximum: 0` is a ceiling of zero; `deliveryTypes: []` is not
+         * "any channel").
+         *
+         * `dontApplyLoyality` / `dontApplyOffer`: their console sets BOTH true,
+         * i.e. this coupon does not stack with loyalty rewards or promotions.
+         * We defaulted them to false, which is the permissive reading and the
+         * opposite of what a compensation coupon should be — an apology is not
+         * meant to combine with a running promotion. Matching them is both
+         * safer commercially and closer to a known-good request.
+         *
+         * `posDisountCode: 0` is what they send; it is stated rather than left
+         * to default so the payload is identical to one that works.
+         */
+        dontApplyLoyality: true,
+        dontApplyOffer: true,
+        posDisountCode: 0,
         /*
          * WHO PAYS FOR THIS COUPON.
          *

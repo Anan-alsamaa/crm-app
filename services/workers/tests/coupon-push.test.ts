@@ -198,13 +198,36 @@ describe('yijiCouponPayload — what KIND of coupon this is', () => {
     expect(c.monthlyReachLimit).toBe(1);
   });
 
-  it('sends NO deliveryTypes for "All" — an empty list is how Yiji spells that', () => {
+  it('ENUMERATES every channel for "All" — an empty list is not how Yiji spells it', () => {
     /*
-     * Not an oversight: enumerating every channel would break the moment Yiji
-     * adds one, and their own coupons treat an absent list as unrestricted.
+     * This asserted the opposite until 2026-08-29, on my assumption that an
+     * absent list reads as "no restriction". A coupon built in Yiji's own
+     * console against the same order and customer settled it: "all delivery
+     * types" carries `[3,1,2,4,5]` — every value in the enum, enumerated.
+     *
+     * Third time this API has punished the generous reading of an empty or
+     * zero value: `orderMaximum: 0` is a ceiling of zero, and `deliveryTypes:
+     * []` is not "any channel". Assume nothing here is permissive by default.
      */
     const c = coupon({ ...ROW, delivery_type: 'All' });
-    expect(c).not.toHaveProperty('deliveryTypes');
+    expect(c.deliveryTypes).toEqual([3, 1, 2, 4, 5]);
+  });
+
+  it('sends the fields their console sends, so the payload matches a known-good one', () => {
+    /*
+     * Each of these was absent from ours and defaulted. `dontApplyLoyality` and
+     * `dontApplyOffer` are the ones that matter commercially: their console
+     * sets BOTH true, meaning a compensation coupon does not stack with
+     * loyalty rewards or a running promotion. We defaulted them to false — the
+     * permissive reading, and the wrong one for an apology.
+     */
+    const c = coupon();
+    expect(c.dontApplyLoyality).toBe(true);
+    expect(c.dontApplyOffer).toBe(true);
+    expect(c.posDisountCode).toBe(0);
+    // The reason under the name their own UI uses, alongside the documented one.
+    expect(c.compensation).toBe(ROW.reason);
+    expect(c.compensationReason).toBe(ROW.reason);
   });
 
   it('maps a specific channel selection onto their codes', () => {
