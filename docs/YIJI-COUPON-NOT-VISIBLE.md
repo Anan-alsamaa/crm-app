@@ -1,4 +1,34 @@
-# Why the coupon notifies but is not in the app
+# Why the coupon notified but was not in the app — SOLVED
+
+> **RESOLVED 2026-08-30.** Coupon `CC-SJXW86R2` (receipt 21499) was created in
+> the CRM, delivered to Yiji, appeared in the customer's app, and was
+> **redeemed successfully**. The whole chain works.
+>
+> It was never one thing. Five fields were wrong, every one of them an
+> _omission_ that Yiji defaulted to something restrictive:
+>
+> | field                | we sent           | what it meant                      |
+> | -------------------- | ----------------- | ---------------------------------- |
+> | `orderMaximum`       | absent → 0        | a ceiling of **zero** — unusable   |
+> | `deliveryTypes`      | absent → `[]`     | "all" is `[3,1,2,4,5]`, enumerated |
+> | `monthlyReachLimit`  | absent → 0        | no monthly allowance               |
+> | `discountPercentage` | omitted on Amount | send both, unused one as 0         |
+> | dates                | UTC with `Z`      | local wall-clock, no zone          |
+>
+> Plus `issuingSideId` (cost unattributed) and the two `dontApply*` flags.
+>
+> **The lesson: in this API an absent field is not a neutral default.** Zero on
+> a ceiling means zero, an empty array means none. Each fault produced a coupon
+> that existed, notified the customer, and could not be used — invisible from
+> our side, because the push returned success.
+>
+> The theory below — that `type: 1` (Private) was the cause — was **wrong**.
+> The owner said so before the evidence arrived, and the evidence agreed: their
+> own console coupon is Private too. It is kept for the reasoning trail.
+>
+> **What actually cracked it:** asking the owner to build the same coupon in
+> Yiji's console and send the request payload, then diffing field by field.
+> That one step resolved what days of reading Swagger could not.
 
 _Read off Yiji's own Swagger, 2026-08-29. No coupon was issued to investigate
 this._
