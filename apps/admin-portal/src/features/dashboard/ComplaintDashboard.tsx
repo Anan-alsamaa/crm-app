@@ -86,8 +86,23 @@ const KPI_CHIPS = {
  * A single flat token rather than a per-tone map, kept as a constant so the
  * next person changing it does not have to find eight copies.
  */
-const KPI_CARD =
-  'bg-card ring-1 ring-foreground/[0.07] shadow-[0_1px_2px_oklch(var(--shadow-color)/0.04),0_8px_24px_-16px_oklch(var(--shadow-color)/0.14)]';
+const KPI_CARD = cn(
+  'bg-card ring-1 ring-foreground/[0.06]',
+  /*
+   * A THREE-LAYER shadow, which is what makes a surface read as lifted rather
+   * than outlined.
+   *
+   * One blurry drop shadow flattens — the eye reads a grey smudge. Real depth
+   * comes from stacking: a tight contact shadow where the card meets the page,
+   * a mid layer for the body, and a wide soft layer for ambient occlusion. It
+   * is the same trick as a physical card on a desk.
+   *
+   * Still neutral, still low opacity. The previous version was so faint
+   * (0.04 / 0.14) that the cards read as flat rectangles — restraint had gone
+   * past enterprise into lifeless.
+   */
+  'shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_4px_8px_-2px_oklch(var(--shadow-color)/0.08),0_16px_32px_-12px_oklch(var(--shadow-color)/0.14)]',
+);
 
 /* The numeral is the one place a hue is written as a literal instead of a
  * token. `--sky` and `--success` are tuned to fill a chip, and at that
@@ -173,10 +188,20 @@ function Kpi({
         'group relative flex flex-col rounded-xl p-5',
         KPI_CARD,
         'motion-safe:animate-rise-in',
-        // Shadow only on hover, and a small one. The card used to lift a full
-        // rem, which is a playful gesture on a board somebody reads all day.
+        /*
+         * The card lifts under the cursor — 2px, not the 16px it once did.
+         *
+         * A full-rem jump is a fidget on a board somebody reads all day; no
+         * movement at all makes the surface feel painted on. Two pixels plus a
+         * deepening shadow is the amount that reads as "this is a thing on a
+         * page" without asking to be noticed.
+         *
+         * Under `motion-safe`, so anyone who has asked their system for reduced
+         * motion gets the shadow change and no movement.
+         */
         'transition-[box-shadow,transform] duration-base ease-out',
-        'hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.06),0_14px_32px_-18px_oklch(var(--shadow-color)/0.22)]',
+        'hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.07),0_8px_16px_-4px_oklch(var(--shadow-color)/0.10),0_24px_48px_-16px_oklch(var(--shadow-color)/0.20)]',
+        'hover:ring-foreground/[0.10] motion-safe:hover:-translate-y-0.5',
         onOpen &&
           'w-full cursor-pointer text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
       )}

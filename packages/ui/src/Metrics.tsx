@@ -344,14 +344,17 @@ export function SectionCard({
         // rather than shadow alone, and a shadow light enough to read as depth
         // instead of decoration. A board where the panels and the tiles use
         // different radii looks assembled from two products.
-        'rounded-xl bg-card p-6 ring-1 ring-foreground/[0.07] shadow-[0_1px_2px_oklch(var(--shadow-color)/0.04),0_8px_24px_-16px_oklch(var(--shadow-color)/0.14)]',
+        // Same three-layer shadow as the KPI tiles — a contact layer, a body
+        // layer and a wide ambient one. One blurry drop shadow reads as a grey
+        // smudge; stacking is what makes a surface look lifted off the page.
+        'rounded-xl bg-card p-6 ring-1 ring-foreground/[0.06] shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_4px_8px_-2px_oklch(var(--shadow-color)/0.08),0_16px_32px_-12px_oklch(var(--shadow-color)/0.14)]',
         // Settles up into place on mount, and lifts a hair under the cursor.
         'motion-safe:animate-rise-in',
         /* No lift. A SectionCard is a content panel, not a control — nothing
            happens when you click it, so animating it under the cursor promises
            an interaction that does not exist. The shadow alone acknowledges the
            pointer. */
-        'transition-shadow duration-base ease-out hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.06),0_14px_32px_-18px_oklch(var(--shadow-color)/0.20)]',
+        'transition-shadow duration-base ease-out hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.07),0_8px_16px_-4px_oklch(var(--shadow-color)/0.10),0_24px_48px_-16px_oklch(var(--shadow-color)/0.20)]',
         className,
       )}
     >
