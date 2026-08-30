@@ -435,15 +435,23 @@ describe('yijiIssuingSideId', () => {
     expect(yijiIssuingSideId('Parcel')).toBe(20);
   });
 
-  it('sends NOTHING for Leajlak, whose id was not supplied', () => {
+  it('has an id for EVERY issuing side we offer', () => {
     /*
-     * The list covers every other side and simply omits this courier. The
-     * tempting fallback is 2 ("Other") and it is wrong: "Other" means UNKNOWN,
-     * so it would file a courier we can name under a bucket that says we
-     * cannot — a quiet, permanent error in the reports used to bill couriers.
-     * Undefined omits the field and lets Yiji default it.
+     * Leajlak was the last gap (29, supplied 2026-08-29). Asserted over the
+     * whole table rather than one value: adding a side without an id would
+     * otherwise pass silently and send nothing, and "nothing" is
+     * indistinguishable from "correctly defaulted" in Yiji's reporting.
      */
-    expect(yijiIssuingSideId('Leajlak')).toBeUndefined();
+    for (const side of ISSUING_SIDES) {
+      expect(side.yijiId, `${side.value} has no Yiji id`).toEqual(expect.any(Number));
+    }
+    expect(yijiIssuingSideId('Leajlak')).toBe(29);
+  });
+
+  it('sends nothing for a side that is not in the table', () => {
+    // A courier operations adds to the list but nobody has mapped yet: omit the
+    // field and let Yiji default, rather than guess an id.
+    expect(yijiIssuingSideId('Jahez')).toBeUndefined();
   });
 
   it('is undefined for a side that is not in the table at all', () => {

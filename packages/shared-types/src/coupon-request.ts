@@ -270,11 +270,13 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
  *   6  OPS - Compensation        8  CC - Compensation
  *   3  MKT - Activity           28  Shadh - Compensation
  *  11  Taker - Compensation     22  Alshrouq - Compensation
- *  20  Parcel - Compensation     2  Other
+ *  20  Parcel - Compensation    29  Leajlak - Compensation
+ *   2  Other                        (no CRM side maps to it)
  *
- * A null `yijiId` is NOT SENT, and Yiji applies its own default. That matters
- * for the one row still null: a wrong id does not fail loudly, it silently
- * books real money to the wrong department in the reports somebody reads.
+ * Every side now has an id. A null `yijiId` would NOT be sent and Yiji would
+ * apply its own default — kept as the behaviour for any side added later,
+ * because a guessed id does not fail loudly: it silently books real money to
+ * the wrong department in the reports somebody reads.
  *
  * The delivery companies are named individually rather than a single
  * "Delivery", because a coupon issued because Shadh lost the order is not the
@@ -311,19 +313,7 @@ export const ISSUING_SIDES: readonly IssuingSide[] = [
   { value: 'Taker', prefix: 'TAKER', yijiId: 11 },
   // Yiji spell it "Alshrouq"; same courier.
   { value: 'Shurouq', prefix: 'SHUROUQ', yijiId: 22 },
-  /*
-   * LEAJLAK HAS NO ID YET — deliberately still null.
-   *
-   * The list supplied on 2026-08-29 covers every other side and simply does not
-   * include this courier. Either Yiji have one and it was missed, or they do
-   * not carry Leajlak at all.
-   *
-   * The tempting fallback is 2 ("Other"), and it is the wrong answer: "Other"
-   * means UNKNOWN, so it would file a courier we can name under a bucket that
-   * says we cannot — a quiet, permanent error in the reports somebody reads to
-   * bill couriers. Sending nothing is honest; sending "Other" is a claim.
-   */
-  { value: 'Leajlak', prefix: 'LEAJLAK', yijiId: null },
+  { value: 'Leajlak', prefix: 'LEAJLAK', yijiId: 29 },
   { value: 'Parcel', prefix: 'PARCEL', yijiId: 20 },
 ];
 
@@ -443,6 +433,20 @@ export function generateCouponCode(
  * empty list reads as "no restriction". A coupon built in Yiji's own console
  * settled it: "all delivery types" carries `[3,1,2,4,5]` — every value,
  * enumerated. See YIJI_ALL_DELIVERY_TYPES.
+ *
+ * ⚠ STILL UNVERIFIED: WHICH NUMBER IS WHICH. We now know the set is {1..5} and
+ * that the enum is 1-based, but not that `delivery` is 1 rather than 3. The
+ * console's "all" array happens to start with 3, which is a hint about their UI
+ * ordering and not about meaning.
+ *
+ * The exposure is narrow and worth stating precisely:
+ *   - "All" is SAFE either way — it sends every value, so a mislabelled name
+ *     cannot restrict anything. Every coupon issued so far uses All.
+ *   - A SPECIFIC selection is only correct if our labels match theirs. Get it
+ *     wrong and the coupon is restricted to channels the customer cannot use —
+ *     invisible from our side, exactly like the earlier faults.
+ *
+ * One question to Yiji closes it: which label belongs to each of 1-5.
  */
 /**
  * Every delivery type, in the order Yiji's own console sends them for "all".
