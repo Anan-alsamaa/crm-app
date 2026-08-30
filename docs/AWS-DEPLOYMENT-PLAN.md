@@ -43,13 +43,34 @@ records a real ECS Fargate deployment on 2026-08-06).
 `docker-compose.prod.yml`.** Not ECS, not Kubernetes — and the reasoning matters
 because the instinct on AWS is to reach for the managed thing.
 
-**Why not ECS/Fargate.** The whole stack is already a working Compose file with
-health checks and env guards. On ECS each of the six services becomes a task
-definition, a service, a target group and a load-balancer rule; secrets move to
-Parameter Store; the bootstrap becomes a one-off task you have to invoke.
-That is roughly a day of setup per environment and a permanent tax on every
-change — for an internal CRM with a bounded number of agents, which is not a
-scaling problem. Fargate also costs more than EC2 for a workload that runs 24/7.
+**Why not ECS/Fargate — three concrete things in THIS app, not a general
+argument.**
+
+1. **Five custom Directus extensions**, bind-mounted from the repo:
+   `app-roles-sync`, `cast-custom-field-value`, `lock-project-owner`,
+   `notify-on-change` (the high-value coupon alert) and
+   `super-header-interface`. These are our code, and Fargate has no bind
+   mounts. You would bake a custom Directus image on every extension change, or
+   mount EFS. Both work; both are build and infrastructure you then maintain
+   for ever.
+
+2. **Directus uploads are a persistent volume.** Fargate containers are
+   ephemeral, so this becomes EFS (cost + mount config) or S3 (a config
+   change). Not hard — another moving part.
+
+3. **The bootstrap is a one-shot container** that provisions the schema and
+   must finish _before_ the rest accept traffic. On Compose that is
+   `depends_on`. On ECS it is a separate `RunTask` you invoke, poll and wire
+   into every deploy.
+
+None of these is a blocker. Together they are roughly a day per environment plus
+permanent maintenance, bought to solve a scaling problem this app does not have —
+an internal CRM with a bounded number of agents. Fargate also costs more than
+EC2 for a workload that runs 24/7.
+
+**ECS becomes right when:** one box genuinely cannot hold the load, org policy
+mandates it, or a team already runs ECS and would rather have one way of doing
+things. All three are real reasons. None is true today.
 
 **Why one box is enough.** The realtime layer coordinates through Redis, so you
 can scale _within_ the box (`--scale socket-gateway=3 --scale workers=2`) long
