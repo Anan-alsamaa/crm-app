@@ -1,4 +1,4 @@
-# Go-live readiness — 2026-08-21
+# Go-live readiness — 2026-08-21 (coupon section updated 2026-08-30)
 
 A current-state assessment to run **before scheduling a production cutover**. The
 timeless "how to deploy/operate" reference is [`PRODUCTION.md`](./PRODUCTION.md)
@@ -105,6 +105,51 @@ none of them fail loudly, so verify them explicitly.
       administrator, the service accounts and the e2e runner untouched. Skip it
       and those people keep signing in with their old email address, which
       works but is not what anyone was told to expect.
+- [ ] **`YIJI_COUPON_DELIVERY` — the one switch that spends real money.**
+
+      `off` (the default, and what `.env.prod.example` ships) means approved
+      coupons queue up and go nowhere. `on` means the worker pushes them to Yiji,
+      Yiji notifies the customer, and the customer can spend them. There is no
+      undo: deleting the CRM row does **not** revoke the grant on Yiji's side.
+
+      - **Staging: leave it `off`, permanently.** Staging shares the real Yiji
+        tenant, so `on` there hands real customers real money for test data.
+      - **Production: turn it on only when you are ready to be sending.** The
+        sweep runs every 5 minutes and will deliver *everything* currently
+        sitting at `approved` — check what that is first:
+
+        ```sql
+        SELECT coupon_code, coupon_value FROM coupon_approvals
+        WHERE status IN ('approved','edited') AND yiji_coupon_user_id IS NULL
+          AND yiji_push_error IS NULL AND delivery_excluded IS NOT TRUE;
+        ```
+
+        Anything in that list you do not want sent should be marked
+        `delivery_excluded = true` **before** flipping the switch.
+
+- [ ] **Yiji credentials must reach the WORKERS service**, not just the gateway.
+      `YIJI_ADMIN_API_URL`, `YIJI_ADMIN_EMAIL`, `YIJI_ADMIN_PASSWORD`,
+      `YIJI_TENANT_ID` and `YIJI_COUPON_DELIVERY` are all wired through in
+      `docker-compose.prod.yml` — verified. Without them the coupon feature
+      ships dead: the push cannot authenticate and every coupon sits `approved`
+      with no error, which looks exactly like nobody having approved anything.
+
+- [ ] **The coupon-integration migrations (added 2026-08-26 → 08-30).** Four
+      scripts, each **idempotent** — re-running one prints "nothing to do" — so
+      run them in any order and again if unsure. All take `DIRECTUS_TOKEN` (or
+      `DIRECTUS_ADMIN_EMAIL` + `DIRECTUS_ADMIN_PASSWORD`) and are dry-run by
+      default; add `--write` to apply.
+
+      | script | what it does | if you skip it |
+      | --- | --- | --- |
+      | `add-coupon-item-sku.mjs` | adds `coupon_approvals.item_sku` | item-level reporting stays a text search across spellings |
+      | `add-coupon-no-other-discounts.mjs` | adds `coupon_approvals.no_other_discounts` | the agent's stacking choice has nowhere to persist; the push reads `undefined` and sends the permissive default |
+      | `migrate-issuing-sides.mjs` | Call Centre → Customer Care; retires "Delivery"; adds the five couriers | coupons carry the wrong `issuingSideId` and Yiji attributes the cost to the wrong department |
+      | `migrate-service-types.mjs` | Drive Thru → Carhop, Dinning → Dine-in, TakeOut → Takeout, **and the tickets already holding the old spellings** | the combobox is locked to the list, so those tickets render blank and lose their service type on the next save |
+
+      The last two touch DATA as well as lists, which is why they move the rows
+      in the same pass — renaming a list alone orphans every row pointing at it.
+
 - [ ] **Seed the option lists**: `node scripts/seed-option-lists.mjs --write`.
       Adds the `ai_action` list ("Inbox: AI assistance"). An unreadable or empty
       list falls back to offering every action, so this fails soft — but the
