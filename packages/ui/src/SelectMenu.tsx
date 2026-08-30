@@ -27,6 +27,16 @@ export interface SelectMenuProps {
   variant?: 'field' | 'ghost';
   /** Small muted lead label shown before the value in the trigger (e.g. "Status"). */
   leading?: ReactNode;
+  /**
+   * Show a search box in the menu and filter the options as the agent types.
+   *
+   * OPT-IN. The keydown typeahead below already jumps to a match, which is
+   * enough for a five-item status list — but it matches only from the START of
+   * a label and never hides anything, so on 130 branches an agent who knows the
+   * word "Khurais" still has to scroll for it. `searchable` is for those lists:
+   * long, and where the memorable part of a name sits in the middle.
+   */
+  searchable?: boolean;
 }
 
 /**
@@ -51,6 +61,7 @@ export function SelectMenu({
   className,
   variant = 'field',
   leading,
+  searchable = false,
   ...aria
 }: SelectMenuProps): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -65,6 +76,18 @@ export function SelectMenu({
   const listRef = useRef<HTMLUListElement | null>(null);
   const typeahead = useRef<{ buf: string; at: number }>({ buf: '', at: 0 });
   const listId = useId();
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  /*
+   * The options actually rendered. Substring, not prefix: on a list of branches
+   * the memorable part of "LCP-053 Othaim Mall Khurais Road" is in the middle,
+   * and a prefix match would never find it.
+   */
+  const shown =
+    searchable && query.trim()
+      ? options.filter((o) => String(o.label).toLowerCase().includes(query.trim().toLowerCase()))
+      : options;
 
   const selectedIndex = options.findIndex((o) => o.value === value);
   const selected = selectedIndex >= 0 ? options[selectedIndex] : undefined;
@@ -108,8 +131,25 @@ export function SelectMenu({
     return () => window.removeEventListener('mousedown', onDown);
   }, [open]);
 
+  /*
+   * A fresh search each time it opens, and the caret already in the box.
+   *
+   * Leaving the previous query behind would reopen the menu showing a filtered
+   * subset with no obvious reason — the agent sees three of a hundred branches
+   * and no explanation.
+   */
+  useEffect(() => {
+    if (!searchable) return;
+    if (open) {
+      setQuery('');
+      const id = window.setTimeout(() => searchRef.current?.focus(), 0);
+      return () => window.clearTimeout(id);
+    }
+    return undefined;
+  }, [open, searchable]);
+
   const choose = (i: number) => {
-    const o = options[i];
+    const o = shown[i];
     if (!o || o.disabled) return;
     onChange(o.value);
     setOpen(false);
@@ -131,7 +171,7 @@ export function SelectMenu({
       triggerRef.current?.focus();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActive((a) => Math.min(options.length - 1, a + 1));
+      setActive((a) => Math.min(shown.length - 1, a + 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActive((a) => Math.max(0, a - 1));
@@ -140,7 +180,7 @@ export function SelectMenu({
       setActive(0);
     } else if (e.key === 'End') {
       e.preventDefault();
-      setActive(options.length - 1);
+      setActive(shown.length - 1);
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       choose(active);
@@ -150,7 +190,7 @@ export function SelectMenu({
         now - typeahead.current.at > 600 ? e.key : typeahead.current.buf + e.key;
       typeahead.current.at = now;
       const q = typeahead.current.buf.toLowerCase();
-      const i = options.findIndex((o) => String(o.label).toLowerCase().startsWith(q));
+      const i = shown.findIndex((o) => String(o.label).toLowerCase().startsWith(q));
       if (i >= 0) setActive(i);
     }
   };
@@ -247,7 +287,32 @@ export function SelectMenu({
                 : { top: coords.top + 6 }),
             }}
           >
-            {options.map((o, i) => {
+            {searchable && (
+              /* A real input, so typing composes normally (Arabic, IME, paste)
+                 — the keydown typeahead below cannot do any of those. It is
+                 inside the listbox, so `onKeyDown` on the wrapper still handles
+                 arrows and Enter and the two do not fight. */
+              <li className="sticky top-0 z-10 -m-1 mb-1 bg-popover/95 p-2 backdrop-blur">
+                <input
+                  ref={searchRef}
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.currentTarget.value);
+                    // Any keystroke invalidates the highlighted row, so put it
+                    // back on the first match rather than an index into a list
+                    // that no longer exists.
+                    setActive(0);
+                  }}
+                  placeholder="Search…"
+                  aria-label="Search options"
+                  className="h-8 w-full rounded-lg bg-input px-2.5 text-xs text-foreground ring-1 ring-inset ring-foreground/[0.08] placeholder:text-muted-foreground/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                />
+              </li>
+            )}
+            {shown.length === 0 && (
+              <li className="px-2.5 py-3 text-center text-xs text-muted-foreground">No match</li>
+            )}
+            {shown.map((o, i) => {
               const isSel = o.value === value;
               return (
                 <li key={o.value} role="option" aria-selected={isSel}>

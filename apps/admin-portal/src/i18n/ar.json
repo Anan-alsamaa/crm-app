@@ -458,7 +458,9 @@
     "opsTrendEmpty": "لا توجد تذاكر في هذا النطاق بعد.",
     "opsTrendSr": "التذاكر شهريًا للتحديد الحالي.",
     "opsTrendOneMonth": "شهر واحد فقط في هذا النطاق — وسّع التواريخ لمقارنة الأشهر.",
-    "kpiCompensationShort": "التعويضات المعتمدة"
+    "kpiCompensationShort": "التعويضات المعتمدة",
+    "chain": "سلسلة",
+    "allChains": "كل مديري السلاسل"
   },
   "complaintReport": {
     "any": "الكل",

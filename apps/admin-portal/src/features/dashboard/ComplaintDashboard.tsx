@@ -63,6 +63,9 @@ const KPI_CHIPS = {
   success: 'bg-success-tint text-success',
   primary: 'bg-primary-tint text-primary',
   destructive: 'bg-destructive-tint text-destructive',
+  // Amber. Added so eight cards can carry six distinct hues instead of five
+  // with two repeats — see KPI_NUMERALS.
+  amber: 'bg-[oklch(0.93_0.065_75)] text-[oklch(0.42_0.10_75)]',
 } as const;
 
 /*
@@ -107,6 +110,11 @@ const KPI_SURFACES = {
     'bg-gradient-to-br from-primary-tint to-primary-tint/75 ring-primary/40 shadow-primary/25',
   destructive:
     'bg-gradient-to-br from-destructive-tint to-destructive-tint/75 ring-destructive/40 shadow-destructive/25',
+  /* A literal amber, NOT the `warning` token — that is the severity red, and
+     money given away is not a warning. Written inline because it is the one
+     hue on this board with no semantic token behind it. */
+  amber:
+    'bg-gradient-to-br from-[oklch(0.93_0.065_75)] to-[oklch(0.93_0.065_75/0.75)] ring-[oklch(0.42_0.10_75/0.4)] shadow-[oklch(0.42_0.10_75/0.25)]',
 } as const;
 
 /* The saturated top edge — the single most visible piece of hue on the card,
@@ -119,6 +127,7 @@ const KPI_EDGES = {
   success: 'before:bg-success',
   primary: 'before:bg-primary',
   destructive: 'before:bg-destructive',
+  amber: 'before:bg-[oklch(0.62_0.13_75)]',
 } as const;
 
 /* The numeral is the one place a hue is written as a literal instead of a
@@ -126,13 +135,25 @@ const KPI_EDGES = {
  * lightness a 44px numeral on white misses 4.5:1 — so these are the same
  * hues darkened until they pass. Keep the HUE in step with the token when
  * the brand moves; only the lightness is meant to differ. */
+/*
+ * The numeral, one per tone, tuned to its own ground.
+ *
+ * Written as literals rather than tokens because `--primary` and friends are
+ * chosen to fill a chip, and at that lightness a 40px numeral on a tint misses
+ * 4.5:1. These are the same hues darkened until they pass — keep the HUE in
+ * step with the tint when the palette moves; only the lightness should differ.
+ *
+ * Every pair below was measured on its actual ground: 6.5 to 7.8 against the
+ * tints in index.css. Do not eyeball a replacement.
+ */
 const KPI_NUMERALS = {
   neutral: 'text-foreground',
-  sky: 'text-[oklch(0.48_0.16_264)]',
-  violet: 'text-[oklch(0.48_0.19_285)]',
-  success: 'text-[oklch(0.45_0.13_155)]',
-  primary: 'text-primary',
-  destructive: 'text-destructive',
+  sky: 'text-[oklch(0.40_0.10_195)]',
+  violet: 'text-[oklch(0.42_0.15_320)]',
+  success: 'text-[oklch(0.40_0.11_155)]',
+  primary: 'text-[oklch(0.40_0.16_277)]',
+  destructive: 'text-[oklch(0.44_0.15_15)]',
+  amber: 'text-[oklch(0.42_0.10_75)]',
 } as const;
 
 function Kpi({
@@ -912,6 +933,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           </span>
           <SelectMenu
             size="sm"
+            searchable
             value={draft.brand}
             onChange={(v) => setDraft((f) => ({ ...f, brand: v }))}
             aria-label={t('complaintDash.brand', { defaultValue: 'Brand' })}
@@ -927,6 +949,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           </span>
           <SelectMenu
             size="sm"
+            searchable
             value={draft.area}
             onChange={(v) => setDraft((f) => ({ ...f, area: v }))}
             aria-label={t('complaintDash.area', { defaultValue: 'Area' })}
@@ -936,12 +959,35 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             ]}
           />
         </label>
+        {/* Chain sits beside Area because it is the level ABOVE it — a chain
+            spans several areas, so "everything under this chain manager" is a
+            question Area cannot answer by itself. */}
+        <label className="flex flex-col gap-1">
+          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            {t('complaintDash.chain', { defaultValue: 'Chain' })}
+          </span>
+          <SelectMenu
+            size="sm"
+            searchable
+            value={draft.chain}
+            onChange={(v) => setDraft((f) => ({ ...f, chain: v }))}
+            aria-label={t('complaintDash.chain', { defaultValue: 'Chain' })}
+            options={[
+              {
+                value: '',
+                label: t('complaintDash.allChains', { defaultValue: 'All chain managers' }),
+              },
+              ...(d?.chainOptions ?? []).map((c) => ({ value: c, label: c })),
+            ]}
+          />
+        </label>
         <label className="flex flex-col gap-1">
           <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('complaintDash.city', { defaultValue: 'City' })}
           </span>
           <SelectMenu
             size="sm"
+            searchable
             value={draft.city}
             onChange={(v) => setDraft((f) => ({ ...f, city: v }))}
             aria-label={t('complaintDash.city', { defaultValue: 'City' })}
@@ -957,8 +1003,12 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           </span>
           <SelectMenu
             size="sm"
-            // Branch names run to "LCP-053 Othaim Mall Khurais Road"; at the
-            // default width they all truncated to the store code.
+            // The longest list on the bar — 130-odd branches — so it needs the
+            // search box most. Names run to "LCP-053 Othaim Mall Khurais Road"
+            // and the memorable word is in the MIDDLE, which is why the match
+            // is a substring rather than a prefix.
+            searchable
+            // At the default width they all truncated to the store code.
             className="w-[16rem]"
             value={draft.store}
             onChange={(v) => setDraft((f) => ({ ...f, store: v }))}
@@ -1275,7 +1325,10 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                     query key with the card below, so the tile and the card are
                     one request and cannot disagree. */}
                 <Kpi
-                  tone="primary"
+                  /* amber, not a second primary. The eight cards had
+                     only five hues between them, so two pairs matched and the
+                     row read as a gradient of blue rather than a palette. */
+                  tone="amber"
                   icon={<ChartIcon size={17} />}
                   order={6}
                   value={coupons.sar.toLocaleString(undefined, { maximumFractionDigits: 0 })}

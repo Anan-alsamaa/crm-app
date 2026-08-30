@@ -30,9 +30,18 @@ export interface ComplaintFilters {
   /** `yyyy-mm-dd`; empty means unbounded. */
   from: string;
   to: string;
-  /** Brand id, area manager, city name, store id. Empty means "all". */
+  /** Brand id, area manager, chain manager, city name, store id. Empty = "all". */
   brand: string;
   area: string;
+  /**
+   * The CHAIN manager — the level above the area manager.
+   *
+   * A separate filter rather than a coarser Area, because a chain spans several
+   * areas: "show me everything under this chain manager" is a different
+   * question from "show me this area", and answering the first by picking areas
+   * one at a time is how a number gets quietly under-counted.
+   */
+  chain: string;
   city: string;
   store: string;
 }
@@ -41,6 +50,7 @@ export const emptyComplaintFilters: ComplaintFilters = {
   from: '',
   to: '',
   brand: '',
+  chain: '',
   area: '',
   city: '',
   store: '',
@@ -242,6 +252,7 @@ export interface ComplaintMetrics {
   /** Options for the filter bar, derived from the store master. */
   brandOptions: Array<{ id: string; name: string }>;
   areaOptions: string[];
+  chainOptions: string[];
   cityOptions: string[];
   storeOptions: Array<{
     id: string;
@@ -626,6 +637,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
 
         if (filters.brand && brandId !== filters.brand) continue;
         if (filters.area && area !== filters.area) continue;
+        if (filters.chain && chain !== filters.chain) continue;
         if (filters.city && city !== filters.city) continue;
         if (filters.store && storeId !== filters.store) continue;
 
@@ -938,6 +950,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         },
         brandOptions,
         areaOptions: uniqueSorted(storeRows.map((s) => s.area_manager)),
+        chainOptions: uniqueSorted(storeRows.map((s) => s.chain_manager)),
         cityOptions: uniqueSorted(storeRows.map((s) => s.city)),
         storeOptions: storeRows
           .map((s) => ({

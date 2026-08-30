@@ -741,7 +741,11 @@
     "couponsAssigned": "القسيمة الممنوحة",
     "otherName": "عن ماذا هذه الشكوى؟",
     "otherNameHint": "مطلوب — سيصبح هذا اسم التذكرة.",
-    "otherNamePlaceholder": "مثال: لم تُضَف نقاط الولاء"
+    "otherNamePlaceholder": "مثال: لم تُضَف نقاط الولاء",
+    "orderId": "رقم الطلب (اختياري)",
+    "orderIdHint": "إن كان لدى العميل رقم الطلب فأضِفه — لا يمكن إرسال قسيمة إلا على طلب.",
+    "orderIdPlaceholder": "مثال: 1234535",
+    "orderNotFound": "لا يوجد طلب بهذا الرقم لدى هذا المورّد."
   },
   "complaints": {
     "title": "شكاواي",

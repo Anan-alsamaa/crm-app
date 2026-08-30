@@ -207,7 +207,46 @@ export function CreateTicketDialog({
   // guesses the customer's newest order. Preferring the guess would silently
   // snapshot the wrong order onto the ticket whenever the complaint is about an
   // older one, and for an unlinked contact the lookup returns nothing at all.
-  const latestOrder = getPinnedOrder(conversationId) ?? ordersQuery.data ?? null;
+  /*
+   * AN ORDER TYPED IN BY HAND.
+   *
+   * Every source of an order above needs a CONVERSATION: the automatic lookup
+   * is gated on one, and `getPinnedOrder` returns null without one. So a ticket
+   * raised from the Add-ticket page — a phoned-in complaint, which is most of
+   * them — could never carry an order at all.
+   *
+   * That is not cosmetic. `CreateCouponUserFromOrder` attaches a coupon TO AN
+   * ORDER, so a coupon on such a ticket can never be delivered: it sits
+   * approved for ever while the worker logs "no order to attach to". Two
+   * coupons were stuck exactly that way, owed to a real customer.
+   *
+   * The customer is reading the number off their phone either way, so the
+   * honest fix is a box to type it into. Deliberately its own state rather than
+   * `chooseOrder`, which is keyed by conversation and would have nowhere to
+   * live here.
+   */
+  const [typedOrderId, setTypedOrderId] = useState('');
+  const [lookupId, setLookupId] = useState('');
+  const typedOrderQuery = useQuery({
+    queryKey: ['manual-order', yijiVendorId, lookupId],
+    enabled: !!yijiVendorId && !!lookupId,
+    queryFn: () => commerce.getOrder(yijiVendorId, lookupId),
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  /*
+   * A typed order wins over both.
+   *
+   * It is the most deliberate signal there is — the agent read a number off a
+   * phone call and typed it — where the automatic lookup only ever guesses the
+   * customer's newest order and the pin may be stale from an earlier ticket.
+   */
+  const latestOrder =
+    (typedOrderQuery.data as YijiOrder | null | undefined) ??
+    getPinnedOrder(conversationId) ??
+    ordersQuery.data ??
+    null;
   const sessionFiles = useConversationAttachmentIds(conversationId ?? null);
   const sessionFileIds = sessionFiles.data ?? [];
 
@@ -595,6 +634,66 @@ export function CreateTicketDialog({
                   and kept in its original order. */}
               <div className="space-y-4 border-t border-border pt-4">
                 {contactField}
+                {/* THE ORDER, typed in.
+                    Shown only when there is no order already — from a chat the
+                    order comes with the conversation and this would invite an
+                    agent to override it by hand. On the Add-ticket page there
+                    is nothing else, and without it the ticket carries no order:
+                    a coupon on such a ticket can never be delivered, because
+                    Yiji attaches coupons TO AN ORDER. */}
+                {!latestOrder && (
+                  <FormField
+                    label={t('complaint.orderId', { defaultValue: 'Order number (optional)' })}
+                    hint={
+                      typedOrderQuery.isError
+                        ? undefined
+                        : t('complaint.orderIdHint', {
+                            defaultValue:
+                              'If the customer has their order number, add it — a coupon can only be sent against an order.',
+                          })
+                    }
+                    error={
+                      typedOrderQuery.isError
+                        ? t('complaint.orderNotFound', {
+                            defaultValue: 'No order with that number for this vendor.',
+                          })
+                        : undefined
+                    }
+                  >
+                    <div className="flex gap-2">
+                      <input
+                        value={typedOrderId}
+                        onChange={(e) => setTypedOrderId(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                          // Enter looks up rather than submitting the ticket —
+                          // a half-filled form saved by a stray keypress is
+                          // worse than a button nobody found.
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            setLookupId(typedOrderId.trim());
+                          }
+                        }}
+                        inputMode="numeric"
+                        aria-label={t('complaint.orderId', {
+                          defaultValue: 'Order number (optional)',
+                        })}
+                        placeholder={t('complaint.orderIdPlaceholder', {
+                          defaultValue: 'e.g. 1234535',
+                        })}
+                        className="h-10 min-w-[8rem] flex-1 rounded-2xl bg-input px-3.5 font-mono text-sm tabular-nums text-foreground ring-1 ring-inset ring-foreground/[0.08] placeholder:font-sans placeholder:text-muted-foreground/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        loading={typedOrderQuery.isFetching}
+                        disabled={!typedOrderId.trim() || !yijiVendorId}
+                        onClick={() => setLookupId(typedOrderId.trim())}
+                      >
+                        {t('commerce.lookupGo', { defaultValue: 'Find' })}
+                      </Button>
+                    </div>
+                  </FormField>
+                )}
                 <FormField label={t('tickets.description')} htmlFor="ticket-description">
                   <Textarea
                     id="ticket-description"
