@@ -69,66 +69,25 @@ const KPI_CHIPS = {
 } as const;
 
 /*
- * The card surface carries the hue, and carries it PROPERLY.
+ * ONE NEUTRAL CARD, and the colour spent only where it carries meaning.
  *
- * Twice now these have been too pale. The tints themselves were 0.04-0.06
- * chroma — barely tinted, so a "coloured" card rendered as off-white — and the
- * gradient then faded to 45% of even that, leaving most of the card white with
- * a hint of colour in one corner. Measured, not eyeballed: the old sky tint was
- * #d4e8ff.
+ * This board went through pastel fills, a saturated 4px top stripe, coloured
+ * rings and tinted shadows — four ways of saying the same hue on one card. The
+ * owner's verdict was "cartoonish, not enterprise", and that was right: a wall
+ * of coloured rectangles with bunting along the top is a consumer convention.
+ * Stripe, Linear, Datadog and Vercel all do the opposite — a plain card, a
+ * hairline border, and colour reserved for the data itself.
  *
- * The tint tokens are now roughly double the chroma (see `--sky-tint` and
- * friends in index.css) and the gradient bottoms out at 75% rather than 45%, so
- * the hue holds across the whole card instead of washing out.
+ * So the surface is now identical on every card. The hue survives in exactly
+ * two places, both of which are information rather than decoration: the ICON
+ * CHIP and the NUMERAL. That is still enough to tell eight cards apart at a
+ * glance, because the eye lands on the number first anyway.
  *
- * The numerals were re-measured against the new grounds and all five still
- * clear 4.5:1 — that is the constraint that caps how dark these can go, and it
- * is why the answer is more CHROMA rather than less lightness.
- *
- * The card surface carries the hue.
- *
- * These used to fade from `tint/70` to `card`, which meant most of every card
- * was white and the colour was a suggestion in one corner — a dashboard of
- * near-white rectangles with nothing for the eye to land on.
- *
- * Now the tint holds at FULL strength across the whole card and the gradient
- * deepens toward the bottom-right instead of washing out, the ring is twice as
- * present, and the shadow is tinted with the card's own hue rather than neutral
- * grey — so a card is lit by its colour instead of sitting in a grey pool.
- *
- * The text on top is unaffected: these are the same `*-tint` tokens, which are
- * defined light enough in both themes that the numerals below still clear
- * 4.5:1. Contrast comes from KPI_NUMERALS, and that is measured separately.
+ * A single flat token rather than a per-tone map, kept as a constant so the
+ * next person changing it does not have to find eight copies.
  */
-const KPI_SURFACES = {
-  neutral: 'bg-gradient-to-br from-secondary to-secondary/60 ring-foreground/[0.12]',
-  sky: 'bg-gradient-to-br from-sky-tint to-sky-tint/75 ring-sky/40 shadow-sky/25',
-  violet: 'bg-gradient-to-br from-violet-tint to-violet-tint/75 ring-violet/40 shadow-violet/25',
-  success:
-    'bg-gradient-to-br from-success-tint to-success-tint/75 ring-success/40 shadow-success/25',
-  primary:
-    'bg-gradient-to-br from-primary-tint to-primary-tint/75 ring-primary/40 shadow-primary/25',
-  destructive:
-    'bg-gradient-to-br from-destructive-tint to-destructive-tint/75 ring-destructive/40 shadow-destructive/25',
-  /* A literal amber, NOT the `warning` token — that is the severity red, and
-     money given away is not a warning. Written inline because it is the one
-     hue on this board with no semantic token behind it. */
-  amber:
-    'bg-gradient-to-br from-[oklch(0.93_0.065_75)] to-[oklch(0.93_0.065_75/0.75)] ring-[oklch(0.42_0.10_75/0.4)] shadow-[oklch(0.42_0.10_75/0.25)]',
-} as const;
-
-/* The saturated top edge — the single most visible piece of hue on the card,
-   and what makes a row of KPIs read as distinct at a glance rather than as one
-   pastel band. `before` rather than a border so it cannot shift the layout. */
-const KPI_EDGES = {
-  neutral: 'before:bg-foreground/25',
-  sky: 'before:bg-sky',
-  violet: 'before:bg-violet',
-  success: 'before:bg-success',
-  primary: 'before:bg-primary',
-  destructive: 'before:bg-destructive',
-  amber: 'before:bg-[oklch(0.62_0.13_75)]',
-} as const;
+const KPI_CARD =
+  'bg-card ring-1 ring-foreground/[0.07] shadow-[0_1px_2px_oklch(var(--shadow-color)/0.04),0_8px_24px_-16px_oklch(var(--shadow-color)/0.14)]';
 
 /* The numeral is the one place a hue is written as a literal instead of a
  * token. `--sky` and `--success` are tuned to fill a chip, and at that
@@ -209,13 +168,15 @@ function Kpi({
       {...(onOpen ? { type: 'button', onClick: onOpen } : {})}
       style={{ animationDelay: `${Math.min(order, 6) * 55}ms` }}
       className={cn(
-        'group relative flex flex-col overflow-hidden rounded-2xl p-5 shadow-soft ring-1',
-        KPI_SURFACES[tone],
-        'before:absolute before:inset-x-0 before:top-0 before:h-1 before:content-[""]',
-        KPI_EDGES[tone],
+        // `rounded-xl`, not `2xl`: a softer corner is friendlier and reads
+        // consumer. Enterprise surfaces are closer to square.
+        'group relative flex flex-col rounded-xl p-5',
+        KPI_CARD,
         'motion-safe:animate-rise-in',
-        'transition-[box-shadow,transform,border-color] duration-base ease-out',
-        'hover:shadow-float motion-safe:hover:-translate-y-1',
+        // Shadow only on hover, and a small one. The card used to lift a full
+        // rem, which is a playful gesture on a board somebody reads all day.
+        'transition-[box-shadow,transform] duration-base ease-out',
+        'hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.06),0_14px_32px_-18px_oklch(var(--shadow-color)/0.22)]',
         onOpen &&
           'w-full cursor-pointer text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
       )}

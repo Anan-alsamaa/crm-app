@@ -340,10 +340,18 @@ export function SectionCard({
     <section
       style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
       className={cn(
-        'rounded-2xl bg-card p-6 shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_12px_32px_-12px_oklch(var(--shadow-color)/0.18)]',
+        // Matches the KPI cards above it: squarer corner, a hairline border
+        // rather than shadow alone, and a shadow light enough to read as depth
+        // instead of decoration. A board where the panels and the tiles use
+        // different radii looks assembled from two products.
+        'rounded-xl bg-card p-6 ring-1 ring-foreground/[0.07] shadow-[0_1px_2px_oklch(var(--shadow-color)/0.04),0_8px_24px_-16px_oklch(var(--shadow-color)/0.14)]',
         // Settles up into place on mount, and lifts a hair under the cursor.
         'motion-safe:animate-rise-in',
-        'transition-[box-shadow,transform] duration-base ease-out hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.08),0_20px_44px_-16px_oklch(var(--shadow-color)/0.28)] motion-safe:hover:-translate-y-1',
+        /* No lift. A SectionCard is a content panel, not a control — nothing
+           happens when you click it, so animating it under the cursor promises
+           an interaction that does not exist. The shadow alone acknowledges the
+           pointer. */
+        'transition-shadow duration-base ease-out hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.06),0_14px_32px_-18px_oklch(var(--shadow-color)/0.20)]',
         className,
       )}
     >
