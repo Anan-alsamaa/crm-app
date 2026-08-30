@@ -270,7 +270,7 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
  *   6  OPS - Compensation        8  CC - Compensation
  *   3  MKT - Activity           28  Shadh - Compensation
  *  11  Taker - Compensation     22  Alshrouq - Compensation
- *  20  Parcel - Compensation    29  Leajlak - Compensation
+ *  20  Parcel - Compensation    13  4U - Compensation  (= Leajlak)
  *   2  Other                        (no CRM side maps to it)
  *
  * Every side now has an id. A null `yijiId` would NOT be sent and Yiji would
@@ -313,7 +313,9 @@ export const ISSUING_SIDES: readonly IssuingSide[] = [
   { value: 'Taker', prefix: 'TAKER', yijiId: 11 },
   // Yiji spell it "Alshrouq"; same courier.
   { value: 'Shurouq', prefix: 'SHUROUQ', yijiId: 22 },
-  { value: 'Leajlak', prefix: 'LEAJLAK', yijiId: 29 },
+  // Yiji key this one "4U - Compensation"; the CRM keeps the courier's name,
+  // and only the id crosses the boundary.
+  { value: 'Leajlak', prefix: 'LEAJLAK', yijiId: 13 },
   { value: 'Parcel', prefix: 'PARCEL', yijiId: 20 },
 ];
 
@@ -434,19 +436,14 @@ export function generateCouponCode(
  * settled it: "all delivery types" carries `[3,1,2,4,5]` — every value,
  * enumerated. See YIJI_ALL_DELIVERY_TYPES.
  *
- * ⚠ STILL UNVERIFIED: WHICH NUMBER IS WHICH. We now know the set is {1..5} and
- * that the enum is 1-based, but not that `delivery` is 1 rather than 3. The
- * console's "all" array happens to start with 3, which is a hint about their UI
- * ordering and not about meaning.
+ * ⚠ RESOLVED 2026-08-29, and the caveat was justified: two were WRONG.
  *
- * The exposure is narrow and worth stating precisely:
- *   - "All" is SAFE either way — it sends every value, so a mislabelled name
- *     cannot restrict anything. Every coupon issued so far uses All.
- *   - A SPECIFIC selection is only correct if our labels match theirs. Get it
- *     wrong and the coupon is restricted to channels the customer cannot use —
- *     invisible from our side, exactly like the earlier faults.
+ *   delivery 1   pickup 2   carhop 3   dine-in 4   takeout 5
  *
- * One question to Yiji closes it: which label belongs to each of 1-5.
+ * I had takeout as 4 and dine-in as 5 — swapped. A coupon restricted to Takeout
+ * went out as dine-in and vice versa: valid on a channel the customer was not
+ * using, invalid on the one they were, and undetectable from our side. "All"
+ * was never affected, because it sends every value.
  */
 /**
  * Every delivery type, in the order Yiji's own console sends them for "all".
@@ -465,12 +462,17 @@ export const YIJI_DELIVERY_TYPE_CODE: Record<string, number> = {
   carhop: 3,
   'drive thru': 3,
   'drive-thru': 3,
-  takeout: 4,
-  takeaway: 4,
-  'dine-in': 5,
-  'dine in': 5,
-  dinning: 5,
-  dining: 5,
+  // CONFIRMED by the owner 2026-08-29, and takeout/dine-in were the wrong way
+  // round here until then: we sent takeout as 4 and dine-in as 5. A coupon
+  // restricted to one was valid on the other — invalid on the channel the
+  // customer was actually using, and invisible from our side. "All" was never
+  // affected, because it sends every value.
+  takeout: 5,
+  takeaway: 5,
+  'dine-in': 4,
+  'dine in': 4,
+  dinning: 4,
+  dining: 4,
 };
 
 /**

@@ -311,6 +311,17 @@ describe('high-value coupon alert', () => {
 });
 
 describe('yijiDeliveryTypes', () => {
+  it('covers all five codes exactly once between the named channels', () => {
+    /*
+     * The set has to be {1,2,3,4,5} with nothing missing and nothing doubled —
+     * a transposition (which happened) keeps the set intact, but a typo would
+     * not, and this is the cheap guard against that.
+     */
+    const named = ['Delivery', 'Pickup', 'Carhop', 'Dine-in', 'Takeout'];
+    const codes = named.flatMap((n) => yijiDeliveryTypes(n) ?? []);
+    expect([...codes].sort()).toEqual([1, 2, 3, 4, 5]);
+  });
+
   it('ENUMERATES every channel for "All"', () => {
     /*
      * This asserted the opposite until 2026-08-29. I reasoned that an absent
@@ -330,6 +341,15 @@ describe('yijiDeliveryTypes', () => {
 
   it('maps a specific selection, de-duplicated', () => {
     expect(yijiDeliveryTypes('Delivery, Pickup')).toEqual([1, 2]);
+    /*
+     * TAKEOUT IS 5 AND DINE-IN IS 4, confirmed by the owner 2026-08-29. They
+     * were the other way round here until then, so a coupon restricted to
+     * Takeout went out as dine-in and vice versa — valid on a channel the
+     * customer was not using. Asserted explicitly because the two are easy to
+     * transpose and nothing about the numbers hints at which is which.
+     */
+    expect(yijiDeliveryTypes('Takeout')).toEqual([5]);
+    expect(yijiDeliveryTypes('Dine-in')).toEqual([4]);
     // Carhop and Drive Thru are the same service under two names.
     expect(yijiDeliveryTypes('Carhop, Drive Thru')).toEqual([3]);
   });
@@ -437,7 +457,7 @@ describe('yijiIssuingSideId', () => {
 
   it('has an id for EVERY issuing side we offer', () => {
     /*
-     * Leajlak was the last gap (29, supplied 2026-08-29). Asserted over the
+     * Leajlak was the last gap (13, supplied 2026-08-29). Asserted over the
      * whole table rather than one value: adding a side without an id would
      * otherwise pass silently and send nothing, and "nothing" is
      * indistinguishable from "correctly defaulted" in Yiji's reporting.
@@ -445,7 +465,9 @@ describe('yijiIssuingSideId', () => {
     for (const side of ISSUING_SIDES) {
       expect(side.yijiId, `${side.value} has no Yiji id`).toEqual(expect.any(Number));
     }
-    expect(yijiIssuingSideId('Leajlak')).toBe(29);
+    // 13, keyed "4U - Compensation" on their side. It was briefly recorded as
+    // 29 from a first list that turned out to be wrong.
+    expect(yijiIssuingSideId('Leajlak')).toBe(13);
   });
 
   it('sends nothing for a side that is not in the table', () => {
