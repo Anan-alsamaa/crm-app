@@ -1,5 +1,29 @@
 # Checking what AWS access you already have
 
+> ## RESULT, 2026-08-31 — checked in the console
+>
+> Account **`408568863712`** (matches the existing ECS runbook), region
+> **us-east-2**, IAM user `e.habibi@anan.sa`.
+>
+> | service         | result                                                                              |
+> | --------------- | ----------------------------------------------------------------------------------- |
+> | SES             | ❌ `ses:GetAccount`, `ses:ListRecommendations` denied                               |
+> | RDS             | ❌ `rds:DescribeDBInstances`, `DescribeDBClusters`, `DescribeDBSubnetGroups` denied |
+> | IAM create user | ❌ `iam:CreateUser` denied — so the SMTP credential cannot be self-served           |
+> | ElastiCache     | ✅ list works (0 caches)                                                            |
+> | EC2             | ✅ list works — **6 instances already running**, incl. 2× t3.2xlarge and a bastion  |
+> | VPC             | ✅ visible                                                                          |
+>
+> Every denial read _"because no identity-based policy allows..."_ — the user has
+> **no policy at all** for those services, not a narrowed one. So this is an
+> additive ask, not an argument about scope.
+>
+> **Note the account is already in use by someone else** (those 6 instances).
+> Worth knowing whose before adding to it, and it is why a tag-scoped policy is
+> the easier thing for an owner to approve.
+>
+> The exact ask is in [`AWS-ACCESS-REQUEST.md`](./AWS-ACCESS-REQUEST.md).
+
 _Run these before asking for anything. Each one is read-only or trivially
 reversible — nothing here creates a billable resource that you cannot delete in
 the same minute._
