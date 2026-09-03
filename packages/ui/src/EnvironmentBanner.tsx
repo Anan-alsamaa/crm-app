@@ -7,11 +7,11 @@
  * as "only staging". The marker therefore has to be impossible to miss and
  * impossible to dismiss.
  *
- * Deliberately NOT a boxed alert. A bordered card reads as a message about the
- * page's content and gets tuned out after a day. This is a thin band pinned to
- * the very top of the viewport, above everything, with a slow travelling sheen
- * — peripheral motion is what keeps it noticeable on the hundredth visit,
- * whereas a static bar becomes invisible.
+ * A small pill centred at the top of the viewport rather than a full-width
+ * band: it stays out of the layout entirely, so no page has to reserve space
+ * for it and nothing shifts when it appears. The slow travelling sheen is what
+ * keeps it noticeable on the hundredth visit — a static badge becomes
+ * wallpaper within a day.
  *
  * Renders NOTHING when the environment is production or unset, so it costs
  * production a few bytes and no layout.
@@ -32,21 +32,8 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
   const env = environment?.trim().toLowerCase();
   const show = !!env && NON_PRODUCTION.has(env);
 
-  /* The banner occupies real space at the top of the document. Rather than ask
-   * every app to add padding — which they would forget, and which would then
-   * hide their own headers behind this one — it sets the offset itself and
-   * removes it on unmount. */
-  useEffect(() => {
-    if (!show) return;
-    const root = document.documentElement;
-    const prev = root.style.getPropertyValue('--env-banner-height');
-    root.style.setProperty('--env-banner-height', '28px');
-    document.body.style.paddingTop = '28px';
-    return () => {
-      root.style.setProperty('--env-banner-height', prev);
-      document.body.style.paddingTop = '';
-    };
-  }, [show]);
+  /* No body offset. A full-width band has to push the page down; a floating
+   * pill overlays it, so nothing reflows and no app has to know it exists. */
 
   // Respect the OS "reduce motion" setting: the sheen is decoration, and for
   // anyone who finds movement uncomfortable it is worse than useless.
@@ -82,23 +69,28 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
         data-env-banner={env}
         style={{
           position: 'fixed',
-          insetInlineStart: 0,
-          insetInlineEnd: 0,
-          top: 0,
+          top: 8,
+          // Centred without needing a width: the pill is only as wide as its
+          // text, so it never crowds the app's own header.
+          insetInlineStart: '50%',
+          transform: 'translateX(-50%)',
           zIndex: 2147483647, // above dialogs, drawers and command palettes
-          height: 28,
-          display: 'flex',
+          display: 'inline-flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          gap: '.55rem',
+          gap: '.45rem',
+          padding: '5px 12px 5px 10px',
+          borderRadius: 999,
           // A warm red that reads as "caution", not "error" — nothing is broken.
           background: 'linear-gradient(90deg,#B3261E 0%,#D93A2B 50%,#B3261E 100%)',
           color: '#fff',
-          font: '600 11.5px/1 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif',
-          letterSpacing: '.12em',
+          font: '600 11px/1 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif',
+          letterSpacing: '.1em',
           textTransform: 'uppercase',
-          boxShadow: '0 1px 6px rgba(0,0,0,.28)',
+          // A ring rather than a heavy shadow, so it reads as a badge sitting
+          // ON the page rather than a bar attached to the window.
+          boxShadow: '0 2px 10px rgba(0,0,0,.22), 0 0 0 1px rgba(255,255,255,.35) inset',
           overflow: 'hidden',
+          whiteSpace: 'nowrap',
           userSelect: 'none',
           pointerEvents: 'none', // never intercepts a click meant for the app
           animation: reduceMotion ? undefined : 'crm-env-pulse 4s ease-in-out infinite',
@@ -132,7 +124,7 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
           }}
         />
         <span style={{ position: 'relative' }}>
-          {label} — not live data
+          {label}
           {detail ? ` · ${detail}` : ''}
         </span>
       </div>

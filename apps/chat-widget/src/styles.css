@@ -1090,21 +1090,29 @@
     height: min(620px, calc(100vh - 100px));
   }
 }
-/* Staging marker — see Widget.tsx. A thin band at the top of the panel with a
-   slow travelling sheen: peripheral motion is what keeps it noticeable after
-   the hundredth visit, where a static bar becomes invisible. Never rendered in
-   production, where VITE_ENVIRONMENT is unset. */
+/* Staging marker — see Widget.tsx. A small pill rather than a full-width bar:
+   the widget panel is narrow, and a band across it would compete with the
+   header. The slow travelling sheen is what keeps it noticeable after the
+   hundredth visit. Never rendered in production, where VITE_ENVIRONMENT is
+   unset. */
 .yiji-env-banner {
   position: relative;
+  align-self: center;
   overflow: hidden;
-  padding: 5px 8px;
+  margin: 6px auto 0;
+  padding: 4px 10px;
+  border-radius: 999px;
   background: linear-gradient(90deg, #b3261e 0%, #d93a2b 50%, #b3261e 100%);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35);
   color: #fff;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-align: center;
   text-transform: uppercase;
+  white-space: nowrap;
   user-select: none;
 }
 .yiji-env-banner::after {
@@ -1121,7 +1129,7 @@
     transform: translateX(-100%);
   }
   to {
-    transform: translateX(230%);
+    transform: translateX(330%);
   }
 }
 @media (prefers-reduced-motion: reduce) {

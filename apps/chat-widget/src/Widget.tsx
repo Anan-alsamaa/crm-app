@@ -676,7 +676,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
               accident. */}
           {import.meta.env.VITE_ENVIRONMENT === 'staging' && (
             <div className="yiji-env-banner" role="status">
-              STAGING &mdash; not live
+              Staging
             </div>
           )}
           <header className="yiji-header">
