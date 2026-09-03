@@ -1,0 +1,131 @@
+{
+  "family": "crm-{{ENV}}-workers",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/crm-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/crm-task-role-{{ENV}}",
+  "containerDefinitions": [
+    {
+      "name": "workers",
+      "image": "{{ACCOUNT_ID}}.dkr.ecr.{{REGION}}.amazonaws.com/crm/workers:{{IMAGE_TAG}}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8083,
+          "protocol": "tcp"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/crm-{{ENV}}/workers",
+          "awslogs-region": "{{REGION}}",
+          "awslogs-stream-prefix": "workers"
+        }
+      },
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "info"
+        },
+        {
+          "name": "HEALTH_PORT",
+          "value": "8083"
+        },
+        {
+          "name": "DIRECTUS_INTERNAL_URL",
+          "value": "https://api.{{PUBLIC_SUFFIX}}"
+        },
+        {
+          "name": "REDIS_URL",
+          "value": "redis://clustercfg.redis-yiji.6ea0wx.use2.cache.amazonaws.com:6379"
+        },
+        {
+          "name": "AI_GATEWAY_URL",
+          "value": "https://ai.{{PUBLIC_SUFFIX}}"
+        },
+        {
+          "name": "SMTP_HOST",
+          "value": "smtp.office365.com"
+        },
+        {
+          "name": "SMTP_PORT",
+          "value": "587"
+        },
+        {
+          "name": "SMTP_USER",
+          "value": "Yiji@anan.sa"
+        },
+        {
+          "name": "SMTP_FROM",
+          "value": "{{SMTP_FROM}}"
+        },
+        {
+          "name": "WORKER_CONCURRENCY",
+          "value": "5"
+        },
+        {
+          "name": "WORKER_LOCK_MS",
+          "value": "30000"
+        },
+        {
+          "name": "INACTIVITY_MINUTES",
+          "value": "120"
+        },
+        {
+          "name": "YIJI_API_URL",
+          "value": "{{YIJI_API_URL}}"
+        },
+        {
+          "name": "YIJI_ADMIN_API_URL",
+          "value": "{{YIJI_ADMIN_API_URL}}"
+        },
+        {
+          "name": "YIJI_ADMIN_EMAIL",
+          "value": "{{YIJI_ADMIN_EMAIL}}"
+        },
+        {
+          "name": "YIJI_TENANT_ID",
+          "value": "{{YIJI_TENANT_ID}}"
+        },
+        {
+          "name": "YIJI_COUPON_DELIVERY",
+          "value": "{{YIJI_COUPON_DELIVERY}}"
+        },
+        {
+          "name": "OTEL_SERVICE_NAME",
+          "value": "workers"
+        },
+        {
+          "name": "SVC_WORKERS_TOKEN",
+          "value": "{{SECRET:SVC_WORKERS_TOKEN}}"
+        },
+        {
+          "name": "SVC_AI_TOKEN",
+          "value": "{{SECRET:SVC_AI_TOKEN}}"
+        },
+        {
+          "name": "SMTP_PASSWORD",
+          "value": "{{SECRET:SMTP_PASSWORD}}"
+        },
+        {
+          "name": "YIJI_ADMIN_PASSWORD",
+          "value": "{{SECRET:YIJI_ADMIN_PASSWORD}}"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -qO- http://127.0.0.1:8083/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

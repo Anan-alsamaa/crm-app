@@ -1,0 +1,95 @@
+{
+  "family": "crm-{{ENV}}-ai-gateway",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/crm-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/crm-task-role-{{ENV}}",
+  "containerDefinitions": [
+    {
+      "name": "ai-gateway",
+      "image": "{{ACCOUNT_ID}}.dkr.ecr.{{REGION}}.amazonaws.com/crm/ai-gateway:{{IMAGE_TAG}}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8081,
+          "protocol": "tcp"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/crm-{{ENV}}/ai-gateway",
+          "awslogs-region": "{{REGION}}",
+          "awslogs-stream-prefix": "ai-gateway"
+        }
+      },
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "PORT",
+          "value": "8081"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "info"
+        },
+        {
+          "name": "DIRECTUS_INTERNAL_URL",
+          "value": "https://api.{{PUBLIC_SUFFIX}}"
+        },
+        {
+          "name": "REDIS_URL",
+          "value": "redis://clustercfg.redis-yiji.6ea0wx.use2.cache.amazonaws.com:6379"
+        },
+        {
+          "name": "CORS_ORIGIN",
+          "value": "https://agent.{{PUBLIC_SUFFIX}},https://admin.{{PUBLIC_SUFFIX}}"
+        },
+        {
+          "name": "GEMINI_MODEL",
+          "value": "gemini-2.5-flash"
+        },
+        {
+          "name": "YIJI_API_URL",
+          "value": "{{YIJI_API_URL}}"
+        },
+        {
+          "name": "YIJI_ADMIN_API_URL",
+          "value": "{{YIJI_ADMIN_API_URL}}"
+        },
+        {
+          "name": "YIJI_ADMIN_EMAIL",
+          "value": "{{YIJI_ADMIN_EMAIL}}"
+        },
+        {
+          "name": "OTEL_SERVICE_NAME",
+          "value": "ai-gateway"
+        },
+        {
+          "name": "SVC_AI_TOKEN",
+          "value": "{{SECRET:SVC_AI_TOKEN}}"
+        },
+        {
+          "name": "GEMINI_API_KEY",
+          "value": "{{SECRET:GEMINI_API_KEY}}"
+        },
+        {
+          "name": "YIJI_ADMIN_PASSWORD",
+          "value": "{{SECRET:YIJI_ADMIN_PASSWORD}}"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -qO- http://127.0.0.1:8081/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

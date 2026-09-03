@@ -1,3 +1,4 @@
+import { envKey } from '@yiji/shared-config/redis';
 import type { Redis } from 'ioredis';
 
 /**
@@ -41,7 +42,9 @@ export class SlidingWindowLimiter {
     private readonly redis: Redis,
     private readonly windowMs: number,
     private readonly limit: number,
-    private readonly keyPrefix = 'rl',
+    // Namespaced: a shared cluster would otherwise let staging traffic
+    // consume production's rate-limit budget.
+    private readonly keyPrefix = envKey('rl'),
   ) {}
 
   async check(scope: string): Promise<RateLimitVerdict> {
@@ -72,7 +75,9 @@ export class SlidingWindowLimiter {
 export class MonthlyCap {
   constructor(
     private readonly redis: Redis,
-    private readonly keyPrefix = 'aicap',
+    // Namespaced: the monthly AI spend cap must count each environment
+    // separately, or staging usage exhausts production's allowance.
+    private readonly keyPrefix = envKey('aicap'),
   ) {}
 
   private monthKey(): string {

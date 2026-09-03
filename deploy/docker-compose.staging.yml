@@ -1,0 +1,66 @@
+# Staging overlay — external RDS, on-box Redis.
+#
+# Use TOGETHER with the base prod file, from the repo root:
+#
+#   docker compose --project-name crm-staging --env-file .env.staging \
+#     -f docker-compose.prod.yml -f deploy/docker-compose.staging.yml up -d
+#
+# `scripts/deploy-staging.sh` does exactly this — prefer it.
+#
+# WHY THIS FILE EXISTS. The base file is a self-contained single-host stack: it
+# ships its own Postgres. Staging deliberately does NOT use it — the database is
+# the SHARED RDS instance (`crm_staging`, loaded 2026-08-31 with the full audit
+# trail), because that is where the data already lives and reloading 100k
+# revisions per deploy is not a thing anyone should do. This overlay therefore:
+#
+#   1. removes the bundled `postgres` service, and
+#   2. adds the TLS settings RDS needs, which the base file does not carry.
+#
+# Redis STAYS on the box (`redis:7-alpine`, from the base file). ElastiCache is
+# at a PRIVATE address inside vpc-08ea7d710f4596303 while this instance launches
+# into the default VPC — separate VPCs do not route, confirmed by the client
+# returning `Failed to refresh slots cache`. Redis holds only transient job
+# state, so an on-box instance is the correct staging trade. Leave REDIS_URL
+# unset in .env.staging and the base default (redis://redis:6379) applies.
+
+services:
+  # Not used on staging — the database is RDS. `!reset` is Compose's official
+  # way to drop an inherited service (Compose >= 2.24); `scale: 0` would leave a
+  # container definition behind and `depends_on` would still wait on it.
+  postgres: !reset null
+
+  directus:
+    # The base file makes Directus wait for the bundled postgres to be healthy.
+    # That service no longer exists here, so the condition must go with it or
+    # Compose refuses to start ("depends on undefined service"). Redis is still
+    # local and still worth waiting for.
+    depends_on: !override
+      redis:
+        condition: service_healthy
+    environment:
+      # RDS presents a CA that is not in the container's trust store, so a
+      # verifying client aborts the connection with SELF_SIGNED_CERT_IN_CHAIN.
+      #
+      # ONLY this one variable. Do NOT add `DB_SSL: 'true'` alongside it —
+      # PROVED 2026-09-02 by running the real image against crm_staging: with
+      # both set, Directus dies at boot; with only this one, it starts and all
+      # five extensions load. Setting the parent to a plain boolean overrides
+      # the nested object form the double underscore builds. The Aug 2026 ECS
+      # task definition that worked against this same RDS also carried only
+      # this half.
+      #
+      # The `bootstrap` service below is the exception — its own pg client
+      # reads `DB_SSL === 'true'` in code (directus/bootstrap/src/env.ts).
+      DB_SSL__REJECT_UNAUTHORIZED: 'false'
+
+  bootstrap:
+    depends_on: !override
+      directus:
+        condition: service_healthy
+    environment:
+      # The constraints step opens its OWN raw Postgres connection (index and
+      # constraint SQL the Directus API cannot express), so it needs its own TLS
+      # flag — see directus/bootstrap/src/env.ts. It runs LAST, so without this
+      # the bootstrap fails at the very end of an otherwise successful apply and
+      # looks like a schema bug rather than a connection one.
+      DB_SSL: 'true'

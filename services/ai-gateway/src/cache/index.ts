@@ -1,3 +1,4 @@
+import { envKey } from '@yiji/shared-config/redis';
 import { createHash } from 'node:crypto';
 import type { Redis } from 'ioredis';
 
@@ -14,7 +15,9 @@ export class ResponseCache {
   constructor(
     private readonly redis: Redis,
     private readonly ttlSeconds = 900,
-    private readonly keyPrefix = 'aicache',
+    // Namespaced: staging and production share one Redis cluster, so an
+    // unprefixed cache key would serve a staging answer to a production user.
+    private readonly keyPrefix = envKey('aicache'),
   ) {}
 
   private hash(input: string): string {

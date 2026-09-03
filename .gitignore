@@ -138,3 +138,4 @@ var/
 # users.json holds staff accounts. It sat untracked-but-not-ignored, one
 # `git add -A` away from being published to GitHub.
 Ayman/
+.directus-test.env
