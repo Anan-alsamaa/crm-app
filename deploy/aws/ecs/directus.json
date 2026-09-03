@@ -112,7 +112,7 @@
         },
         {
           "name": "REFRESH_TOKEN_COOKIE_SAME_SITE",
-          "value": "lax"
+          "value": "none"
         },
         {
           "name": "REFRESH_TOKEN_COOKIE_SECURE",

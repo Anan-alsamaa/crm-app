@@ -77,6 +77,21 @@ fi
 # The saving was a few dollars of logs; the cost was trusting what you observe.
 SWEEP_MS=60000
 
+# minimumHealthyPercent: 100 in production, 50 where a service runs ONE task.
+#
+# 100 means "never drop below the desired count while deploying", which is what
+# makes a production release invisible — the old tasks keep serving until the
+# new ones are healthy. With TWO tasks that works: ECS stops one, starts a
+# replacement, then does the other.
+#
+# With ONE task it deadlocks. ECS cannot stop the only healthy task without
+# breaching the floor, so it starts a second, both stay healthy, and the
+# deployment never converges — it sits IN_PROGRESS indefinitely while you pay
+# for two tasks. Observed on staging: three services each held a duplicate for
+# hours. 50 lets it replace the single task, at the cost of a few seconds'
+# interruption, which is the correct trade in an environment with one copy.
+MIN_HEALTHY=$([ "$ENV_NAME" = "prod" ] && echo 100 || echo 50)
+
 echo "==> Services for $CLUSTER"
 
 for svc in directus socket-gateway ai-gateway workers; do
@@ -98,7 +113,7 @@ for svc in directus socket-gateway ai-gateway workers; do
     --desired-count "${DESIRED[$svc]}" \
     --launch-type FARGATE \
     --network-configuration "awsvpcConfiguration={subnets=[${SUBNETS}],securityGroups=[${SG}],assignPublicIp=DISABLED}" \
-    --deployment-configuration "maximumPercent=200,minimumHealthyPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}" \
+    --deployment-configuration "maximumPercent=200,minimumHealthyPercent=${MIN_HEALTHY},deploymentCircuitBreaker={enable=true,rollback=true}" \
     "${EXTRA[@]}" >/dev/null 2>&1 && echo "    created" || echo "    exists (use update-service to change it)"
 
   # ── Auto-scaling ──────────────────────────────────────────────────────
