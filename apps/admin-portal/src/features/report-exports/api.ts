@@ -11,6 +11,7 @@ import {
   agentPerformance,
   chatHandoffs,
   conversationTimestamps,
+  readChunked,
   splitLocalDateTime,
   type ComplaintReportRow,
 } from '@yiji/reports';
@@ -304,6 +305,25 @@ function displayName(u: RawUser): string {
   return [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '—';
 }
 
+/**
+ * Read a collection filtered by a potentially large id set, one chunk per
+ * request. See `readChunked` in @yiji/reports for why this is necessary — in
+ * short, a few hundred ids in a query string is an HTTP 414 from CloudFront.
+ */
+function readByIdsChunked<T>(
+  collection: string,
+  ids: string[],
+  build: (idChunk: string[]) => Record<string, unknown>,
+): Promise<T[]> {
+  return readChunked(
+    ids,
+    (chunk) =>
+      directus.request(readItems(collection as never, build(chunk) as never) as never) as Promise<
+        T[]
+      >,
+  );
+}
+
 /** Ticket fields every report needs. */
 const BASE_TICKET_FIELDS = [
   'id',
@@ -488,13 +508,15 @@ async function loadAgentReport(
         ),
       );
       if (missingConvIds.length > 0) {
-        const extraConvs = (await directus.request(
-          readItems('conversations', {
-            filter: { id: { _in: missingConvIds } },
+        const extraConvs = await readByIdsChunked<{ id: string; assigned_agent: string | null }>(
+          'conversations',
+          missingConvIds,
+          (ids) => ({
+            filter: { id: { _in: ids } },
             fields: ['id', 'assigned_agent'],
             limit: -1,
           }),
-        )) as { id: string; assigned_agent: string | null }[];
+        );
         for (const c of extraConvs) convAgent.set(c.id, c.assigned_agent);
       }
 
@@ -556,24 +578,23 @@ async function loadAgentReport(
       const lastEditBy = new Map<string, { name: string; at: string }>();
       if (tickets.length > 0) {
         try {
-          const revs = (await directus.request(
-            readItems(
-              'directus_revisions' as never,
-              {
-                limit: -1,
-                filter: {
-                  collection: { _eq: 'tickets' },
-                  item: { _in: tickets.map((t) => t.id) },
-                },
-                fields: ['item', 'activity.action', 'activity.timestamp', 'activity.user'],
-                // Newest first, so the first row seen for a ticket wins.
-                sort: ['-id'],
-              } as never,
-            ) as never,
-          )) as Array<{
+          const revs = await readByIdsChunked<{
             item: string;
             activity: { action: string; timestamp: string; user: string | null } | null;
-          }>;
+          }>(
+            'directus_revisions',
+            tickets.map((t) => t.id),
+            (ids) => ({
+              limit: -1,
+              filter: {
+                collection: { _eq: 'tickets' },
+                item: { _in: ids },
+              },
+              fields: ['item', 'activity.action', 'activity.timestamp', 'activity.user'],
+              // Newest first, so the first row seen for a ticket wins.
+              sort: ['-id'],
+            }),
+          );
           for (const r of revs) {
             if (!r.activity?.user || r.activity.action !== 'update') continue;
             if (lastEditBy.has(r.item)) continue;
@@ -722,27 +743,25 @@ async function loadAgentReport(
       // The operational half the owner evaluates agents BY — chats handled,
       // no-reply, in-time %, first response, time to solve, common chats —
       // computed with the exact shared arithmetic of the performance pages.
-      const chatMsgs =
-        conversations.length === 0
-          ? []
-          : ((await directus.request(
-              readItems(
-                'messages' as never,
-                {
-                  limit: -1,
-                  filter: {
-                    conversation: { _in: conversations.map((c) => c.id) },
-                    is_internal_note: { _eq: false },
-                  },
-                  fields: ['conversation', 'sender_type', 'date_created'],
-                  sort: ['date_created'],
-                } as never,
-              ) as never,
-            )) as Array<{
-              conversation: string;
-              sender_type: string;
-              date_created: string | null;
-            }>);
+      // Chunked: one `_in` carrying every conversation id overflows the URL and
+      // CloudFront answers 414 before Directus sees it. See IN_FILTER_CHUNK.
+      const chatMsgs = await readByIdsChunked<{
+        conversation: string;
+        sender_type: string;
+        date_created: string | null;
+      }>(
+        'messages',
+        conversations.map((c) => c.id),
+        (ids) => ({
+          limit: -1,
+          filter: {
+            conversation: { _in: ids },
+            is_internal_note: { _eq: false },
+          },
+          fields: ['conversation', 'sender_type', 'date_created'],
+          sort: ['date_created'],
+        }),
+      );
       const chatTimes = conversationTimestamps(chatMsgs);
       const timings = conversations.map((c) => {
         const agentId = realAgentId(c.assigned_agent);
@@ -958,13 +977,13 @@ export function useTicketOrders(contactIds: string[], enabled: boolean, days: nu
       // for just these contacts in one query.
       let contacts: ContactCommerce[] = [];
       try {
-        contacts = (await directus.request(
-          readItems('contacts', {
-            filter: { id: { _in: capped } },
-            fields: ['id', 'external_customer_id', 'vendor.yiji_vendor_id'],
-            limit: -1,
-          }),
-        )) as ContactCommerce[];
+        // Chunked for the same reason as the report queries: 150 ids is already
+        // a ~5.5KB filter, and the cap is a product decision that could rise.
+        contacts = await readByIdsChunked<ContactCommerce>('contacts', capped, (ids) => ({
+          filter: { id: { _in: ids } },
+          fields: ['id', 'external_customer_id', 'vendor.yiji_vendor_id'],
+          limit: -1,
+        }));
       } catch {
         // Contacts unreadable → no enrichment, blank order columns.
         return result;
