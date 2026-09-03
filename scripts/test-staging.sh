@@ -98,6 +98,22 @@ if [ -n "$TID" ]; then
   w=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 -X PATCH "$API/items/tickets/$TID" \
         "${AUTH[@]}" -H 'Content-Type: application/json' -d '{"status":"resolved"}' 2>/dev/null)
   [ "$w" = "200" ] && ok "ticket update (mark as solved)" || no "ticket update" "HTTP $w"
+
+  # READ IT BACK ON A SEPARATE REQUEST.
+  #
+  # A 200 on the PATCH proves the write was ACCEPTED, not that a later reader
+  # sees it. Directus could not purge its cache on a Redis CLUSTER endpoint
+  # (CROSSSLOT on the multi-key delete), so every write returned 200 carrying
+  # the new value while every later GET served the OLD one. That is what
+  # "mark as solved does nothing" and "the approved coupon stays pending"
+  # both were. Only a second request catches it.
+  BACK=$(curl -s --max-time 20 "${AUTH[@]}" "$API/items/tickets/$TID?fields=status" 2>/dev/null |
+         python -c "import sys,json;print(json.load(sys.stdin)['data']['status'])" 2>/dev/null)
+  if [ "$BACK" = "resolved" ]; then
+    ok "the write is VISIBLE to the next read"
+  else
+    no "stale read: wrote resolved, read back ${BACK:-nothing}" "Directus is serving cache it could not purge - see finding 10"
+  fi
   curl -s -o /dev/null --max-time 20 -X PATCH "$API/items/tickets/$TID" "${AUTH[@]}" \
        -H 'Content-Type: application/json' -d "{\"status\":\"$WAS\"}" 2>/dev/null
 else

@@ -3,14 +3,26 @@
 First real use of the deployed staging environment by the owner, plus what
 testing from this end then turned up. Seven defects.
 
-**Fixed:** the cross-site cookie (1), the Socket.IO target group (3), the
-CloudFront 414 that emptied every report (7). **Not a bug:** the inbox filters
-(2), which combine by design and now say so. **Awaiting retest on a fresh
-session:** the order lookup (4) and the coupon queue (5), both of which trace
-back to defect 1. **Still to reproduce:** mark-as-solved (6) — though the
-staging suite now exercises a ticket status write and it passes.
+**Fixed and verified:** the cross-site cookie (1), the Socket.IO target group
+(3), the order lookup (4 — now returns the full order), the CloudFront 414 that
+emptied every report (7). **Not a bug:** the inbox filters (2), which combine by
+design and now say so.
 
-The staging suite (`scripts/test-staging.sh`) is **16/16**.
+**OPEN, all infrastructure, all needing an AWS change:**
+
+| #   | what                                         | effect                                               |
+| --- | -------------------------------------------- | ---------------------------------------------------- |
+| 10  | Directus cache cannot purge on Redis Cluster | **writes appear not to save** — explains 5 and 6     |
+| 8   | all three service tokens are invalid         | AI config unreadable and unwritable by anyone        |
+| 9   | the eight AI endpoints have no ALB rule      | every AI feature 404s, answered by the wrong service |
+
+Defect 10 is the serious one: a write returns 200 with the new value, is
+recorded in the audit trail, and the next read still serves the old value.
+
+The staging suite (`scripts/test-staging.sh`) is **16/16** and the route sweep
+(`scripts/sweep-admin-routes.mjs`) finds every report clean — neither catches
+10, because both read back through the same stale cache. A test that writes and
+then re-reads on a SEPARATE request is the gap; see the suite's section 7.
 
 ---
 
@@ -79,6 +91,105 @@ conversations, contacts) and both portals' Agent performance pages.
 
 ---
 
+## OPEN — infrastructure, found by sweeping the deployed routes
+
+Both found on 2026-09-04 by `scripts/sweep-admin-routes.mjs`, which drives all
+22 admin routes in a real browser. Neither is code; both need an AWS change,
+and both would have shipped to production exactly as they are.
+
+### 8. All three service tokens are invalid — AI config is dead
+
+`SVC_AI_TOKEN`, `SVC_GATEWAY_TOKEN` and `SVC_WORKERS_TOKEN` in the staging task
+definitions are all rejected by Directus with **401 INVALID_CREDENTIALS**. The
+service accounts exist, are active, and DO hold tokens — the deployed values
+simply are not the stored ones. They drifted.
+
+The visible symptom is small and the cause is not:
+
+- `adminRoleIds()` asks Directus which roles are Admin/Administrator using the
+  gateway's own token. That call 401s, the `catch` returns an EMPTY SET, and
+  the empty set is then cached for five minutes.
+- Empty set means `isAdmin` is false for **everybody**, including a real
+  Administrator. All four admin-gated AI endpoints answer `403 admin_required`
+  — `GET`/`PUT /admin/config` and `GET /admin/usage`.
+- So AI settings cannot be read OR changed on staging, by anyone.
+
+> The fallback is deliberately fail-closed, which is right. But it makes a
+> credential fault present as an authorization fault, which is what makes this
+> expensive to diagnose: the screen says you are not an admin, and you are.
+
+**Fix:** rotate the three tokens — regenerate on the service accounts in
+Directus and update the task definitions together. Needs approval (AWS write).
+
+### 9. The eight AI endpoints have no ALB rule — Aura is unreachable
+
+The listener routes `/commerce/*`, `/admin/config` and `/admin/usage` to the AI
+gateway. It does NOT route the eight endpoints in `AI_ENDPOINTS`:
+
+    /summarize-conversation  /suggest-reply     /analyze-sentiment
+    /detect-intent           /extract-entities  /semantic-search
+    /score-lead              /help-assistant
+
+All eight fall through to the default target and are answered by **Directus**,
+which 404s them (`ROUTE_NOT_FOUND`). Verified against all eight.
+
+So every AI feature — Aura, reply suggestions, summaries, sentiment — is dead
+on staging, and the 404 comes from the wrong service, so nothing in the AI
+gateway's log shows a problem at all.
+
+**Fix:** one more listener rule sending those eight paths to `crm-stg-ai`.
+Needs approval (AWS write).
+
+### 10. Directus serves STALE data — the cache cannot purge on Redis Cluster
+
+**The single most serious finding. It explains defects 5 and 6, which I had
+attributed to an expired session.**
+
+Reproduced at the API, with no browser involved:
+
+| step                                             | result                                 |
+| ------------------------------------------------ | -------------------------------------- |
+| `PATCH /items/tickets/<id>` → `status: resolved` | **200**, response body says `resolved` |
+| the revision log                                 | the `resolved` write **is recorded**   |
+| `GET` the same id, +3s and +8s later             | **`new`**                              |
+
+The write reaches Postgres. The READ does not see it. From the Directus log at
+the moment of the write:
+
+    WARN: [cache] ReplyError: CROSSSLOT Keys in request don't hash to the same slot
+
+`REDIS` points at `clustercfg.redis-yiji...` — **cluster mode**. Directus purges
+by deleting many keys in ONE command; on a cluster those keys live in different
+slots and the multi-key delete is refused. `CACHE_AUTO_PURGE=true` therefore
+never actually purges, Directus logs a **WARN and continues**, and every later
+read serves the stale entry.
+
+> The severity is in the failure mode, not the error. A write returns 200 with
+> the new value in the body, so the API looks correct, the audit trail looks
+> correct, and only the next read is wrong. "Mark as solved does nothing" and
+> "the approved coupon stays in the pending queue" are both this.
+
+**This is not staging-only.** `CACHE_ENABLED/CACHE_STORE/CACHE_AUTO_PURGE` are
+set the same way in `deploy/aws/ecs/directus.json` AND `docker-compose.prod.yml`,
+so production inherits it the moment it points at the same cluster-mode Redis.
+
+**Options, cheapest first** — all need approval (AWS write):
+
+1. **`CACHE_ENABLED=false`.** One env var. Correctness immediately; the cost is
+   read latency, which on this dataset is single-digit ms.
+2. **Point `REDIS` at a non-cluster endpoint.** Keeps caching, needs a
+   standalone ElastiCache node.
+3. **`CACHE_STORE=memory`.** Caches per task, so two tasks disagree — acceptable
+   only at one replica.
+
+Recommend **1 now**, revisit once there is traffic worth caching for.
+
+> Note the same trap already bit the socket gateway (ioredis Cluster vs
+> standalone). A cluster endpoint is not a drop-in for a standalone one, and
+> both failures were silent.
+
+---
+
 ## OPEN — application behaviour
 
 These reproduce in the UI and need tracing in the code. None is
@@ -130,7 +241,9 @@ An auth failure presented as a data failure, which is exactly what sent this
 investigation to Yiji and to vendor scoping. A 401/403 now throws
 `commerce AUTH`.
 
-**Retest after a fresh sign-in.** The cookie fix should resolve it.
+**RESOLVED — verified 2026-09-04.** `/commerce/order?vendorId=1&orderId=1234535`
+returns **200 with the full order** (status, totals, items, restaurant, delivery)
+through CloudFront with a bearer token. The cookie fix was the fix.
 
 ### 5. Approving a coupon leaves it in the pending queue
 
@@ -149,23 +262,25 @@ so it is not re-investigated:
 So the data, the keys and the polling are all correct, and the row should clear
 within 30 seconds unaided.
 
-**Most likely cause: the session had already expired from defect 1.** The
-refetch would then fail silently and the screen would keep showing what it last
-had. That fits the report exactly — the toast fires from the mutation's own
-success, while the refetch that follows is the part that needs a valid session.
+**Cause: the stale cache — defect 10.** My earlier guess (an expired session
+from defect 1) was WRONG, and is recorded here so it is not re-investigated.
 
-**Retest after the cookie fix before investigating further.** If it still
-reproduces on a fresh login, the next step is the network tab: confirm whether
-the refetch is issued at all, and what it returns.
+The data, the query keys and the polling were all correct, which is exactly why
+this was puzzling. The refetch IS issued and DOES succeed — it is answered from
+a cache that Directus could not purge, so it returns the pre-decision rows. The
+row clears only when the cache entry expires on its own.
 
-### 6. "Mark as solved" does nothing
+Fixing defect 10 fixes this. No application change needed.
 
-No visible effect, no error. Determine first whether the request is even sent
-(network tab) — that separates a dead handler from a failing call.
+### 6. "Mark as solved" does nothing — EXPLAINED by defect 10
 
----
+**Cause: the stale cache.** The write succeeds (200, recorded in revisions);
+the read afterwards serves the pre-write value, so the ticket appears unchanged.
 
-## Verify each fix against the DEPLOYED environment
+Verified at the API with no browser: `PATCH` to `resolved` returned `resolved`
+and was written, and a `GET` 8 seconds later still said `new`.
 
-Every one of these was invisible until someone used the system. Reproduce in the
-browser, not by reading the code, and confirm the fix the same way.
+Fixing defect 10 fixes this. No application change needed.
+
+> I first reported this as "determine whether the request is even sent". It is
+> sent, and it works. The request was never the problem.
