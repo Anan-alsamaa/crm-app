@@ -470,9 +470,14 @@ function Shell({ children }: { children: React.ReactNode }) {
    * jargon. Dropping the group leaves "Dashboard | Tickets", which is the whole
    * of what that role does.
    *
-   * Counted rather than hardcoded, so this stays true as privileges move: a
-   * role that can see Compensation as well keeps the group, and a role that can
-   * see only Compensation keeps it too — the collapse only removes a duplicate.
+   * Counted rather than hardcoded, so this stays true as tabs and privileges
+   * move — the collapse only ever removes a duplicate, never a destination.
+   *
+   * Since Compensation moved to Agent KPI (2026-09-03) this group holds ONE
+   * tab, so the collapse now fires for every role and "Operational KPI"
+   * renders as "Ticket breakdown". That is the intended reading: a group of
+   * one is the same place named twice. Left counted rather than simplified
+   * away, so adding a second operations report restores the group by itself.
    */
   const visibleTabs = (group: { to: string; requires?: Privilege }[]) =>
     group.filter((tab) => !tab.requires || can(tab.requires));
@@ -602,6 +607,16 @@ function Shell({ children }: { children: React.ReactNode }) {
  * Built from `t` at render rather than frozen at import, so switching language
  * relabels the tabs like everything else.
  */
+/**
+ * Where the compensation report lives.
+ *
+ * Named because THREE places point at it — the tab, the legacy `/compensation`
+ * link and the old Operational-KPI URL — and a move that updates two of them
+ * leaves a redirect pointing at a 404 nobody notices until someone follows an
+ * old bookmark.
+ */
+const COMPENSATION_PATH = '/reports/agent-kpi/compensation';
+
 function reportTabs(t: TFunction) {
   return {
     agentKpi: [
@@ -620,19 +635,19 @@ function reportTabs(t: TFunction) {
         label: t('nav.reportConversations', { defaultValue: 'Chat status' }),
         requires: 'view_all_chats' as const,
       },
+      {
+        // Compensation is a money screen, so it follows the coupon privilege
+        // rather than the chat one it happens to sit beside.
+        to: 'compensation',
+        label: t('nav.compensationAll', { defaultValue: 'Compensation' }),
+        requires: 'approve_coupons' as const,
+      },
     ],
     opsKpi: [
       {
         to: 'tickets',
         label: t('nav.reportTickets', { defaultValue: 'Ticket breakdown' }),
         requires: 'view_all_tickets' as const,
-      },
-      {
-        // Compensation is a money screen, so it follows the coupon privilege
-        // rather than the ticket one it happens to sit beside.
-        to: 'compensation',
-        label: t('nav.compensationAll', { defaultValue: 'Compensation' }),
-        requires: 'approve_coupons' as const,
       },
     ],
   };
@@ -777,6 +792,14 @@ export function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="compensation"
+              element={
+                <ProtectedRoute requires="approve_coupons">
+                  <AllCompensationPage />
+                </ProtectedRoute>
+              }
+            />
           </Route>
           <Route
             path="/reports/operational-kpi"
@@ -797,14 +820,10 @@ export function App() {
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="compensation"
-              element={
-                <ProtectedRoute requires="approve_coupons">
-                  <AllCompensationPage />
-                </ProtectedRoute>
-              }
-            />
+            {/* Compensation moved to Agent KPI (owner's call, 2026-09-03) — it
+                reports what agents gave away, which is an agent measure. The
+                redirect below keeps existing links and bookmarks working. */}
+            <Route path="compensation" element={<Navigate to={COMPENSATION_PATH} replace />} />
           </Route>
           {/* The Complaints report was merged into Tickets — same records,
               one page. Redirect so existing links and bookmarks still land. */}
@@ -823,10 +842,7 @@ export function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/compensation"
-            element={<Navigate to="/reports/operational-kpi/compensation" replace />}
-          />
+          <Route path="/compensation" element={<Navigate to={COMPENSATION_PATH} replace />} />
           <Route
             path="/coupon-report"
             element={
