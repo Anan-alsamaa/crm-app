@@ -1,12 +1,20 @@
 # Staging test findings — 2026-09-03
 
-First real use of the deployed staging environment by the owner. Six defects.
-Two were infrastructure and are fixed; four are application behaviour and need
-reproducing against the code.
+First real use of the deployed staging environment by the owner, plus what
+testing from this end then turned up. Seven defects.
+
+**Fixed:** the cross-site cookie (1), the Socket.IO target group (3), the
+CloudFront 414 that emptied every report (7). **Not a bug:** the inbox filters
+(2), which combine by design and now say so. **Awaiting retest on a fresh
+session:** the order lookup (4) and the coupon queue (5), both of which trace
+back to defect 1. **Still to reproduce:** mark-as-solved (6) — though the
+staging suite now exercises a ticket status write and it passes.
+
+The staging suite (`scripts/test-staging.sh`) is **16/16**.
 
 ---
 
-## FIXED — infrastructure
+## FIXED — infrastructure and data-scale
 
 ### 1. Refresh signs you out
 
@@ -46,6 +54,29 @@ the service.
 > wildcard needs at least one character after it, and the handshake URL is
 > exactly that path plus a query string. Both patterns are listed.
 
+### 7. Every report empty — "Could not load report data"
+
+**Cause. HTTP 414 from CloudFront, before any service saw the request.**
+
+The admin ticket breakdown failed whole while **every one of its queries
+succeeded when run individually against staging**. The failing one is the query
+built FROM another query's output: messages filtered by every conversation id.
+
+A Directus filter travels in the QUERY STRING. 232 conversation ids is a ~9KB
+filter that URL-encodes to ~27KB, and CloudFront rejects anything past roughly
+8KB — before the ALB, before Directus, so **nothing appears in any service log**.
+
+> This bug **grows into existence**. It cannot reproduce on a dev database with a
+> handful of conversations; it appears the day real data pushes the count past
+> the limit. It was heading for production identically.
+
+**Fix.** `readChunked` in `@yiji/reports` (120 ids per request), applied to all
+six unbounded call sites: the report-exports api (messages, revisions,
+conversations, contacts) and both portals' Agent performance pages.
+
+**Verified against deployed staging:** the failing query went from HTTP 414 to
+383 messages across two chunks. Staging suite now **16/16**.
+
 ---
 
 ## OPEN — application behaviour
@@ -53,27 +84,53 @@ the service.
 These reproduce in the UI and need tracing in the code. None is
 infrastructure: the requests reach the right service and come back.
 
-### 2. Open / Urgent / Unread filters do not clear
+### 2. Open / Urgent / Unread filters do not clear — NOT A BUG
 
-Clicking Unread then Open leaves **both** appearing pressed. Suggests the filter
-state is additive where it should be exclusive, or the pressed style is driven
-by something other than the active filter.
+The three tiles are **independent filters that combine**, and the state logic
+was already correct: clicking Unread then Open legitimately leaves both active.
+What was missing was any indication that they stack. A filter summary line and
+a Clear link now say so out loud.
 
-Start at the inbox filter component in `apps/agent-portal/src/features/inbox`.
+> As reported: "clicking Unread then Open leaves both appearing pressed." They
+> were pressed because they were both applied. The interface was accurate and
+> silent; it is now accurate and explicit.
 
 ### 4. Order lookup fails in the CRM, works in Postman
 
-`No order 1234535 for this vendor.`
-(`apps/agent-portal/src/features/commerce/OrderViews.tsx`)
+**Cause: the session, again — the same root as defect 1.**
 
-Routing is fine — `/commerce/order` through CloudFront returns **401**, i.e. it
-reaches ai-gateway and is properly rejected without auth. `YIJI_API_URL`,
-`YIJI_ADMIN_API_URL`, `YIJI_ADMIN_EMAIL` and the password are all set on the
-task.
+Proved by elimination against the LIVE environment:
 
-So the difference is most likely the **vendorId** the portal sends versus what
-Postman used. `commerce-client.ts` passes `{ vendorId, orderId }`; check where
-that vendorId is resolved from and whether staging's data yields the same one.
+| tested                                                      | result                           |
+| ----------------------------------------------------------- | -------------------------------- |
+| Yiji admin login with `CRMUSER@ANAN.SA` / the real password | **202 Valid Email and Password** |
+| `order.yiji-app.com/api/Order/GetOrderAsync/1234535`        | **200, full order**              |
+| `/commerce/order` through CloudFront with a session cookie  | **401 Missing bearer token**     |
+| ai-gateway logs for any `/commerce/*` request               | **none — only health checks**    |
+
+The request never reaches the gateway. The portal authenticates in **cookie
+mode**, so `commerce-client.ts` calls `auth.getToken()` for a bearer token —
+and that returns `null` once a refresh has failed. With no header the gateway
+rejects the call, and it never appears in its logs.
+
+> **Two things I got wrong while chasing this, recorded so they are not
+> re-investigated:**
+>
+> 1. **`YIJI_ADMIN_PASSWORD=123` is NOT a placeholder** — it is the real
+>    password for `CRMUSER@ANAN.SA` and it authenticates successfully. It looks
+>    like a dev leftover; it is not.
+> 2. **The order is not missing.** It 404s on `admin.yiji-app.com` but returns
+>    200 on `order.yiji-app.com`, which is the host the client actually uses
+>    (`baseUrl` = `YIJI_API_URL`). `YIJI_API_KEY` being empty is also fine —
+>    that API serves this endpoint unauthenticated.
+
+**Secondary defect, fixed.** `commerce-client.ts` caught every non-OK response
+identically, so the order panel rendered `No order {{orderId}} for this vendor.`
+An auth failure presented as a data failure, which is exactly what sent this
+investigation to Yiji and to vendor scoping. A 401/403 now throws
+`commerce AUTH`.
+
+**Retest after a fresh sign-in.** The cookie fix should resolve it.
 
 ### 5. Approving a coupon leaves it in the pending queue
 
