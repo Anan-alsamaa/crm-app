@@ -474,10 +474,12 @@ function Shell({ children }: { children: React.ReactNode }) {
    * move — the collapse only ever removes a duplicate, never a destination.
    *
    * Since Compensation moved to Agent KPI (2026-09-03) this group holds ONE
-   * tab, so the collapse now fires for every role and "Operational KPI"
-   * renders as "Ticket breakdown". That is the intended reading: a group of
-   * one is the same place named twice. Left counted rather than simplified
-   * away, so adding a second operations report restores the group by itself.
+   * tab for every role, so the collapse always fires. It now shortens the
+   * PATH only and keeps the group's own name (owner's call, 2026-09-04):
+   * "Operational KPI" is the heading operations think in, and losing it made
+   * the bar read as a flat list of reports with no operations section at all.
+   * The link still lands directly on the report, because a group route with
+   * one child only redirects there anyway.
    */
   const visibleTabs = (group: { to: string; requires?: Privilege }[]) =>
     group.filter((tab) => !tab.requires || can(tab.requires));
@@ -490,25 +492,24 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: section.items.flatMap((it) => {
         if (it.requires && !can(it.requires)) return [];
         /*
-         * A group that collapses to ONE tab becomes that tab.
+         * A group that collapses to ONE tab links straight to that tab.
          *
-         * This used to just drop the group and add nothing back, on the
-         * reasoning that a "Operational KPI → Ticket breakdown" pair with one
-         * leaf is the same destination named twice. True — but for a role that
-         * can see only Ticket breakdown, dropping the group dropped its ONLY
-         * report, the Reports section then had no items and was filtered out
-         * whole, and an Operations user was left with a top bar containing
-         * Dashboard and nothing else. The duplicate was worth removing; the
-         * destination was not.
+         * This used to drop the group and add nothing back, on the reasoning
+         * that an "Operational KPI → Ticket breakdown" pair with one leaf is
+         * the same destination named twice. But for a role that can see only
+         * Ticket breakdown, dropping the group dropped its ONLY report, the
+         * Reports section then had no items and was filtered out whole, and an
+         * Operations user was left with a top bar containing Dashboard and
+         * nothing else.
+         *
+         * So the entry stays, under its own name, pointing at the one report
+         * it holds. Renaming it to that report was tried and reverted: the
+         * group name is how operations refer to this, and without it the bar
+         * reads as loose reports with no operations heading.
          */
         if (it.to === '/reports/operational-kpi' && opsKpiCollapsedToTickets) {
-          return [
-            {
-              ...it,
-              to: '/reports/operational-kpi/tickets',
-              label: t('nav.reportTickets', { defaultValue: 'Ticket breakdown' }),
-            },
-          ];
+          // Path only — the label stays "Operational KPI". See above.
+          return [{ ...it, to: '/reports/operational-kpi/tickets' }];
         }
         return [it];
       }),
