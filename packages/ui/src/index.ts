@@ -1,3 +1,5 @@
+export { EnvironmentBanner } from './EnvironmentBanner.js';
+export type { EnvironmentBannerProps } from './EnvironmentBanner.js';
 /**
  * @yiji/ui — shared React primitives for the Yiji CRM portals.
  *

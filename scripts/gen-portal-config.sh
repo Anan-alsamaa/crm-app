@@ -73,6 +73,10 @@ mkdir -p "$(dirname "$OUT")"
 {
   echo "/* Generated for ${ENV_NAME} by scripts/gen-portal-config.sh. Do not edit. */"
   echo 'window.__SARA_CONFIG__ = {'
+  # Drives the "this is not production" banner. Emitted ONLY for non-production,
+  # so the warning is opt-in: a missing or truncated config.js can never make
+  # production announce itself as staging to every user.
+  [ "$ENV_NAME" != "prod" ] && echo "  ENVIRONMENT: '${ENV_NAME}',"
   echo "  DIRECTUS_URL: '${DIRECTUS_URL}',"
   echo "  SOCKET_URL: '${SOCKET_URL}',"
   echo "  AI_GATEWAY_URL: '${AI_GATEWAY_URL}',"

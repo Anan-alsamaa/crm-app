@@ -669,6 +669,16 @@ export function Widget({ config }: { config: WidgetConfig }) {
     >
       {open && (
         <div className="yiji-panel" role="dialog" aria-label={tr.title}>
+          {/* Staging marker. The widget is embedded in a CUSTOMER'S storefront
+              and has no /config.js, so unlike the portals this comes from a
+              build-time variable. Absent means production, so the warning is
+              opt-in and can never appear on a real customer's site by
+              accident. */}
+          {import.meta.env.VITE_ENVIRONMENT === 'staging' && (
+            <div className="yiji-env-banner" role="status">
+              STAGING &mdash; not live
+            </div>
+          )}
           <header className="yiji-header">
             <div className="yiji-header-row">
               <div className="yiji-header-text yiji-header-text-with-logo">
