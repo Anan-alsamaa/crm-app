@@ -40,7 +40,7 @@
         },
         {
           "name": "DIRECTUS_INTERNAL_URL",
-          "value": "https://api.{{PUBLIC_SUFFIX}}"
+          "value": "http://{{ALB_HOST}}"
         },
         {
           "name": "REDIS_URL",
@@ -48,7 +48,7 @@
         },
         {
           "name": "CORS_ORIGIN",
-          "value": "https://agent.{{PUBLIC_SUFFIX}},https://admin.{{PUBLIC_SUFFIX}}"
+          "value": "{{PORTAL_ORIGINS}}"
         },
         {
           "name": "GEMINI_MODEL",

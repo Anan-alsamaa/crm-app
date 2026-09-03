@@ -35,9 +35,27 @@ set -euo pipefail
 ENV_NAME="${1:-}"
 OUT="${2:-config.js}"
 
+# CloudFront distribution domains, not custom hostnames.
+#
+# acm:RequestCertificate AND acm:ImportCertificate are both DENIED on this
+# account (tested 2026-09-03), and a custom domain on CloudFront or an ALB
+# requires an ACM certificate. CloudFront issues its own free certificate for
+# *.cloudfront.net, so HTTPS works — which matters because Directus sets
+# REFRESH_TOKEN_COOKIE_SECURE=true and a browser will not send that cookie over
+# plain HTTP, so logins would not persist at all.
+#
+# Replacing these with api.crm-staging.yiji-app.com etc. is a post-deployment
+# task; see docs/AWS-RESOURCES.md. It is a config regeneration, not a rebuild,
+# because the portals resolve these at RUNTIME.
 case "$ENV_NAME" in
-  staging) SUFFIX="staging.crm.anan.sa" ;;
-  prod)    SUFFIX="crm.anan.sa" ;;
+  staging)
+    API="https://d2vi34f7wgjecb.cloudfront.net"
+    # One distribution fronts all three services; the ALB routes by path.
+    SOCKET="$API"; AI="$API"; JOBS="$API"
+    ;;
+  prod)
+    echo "prod CloudFront distributions not created yet" >&2; exit 2
+    ;;
   *) echo "usage: $0 <staging|prod> [outfile]" >&2; exit 2 ;;
 esac
 
@@ -46,10 +64,10 @@ esac
 # NOT baked at build time (see .github/workflows/deploy.yml), so if it is
 # missing HERE it falls back to loopback and three features fail silently,
 # because the producer call is best-effort and its caller swallows the error.
-DIRECTUS_URL="https://api.${SUFFIX}"
-SOCKET_URL="https://ws.${SUFFIX}"
-AI_GATEWAY_URL="https://ai.${SUFFIX}"
-JOB_PRODUCER_URL="https://jobs.${SUFFIX}"
+DIRECTUS_URL="$API"
+SOCKET_URL="$SOCKET"
+AI_GATEWAY_URL="$AI"
+JOB_PRODUCER_URL="$JOBS"
 
 mkdir -p "$(dirname "$OUT")"
 {

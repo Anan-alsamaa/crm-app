@@ -22,7 +22,7 @@
       "environment": [
         {
           "name": "DIRECTUS_INTERNAL_URL",
-          "value": "https://api.{{PUBLIC_SUFFIX}}"
+          "value": "http://{{ALB_HOST}}"
         },
         {
           "name": "DB_HOST",

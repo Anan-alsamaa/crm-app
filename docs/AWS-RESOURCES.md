@@ -311,3 +311,189 @@ Sign-in will fail until Directus is deployed; the page itself renders.
 `crm-staging` and `crm-prod`, both ACTIVE, FARGATE + FARGATE_SPOT,
 **Container Insights enabled** — which is what `RunningTaskCount` needs, so the
 alarms in `scripts/create-alarms.sh` will actually fire. Empty clusters are free.
+
+---
+
+## Staging is LIVE (2026-09-03)
+
+All four services running on ECS Fargate, HEALTHY, deployments COMPLETED:
+
+| service          | task definition                | state             |
+| ---------------- | ------------------------------ | ----------------- |
+| `directus`       | `crm-staging-directus:2`       | RUNNING / HEALTHY |
+| `socket-gateway` | `crm-staging-socket-gateway:4` | RUNNING / HEALTHY |
+| `ai-gateway`     | `crm-staging-ai-gateway:3`     | RUNNING / HEALTHY |
+| `workers`        | `crm-staging-workers:2`        | RUNNING / HEALTHY |
+
+### Three bugs the deployment found — none reproducible locally
+
+**1. `logs:CreateLogGroup` is NOT in `AmazonECSTaskExecutionRolePolicy`.** Tasks
+died at PROVISIONING with a `ResourceInitializationError` that reads like a
+logging misconfiguration; the cause was a missing IAM action. The task
+definitions had `awslogs-create-group: true`, which asks the ECS agent to create
+the group at task start. **Fix:** create the ten log groups up front (a user
+has the permission even where the role does not) and drop the flag. Doing it
+this way also allowed retention to be set — 7 days staging, 30 production —
+which is the log cost control from the finance document actually enforced.
+
+**2. `Redis is already connecting/connected`** (commit `7a911b4`). A real
+application bug. Standalone ioredis is lazy and must be told to connect; a
+**Cluster connects eagerly in its constructor** and throws if `connect()` is
+called as well. `createRedis` returns whichever the URL implies, so the
+unconditional call worked against local standalone Redis and failed only against
+ElastiCache in cluster mode. **This class of bug cannot be caught locally.**
+
+**3. The container health check killed its own task** (commit `cbf65cb`).
+socket-gateway's check hit `/ready`, which asserts _Directus is reachable_. ECS
+treats a failing container health check as grounds to replace the task, so the
+gateway destroyed itself in a loop because another service had no DNS yet.
+`/health` answers liveness and is what a container check must use; readiness
+belongs on the load balancer target group, where "not ready" means "do not route
+to me" rather than "replace me".
+
+### Monitoring
+
+SNS topic `arn:aws:sns:us-east-2:408568863712:crm-alerts` and seven staging
+alarms: one per service for task count, Directus CPU and memory, and log volume.
+
+> **The topic has NO subscriber.** `SNS:Subscribe` is denied for this user, so
+> alarms fire and show in the console but **no email is delivered**. Add a
+> subscription in the SNS console and confirm the emailed link, or the alarms
+> are decoration.
+
+### Still denied, and what it blocks
+
+| Action                   | Blocks                                                                                       |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| `iam:PutRolePolicy`      | Adding S3 write to `crm-github-deploy`. **CI portal uploads will fail** until Rabih adds it. |
+| `SNS:Subscribe`          | Alarm emails.                                                                                |
+| `cloudwatch:ListMetrics` | Only inspection; alarms themselves work.                                                     |
+
+---
+
+## POST-DEPLOYMENT TASK: proper hostnames
+
+**Deferred 2026-09-03 by the owner. Do this after production is live and stable.**
+
+Staging and production currently reach their backend services through
+CloudFront's own `*.cloudfront.net` domains. That works and is secure —
+CloudFront issues a free certificate for its own domain, the browser sees valid
+HTTPS, and secure session cookies function — but the URLs are opaque
+(`d1a2b3c4.cloudfront.net`) rather than `api.crm.yiji-app.com`.
+
+**Why it was deferred:** `acm:RequestCertificate` AND `acm:ImportCertificate`
+are both DENIED for `e.habibi@anan.sa` (tested 2026-09-03). A custom domain on
+either CloudFront or an ALB requires an ACM certificate, so proper hostnames
+cannot be configured at all from this account.
+
+### The target
+
+| environment | intended names                                   |
+| ----------- | ------------------------------------------------ |
+| production  | `*.crm.yiji-app.com` — api, ws, ai, agent, admin |
+| staging     | `*.crm-staging.yiji-app.com` — same five         |
+
+Verified free: no `crm*` record exists in `yiji-app.com` (48 records, all
+explicit, **no wildcard**), Route 53 is authoritative for the zone, and there
+are no CAA records to block issuance. Adding these is purely additive — it
+cannot disturb Yiji's records, each of which independently aliases its own EKS
+load balancer.
+
+### Two routes, either works
+
+**A. ACM access from Rabih** — `acm:RequestCertificate` +
+`acm:DescribeCertificate`. Certificates are free. Then request
+`*.crm.yiji-app.com` and `*.crm-staging.yiji-app.com`, add the validation
+CNAMEs, attach to the ALB listener, point the DNS records at it.
+
+**B. Cloudflare, via `anan.sa`** — that domain's DNS is on Cloudflare
+(`elma/salvador.ns.cloudflare.com`), which issues its own free certificates and
+needs no AWS permission. A smaller ask than an IAM grant, but a different owner.
+
+> **Do NOT reuse Yiji's existing `*.yiji-app.com` certificate.** It is attached
+> to their production load balancer; sharing it means a deletion or a failed
+> renewal on their side takes the CRM down too. Request separate ones — they
+> cost nothing.
+
+### The switch is cheap
+
+Roughly 20 minutes, no rebuild, no downtime: new certificate, new DNS records,
+one listener update, regenerate `config.js` and re-upload the portals. The
+portals resolve their URLs at RUNTIME (`resolveUrl`, `/config.js`), which is
+precisely what makes a hostname change not a rebuild.
+
+---
+
+## Edge: ALB + CloudFront (2026-09-03)
+
+TLS comes from **CloudFront's own certificate** on `*.cloudfront.net`, which is
+free and needs no ACM permission — see the deferred-hostnames task above for why
+ACM is unavailable.
+
+```
+browser --HTTPS--> CloudFront --HTTP--> ALB --> ECS tasks (private subnets)
+          free cert            inside AWS
+```
+
+| Resource           | Id                                                  |
+| ------------------ | --------------------------------------------------- |
+| ALB `crm-alb`      | `crm-alb-220616707.us-east-2.elb.amazonaws.com`     |
+| ALB security group | `sg-0a10756deb960ec6f`                              |
+| Target groups      | `crm-stg-directus`, `crm-stg-socket`, `crm-stg-ai`  |
+| API distribution   | `E2BHUTOA7A1WLB` -> `d2vi34f7wgjecb.cloudfront.net` |
+
+### The ALB is NOT open to the internet
+
+Inbound is a single rule allowing HTTP 80 from the AWS-managed prefix list
+`pl-b6a144df` (`com.amazonaws.global.cloudfront.origin-facing`) — CloudFront
+edge servers only. Verified: a direct curl to the ALB from outside times out.
+It is `internet-facing` in the AWS sense (public subnets, routable) but refuses
+everything that is not CloudFront.
+
+### Routing is by PATH, not by header
+
+The first design routed on an `X-CRM-Target` header. **That does not work**: the
+Directus SDK cannot send custom headers, so internal service-to-service calls
+would never match a rule.
+
+Now: **Directus is the listener's DEFAULT action** (it owns `/items`, `/auth`,
+`/assets`, `/server/*`), with two path rules above it —
+`/socket.io/*,/webhooks/*,/jobs/*,/walk-in/*` to socket-gateway and
+`/ai/*,/assist/*,/commerce/*` to ai-gateway.
+
+> ### The deadlock this also fixed
+>
+> socket-gateway's **load-balancer** health check was `/ready`, which asserts
+> Directus is reachable — and Directus is reached THROUGH this ALB. So the task
+> could not become healthy until it was already receiving traffic. It cycled
+> `draining` -> gone, forever.
+>
+> The LB check is now `/health`. The rule: **`/health` decides whether to route
+> to a task; `/ready` describes whether its dependencies are up.** Using the
+> latter for routing is circular whenever services talk to each other through
+> the same load balancer.
+
+### Services reach Directus through the ALB, not a public URL
+
+`DIRECTUS_INTERNAL_URL` and `AI_GATEWAY_URL` are `http://{{ALB_HOST}}`,
+substituted per environment at registration. The call stays inside the VPC —
+no NAT data charge, lower latency — and it does not depend on CloudFront
+existing, which is what broke the bootstrap ordering before.
+
+**`{{ALB_HOST}}` is a placeholder deliberately.** A literal ALB hostname in the
+task definition would give production staging's load balancer.
+
+### Stickiness on the socket target group
+
+Enabled (`lb_cookie`, 1 day). Socket.IO negotiates over HTTP long-polling first
+and that handshake spans several requests; without stickiness they land on
+different tasks and the one that did not create the session answers
+`Session ID unknown`. **It works at one task** — the failure appears only when
+you scale, after every test has passed.
+
+### Yiji untouched — verified after every step
+
+48 DNS records (unchanged), both `k8s-*` load balancers active, their
+`*.yiji-app.com` certificate ISSUED, and the shared security group
+`sg-0cd4698b2c26e93c0` still on its original 2 rules. Everything here is
+additive and separate.

@@ -96,7 +96,7 @@
         },
         {
           "name": "PUBLIC_URL",
-          "value": "https://api.{{PUBLIC_SUFFIX}}"
+          "value": "{{API_URL}}"
         },
         {
           "name": "CORS_ENABLED",
@@ -104,7 +104,7 @@
         },
         {
           "name": "CORS_ORIGIN",
-          "value": "https://agent.{{PUBLIC_SUFFIX}},https://admin.{{PUBLIC_SUFFIX}}"
+          "value": "{{PORTAL_ORIGINS}}"
         },
         {
           "name": "CORS_CREDENTIALS",
@@ -120,7 +120,7 @@
         },
         {
           "name": "PASSWORD_RESET_URL_ALLOW_LIST",
-          "value": "https://agent.{{PUBLIC_SUFFIX}}/reset-password,https://admin.{{PUBLIC_SUFFIX}}/reset-password"
+          "value": "{{PORTAL_ORIGINS}}"
         },
         {
           "name": "EMAIL_TRANSPORT",
