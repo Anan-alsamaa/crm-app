@@ -94,7 +94,9 @@ function InboxStat({
       title={
         active
           ? t('inbox.clearFilter', { defaultValue: 'Click again to clear this filter' })
-          : undefined
+          : t('inbox.addFilter', {
+              defaultValue: 'Adds to the filters already applied',
+            })
       }
     >
       <span
@@ -370,6 +372,39 @@ export function Inbox() {
               </div>
             );
           })()}
+
+          {/* These three tiles are INDEPENDENT filters that combine — open AND
+              unread is a valid, useful selection. But three identical chips in
+              a row read as a mutually exclusive set, so lighting a second one
+              looks like the first is stuck. This line says what is actually
+              applied and gives one click to clear it, which is the affordance
+              that was missing. */}
+          {(filters.status === 'open' || filters.priority === 'urgent' || filters.unread) && (
+            <div className="mt-2 flex items-center gap-2 px-4 text-2xs text-muted-foreground">
+              <span>
+                {t('inbox.filtersApplied', {
+                  defaultValue: 'Showing: {{list}}',
+                  list: [
+                    filters.status === 'open' && t('inbox.stats.open', { defaultValue: 'open' }),
+                    filters.priority === 'urgent' &&
+                      t('inbox.stats.urgent', { defaultValue: 'urgent' }),
+                    filters.unread && t('inbox.stats.unread', { defaultValue: 'unread' }),
+                  ]
+                    .filter(Boolean)
+                    .join(' + '),
+                })}
+              </span>
+              <button
+                type="button"
+                className="font-semibold text-primary underline-offset-2 hover:underline"
+                onClick={() =>
+                  setFilters((f) => ({ ...f, status: 'all', priority: 'all', unread: false }))
+                }
+              >
+                {t('inbox.clearAll', { defaultValue: 'Clear' })}
+              </button>
+            </div>
+          )}
 
           {/* Search + ghost filter row — mt-3 keeps the same breath between the
               stat tiles above and the search field as between title and tiles. */}

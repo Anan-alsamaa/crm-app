@@ -77,14 +77,29 @@ that vendorId is resolved from and whether staging's data yields the same one.
 
 ### 5. Approving a coupon leaves it in the pending queue
 
-The toast says _"Approved — the coupon is on the ticket"_, so the write
-succeeded, but the row stays in Pending Approval and the ticket still shows the
-coupon as not approved.
+**The write WORKS.** Checked in the database: the row is `approved` with
+`decided_at` set. So this is a display problem, not a lost decision.
 
-Reads like a **stale cache**: the mutation succeeded and the list was not
-invalidated. Check the React Query keys around the approval mutation in the
-admin portal — a key that does not include everything the data resolved against
-has caused exactly this in this codebase before.
+My first guess — a stale React Query cache — is **wrong**, and worth recording
+so it is not re-investigated:
+
+- `useDecideCoupon` does `invalidateQueries({ queryKey: ['coupon-approvals'] })`
+  on success.
+- The list uses `['coupon-approvals', status]`, which that prefix correctly
+  invalidates.
+- The list additionally polls every 30s (`refetchInterval`).
+
+So the data, the keys and the polling are all correct, and the row should clear
+within 30 seconds unaided.
+
+**Most likely cause: the session had already expired from defect 1.** The
+refetch would then fail silently and the screen would keep showing what it last
+had. That fits the report exactly — the toast fires from the mutation's own
+success, while the refetch that follows is the part that needs a valid session.
+
+**Retest after the cookie fix before investigating further.** If it still
+reproduces on a fresh login, the next step is the network tab: confirm whether
+the refetch is issued at all, and what it returns.
 
 ### 6. "Mark as solved" does nothing
 
