@@ -497,3 +497,43 @@ you scale, after every test has passed.
 `*.yiji-app.com` certificate ISSUED, and the shared security group
 `sg-0cd4698b2c26e93c0` still on its original 2 rules. Everything here is
 additive and separate.
+
+---
+
+## Shared-cost allocation, and one thing worth more than the split
+
+Two costs serve BOTH environments and are billed once: the NAT gateway
+($32.85/mo) and the ALB ($16.43/mo). They are **fixed hourly charges** — the
+same whether either environment sends one request or a million — so how they are
+apportioned is an accounting choice, not a lever on the bill.
+
+**Split 20/80, test/live** (owner's call). Reasoning: staging is exercised
+occasionally by one person; production carries the whole team all day plus
+customer chat.
+
+> **The two resources do not actually deserve the same ratio.** The ALB is
+> request-driven, so 20/80 arguably still flatters staging — the real figure is
+> nearer 5/95. The NAT is the opposite: staging's background sweeps run 24/7 on
+> the same timer as production's, Directus reaches RDS over its PUBLIC endpoint
+> so every query crosses the NAT, and image pulls are ~230 MB for Directus
+> alone. A defensible NAT split is nearer 35/65.
+>
+> Splitting them separately (NAT 35/65, ALB 10/90) moves **$3.28**. Not worth
+> the extra explanation on a document already with finance, and the two biases
+> roughly cancel.
+
+### What WAS worth changing: staging's sweep interval
+
+The DB-driven sweeps are what let the system survive losing Redis — the queue
+holds only scheduling, so the next sweep refills it. Production keeps them at
+**60s**, which bounds that recovery.
+
+Staging was running the identical 60s timer: **43,200 sweeps a day** in an
+environment used occasionally by one person. Now **300000ms (5 min)** —
+`SWEEP_MS` in `scripts/create-services.sh`, per environment.
+
+That is not a cost-allocation change, it is a real reduction: CloudWatch log
+volume is charged **per GB ingested and is NOT capped by the scaling limits**
+(the one line that can genuinely overshoot), and every sweep queries an RDS
+instance **shared with other teams**. A 5-minute recovery in a test environment
+is irrelevant.

@@ -65,6 +65,17 @@ else
   declare -A MAXCOUNT=([directus]=1 [socket-gateway]=1 [ai-gateway]=1 [workers]=1)
 fi
 
+# Sweep interval, per environment. These DB-driven sweeps are what let the
+# system survive losing Redis — the queue holds only scheduling, so the next
+# sweep refills it — which is why production keeps them at 60s.
+#
+# Staging is exercised occasionally by one person. 43,200 sweeps a day there
+# versus 8,640 buys nothing, and it is not free: log volume is charged per GB
+# and is NOT capped by the scaling limits, and every sweep queries a database
+# instance shared with other teams.
+SWEEP_MS=$([ "$ENV_NAME" = "prod" ] && echo 60000 || echo 300000)
+echo "  sweep interval: ${SWEEP_MS}ms"
+
 echo "==> Services for $CLUSTER"
 
 for svc in directus socket-gateway ai-gateway workers; do
