@@ -522,18 +522,16 @@ customer chat.
 > the extra explanation on a document already with finance, and the two biases
 > roughly cancel.
 
-### What WAS worth changing: staging's sweep interval
+### Staging runs the SAME sweep interval as production — deliberately
 
-The DB-driven sweeps are what let the system survive losing Redis — the queue
-holds only scheduling, so the next sweep refills it. Production keeps them at
-**60s**, which bounds that recovery.
+Both are **60s**. This was briefly changed to 300s for staging on the reasoning
+that it idles most of the time and 43,200 sweeps a day costs log volume for
+nothing. **That was wrong**, and the reason is worth keeping.
 
-Staging was running the identical 60s timer: **43,200 sweeps a day** in an
-environment used occasionally by one person. Now **300000ms (5 min)** —
-`SWEEP_MS` in `scripts/create-services.sh`, per environment.
+Staging exists to WATCH a change behave: raise a ticket and see the SLA warning
+fire, approve a coupon and see it queue. At a 5-minute interval you sit waiting,
+or conclude the feature is broken when it is merely slow. **A test environment
+that behaves differently from production is not testing production.**
 
-That is not a cost-allocation change, it is a real reduction: CloudWatch log
-volume is charged **per GB ingested and is NOT capped by the scaling limits**
-(the one line that can genuinely overshoot), and every sweep queries an RDS
-instance **shared with other teams**. A 5-minute recovery in a test environment
-is irrelevant.
+The saving was a few dollars of CloudWatch ingestion. The cost would have been
+trusting what you observe there. Keep them identical.
