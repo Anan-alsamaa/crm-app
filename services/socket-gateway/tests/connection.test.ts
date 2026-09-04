@@ -41,7 +41,12 @@ function makeStubs(over: Partial<Record<keyof GatewayDirectus, unknown>> = {}): 
   const directus = {
     resolveVendor: vi.fn(async () => ({ id: 'vendor-uuid', colors: { primary: '#abcabc' } })),
     upsertContact: vi.fn(async () => ({ id: 'contact-1', isNew: true, name: null, phone: null })),
+    // Default: the customer already HAS a live thread, which most tests assume
+    // (they emit into 'conv-1' straight after connecting). A test that wants the
+    // brand-new-visitor path overrides this to return null.
+    findLiveConversation: vi.fn(async () => 'conv-1'),
     findOrCreateConversation: vi.fn(async () => ({ id: 'conv-1', created: true })),
+    createWalkInConversation: vi.fn(async () => ({ id: 'conv-walkin', created: true })),
     persistMessage: vi.fn(async () => ({ id: 'msg-1', createdAt: '2026-01-01T00:00:00.000Z' })),
     deleteInternalNote: vi.fn(async () => true),
     listAgentConversationIds: vi.fn(async () => ['conv-1']),
@@ -119,8 +124,12 @@ function connect(port: number, auth: Record<string, unknown>): Promise<ClientSoc
 
 /** Open a customer client and resolve once it has received its `ready` frame.
  * Attaches the `ready` listener before connecting to avoid missing it. */
-function connectCustomerReady(port: number, sockets: ClientSocket[]): Promise<ClientSocket> {
-  const client = openClient(port, { kind: 'customer', token: 't' });
+function connectCustomerReady(
+  port: number,
+  sockets: ClientSocket[],
+  auth: Record<string, unknown> = { lazyConversation: true },
+): Promise<ClientSocket> {
+  const client = openClient(port, { kind: 'customer', token: 't', ...auth });
   sockets.push(client);
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('timeout waiting for ready')), 5000);
@@ -180,7 +189,13 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
         branding: unknown;
         agentsOnline: number;
       }> = [];
-      const client = openClient(harness.port, { kind: 'customer', token: 't' });
+      const client = openClient(harness.port, {
+        kind: 'customer',
+        token: 't',
+        // This test is the NEW protocol: nothing is created at handshake.
+        // The old-widget test below is the one that omits this flag.
+        lazyConversation: true,
+      });
       sockets.push(client);
       const readyP = new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('timeout waiting for ready')), 5000);
@@ -201,10 +216,81 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
         'vendor-uuid',
         expect.objectContaining({ customer_id: 'cust-1' }),
       );
-      expect(harness.stubs.directus.findOrCreateConversation).toHaveBeenCalledWith(
+      // RESOLVED, not created. Connecting must never write a conversation —
+      // that is what produced duplicate empty threads for a visitor who
+      // scanned a QR code twice. See ensureConversation.
+      expect(harness.stubs.directus.findLiveConversation).toHaveBeenCalledWith(
         'vendor-uuid',
         'contact-1',
       );
+      expect(harness.stubs.directus.findOrCreateConversation).not.toHaveBeenCalled();
+      expect(harness.stubs.directus.createWalkInConversation).not.toHaveBeenCalled();
+    });
+
+    /*
+     * The duplicate-conversation regression.
+     *
+     * Reported from staging: ONE customer (0537301009) showed as TWO chats in
+     * the agent inbox, same phone, one of them holding nothing but its own
+     * system note. Both were walk-in QR sessions, created 19 minutes apart.
+     *
+     * The cause was that the conversation was created during the HANDSHAKE, so
+     * opening the widget was enough to write a row — and a walk-in always
+     * creates rather than reusing, so scanning the QR code twice (or simply
+     * reloading the page) produced a second, empty thread.
+     */
+    it('creates NO conversation for a walk-in that connects but never speaks', async () => {
+      const stubs = makeStubs({ findLiveConversation: vi.fn(async () => null) });
+      stubs.verifier.verify = vi.fn(() => ({
+        vendor_id: 'yiji-vendor',
+        customer_id: 'cust-1',
+        phone: '0537301009',
+        walk_in: true,
+      })) as unknown as CustomerVerifier['verify'];
+      harness = await startGateway(stubs);
+      await connectCustomerReady(harness.port, sockets);
+      // Give any stray async creation a chance to land before asserting.
+      await new Promise((r) => setTimeout(r, 150));
+      expect(harness.stubs.directus.createWalkInConversation).not.toHaveBeenCalled();
+      expect(harness.stubs.directus.findOrCreateConversation).not.toHaveBeenCalled();
+    });
+
+    it('creates exactly ONE conversation when a walk-in finally sends a message', async () => {
+      const stubs = makeStubs({ findLiveConversation: vi.fn(async () => null) });
+      stubs.verifier.verify = vi.fn(() => ({
+        vendor_id: 'yiji-vendor',
+        customer_id: 'cust-1',
+        phone: '0537301009',
+        walk_in: true,
+      })) as unknown as CustomerVerifier['verify'];
+      harness = await startGateway(stubs);
+      const client = await connectCustomerReady(harness.port, sockets);
+      // Two messages in the SAME tick: the classic way a lazy-create races
+      // itself into making two rows.
+      client.emit('message:send', { content: 'hello', clientMsgId: 'a' });
+      client.emit('message:send', { content: 'anyone there?', clientMsgId: 'b' });
+      await new Promise((r) => setTimeout(r, 400));
+      expect(harness.stubs.directus.createWalkInConversation).toHaveBeenCalledTimes(1);
+    });
+
+    it('an OLD widget (no lazyConversation flag) still gets a conversation at handshake', async () => {
+      // The widget bundle ships separately from the gateway. A stale bundle
+      // refuses to send until it holds a conversation id, so the gateway must
+      // keep creating one for it — otherwise deploying this fix would silently
+      // break every fresh session on the old widget.
+      harness = await startGateway(makeStubs({ findLiveConversation: vi.fn(async () => null) }));
+      const ready = await new Promise<{ conversationId: string | null }>((resolve, reject) => {
+        const client = openClient(harness.port, { kind: 'customer', token: 't' }); // no flag
+        sockets.push(client);
+        const timer = setTimeout(() => reject(new Error('timeout')), 5000);
+        client.once('ready', (p) => {
+          clearTimeout(timer);
+          resolve(p);
+        });
+        client.on('connect_error', reject);
+      });
+      expect(ready.conversationId).toBe('conv-1');
+      expect(harness.stubs.directus.findOrCreateConversation).toHaveBeenCalledTimes(1);
     });
 
     it('seeds a returning customer with messages:history', async () => {

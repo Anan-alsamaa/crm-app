@@ -2,12 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { MessageSend, MessageNew, rooms, SOCKET_EVENTS } from '@yiji/shared-types';
 
 describe('socket event contract (T039)', () => {
-  it('MessageSend requires conversationId, content, clientMsgId', () => {
+  it('MessageSend requires content and clientMsgId; conversationId is optional', () => {
     expect(
       MessageSend.safeParse({ conversationId: 'c', content: 'hi', clientMsgId: 'm1' }).success,
     ).toBe(true);
+    // Neither text nor an attachment is still rejected.
     expect(MessageSend.safeParse({ conversationId: 'c', content: '' }).success).toBe(false);
-    expect(MessageSend.safeParse({ content: 'hi', clientMsgId: 'm1' }).success).toBe(false);
+    // No conversationId is VALID: a customer's first message is what creates
+    // the conversation, so the widget has no id to send yet. The gateway
+    // resolves it and refuses any id that is not the socket's own, so the IDOR
+    // guard does not depend on this field being required here.
+    expect(MessageSend.safeParse({ content: 'hi', clientMsgId: 'm1' }).success).toBe(true);
+    // clientMsgId is still required — it is what de-duplicates a retry.
+    expect(MessageSend.safeParse({ content: 'hi' }).success).toBe(false);
   });
 
   it('MessageNew validates a broadcast payload', () => {

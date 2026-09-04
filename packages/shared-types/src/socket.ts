@@ -15,7 +15,15 @@ const idSchema = z.union([z.string(), z.number()]).transform(String);
 // --- Client → Server ---
 export const MessageSend = z
   .object({
-    conversationId: idSchema,
+    /**
+     * Optional, because a customer's FIRST message is what creates the
+     * conversation — until then the widget has no id to send.
+     *
+     * The gateway resolves the real conversation for a customer socket and
+     * refuses any id that is not the one that socket owns, so making this
+     * optional does not weaken the IDOR guard. Agents always send it.
+     */
+    conversationId: idSchema.optional(),
     // Content may be empty for an attachment-only message; the refine below
     // still rejects a message that has neither text nor an attachment.
     content: z.string(),

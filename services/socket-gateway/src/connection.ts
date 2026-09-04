@@ -34,11 +34,23 @@ interface SocketData {
   contactName?: string | null;
   contactPhone?: string | null;
   contactIsNew?: boolean;
+  /**
+   * Set once the conversation EXISTS. Undefined until the customer actually
+   * sends something — see `ensureConversation`.
+   */
   conversationId?: string;
   conversationCreated?: boolean;
   /** Session came from the store QR code; the phone was typed, not proven. */
   walkIn?: boolean;
   agentId?: string;
+  /**
+   * Serialises conversation creation for THIS socket.
+   *
+   * Two messages sent in the same instant both find no conversation and both
+   * create one. Holding the in-flight promise means the second awaits the
+   * first instead of racing it.
+   */
+  conversationPromise?: Promise<string>;
 }
 
 export interface ConnectionDeps {
@@ -121,7 +133,23 @@ export function registerConnection(deps: ConnectionDeps): void {
 
   // --- Auth middleware: validate token, onboard, attach socket.data ---
   io.use(async (socket, next) => {
-    const auth = socket.handshake.auth as { kind?: string; token?: string };
+    const auth = socket.handshake.auth as {
+      kind?: string;
+      token?: string;
+      /**
+       * Set by a widget that knows conversations are created on first message
+       * (see ensureConversation). A widget WITHOUT it is an older bundle whose
+       * send() refuses to fire until it holds a conversation id — so for that
+       * client the conversation is still created here at handshake, exactly as
+       * before, or a fresh visitor could never send anything.
+       *
+       * The widget bundle is not part of the ECS deploy: it is served from a
+       * host of its own (locally, or a CDN in production) and updates on its
+       * own schedule. The gateway therefore cannot assume the two roll out
+       * together, and this flag is how it tells which widget it is talking to.
+       */
+      lazyConversation?: boolean;
+    };
     const data = socket.data as SocketData;
     try {
       if (auth.kind === 'agent') {
@@ -138,13 +166,6 @@ export function registerConnection(deps: ConnectionDeps): void {
       const vendor = await directus.resolveVendor(claims.vendor_id);
       if (!vendor) throw new CustomerTokenError('unknown or inactive vendor');
       const contact = await directus.upsertContact(vendor.id, claims);
-      // A walk-in session gets a conversation of its OWN. See
-      // `createWalkInConversation`: the phone was typed by somebody standing in
-      // a store, not proven, so it must not open a thread that number already
-      // owns.
-      const conversation = claims.walk_in
-        ? await directus.createWalkInConversation(vendor.id, contact.id, claims.phone ?? '')
-        : await directus.findOrCreateConversation(vendor.id, contact.id);
       data.kind = 'customer';
       data.vendorId = vendor.id;
       data.vendorColors = vendor.colors;
@@ -153,9 +174,45 @@ export function registerConnection(deps: ConnectionDeps): void {
       data.contactName = contact.name;
       data.contactPhone = contact.phone;
       data.contactIsNew = contact.isNew;
-      data.conversationId = conversation.id;
-      data.conversationCreated = conversation.created;
       data.walkIn = claims.walk_in === true;
+
+      /*
+       * NO conversation is created here.
+       *
+       * This used to create one during the handshake, so merely OPENING the
+       * widget wrote a row — whether or not the visitor ever typed anything.
+       * For a walk-in that is doubly bad, because `createWalkInConversation`
+       * always creates rather than reusing: one customer scanning a QR code
+       * twice, or reloading the page, produced two threads bearing the same
+       * phone number and no messages. The agent inbox then shows the same
+       * person twice, one of them empty, and there is no way to tell which is
+       * the real conversation.
+       *
+       * A conversation now begins when the customer says something. See
+       * `ensureConversation`. A returning, non-walk-in customer still resumes
+       * their existing thread, so their history is attached to the first
+       * message — resolved BELOW for the seed, without creating anything.
+       */
+      if (auth.lazyConversation === true) {
+        // New widget: resume an existing thread for the seed, create nothing.
+        if (!data.walkIn) {
+          const existing = await directus.findLiveConversation(vendor.id, contact.id);
+          if (existing) {
+            data.conversationId = existing;
+            data.conversationCreated = false;
+          }
+        }
+      } else {
+        // Old widget: it cannot send without an id, so give it one now. This
+        // keeps a stale bundle working; it also keeps the duplicate-thread
+        // behaviour for walk-ins on that bundle, which is why updating the
+        // widget host is part of finishing this fix, not optional.
+        const conv = data.walkIn
+          ? await directus.createWalkInConversation(vendor.id, contact.id, claims.phone ?? '')
+          : await directus.findOrCreateConversation(vendor.id, contact.id);
+        data.conversationId = conv.id;
+        data.conversationCreated = conv.created;
+      }
       return next();
     } catch (err) {
       // Surface the REAL cause. Directus SDK rejects with a non-Error object
@@ -209,11 +266,75 @@ export function registerConnection(deps: ConnectionDeps): void {
   logger.info('connection handlers registered');
 }
 
-async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<void> {
-  const { io, directus, producer, logger } = deps;
+/**
+ * The conversation for this customer socket, created on FIRST USE.
+ *
+ * Creating it at handshake meant opening the widget was enough to produce a
+ * row. A walk-in visitor who scanned the QR code twice — or simply reloaded —
+ * got two threads under one phone number, one of them holding nothing but its
+ * own system note, and the agent inbox showed the customer twice with no way
+ * to tell which thread was real.
+ *
+ * Called from the first write a customer makes, so an empty conversation is
+ * never persisted at all. Idempotent per socket: the in-flight promise is
+ * cached, so two messages sent in the same tick share one creation instead of
+ * racing to make two.
+ */
+async function ensureConversation(socket: Socket, deps: ConnectionDeps): Promise<string> {
   const data = socket.data as SocketData;
-  if (!data.conversationId || !data.vendorId) return;
-  await socket.join(rooms.conversation(data.conversationId));
+  if (data.conversationId) return data.conversationId;
+  if (data.conversationPromise) return data.conversationPromise;
+  if (!data.vendorId || !data.contactId) throw new Error('socket is not onboarded');
+
+  const { directus, io, producer, logger } = deps;
+  const vendorId = data.vendorId;
+  const contactId = data.contactId;
+
+  data.conversationPromise = (async () => {
+    // A walk-in gets its OWN thread rather than reusing one: the phone was
+    // typed by somebody standing in a store, not proven, so it must not open a
+    // thread that number already owns.
+    const conv = data.walkIn
+      ? await directus.createWalkInConversation(vendorId, contactId, data.contactPhone ?? '')
+      : await directus.findOrCreateConversation(vendorId, contactId);
+
+    data.conversationId = conv.id;
+    data.conversationCreated = conv.created;
+    await socket.join(rooms.conversation(conv.id));
+    // The widget learns its id here rather than at handshake, because until
+    // now there was nothing to name.
+    socket.emit('conversation:ready', { conversationId: conv.id });
+
+    if (conv.created) {
+      // Fires the conversation_created automation trigger (assignment /
+      // keyword rules) exactly once, now that the conversation is real.
+      await producer
+        .conversationCreated(conv.id)
+        .catch((err) => logger.warn({ err }, 'conversationCreated enqueue failed'));
+      // Agents' inboxes only learn about a conversation once it exists.
+      io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId: conv.id });
+    }
+    return conv.id;
+  })();
+
+  try {
+    return await data.conversationPromise;
+  } catch (err) {
+    // Clear the cache so a transient failure does not wedge the socket into
+    // never being able to open a conversation again.
+    data.conversationPromise = undefined;
+    throw err;
+  }
+}
+
+async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<void> {
+  const { io, directus, logger } = deps;
+  const data = socket.data as SocketData;
+  // No conversation is required to connect any more — one is created on the
+  // customer's first message (see ensureConversation). A returning customer
+  // already has theirs resolved at handshake, so join it for live delivery.
+  if (!data.vendorId) return;
+  if (data.conversationId) await socket.join(rooms.conversation(data.conversationId));
   await socket.join(rooms.vendor(data.vendorId));
   const online = addPresence(data.vendorId, socket.id);
   io.to(rooms.vendor(data.vendorId)).emit(SOCKET_EVENTS.presenceUpdate, {
@@ -225,7 +346,9 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
   // connect without waiting for the next agents:presence pulse), and the
   // contact identity so a returning, named customer is greeted by name.
   socket.emit('ready', {
-    conversationId: data.conversationId,
+    // null until the customer sends something. The widget receives the real id
+    // on `conversation:ready`, emitted the moment the conversation is created.
+    conversationId: data.conversationId ?? null,
     branding: data.vendorColors ?? null,
     // The vendor the customer is actually talking to — the widget's
     // "Powered by" line names them, not the CRM.
@@ -244,7 +367,7 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
   // is empty anyway — this is belt and braces. The phone was typed by somebody
   // in a store, not proven, so history is not theirs to be shown even if a
   // future change made this conversation resumable.
-  if (!data.walkIn) {
+  if (!data.walkIn && data.conversationId) {
     try {
       const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const history = await directus.loadConversationMessages(data.conversationId, { since });
@@ -255,10 +378,11 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
       logger.warn({ err }, 'failed to load conversation history');
     }
   }
-  // A brand-new conversation fires the conversation_created automation trigger
-  // (assignment / keyword rules) exactly once; a resumed one already fired it.
-  if (data.conversationCreated) {
-    await producer
+  // A conversation created at HANDSHAKE (old-widget path) fires its automation
+  // trigger here; one created lazily fires it inside ensureConversation. Both
+  // paths fire it exactly once, at the moment the conversation comes to exist.
+  if (data.conversationCreated && data.conversationId) {
+    await deps.producer
       .conversationCreated(data.conversationId)
       .catch((err) => logger.warn({ err }, 'conversationCreated enqueue failed'));
   }
@@ -324,19 +448,49 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     const parsed = MessageSend.safeParse(raw);
     if (!parsed.success)
       return socket.emit(SOCKET_EVENTS.error, { code: 'bad_payload', message: 'invalid message' });
-    const { conversationId, content, attachments, clientMsgId } = parsed.data;
-    // IDOR guard: a customer socket is bound to exactly ONE conversation at
-    // handshake (data.conversationId). Never let a client-supplied id target
-    // another customer's conversation — that would be cross-tenant message
-    // injection. Agents operate the shared inbox and may act on conversations
-    // they've opened (see conversation:subscribe), so this only constrains
-    // customers.
-    if (data.kind === 'customer' && conversationId !== data.conversationId) {
+    const { conversationId: requestedId, content, attachments, clientMsgId } = parsed.data;
+    let conversationId = requestedId;
+
+    if (data.kind === 'customer') {
+      /*
+       * A customer's FIRST message is what brings the conversation into
+       * existence, so at this point there may be nothing to compare against.
+       * The widget sends whatever id it was given — null on a fresh session —
+       * and the server decides. That keeps the IDOR guard below meaningful
+       * while allowing the id to be unknown to the client.
+       */
+      try {
+        conversationId = await ensureConversation(socket, deps);
+      } catch (err) {
+        logger.error({ err }, 'could not open a conversation');
+        return socket.emit(SOCKET_EVENTS.error, {
+          code: 'conversation_unavailable',
+          message: 'could not open a conversation',
+        });
+      }
+      // IDOR guard: a customer socket is bound to exactly ONE conversation.
+      // Never let a client-supplied id target another customer's conversation —
+      // that would be cross-tenant message injection. A client that names a
+      // DIFFERENT conversation than the one it owns is refused; one that names
+      // none (a fresh session) simply gets its own.
+      if (requestedId && requestedId !== conversationId) {
+        return socket.emit(SOCKET_EVENTS.error, {
+          code: 'forbidden',
+          message: 'conversation not accessible',
+        });
+      }
+    }
+
+    // An AGENT always names the conversation: they act on the shared inbox and
+    // nothing else can resolve which thread they mean. Only a customer's first
+    // message is allowed to arrive without one.
+    if (!conversationId) {
       return socket.emit(SOCKET_EVENTS.error, {
-        code: 'forbidden',
-        message: 'conversation not accessible',
+        code: 'bad_payload',
+        message: 'conversationId is required',
       });
     }
+    const convId: string = conversationId;
     try {
       // Attachment validation (MIME allow-list + size cap) before persisting.
       if (attachments && attachments.length > 0) {
@@ -352,7 +506,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       }
       const senderType = data.kind === 'agent' ? 'agent' : 'customer';
       const saved = await directus.persistMessage({
-        conversationId,
+        conversationId: convId,
         senderType,
         senderUser: data.kind === 'agent' ? data.agentId : undefined,
         senderContact: data.kind === 'customer' ? data.contactId : undefined,
@@ -361,18 +515,18 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       });
       const payload: MessageNew = {
         id: saved.id,
-        conversationId,
+        conversationId: convId,
         senderType,
         content,
         attachments: attachments ?? [],
         createdAt: saved.createdAt,
         clientMsgId,
       };
-      io.to(rooms.conversation(conversationId)).emit(SOCKET_EVENTS.messageNew, payload);
+      io.to(rooms.conversation(convId)).emit(SOCKET_EVENTS.messageNew, payload);
       // Signal every agent inbox to refresh (covers conversations they haven't joined).
-      io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId });
+      io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId: convId });
       // Carry the message text so keyword-based automation rules can match.
-      await producer.messageReceived(conversationId, content);
+      await producer.messageReceived(convId, content);
 
       // Auto-assignment: only a CUSTOMER message starts the ladder. An agent
       // typing is the opposite signal — the conversation is already being
@@ -382,7 +536,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       if (senderType === 'customer') {
         void producer
           .enqueueRouting({
-            conversationId,
+            conversationId: convId,
             stage: 'assign',
             attemptedAgentIds: [],
             outboundCountAtSchedule: 0,
@@ -412,14 +566,14 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       if (senderType === 'agent') {
         void (async () => {
           try {
-            const inRoom = await io.in(rooms.conversation(conversationId)).fetchSockets();
+            const inRoom = await io.in(rooms.conversation(convId)).fetchSockets();
             const customerWatching = inRoom.some(
               (sock) => (sock.data as SocketData).kind === 'customer',
             );
             if (customerWatching) return;
-            const contact = await directus.loadConversationContact(conversationId);
+            const contact = await directus.loadConversationContact(convId);
             await producer.enqueueCustomerPush({
-              conversationId,
+              conversationId: convId,
               phone: contact?.phone ?? null,
               externalCustomerId: contact?.externalCustomerId ?? null,
               // One line, not the thread — see CustomerPushJob.
@@ -521,7 +675,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
         return;
       }
       io.to(rooms.conversation(conversationId)).emit(SOCKET_EVENTS.noteDeleted, {
-        conversationId,
+        conversationId: conversationId,
         noteId,
       });
     } catch (err) {

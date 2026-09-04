@@ -160,6 +160,26 @@ export class GatewayDirectus {
    * one. See the reopen in persistMessage for the other half of this — a reply
    * that lands on a thread solved mid-session.
    */
+  /**
+   * The contact's live thread, or null — READ ONLY, creates nothing.
+   *
+   * Split out of `findOrCreateConversation` so the handshake can resume a
+   * returning customer's history WITHOUT writing a row for someone who only
+   * opened the widget and never typed. See the note in connection.ts.
+   */
+  async findLiveConversation(_vendorUuid: string, contactId: string): Promise<string | null> {
+    const live = (await this.client.request(
+      readItems('conversations', {
+        // See the note in findOrCreateConversation on why 'pending' stays here.
+        filter: { contact: { _eq: contactId }, status: { _in: ['open', 'pending'] } },
+        fields: ['id'],
+        sort: ['-last_message_at'],
+        limit: 1,
+      }),
+    )) as Array<{ id: string }>;
+    return live[0]?.id ?? null;
+  }
+
   async findOrCreateConversation(
     vendorUuid: string,
     contactId: string,

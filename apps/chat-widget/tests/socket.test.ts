@@ -79,7 +79,11 @@ describe('connectWidget — connection setup', () => {
     expect(ioMock).toHaveBeenCalledTimes(1);
     const [url, opts] = ioMock.mock.calls[0]!;
     expect(url).toBe('https://gw.example');
-    expect(opts.auth).toEqual({ kind: 'customer', token: 'tok-abc' });
+    // `lazyConversation: true` is how this bundle tells the gateway it creates
+    // conversations on first message — so nothing is written at handshake, and a
+    // walk-in visitor who reloads or re-scans the QR code no longer leaves an
+    // empty duplicate thread. A gateway that predates the flag simply ignores it.
+    expect(opts.auth).toEqual({ kind: 'customer', token: 'tok-abc', lazyConversation: true });
     expect(opts.transports).toEqual(['websocket', 'polling']);
     expect(opts.reconnection).toBe(true);
     expect(opts.extraHeaders).toEqual({ 'ngrok-skip-browser-warning': 'true' });
