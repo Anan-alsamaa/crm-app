@@ -233,7 +233,22 @@ itself.
 | script                                     | when                                                                                          |
 | ------------------------------------------ | --------------------------------------------------------------------------------------------- |
 | `scripts/create-services.sh <env>`         | after cluster + task definitions + IAM roles exist                                            |
+| `scripts/create-listener-rules.sh <env>`   | after the target groups exist — **required, see below**                                       |
 | `scripts/create-alarms.sh <env> <sns-arn>` | after the services exist (an alarm on a service with no datapoints sits in INSUFFICIENT_DATA) |
+| `scripts/deploy-portals.sh <env> [app]`    | after building the portals — never a bare `aws s3 sync`, which deletes `config.js`            |
+
+**Do not skip `create-listener-rules.sh`, and do not hand-build the routing.**
+A missing rule fails SILENTLY: the path falls through to the default target and
+Directus answers it with a confident `404 ROUTE_NOT_FOUND`. That is how the
+eight AI endpoints were dead for the whole life of the staging deployment —
+every AI feature 404'd, and because the wrong service answered, the AI
+gateway's own log showed nothing. The staging rules were all built by hand and
+recorded nowhere until 2026-09-04.
+
+Note the **5 condition values per rule** limit, and that two path-pattern
+conditions on one rule are ANDed rather than ORed — so a longer path list needs
+more RULES, not more conditions. The eight AI endpoints are split across
+priorities 21 and 22 for this reason.
 
 Container Insights must be enabled on each cluster or `RunningTaskCount` is
 never published and the task-count alarms stay silent forever — the script
@@ -535,3 +550,41 @@ that behaves differently from production is not testing production.**
 
 The saving was a few dollars of CloudWatch ingestion. The cost would have been
 trusting what you observe there. Keep them identical.
+
+---
+
+## The ALB lockdown blocked the services from each other (2026-09-03)
+
+Two decisions that were each right alone and broken together:
+
+1. The ALB security group accepts **only** AWS's CloudFront prefix list
+   (`pl-b6a144df`) — so nothing but CloudFront can reach it from outside.
+2. `DIRECTUS_INTERNAL_URL` points services at **that same ALB**, so
+   service-to-service calls go out through the front door and back in.
+
+The ai-gateway's `whoAmI` call to Directus's `/users/me` therefore hit a
+security group that did not know it, and **timed out** after 5s.
+
+**What made it expensive:** the failure surfaced as
+`{"error":"Invalid or expired session"}` — an auth message for a network
+problem. Every instinct says "the token is wrong". The token was fine; the
+tell was `"responseTime":5001` in the gateway's log, exactly matching the
+5-second `AbortSignal.timeout(5_000)` in `whoAmI`.
+
+**Fix:** allow the tasks' own security group (`sg-06ca4c19fa44b2dc3`) inbound
+on 80 to the ALB SG. The ALB stays closed to the internet; it now accepts
+CloudFront **and** the services.
+
+```
+80  pl-b6a144df             <- CloudFront edge
+80  sg-06ca4c19fa44b2dc3    <- the services themselves
+```
+
+> **Prefix-list rules count once per CIDR.** CloudFront's list is ~55 entries,
+> which nearly exhausts a security group's default 60-rule quota on its own —
+> that is why the extra per-service listener ports had to be abandoned earlier.
+> Budget for it before adding more rules to this group.
+
+> **A duration in a log is evidence.** `responseTime` landing exactly on a
+> configured timeout means a network path, not a credential — whatever the
+> error message claims. Check the number before believing the words.
