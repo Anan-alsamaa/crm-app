@@ -65,10 +65,24 @@ else
 fi
 
 sec "4. Data"
+# READABLE, not non-empty. These run as an AGENT, whose ticket and conversation
+# views are scoped to what is assigned to them - so a legitimate zero is not a
+# fault, and asserting non-zero turned the suite red when staging was pruned to
+# one customer whose tickets belong to other agents. A permissions or
+# connectivity failure shows up as a non-200, which is what is tested here.
+# `stores` is unscoped reference data, so that one must genuinely have rows.
 for c in tickets contacts stores conversations; do
-  n=$(curl -s --max-time 20 "${AUTH[@]}" "$API/items/$c?aggregate%5Bcount%5D=*" 2>/dev/null \
-      | python -c "import sys,json;print(json.load(sys.stdin)['data'][0]['count'])" 2>/dev/null)
-  [ -n "$n" ] && [ "$n" != "0" ] && ok "$c readable ($n)" || no "$c readable" "got '${n:-nothing}'"
+  resp=$(curl -s -w '
+%{http_code}' --max-time 20 "${AUTH[@]}" "$API/items/$c?aggregate%5Bcount%5D=*" 2>/dev/null)
+  code=$(tail -n1 <<<"$resp")
+  n=$(sed '$d' <<<"$resp" | python -c "import sys,json;print(json.load(sys.stdin)['data'][0]['count'])" 2>/dev/null)
+  if [ "$code" != "200" ]; then
+    no "$c readable" "HTTP $code"
+  elif [ "$c" = "stores" ] && { [ -z "$n" ] || [ "$n" = "0" ]; }; then
+    no "stores readable" "reference data is empty - the store master did not load"
+  else
+    ok "$c readable ($n visible to this agent)"
+  fi
 done
 
 sec "5. Realtime"
@@ -90,13 +104,24 @@ else
 fi
 
 sec "7. Writes (WRITE — restored)"
-TID=$(curl -s --max-time 20 "${AUTH[@]}" "$API/items/tickets?limit=1&fields=id,status" 2>/dev/null \
+# Prefer the agent, but fall back to an ADMIN session when the agent has no
+# ticket assigned. Agents may only write their own tickets, so after a data
+# prune the agent can legitimately have none - and skipping would silently drop
+# the read-back check below, which is the one that catches defect 10.
+WAUTH=("${AUTH[@]}")
+WHO="$EMAIL"
+if [ "$(curl -s --max-time 20 "${AUTH[@]}" "$API/items/tickets?limit=1&fields=id" 2>/dev/null | python -c "import sys,json;print(len(json.load(sys.stdin)['data']))" 2>/dev/null)" = "0" ]    && [ -n "${ADMIN_EMAIL:-}" ] && [ -n "${ADMIN_PASSWORD:-}" ]; then
+  ATOK=$(curl -s --max-time 25 -X POST "$API/auth/login" -H 'Content-Type: application/json'            -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}" 2>/dev/null          | python -c "import sys,json;print(json.load(sys.stdin)['data']['access_token'])" 2>/dev/null)
+  if [ -n "$ATOK" ]; then WAUTH=(-H "Authorization: Bearer $ATOK"); WHO="$ADMIN_EMAIL"; fi
+fi
+
+TID=$(curl -s --max-time 20 "${WAUTH[@]}" "$API/items/tickets?limit=1&fields=id,status" 2>/dev/null \
       | python -c "import sys,json;d=json.load(sys.stdin)['data'];print(d[0]['id'] if d else '')" 2>/dev/null)
 if [ -n "$TID" ]; then
-  WAS=$(curl -s --max-time 20 "${AUTH[@]}" "$API/items/tickets/$TID?fields=status" 2>/dev/null \
+  WAS=$(curl -s --max-time 20 "${WAUTH[@]}" "$API/items/tickets/$TID?fields=status" 2>/dev/null \
         | python -c "import sys,json;print(json.load(sys.stdin)['data']['status'])" 2>/dev/null)
   w=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 -X PATCH "$API/items/tickets/$TID" \
-        "${AUTH[@]}" -H 'Content-Type: application/json' -d '{"status":"resolved"}' 2>/dev/null)
+        "${WAUTH[@]}" -H 'Content-Type: application/json' -d '{"status":"resolved"}' 2>/dev/null)
   [ "$w" = "200" ] && ok "ticket update (mark as solved)" || no "ticket update" "HTTP $w"
 
   # READ IT BACK ON A SEPARATE REQUEST.
@@ -107,17 +132,20 @@ if [ -n "$TID" ]; then
   # the new value while every later GET served the OLD one. That is what
   # "mark as solved does nothing" and "the approved coupon stays pending"
   # both were. Only a second request catches it.
-  BACK=$(curl -s --max-time 20 "${AUTH[@]}" "$API/items/tickets/$TID?fields=status" 2>/dev/null |
+  BACK=$(curl -s --max-time 20 "${WAUTH[@]}" "$API/items/tickets/$TID?fields=status" 2>/dev/null |
          python -c "import sys,json;print(json.load(sys.stdin)['data']['status'])" 2>/dev/null)
   if [ "$BACK" = "resolved" ]; then
     ok "the write is VISIBLE to the next read"
   else
     no "stale read: wrote resolved, read back ${BACK:-nothing}" "Directus is serving cache it could not purge - see finding 10"
   fi
-  curl -s -o /dev/null --max-time 20 -X PATCH "$API/items/tickets/$TID" "${AUTH[@]}" \
+  curl -s -o /dev/null --max-time 20 -X PATCH "$API/items/tickets/$TID" "${WAUTH[@]}" \
        -H 'Content-Type: application/json' -d "{\"status\":\"$WAS\"}" 2>/dev/null
 else
-  no "ticket update" "no ticket to test with"
+  # Not a failure: this agent has no tickets assigned, so there is nothing it
+  # is allowed to write. Say so rather than reporting a defect that is not one.
+  printf '  [33mSKIP[0m  ticket update - no ticket assigned to %s
+' "$WHO"
 fi
 
 sec "8. Environment guards"
