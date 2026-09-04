@@ -28,6 +28,17 @@ async function get<T>(path: string, params: Record<string, string>): Promise<T> 
   const res = await fetch(`${GATEWAY_URL}${path}?${qs}`, {
     headers: token ? { authorization: `Bearer ${token}` } : {},
   });
+  /*
+   * Distinguish "not signed in" from "no such order".
+   *
+   * The client authenticates in cookie mode, so getToken() returns the access
+   * token held in memory — and null once a refresh has failed. The gateway then
+   * answers 401 "Missing bearer token", the caller catches any error, and the
+   * order panel renders "No order NNN for this vendor". That sent us looking at
+   * Yiji and at vendor scoping for a fault that was only an expired session.
+   * A thrown AUTH is caught by the same callers but says what actually happened.
+   */
+  if (res.status === 401 || res.status === 403) throw new Error('commerce AUTH');
   if (!res.ok) throw new Error(`commerce ${res.status}`);
   const body = (await res.json()) as { data: T };
   return body.data;
