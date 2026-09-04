@@ -24,6 +24,7 @@ import {
   toast,
 } from '@yiji/ui';
 import { exportFileName } from '@yiji/shared-config';
+import { couponDecision } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { usePinnedWidth } from '../../lib/pinned-width.js';
 import { ColumnScroller } from '../../components/ColumnScroller.js';
@@ -351,9 +352,11 @@ export function AllCompensationPage() {
     let approved = 0;
     let pending = 0;
     for (const r of filtered) {
-      const st = (r.status ?? 'pending').toLowerCase();
-      if (st === 'approved' || st === 'assigned') approved += 1;
-      if (st === 'pending') pending += 1;
+      // The DECISION, not the literal — `edited` is an approval with amended
+      // terms and was being left out of this count.
+      const decision = couponDecision(r.status);
+      if (decision === 'approved') approved += 1;
+      if (decision === 'pending') pending += 1;
       const pct = Number(r.coupon_percent);
       if (Number.isFinite(pct) && pct > 0) percentCoupons += 1;
       else {

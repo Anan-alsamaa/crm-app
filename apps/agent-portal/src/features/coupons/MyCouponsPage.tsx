@@ -11,7 +11,11 @@ import {
   Toolbar,
   ToolbarSpacer,
 } from '@yiji/ui';
-import { COUPON_APPROVAL_STATUSES, type CouponApprovalStatus } from '@yiji/shared-types';
+import {
+  COUPON_APPROVAL_STATUSES,
+  couponDecision,
+  type CouponApprovalStatus,
+} from '@yiji/shared-types';
 import { useMyCouponRequests, type CouponRequestRow } from './api.js';
 
 /**
@@ -57,10 +61,10 @@ export function MyCouponsPage() {
   const [view, setView] = useState<CouponApprovalStatus | 'all'>('pending');
   const [search, setSearch] = useState('');
 
-  // "approved" includes "assigned" (delivered to Yiji) — an approved coupon
-  // must not vanish from the Approved tab once the worker pushes it.
+  // "approved" is every APPROVED decision — 'edited' and 'assigned' included.
+  // Naming only 'assigned' here left an amended approval in no tab at all.
   const inView = (s: string, v: CouponApprovalStatus | 'all') =>
-    v === 'all' || s === v || (v === 'approved' && s === 'assigned');
+    v === 'all' || s === v || (v === 'approved' && couponDecision(s) === 'approved');
 
   const rows = useMemo(() => {
     const all = requests.data ?? [];

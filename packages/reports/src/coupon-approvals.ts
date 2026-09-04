@@ -7,8 +7,14 @@
  * same numbers.
  */
 
+import { couponDecision, couponWasAmended } from '@yiji/shared-types';
+
 export interface CouponApprovalFact {
-  /** 'pending' | 'approved' | 'rejected' — anything else is counted as pending. */
+  /**
+   * Any CouponRequestStatus. Classified through `couponDecision`, so 'edited'
+   * and 'assigned' count as APPROVED — they are approvals that were amended
+   * or delivered, not different outcomes. Anything unrecognised is pending.
+   */
   status: string | null;
   /** True when a supervisor changed the terms before approving. */
   editedByAdmin: boolean | null;
@@ -45,18 +51,19 @@ const EMPTY: CouponOutcome = {
 
 function tally(into: CouponOutcome, f: CouponApprovalFact): void {
   into.requested += 1;
-  const status = (f.status ?? 'pending').toLowerCase();
-  if (status === 'approved') {
+  // The DECISION, not the literal status. Comparing against 'approved' here
+  // put every DELIVERED coupon ('assigned') in the pending bucket, so the
+  // queue reported decisions still owed that had been made weeks earlier.
+  const decision = couponDecision(f.status);
+  if (decision === 'approved') {
     into.approvedTotal += 1;
     // An amended approval is still an approval, but it is a different event and
     // the whole point of the report is being able to see how often it happens.
-    if (f.editedByAdmin) into.approvedWithChanges += 1;
+    if (couponWasAmended(f.status, f.editedByAdmin)) into.approvedWithChanges += 1;
     else into.approvedAsAsked += 1;
-  } else if (status === 'rejected') {
+  } else if (decision === 'rejected') {
     into.rejected += 1;
   } else {
-    // Anything unrecognised counts as undecided rather than being dropped: a
-    // request that vanishes from the totals is worse than one in the wrong bucket.
     into.pending += 1;
   }
 }

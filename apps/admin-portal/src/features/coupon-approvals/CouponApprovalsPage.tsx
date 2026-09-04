@@ -20,6 +20,7 @@ import {
   couponTermsProblems,
   isPercentageCategory,
   type CouponApprovalStatus,
+  couponDecision,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import {
@@ -281,7 +282,9 @@ function Row({
   const pending = row.status === 'pending';
   /* Delivery only means anything once a decision has been made, and only an
    * APPROVAL is owed to anybody — a rejected coupon was never going to Yiji. */
-  const approvedNotPending = row.status === 'approved' || row.status === 'assigned';
+  // Any approval, including one with amended terms (`edited`) — the worker's
+  // push filter includes it, so the retry affordance must too.
+  const approvedNotPending = couponDecision(row.status) === 'approved';
   /*
    * NO ORDER, NO COUPON — and a supervisor has to know that BEFORE they decide.
    *

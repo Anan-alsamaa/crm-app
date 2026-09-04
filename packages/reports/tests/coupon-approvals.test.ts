@@ -5,6 +5,35 @@ import {
   couponRate,
   type CouponApprovalFact,
 } from '../src/coupon-approvals.js';
+import { COUPON_APPROVED_STATUSES, CouponRequestStatus, couponDecision } from '@yiji/shared-types';
+
+describe('couponDecision and COUPON_APPROVED_STATUSES', () => {
+  it('agree on which statuses are approvals', () => {
+    // The list exists only because a Directus `_in` filter cannot call the
+    // function. If someone adds a status to one and not the other, the
+    // Approved tab and the approved COUNT quietly disagree — which is the
+    // exact bug this replaced. Derive both from the enum and compare.
+    const fromSwitch = CouponRequestStatus.options.filter((s) => couponDecision(s) === 'approved');
+    expect([...COUPON_APPROVED_STATUSES].sort()).toEqual(fromSwitch.sort());
+  });
+
+  it('classifies every enum member, never falling to the default', () => {
+    for (const s of CouponRequestStatus.options) {
+      const d = couponDecision(s);
+      expect(['approved', 'rejected', 'pending']).toContain(d);
+      // Only 'pending' itself may be pending: an enum member that lands in
+      // the default branch is an unclassified status, not an undecided one.
+      if (d === 'pending') expect(s).toBe('pending');
+    }
+  });
+
+  it('treats unknown, null and casing as the tests above expect', () => {
+    expect(couponDecision(null)).toBe('pending');
+    expect(couponDecision('ASSIGNED')).toBe('approved');
+    expect(couponDecision(' Edited ')).toBe('approved');
+    expect(couponDecision('escalated')).toBe('pending');
+  });
+});
 
 const f = (
   status: string | null,
@@ -34,6 +63,49 @@ describe('couponOutcomes', () => {
     const o = couponOutcomes([f('escalated'), f(null)]);
     expect(o.requested).toBe(2);
     expect(o.pending).toBe(2);
+  });
+
+  /*
+   * The status-conflation regression.
+   *
+   * Five statuses, but three of them ('approved', 'edited', 'assigned') are
+   * all APPROVALS that differ only in what happened next. The tally used to
+   * match the literal 'approved', so a coupon that had been approved AND
+   * delivered to Yiji ('assigned') fell into the pending bucket — and the
+   * staging queue reported five decisions still owed weeks after they were
+   * made. Found by auditing the dashboard against the database.
+   */
+  it('counts a DELIVERED coupon (assigned) as approved, not pending', () => {
+    const o = couponOutcomes([f('assigned'), f('assigned')]);
+    expect(o.approvedTotal).toBe(2);
+    expect(o.approvedAsAsked).toBe(2);
+    expect(o.pending).toBe(0);
+  });
+
+  it('counts an amended approval (edited) as approved WITH changes', () => {
+    // 'edited' is the status an admin leaves when they change the terms and
+    // approve in one action, so it is an approval-with-changes by definition —
+    // even when the editedByAdmin flag was not set alongside it.
+    const o = couponOutcomes([f('edited'), f('edited', true)]);
+    expect(o.approvedTotal).toBe(2);
+    expect(o.approvedWithChanges).toBe(2);
+    expect(o.approvedAsAsked).toBe(0);
+    expect(o.pending).toBe(0);
+  });
+
+  it('adds up across ALL five statuses', () => {
+    const o = couponOutcomes([
+      f('pending'),
+      f('approved'),
+      f('edited'),
+      f('rejected'),
+      f('assigned'),
+    ]);
+    expect(o.requested).toBe(5);
+    expect(o.approvedTotal).toBe(3);
+    expect(o.rejected).toBe(1);
+    expect(o.pending).toBe(1);
+    expect(o.approvedTotal + o.rejected + o.pending).toBe(o.requested);
   });
 
   it('adds up', () => {

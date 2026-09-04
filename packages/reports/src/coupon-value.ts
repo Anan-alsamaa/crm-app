@@ -5,6 +5,8 @@
  * rejected / pending). This counts money, and money needs its own rules.
  */
 
+import { couponDecision } from '@yiji/shared-types';
+
 /** The fields a worth calculation needs off a coupon approval row. */
 export interface CouponValueFact {
   status: string | null;
@@ -104,10 +106,6 @@ export function couponSar(f: CouponValueFact): number | null {
   return (f.couponPercent ?? 0) > 0 ? null : 0;
 }
 
-const APPROVED = 'approved';
-const PENDING = 'pending';
-const REJECTED = 'rejected';
-
 /** Total approved riyals, plus the same split by issuing side. */
 export function couponWorth(facts: readonly CouponValueFact[]): CouponWorth {
   let sar = 0;
@@ -121,22 +119,25 @@ export function couponWorth(facts: readonly CouponValueFact[]): CouponWorth {
   const days = new Map<string, { sar: number; count: number }>();
 
   for (const f of facts) {
-    const status = (f.status ?? '').trim().toLowerCase();
+    // The DECISION, not the literal status. Matching 'approved' alone skipped
+    // every coupon that had gone on to be DELIVERED ('assigned'), so the spend
+    // figure halved the moment the push to Yiji succeeded — the dashboard read
+    // 5 SAR across 5 coupons when 10 had been approved.
+    const decision = couponDecision(f.status);
     const value = couponSar(f);
 
-    if (status === PENDING) {
+    if (decision === 'pending') {
       pendingCount += 1;
       pendingSar += value ?? 0;
       continue;
     }
-    if (status === REJECTED) {
+    if (decision === 'rejected') {
       rejectedCount += 1;
       rejectedSar += value ?? 0;
       continue;
     }
     // Rejected coupons cost nothing — they were never issued. Only approved
     // money counts toward `sar`, which is what "issued" means.
-    if (status !== APPROVED) continue;
 
     count += 1;
     if (value == null) {
