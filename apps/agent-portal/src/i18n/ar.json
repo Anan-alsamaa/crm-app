@@ -298,7 +298,10 @@
     "assignedAll": "كل المحادثات",
     "emptyFiltered": "لا شيء يطابق عوامل التصفية هذه.",
     "emptyFilteredHint": "المحادثات مخفية وليست محذوفة. أزل عوامل التصفية لعرضها.",
-    "clearFilters": "إزالة عوامل التصفية"
+    "clearFilters": "إزالة عوامل التصفية",
+    "addFilter": "يُضاف إلى عوامل التصفية المطبَّقة",
+    "clearAll": "مسح",
+    "noneToFilter": "لا توجد محادثات {{label}} للتصفية"
   },
   "conversation": {
     "replyPlaceholder": "اكتب ردًا…",
@@ -863,7 +866,9 @@
       "pending": "قيد الانتظار",
       "approved": "مُعتمدة",
       "rejected": "مرفوضة",
-      "all": "الكل"
+      "all": "الكل",
+      "approvedPending": "مُعتمدة · جارٍ الإرسال",
+      "assigned": "مُعتمدة · تم التسليم"
     },
     "requested": "أُرسل للاعتماد. يصل العميل بعد موافقة المشرف.",
     "requestTitle": "طلب قسيمة",
