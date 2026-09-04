@@ -753,7 +753,15 @@ async function applyConstraints(): Promise<void> {
       // Log `=` vs `+` honestly so the idempotence check (check-idempotence.mjs)
       // can assert "second apply created nothing" — `CREATE ... IF NOT EXISTS`
       // succeeds either way, so we must probe pg_indexes to know which happened.
-      const name = sql.match(/INDEX\s+(?:IF NOT EXISTS\s+)?(\w+)/i)?.[1];
+      //
+      // A DROP is idempotent by definition, so it is never a creation. It also
+      // must not go through the name probe: the pattern below reads the word
+      // after INDEX, and for `DROP INDEX IF EXISTS foo` that word is literally
+      // `IF`. No index is ever named `IF`, so the probe found nothing and the
+      // statement reported `+ IF` on EVERY run — failing the idempotence check
+      // for ever while the bootstrap itself was perfectly correct.
+      const isDrop = /^\s*DROP\s/i.test(sql);
+      const name = isDrop ? undefined : sql.match(/INDEX\s+(?:IF NOT EXISTS\s+)?(\w+)/i)?.[1];
       let existed = false;
       if (name) {
         const { rowCount } = await pool.query('SELECT 1 FROM pg_indexes WHERE indexname = $1', [
