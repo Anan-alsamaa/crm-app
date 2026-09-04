@@ -8,21 +8,27 @@ testing from this end then turned up. Seven defects.
 emptied every report (7). **Not a bug:** the inbox filters (2), which combine by
 design and now say so.
 
-**OPEN, all infrastructure, all needing an AWS change:**
+**Also fixed (infrastructure, 2026-09-04):**
 
-| #   | what                                         | effect                                               |
-| --- | -------------------------------------------- | ---------------------------------------------------- |
-| 10  | Directus cache cannot purge on Redis Cluster | **writes appear not to save** — explains 5 and 6     |
-| 8   | all three service tokens are invalid         | AI config unreadable and unwritable by anyone        |
-| 9   | the eight AI endpoints have no ALB rule      | every AI feature 404s, answered by the wrong service |
+| #   | what                                            | effect                                                   | fix                                           |
+| --- | ----------------------------------------------- | -------------------------------------------------------- | --------------------------------------------- |
+| 10  | Directus cache could not purge on Redis Cluster | **writes appeared not to save** — the real cause of 5, 6 | `CACHE_ENABLED=false`                         |
+| 8   | all three service tokens were invalid           | AI config unreadable and unwritable by anyone            | set the accounts' tokens to the deployed ones |
+| 9   | the eight AI endpoints had no ALB rule          | every AI feature 404'd, answered by Directus             | listener rules 21 + 22                        |
 
-Defect 10 is the serious one: a write returns 200 with the new value, is
-recorded in the audit trail, and the next read still serves the old value.
+Defect 10 was the serious one: a write returned 200 with the new value, was
+recorded in the audit trail, and the next read still served the old value.
 
-The staging suite (`scripts/test-staging.sh`) is **16/16** and the route sweep
-(`scripts/sweep-admin-routes.mjs`) finds every report clean — neither catches
-10, because both read back through the same stale cache. A test that writes and
-then re-reads on a SEPARATE request is the gap; see the suite's section 7.
+**Current state:** `scripts/test-staging.sh` **17/17** (including the
+write-then-read-back check added for defect 10) and
+`scripts/sweep-admin-routes.mjs` **22 routes, 0 findings**. A real
+`POST /summarize-conversation` returns a generated summary, so the AI path is
+alive end to end.
+
+> The lesson worth keeping: neither the suite nor the sweep caught defect 10 at
+> first, because **both read back through the same stale cache**. A write test
+> must re-read on a SEPARATE request; a 200 proves only that the write was
+> accepted.
 
 ---
 
@@ -91,13 +97,14 @@ conversations, contacts) and both portals' Agent performance pages.
 
 ---
 
-## OPEN — infrastructure, found by sweeping the deployed routes
+## FIXED — infrastructure, found by sweeping the deployed routes
 
-Both found on 2026-09-04 by `scripts/sweep-admin-routes.mjs`, which drives all
-22 admin routes in a real browser. Neither is code; both need an AWS change,
-and both would have shipped to production exactly as they are.
+All three found on 2026-09-04 by `scripts/sweep-admin-routes.mjs`, which drives
+all 22 admin routes in a real browser, plus the write/read-back test. None was
+code; all three needed an AWS change, and all three would have shipped to
+production exactly as they were. All are now fixed and verified.
 
-### 8. All three service tokens are invalid — AI config is dead
+### 8. All three service tokens were invalid — FIXED 2026-09-04
 
 `SVC_AI_TOKEN`, `SVC_GATEWAY_TOKEN` and `SVC_WORKERS_TOKEN` in the staging task
 definitions are all rejected by Directus with **401 INVALID_CREDENTIALS**. The
@@ -118,10 +125,18 @@ The visible symptom is small and the cause is not:
 > credential fault present as an authorization fault, which is what makes this
 > expensive to diagnose: the screen says you are not an admin, and you are.
 
-**Fix:** rotate the three tokens — regenerate on the service accounts in
-Directus and update the task definitions together. Needs approval (AWS write).
+**Fixed.** The deployed values turned out to be the INTENDED ones — they match
+`.env.staging` — but were never written onto the Directus accounts, so the two
+sides had drifted. Setting each account's `token` to its deployed value fixed
+all three with no redeploy of the services.
 
-### 9. The eight AI endpoints have no ALB rule — Aura is unreachable
+The AI gateway then still 403'd, because `adminRoleIds()` caches for five
+minutes and had cached the empty set. A `--force-new-deployment` cleared it.
+
+Verified: all three tokens authenticate, and `/admin/config` + `/admin/usage`
+return **200** with real config.
+
+### 9. The eight AI endpoints had no ALB rule — FIXED 2026-09-04
 
 The listener routes `/commerce/*`, `/admin/config` and `/admin/usage` to the AI
 gateway. It does NOT route the eight endpoints in `AI_ENDPOINTS`:
@@ -137,10 +152,15 @@ So every AI feature — Aura, reply suggestions, summaries, sentiment — is dea
 on staging, and the 404 comes from the wrong service, so nothing in the AI
 gateway's log shows a problem at all.
 
-**Fix:** one more listener rule sending those eight paths to `crm-stg-ai`.
-Needs approval (AWS write).
+**Fixed.** Two rules, not one: an ALB allows **5 condition values per rule**
+(`condition-values-per-alb-rule`), and two path-pattern conditions on one rule
+are ANDed, which would match nothing. So priority 21 carries five paths and 22
+carries three, both forwarding to `crm-stg-ai`.
 
-### 10. Directus serves STALE data — the cache cannot purge on Redis Cluster
+Verified: all eight now reach the gateway, and a real
+`POST /summarize-conversation` returns **200 with a generated summary**.
+
+### 10. Directus served STALE data (Redis Cluster) — FIXED 2026-09-04
 
 **The single most serious finding. It explains defects 5 and 6, which I had
 attributed to an expired session.**
@@ -182,7 +202,17 @@ so production inherits it the moment it points at the same cluster-mode Redis.
 3. **`CACHE_STORE=memory`.** Caches per task, so two tasks disagree — acceptable
    only at one replica.
 
-Recommend **1 now**, revisit once there is traffic worth caching for.
+**Fixed with option 1** — `CACHE_ENABLED=false`, task definition
+`crm-staging-directus:5`, and the same change made in
+`deploy/aws/ecs/directus.json` so it cannot ship to production as it was.
+
+`REDIS` and `RATE_LIMITER_STORE=redis` are deliberately KEPT: the rate limiter
+issues single-key operations, which a cluster handles normally. Only the
+cache's multi-key delete was affected.
+
+Verified: `PATCH` a ticket to `resolved`, immediately re-read → `resolved`.
+`scripts/test-staging.sh` is **17/17**, including the read-back check that was
+correctly failing before this.
 
 > Note the same trap already bit the socket gateway (ioredis Cluster vs
 > standalone). A cluster endpoint is not a drop-in for a standalone one, and

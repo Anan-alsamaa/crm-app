@@ -145,16 +145,40 @@ detect that hostname and build a cluster-aware client with the `{yiji}` hash tag
 (`packages/shared-config/src/redis.ts`), so BullMQ's Lua scripts do not fail
 with CROSSSLOT.
 
-**Directus's own Redis client is not cluster-aware.** It works today only
-because `redis-yiji` is a **single-shard** cluster: with one shard every key
-lives on that shard, so the server never issues a `MOVED` redirect and the
-client never has to follow one. Verified 2026-08-06 by
-`cache:responseTime` appearing in `/server/health`.
+**Directus's own Redis client is not cluster-aware, and this DID break — so
+`CACHE_ENABLED=false` (2026-09-04).**
 
-> **If anyone adds shards to `redis-yiji`, re-test Directus immediately.** It
-> would start hitting `MOVED` on every key that hashes elsewhere, surfacing as
-> intermittent 500s rather than a clean failure. The fallback is
-> `CACHE_ENABLED=false` — Directus runs correctly on in-memory cache.
+The prediction below was that a single-shard cluster is safe because no key
+ever needs a `MOVED` redirect. That part is true. The failure was somewhere
+else entirely, and worse:
+
+Directus **purges its cache by deleting many keys in ONE command**. A cluster
+refuses a multi-key command whose keys span slots — even on one shard, because
+the check is on the SLOT, not the node:
+
+    WARN: [cache] ReplyError: CROSSSLOT Keys in request don't hash to the same slot
+
+It is logged as a **WARN and execution continues**, so `CACHE_AUTO_PURGE=true`
+never actually purges and every later read serves the pre-write value.
+
+> **The failure mode is what makes this dangerous.** A write returns **200 with
+> the new value in the body** and **is recorded in `directus_revisions`** — API
+> and audit trail both look correct. Only a separate, later read is wrong. It
+> presents as "the button does nothing": on staging it was reported as
+> "mark as solved does nothing" and "the approved coupon still shows pending",
+> and both were chased as session and cache-invalidation bugs in the FRONTEND
+> before anyone looked at the Directus log.
+
+`CACHE_ENABLED=false` is the fix here: reads on this dataset are single-digit
+ms, so the cache was buying very little. To re-enable it, Directus needs a
+**standalone** (non-`clustercfg.`) endpoint — not another shard count.
+
+**`RATE_LIMITER_STORE=redis` is unaffected and stays on**: it issues
+single-key operations, which a cluster handles normally.
+
+**Any write path must be verified by reading back on a SEPARATE request.**
+`scripts/test-staging.sh` section 7 does this now; a 200 on the write proves
+only that it was accepted.
 
 Note the health payload names checks by **role, not backend**: there is no
 `redis` key, so grepping for one returns nothing and reads as "Redis is off"

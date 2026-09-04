@@ -69,11 +69,17 @@ let current = 'login';
 page.on('console', (m) => {
   if (m.type() !== 'error') return;
   const text = m.text();
+  // The browser echoes every failed request as a console error too, with no URL
+  // attached — so a response we deliberately allowed (the pre-login session
+  // probe) cannot be filtered by path here. Counting it would mean this sweep
+  // never reports a clean zero, which is how a real finding gets ignored.
+  if (current === 'login' && /Failed to load resource/i.test(text)) return;
   if (!noise(text)) problems.push({ route: current, kind: 'console', detail: text.slice(0, 220) });
 });
 page.on('requestfailed', (r) => {
   const detail = `${r.method()} ${r.url()} — ${r.failure()?.errorText ?? 'failed'}`;
-  if (!noise(detail)) problems.push({ route: current, kind: 'request', detail: detail.slice(0, 220) });
+  if (!noise(detail))
+    problems.push({ route: current, kind: 'request', detail: detail.slice(0, 220) });
 });
 page.on('response', (r) => {
   if (r.status() < 400) return;
@@ -105,7 +111,10 @@ for (const [name, path] of ROUTES) {
   // rather than a fixed delay, so a slow chunked read is not read as a pass.
   await page.waitForLoadState('networkidle', { timeout: 45000 }).catch(() => {});
 
-  const body = await page.locator('body').innerText().catch(() => '');
+  const body = await page
+    .locator('body')
+    .innerText()
+    .catch(() => '');
   const landed = new URL(page.url()).pathname;
   const errText = /could not load|failed to load|something went wrong|unexpected error/i.exec(body);
   const empty = /no data in this window|nothing to show/i.exec(body);
@@ -129,15 +138,26 @@ let bad = 0;
 for (const r of results) {
   const redirected = r.landed !== r.path && !(r.path === '/' && r.landed === '/');
   const flags = [];
-  if (r.error) { flags.push(`ERROR STATE: "${r.error}"`); bad++; }
+  if (r.error) {
+    flags.push(`ERROR STATE: "${r.error}"`);
+    bad++;
+  }
   if (r.empty) flags.push(`empty: "${r.empty}"`);
   // Deliberately NOT a byte threshold: Vendors legitimately holds one row and
   // tripped a 400-char rule. A page is thin only if it rendered essentially
   // nothing at all.
-  if (r.chars < 120) { flags.push(`THIN PAGE (${r.chars} chars)`); bad++; }
-  if (r.newProblems) { flags.push(`${r.newProblems} console/network problem(s)`); bad++; }
+  if (r.chars < 120) {
+    flags.push(`THIN PAGE (${r.chars} chars)`);
+    bad++;
+  }
+  if (r.newProblems) {
+    flags.push(`${r.newProblems} console/network problem(s)`);
+    bad++;
+  }
   const status = flags.length ? `\x1b[31m${flags.join(' | ')}\x1b[0m` : '\x1b[32mok\x1b[0m';
-  console.log(`${r.name.padEnd(38)} ${redirected ? `-> ${r.landed}`.padEnd(38) : ''.padEnd(38)} ${status}`);
+  console.log(
+    `${r.name.padEnd(38)} ${redirected ? `-> ${r.landed}`.padEnd(38) : ''.padEnd(38)} ${status}`,
+  );
 }
 
 if (problems.length) {
@@ -146,5 +166,7 @@ if (problems.length) {
   for (const p of problems) console.log(`[${p.route}] (${p.kind}) ${p.detail}`);
 }
 
-console.log(`\n${results.length} routes, ${bad} with findings, ${problems.length} console/network problems`);
+console.log(
+  `\n${results.length} routes, ${bad} with findings, ${problems.length} console/network problems`,
+);
 process.exit(bad || problems.length ? 1 : 0);
