@@ -1500,61 +1500,6 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
               </SectionCard>
             )}
             {view === 'operations' && (
-              /*
-               * IS IT GETTING BETTER?
-               *
-               * Every other panel on this board is a RANKING — which branch,
-               * which brand, which area manager is worst right now. All of them
-               * answer "where do I go today" and none of them answers whether
-               * yesterday's visit worked. A branch at the top of the list two
-               * months running is a different conversation from one that has
-               * just arrived there, and the ranking cannot tell them apart.
-               *
-               * Deliberately the OPERATIONS cut of the same filters: whatever
-               * brand, city, area manager or branch is selected above, this is
-               * that selection's own trend, not a global one. A chart showing
-               * something other than what the filters say would be worse than
-               * no chart.
-               *
-               * A bar per month rather than a line: months are discrete
-               * buckets, and a smooth curve between them implies readings
-               * in between that do not exist.
-               */
-              <SectionCard
-                /* Full width. A trend is read left-to-right across time, and
-                   twelve bars squeezed into half a grid column are too narrow
-                   to compare — the ranking panels below are lists and are
-                   perfectly happy in a column; this is not. */
-                className="md:col-span-2"
-                title={t('complaintDash.opsTrend', { defaultValue: 'Tickets per month' })}
-                hint={t('complaintDash.opsTrendHint', {
-                  defaultValue:
-                    'The selection above, month by month — whether the branches you are working on are improving.',
-                })}
-                tone="sky"
-                index={2}
-              >
-                {/* TWO months, not one. A trend needs two points to be a
-                    trend; a single bar is at 100% of a scale set by itself,
-                    which reads as "this is the maximum" when there is nothing
-                    to be maximal against. The count already has a KPI. */}
-                {d.months.length < 2 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">
-                    {d.months.length === 0
-                      ? t('complaintDash.opsTrendEmpty', {
-                          defaultValue: 'No tickets in this range yet.',
-                        })
-                      : t('complaintDash.opsTrendOneMonth', {
-                          defaultValue:
-                            'Only one month in this range — widen the dates to compare months.',
-                        })}
-                  </p>
-                ) : (
-                  <MonthBars months={d.months} />
-                )}
-              </SectionCard>
-            )}
-            {view === 'operations' && (
               <CutCard
                 title={t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' })}
                 hint={
