@@ -1186,7 +1186,8 @@
       "scheduleReports": "Schedule reports",
       "manageSla": "Edit SLA policies",
       "manageRoles": "Manage roles & privileges",
-      "manageBackup": "Run backups"
+      "manageBackup": "Run backups",
+      "useDirectusApp": "Use the Directus admin app"
     },
     "brands": "Brand access",
     "brandsHelp": "Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a chat has no brand until a ticket gives it one.",

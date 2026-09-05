@@ -76,6 +76,17 @@ export const PRIVILEGES = [
   'manage_roles',
   /** The self-serve JSON backup. Read grants come from the other privileges. */
   'manage_backup',
+  /**
+   * Signals that this role is EXPECTED to use the Directus admin app directly,
+   * and grants the reads that make it usable (the schema, so the collection
+   * list renders with real field names rather than raw keys).
+   *
+   * It does NOT grant `admin_access` — nothing in this list can. A holder sees
+   * the collections their other privileges already allow, and is refused on
+   * permissions, policies and roles exactly as before. The point is a manager
+   * with the run of the data who still cannot re-draw who may see what.
+   */
+  'use_directus_app',
 ] as const;
 
 export type Privilege = (typeof PRIVILEGES)[number];
@@ -104,6 +115,7 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   manage_sla: 'admin',
   manage_roles: 'admin',
   manage_backup: 'admin',
+  use_directus_app: 'admin',
 };
 
 /**
@@ -127,6 +139,7 @@ export const ADMIN_PORTAL_PRIVILEGES: readonly Privilege[] = [
   'manage_sla',
   'manage_roles',
   'manage_backup',
+  'use_directus_app',
 ];
 
 /**

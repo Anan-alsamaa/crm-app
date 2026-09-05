@@ -281,6 +281,26 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     manage_roles: [...crud('app_roles'), ...readOnly('directus_roles')],
     // UI gate: the self-serve JSON backup reads through the other privileges.
     manage_backup: [],
+    /*
+     * The Directus admin app, for a manager who works the data directly.
+     *
+     * app_access is already on every materialized policy, so signing in was
+     * never the missing piece — these are the SCHEMA reads that make the app
+     * legible: without them the collection list renders raw keys and the item
+     * forms have no field labels.
+     *
+     * Deliberately absent: directus_permissions, directus_policies,
+     * directus_roles, directus_settings. That is the line. A holder has the
+     * run of the business data and still cannot re-draw who may see what,
+     * because admin_access is not expressible here at all.
+     */
+    use_directus_app: [
+      ...readOnly('directus_collections'),
+      ...readOnly('directus_fields'),
+      ...readOnly('directus_relations'),
+      ...readOnly('directus_translations'),
+      ...readOnly('directus_presets'),
+    ],
   };
 
   const RESERVED = new Set(['administrator', 'admin', 'agent']);

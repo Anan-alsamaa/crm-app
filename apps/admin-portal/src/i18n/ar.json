@@ -1091,7 +1091,8 @@
       "scheduleReports": "جدولة التقارير",
       "manageSla": "تعديل سياسات اتفاقية الخدمة",
       "manageRoles": "إدارة الأدوار والصلاحيات",
-      "manageBackup": "تشغيل النسخ الاحتياطي"
+      "manageBackup": "تشغيل النسخ الاحتياطي",
+      "useDirectusApp": "استخدام تطبيق Directus الإداري"
     },
     "pending": "قيد التطبيق…",
     "privCount": "{{n}} صلاحية",

@@ -323,6 +323,9 @@ export function RolesPage() {
     manage_sla: t('roles.p.manageSla', { defaultValue: 'Edit SLA policies' }),
     manage_roles: t('roles.p.manageRoles', { defaultValue: 'Manage roles & privileges' }),
     manage_backup: t('roles.p.manageBackup', { defaultValue: 'Run backups' }),
+    use_directus_app: t('roles.p.useDirectusApp', {
+      defaultValue: 'Use the Directus admin app',
+    }),
   };
 
   return (
