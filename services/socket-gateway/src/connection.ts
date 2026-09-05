@@ -35,6 +35,14 @@ interface SocketData {
   contactPhone?: string | null;
   contactIsNew?: boolean;
   /**
+   * The Yiji customer id we hold for this contact, or null if unknown there.
+   *
+   * Drives whether a walk-in resumes an existing thread: a KNOWN customer is
+   * no longer a guess, so a later walk-in by the same number is the same
+   * person continuing the same conversation.
+   */
+  contactExternalId?: string | null;
+  /**
    * Set once the conversation EXISTS. Undefined until the customer actually
    * sends something — see `ensureConversation`.
    */
@@ -174,6 +182,15 @@ export function registerConnection(deps: ConnectionDeps): void {
       data.contactName = contact.name;
       data.contactPhone = contact.phone;
       data.contactIsNew = contact.isNew;
+      data.contactExternalId = contact.externalCustomerId;
+      if (contact.promoted) {
+        // Worth a line in the log: this is the moment an anonymous walk-in
+        // became a named customer, and it is otherwise invisible.
+        logger.info(
+          { contactId: contact.id, externalCustomerId: contact.externalCustomerId },
+          'walk-in contact promoted to a registered Yiji customer',
+        );
+      }
       data.walkIn = claims.walk_in === true;
 
       /*
@@ -208,7 +225,12 @@ export function registerConnection(deps: ConnectionDeps): void {
         // behaviour for walk-ins on that bundle, which is why updating the
         // widget host is part of finishing this fix, not optional.
         const conv = data.walkIn
-          ? await directus.createWalkInConversation(vendor.id, contact.id, claims.phone ?? '')
+          ? await directus.createWalkInConversation(
+              vendor.id,
+              contact.id,
+              claims.phone ?? '',
+              !!contact.externalCustomerId,
+            )
           : await directus.findOrCreateConversation(vendor.id, contact.id);
         data.conversationId = conv.id;
         data.conversationCreated = conv.created;
@@ -295,7 +317,12 @@ async function ensureConversation(socket: Socket, deps: ConnectionDeps): Promise
     // typed by somebody standing in a store, not proven, so it must not open a
     // thread that number already owns.
     const conv = data.walkIn
-      ? await directus.createWalkInConversation(vendorId, contactId, data.contactPhone ?? '')
+      ? await directus.createWalkInConversation(
+          vendorId,
+          contactId,
+          data.contactPhone ?? '',
+          !!data.contactExternalId,
+        )
       : await directus.findOrCreateConversation(vendorId, contactId);
 
     data.conversationId = conv.id;
@@ -367,7 +394,16 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
   // is empty anyway — this is belt and braces. The phone was typed by somebody
   // in a store, not proven, so history is not theirs to be shown even if a
   // future change made this conversation resumable.
-  if (!data.walkIn && data.conversationId) {
+  /*
+   * History replay: withheld from an UNVERIFIED walk-in, allowed once known.
+   *
+   * The rule was "never for a walk-in", because a typed phone is not proof and
+   * replaying a stranger's chat to whoever guessed a number is the worst case.
+   * That still holds for an unknown contact. But a contact we have identified
+   * through the Yiji app is not a guess any more, and withholding their own
+   * history from them is just a worse product.
+   */
+  if ((!data.walkIn || data.contactExternalId) && data.conversationId) {
     try {
       const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const history = await directus.loadConversationMessages(data.conversationId, { since });

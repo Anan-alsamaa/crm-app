@@ -111,6 +111,8 @@ export interface CouponApprovalRow {
   no_other_discounts: boolean | null;
   reason: string | null;
   contact: {
+    /** Needed to write the Yiji id back when the order reveals it. */
+    id: string;
     name: string | null;
     phone: string | null;
     /** The customer's id in YIJI — what their API calls `userId`. */
@@ -662,7 +664,7 @@ export async function processCouponPushJob(
         'item_name',
         'no_other_discounts',
         'reason',
-        { contact: ['name', 'phone', 'external_customer_id'] },
+        { contact: ['id', 'name', 'phone', 'external_customer_id'] },
         // The order is the whole point of the endpoint, and the receipt tells
         // us whether a previous attempt already succeeded.
         { ticket: ['order_id'] },
@@ -747,6 +749,41 @@ export async function processCouponPushJob(
       logger.warn(
         { id, orderId, err: describeError(err) },
         'could not read the order for coupon enrichment — pushing without it',
+      );
+    }
+  }
+
+  /*
+   * THE ORDER KNOWS WHO THEY ARE — so learn it.
+   *
+   * Yiji has no lookup by phone, which is why a walk-in's contact is stored
+   * with `external_customer_id: null`. But the ORDER carries their real
+   * `userId`, and we have just read it. Writing it back turns an anonymous
+   * walk-in into a named customer permanently: their next chat resumes, their
+   * order history resolves, and later coupons address them directly instead
+   * of leaning on the order every time.
+   *
+   * Only ever null -> real. Never overwritten, and never with a phone-derived
+   * handle — a fabricated value in this column is what gets sent to Yiji as
+   * `userId`. Best-effort: this is enrichment, and failing it must not stop a
+   * coupon the customer is owed.
+   */
+  const learnedUserId = order?.userId?.trim();
+  if (learnedUserId && row.contact?.id && !row.contact.external_customer_id) {
+    try {
+      await directus.request(
+        updateItem('contacts' as never, row.contact.id, {
+          external_customer_id: learnedUserId,
+        } as never),
+      );
+      logger.info(
+        { id, contactId: row.contact.id, externalCustomerId: learnedUserId, orderId },
+        'learned the customer Yiji id from their order — contact promoted',
+      );
+    } catch (err) {
+      logger.warn(
+        { id, contactId: row.contact.id, err: describeError(err) },
+        'could not write back the customer Yiji id — coupon push continues',
       );
     }
   }

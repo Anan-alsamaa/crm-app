@@ -59,7 +59,16 @@ export class GatewayDirectus {
   async upsertContact(
     vendorUuid: string,
     claims: CustomerClaims,
-  ): Promise<{ id: string; isNew: boolean; name: string | null; phone: string | null }> {
+  ): Promise<{
+    id: string;
+    isNew: boolean;
+    name: string | null;
+    phone: string | null;
+    /** The Yiji id we now hold for this person, or null if they are unknown there. */
+    externalCustomerId: string | null;
+    /** True when THIS session is what taught us their Yiji id. */
+    promoted: boolean;
+  }> {
     // Normalize identity once: a missing OR blank/whitespace name/phone/email is
     // stored as null (not ""), so the agent UI's `name ?? "Unknown"` fallback and
     // the phone/email dedup behave consistently. Only customer_id + (usually)
@@ -68,10 +77,22 @@ export class GatewayDirectus {
     const phone = claims.phone?.trim() || null;
     const email = claims.email?.trim() || null;
 
+    /*
+     * The Yiji id this SESSION can prove, or null.
+     *
+     * A walk-in's `customer_id` is `cust-<digits>`, minted by the walk-in
+     * endpoint from the phone the visitor typed — a local handle, not a Yiji
+     * account. Only a session that came from the Yiji app carries a real one.
+     */
+    const provenExternalId = isPhoneDerivedCustomerId(claims.customer_id)
+      ? null
+      : claims.customer_id;
+
     const findExisting = async (): Promise<{
       id: string;
       name: string | null;
       phone: string | null;
+      external_customer_id: string | null;
     } | null> => {
       const or: Array<Record<string, unknown>> = [];
       if (phone) or.push({ phone: { _eq: phone } });
@@ -80,21 +101,64 @@ export class GatewayDirectus {
       const existing = (await this.client.request(
         readItems('contacts', {
           filter: { vendor: { _eq: vendorUuid }, _or: or },
-          fields: ['id', 'name', 'phone'],
+          fields: ['id', 'name', 'phone', 'external_customer_id'],
           limit: 1,
         }),
-      )) as Array<{ id: string; name: string | null; phone: string | null }>;
+      )) as Array<{
+        id: string;
+        name: string | null;
+        phone: string | null;
+        external_customer_id: string | null;
+      }>;
       return existing[0] ?? null;
     };
 
     const existing = await findExisting();
-    if (existing)
+    if (existing) {
+      /*
+       * PROMOTION: the walk-in who turns out to be a registered customer.
+       *
+       * Somebody scans a QR code in a branch and types their phone. We have no
+       * way to look that number up on Yiji (their API is keyed by customer id
+       * and order id, with no lookup by phone), so the contact is stored with
+       * `external_customer_id: null` — honestly unknown.
+       *
+       * Later the same person opens the chat FROM the Yiji app, which hands us
+       * their real customer id. The phone matches, so `findExisting` returns
+       * the very row the walk-in created — and this used to return it
+       * unchanged, throwing away the one piece of information the new session
+       * had. The customer stayed permanently "unknown" no matter how many
+       * times they came back through the app.
+       *
+       * So: adopt it. Only ever null -> real, never overwriting an id we
+       * already hold and never writing a phone-derived handle, because a
+       * fabricated value in this column is what the coupon push sends to Yiji
+       * as `userId`.
+       */
+      const promote = !!provenExternalId && !existing.external_customer_id;
+      if (promote) {
+        try {
+          await this.client.request(
+            updateItem('contacts', existing.id, {
+              external_customer_id: provenExternalId,
+              // They are a real account now, however they first arrived.
+              acquisition_channel: 'app',
+            } as never),
+          );
+        } catch {
+          /* Best effort: a failed promotion must not block the chat. The next
+             session from the app tries again. */
+        }
+      }
       return {
         id: existing.id,
         isNew: false,
         name: existing.name ?? null,
         phone: existing.phone ?? null,
+        externalCustomerId: promote ? provenExternalId : (existing.external_customer_id ?? null),
+        promoted: promote,
       };
+    }
 
     try {
       /*
@@ -116,9 +180,7 @@ export class GatewayDirectus {
       const created = (await this.client.request(
         createItem('contacts', {
           vendor: vendorUuid,
-          external_customer_id: isPhoneDerivedCustomerId(claims.customer_id)
-            ? null
-            : claims.customer_id,
+          external_customer_id: provenExternalId,
           /* How they reached us, kept because it is worth something later: a
            * walk-in is somebody who was standing in a branch, which is exactly
            * the sort of thing an offer wants to know. Its own column rather
@@ -130,7 +192,14 @@ export class GatewayDirectus {
           email,
         } as never),
       )) as { id: string };
-      return { id: created.id, isNew: true, name, phone };
+      return {
+        id: created.id,
+        isNew: true,
+        name,
+        phone,
+        externalCustomerId: provenExternalId,
+        promoted: false,
+      };
     } catch (err) {
       // The widget reconnects aggressively, so multiple onboarding flows can
       // race: each reads "not found" then races to create the same contact,
@@ -139,7 +208,14 @@ export class GatewayDirectus {
       // winning create produced. Only rethrow if it genuinely doesn't exist.
       const raced = await findExisting();
       if (raced)
-        return { id: raced.id, isNew: false, name: raced.name ?? null, phone: raced.phone ?? null };
+        return {
+          id: raced.id,
+          isNew: false,
+          name: raced.name ?? null,
+          phone: raced.phone ?? null,
+          externalCustomerId: raced.external_customer_id ?? null,
+          promoted: false,
+        };
       throw err;
     }
   }
@@ -231,7 +307,24 @@ export class GatewayDirectus {
     vendorUuid: string,
     contactId: string,
     phone: string,
+    /**
+     * True when this contact is a KNOWN Yiji customer (we hold their id).
+     *
+     * The whole reason a walk-in gets its own thread is that the phone was
+     * typed, not proven — attaching an unverified session to a thread that
+     * number already owns would hand a stranger somebody's history. That
+     * reasoning is about the CONTACT, not about the door they came through:
+     * once a person has been identified through the Yiji app, the contact is
+     * no longer a guess, and a later walk-in by the same number is the same
+     * customer continuing the same conversation. Splitting them into a second
+     * thread is what made one customer appear twice in the inbox.
+     */
+    known = false,
   ): Promise<{ id: string; created: boolean }> {
+    if (known) {
+      const live = await this.findLiveConversation(vendorUuid, contactId);
+      if (live) return { id: live, created: false };
+    }
     const created = (await this.client.request(
       createItem('conversations', {
         vendor: vendorUuid,
@@ -246,11 +339,17 @@ export class GatewayDirectus {
     await this.persistMessage({
       conversationId: created.id,
       senderType: 'system',
-      content:
-        `Walk-in chat — started from a store QR code. The number ${phone} was ` +
-        `typed by the visitor and has NOT been verified, and no earlier chat ` +
-        `history is shown in this session. Confirm who you are speaking to ` +
-        `before granting compensation.`,
+      // The note must describe THIS session honestly. A known customer walking
+      // in is a different situation from an unidentified one, and telling an
+      // agent to doubt a customer we have already identified would be false
+      // caution — the kind that gets ignored, taking the real warnings with it.
+      content: known
+        ? `Walk-in chat — started from a store QR code by ${phone}, a customer ` +
+          `already identified in the Yiji app. Their order history is available.`
+        : `Walk-in chat — started from a store QR code. The number ${phone} was ` +
+          `typed by the visitor and has NOT been verified, and no earlier chat ` +
+          `history is shown in this session. Confirm who you are speaking to ` +
+          `before granting compensation.`,
       isInternalNote: true,
     }).catch(() => {
       /* The warning is important, but a conversation the customer can use is
