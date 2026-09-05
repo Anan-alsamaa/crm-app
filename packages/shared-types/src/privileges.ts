@@ -15,6 +15,21 @@
  * the things that only the owner holds, and no edit to any role can change
  * that, because the capability does not exist as a grantable thing.
  *
+ * THE OWNER-ONLY INVENTORY (2026-09-05), so the boundary is one list:
+ *
+ *   in this app     Vendors; AI settings; editing the Administrator's own
+ *                   account; assigning any admin_access or service role;
+ *                   the ceiling override in the Roles editor.
+ *   in AWS          The ECS task definitions — which carry the Yiji
+ *                   credentials and the coupon delivery switch
+ *                   (YIJI_COUPON_DELIVERY). Writable only by the owner's IAM
+ *                   user.
+ *   in GitHub       Production deploys — the `prod` environment requires the
+ *                   owner's review before any workflow may run against it.
+ *
+ * Anything new that moves money, data or credentials belongs on this list,
+ * gated with `ownerOnly` — not with a privilege.
+ *
  * The extension's CATALOG stays the authority on what each key GRANTS in the
  * database — a tick with no catalog entry is stripped server-side. None of
  * this is the security boundary; Directus is. This decides what a person is

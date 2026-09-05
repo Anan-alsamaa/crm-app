@@ -1277,7 +1277,8 @@
       "ticket_update": "Ticket update",
       "reminder": "Reminder",
       "escalation": "Escalation",
-      "automation": "Automation"
+      "automation": "Automation",
+      "access_change": "Access change"
     },
     "allRead": "All caught up",
     "markAllRead": "Mark all read",

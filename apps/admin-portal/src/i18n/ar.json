@@ -1525,7 +1525,8 @@
       "ticket_update": "تحديث تذكرة",
       "reminder": "تذكير",
       "escalation": "تصعيد",
-      "automation": "أتمتة"
+      "automation": "أتمتة",
+      "access_change": "تغيير في الصلاحيات"
     },
     "allRead": "لا جديد لديك",
     "markAllRead": "تعليم الكل كمقروء",

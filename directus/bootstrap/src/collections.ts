@@ -716,6 +716,7 @@ export const collections: CollectionSpec[] = [
           'escalation',
           'automation',
           'high_value_coupon',
+          'access_change',
         ],
       },
       { field: 'title', type: 'string' },

@@ -151,6 +151,9 @@ export const NotificationType = z.enum([
      is the case where nobody should have to be on the right screen to find
      out. See COUPON_ALERT_THRESHOLD_SAR. */
   'high_value_coupon',
+  /* The access model moved: a role created, edited or deleted, or a person
+     moved to another role. Addressed to the project owner(s) only. */
+  'access_change',
 ]);
 export type NotificationType = z.infer<typeof NotificationType>;
 

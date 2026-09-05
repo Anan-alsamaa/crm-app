@@ -122,7 +122,9 @@ export default ({ action }, { services, database, getSchema, logger }) => {
 
   function couponExposure(row) {
     const cap = Number(row?.max_discount ?? 0) || 0;
-    const category = String(row?.discount_category ?? '').trim().toLowerCase();
+    const category = String(row?.discount_category ?? '')
+      .trim()
+      .toLowerCase();
     if (PERCENTAGE_CATEGORIES.has(category)) return cap > 0 ? cap : 0;
     const value = Number(row?.coupon_value ?? 0) || 0;
     return Math.max(value, cap > 0 ? cap : 0);
@@ -163,14 +165,25 @@ export default ({ action }, { services, database, getSchema, logger }) => {
           privileges = [];
         }
       }
-      if (Array.isArray(privileges) && privileges.includes('approve_coupons')) {
-        roleIds.add(String(r.directus_role));
-      }
+      // The column holds `{ privilege: true }` (see app-roles-sync). This
+      // tested for an ARRAY, so resolution by privilege matched no role at all
+      // and only the built-in names below ever received the alert — the same
+      // reach-nobody failure the note above describes, one layer down.
+      const holds = Array.isArray(privileges)
+        ? privileges.includes('approve_coupons')
+        : privileges && typeof privileges === 'object' && privileges.approve_coupons === true;
+      if (holds) roleIds.add(String(r.directus_role));
     }
 
     const builtins = await database('directus_roles').select('id', 'name');
     for (const r of builtins) {
-      if (BUILTIN_APPROVER_ROLES.has(String(r.name ?? '').trim().toLowerCase())) {
+      if (
+        BUILTIN_APPROVER_ROLES.has(
+          String(r.name ?? '')
+            .trim()
+            .toLowerCase(),
+        )
+      ) {
         roleIds.add(String(r.id));
       }
     }
@@ -242,5 +255,141 @@ export default ({ action }, { services, database, getSchema, logger }) => {
     logger?.info?.(
       `notify-on-change: high-value coupon ${amount} alerted ${recipients.length} approver(s)`,
     );
+  });
+
+  /* ── Alerts on the tier boundary ──────────────────────────────────────── */
+
+  /**
+   * The project owner(s): every active user on a role whose policy carries
+   * admin_access. Resolved from the policy graph, not from a role name, so it
+   * survives a rename — and COUNTED against the database when this was
+   * written, because "notify the admins" has reached nobody here before.
+   */
+  async function ownerRecipients() {
+    const rows = await database('directus_users as u')
+      .join('directus_access as a', 'a.role', 'u.role')
+      .join('directus_policies as p', 'p.id', 'a.policy')
+      .where('p.admin_access', true)
+      .andWhere('u.status', 'active')
+      .distinct('u.id')
+      .pluck('u.id');
+    return rows;
+  }
+
+  const who = async (userId) => {
+    if (!userId) return 'the system';
+    const u = await database('directus_users').where({ id: userId }).first('email', 'first_name');
+    return u?.email ?? u?.first_name ?? String(userId);
+  };
+  const roleName = async (roleId) => {
+    if (!roleId) return '(none)';
+    const r = await database('directus_roles').where({ id: roleId }).first('name');
+    return r?.name ?? String(roleId);
+  };
+
+  /**
+   * Tell the owner when the ACCESS MODEL moves — a role edited, a role
+   * created or deleted, a person moved to a different role.
+   *
+   * Nothing here decides whether the change was allowed; the app-roles-sync
+   * ceiling and the manage_users fence already did that. This is the part
+   * that keeps the owner in the loop on the changes that WERE allowed: a
+   * manager who feels in control is fine, one who reshapes roles without the
+   * owner knowing is the thing to see. Not skipping the actor would tell the
+   * owner about their own edits, so `notify` drops self-notifications as
+   * usual.
+   */
+  async function alertOwners(context, { title, body, link, payload }) {
+    const schema = await getSchema();
+    const actor = context?.accountability?.user ?? null;
+    let recipients = [];
+    try {
+      recipients = await ownerRecipients();
+    } catch (err) {
+      logger?.warn?.(`notify-on-change: could not resolve owners: ${err?.message ?? err}`);
+      return;
+    }
+    if (recipients.length === 0) {
+      logger?.warn?.(`notify-on-change: access change "${title}" but NO active owner to tell`);
+      return;
+    }
+    for (const recipient of recipients) {
+      await notify(schema, {
+        recipient,
+        actor,
+        type: 'access_change',
+        title,
+        body,
+        link,
+        payload: { ...(payload ?? {}), actor },
+      });
+    }
+    logger?.info?.(
+      `notify-on-change: access change "${title}" alerted ${recipients.length} owner(s)`,
+    );
+  }
+
+  action('app_roles.items.create', async (meta, context) => {
+    const name = meta?.payload?.name ?? 'a role';
+    await alertOwners(context, {
+      title: `Role created: ${name}`,
+      body: `${await who(context?.accountability?.user)} created the role "${name}".`,
+      link: '/roles',
+      payload: { roleId: meta?.key ?? null },
+    });
+  });
+
+  action('app_roles.items.update', async (meta, context) => {
+    const changed = Object.keys(meta?.payload ?? {}).filter(
+      (k) => k !== 'directus_role' && k !== 'directus_policy',
+    );
+    if (changed.length === 0) return; // the sync's own write-back, not a person
+    for (const key of meta?.keys ?? []) {
+      const row = await database('app_roles').where({ id: key }).first('name');
+      const name = row?.name ?? String(key);
+      await alertOwners(context, {
+        title: `Role changed: ${name}`,
+        body: `${await who(context?.accountability?.user)} changed ${changed.join(', ')} on the role "${name}".`,
+        link: '/roles',
+        payload: { roleId: key, changed },
+      });
+    }
+  });
+
+  action('app_roles.items.delete', async (meta, context) => {
+    for (const key of meta?.keys ?? []) {
+      await alertOwners(context, {
+        title: 'Role deleted',
+        body: `${await who(context?.accountability?.user)} deleted a role (${key}).`,
+        link: '/roles',
+        payload: { roleId: key },
+      });
+    }
+  });
+
+  // System collections emit `users.*`, not `users.items.*`.
+  action('users.create', async (meta, context) => {
+    const role = meta?.payload?.role;
+    if (!role) return;
+    const email = meta?.payload?.email ?? meta?.key ?? 'a user';
+    await alertOwners(context, {
+      title: `User created: ${email}`,
+      body: `${await who(context?.accountability?.user)} created ${email} with the role "${await roleName(role)}".`,
+      link: '/users',
+      payload: { userId: meta?.key ?? null, role },
+    });
+  });
+
+  action('users.update', async (meta, context) => {
+    if (!('role' in (meta?.payload ?? {}))) return; // only ROLE changes are a boundary event
+    const role = meta.payload.role;
+    for (const key of meta?.keys ?? []) {
+      await alertOwners(context, {
+        title: `Role change for ${await who(key)}`,
+        body: `${await who(context?.accountability?.user)} moved ${await who(key)} to the role "${await roleName(role)}".`,
+        link: '/users',
+        payload: { userId: key, role },
+      });
+    }
   });
 };

@@ -17,6 +17,7 @@ const TONE_BY_TYPE: Record<string, NotifTone> = {
   reminder: 'warning',
   escalation: 'destructive',
   automation: 'muted',
+  access_change: 'destructive',
 };
 
 /**
