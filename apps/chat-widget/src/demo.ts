@@ -46,7 +46,10 @@ interface CustomerIdentity {
 const DEFAULT_IDENTITY: CustomerIdentity = {
   vendor_id: '1',
   customer_id: 'demo-customer-phone',
-  phone: '+966555123456',
+  // 05XXXXXXXX is the one stored shape (see normalizePhone). The demo seed
+  // used +966… , which is the only place in the app that still spelled a
+  // Saudi number the other way.
+  phone: '0555123456',
 };
 
 function resolveIdentity(): CustomerIdentity {
