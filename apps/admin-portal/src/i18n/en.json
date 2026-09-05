@@ -35,7 +35,7 @@
     "customFields": "Custom fields",
     "reports": "Scheduled reports",
     "reportsGroup": "Reports",
-    "aiConfig": "AI assistance",
+    "aiConfig": "AI settings",
     "intelligence": "Intelligence",
     "primary": "Primary navigation",
     "openMenu": "Open menu",
@@ -65,7 +65,7 @@
     "compensationAll": "Compensation",
     "ticketsGroup": "Tickets",
     "aiConfigGroup": "AI",
-    "aiConfigShort": "AI"
+    "aiConfigShort": "AI settings"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1181,7 +1181,13 @@
       "importData": "Import tickets",
       "manageLists": "Edit dropdown lists & settings",
       "manageRestaurants": "Manage brands & branches",
-      "manageUsers": "Manage users"
+      "manageUsers": "Manage users",
+      "viewOpsDashboard": "View the Operations dashboard",
+      "scheduleReports": "Schedule reports",
+      "manageSla": "Edit SLA policies",
+      "manageRoles": "Manage roles & privileges",
+      "manageBackup": "Run backups",
+      "useDirectusApp": "Use the Directus admin app"
     },
     "brands": "Brand access",
     "brandsHelp": "Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a chat has no brand until a ticket gives it one.",
@@ -1197,7 +1203,8 @@
     "clearGroup": "None",
     "branchSelectShown": "Select these {{n}}",
     "branchDeselectShown": "Clear these {{n}}",
-    "branchCount": "{{n}} selected."
+    "branchCount": "{{n}} selected.",
+    "ceilingHint": "You cannot grant a privilege your own role does not hold."
   },
   "backup": {
     "title": "Backup",
@@ -1224,7 +1231,9 @@
     "noPortalAccess": "This portal is not for your role",
     "noPortalAccessHint": "Your account is signed in, but none of the screens here are open to it. If you handle customer chats, use the agent portal instead.",
     "noPagePrivilege": "You do not have access to this page",
-    "noPagePrivilegeHint": "Your role does not include this. An administrator can change that under Roles & privileges."
+    "noPagePrivilegeHint": "Your role does not include this. An administrator can change that under Roles & privileges.",
+    "ownerOnly": "Only the project owner can open this page",
+    "ownerOnlyHint": "This is not something a role can be given. If you need a change here, ask the project owner."
   },
   "agentDash": {
     "title": "Agent",
@@ -1256,5 +1265,32 @@
   },
   "couponSpend": {
     "reconcile": "Tickets in this range carry {{total}} SAR in total. {{gap}} SAR of that was set straight on the ticket, with no approval raised here."
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications.",
+    "markRead": "Mark read",
+    "type": {
+      "sla_warning": "SLA warning",
+      "sla_breach": "SLA breach",
+      "assignment": "Assignment",
+      "mention": "Mention",
+      "ticket_update": "Ticket update",
+      "reminder": "Reminder",
+      "escalation": "Escalation",
+      "automation": "Automation",
+      "access_change": "Access change"
+    },
+    "allRead": "All caught up",
+    "markAllRead": "Mark all read",
+    "emptyHint": "New SLA warnings, mentions, and assignments land here.",
+    "emptyAllHint": "You have no notifications yet.",
+    "today": "Today",
+    "earlier": "Earlier",
+    "view": "View",
+    "managePreferences": "Manage notification preferences",
+    "unreadCount": "{{count}} unread",
+    "tabUnread": "Unread",
+    "tabAll": "All"
   }
 }

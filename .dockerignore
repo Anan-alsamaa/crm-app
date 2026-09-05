@@ -3,6 +3,15 @@
 **/node_modules
 **/dist
 **/build
+
+# EXCEPTION: super-header-interface's dist/ is a COMMITTED artifact, not build
+# output. It is a Vue interface extension whose compiled bundle is checked in,
+# and directus/Dockerfile bakes it into the image (Fargate cannot bind-mount
+# extensions). Without this negation the extension is silently absent from the
+# image — which is exactly the class of failure the Dockerfile's build-time
+# guard now catches. The four other extensions are plain JS and unaffected.
+!directus/extensions/super-header-interface/dist
+!directus/extensions/super-header-interface/dist/**
 **/.turbo
 **/coverage
 **/.vite

@@ -34,6 +34,7 @@ import {
   chatHandoffs,
   comparisonRows,
   conversationTimestamps,
+  readChunked,
   dailyTrend,
   firstResponseSec,
   formatDuration,
@@ -139,21 +140,33 @@ function useChatTimings(filters: Filters) {
        * permissions gap cannot empty the page. */
       const subjectOf = new Map<string, string>();
       try {
-        const linked = (await directus.request(
-          readItems(
-            'tickets' as never,
-            {
-              limit: -1,
-              filter: { conversation: { _in: conversations.map((c) => c.id) } },
-              fields: ['conversation', 'subject', 'complaint_type'],
-              sort: ['-date_created'],
-            } as never,
-          ),
-        )) as unknown as Array<{
+        // Chunked: every conversation id in one query string is an HTTP 414
+        // from CloudFront once the count grows. See readChunked.
+        const linked = await readChunked<{
           conversation: string | null;
           subject: string | null;
           complaint_type: string | null;
-        }>;
+        }>(
+          conversations.map((c) => c.id),
+          (ids) =>
+            directus.request(
+              readItems(
+                'tickets' as never,
+                {
+                  limit: -1,
+                  filter: { conversation: { _in: ids } },
+                  fields: ['conversation', 'subject', 'complaint_type'],
+                  sort: ['-date_created'],
+                } as never,
+              ),
+            ) as unknown as Promise<
+              Array<{
+                conversation: string | null;
+                subject: string | null;
+                complaint_type: string | null;
+              }>
+            >,
+        );
         for (const tk of linked) {
           if (!tk.conversation) continue;
           const label = tk.complaint_type?.trim() || tk.subject?.trim();
@@ -166,24 +179,30 @@ function useChatTimings(filters: Filters) {
 
       // First response needs the messages: the conversation row knows when it
       // started, never when somebody answered.
-      const messages = (await directus.request(
-        readItems(
-          'messages' as never,
-          {
-            limit: -1,
-            filter: {
-              conversation: { _in: conversations.map((c) => c.id) },
-              is_internal_note: { _eq: false },
-            },
-            fields: ['conversation', 'sender_type', 'date_created'],
-            sort: ['date_created'],
-          } as never,
-        ),
-      )) as unknown as Array<{
+      const messages = await readChunked<{
         conversation: string;
         sender_type: string;
         date_created: string | null;
-      }>;
+      }>(
+        conversations.map((c) => c.id),
+        (ids) =>
+          directus.request(
+            readItems(
+              'messages' as never,
+              {
+                limit: -1,
+                filter: {
+                  conversation: { _in: ids },
+                  is_internal_note: { _eq: false },
+                },
+                fields: ['conversation', 'sender_type', 'date_created'],
+                sort: ['date_created'],
+              } as never,
+            ),
+          ) as unknown as Promise<
+            Array<{ conversation: string; sender_type: string; date_created: string | null }>
+          >,
+      );
 
       // Shared with the agent portal — see conversationTimestamps in
       // @yiji/reports. Two portals reducing the same messages by hand is how
@@ -198,15 +217,31 @@ function useChatTimings(filters: Filters) {
        */
       let handoffs = new Map<string, { passedOn: boolean; takenBy: string | null }>();
       try {
-        const events = (await directus.request(
-          readItems(
-            'routing_events' as never,
-            {
-              limit: -1,
-              filter: { conversation: { _in: conversations.map((c) => c.id) } },
-              fields: ['conversation', 'agent', 'outcome', 'stage'],
-            } as never,
-          ),
+        const events = (await readChunked<{
+          conversation: string;
+          agent: string | null;
+          outcome: string;
+          stage: string;
+        }>(
+          conversations.map((c) => c.id),
+          (ids) =>
+            directus.request(
+              readItems(
+                'routing_events' as never,
+                {
+                  limit: -1,
+                  filter: { conversation: { _in: ids } },
+                  fields: ['conversation', 'agent', 'outcome', 'stage'],
+                } as never,
+              ),
+            ) as unknown as Promise<
+              Array<{
+                conversation: string;
+                agent: string | null;
+                outcome: string;
+                stage: string;
+              }>
+            >,
         )) as unknown as Array<{
           conversation: string;
           agent: string | null;

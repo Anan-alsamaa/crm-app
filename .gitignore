@@ -138,3 +138,8 @@ var/
 # users.json holds staff accounts. It sat untracked-but-not-ignored, one
 # `git add -A` away from being published to GitHub.
 Ayman/
+.directus-test.env
+
+# Rendered task definitions from scripts/deploy-service.sh — they carry the
+# live environment values and must never be committed.
+.taskdef-*.json

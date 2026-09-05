@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, updateItem } from '@directus/sdk';
-import { approvedCouponPatch, type CouponApprovalStatus } from '@yiji/shared-types';
+import {
+  approvedCouponPatch,
+  COUPON_APPROVED_STATUSES,
+  type CouponApprovalStatus,
+} from '@yiji/shared-types';
 import { jobProducer } from '../../lib/job-producer.js';
 import { directus } from '../../lib/directus.js';
 
@@ -146,13 +150,13 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
             // that just came in is the one somebody is waiting on.
             sort: ['-date_created'],
             limit: -1,
-            // "approved" includes "assigned": delivery to Yiji moves the status
-            // on, and an approved coupon must not vanish from the Approved tab
-            // the moment the worker gets it there.
+            // "approved" is every APPROVED decision — 'edited' (terms amended)
+            // and 'assigned' (delivered) included. Listing only two of the three
+            // meant an amended approval matched NO tab and simply vanished.
             ...(status === 'all'
               ? {}
               : status === 'approved'
-                ? { filter: { status: { _in: ['approved', 'assigned'] } } }
+                ? { filter: { status: { _in: [...COUPON_APPROVED_STATUSES] } } }
                 : { filter: { status: { _eq: status } } }),
           } as never,
         ),

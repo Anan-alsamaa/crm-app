@@ -578,6 +578,15 @@ export function saveColumnOrder<T extends string>(storageKey: string, order: rea
 export const TICKET_REPORT_ORDER_KEY = 'yiji.ticketReport.columnOrder';
 
 /**
+ * Storage key for the compensation report's column arrangement.
+ *
+ * Its OWN key, deliberately: the two reports answer different questions and
+ * share no columns, so one arrangement carried onto the other would only
+ * scramble it.
+ */
+export const COMPENSATION_REPORT_ORDER_KEY = 'yiji.compensationReport.columnOrder';
+
+/**
  * The compensation column reads "Compensated" or "Not compensated", always —
  * never blank.
  *

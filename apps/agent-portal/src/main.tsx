@@ -6,12 +6,15 @@ import '@fontsource-variable/outfit';
 import './i18n/index.js';
 import './index.css';
 import { App } from './App.js';
+import { EnvironmentBanner } from '@yiji/ui';
+import { runtimeConfig } from '@yiji/shared-config';
 
 const queryClient = new QueryClient();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
+      <EnvironmentBanner environment={runtimeConfig().ENVIRONMENT} />
       <App />
     </QueryClientProvider>
   </React.StrictMode>,

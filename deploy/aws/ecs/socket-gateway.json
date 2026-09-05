@@ -1,0 +1,111 @@
+{
+  "family": "crm-{{ENV}}-socket-gateway",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/crm-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/crm-task-role-{{ENV}}",
+  "containerDefinitions": [
+    {
+      "name": "socket-gateway",
+      "image": "{{ACCOUNT_ID}}.dkr.ecr.{{REGION}}.amazonaws.com/crm/socket-gateway:{{IMAGE_TAG}}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        },
+        {
+          "containerPort": 8081,
+          "protocol": "tcp"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/crm-{{ENV}}/socket-gateway",
+          "awslogs-region": "{{REGION}}",
+          "awslogs-stream-prefix": "socket-gateway"
+        }
+      },
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "PORT",
+          "value": "8080"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "info"
+        },
+        {
+          "name": "DIRECTUS_INTERNAL_URL",
+          "value": "http://directus.crm.local:8055"
+        },
+        {
+          "name": "REDIS_ENABLED",
+          "value": "true"
+        },
+        {
+          "name": "REDIS_URL",
+          "value": "redis://clustercfg.redis-yiji.6ea0wx.use2.cache.amazonaws.com:6379"
+        },
+        {
+          "name": "CORS_ORIGIN",
+          "value": "{{PORTAL_ORIGINS}}"
+        },
+        {
+          "name": "WIDGET_CORS_ORIGIN",
+          "value": "*"
+        },
+        {
+          "name": "SOCKET_TRANSPORTS",
+          "value": "polling,websocket"
+        },
+        {
+          "name": "WEBHOOK_TOLERANCE_SEC",
+          "value": "300"
+        },
+        {
+          "name": "ATTACHMENT_MAX_BYTES",
+          "value": "10485760"
+        },
+        {
+          "name": "MSG_RATE_CAPACITY",
+          "value": "20"
+        },
+        {
+          "name": "MSG_RATE_REFILL_PER_SEC",
+          "value": "5"
+        },
+        {
+          "name": "OTEL_SERVICE_NAME",
+          "value": "socket-gateway"
+        },
+        {
+          "name": "YIJI_JWT_SECRET",
+          "value": "{{SECRET:YIJI_JWT_SECRET}}"
+        },
+        {
+          "name": "SVC_GATEWAY_TOKEN",
+          "value": "{{SECRET:SVC_GATEWAY_TOKEN}}"
+        },
+        {
+          "name": "YIJI_WEBHOOK_SECRET",
+          "value": "{{SECRET:YIJI_WEBHOOK_SECRET}}"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -qO- http://127.0.0.1:8081/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

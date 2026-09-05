@@ -101,10 +101,28 @@ async function main(): Promise<void> {
   logger.info('SLA reconcile sweep scheduled (every 60s)');
 
   // Recurring inactivity sweep — enqueues `inactivity` automation triggers for
-  // conversations gone quiet past the threshold (default 120m, every 5m).
+  // conversations gone quiet past the threshold (default 120m; swept every sweepMs).
+  /*
+   * How often the DB-driven safety-net sweeps run.
+   *
+   * These are what make the system survive losing Redis: the queue holds only
+   * SCHEDULING, while the durable state is in Postgres, so each sweep re-derives
+   * its own work (open tickets needing SLA dates, coupons approved but not yet
+   * delivered, conversations gone quiet). After a Redis outage the queue comes
+   * back empty and the next sweep refills it — nothing is permanently lost, and
+   * the worst case is a delay of one interval.
+   *
+   * 60s rather than the previous 300s: each sweep is a single indexed query
+   * returning a handful of rows, so the cost is negligible, and it cuts
+   * worst-case recovery after an outage by 80%. Tunable per environment; the
+   * normal path is still IMMEDIATE (an approval enqueues its job right away),
+   * so this interval only bounds recovery, not everyday latency.
+   */
+  const sweepMs = Number(process.env.SWEEP_INTERVAL_MS ?? 60_000);
+
   const inactivityMinutes = Number(process.env.INACTIVITY_MINUTES ?? 120);
-  await scheduleInactivitySweep(queues[QUEUES.automation], 5 * 60_000);
-  logger.info({ inactivityMinutes }, 'inactivity sweep scheduled (every 5m)');
+  await scheduleInactivitySweep(queues[QUEUES.automation], sweepMs);
+  logger.info({ inactivityMinutes, sweepMs }, 'inactivity sweep scheduled');
 
   /*
    * Recurring coupon delivery sweep.
@@ -126,10 +144,10 @@ async function main(): Promise<void> {
     }).catch((err) => logger.warn({ err: (err as Error).message }, 'coupon delivery sweep failed'));
   };
   void couponSweep();
-  const couponSweepTimer = setInterval(() => void couponSweep(), 5 * 60_000);
+  const couponSweepTimer = setInterval(() => void couponSweep(), sweepMs);
   logger.info(
-    { enabled: (process.env.YIJI_COUPON_DELIVERY ?? '').trim().toLowerCase() === 'on' },
-    'coupon delivery sweep scheduled (every 5m) — set YIJI_COUPON_DELIVERY=on to send',
+    { enabled: (process.env.YIJI_COUPON_DELIVERY ?? '').trim().toLowerCase() === 'on', sweepMs },
+    'coupon delivery sweep scheduled — set YIJI_COUPON_DELIVERY=on to send',
   );
 
   // Scheduled reports (§16/§18): register a BullMQ Job Scheduler per report that
@@ -150,7 +168,7 @@ async function main(): Promise<void> {
     void syncScheduledReports(queues[QUEUES.reports], { directus, logger }).catch((err) =>
       logger.warn({ err: (err as Error).message }, 'scheduled-reports re-sync failed'),
     );
-  }, 5 * 60_000);
+  }, sweepMs);
   reportSyncTimer.unref();
 
   const deps: ProcessorDeps = {

@@ -358,6 +358,8 @@ export function Widget({ config }: { config: WidgetConfig }) {
         contact,
         isNew,
       }) => {
+        // null on a fresh session; `onConversationReady` fills it in when the
+        // customer's first message creates the conversation.
         convoRef.current = conversationId;
         if (b && typeof b === 'object') setBranding(b as Branding);
         setAgentsOnline(count);
@@ -380,7 +382,10 @@ export function Widget({ config }: { config: WidgetConfig }) {
             ...prev,
             {
               id: GREETING_ID,
-              conversationId,
+              // '' until the conversation exists — the greeting is a local,
+              // client-side message and is never persisted, so it does not
+              // need a real id.
+              conversationId: conversationId ?? '',
               senderType: 'agent',
               content: greeting,
               attachments: [],
@@ -388,6 +393,12 @@ export function Widget({ config }: { config: WidgetConfig }) {
             },
           ];
         });
+      },
+      // The conversation now exists — the customer's first message created it.
+      // Until this fires the widget has no id, because opening the widget no
+      // longer creates a conversation.
+      onConversationReady: ({ conversationId }) => {
+        convoRef.current = conversationId;
       },
       onAgentsPresence: (count) => {
         setAgentsOnline(count);
@@ -492,13 +503,17 @@ export function Widget({ config }: { config: WidgetConfig }) {
   const send = () => {
     const content = draft.trim();
     const attachmentIds = pending.map((p) => p.id);
-    if ((!content && attachmentIds.length === 0) || !convoRef.current || !socketRef.current) return;
+    // NOT gated on convoRef: the conversation is created BY the first message,
+    // so on a fresh session there is no id yet and requiring one here would
+    // mean the customer could never send anything at all. The gateway resolves
+    // (and creates) the conversation, then tells us its id.
+    if ((!content && attachmentIds.length === 0) || !socketRef.current) return;
     const cmid = clientId();
     setMessages((prev) => [
       ...prev,
       {
         id: cmid,
-        conversationId: convoRef.current!,
+        conversationId: convoRef.current ?? '',
         senderType: 'customer',
         content,
         attachments: attachmentIds,
@@ -507,7 +522,9 @@ export function Widget({ config }: { config: WidgetConfig }) {
       },
     ]);
     socketRef.current.emit('message:send', {
-      conversationId: convoRef.current,
+      // Omitted entirely on a first message — the server decides which
+      // conversation this belongs to, and creates it if there is none.
+      ...(convoRef.current ? { conversationId: convoRef.current } : {}),
       content,
       ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
       clientMsgId: cmid,
@@ -669,6 +686,16 @@ export function Widget({ config }: { config: WidgetConfig }) {
     >
       {open && (
         <div className="yiji-panel" role="dialog" aria-label={tr.title}>
+          {/* Staging marker. The widget is embedded in a CUSTOMER'S storefront
+              and has no /config.js, so unlike the portals this comes from a
+              build-time variable. Absent means production, so the warning is
+              opt-in and can never appear on a real customer's site by
+              accident. */}
+          {import.meta.env.VITE_ENVIRONMENT === 'staging' && (
+            <div className="yiji-env-banner" role="status">
+              Staging &middot; test chat, not monitored
+            </div>
+          )}
           <header className="yiji-header">
             <div className="yiji-header-row">
               <div className="yiji-header-text yiji-header-text-with-logo">

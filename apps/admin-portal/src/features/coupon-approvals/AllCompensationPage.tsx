@@ -6,6 +6,7 @@ import {
   Button,
   cn,
   ConfirmDialog,
+  Drawer,
   ExportButtons,
   formatDate,
   formatRelative,
@@ -14,6 +15,7 @@ import {
   Pill,
   ReportKpi,
   ReportKpiStrip,
+  Input,
   Skeleton,
   Table,
   TablePager,
@@ -22,10 +24,19 @@ import {
   toast,
 } from '@yiji/ui';
 import { exportFileName } from '@yiji/shared-config';
+import { couponDecision } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { usePinnedWidth } from '../../lib/pinned-width.js';
 import { ColumnScroller } from '../../components/ColumnScroller.js';
-import { downloadCsv, toCsv } from '@yiji/reports';
+import {
+  COMPENSATION_REPORT_ORDER_KEY,
+  downloadCsv,
+  loadColumnOrder,
+  moveColumn,
+  reconcileColumnOrder,
+  saveColumnOrder,
+  toCsv,
+} from '@yiji/reports';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { TicketHistoryDrawer } from '../report-exports/TicketHistoryDrawer.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
@@ -43,6 +54,13 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
  * reconciling a coupon against an invoice needs the terms and the dates in one
  * glance, and hiding half of them by default only means finding the picker
  * first. The table scrolls sideways instead.
+ *
+ * The columns can, however, be REARRANGED — same interaction as the ticket
+ * breakdown report, same shared helpers, same per-report localStorage key.
+ * With 23 columns on a sideways-scrolling table, which three sit at the front
+ * decides whether the answer is visible or a swipe away, and that differs by
+ * who is reading: finance leads with the money, operations with the branch.
+ * Rearranging is not hiding, so the "everything is on screen" promise holds.
  */
 interface Row {
   id: string;
@@ -151,8 +169,45 @@ export function money(n: number | string | null | undefined): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, '');
 }
 
+/**
+ * Every column key, in the order the report ships with.
+ *
+ * Declared separately from the column definitions (which need `t` and so must
+ * be built inside the component) purely so the saved arrangement can be
+ * reconciled against it — a saved order naming a column that no longer exists,
+ * or missing one added since, is repaired rather than obeyed.
+ */
+const COMPENSATION_COLUMN_KEYS = [
+  'code',
+  'title',
+  'customer',
+  'phone',
+  'brand',
+  'store',
+  'order',
+  'item',
+  'issuing',
+  'delivery',
+  'couponType',
+  'category',
+  'worth',
+  'cap',
+  'uses',
+  'validFrom',
+  'validTo',
+  'state',
+  'agent',
+  'decidedBy',
+  'raised',
+  'decidedAt',
+  'reason',
+  'note',
+] as const;
+
+type CompensationColumnKey = (typeof COMPENSATION_COLUMN_KEYS)[number];
+
 interface Column {
-  key: string;
+  key: CompensationColumnKey;
   label: string;
   end?: boolean;
   get: (r: Row) => string;
@@ -223,6 +278,18 @@ export function AllCompensationPage() {
   // The right page size differs by task: 25 to read the queue, 500 to scan a
   // month before exporting. One fixed size served neither.
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  // The column arrangement — a browser preference, reconciled on load so it
+  // survives a column being added or removed. Same helpers, same behaviour as
+  // the ticket breakdown report.
+  const [order, setOrder] = useState<CompensationColumnKey[]>(() =>
+    reconcileColumnOrder(
+      loadColumnOrder<CompensationColumnKey>(COMPENSATION_REPORT_ORDER_KEY),
+      COMPENSATION_COLUMN_KEYS,
+    ),
+  );
+  const [showCols, setShowCols] = useState(false);
+  const [colQuery, setColQuery] = useState('');
+  const [dragKey, setDragKey] = useState<CompensationColumnKey | null>(null);
 
   const list = useMemo(() => rows.data ?? [], [rows.data]);
 
@@ -285,9 +352,11 @@ export function AllCompensationPage() {
     let approved = 0;
     let pending = 0;
     for (const r of filtered) {
-      const st = (r.status ?? 'pending').toLowerCase();
-      if (st === 'approved' || st === 'assigned') approved += 1;
-      if (st === 'pending') pending += 1;
+      // The DECISION, not the literal — `edited` is an approval with amended
+      // terms and was being left out of this count.
+      const decision = couponDecision(r.status);
+      if (decision === 'approved') approved += 1;
+      if (decision === 'pending') pending += 1;
       const pct = Number(r.coupon_percent);
       if (Number.isFinite(pct) && pct > 0) percentCoupons += 1;
       else {
@@ -320,7 +389,7 @@ export function AllCompensationPage() {
   const statusLabel = (r: Row) =>
     t(`status.${r.status ?? 'pending'}`, { ns: 'common', defaultValue: r.status ?? 'pending' });
 
-  const columns: Column[] = [
+  const columnDefs: Column[] = [
     {
       key: 'code',
       label: t('coupons.code', { defaultValue: 'Coupon code' }),
@@ -445,6 +514,57 @@ export function AllCompensationPage() {
       get: (r) => r.decision_note ?? '',
     },
   ];
+
+  /**
+   * The columns as the reader arranged them.
+   *
+   * One source of order for the table AND the export: an operator who moved
+   * "Worth" to the front and then exported would otherwise get a spreadsheet
+   * in a different order from the screen they arranged, which is worse than
+   * not offering the arrangement at all.
+   */
+  const byKey = new Map(columnDefs.map((c) => [c.key, c]));
+  /*
+   * Reconciled against the DEFINITIONS, not just the key list.
+   *
+   * Mapping the saved order and dropping whatever does not resolve would lose
+   * a column silently the moment the two lists disagreed — the exact failure
+   * shape this codebase keeps meeting: a filter that matches nothing and
+   * renders as a plausible, wrong table. Appending the unresolved definitions
+   * instead means a newly added column shows up at the end rather than
+   * vanishing, whatever a year-old saved arrangement says.
+   */
+  const ordered = reconcileColumnOrder(
+    order.filter((k) => byKey.has(k)),
+    columnDefs.map((c) => c.key),
+  );
+  const columns: Column[] = ordered
+    .map((k) => byKey.get(k))
+    .filter((c): c is Column => c !== undefined);
+
+  /**
+   * Move one column by `delta` places, persisting the new arrangement.
+   *
+   * Reorders `ordered` — the list the table actually renders — because the
+   * index the caller passes came from those rendered rows. Reordering the raw
+   * saved `order` instead would apply a position from one array to another.
+   */
+  const reorderTo = (key: CompensationColumnKey, to: number) => {
+    const from = ordered.indexOf(key);
+    if (from < 0) return;
+    const next = moveColumn(ordered, from, to);
+    setOrder(next);
+    saveColumnOrder(COMPENSATION_REPORT_ORDER_KEY, next);
+  };
+
+  const moveCol = (key: CompensationColumnKey, delta: number) =>
+    reorderTo(key, ordered.indexOf(key) + delta);
+
+  const resetOrder = () => {
+    const next = [...COMPENSATION_COLUMN_KEYS];
+    setOrder(next);
+    saveColumnOrder(COMPENSATION_REPORT_ORDER_KEY, next);
+  };
 
   /** What was filtered, for the file name — see `exportFileName`. */
   const scope = () => {
@@ -609,6 +729,19 @@ export function AllCompensationPage() {
             onClear={reset}
             actions={
               <div className="flex flex-wrap items-center gap-2">
+                {/* Arrange only — no checkboxes. Every column stays on screen
+                    by design (see the note on this component); what differs by
+                    reader is which ones come FIRST on a 23-column table that
+                    scrolls sideways. */}
+                <button
+                  type="button"
+                  onClick={() => setShowCols(true)}
+                  aria-expanded={showCols}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors duration-fast hover:bg-secondary hover:text-foreground"
+                >
+                  {t('agentReports.columns', { defaultValue: 'Columns' })}
+                  <span className="tabular-nums opacity-70">{columns.length}</span>
+                </button>
                 <ExportButtons
                   visibleCount={filtered.length}
                   totalCount={rows.data?.length ?? 0}
@@ -836,6 +969,144 @@ export function AllCompensationPage() {
               onClose={() => setHistoryOf(null)}
             />
           )}
+
+          {/* A dialog rather than a popover, matching the ticket breakdown:
+              arranging 23 columns is a task, and it needs room, a search and a
+              deliberate way out. */}
+          <Drawer
+            open={showCols}
+            onClose={() => setShowCols(false)}
+            title={t('agentReports.exportColumns', { defaultValue: 'Columns' })}
+            description={t('complaintReport.columnsHelp', {
+              defaultValue:
+                'Drag a row to reorder. The order here is the order in the table and the export.',
+            })}
+            width="lg"
+            footer={
+              <Button onClick={() => setShowCols(false)}>
+                {t('actions.done', { ns: 'common', defaultValue: 'Done' })}
+              </Button>
+            }
+          >
+            <div className="flex h-full flex-col">
+              <div className="space-y-2 border-b border-border p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                    {t('compensationAll.columnCount', {
+                      defaultValue: '{{n}} columns',
+                      n: columns.length,
+                    })}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-2xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+                    onClick={resetOrder}
+                  >
+                    {t('complaintReport.resetOrder', { defaultValue: 'Reset order' })}
+                  </button>
+                </div>
+                <Input
+                  value={colQuery}
+                  onChange={(e) => setColQuery(e.target.value)}
+                  className="h-7 text-xs"
+                  aria-label={t('complaintReport.findColumn', { defaultValue: 'Find a column' })}
+                  placeholder={t('complaintReport.findColumn', {
+                    defaultValue: 'Find a column…',
+                  })}
+                />
+              </div>
+              <ul className="flex-1 space-y-0.5 overflow-auto p-3">
+                {columns.map((c, i) => {
+                  // Filtering hides rows but never renumbers them: the position
+                  // shown is the real position in the report.
+                  if (
+                    colQuery.trim() &&
+                    !c.label.toLowerCase().includes(colQuery.trim().toLowerCase())
+                  ) {
+                    return null;
+                  }
+                  return (
+                    <li
+                      key={c.key}
+                      draggable
+                      onDragStart={(e) => {
+                        setDragKey(c.key);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onDragEnd={() => setDragKey(null)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (!dragKey || dragKey === c.key) return;
+                        reorderTo(dragKey, ordered.indexOf(c.key));
+                        setDragKey(null);
+                      }}
+                      className={cn(
+                        'flex items-center gap-1 rounded-lg',
+                        dragKey === c.key && 'opacity-40',
+                      )}
+                    >
+                      {/* Drag is the fast path; the arrows are the
+                          keyboard-reachable one. */}
+                      <span
+                        aria-hidden
+                        className="shrink-0 cursor-grab select-none px-1 text-muted-foreground/60 active:cursor-grabbing"
+                        title={t('complaintReport.dragHint', { defaultValue: 'Drag to reorder' })}
+                      >
+                        ⠿
+                      </span>
+                      <span className="w-5 shrink-0 text-end text-2xs tabular-nums text-muted-foreground/70">
+                        {i + 1}
+                      </span>
+                      <span className="flex-1 rounded-lg px-1.5 py-1.5 text-xs text-foreground">
+                        {c.label}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={i === 0}
+                        onClick={() => moveCol(c.key, -1)}
+                        aria-label={t('complaintReport.moveUp', {
+                          col: c.label,
+                          defaultValue: 'Move {{col}} earlier',
+                        })}
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        disabled={i === columns.length - 1}
+                        onClick={() => moveCol(c.key, 1)}
+                        aria-label={t('complaintReport.moveDown', {
+                          col: c.label,
+                          defaultValue: 'Move {{col}} later',
+                        })}
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        disabled={i === 0}
+                        onClick={() => moveCol(c.key, -i)}
+                        aria-label={t('complaintReport.moveFirst', {
+                          col: c.label,
+                          defaultValue: 'Move {{col}} to the front',
+                        })}
+                        title={t('complaintReport.moveFirst', {
+                          col: c.label,
+                          defaultValue: 'Move {{col}} to the front',
+                        })}
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                      >
+                        ⤒
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </Drawer>
 
           <ConfirmDialog
             open={!!confirmDelete}

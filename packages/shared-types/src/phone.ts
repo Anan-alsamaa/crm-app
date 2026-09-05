@@ -44,10 +44,16 @@ export function normalizePhone(raw: string | null | undefined): string {
   const digits = input.replace(/\D/g, '');
   if (!digits) return input;
 
+  // `00` is the international dialling prefix — 00966… is the same number as
+  // +966…, and it is what a phone's own contact card often stores. Without
+  // this the 00 fell through to the "already local" branch below and became
+  // `0966537301009`: a FOURTH spelling of a customer, matching nothing.
+  const dialled = digits.startsWith('00') ? digits.slice(2) : digits;
+
   // Carries the country code, with or without a + and with or without the
   // trunk 0 that some people leave in after it (+966 05… happens).
-  if (digits.startsWith(SA_CODE)) {
-    const rest = digits.slice(SA_CODE.length).replace(/^0+/, '');
+  if (dialled.startsWith(SA_CODE)) {
+    const rest = dialled.slice(SA_CODE.length).replace(/^0+/, '');
     return rest ? `0${rest}` : input;
   }
   // Already local: 05XXXXXXXX. Collapse a doubled trunk 0 but keep the single.

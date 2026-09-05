@@ -22,6 +22,7 @@ import {
 import { directus } from '../../lib/directus.js';
 import { BranchPicker } from './BranchPicker.js';
 import { PRIVILEGES, PRIVILEGE_GROUP, type Privilege } from '../../lib/privileges.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 
 /**
  * Roles & privileges, the way the ops portal does it: a named role is a set of
@@ -243,7 +244,26 @@ export function RolesPage() {
     reporting: <ChartIcon size={15} />,
     admin: <ShieldIcon size={15} />,
   };
-  const locked = selected?.builtin ?? false;
+  const { can, isOwner, user } = useAuth();
+  /**
+   * Two locks, one editor.
+   *
+   * A built-in row is defined in code. And the row that materialized to the
+   * role YOU are signed in with is locked for everyone but the owner: a person
+   * who can edit their own role can grant themselves whatever the ceiling
+   * allows, one tick at a time. The server refuses it too (app-roles-sync);
+   * this just says so before the click.
+   */
+  const ownRole =
+    !isOwner && !!selected?.directus_role && selected.directus_role === user?.role?.id;
+  const locked = (selected?.builtin ?? false) || ownRole;
+  /**
+   * THE CEILING. A privilege you do not hold is one you cannot grant — shown,
+   * so the shape of the whole catalogue stays visible, but not tickable. The
+   * owner (Directus admin_access) is unrestricted. Enforced again server-side,
+   * because a disabled toggle is a courtesy and a PATCH is not.
+   */
+  const grantable = (key: Privilege) => isOwner || can(key);
   /**
    * Which branches are offered. Fencing to a brand already implies its
    * branches, so once brands are picked the branch list narrows to them —
@@ -296,6 +316,16 @@ export function RolesPage() {
       defaultValue: 'Manage brands & branches',
     }),
     manage_users: t('roles.p.manageUsers', { defaultValue: 'Manage users' }),
+    view_ops_dashboard: t('roles.p.viewOpsDashboard', {
+      defaultValue: 'View the Operations dashboard',
+    }),
+    schedule_reports: t('roles.p.scheduleReports', { defaultValue: 'Schedule reports' }),
+    manage_sla: t('roles.p.manageSla', { defaultValue: 'Edit SLA policies' }),
+    manage_roles: t('roles.p.manageRoles', { defaultValue: 'Manage roles & privileges' }),
+    manage_backup: t('roles.p.manageBackup', { defaultValue: 'Run backups' }),
+    use_directus_app: t('roles.p.useDirectusApp', {
+      defaultValue: 'Use the Directus admin app',
+    }),
   };
 
   return (
@@ -604,6 +634,15 @@ export function RolesPage() {
                                     type="checkbox"
                                     className="peer sr-only"
                                     checked={!!draft.privileges[p.key]}
+                                    disabled={locked || !grantable(p.key)}
+                                    title={
+                                      !grantable(p.key)
+                                        ? t('roles.ceilingHint', {
+                                            defaultValue:
+                                              'You cannot grant a privilege your own role does not hold.',
+                                          })
+                                        : undefined
+                                    }
                                     onChange={(e) =>
                                       setDraft((d) => ({
                                         ...d,

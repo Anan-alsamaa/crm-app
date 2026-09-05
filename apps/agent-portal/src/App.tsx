@@ -21,6 +21,7 @@ import {
 } from '@yiji/ui';
 import { RouteError } from './components/RouteError.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
+import type { Privilege } from '@yiji/shared-types';
 import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
 import { ResetPassword, RESET_PASSWORD_PATH } from './pages/ResetPassword.js';
@@ -74,6 +75,8 @@ interface NavItem {
   end?: boolean;
   label: string;
   icon: typeof InboxIcon;
+  /** Shown only to a role holding this. Absent = every signed-in person. */
+  requires?: Privilege;
 }
 
 interface NavSection {
@@ -318,36 +321,42 @@ function MobileBrand() {
 function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, can } = useAuth();
   const displayName = staffDisplayName(user, 'Agent');
   // Command-palette open state is lifted here so the top-bar search trigger and
   // the Cmd/Ctrl+K shortcut both drive the one palette instance below.
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const sections: NavSection[] = [
+  const allSections: NavSection[] = [
     {
       heading: t('nav.work', { defaultValue: 'Work' }),
       items: [
-        { to: '/', end: true, label: t('nav.inbox'), icon: InboxIcon },
+        { to: '/', end: true, label: t('nav.inbox'), icon: InboxIcon, requires: 'use_chat' },
         {
           to: '/new-ticket',
           label: t('nav.addTicket', { defaultValue: 'Add ticket' }),
           icon: AddTicketIcon,
+          requires: 'create_tickets',
         },
-        { to: '/tickets', label: t('nav.tickets'), icon: TicketIcon },
+        { to: '/tickets', label: t('nav.tickets'), icon: TicketIcon, requires: 'view_tickets' },
         {
+          // The customer directory the inbox links into — it goes with chat.
           to: '/contacts',
           label: t('nav.contacts', { defaultValue: 'Contacts' }),
           icon: UsersIcon,
+          requires: 'use_chat',
         },
         {
           to: '/performance',
           label: t('nav.performance', { defaultValue: 'Agent performance' }),
           icon: ClockIcon,
+          requires: 'use_chat',
         },
         {
+          // Compensation is raised from a ticket, so it follows the ticket privilege.
           to: '/compensation',
           label: t('nav.compensation', { defaultValue: 'Compensation' }),
           icon: ClockIcon,
+          requires: 'create_tickets',
         },
       ],
     },
@@ -356,6 +365,12 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [{ to: '/preferences', label: t('nav.preferences'), icon: SettingsIcon }],
     },
   ];
+  // A hidden link is not a closed one — the routes below gate too — but a
+  // nav that offers work a role cannot do is a nav that teaches people to
+  // click and be refused.
+  const sections: NavSection[] = allSections
+    .map((s) => ({ ...s, items: s.items.filter((it) => !it.requires || can(it.requires)) }))
+    .filter((s) => s.items.length > 0);
   // ONE floating bar (the owner's reference layout — no sidebars): brand at
   // the start, the flat nav pills in the middle, utilities at the end. The
   // rail still exists but only as the mobile drawer.
@@ -458,7 +473,7 @@ export function App() {
           <Route
             path="/"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="use_chat">
                 <Shell>
                   <Inbox />
                 </Shell>
@@ -468,7 +483,7 @@ export function App() {
           <Route
             path="/tickets"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="view_tickets">
                 <Shell>
                   <TicketsPage />
                 </Shell>
@@ -480,7 +495,7 @@ export function App() {
           <Route
             path="/compensation-requests"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="create_tickets">
                 <Shell>
                   <CompensationPage />
                 </Shell>
@@ -490,7 +505,7 @@ export function App() {
           <Route
             path="/performance"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="use_chat">
                 <Shell>
                   <AgentPerformancePage />
                 </Shell>
@@ -500,7 +515,7 @@ export function App() {
           <Route
             path="/new-ticket"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="create_tickets">
                 <Shell>
                   <NewTicketPage />
                 </Shell>
@@ -510,7 +525,7 @@ export function App() {
           <Route
             path="/tickets/:ticketId"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="view_tickets">
                 <Shell>
                   <TicketsPage />
                 </Shell>
@@ -530,7 +545,7 @@ export function App() {
           <Route
             path="/contacts"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="use_chat">
                 <Shell>
                   <ContactsPage />
                 </Shell>
@@ -540,7 +555,7 @@ export function App() {
           <Route
             path="/contacts/:id"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="use_chat">
                 <Shell>
                   <ContactProfilePage />
                 </Shell>
@@ -550,7 +565,7 @@ export function App() {
           <Route
             path="/compensation"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="create_tickets">
                 <Shell>
                   <MyCouponsPage />
                 </Shell>
@@ -560,7 +575,7 @@ export function App() {
           <Route
             path="/compensation-requests/:id"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="create_tickets">
                 <Shell>
                   <CompensationPage />
                 </Shell>

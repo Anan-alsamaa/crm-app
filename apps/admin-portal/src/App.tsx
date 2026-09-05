@@ -284,7 +284,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const tabs = reportTabs(t);
   const location = useLocation();
-  const { user, logout, can } = useAuth();
+  const { user, logout, can, isOwner } = useAuth();
   const displayName = staffDisplayName(user, 'Admin');
   // Command-palette open state is lifted here so the top-bar search trigger and
   // the Cmd/Ctrl+K shortcut both drive the one palette instance below.
@@ -336,7 +336,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           // NOT `/reports`: that is now the parent of the two KPI pages, so a
           // link to it would light up alongside whichever one is open.
           to: '/reports/scheduled',
-          requires: 'manage_lists' as const,
+          requires: 'schedule_reports' as const,
           label: t('nav.reports', { defaultValue: 'Scheduled reports' }),
           icon: CalendarIcon,
         },
@@ -379,7 +379,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         { to: '/users', label: t('nav.users'), icon: UsersIcon, requires: 'manage_users' as const },
         {
           to: '/roles',
-          requires: 'manage_users' as const,
+          requires: 'manage_roles' as const,
           label: t('nav.roles', { defaultValue: 'Roles & privileges' }),
           icon: ShieldIcon,
         },
@@ -388,7 +388,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           to: '/vendors',
           label: t('nav.vendors', { defaultValue: 'Vendors' }),
           icon: StoreIcon,
-          requires: 'manage_restaurants' as const,
+          ownerOnly: true,
         },
         {
           to: '/lists',
@@ -398,7 +398,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         },
         {
           to: '/backup',
-          requires: 'manage_users' as const,
+          requires: 'manage_backup' as const,
           label: t('nav.backup', { defaultValue: 'Backup' }),
           icon: DownloadIcon,
         },
@@ -433,7 +433,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     {
       heading: t('nav.policies', { defaultValue: 'Policies' }),
       items: [
-        { to: '/sla', label: t('nav.sla'), icon: ShieldIcon, requires: 'manage_lists' as const },
+        { to: '/sla', label: t('nav.sla'), icon: ShieldIcon, requires: 'manage_sla' as const },
       ],
     },
     {
@@ -441,10 +441,10 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         {
           to: '/ai-config',
-          requires: 'manage_lists' as const,
+          ownerOnly: true,
           // A single-item section shows the ITEM label in the top bar, so this
           // is the word that has to fit there. The page keeps its full title.
-          label: t('nav.aiConfigShort', { defaultValue: 'AI' }),
+          label: t('nav.aiConfigShort', { defaultValue: 'AI settings' }),
           icon: SparkleIcon,
         },
       ],
@@ -470,9 +470,16 @@ function Shell({ children }: { children: React.ReactNode }) {
    * jargon. Dropping the group leaves "Dashboard | Tickets", which is the whole
    * of what that role does.
    *
-   * Counted rather than hardcoded, so this stays true as privileges move: a
-   * role that can see Compensation as well keeps the group, and a role that can
-   * see only Compensation keeps it too — the collapse only removes a duplicate.
+   * Counted rather than hardcoded, so this stays true as tabs and privileges
+   * move — the collapse only ever removes a duplicate, never a destination.
+   *
+   * Since Compensation moved to Agent KPI (2026-09-03) this group holds ONE
+   * tab for every role, so the collapse always fires. It now shortens the
+   * PATH only and keeps the group's own name (owner's call, 2026-09-04):
+   * "Operational KPI" is the heading operations think in, and losing it made
+   * the bar read as a flat list of reports with no operations section at all.
+   * The link still lands directly on the report, because a group route with
+   * one child only redirects there anyway.
    */
   const visibleTabs = (group: { to: string; requires?: Privilege }[]) =>
     group.filter((tab) => !tab.requires || can(tab.requires));
@@ -484,26 +491,27 @@ function Shell({ children }: { children: React.ReactNode }) {
       ...section,
       items: section.items.flatMap((it) => {
         if (it.requires && !can(it.requires)) return [];
+        // Owner-only entries are not privileges; nobody but the owner sees them.
+        if ((it as { ownerOnly?: boolean }).ownerOnly && !isOwner) return [];
         /*
-         * A group that collapses to ONE tab becomes that tab.
+         * A group that collapses to ONE tab links straight to that tab.
          *
-         * This used to just drop the group and add nothing back, on the
-         * reasoning that a "Operational KPI → Ticket breakdown" pair with one
-         * leaf is the same destination named twice. True — but for a role that
-         * can see only Ticket breakdown, dropping the group dropped its ONLY
-         * report, the Reports section then had no items and was filtered out
-         * whole, and an Operations user was left with a top bar containing
-         * Dashboard and nothing else. The duplicate was worth removing; the
-         * destination was not.
+         * This used to drop the group and add nothing back, on the reasoning
+         * that an "Operational KPI → Ticket breakdown" pair with one leaf is
+         * the same destination named twice. But for a role that can see only
+         * Ticket breakdown, dropping the group dropped its ONLY report, the
+         * Reports section then had no items and was filtered out whole, and an
+         * Operations user was left with a top bar containing Dashboard and
+         * nothing else.
+         *
+         * So the entry stays, under its own name, pointing at the one report
+         * it holds. Renaming it to that report was tried and reverted: the
+         * group name is how operations refer to this, and without it the bar
+         * reads as loose reports with no operations heading.
          */
         if (it.to === '/reports/operational-kpi' && opsKpiCollapsedToTickets) {
-          return [
-            {
-              ...it,
-              to: '/reports/operational-kpi/tickets',
-              label: t('nav.reportTickets', { defaultValue: 'Ticket breakdown' }),
-            },
-          ];
+          // Path only — the label stays "Operational KPI". See above.
+          return [{ ...it, to: '/reports/operational-kpi/tickets' }];
         }
         return [it];
       }),
@@ -602,6 +610,16 @@ function Shell({ children }: { children: React.ReactNode }) {
  * Built from `t` at render rather than frozen at import, so switching language
  * relabels the tabs like everything else.
  */
+/**
+ * Where the compensation report lives.
+ *
+ * Named because THREE places point at it — the tab, the legacy `/compensation`
+ * link and the old Operational-KPI URL — and a move that updates two of them
+ * leaves a redirect pointing at a 404 nobody notices until someone follows an
+ * old bookmark.
+ */
+const COMPENSATION_PATH = '/reports/agent-kpi/compensation';
+
 function reportTabs(t: TFunction) {
   return {
     agentKpi: [
@@ -620,19 +638,19 @@ function reportTabs(t: TFunction) {
         label: t('nav.reportConversations', { defaultValue: 'Chat status' }),
         requires: 'view_all_chats' as const,
       },
+      {
+        // Compensation is a money screen, so it follows the coupon privilege
+        // rather than the chat one it happens to sit beside.
+        to: 'compensation',
+        label: t('nav.compensationAll', { defaultValue: 'Compensation' }),
+        requires: 'approve_coupons' as const,
+      },
     ],
     opsKpi: [
       {
         to: 'tickets',
         label: t('nav.reportTickets', { defaultValue: 'Ticket breakdown' }),
         requires: 'view_all_tickets' as const,
-      },
-      {
-        // Compensation is a money screen, so it follows the coupon privilege
-        // rather than the ticket one it happens to sit beside.
-        to: 'compensation',
-        label: t('nav.compensationAll', { defaultValue: 'Compensation' }),
-        requires: 'approve_coupons' as const,
       },
     ],
   };
@@ -681,7 +699,7 @@ export function App() {
           <Route
             path="/sla"
             element={
-              <ProtectedRoute requires="manage_lists">
+              <ProtectedRoute requires="manage_sla">
                 <Shell>
                   <SlaPoliciesPage />
                 </Shell>
@@ -691,7 +709,7 @@ export function App() {
           <Route
             path="/vendors"
             element={
-              <ProtectedRoute requires="manage_restaurants">
+              <ProtectedRoute ownerOnly>
                 <Shell>
                   <VendorsPage />
                 </Shell>
@@ -721,7 +739,7 @@ export function App() {
           <Route
             path="/ai-config"
             element={
-              <ProtectedRoute requires="manage_lists">
+              <ProtectedRoute ownerOnly>
                 <Shell>
                   <AiConfigPage />
                 </Shell>
@@ -735,7 +753,7 @@ export function App() {
           <Route
             path="/reports/scheduled"
             element={
-              <ProtectedRoute requires="manage_lists">
+              <ProtectedRoute requires="schedule_reports">
                 <Shell>
                   <ReportsPage />
                 </Shell>
@@ -777,6 +795,14 @@ export function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="compensation"
+              element={
+                <ProtectedRoute requires="approve_coupons">
+                  <AllCompensationPage />
+                </ProtectedRoute>
+              }
+            />
           </Route>
           <Route
             path="/reports/operational-kpi"
@@ -797,14 +823,10 @@ export function App() {
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="compensation"
-              element={
-                <ProtectedRoute requires="approve_coupons">
-                  <AllCompensationPage />
-                </ProtectedRoute>
-              }
-            />
+            {/* Compensation moved to Agent KPI (owner's call, 2026-09-03) — it
+                reports what agents gave away, which is an agent measure. The
+                redirect below keeps existing links and bookmarks working. */}
+            <Route path="compensation" element={<Navigate to={COMPENSATION_PATH} replace />} />
           </Route>
           {/* The Complaints report was merged into Tickets — same records,
               one page. Redirect so existing links and bookmarks still land. */}
@@ -823,10 +845,7 @@ export function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/compensation"
-            element={<Navigate to="/reports/operational-kpi/compensation" replace />}
-          />
+          <Route path="/compensation" element={<Navigate to={COMPENSATION_PATH} replace />} />
           <Route
             path="/coupon-report"
             element={
@@ -888,7 +907,7 @@ export function App() {
           <Route
             path="/roles"
             element={
-              <ProtectedRoute requires="manage_users">
+              <ProtectedRoute requires="manage_roles">
                 <Shell>
                   <RolesPage />
                 </Shell>
@@ -898,7 +917,7 @@ export function App() {
           <Route
             path="/backup"
             element={
-              <ProtectedRoute requires="manage_users">
+              <ProtectedRoute requires="manage_backup">
                 <Shell>
                   <BackupPage />
                 </Shell>

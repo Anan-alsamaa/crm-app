@@ -29,6 +29,59 @@ export const CouponRequestStatus = z.enum([
 export type CouponRequestStatus = z.infer<typeof CouponRequestStatus>;
 
 /**
+ * The DECISION a status carries — the one thing every count and every riyal
+ * figure actually cares about.
+ *
+ * The five statuses answer two different questions at once. Three of them
+ * ('approved', 'edited', 'assigned') all mean the request WAS APPROVED; they
+ * differ only in what happened afterwards — unchanged, amended, or delivered
+ * to Yiji. Code that compares against the literal 'approved' silently drops
+ * the other two, and that is exactly what happened: the dashboard reported
+ * 5 SAR across 5 approved coupons when 10 had been approved, because the five
+ * that had ALSO been delivered no longer matched. Worse, the outcome tally
+ * put those five delivered coupons in the PENDING bucket, so the queue said
+ * five decisions were still owed weeks after they were made.
+ *
+ * This is the only place that mapping lives. Anything that needs to know
+ * whether a coupon went through asks here, never the literal.
+ */
+export type CouponDecision = 'approved' | 'rejected' | 'pending';
+
+/**
+ * Every status whose decision is APPROVED — for a Directus `_in` filter, which
+ * cannot call `couponDecision`. Derived from the same switch below in spirit;
+ * a status added to one and not the other is caught by the test that checks
+ * they agree.
+ */
+export const COUPON_APPROVED_STATUSES = ['approved', 'edited', 'assigned'] as const;
+
+export function couponDecision(status: string | null | undefined): CouponDecision {
+  switch ((status ?? '').trim().toLowerCase()) {
+    case 'approved':
+    case 'edited':
+    case 'assigned':
+      return 'approved';
+    case 'rejected':
+      return 'rejected';
+    default:
+      // Unrecognised counts as undecided rather than being dropped: a request
+      // that vanishes from the totals is worse than one in the wrong bucket.
+      return 'pending';
+  }
+}
+
+/** Approved AND the terms were changed first — a different event, worth seeing. */
+export function couponWasAmended(
+  status: string | null | undefined,
+  editedByAdmin?: boolean | null,
+): boolean {
+  return (
+    couponDecision(status) === 'approved' &&
+    (editedByAdmin === true || (status ?? '').trim().toLowerCase() === 'edited')
+  );
+}
+
+/**
  * What the agent fills in.
  *
  * Times are deliberately absent. A coupon is valid for whole days: from 00:00

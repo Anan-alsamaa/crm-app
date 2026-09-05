@@ -114,12 +114,17 @@ describe('AgentPerformancePage', () => {
     expect(tile('Answered in time')).toBe('67%');
   });
 
-  it('charts the volume even when not one chat has been answered', () => {
+  it('charts the volume even when not one chat has been answered', async () => {
     perf.useChatTimings.mockReturnValue({
       data: [chat({ conversationId: 'never', firstAgentAt: null, solvedAt: null })],
       isLoading: false,
     });
     renderPage();
+    // The page opens on the signed-in agent, so the agent-vs-agent volume chart
+    // is correctly absent — comparing one person with themselves compares
+    // nothing. Widen to every agent to see it.
+    await userEvent.setup().click(screen.getByRole('combobox', { name: 'Agent' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'All agents' }));
     // The point of the volume series: the page still shows real work on a range
     // where every timing is legitimately missing, instead of reading as broken.
     const volume = screen.getByText('Who handled the chats').closest('section')!;
@@ -147,16 +152,23 @@ describe('AgentPerformancePage', () => {
     expect(navigate).toHaveBeenCalledWith('/?conv=slow');
   });
 
-  it('hides the agent-versus-agent charts when one agent is selected', async () => {
+  it('opens on the signed-in agent, and widens to the team on request', async () => {
     const user = userEvent.setup();
     renderPage();
-    expect(screen.getByText('Who handled the chats')).toBeInTheDocument();
-    // SelectMenu's trigger is a combobox; each option is a button inside a li.
-    await user.click(screen.getByRole('combobox', { name: 'Agent' }));
-    await user.click(screen.getByRole('button', { name: 'Sara' }));
-    // Comparing one person against themselves compares nothing.
+    /*
+     * The page DEFAULTS to whoever is looking (owner's call, 2026-09-05). It
+     * used to open on "All agents", so an agent's own numbers were three
+     * clicks away and the first thing they saw was a league table of the whole
+     * team. So the agent-vs-agent charts are absent on arrival — comparing one
+     * person with themselves compares nothing — and appear once the picker is
+     * widened, which is still fully available.
+     */
     expect(screen.queryByText('Who handled the chats')).not.toBeInTheDocument();
     expect(screen.getByText('Chats per day')).toBeInTheDocument();
+    // SelectMenu's trigger is a combobox; each option is a button inside a li.
+    await user.click(screen.getByRole('combobox', { name: 'Agent' }));
+    await user.click(screen.getByRole('button', { name: 'All agents' }));
+    expect(screen.getByText('Who handled the chats')).toBeInTheDocument();
   });
 
   it('passes the filters through to the query rather than filtering after the fact', () => {

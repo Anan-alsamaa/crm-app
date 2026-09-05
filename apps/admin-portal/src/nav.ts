@@ -35,6 +35,11 @@ export interface NavItem {
    * it can actually read.
    */
   requires?: Privilege;
+  /**
+   * Owner-only entry: shown to the project owner (Directus admin_access) and
+   * nobody else. Not a privilege — no role edit can widen it.
+   */
+  ownerOnly?: boolean;
 }
 
 export interface NavSection {

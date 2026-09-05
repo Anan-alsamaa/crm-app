@@ -292,7 +292,8 @@
     "deleteTitle": "حذف سجل الكوبون هذا؟",
     "deleteConfirm": "حذف «{{label}}»؟ يُحذف السجل، ويبقى منفّذ الحذف في سجل التغييرات. لا يُلغى بذلك أي كوبون سبق تسليمه للعميل.",
     "deleted": "تم حذف سجل الكوبون.",
-    "deleteFailed": "تعذّر حذف هذا السجل."
+    "deleteFailed": "تعذّر حذف هذا السجل.",
+    "columnCount": "{{n}} عمود"
   },
   "complaintDash": {
     "tableTotal": "الإجمالي",
@@ -854,7 +855,7 @@
     "customFields": "حقول مخصّصة",
     "reports": "التقارير المجدولة",
     "reportsGroup": "التقارير",
-    "aiConfig": "المساعدة بالذكاء الاصطناعي",
+    "aiConfig": "إعدادات الذكاء الاصطناعي",
     "intelligence": "الذكاء الاصطناعي",
     "primary": "التنقل الرئيسي",
     "openMenu": "فتح القائمة",
@@ -888,7 +889,7 @@
     "automationGroup": "الأتمتة",
     "ticketsGroup": "التذاكر",
     "aiConfigGroup": "الذكاء",
-    "aiConfigShort": "الذكاء"
+    "aiConfigShort": "إعدادات الذكاء الاصطناعي"
   },
   "pagination": {
     "prev": "السابق",
@@ -1085,7 +1086,13 @@
       "importData": "استيراد التذاكر",
       "manageLists": "تحرير القوائم والإعدادات",
       "manageRestaurants": "إدارة العلامات والفروع",
-      "manageUsers": "إدارة المستخدمين"
+      "manageUsers": "إدارة المستخدمين",
+      "viewOpsDashboard": "عرض لوحة العمليات",
+      "scheduleReports": "جدولة التقارير",
+      "manageSla": "تعديل سياسات اتفاقية الخدمة",
+      "manageRoles": "إدارة الأدوار والصلاحيات",
+      "manageBackup": "تشغيل النسخ الاحتياطي",
+      "useDirectusApp": "استخدام تطبيق Directus الإداري"
     },
     "pending": "قيد التطبيق…",
     "privCount": "{{n}} صلاحية",
@@ -1095,7 +1102,8 @@
     "title": "الأدوار والصلاحيات",
     "total": "أدوار",
     "branchSelectShown": "اختر هذه ({{n}})",
-    "branchDeselectShown": "إلغاء هذه ({{n}})"
+    "branchDeselectShown": "إلغاء هذه ({{n}})",
+    "ceilingHint": "لا يمكنك منح صلاحية لا يملكها دورك."
   },
   "shortcuts": {
     "title": "اختصارات لوحة المفاتيح",
@@ -1477,7 +1485,9 @@
     "noPortalAccess": "هذه البوابة ليست لدورك",
     "noPortalAccessHint": "تم تسجيل دخولك، لكن لا تتوفر لدورك أي شاشة هنا. إن كنت تتعامل مع محادثات العملاء، استخدم بوابة الموظفين.",
     "noPagePrivilege": "لا تملك صلاحية الوصول إلى هذه الصفحة",
-    "noPagePrivilegeHint": "دورك لا يشمل هذه الصفحة. يمكن للمسؤول تغيير ذلك من «الأدوار والصلاحيات»."
+    "noPagePrivilegeHint": "دورك لا يشمل هذه الصفحة. يمكن للمسؤول تغيير ذلك من «الأدوار والصلاحيات».",
+    "ownerOnly": "هذه الصفحة متاحة لمالك المشروع فقط",
+    "ownerOnlyHint": "لا يمكن منح هذا لأي دور. إن احتجت تغييرًا هنا فاطلبه من مالك المشروع."
   },
   "agentDash": {
     "title": "الموظفون",
@@ -1505,12 +1515,31 @@
     "noneOpen": "كل التذاكر منجزة."
   },
   "notifications": {
-    "title": "الإشعارات",
-    "open": "الإشعارات",
-    "openWithCount": "الإشعارات، {{count}} غير مقروء",
+    "title": "التنبيهات",
+    "empty": "لا توجد تنبيهات.",
+    "markRead": "وضع علامة كمقروء",
+    "type": {
+      "sla_warning": "تحذير اتفاقية الخدمة",
+      "sla_breach": "خرق اتفاقية الخدمة",
+      "assignment": "تعيين",
+      "mention": "إشارة",
+      "ticket_update": "تحديث تذكرة",
+      "reminder": "تذكير",
+      "escalation": "تصعيد",
+      "automation": "أتمتة",
+      "access_change": "تغيير في الصلاحيات"
+    },
+    "allRead": "لا جديد لديك",
     "markAllRead": "تعليم الكل كمقروء",
-    "empty": "لا يوجد ما تقرأه.",
-    "unread": "غير مقروء"
+    "emptyHint": "تظهر هنا تنبيهات اتفاقية الخدمة والإشارات والتعيينات الجديدة.",
+    "emptyAllHint": "لا توجد لديك إشعارات بعد.",
+    "today": "اليوم",
+    "earlier": "سابقًا",
+    "view": "عرض",
+    "managePreferences": "إدارة تفضيلات الإشعارات",
+    "unreadCount": "{{count}} غير مقروءة",
+    "tabUnread": "غير مقروءة",
+    "tabAll": "الكل"
   },
   "common": {
     "yes": "نعم",

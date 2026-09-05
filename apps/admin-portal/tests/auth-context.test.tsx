@@ -26,9 +26,13 @@ beforeEach(() => {
 });
 
 describe('isAdmin', () => {
-  it('accepts Administrator and Admin roles', () => {
+  it('accepts the Administrator role by name; the CRM Admin role is NOT the owner', () => {
     expect(isAdmin({ role: { name: 'Administrator' } } as never)).toBe(true);
-    expect(isAdmin({ role: { name: 'Admin' } } as never)).toBe(true);
+    // A CRM administrator is an app role with privileges like everyone else.
+    // Treating it as the owner here made it all-powerful in this portal
+    // regardless of any privilege, which is exactly what the roles model
+    // must not allow.
+    expect(isAdmin({ role: { name: 'Admin' } } as never)).toBe(false);
   });
   it('rejects other roles and null', () => {
     expect(isAdmin({ role: { name: 'Agent' } } as never)).toBe(false);

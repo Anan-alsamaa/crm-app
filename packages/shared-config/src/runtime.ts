@@ -72,6 +72,15 @@ export function exportFileName(
 
 /** What a deployed portal may be told about itself at boot. */
 export interface RuntimeConfig {
+  /**
+   * Which environment this bundle is CURRENTLY serving — not which one it was
+   * built for. The portals ship one image for every environment, so the banner
+   * that warns "this is staging" has to come from /config.js like the URLs do.
+   *
+   * Absent means production: the warning is opt-in, so a missing or truncated
+   * config.js can never make production look like staging to every user.
+   */
+  ENVIRONMENT?: string;
   DIRECTUS_URL?: string;
   SOCKET_URL?: string;
   AI_GATEWAY_URL?: string;
@@ -109,6 +118,17 @@ export interface RuntimeConfig {
  * Whatever wins is then passed through `onPageHost`, so a loopback address
  * still follows the host the page was opened on.
  */
+/**
+ * The whole injected runtime config, for callers that need a NON-url value.
+ *
+ * `resolveUrl` exists for addresses and applies `onPageHost`, which would be
+ * wrong for a plain string like the environment name. Returns an empty object
+ * when nothing was injected, so a caller can read a key without guarding.
+ */
+export function runtimeConfig(): RuntimeConfig {
+  return (globalThis as { __SARA_CONFIG__?: RuntimeConfig }).__SARA_CONFIG__ ?? {};
+}
+
 export function resolveUrl(
   key: keyof RuntimeConfig,
   buildTime: string | undefined,

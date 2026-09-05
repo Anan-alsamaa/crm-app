@@ -117,3 +117,31 @@ describe('isPhoneDerivedCustomerId', () => {
     }
   });
 });
+
+describe('one stored shape — 05XXXXXXXX', () => {
+  /*
+   * The owner's rule (2026-09-05): one format exists in this system and it is
+   * `05XXXXXXXX`. Everything that WRITES a phone must land on it, whatever was
+   * typed or sent — the Yiji app sends `+9665…`, a counter types `05…`, and an
+   * agent editing a contact might paste either. Two spellings of one customer
+   * is a customer who cannot be found by equality, which is how a returning
+   * walk-in looked like a new person.
+   */
+  it.each([
+    ['+966537301009', '0537301009'],
+    ['966537301009', '0537301009'],
+    ['+966 53 730 1009', '0537301009'],
+    ['00966537301009', '0537301009'],
+    ['0537301009', '0537301009'],
+    ['537301009', '0537301009'],
+    ['05 3730 1009', '0537301009'],
+  ])('%s -> %s', (input, expected) => {
+    expect(normalizePhone(input)).toBe(expected);
+  });
+
+  it('leaves a genuinely foreign number alone rather than claiming it is Saudi', () => {
+    // Prefixing a 0 onto a UK or UAE number would invent a Saudi customer.
+    expect(normalizePhone('+971501234567')).toBe('+971501234567');
+    expect(normalizePhone('+447700900123')).toBe('+447700900123');
+  });
+});

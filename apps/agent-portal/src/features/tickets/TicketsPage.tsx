@@ -1703,8 +1703,20 @@ function TicketCoupons({ ticketId }: { ticketId: string }) {
               <span className="text-sm font-semibold tabular-nums text-foreground">
                 {c.coupon_percent != null ? `${c.coupon_percent}%` : `${c.coupon_value ?? 0} SAR`}
               </span>
+              {/* One column carries two facts: whether a supervisor decided,
+                  and whether Yiji has the coupon yet. `approved` and `edited`
+                  both mean "decided yes, not delivered"; `assigned` means Yiji
+                  accepted it. Showing the raw value makes an approved coupon
+                  read as unfinished to the agent, who then tells the customer
+                  nothing has happened. Say both parts instead. */}
               <Pill tone={TONE[c.status] ?? 'neutral'} size="sm">
-                {t(`coupons.status.${c.status}`, { defaultValue: c.status })}
+                {c.status === 'approved' || c.status === 'edited'
+                  ? t('coupons.status.approvedPending', {
+                      defaultValue: 'Approved · sending',
+                    })
+                  : c.status === 'assigned'
+                    ? t('coupons.status.assigned', { defaultValue: 'Approved · delivered' })
+                    : t(`coupons.status.${c.status}`, { defaultValue: c.status })}
               </Pill>
               {/* An amended approval is still an approval, but the agent asked
                   for a different number and should be told so before they

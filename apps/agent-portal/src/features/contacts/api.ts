@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, readItem, createItem, updateItem, deleteItem } from '@directus/sdk';
 import { directus } from '../../lib/directus.js';
+import { normalizePhone } from '@yiji/shared-types';
 
 /** A tag attached to a contact via the contacts_tags junction. */
 export interface ContactTagLink {
@@ -218,7 +219,29 @@ export function useUpdateContact() {
     }: {
       id: string;
       patch: { name?: string | null; email?: string | null; phone?: string | null };
-    }) => directus.request(updateItem('contacts', id, patch as never)),
+    }) =>
+      directus.request(
+        updateItem(
+          'contacts',
+          id,
+          /*
+           * ONE STORED SHAPE: 05XXXXXXXX.
+           *
+           * A typed phone went to the database exactly as typed, so an agent
+           * writing "+966 53 730 1009" created a second spelling of a customer
+           * the gateway stores as "0537301009" — and every lookup that matches
+           * on equality (upsertContact, the walk-in join, contact dedupe) then
+           * misses. Normalised on the way IN so the column has one shape; the
+           * conversions OUT (wa.me, the Yiji coupon push) stay where they are.
+           */
+          (patch.phone === undefined
+            ? patch
+            : {
+                ...patch,
+                phone: patch.phone ? normalizePhone(patch.phone) || null : null,
+              }) as never,
+        ),
+      ),
     onSuccess: (_d, vars) => {
       void qc.invalidateQueries({ queryKey: ['contact', vars.id] });
       void qc.invalidateQueries({ queryKey: ['contacts'] });

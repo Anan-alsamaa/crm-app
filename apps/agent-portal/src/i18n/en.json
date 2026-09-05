@@ -3,7 +3,11 @@
   "portalName": "User",
   "portalFullName": "Sara CRM · User",
   "auth": {
-    "sessionExpired": "Your session expired. Please sign in again."
+    "sessionExpired": "Your session expired. Please sign in again.",
+    "noPortalAccess": "This portal is not for your role",
+    "noPortalAccessHint": "Your account is signed in, but none of the screens here are open to it. If you run reports or manage the operation, use the admin portal instead.",
+    "noPagePrivilege": "You do not have access to this page",
+    "noPagePrivilegeHint": "Your role does not include this. An administrator can change that under Roles & privileges."
   },
   "contacts": {
     "title": "Contacts",
@@ -467,7 +471,8 @@
       "ticket_update": "Ticket update",
       "reminder": "Reminder",
       "escalation": "Escalation",
-      "automation": "Automation"
+      "automation": "Automation",
+      "access_change": "Access change"
     },
     "allRead": "All caught up",
     "markAllRead": "Mark all read",

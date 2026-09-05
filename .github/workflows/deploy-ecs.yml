@@ -1,0 +1,345 @@
+name: Deploy to ECS
+
+# Build once, push to ECR, deploy to ECS Fargate.
+#
+#   merge to main  -> build + push + deploy STAGING automatically
+#   tag v1.2.3     -> deploy PRODUCTION from the SAME digests (no rebuild)
+#
+# Authentication is GitHub OIDC: Actions exchanges a short-lived token for an
+# AWS role at run time. There are NO AWS access keys in GitHub secrets, and
+# nothing to rotate.
+#
+# ── PREREQUISITES (none of these exist yet — 2026-09-02) ──────────────────
+#   1. IAM OIDC provider for token.actions.githubusercontent.com
+#   2. Role `crm-github-deploy` whose trust policy names THIS repo, with
+#      ecr:* on crm/*, ecs:UpdateService/RegisterTaskDefinition, iam:PassRole
+#      on the two task roles, and s3:PutObject on the portal buckets
+#   3. ECR repositories: crm/directus, crm/socket-gateway, crm/ai-gateway,
+#      crm/workers, crm/bootstrap
+#   4. Task roles `crm-ecs-execution-role` + `crm-task-role-{staging,prod}`
+#
+# Until (1) and (2) exist this workflow cannot authenticate and every run fails
+# at "Configure AWS credentials". That is the correct behaviour — it fails at
+# the door rather than half-deploying.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Which environment to deploy'
+        required: true
+        default: staging
+        type: choice
+        options: [staging, prod]
+
+permissions:
+  contents: read
+  id-token: write # REQUIRED for OIDC. Without it the token exchange fails.
+
+concurrency:
+  # Never let two deploys to the same environment overlap; queue instead of
+  # cancelling, so a half-finished ECS rollout is not abandoned mid-flight.
+  group: deploy-ecs-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-2
+  ECR_REGISTRY: 408568863712.dkr.ecr.us-east-2.amazonaws.com
+
+jobs:
+  # ── 1. The gate ───────────────────────────────────────────────────────────
+  # Deploy fires on push/tag while CI fires separately, so without this a tag
+  # could ship over a red pipeline. That is not hypothetical: v1.1.2 through
+  # v1.2.0 all published with a green Deploy badge and failing tests.
+  gate:
+    name: Quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4.2.0
+        with:
+          version: 9.15.0 # pinned to match ci.yml — a different pnpm rejects the lockfile
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+
+  # ── 2. Resolve what we are deploying ──────────────────────────────────────
+  # One place decides environment + image tag, so no later job can disagree.
+  plan:
+    name: Plan
+    needs: gate
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.p.outputs.environment }}
+      image_tag: ${{ steps.p.outputs.image_tag }}
+      build: ${{ steps.p.outputs.build }}
+    steps:
+      - id: p
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENVIRONMENT="${{ inputs.environment }}"; TAG="main"; BUILD=false
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # A TAG IS A PROMOTION, NOT A BUILD. The images already exist from
+            # the merge to main; production re-tags those exact digests, so what
+            # was tested on staging is byte-for-byte what ships.
+            ENVIRONMENT=prod; TAG="${GITHUB_REF#refs/tags/}"; BUILD=false
+          else
+            ENVIRONMENT=staging; TAG=main; BUILD=true
+          fi
+          echo "environment=$ENVIRONMENT" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "::notice::Deploying $ENVIRONMENT at tag $TAG (build=$BUILD)"
+
+  # ── 3. Build and push the service images ──────────────────────────────────
+  build:
+    name: Build ${{ matrix.name }}
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: directus, dockerfile: directus/Dockerfile }
+          - { name: socket-gateway, dockerfile: services/socket-gateway/Dockerfile }
+          - { name: ai-gateway, dockerfile: services/ai-gateway/Dockerfile }
+          - { name: workers, dockerfile: services/workers/Dockerfile }
+          - { name: bootstrap, dockerfile: directus/bootstrap/Dockerfile }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::408568863712:role/crm-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          # Tagged with both the branch tag and the commit SHA. The SHA tag is
+          # what makes a rollback precise — `main` moves, a SHA does not.
+          tags: |
+            ${{ env.ECR_REGISTRY }}/crm/${{ matrix.name }}:${{ needs.plan.outputs.image_tag }}
+            ${{ env.ECR_REGISTRY }}/crm/${{ matrix.name }}:sha-${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          provenance: false
+
+  # ── 4. Portals: static bundles to S3 + CloudFront ─────────────────────────
+  # NOT containers. They are static files; running nginx in Fargate to serve
+  # them would cost ~$18/mo each and buy nothing.
+  portals:
+    name: Build & upload portals
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4.2.0
+        with: { version: 9.15.0 }
+      - uses: actions/setup-node@v5
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build portals
+        env:
+          # Baked-in FALLBACKS only. The real values come from config.js at
+          # runtime (see below), which is what keeps one bundle serving both
+          # environments.
+          VITE_DIRECTUS_URL: ${{ vars.VITE_DIRECTUS_URL }}
+          VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL }}
+          VITE_AI_GATEWAY_URL: ${{ vars.VITE_AI_GATEWAY_URL }}
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          pnpm --filter @yiji/agent-portal build
+          pnpm --filter @yiji/admin-portal build
+
+      - name: Generate runtime config
+        # On S3 there is no container, so nothing writes config.js the way
+        # docker-entrypoint.sh does. Without this the portal falls back to the
+        # baked VITE_* value and the bundle becomes environment-specific.
+        run: |
+          ./scripts/gen-portal-config.sh ${{ needs.plan.outputs.environment }} \
+            apps/agent-portal/dist/config.js
+          ./scripts/gen-portal-config.sh ${{ needs.plan.outputs.environment }} \
+            apps/admin-portal/dist/config.js
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::408568863712:role/crm-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload to S3
+        env:
+          ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+        run: |
+          for app in agent admin; do
+            BUCKET="crm-${ENVIRONMENT}-${app}-portal"
+            # Hashed assets first, cached hard. Vite content-hashes filenames,
+            # so a year is safe and correct.
+            aws s3 sync "apps/${app}-portal/dist" "s3://${BUCKET}" \
+              --delete --cache-control "public,max-age=31536000,immutable" \
+              --exclude "index.html" --exclude "config.js"
+            # index.html and config.js have STABLE names and must never be
+            # cached: a cached config.js means the portal talks to the previous
+            # environment's API until someone hard-refreshes — an outage with no
+            # error message.
+            aws s3 cp "apps/${app}-portal/dist/index.html" "s3://${BUCKET}/index.html" \
+              --cache-control "no-cache"
+            aws s3 cp "apps/${app}-portal/dist/config.js" "s3://${BUCKET}/config.js" \
+              --cache-control "no-cache"
+          done
+
+  # ── 5. Deploy the ECS services ────────────────────────────────────────────
+  deploy:
+    name: Deploy ${{ matrix.service }} to ${{ needs.plan.outputs.environment }}
+    needs: [plan, build, portals]
+    # `always()` + the failure check: build is SKIPPED on a tag promotion (no
+    # rebuild), and a skipped dependency would otherwise block this job.
+    if: always() && needs.plan.result == 'success' && needs.build.result != 'failure' && needs.portals.result == 'success'
+    runs-on: ubuntu-latest
+    # A GitHub Environment named `prod` can carry a required-reviewer rule, so
+    # production waits for a human even though the tag triggered it.
+    environment: ${{ needs.plan.outputs.environment }}
+    strategy:
+      fail-fast: false
+      # Deploy one at a time: directus first, since the others depend on it.
+      max-parallel: 1
+      matrix:
+        service: [directus, socket-gateway, ai-gateway, workers]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::408568863712:role/crm-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Render task definition
+        env:
+          ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+          IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
+        run: |
+          # The public hostname suffix differs per environment; everything else
+          # is substituted identically. Keep this in step with
+          # scripts/gen-portal-config.sh, which derives the same names.
+          if [ "$ENVIRONMENT" = "prod" ]; then
+            SUFFIX="crm.anan.sa"; COUPONS="on"; SMTP_FROM="Sara CRM <Yiji@anan.sa>"
+          else
+            SUFFIX="staging.crm.anan.sa"; COUPONS="off"; SMTP_FROM="Sara CRM (staging) <Yiji@anan.sa>"
+          fi
+          sed -e "s|{{ENV}}|${ENVIRONMENT}|g" \
+              -e "s|{{IMAGE_TAG}}|${IMAGE_TAG}|g" \
+              -e "s|{{ACCOUNT_ID}}|408568863712|g" \
+              -e "s|{{REGION}}|${AWS_REGION}|g" \
+              -e "s|{{PUBLIC_SUFFIX}}|${SUFFIX}|g" \
+              -e "s|{{YIJI_COUPON_DELIVERY}}|${COUPONS}|g" \
+              -e "s|{{SMTP_FROM}}|${SMTP_FROM}|g" \
+              deploy/aws/ecs/${{ matrix.service }}.json > /tmp/taskdef.json
+          echo "--- rendered (secrets are SSM refs, not values) ---"
+          cat /tmp/taskdef.json
+
+      - name: Guard — staging must never deliver coupons
+        # Real money, real customers, and delivery works from a BACKLOG: the
+        # first sweep after it goes live sends every approved-undelivered coupon
+        # at once. A bad substitution here must stop the deploy, not ship.
+        if: matrix.service == 'workers' && needs.plan.outputs.environment != 'prod'
+        run: |
+          grep -q '"YIJI_COUPON_DELIVERY"' /tmp/taskdef.json || { echo "::error::coupon flag missing"; exit 1; }
+          if grep -A1 '"YIJI_COUPON_DELIVERY"' /tmp/taskdef.json | grep -q '"on"'; then
+            echo "::error::YIJI_COUPON_DELIVERY=on on a non-production deploy — refusing"
+            exit 1
+          fi
+          echo "coupon delivery correctly off"
+
+      # NOTHING is registered until the image is confirmed present in ECR.
+      #
+      # A task definition looks identical whether its image exists or not, so
+      # registering first and finding out later is how a rollout gets stuck
+      # IN_PROGRESS with 0 running tasks and no error anywhere. (Seen for real:
+      # an expired ECR login made two pushes 403 while the deploy carried on.)
+      # On a tag promotion the build job is skipped by design — the image was
+      # pushed by an earlier run — so this doubles as the check that the tag
+      # being promoted actually exists.
+      - name: Verify the image is in ECR
+        env:
+          IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
+        run: |
+          DIGEST=$(aws ecr describe-images             --repository-name "crm/${{ matrix.service }}"             --image-ids "imageTag=${IMAGE_TAG}"             --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || true)
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "None" ]; then
+            echo "::error::crm/${{ matrix.service }}:${IMAGE_TAG} is not in ECR — refusing to register a task definition that cannot start"
+            exit 1
+          fi
+          echo "::notice::${{ matrix.service }} image confirmed: $DIGEST"
+
+      - name: Register task definition
+        id: reg
+        run: |
+          ARN=$(aws ecs register-task-definition \
+            --cli-input-json file:///tmp/taskdef.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+          echo "::notice::registered $ARN"
+
+      - name: Update service
+        env:
+          ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+        run: |
+          aws ecs update-service \
+            --cluster "crm-${ENVIRONMENT}" \
+            --service "${{ matrix.service }}" \
+            --task-definition "${{ steps.reg.outputs.arn }}" \
+            --query 'service.serviceName' --output text
+
+      - name: Wait for the rollout to stabilise
+        env:
+          ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+        run: |
+          # Fails if the new tasks never reach steady state, which is what turns
+          # a broken deploy into a failed workflow rather than a silent one.
+          # ECS keeps the old tasks serving until the new ones are healthy.
+          aws ecs wait services-stable \
+            --cluster "crm-${ENVIRONMENT}" --services "${{ matrix.service }}"
+          echo "::notice::${{ matrix.service }} stable"
+
+  # ── 6. Smoke ──────────────────────────────────────────────────────────────
+  smoke:
+    name: Smoke
+    needs: [plan, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe the public endpoints
+        env:
+          ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+        run: |
+          if [ "$ENVIRONMENT" = "prod" ]; then SUFFIX="crm.anan.sa"; else SUFFIX="staging.crm.anan.sa"; fi
+          fail=0
+          for probe in "api.${SUFFIX}/server/health" "ai.${SUFFIX}/health"; do
+            if curl -fsS --max-time 15 "https://${probe}" >/dev/null; then
+              echo "ok   $probe"
+            else
+              echo "FAIL $probe"; fail=1
+            fi
+          done
+          # Directus names health checks by ROLE, not backend: there is no
+          # `redis` key, so grepping for one reads as "Redis is off" when it is
+          # connected. `cache` is the proof.
+          curl -fsS --max-time 15 "https://api.${SUFFIX}/server/health" | grep -q '"cache"' \
+            && echo "ok   redis (reported as 'cache')" \
+            || echo "warn redis/cache not reported"
+          exit $fail

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
 import { normaliseConversationStatus } from '@yiji/shared-types';
-import { chatHandoffs, conversationTimestamps, type ChatTiming } from '@yiji/reports';
+import { chatHandoffs, conversationTimestamps, readChunked, type ChatTiming } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -110,18 +110,30 @@ export function useChatTimings(filters: PerformanceFilters) {
        * — a permissions gap here must not empty the whole page. */
       const subjectOf = new Map<string, string>();
       try {
-        const linked = (await directus.request(
-          readItems('tickets', {
-            limit: -1,
-            filter: { conversation: { _in: conversations.map((c) => c.id) } },
-            fields: ['conversation', 'subject', 'complaint_type'],
-            sort: ['-date_created'],
-          }),
-        )) as unknown as Array<{
+        // Chunked: every conversation id in one query string is an HTTP 414
+        // from CloudFront once the count grows. See readChunked.
+        const linked = await readChunked<{
           conversation: string | null;
           subject: string | null;
           complaint_type: string | null;
-        }>;
+        }>(
+          conversations.map((c) => c.id),
+          (ids) =>
+            directus.request(
+              readItems('tickets', {
+                limit: -1,
+                filter: { conversation: { _in: ids } },
+                fields: ['conversation', 'subject', 'complaint_type'],
+                sort: ['-date_created'],
+              }),
+            ) as unknown as Promise<
+              Array<{
+                conversation: string | null;
+                subject: string | null;
+                complaint_type: string | null;
+              }>
+            >,
+        );
         for (const tk of linked) {
           if (!tk.conversation) continue;
           const label = tk.complaint_type?.trim() || tk.subject?.trim();
@@ -132,17 +144,21 @@ export function useChatTimings(filters: PerformanceFilters) {
         /* no ticket read access — rows fall back to the customer alone */
       }
 
-      const messages = (await directus.request(
-        readItems('messages', {
-          limit: -1,
-          filter: {
-            conversation: { _in: conversations.map((c) => c.id) },
-            is_internal_note: { _eq: false },
-          },
-          fields: ['conversation', 'sender_type', 'date_created'],
-          sort: ['date_created'],
-        }),
-      )) as unknown as MessageRow[];
+      const messages = await readChunked<MessageRow>(
+        conversations.map((c) => c.id),
+        (ids) =>
+          directus.request(
+            readItems('messages', {
+              limit: -1,
+              filter: {
+                conversation: { _in: ids },
+                is_internal_note: { _eq: false },
+              },
+              fields: ['conversation', 'sender_type', 'date_created'],
+              sort: ['date_created'],
+            }),
+          ) as unknown as Promise<MessageRow[]>,
+      );
 
       /**
        * Shared with the admin console — see conversationTimestamps in
@@ -166,18 +182,29 @@ export function useChatTimings(filters: PerformanceFilters) {
        */
       let handoffs = new Map<string, { passedOn: boolean; takenBy: string | null }>();
       try {
-        const events = (await directus.request(
-          readItems('routing_events', {
-            limit: -1,
-            filter: { conversation: { _in: conversations.map((c) => c.id) } },
-            fields: ['conversation', 'agent', 'outcome', 'stage'],
-          }),
-        )) as unknown as Array<{
+        const events = await readChunked<{
           conversation: string;
           agent: string | null;
           outcome: string;
           stage: string;
-        }>;
+        }>(
+          conversations.map((c) => c.id),
+          (ids) =>
+            directus.request(
+              readItems('routing_events', {
+                limit: -1,
+                filter: { conversation: { _in: ids } },
+                fields: ['conversation', 'agent', 'outcome', 'stage'],
+              }),
+            ) as unknown as Promise<
+              Array<{
+                conversation: string;
+                agent: string | null;
+                outcome: string;
+                stage: string;
+              }>
+            >,
+        );
         handoffs = chatHandoffs(events);
       } catch {
         /* no routing history readable — every chat counts as cleanly assigned */

@@ -40,10 +40,69 @@ describe('GatewayDirectus.resolveVendor', () => {
   });
 });
 
+describe('GatewayDirectus.createWalkInConversation', () => {
+  /*
+   * A walk-in gets its OWN thread because the phone was typed, not proven —
+   * attaching an unverified session to a thread that number already owns would
+   * hand a stranger somebody's history.
+   *
+   * That reasoning is about the CONTACT, not the door they came through. Once
+   * a person has been identified through the Yiji app, the contact is no
+   * longer a guess, and a later walk-in by the same number is the same
+   * customer continuing the same conversation. Always creating is what made
+   * one customer appear twice in the agent's inbox.
+   */
+  it('opens a NEW thread for an unidentified walk-in', async () => {
+    request
+      .mockResolvedValueOnce({ id: 'conv-new' }) // create
+      .mockResolvedValueOnce({ id: 'msg-note' }) // the system note
+      .mockResolvedValueOnce({}); // last_message_at touch
+    const res = await makeGateway().createWalkInConversation(
+      'vendor-uuid',
+      'contact-1',
+      '0537301009',
+      false,
+    );
+    expect(res).toEqual({ id: 'conv-new', created: true });
+  });
+
+  it('RESUMES the live thread when the walk-in is a known customer', async () => {
+    request.mockResolvedValueOnce([{ id: 'conv-existing' }]); // findLiveConversation
+    const res = await makeGateway().createWalkInConversation(
+      'vendor-uuid',
+      'contact-1',
+      '0537301009',
+      true,
+    );
+    expect(res).toEqual({ id: 'conv-existing', created: false });
+    expect(request).toHaveBeenCalledTimes(1); // looked, did not create
+  });
+
+  it('still opens one for a known customer who has no live thread', async () => {
+    request
+      .mockResolvedValueOnce([]) // no live conversation
+      .mockResolvedValueOnce({ id: 'conv-new' })
+      .mockResolvedValueOnce({ id: 'msg-note' })
+      .mockResolvedValueOnce({});
+    const res = await makeGateway().createWalkInConversation(
+      'vendor-uuid',
+      'contact-1',
+      '0537301009',
+      true,
+    );
+    expect(res).toEqual({ id: 'conv-new', created: true });
+  });
+});
+
 describe('GatewayDirectus.upsertContact', () => {
   it('resumes the existing contact (isNew:false) with its STORED name', async () => {
     request.mockResolvedValueOnce([
-      { id: 'contact-existing', name: 'Stored Name', phone: '+15550001' },
+      {
+        id: 'contact-existing',
+        name: 'Stored Name',
+        phone: '+15550001',
+        external_customer_id: 'ext-1',
+      },
     ]);
     const res = await makeGateway().upsertContact('vendor-uuid', baseClaims);
     expect(res).toEqual({
@@ -51,8 +110,74 @@ describe('GatewayDirectus.upsertContact', () => {
       isNew: false,
       name: 'Stored Name',
       phone: '+15550001',
+      externalCustomerId: 'ext-1',
+      promoted: false,
     });
-    expect(request).toHaveBeenCalledTimes(1); // no create call
+    expect(request).toHaveBeenCalledTimes(1); // no create, and nothing to promote
+  });
+
+  /*
+   * THE WALK-IN WHO TURNS OUT TO BE REGISTERED.
+   *
+   * Yiji has no lookup by phone, so a walk-in's contact is stored with no
+   * Yiji id — honestly unknown. When the same person later opens the chat
+   * FROM the Yiji app, the phone matches that row and the session carries
+   * their real customer id. This used to return the row untouched, throwing
+   * the id away: the customer stayed "unknown" for ever, however many times
+   * they came back.
+   */
+  it('PROMOTES a walk-in contact when a Yiji session proves who they are', async () => {
+    request
+      .mockResolvedValueOnce([
+        {
+          id: 'contact-walkin',
+          name: null,
+          phone: '+15550001',
+          external_customer_id: null, // learned nothing at the QR code
+        },
+      ])
+      .mockResolvedValueOnce({}); // the promotion write
+    const res = await makeGateway().upsertContact('vendor-uuid', baseClaims);
+    expect(res).toMatchObject({
+      id: 'contact-walkin',
+      isNew: false,
+      externalCustomerId: 'ext-1',
+      promoted: true,
+    });
+    const [, update] = request.mock.calls;
+    expect(update).toBeDefined();
+  });
+
+  it('never overwrites a Yiji id we already hold', async () => {
+    request.mockResolvedValueOnce([
+      {
+        id: 'contact-known',
+        name: null,
+        phone: '+15550001',
+        external_customer_id: 'their-real-id',
+      },
+    ]);
+    const res = await makeGateway().upsertContact('vendor-uuid', {
+      ...baseClaims,
+      customer_id: 'a-different-id',
+    });
+    expect(res).toMatchObject({ externalCustomerId: 'their-real-id', promoted: false });
+    expect(request).toHaveBeenCalledTimes(1); // no write
+  });
+
+  it('does NOT promote from a phone-derived walk-in handle', async () => {
+    // `cust-<digits>` is minted by our own walk-in endpoint from the typed
+    // phone. Writing it into external_customer_id would put a fabricated value
+    // in the column the coupon push sends to Yiji as `userId`.
+    request.mockResolvedValueOnce([
+      { id: 'c-walkin', name: null, phone: '+15550001', external_customer_id: null },
+    ]);
+    const res = await makeGateway().upsertContact('vendor-uuid', {
+      ...baseClaims,
+      customer_id: 'cust-15550001',
+    });
+    expect(res).toMatchObject({ externalCustomerId: null, promoted: false });
+    expect(request).toHaveBeenCalledTimes(1); // no write
   });
 
   it('creates a new contact (isNew:true) when none exists', async () => {
@@ -60,7 +185,14 @@ describe('GatewayDirectus.upsertContact', () => {
       .mockResolvedValueOnce([]) // lookup miss
       .mockResolvedValueOnce({ id: 'contact-new' }); // create
     const res = await makeGateway().upsertContact('vendor-uuid', baseClaims);
-    expect(res).toEqual({ id: 'contact-new', isNew: true, name: 'Demo', phone: '+15550001' });
+    expect(res).toEqual({
+      id: 'contact-new',
+      isNew: true,
+      name: 'Demo',
+      phone: '+15550001',
+      externalCustomerId: 'ext-1',
+      promoted: false,
+    });
     expect(request).toHaveBeenCalledTimes(2);
   });
 
@@ -71,7 +203,14 @@ describe('GatewayDirectus.upsertContact', () => {
       customer_id: 'ext-2',
       email: 'only@example.com',
     });
-    expect(res).toEqual({ id: 'c2', isNew: true, name: null, phone: null });
+    expect(res).toEqual({
+      id: 'c2',
+      isNew: true,
+      name: null,
+      phone: null,
+      externalCustomerId: 'ext-2',
+      promoted: false,
+    });
   });
 
   it('recovers from a concurrent-create unique violation by re-querying', async () => {

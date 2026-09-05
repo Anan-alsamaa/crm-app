@@ -32,6 +32,42 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
   const log = (msg) => logger?.info?.(`app-roles-sync: ${msg}`);
   const warn = (msg) => logger?.warn?.(`app-roles-sync: ${msg}`);
 
+  /**
+   * A rejection the API reports as 400, not 500.
+   *
+   * Directus's error middleware calls `isDirectusError(err)` and answers 500 to
+   * anything that fails it — so a plain `new Error('bad input')` thrown from a
+   * filter hook tells the caller the SERVER broke when the PAYLOAD was wrong.
+   *
+   * `isDirectusError` tests for `Symbol.for('directus-error')`, and it must sit
+   * on the PROTOTYPE: setting `err[Symbol.for('directus-error')] = true` on the
+   * instance is not seen, and neither are `status`/`code` on their own. All
+   * three were measured against Directus 11 before this was written.
+   *
+   * `@directus/errors` is not resolvable from a bare hook (it is bundled inside
+   * @directus/api), so the shape is reproduced here rather than imported.
+   */
+  class ValidationError extends Error {
+    constructor(message, code = 'INVALID_PAYLOAD') {
+      super(message);
+      this.name = 'DirectusError';
+      this.code = code;
+      this.status = 400;
+      this.extensions = {};
+    }
+  }
+  Object.defineProperty(ValidationError.prototype, Symbol.for('directus-error'), {
+    value: true,
+  });
+
+  /** 403 for "you may not touch this", as distinct from "your input is wrong". */
+  class ForbiddenishError extends ValidationError {
+    constructor(message) {
+      super(message, 'INVALID_PAYLOAD');
+      this.status = 403;
+    }
+  }
+
   /* ── mirrors of directus/bootstrap/src/roles.ts (keep in sync) ────────── */
 
   const ASSIGNED_OR_UNASSIGNED = {
@@ -86,11 +122,12 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
   /* ── grant helpers ────────────────────────────────────────────────────── */
 
   // filter {} = unrestricted; fields null = all fields.
-  const g = (collection, actionName, filterObj = {}, fields = null) => ({
+  const g = (collection, actionName, filterObj = {}, fields = null, validation = null) => ({
     collection,
     action: actionName,
     filter: filterObj,
     fields,
+    validation,
   });
   const crud = (c) => ['create', 'read', 'update', 'delete'].map((a) => g(c, a));
   const readOnly = (c) => [g(c, 'read')];
@@ -112,6 +149,13 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     ...readOnly('quick_replies'),
     ...readOnly('routing_events'),
     ...readOnly('directus_files'),
+    // Reads the code-defined Agent role always had. Without them a materialized
+    // agent role renders a ticket with no deadline and a form with no custom
+    // fields — not a 403 anyone reports, just a quieter screen.
+    ...readOnly('sla_policies'),
+    ...readOnly('custom_fields'),
+    ...readOnly('store_notify_rules'),
+    ...readOnly('automation_rules'),
     g('notifications', 'read', SELF_RECIPIENT),
     g('notifications', 'update', SELF_RECIPIENT),
     g('directus_users', 'update', { id: { _eq: '$CURRENT_USER' } }, [
@@ -147,6 +191,13 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       g('messages_files', 'read'),
       g('directus_files', 'create'),
       g('csat_responses', 'read'),
+      g('custom_field_values', 'create'),
+      g('custom_field_values', 'read'),
+      g('custom_field_values', 'update'),
+      g('contacts_tags', 'create'),
+      g('contacts_tags', 'read'),
+      g('contacts_tags', 'delete'),
+      g('store_notifications', 'create'),
     ],
     view_all_chats: [
       // Wide reads deliberately override the scoped ones from use_chat.
@@ -219,6 +270,37 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       g('stores', 'update', {}, STORE_FIELDS_NO_YIJI_ID),
     ],
     manage_users: [...crud('directus_users')],
+    // UI gate: the Operations tab of the dashboard. Its reads arrive with
+    // view_dashboard / view_all_tickets.
+    view_ops_dashboard: [],
+    schedule_reports: [...crud('reports')],
+    manage_sla: [...crud('sla_policies')],
+    // The Roles editor. Reads directus_roles so the page can show which
+    // Directus role a row materialized to. What a holder may GRANT is capped
+    // by enforceCeiling below, not by this block.
+    manage_roles: [...crud('app_roles'), ...readOnly('directus_roles')],
+    // UI gate: the self-serve JSON backup reads through the other privileges.
+    manage_backup: [],
+    /*
+     * The Directus admin app, for a manager who works the data directly.
+     *
+     * app_access is already on every materialized policy, so signing in was
+     * never the missing piece — these are the SCHEMA reads that make the app
+     * legible: without them the collection list renders raw keys and the item
+     * forms have no field labels.
+     *
+     * Deliberately absent: directus_permissions, directus_policies,
+     * directus_roles, directus_settings. That is the line. A holder has the
+     * run of the business data and still cannot re-draw who may see what,
+     * because admin_access is not expressible here at all.
+     */
+    use_directus_app: [
+      ...readOnly('directus_collections'),
+      ...readOnly('directus_fields'),
+      ...readOnly('directus_relations'),
+      ...readOnly('directus_translations'),
+      ...readOnly('directus_presets'),
+    ],
   };
 
   const RESERVED = new Set(['administrator', 'admin', 'agent']);
@@ -253,7 +335,29 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
    * Only EXACT duplicates are dropped (several privileges legitimately repeat
    * the same read), purely to keep the permission table readable.
    */
-  function buildGrants(privileges, brandIds, storeIds) {
+  /**
+   * Roles nobody may hand out or take over through manage_users.
+   *
+   * `manage_users` used to be plain CRUD on directus_users, which meant anyone
+   * holding it could PATCH another user's `role` to Administrator — or their
+   * own — and become the owner. The fence: a role whose policy carries
+   * admin_access, and every service account role, is excluded both as a
+   * VALUE (validation: you cannot set it) and as a TARGET (filter: you cannot
+   * edit or delete a user who already holds it). Read at sync time so it
+   * follows whatever the roles currently are.
+   */
+  async function protectedRoleIds() {
+    const admin = await database('directus_roles as r')
+      .join('directus_access as a', 'a.role', 'r.id')
+      .join('directus_policies as p', 'p.id', 'a.policy')
+      .where('p.admin_access', true)
+      .distinct('r.id')
+      .pluck('r.id');
+    const svc = await database('directus_roles').whereRaw("LOWER(name) LIKE 'svc-%'").pluck('id');
+    return Array.from(new Set([...admin, ...svc]));
+  }
+
+  function buildGrants(privileges, brandIds, storeIds, protectedRoles = []) {
     const grants = [];
     const seen = new Set();
     const add = (grant) => {
@@ -272,6 +376,21 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
         continue;
       }
       blocks.forEach(add);
+    }
+
+    if (protectedRoles.length > 0) {
+      const notProtected = { role: { _nin: protectedRoles } };
+      for (const grant of grants) {
+        if (grant.collection !== 'directus_users') continue;
+        if (grant.action === 'create' || grant.action === 'update') {
+          grant.validation = notProtected;
+        }
+        if (grant.action === 'update' || grant.action === 'delete') {
+          grant.filter = isWide(grant.filter)
+            ? notProtected
+            : { _and: [grant.filter, notProtected] };
+        }
+      }
     }
 
     /**
@@ -327,26 +446,41 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
 
   /* ── row plumbing ─────────────────────────────────────────────────────── */
 
+  /**
+   * Sentinel for "a string was supplied that is not JSON at all".
+   *
+   * Returning null there would be indistinguishable from "absent", and the
+   * validator treats absent as "nothing to check" — so a value like `"nope"`
+   * sailed past validation and reached Postgres, which rejected it as invalid
+   * json syntax and surfaced a raw SQL string as a 500. The validator now
+   * refuses this sentinel with a 400 instead.
+   */
+  const UNPARSEABLE = Symbol('unparseable-json');
+
   const parseJson = (v) => {
     if (v == null) return null;
     if (typeof v === 'string') {
       try {
         return JSON.parse(v);
       } catch {
-        return null;
+        return UNPARSEABLE;
       }
     }
     return v;
   };
+
+  /** Stored rows are written by this hook, so an unparseable value there is a
+   *  corrupt row rather than user input — treat it as absent. */
+  const asStored = (v) => (v === UNPARSEABLE ? null : v);
 
   async function loadRow(id) {
     const row = await database('app_roles').where({ id }).first();
     if (!row) return null;
     return {
       ...row,
-      privileges: parseJson(row.privileges),
-      brands: parseJson(row.brands),
-      stores: parseJson(row.stores),
+      privileges: asStored(parseJson(row.privileges)),
+      brands: asStored(parseJson(row.brands)),
+      stores: asStored(parseJson(row.stores)),
       builtin: row.builtin === true || row.builtin === 1,
     };
   }
@@ -444,14 +578,14 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     });
     if (stale.length) await permissionsService.deleteMany(stale.map((p) => p.id));
 
-    const grants = buildGrants(row.privileges, row.brands, row.stores);
+    const grants = buildGrants(row.privileges, row.brands, row.stores, await protectedRoleIds());
     await permissionsService.createMany(
       grants.map((grant) => ({
         policy: policyId,
         collection: grant.collection,
         action: grant.action,
         permissions: grant.filter && Object.keys(grant.filter).length ? grant.filter : {},
-        validation: {},
+        validation: grant.validation ?? {},
         fields: grant.fields ?? ['*'],
       })),
     );
@@ -469,53 +603,115 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
 
   function validatePayload(payload) {
     if (payload.name !== undefined && isReserved(payload.name)) {
-      throw new Error(
+      throw new ValidationError(
         `'${payload.name}' is a reserved role name — the built-in roles are defined in code.`,
       );
     }
     const privs = parseJson(payload.privileges);
     if (privs !== null && privs !== undefined) {
-      if (typeof privs !== 'object' || Array.isArray(privs)) {
-        throw new Error('privileges must be an object of { privilege: boolean }');
+      if (privs === UNPARSEABLE || typeof privs !== 'object' || Array.isArray(privs)) {
+        throw new ValidationError('privileges must be an object of { privilege: boolean }');
       }
-      // Strip unknown keys so a crafted payload cannot smuggle a privilege the
-      // catalog will only grow to support later.
+      // Unknown keys are REFUSED, not stripped. Stripping was the original
+      // rule — "a crafted payload cannot smuggle a privilege the catalog will
+      // only grow to support later" — and it was right about smuggling and
+      // wrong about what happens next: a PATCH whose privileges are ALL
+      // unknown stripped down to `{}`, which Directus then stored, replacing
+      // the whole map. A non-owner sending `{ admin_access: true }` did not
+      // gain admin_access; it silently zeroed a Supervisor role instead. A
+      // payload that names something outside the catalog is a payload that
+      // does not know what it is doing, and it must not be allowed to write.
+      const unknown = Object.keys(privs).filter((k) => !CATALOG[k]);
+      if (unknown.length) {
+        throw new ValidationError(
+          `unknown privilege(s): ${unknown.join(', ')} — nothing outside the catalog can be granted`,
+        );
+      }
       const clean = {};
-      for (const k of Object.keys(privs)) if (CATALOG[k]) clean[k] = Boolean(privs[k]);
+      for (const k of Object.keys(privs)) clean[k] = Boolean(privs[k]);
       payload.privileges = clean;
     }
     const brands = parseJson(payload.brands);
     if (brands !== null && brands !== undefined && !Array.isArray(brands)) {
-      throw new Error('brands must be an array of brand ids');
+      throw new ValidationError('brands must be an array of brand ids');
     }
     const stores = parseJson(payload.stores);
     if (stores !== null && stores !== undefined && !Array.isArray(stores)) {
-      throw new Error('stores must be an array of branch ids');
+      throw new ValidationError('stores must be an array of branch ids');
     }
     return payload;
   }
 
-  filter('app_roles.items.create', (payload) => validatePayload(payload));
-  filter('app_roles.items.update', async (payload, meta) => {
+  /**
+   * THE CEILING. A non-owner may edit roles only within what they hold.
+   *
+   * The Roles page disables the toggles a person cannot grant, but a page is
+   * not a boundary — a crafted PATCH is. So the same three rules run here, on
+   * the caller's accountability, for anyone who is not the Directus owner:
+   *
+   *   1. they must hold manage_roles themselves;
+   *   2. they may not grant a privilege their own role does not hold;
+   *   3. they may not edit or delete the role they are signed in with.
+   *
+   * Together with the CATALOG (which cannot express admin_access, vendors or
+   * AI settings at all) this is what keeps the owner's capabilities the
+   * owner's: nothing on this list reaches them, and the list is all a role
+   * editor can touch.
+   */
+  async function enforceCeiling(payload, context, keys = []) {
+    const acc = context?.accountability;
+    if (!acc || acc.admin) return payload; // the owner is unrestricted
+    if (!acc.role) throw new ForbiddenishError('No role on this session.');
+    const mine = await database('app_roles').where({ directus_role: acc.role }).first();
+    const held = parseJson(mine?.privileges) ?? {};
+    if (!held.manage_roles) {
+      throw new ForbiddenishError('Your role does not include managing roles.');
+    }
+    for (const key of keys) {
+      const row = await loadRow(key);
+      if (row?.directus_role && row.directus_role === acc.role) {
+        throw new ForbiddenishError(
+          'You cannot change the role you are signed in with. Ask the project owner.',
+        );
+      }
+    }
+    if (payload && payload.privileges) {
+      for (const [k, on] of Object.entries(payload.privileges)) {
+        if (on && !held[k]) {
+          throw new ForbiddenishError(`You cannot grant '${k}' — your own role does not hold it.`);
+        }
+      }
+    }
+    return payload;
+  }
+
+  filter('app_roles.items.create', async (payload, _meta, context) =>
+    enforceCeiling(validatePayload(payload), context),
+  );
+  filter('app_roles.items.update', async (payload, meta, context) => {
     // A builtin row is display-only. Refuse edits to anything but description.
     for (const key of meta.keys ?? []) {
       const row = await loadRow(key);
       if (row?.builtin) {
         const touched = Object.keys(payload).filter((k) => !['description'].includes(k));
         if (touched.length)
-          throw new Error(`'${row.name}' is a built-in role — it is defined in code, not here.`);
+          throw new ForbiddenishError(
+            `'${row.name}' is a built-in role — it is defined in code, not here.`,
+          );
       }
     }
-    return validatePayload(payload);
+    return enforceCeiling(validatePayload(payload), context, meta.keys ?? []);
   });
 
   // Deleting a row tears the materialized artifacts down BEFORE the row goes,
   // while we can still read which role/policy it owned.
-  filter('app_roles.items.delete', async (keys) => {
+  filter('app_roles.items.delete', async (keys, _meta, context) => {
+    await enforceCeiling(null, context, keys);
     for (const key of keys) {
       const row = await loadRow(key);
       if (!row) continue;
-      if (row.builtin) throw new Error(`'${row.name}' is a built-in role and cannot be deleted.`);
+      if (row.builtin)
+        throw new ForbiddenishError(`'${row.name}' is a built-in role and cannot be deleted.`);
       const schema = await getSchema();
       const opts = { schema, accountability: null, knex: database };
       try {
@@ -537,9 +733,12 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
         }
         log(`tore down materialized role for '${row.name}'`);
       } catch (err) {
-        throw new Error(
+        const conflict = new ValidationError(
           `Cannot delete '${row.name}': ${err?.message ?? err}. Reassign its users to another role first.`,
         );
+        // A role still in use is a CONFLICT, not malformed input.
+        conflict.status = 409;
+        throw conflict;
       }
     }
     return keys;

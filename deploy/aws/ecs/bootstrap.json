@@ -1,0 +1,74 @@
+{
+  "family": "crm-{{ENV}}-bootstrap",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/crm-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/crm-task-role-{{ENV}}",
+  "containerDefinitions": [
+    {
+      "name": "bootstrap",
+      "image": "{{ACCOUNT_ID}}.dkr.ecr.{{REGION}}.amazonaws.com/crm/bootstrap:{{IMAGE_TAG}}",
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/crm-{{ENV}}/bootstrap",
+          "awslogs-region": "{{REGION}}",
+          "awslogs-stream-prefix": "bootstrap"
+        }
+      },
+      "environment": [
+        {
+          "name": "DIRECTUS_INTERNAL_URL",
+          "value": "http://{{ALB_HOST}}"
+        },
+        {
+          "name": "DB_HOST",
+          "value": "test-yiji.ctqnuieahhb8.us-east-2.rds.amazonaws.com"
+        },
+        {
+          "name": "DB_PORT",
+          "value": "5432"
+        },
+        {
+          "name": "DB_DATABASE",
+          "value": "crm_{{ENV}}"
+        },
+        {
+          "name": "DB_USER",
+          "value": "yijicrm"
+        },
+        {
+          "name": "DB_SSL",
+          "value": "true"
+        },
+        {
+          "name": "DIRECTUS_ADMIN_EMAIL",
+          "value": "{{SECRET:DIRECTUS_ADMIN_EMAIL}}"
+        },
+        {
+          "name": "DIRECTUS_ADMIN_PASSWORD",
+          "value": "{{SECRET:DIRECTUS_ADMIN_PASSWORD}}"
+        },
+        {
+          "name": "DB_PASSWORD",
+          "value": "{{SECRET:DB_PASSWORD}}"
+        },
+        {
+          "name": "SVC_GATEWAY_TOKEN",
+          "value": "{{SECRET:SVC_GATEWAY_TOKEN}}"
+        },
+        {
+          "name": "SVC_WORKERS_TOKEN",
+          "value": "{{SECRET:SVC_WORKERS_TOKEN}}"
+        },
+        {
+          "name": "SVC_AI_TOKEN",
+          "value": "{{SECRET:SVC_AI_TOKEN}}"
+        }
+      ]
+    }
+  ]
+}

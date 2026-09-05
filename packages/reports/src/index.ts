@@ -20,6 +20,7 @@ export {
   loadColumnOrder,
   saveColumnOrder,
   TICKET_REPORT_ORDER_KEY,
+  COMPENSATION_REPORT_ORDER_KEY,
   joinComplaintStores,
   reportFilename,
   splitLocalDateTime,
@@ -111,3 +112,8 @@ export {
 } from './coupon-approvals.js';
 export { couponSar, couponWorth } from './coupon-value.js';
 export type { CouponValueFact, CouponWorth, CouponSideTotal } from './coupon-value.js';
+
+/* Large `_in` filters. A browser query string that carries hundreds of ids is
+   rejected by CloudFront with a 414 before Directus ever sees it — a fault that
+   only appears once real data grows past the limit. See chunk-ids.ts. */
+export { chunkIds, readChunked, IN_FILTER_CHUNK } from './chunk-ids.js';

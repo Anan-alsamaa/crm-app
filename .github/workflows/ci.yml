@@ -85,22 +85,32 @@ jobs:
     runs-on: ubuntu-latest
     # The full-stack E2E suite needs the WHOLE integrated stack (gateway +
     # both portals + widget + Directus) working together, so it only makes
-    # sense once all streams are merged. Run it as an integration gate — on
-    # pushes to the authoritative branch (main) — not on
-    # every feature/stream PR, where cross-stream pieces aren't present yet and
-    # it can't go green. Per-PR feedback comes from the fast `quality` job.
+    # sense where every stream is present: on main, and on the pull requests
+    # that merge INTO main. A stream-to-stream PR still skips it, because the
+    # cross-stream pieces are not there yet and it could not go green.
     # `workflow_dispatch` also allows running it on demand from the Actions tab.
     #
     # This job was previously dispatch-only AND continue-on-error, to stop a
     # flood of CI-failure emails. That silenced the alarm rather than fixing the
     # specs: three of them rotted undetected for weeks while every run on main
     # still reported green, because a continue-on-error job cannot mark the run
-    # red. The specs are fixed, so it gates again — on pushes to the
-    # authoritative branch only, not on stream PRs where the cross-stream pieces
-    # aren't present yet and it can't go green.
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # red.
+    #
+    # It also has to RUN on the pull requests it gates. This job is a REQUIRED
+    # check on main, and it used to be push-only — so on every PR it reported
+    # "skipping", which a required check never accepts as satisfied. The result
+    # was that no PR to main could be merged at all, while the branch rules and
+    # the workflow each looked correct on their own.
+    #
+    # The old exclusion existed because stream PRs lacked the cross-stream code
+    # and could not go green. Targeting the base branch instead of the event is
+    # the honest version of that rule: a PR INTO main has everything present, so
+    # it can and must pass; a stream-to-stream PR still skips.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main')
     timeout-minutes: 25
-
     services:
       postgres:
         image: postgres:16-alpine

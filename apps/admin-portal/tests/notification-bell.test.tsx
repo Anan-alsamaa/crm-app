@@ -61,12 +61,14 @@ describe('admin notification bell', () => {
   it('shows the unread count WITHOUT the panel being opened', async () => {
     // The whole point is that nobody has to be looking in the right place.
     renderBell();
-    expect(screen.getByRole('button', { name: /1 unread/i })).toBeInTheDocument();
+    // The badge is a labelled count on the bell, the same shape as the agent
+    // portal's panel this one now shares.
+    expect(screen.getByLabelText(/1 unread/i)).toBeInTheDocument();
   });
 
   it('carries no badge when everything has been read', () => {
     renderBell([{ ...COUPON, read_at: '2026-08-25T11:00:00Z' }]);
-    expect(screen.queryByRole('button', { name: /unread/i })).toBeNull();
+    expect(screen.queryByLabelText(/unread/i)).toBeNull();
     expect(screen.getByRole('button', { name: /notifications/i })).toBeInTheDocument();
   });
 
@@ -83,14 +85,29 @@ describe('admin notification bell', () => {
   it('takes the admin to the approvals queue, and marks it read on the way', async () => {
     renderBell();
     await userEvent.click(screen.getByRole('button', { name: /notifications/i }));
-    await userEvent.click(screen.getByText(/High-value coupon/i));
+    // "View" is the row's link; it marks the item read before navigating so the
+    // badge does not keep counting something already acted on.
+    await userEvent.click(screen.getByRole('button', { name: /^view$/i }));
     expect(markRead).toHaveBeenCalledWith('n1');
     expect(navigate).toHaveBeenCalledWith('/coupon-approvals');
+  });
+
+  it('can mark one item read without leaving the panel', async () => {
+    renderBell();
+    await userEvent.click(screen.getByRole('button', { name: /notifications/i }));
+    await userEvent.click(screen.getByRole('button', { name: /mark read/i }));
+    expect(markRead).toHaveBeenCalledWith('n1');
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('says so plainly when there is nothing, rather than showing an empty box', async () => {
     renderBell([]);
     await userEvent.click(screen.getByRole('button', { name: /notifications/i }));
-    expect(screen.getByText(/nothing to read/i)).toBeInTheDocument();
+    // Unread is the default tab; with nothing unread the empty state says so.
+    // The header subtitle says it too, so assert on the hint that only the
+    // empty state carries.
+    expect(
+      screen.getByText(/new sla warnings, mentions, and assignments land here/i),
+    ).toBeInTheDocument();
   });
 });

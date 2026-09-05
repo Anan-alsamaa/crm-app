@@ -11,6 +11,51 @@ const fact = (over: Partial<CouponValueFact> = {}): CouponValueFact => ({
   ...over,
 });
 
+describe('couponWorth — which statuses count as spend', () => {
+  /*
+   * The regression behind "5 SAR across 5 approved coupons" on the staging
+   * dashboard when the database held 10. Spend used to match the literal
+   * 'approved', so the moment a coupon was DELIVERED to Yiji ('assigned') it
+   * dropped out of the total. The spend figure halved precisely because the
+   * coupons had gone through. Found by auditing the dashboard against the
+   * database, not by any test.
+   */
+  it('counts a delivered coupon (assigned) as approved spend', () => {
+    const w = couponWorth([fact({ status: 'assigned', couponValue: 10 })]);
+    expect(w.sar).toBe(10);
+    expect(w.count).toBe(1);
+    expect(w.pendingSar).toBe(0);
+  });
+
+  it('counts an amended approval (edited) as approved spend', () => {
+    const w = couponWorth([fact({ status: 'edited', couponValue: 7 })]);
+    expect(w.sar).toBe(7);
+    expect(w.count).toBe(1);
+  });
+
+  it('still keeps pending and rejected riyals OUT of spend', () => {
+    const w = couponWorth([
+      fact({ status: 'pending', couponValue: 3 }),
+      fact({ status: 'rejected', couponValue: 4 }),
+      fact({ status: 'approved', couponValue: 5 }),
+    ]);
+    expect(w.sar).toBe(5);
+    expect(w.pendingSar).toBe(3);
+    expect(w.rejectedSar).toBe(4);
+    expect(w.askedSar).toBe(12);
+  });
+
+  it('reproduces the staging figure exactly: ten 1-SAR approvals, five delivered', () => {
+    const facts = [
+      ...Array.from({ length: 5 }, () => fact({ status: 'approved', couponValue: 1 })),
+      ...Array.from({ length: 5 }, () => fact({ status: 'assigned', couponValue: 1 })),
+    ];
+    const w = couponWorth(facts);
+    expect(w.sar).toBe(10); // was 5
+    expect(w.count).toBe(10); // was 5
+  });
+});
+
 describe('couponSar', () => {
   it('prices an amount coupon at its face value', () => {
     expect(couponSar(fact({ couponValue: 25 }))).toBe(25);

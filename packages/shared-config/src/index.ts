@@ -12,6 +12,7 @@ export {
   onPageHost,
   exportFileName,
   resolveUrl,
+  runtimeConfig,
   resolveOptionalUrl,
   type RuntimeConfig,
 } from './runtime.js';

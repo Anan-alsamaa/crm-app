@@ -183,8 +183,27 @@ async function main(): Promise<void> {
     subClient = createRedis(config.REDIS_URL, redisOpts);
     pubClient.on('error', (err) => logger.warn({ err: err.message }, 'redis pub error (retrying)'));
     subClient.on('error', (err) => logger.warn({ err: err.message }, 'redis sub error (retrying)'));
-    await pubClient.connect();
-    await subClient.connect();
+    /* Standalone ioredis is LAZY and must be told to connect; a Cluster
+     * connects eagerly in its constructor and THROWS "Redis is already
+     * connecting/connected" if you call connect() as well.
+     *
+     * `createRedis` returns whichever the URL implies, so this branch is the
+     * difference between local dev (standalone, needs the call) and
+     * ElastiCache in cluster mode (already connecting, must not be called).
+     * Without it the gateway dies at boot on AWS only — the failure cannot
+     * reproduce locally, which is what makes it expensive to find. Waiting on
+     * 'ready' keeps the original guarantee that the adapter is not installed
+     * before both clients can actually carry traffic. */
+    const ready = (c: NonNullable<typeof pubClient>) =>
+      c.status === 'ready'
+        ? Promise.resolve()
+        : c.status === 'connecting' || c.status === 'connect' || c.status === 'reconnecting'
+          ? new Promise<void>((res, rej) => {
+              c.once('ready', () => res());
+              c.once('error', rej);
+            })
+          : c.connect();
+    await Promise.all([ready(pubClient!), ready(subClient!)]);
     io.adapter(createAdapter(pubClient, subClient));
     logger.info('Redis adapter enabled (multi-instance, auto-reconnect)');
   } else {
