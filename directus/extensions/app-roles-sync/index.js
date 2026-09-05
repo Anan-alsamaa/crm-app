@@ -592,10 +592,23 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       if (privs === UNPARSEABLE || typeof privs !== 'object' || Array.isArray(privs)) {
         throw new ValidationError('privileges must be an object of { privilege: boolean }');
       }
-      // Strip unknown keys so a crafted payload cannot smuggle a privilege the
-      // catalog will only grow to support later.
+      // Unknown keys are REFUSED, not stripped. Stripping was the original
+      // rule — "a crafted payload cannot smuggle a privilege the catalog will
+      // only grow to support later" — and it was right about smuggling and
+      // wrong about what happens next: a PATCH whose privileges are ALL
+      // unknown stripped down to `{}`, which Directus then stored, replacing
+      // the whole map. A non-owner sending `{ admin_access: true }` did not
+      // gain admin_access; it silently zeroed a Supervisor role instead. A
+      // payload that names something outside the catalog is a payload that
+      // does not know what it is doing, and it must not be allowed to write.
+      const unknown = Object.keys(privs).filter((k) => !CATALOG[k]);
+      if (unknown.length) {
+        throw new ValidationError(
+          `unknown privilege(s): ${unknown.join(', ')} — nothing outside the catalog can be granted`,
+        );
+      }
       const clean = {};
-      for (const k of Object.keys(privs)) if (CATALOG[k]) clean[k] = Boolean(privs[k]);
+      for (const k of Object.keys(privs)) clean[k] = Boolean(privs[k]);
       payload.privileges = clean;
     }
     const brands = parseJson(payload.brands);
