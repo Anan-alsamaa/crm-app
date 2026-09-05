@@ -23,8 +23,14 @@ interface AuthState {
    * privileges of their own — see `can`).
    */
   privileges: Record<string, boolean> | null;
-  /** True when this person's role grants `priv`. Admins hold everything. */
+  /** True when this person's role grants `priv`. The owner holds everything. */
   can: (priv: Privilege) => boolean;
+  /**
+   * The project owner — Directus admin_access. Vendors, AI settings and the
+   * roles editor's ceiling are gated on THIS, never on a privilege, so no role
+   * edit can hand them out.
+   */
+  isOwner: boolean;
   /** True when there is at least one screen in this portal for them. */
   canUsePortal: boolean;
   /**
@@ -141,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (priv: Privilege): boolean => (isAdmin(user) ? true : privileges?.[priv] === true),
     [user, privileges],
   );
+  const isOwner = useMemo(() => isAdmin(user), [user]);
 
   const canUsePortal = useMemo(() => hasPortalAccess(user, privileges), [user, privileges]);
 
@@ -151,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         privileges,
         can,
+        isOwner,
         canUsePortal,
         login,
         logout,
@@ -175,7 +183,14 @@ export function useAuth(): AuthState {
  * the role-name allowlist is kept only as a non-regressing fallback for setups
  * where the policy graph isn't readable but the role is conventionally named.
  */
-export const ADMIN_ROLES = ['Administrator', 'Admin'];
+/**
+ * Only the Directus owner. The built-in `Admin` role used to be listed here
+ * too, which made it all-powerful in this portal regardless of any privilege —
+ * so a "WeCare Admin" could never be built on it. It is not listed any more:
+ * a CRM administrator is an app role with privileges like everyone else, and
+ * what is owner-only stays owner-only.
+ */
+export const ADMIN_ROLES = ['Administrator'];
 export function isAdmin(user: AuthUser | null): boolean {
   if (!user) return false;
   return user.admin_access || (!!user.role && ADMIN_ROLES.includes(user.role.name));
@@ -190,7 +205,13 @@ export function isAdmin(user: AuthUser | null): boolean {
  * kind of number that gets screenshotted. Default deny, and widen it when
  * somebody asks.
  */
-export const COUPON_MONEY_ROLES = ['Administrator', 'Admin', 'Supervisor'];
+export const COUPON_MONEY_ROLES = [
+  'Administrator',
+  'Admin',
+  'Supervisor',
+  'WeCare Admin',
+  'WeCare Supervisor',
+];
 
 /**
  * Whether to render the coupon spend figures.

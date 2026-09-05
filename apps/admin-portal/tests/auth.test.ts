@@ -21,9 +21,11 @@ describe('isAdmin (admin portal admin guard)', () => {
     expect(isAdmin({ ...base, admin_access: true, role: { id: 'r', name: 'Owner' } })).toBe(true);
     expect(isAdmin({ ...base, admin_access: true, role: null })).toBe(true);
   });
-  it('admits Administrator and Admin by name (fallback)', () => {
+  it('admits Administrator by name (fallback) but never the CRM Admin role', () => {
     expect(isAdmin({ ...base, role: { id: 'r', name: 'Administrator' } })).toBe(true);
-    expect(isAdmin({ ...base, role: { id: 'r', name: 'Admin' } })).toBe(true);
+    // Owner-only pages (vendors, AI settings) and the roles-editor ceiling
+    // key off this. The CRM Admin role must go through privileges.
+    expect(isAdmin({ ...base, role: { id: 'r', name: 'Admin' } })).toBe(false);
   });
   it('rejects non-admins (no admin_access, non-admin role) and null', () => {
     expect(isAdmin({ ...base, role: { id: 'r', name: 'Agent' } })).toBe(false);

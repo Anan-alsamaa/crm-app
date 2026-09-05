@@ -284,7 +284,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const tabs = reportTabs(t);
   const location = useLocation();
-  const { user, logout, can } = useAuth();
+  const { user, logout, can, isOwner } = useAuth();
   const displayName = staffDisplayName(user, 'Admin');
   // Command-palette open state is lifted here so the top-bar search trigger and
   // the Cmd/Ctrl+K shortcut both drive the one palette instance below.
@@ -336,7 +336,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           // NOT `/reports`: that is now the parent of the two KPI pages, so a
           // link to it would light up alongside whichever one is open.
           to: '/reports/scheduled',
-          requires: 'manage_lists' as const,
+          requires: 'schedule_reports' as const,
           label: t('nav.reports', { defaultValue: 'Scheduled reports' }),
           icon: CalendarIcon,
         },
@@ -379,7 +379,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         { to: '/users', label: t('nav.users'), icon: UsersIcon, requires: 'manage_users' as const },
         {
           to: '/roles',
-          requires: 'manage_users' as const,
+          requires: 'manage_roles' as const,
           label: t('nav.roles', { defaultValue: 'Roles & privileges' }),
           icon: ShieldIcon,
         },
@@ -388,7 +388,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           to: '/vendors',
           label: t('nav.vendors', { defaultValue: 'Vendors' }),
           icon: StoreIcon,
-          requires: 'manage_restaurants' as const,
+          ownerOnly: true,
         },
         {
           to: '/lists',
@@ -398,7 +398,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         },
         {
           to: '/backup',
-          requires: 'manage_users' as const,
+          requires: 'manage_backup' as const,
           label: t('nav.backup', { defaultValue: 'Backup' }),
           icon: DownloadIcon,
         },
@@ -433,7 +433,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     {
       heading: t('nav.policies', { defaultValue: 'Policies' }),
       items: [
-        { to: '/sla', label: t('nav.sla'), icon: ShieldIcon, requires: 'manage_lists' as const },
+        { to: '/sla', label: t('nav.sla'), icon: ShieldIcon, requires: 'manage_sla' as const },
       ],
     },
     {
@@ -441,10 +441,10 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         {
           to: '/ai-config',
-          requires: 'manage_lists' as const,
+          ownerOnly: true,
           // A single-item section shows the ITEM label in the top bar, so this
           // is the word that has to fit there. The page keeps its full title.
-          label: t('nav.aiConfigShort', { defaultValue: 'AI' }),
+          label: t('nav.aiConfigShort', { defaultValue: 'AI settings' }),
           icon: SparkleIcon,
         },
       ],
@@ -491,6 +491,8 @@ function Shell({ children }: { children: React.ReactNode }) {
       ...section,
       items: section.items.flatMap((it) => {
         if (it.requires && !can(it.requires)) return [];
+        // Owner-only entries are not privileges; nobody but the owner sees them.
+        if ((it as { ownerOnly?: boolean }).ownerOnly && !isOwner) return [];
         /*
          * A group that collapses to ONE tab links straight to that tab.
          *
@@ -697,7 +699,7 @@ export function App() {
           <Route
             path="/sla"
             element={
-              <ProtectedRoute requires="manage_lists">
+              <ProtectedRoute requires="manage_sla">
                 <Shell>
                   <SlaPoliciesPage />
                 </Shell>
@@ -707,7 +709,7 @@ export function App() {
           <Route
             path="/vendors"
             element={
-              <ProtectedRoute requires="manage_restaurants">
+              <ProtectedRoute ownerOnly>
                 <Shell>
                   <VendorsPage />
                 </Shell>
@@ -737,7 +739,7 @@ export function App() {
           <Route
             path="/ai-config"
             element={
-              <ProtectedRoute requires="manage_lists">
+              <ProtectedRoute ownerOnly>
                 <Shell>
                   <AiConfigPage />
                 </Shell>
@@ -751,7 +753,7 @@ export function App() {
           <Route
             path="/reports/scheduled"
             element={
-              <ProtectedRoute requires="manage_lists">
+              <ProtectedRoute requires="schedule_reports">
                 <Shell>
                   <ReportsPage />
                 </Shell>
@@ -905,7 +907,7 @@ export function App() {
           <Route
             path="/roles"
             element={
-              <ProtectedRoute requires="manage_users">
+              <ProtectedRoute requires="manage_roles">
                 <Shell>
                   <RolesPage />
                 </Shell>
@@ -915,7 +917,7 @@ export function App() {
           <Route
             path="/backup"
             element={
-              <ProtectedRoute requires="manage_users">
+              <ProtectedRoute requires="manage_backup">
                 <Shell>
                   <BackupPage />
                 </Shell>

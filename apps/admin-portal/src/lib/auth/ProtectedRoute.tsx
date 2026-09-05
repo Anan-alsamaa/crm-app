@@ -21,12 +21,19 @@ import type { Privilege } from '../privileges.js';
 export function ProtectedRoute({
   children,
   requires,
+  ownerOnly = false,
 }: {
   children: ReactNode;
   requires?: Privilege;
+  /**
+   * Open to the project owner (Directus admin_access) and nobody else. Not a
+   * privilege on purpose: there is no key in the Roles editor that can hand
+   * this out, so no role edit — by anyone — can widen it.
+   */
+  ownerOnly?: boolean;
 }) {
   const { t } = useTranslation();
-  const { user, loading, canUsePortal, can } = useAuth();
+  const { user, loading, canUsePortal, can, isOwner } = useAuth();
 
   if (loading) {
     return (
@@ -45,6 +52,20 @@ export function ProtectedRoute({
           description={t('auth.noPortalAccessHint', {
             defaultValue:
               'Your account is signed in, but none of the screens here are open to it. If you handle customer chats, use the agent portal instead.',
+          })}
+        />
+      </div>
+    );
+  }
+
+  if (ownerOnly && !isOwner) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <EmptyState
+          title={t('auth.ownerOnly', { defaultValue: 'Only the project owner can open this page' })}
+          description={t('auth.ownerOnlyHint', {
+            defaultValue:
+              'This is not something a role can be given. If you need a change here, ask the project owner.',
           })}
         />
       </div>

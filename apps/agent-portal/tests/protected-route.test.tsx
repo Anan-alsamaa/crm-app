@@ -48,19 +48,55 @@ describe('ProtectedRoute (agent portal permission guard)', () => {
     expect(screen.getByText('login page')).toBeInTheDocument();
   });
 
-  it('renders children for an Agent', () => {
-    useAuthMock.mockReturnValue({ user: agent, loading: false });
+  // The guard reads PRIVILEGES now, not role names: `canUsePortal` says whether
+  // this portal has anything for the role, `can` whether a page is open to it.
+  it('renders children for a role whose privileges open this portal', () => {
+    useAuthMock.mockReturnValue({
+      user: agent,
+      loading: false,
+      canUsePortal: true,
+      can: () => true,
+      isOwner: false,
+    });
     renderGuard();
     expect(screen.getByText('inbox')).toBeInTheDocument();
   });
 
-  it('blocks a role outside the allowed set', () => {
+  it('blocks a role whose privileges open nothing here (e.g. operations)', () => {
     useAuthMock.mockReturnValue({
-      user: { ...agent, role: { id: 'r9', name: 'svc-workers' } },
+      user: { ...agent, role: { id: 'r9', name: 'Operations' } },
       loading: false,
+      canUsePortal: false,
+      can: () => false,
+      isOwner: false,
     });
     renderGuard();
     expect(screen.queryByText('inbox')).not.toBeInTheDocument();
+  });
+
+  it('blocks a page the role is admitted to the portal for but does not hold', () => {
+    useAuthMock.mockReturnValue({
+      user: agent,
+      loading: false,
+      canUsePortal: true,
+      can: (p: string) => p === 'use_chat', // may chat, may not create tickets
+      isOwner: false,
+    });
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute requires="create_tickets">
+                <div>add ticket</div>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText('add ticket')).not.toBeInTheDocument();
   });
 
   it('shows a spinner while loading', () => {

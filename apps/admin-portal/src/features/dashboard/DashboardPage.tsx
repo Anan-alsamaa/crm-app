@@ -28,13 +28,15 @@ type Tab = 'operations' | 'agent';
 
 export function DashboardPage() {
   const { t } = useTranslation();
-  const { user, can } = useAuth();
+  const { user, can, isOwner } = useAuth();
   const firstName = user?.first_name || user?.email?.split('@')[0] || '';
   const canSeeAgent = can('view_all_chats');
+  // The operations board is its own privilege now: the desk is not shown the
+  // branch/brand/area-manager cuts unless told, and operations is not shown
+  // the desk. The owner sees both.
+  const canSeeOps = isOwner || can('view_ops_dashboard');
   const [tab, setTab] = useState<Tab>('agent');
-  // Without the chat privilege there is one dashboard, and it is Operations —
-  // the team view. Agent is the support desk and needs the desk's privilege.
-  const active: Tab = canSeeAgent ? tab : 'operations';
+  const active: Tab = canSeeAgent && canSeeOps ? tab : canSeeAgent ? 'agent' : 'operations';
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -46,7 +48,7 @@ export function DashboardPage() {
 
       {/* A strip of one is a label, not a choice — a role with a single
           dashboard is simply shown it. */}
-      {canSeeAgent && (
+      {canSeeAgent && canSeeOps && (
         <nav
           aria-label={t('dashboard.title', { defaultValue: 'Dashboard' })}
           className="flex shrink-0 items-center gap-1 border-b border-foreground/[0.06] px-4 py-2"
