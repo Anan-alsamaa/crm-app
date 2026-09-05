@@ -84,7 +84,21 @@ export function AgentPerformancePage() {
     return m;
   }, [agents.data]);
 
-  const [filters, setFilters] = useState<PerformanceFilters>({});
+  /*
+   * DEFAULTS TO THE PERSON LOOKING.
+   *
+   * This page opened on "All agents", so an agent's own numbers were three
+   * clicks away and the first thing they saw was the whole team's — which is
+   * both the wrong question for them and a league table nobody asked to be
+   * shown. It now opens on their own row and the picker still offers everyone,
+   * so comparing is a choice rather than the default.
+   *
+   * Lazy initial state, not an effect: setting it afterwards would render the
+   * team view for a frame and fire a second query for data nobody asked for.
+   */
+  const [filters, setFilters] = useState<PerformanceFilters>(() =>
+    user?.id ? { agentId: user.id } : {},
+  );
   const [targetMin, setTargetMin] = useState(DEFAULT_TARGET_MIN);
   /** What is in the box WHILE typing — '' is a legal intermediate state. */
   const [targetDraft, setTargetDraft] = useState(String(DEFAULT_TARGET_MIN));
