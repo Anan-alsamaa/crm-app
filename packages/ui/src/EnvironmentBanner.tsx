@@ -21,7 +21,12 @@ import { useEffect, useState } from 'react';
 export interface EnvironmentBannerProps {
   /** Environment name, e.g. 'staging'. Absent/'production' renders nothing. */
   environment?: string;
-  /** Optional extra context, e.g. 'coupon delivery is off'. */
+  /**
+   * The sentence after the environment name. Defaults to a plain statement
+   * that the data is not live — which is the thing someone needs to know
+   * before they act on what is on screen. Override for anything more
+   * specific, e.g. 'coupon delivery is off'.
+   */
   detail?: string;
 }
 
@@ -77,15 +82,14 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
           zIndex: 2147483647, // above dialogs, drawers and command palettes
           display: 'inline-flex',
           alignItems: 'center',
-          gap: '.45rem',
-          padding: '5px 12px 5px 10px',
+          gap: '.6rem',
+          padding: '9px 20px 9px 16px',
           borderRadius: 999,
           // A warm red that reads as "caution", not "error" — nothing is broken.
           background: 'linear-gradient(90deg,#B3261E 0%,#D93A2B 50%,#B3261E 100%)',
           color: '#fff',
-          font: '600 11px/1 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif',
-          letterSpacing: '.1em',
-          textTransform: 'uppercase',
+          font: '600 12px/1 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif',
+          letterSpacing: '.06em',
           // A ring rather than a heavy shadow, so it reads as a badge sitting
           // ON the page rather than a bar attached to the window.
           boxShadow: '0 2px 10px rgba(0,0,0,.22), 0 0 0 1px rgba(255,255,255,.35) inset',
@@ -115,17 +119,28 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
         <span
           aria-hidden="true"
           style={{
-            width: 6,
-            height: 6,
+            width: 7,
+            height: 7,
             borderRadius: '50%',
             background: '#fff',
             boxShadow: '0 0 0 3px rgba(255,255,255,.28)',
             flex: 'none',
           }}
         />
-        <span style={{ position: 'relative' }}>
-          {label}
-          {detail ? ` · ${detail}` : ''}
+        <span
+          style={{
+            position: 'relative',
+            display: 'inline-flex',
+            alignItems: 'baseline',
+            gap: '.5rem',
+          }}
+        >
+          <strong style={{ fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase' }}>
+            {label}
+          </strong>
+          <span style={{ opacity: 0.92, fontWeight: 500, letterSpacing: '.02em' }}>
+            {detail ?? 'Test environment — data here is not live'}
+          </span>
         </span>
       </div>
     </>

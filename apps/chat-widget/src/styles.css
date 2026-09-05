@@ -1099,19 +1099,18 @@
   position: relative;
   align-self: center;
   overflow: hidden;
-  margin: 6px auto 0;
-  padding: 4px 10px;
+  margin: 8px auto 0;
+  padding: 7px 14px;
   border-radius: 999px;
   background: linear-gradient(90deg, #b3261e 0%, #d93a2b 50%, #b3261e 100%);
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.2),
     inset 0 0 0 1px rgba(255, 255, 255, 0.35);
   color: #fff;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.04em;
   text-align: center;
-  text-transform: uppercase;
   white-space: nowrap;
   user-select: none;
 }
