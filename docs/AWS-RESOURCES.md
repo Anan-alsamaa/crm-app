@@ -236,6 +236,33 @@ itself.
 | `scripts/create-listener-rules.sh <env>`   | after the target groups exist — **required, see below**                                       |
 | `scripts/create-alarms.sh <env> <sns-arn>` | after the services exist (an alarm on a service with no datapoints sits in INSUFFICIENT_DATA) |
 | `scripts/deploy-portals.sh <env> [app]`    | after building the portals — never a bare `aws s3 sync`, which deletes `config.js`            |
+| `scripts/deploy-service.sh <env> <svc...>` | any backend service — verifies the image is in ECR **before** registering a task definition   |
+
+### The embeddable widget
+
+`crm-staging-widget` (S3) behind CloudFront **E2QVORODPLQHNB** →
+`https://dk7gqau5j3o4b.cloudfront.net/yiji-chat-widget.js`. Created 2026-09-05;
+before that there was no widget host on AWS at all — the widget was served by
+nginx on the retired EC2 box, so its bundle went stale the moment the stack
+moved.
+
+Same shape as the portals (private bucket, CloudFront reads via the shared OAC
+`ES4AZAK3K2AK1`, one distribution named in the bucket policy), with three
+deliberate differences:
+
+- **CORS + security headers** (`Managed-CORS-and-SecurityHeadersPolicy`). Yiji's
+  own pages embed this cross-origin; the portals are same-origin and need none.
+- **`max-age=300`, not a year.** The filename is STABLE — the portals'
+  content-hashed assets can be cached for ever, but caching
+  `yiji-chat-widget.js` that long means a widget fix reaches nobody until every
+  browser expires it.
+- **No `index.html`.** The dev demo host page mints a JWT in the browser and
+  must never be published; `deploy-portals.sh` deletes it before syncing, and
+  the deployed host returns 403 for it.
+
+There is **no production widget host yet**. `deploy-portals.sh prod widget`
+fails loudly rather than publishing production's widget to staging's
+distribution.
 
 **Do not skip `create-listener-rules.sh`, and do not hand-build the routing.**
 A missing rule fails SILENTLY: the path falls through to the default target and
