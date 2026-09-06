@@ -8,6 +8,19 @@ const schema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: numericEnv(8080),
+    /**
+     * How many proxies stand between the internet and this process, so that
+     * `req.ip` is the CUSTOMER and not the load balancer.
+     *
+     * On AWS a request arrives through CloudFront and then the ALB: two hops.
+     * With none trusted, every customer shares the ALB address, and the
+     * per-IP limit on the walk-in endpoint (5, then one every 30s) throttles
+     * the whole customer base after the fifth QR scan of the day. Counting
+     * hops inward from the socket, rather than trusting whatever
+     * X-Forwarded-For a client sends, is what keeps the limit unspoofable.
+     * 0 trusts nothing, which is right for a process reached directly.
+     */
+    TRUST_PROXY_HOPS: numericEnv(2),
     DIRECTUS_INTERNAL_URL: z.string().url().default('http://localhost:8055'),
     REDIS_URL: z.string().url().default('redis://localhost:6379'),
     // When false, run a single in-memory instance: no Socket.IO Redis adapter and

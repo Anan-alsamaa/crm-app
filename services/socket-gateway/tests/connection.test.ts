@@ -47,6 +47,7 @@ function makeStubs(over: Partial<Record<keyof GatewayDirectus, unknown>> = {}): 
     findLiveConversation: vi.fn(async () => 'conv-1'),
     findOrCreateConversation: vi.fn(async () => ({ id: 'conv-1', created: true })),
     createWalkInConversation: vi.fn(async () => ({ id: 'conv-walkin', created: true })),
+    findResumableConversation: vi.fn(async () => null),
     persistMessage: vi.fn(async () => ({ id: 'msg-1', createdAt: '2026-01-01T00:00:00.000Z' })),
     deleteInternalNote: vi.fn(async () => true),
     listAgentConversationIds: vi.fn(async () => ['conv-1']),
@@ -271,6 +272,149 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
       client.emit('message:send', { content: 'anyone there?', clientMsgId: 'b' });
       await new Promise((r) => setTimeout(r, 400));
       expect(harness.stubs.directus.createWalkInConversation).toHaveBeenCalledTimes(1);
+    });
+
+    /*
+     * The duplicate that survived the lazy path.
+     *
+     * Creating on first message stopped a reload from writing an EMPTY thread.
+     * It did nothing for a walk-in who had already spoken: the page reloads,
+     * the token is unverified, so the gateway will not resume by phone, and
+     * the next message opens a second thread beside the first. Same person,
+     * same number, twice in the inbox, minutes apart.
+     *
+     * The widget now offers back the id it was handed; the gateway honours it
+     * only once the database says it is this contact's live thread.
+     */
+    describe('an unverified walk-in resumes the thread its OWN device opened', () => {
+      const DEVICE_ID = 'c1f4e7a0-2b3d-4c5e-8f90-1a2b3c4d5e6f';
+      const walkInVerify = (): CustomerVerifier['verify'] =>
+        vi.fn(() => ({
+          vendor_id: 'yiji-vendor',
+          customer_id: 'cust-0537301009',
+          phone: '0537301009',
+          walk_in: true,
+        })) as unknown as CustomerVerifier['verify'];
+
+      /** Connect as a customer; collect the `ready` frame and any history seed. */
+      async function openCustomer(auth: Record<string, unknown>): Promise<{
+        client: ClientSocket;
+        ready: { conversationId: string | null };
+        history: { conversationId: string } | undefined;
+      }> {
+        const client = openClient(harness.port, {
+          kind: 'customer',
+          token: 't',
+          lazyConversation: true,
+          ...auth,
+        });
+        sockets.push(client);
+        let history: { conversationId: string } | undefined;
+        client.on('messages:history', (p: { conversationId: string }) => {
+          history = p;
+        });
+        const ready = await new Promise<{ conversationId: string | null }>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('timeout waiting for ready')), 5000);
+          client.once('ready', (p) => {
+            clearTimeout(timer);
+            resolve(p);
+          });
+          client.on('connect_error', reject);
+        });
+        // The seed follows `ready`; give it a moment to land.
+        await new Promise((r) => setTimeout(r, 100));
+        return { client, ready, history };
+      }
+
+      it('resumes, history included, once the database confirms the id is theirs', async () => {
+        const stubs = makeStubs({
+          findLiveConversation: vi.fn(async () => null),
+          findResumableConversation: vi.fn(async () => DEVICE_ID),
+          loadConversationMessages: vi.fn(async () => [
+            { id: 'm1', conversationId: DEVICE_ID, senderType: 'customer', content: 'cold' },
+          ]),
+        });
+        stubs.verifier.verify = walkInVerify();
+        harness = await startGateway(stubs);
+        const { client, ready, history } = await openCustomer({
+          resumeConversationId: DEVICE_ID,
+        });
+
+        expect(ready.conversationId).toBe(DEVICE_ID);
+        expect(stubs.directus.findResumableConversation).toHaveBeenCalledWith(
+          'vendor-uuid',
+          'contact-1',
+          DEVICE_ID,
+        );
+        // Their own messages, replayed to the device that sent them.
+        expect(history?.conversationId).toBe(DEVICE_ID);
+
+        client.emit('message:send', { content: 'still cold', clientMsgId: 'a' });
+        await new Promise((r) => setTimeout(r, 300));
+        expect(stubs.directus.createWalkInConversation).not.toHaveBeenCalled();
+        expect(stubs.directus.findOrCreateConversation).not.toHaveBeenCalled();
+      });
+
+      it('starts fresh when the id is not this contact\u2019s live thread', async () => {
+        // Solved since, or never theirs: the database says no, and the session
+        // behaves exactly as one that offered nothing.
+        const stubs = makeStubs({
+          findLiveConversation: vi.fn(async () => null),
+          findResumableConversation: vi.fn(async () => null),
+          loadConversationMessages: vi.fn(async () => [{ id: 'm1', content: 'someone else' }]),
+        });
+        stubs.verifier.verify = walkInVerify();
+        harness = await startGateway(stubs);
+        const { client, ready, history } = await openCustomer({
+          resumeConversationId: DEVICE_ID,
+        });
+
+        expect(ready.conversationId).toBeNull();
+        expect(history).toBeUndefined();
+        client.emit('message:send', { content: 'hello', clientMsgId: 'a' });
+        await new Promise((r) => setTimeout(r, 300));
+        expect(stubs.directus.createWalkInConversation).toHaveBeenCalledTimes(1);
+      });
+
+      it('never queries with something that is not shaped like an id', async () => {
+        const stubs = makeStubs({ findLiveConversation: vi.fn(async () => null) });
+        stubs.verifier.verify = walkInVerify();
+        harness = await startGateway(stubs);
+        await openCustomer({ resumeConversationId: { _nnull: true } });
+        await openCustomer({ resumeConversationId: 'x'.repeat(200) });
+        expect(stubs.directus.findResumableConversation).not.toHaveBeenCalled();
+      });
+
+      it('means nothing to an in-app customer: the contact owns the thread, not the device', async () => {
+        // Default verifier, no walk_in claim: the live thread is resolved by
+        // contact as before, whatever the device offers.
+        const stubs = makeStubs();
+        harness = await startGateway(stubs);
+        const { ready } = await openCustomer({ resumeConversationId: DEVICE_ID });
+        expect(ready.conversationId).toBe('conv-1');
+        expect(stubs.directus.findResumableConversation).not.toHaveBeenCalled();
+      });
+
+      it('a walk-in by a number the app has since identified resumes at handshake, history included', async () => {
+        // Known contact: the resume goes by CONTACT, and the history rule that
+        // already allowed this case finally has an id to act on.
+        const stubs = makeStubs({
+          upsertContact: vi.fn(async () => ({
+            id: 'contact-1',
+            isNew: false,
+            name: 'Sara',
+            phone: '0537301009',
+            externalCustomerId: 'yiji-77',
+          })),
+          loadConversationMessages: vi.fn(async () => [{ id: 'm1', content: 'earlier' }]),
+        });
+        stubs.verifier.verify = walkInVerify();
+        harness = await startGateway(stubs);
+        const { ready, history } = await openCustomer({});
+        expect(ready.conversationId).toBe('conv-1');
+        expect(history?.conversationId).toBe('conv-1');
+        expect(stubs.directus.findResumableConversation).not.toHaveBeenCalled();
+      });
     });
 
     it('an OLD widget (no lazyConversation flag) still gets a conversation at handshake', async () => {

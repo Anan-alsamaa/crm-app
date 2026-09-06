@@ -50,6 +50,13 @@ interface SocketData {
   conversationCreated?: boolean;
   /** Session came from the store QR code; the phone was typed, not proven. */
   walkIn?: boolean;
+  /**
+   * An unverified walk-in resumed the thread its OWN device opened (the widget
+   * offered the id back and the gateway confirmed it is this contact's). The
+   * one case where such a session may be shown history; see the rule in
+   * onCustomerConnect.
+   */
+  resumedByDevice?: boolean;
   agentId?: string;
   /**
    * Serialises conversation creation for THIS socket.
@@ -157,6 +164,12 @@ export function registerConnection(deps: ConnectionDeps): void {
        * together, and this flag is how it tells which widget it is talking to.
        */
       lazyConversation?: boolean;
+      /**
+       * The conversation this device opened earlier, offered back by the
+       * widget. Honoured only for an unverified walk-in, and only after the
+       * database confirms it is this contact's live thread.
+       */
+      resumeConversationId?: unknown;
     };
     const data = socket.data as SocketData;
     try {
@@ -211,12 +224,40 @@ export function registerConnection(deps: ConnectionDeps): void {
        * message — resolved BELOW for the seed, without creating anything.
        */
       if (auth.lazyConversation === true) {
-        // New widget: resume an existing thread for the seed, create nothing.
-        if (!data.walkIn) {
+        if (!data.walkIn || data.contactExternalId) {
+          // An identified customer, through the app or a walk-in by a number
+          // the app has since claimed, resumes their live thread for the seed;
+          // nothing is created. The known walk-in used to skip this, so the
+          // history rule below (which already allowed it) never had an id to
+          // act on, and a returning customer saw an empty panel.
           const existing = await directus.findLiveConversation(vendor.id, contact.id);
           if (existing) {
             data.conversationId = existing;
             data.conversationCreated = false;
+          }
+        } else {
+          /*
+           * An UNVERIFIED walk-in never resumes by phone: a typed number is
+           * not proof, and the thread that number owns may be somebody else's.
+           * What it may resume is the thread THIS DEVICE opened. The widget
+           * keeps the id it was handed and offers it back, and the gateway
+           * accepts it only once the database confirms it is this very
+           * contact's live thread. Nobody else was ever given that id, so
+           * holding it is the proof the phone number is not.
+           *
+           * Without this, reloading the page or scanning the code a second
+           * time opened another empty thread for the same person: the
+           * duplicate the lazy path was meant to end, surviving in exactly
+           * this case.
+           */
+          const offered = deviceConversationId(auth.resumeConversationId);
+          if (offered) {
+            const own = await directus.findResumableConversation(vendor.id, contact.id, offered);
+            if (own) {
+              data.conversationId = own;
+              data.conversationCreated = false;
+              data.resumedByDevice = true;
+            }
           }
         }
       } else {
@@ -302,6 +343,15 @@ export function registerConnection(deps: ConnectionDeps): void {
  * cached, so two messages sent in the same tick share one creation instead of
  * racing to make two.
  */
+/**
+ * The conversation id a widget offers back, or null if it is not even shaped
+ * like one. The shape check only keeps junk off the query. OWNERSHIP is
+ * decided by the database, see `findResumableConversation`.
+ */
+function deviceConversationId(value: unknown): string | null {
+  return typeof value === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(value) ? value : null;
+}
+
 async function ensureConversation(socket: Socket, deps: ConnectionDeps): Promise<string> {
   const data = socket.data as SocketData;
   if (data.conversationId) return data.conversationId;
@@ -402,8 +452,12 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
    * That still holds for an unknown contact. But a contact we have identified
    * through the Yiji app is not a guess any more, and withholding their own
    * history from them is just a worse product.
+   *
+   * The third case is the thread this device itself opened (`resumedByDevice`):
+   * the messages replayed are the ones this device sent, to the device that
+   * sent them.
    */
-  if ((!data.walkIn || data.contactExternalId) && data.conversationId) {
+  if ((!data.walkIn || data.contactExternalId || data.resumedByDevice) && data.conversationId) {
     try {
       const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const history = await directus.loadConversationMessages(data.conversationId, { since });

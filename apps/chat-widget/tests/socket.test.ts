@@ -89,6 +89,19 @@ describe('connectWidget — connection setup', () => {
     expect(opts.extraHeaders).toEqual({ 'ngrok-skip-browser-warning': 'true' });
   });
 
+  it('offers back the conversation this device holds, and only when it holds one', () => {
+    // The auth object above is exact: with nothing to offer, the field is
+    // absent rather than null, so a gateway that predates it sees no change.
+    connectWidget('u', 't', makeCallbacks(), { resumeConversationId: 'conv-held' });
+    const [, opts] = ioMock.mock.calls[0]!;
+    expect(opts.auth).toEqual({
+      kind: 'customer',
+      token: 't',
+      lazyConversation: true,
+      resumeConversationId: 'conv-held',
+    });
+  });
+
   it('reports "connecting" synchronously before any socket event fires', () => {
     const cb = makeCallbacks();
     connectWidget('u', 't', cb);

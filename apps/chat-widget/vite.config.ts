@@ -94,7 +94,7 @@ function widgetHostPage(secret: string, gatewayUrl: string): Plugin {
       })();
     </script>`;
       const html = template.replace(
-        /\s*<script type="module" src="\/src\/demo\.ts"><\/script>/,
+        /\s*<script type="module" src="\/src\/host\.ts"><\/script>/,
         init,
       );
       this.emitFile({ type: 'asset', fileName: 'index.html', source: html });
@@ -159,7 +159,8 @@ export default defineConfig(({ mode }) => {
     // identity for ANY customer_id/phone and read or post in that customer's
     // conversations. `apply: 'build'` meant it was emitted by EVERY build,
     // including production. Set WIDGET_DEMO_HOST_PAGE=true to get it back for
-    // local QA; a deploy build must never set it.
+    // local QA; a deploy build must never set it. While it is set, the pages
+    // build (vite.pages.config.ts) leaves index.html to this plugin.
     plugins: env.WIDGET_DEMO_HOST_PAGE === 'true' ? [widgetHostPage(secret, gatewayUrl)] : [],
     build: {
       lib: {

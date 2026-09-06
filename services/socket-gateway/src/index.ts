@@ -240,7 +240,12 @@ async function main(): Promise<void> {
     },
   });
 
-  const app = Fastify({ loggerInstance: logger as unknown as FastifyBaseLogger });
+  const app = Fastify({
+    loggerInstance: logger as unknown as FastifyBaseLogger,
+    // See TRUST_PROXY_HOPS: without it the walk-in rate limit sees the load
+    // balancer address for everybody.
+    trustProxy: config.TRUST_PROXY_HOPS,
+  });
   applySecurityHeaders(app);
 
   // CORS for the admin-triggered enqueue endpoints (POST /jobs/* from the admin

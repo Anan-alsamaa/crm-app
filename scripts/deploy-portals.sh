@@ -93,41 +93,89 @@ for app in agent admin; do
 done
 
 
-# ── The embeddable widget ─────────────────────────────────────────────────
+# ── The widget host: the embeddable bundle AND the two customer pages ─────
 #
-# NOT a portal, and deliberately handled apart from them:
+# Not a portal, and deliberately handled apart from them:
 #
-#   - no config.js. The host page passes `gatewayUrl` to YijiChat.init(), so
-#     there is no runtime config file to generate or to accidentally delete.
-#   - no index.html. It is a library, not an app; the dev demo host page is
-#     stripped because the widget host must serve ONLY the embeddable assets
-#     and never the in-browser JWT-mint page.
-#   - the bundle name is STABLE (yiji-chat-widget.js), unlike the portals'
-#     content-hashed assets — so it must not be cached for a year, or a widget
-#     fix would reach nobody until every browser expired it. Five minutes:
-#     long enough to matter for a page that embeds it on every load, short
-#     enough that a fix lands the same day.
+#   - no config.js. The pages bake the gateway URL in at build time
+#     (scripts/build-widget.sh), and a Yiji host page passes `gatewayUrl` to
+#     YijiChat.init() itself.
+#   - index.html IS published now. It is no longer the dev demo page: the
+#     build emits a host page that can only take a GATEWAY-minted walk-in
+#     session or send the visitor to the phone form (walk-in.html). The build
+#     refuses to emit a page carrying the signing secret or the in-browser
+#     mint (apps/chat-widget/vite.pages.config.ts), and this script checks
+#     again, because a page that could mint a customer token for anybody must
+#     never reach a public URL, however it got into dist/.
+#   - `yiji-chat-widget.js` has a STABLE name, so five minutes, not a year.
+#     The pages' own assets are content-hashed and cached for ever; the HTML
+#     that names them is never cached, or a deploy would leave browsers
+#     loading assets that no longer exist.
+#   - `walk-in` (no extension) is uploaded beside `walk-in.html`, so a printed
+#     QR code can carry the shorter address.
+#   - `/` needs the distribution's DefaultRootObject set to index.html (a
+#     one-time setting, checked below); S3 behind CloudFront has no notion of
+#     a directory index.
 if [ -z "$ONLY" ] || [ "$ONLY" = "widget" ]; then
   BUCKET="crm-${ENV_NAME}-widget"
   [ -n "$WIDGET_DIST" ] || die "no widget host for $ENV_NAME — create the bucket and distribution first"
   SRC="apps/chat-widget/dist"
-  [ -d "$SRC" ] || die "$SRC does not exist — build the widget first"
+  [ -d "$SRC" ] || die "$SRC does not exist — run scripts/build-widget.sh $ENV_NAME first"
   [ -f "$SRC/yiji-chat-widget.js" ] || die "$SRC/yiji-chat-widget.js is missing — the build did not produce a bundle"
+  [ -f "$SRC/index.html" ] && [ -f "$SRC/walk-in.html" ] \
+    || die "$SRC is missing index.html or walk-in.html — run scripts/build-widget.sh $ENV_NAME"
+
+  # The pages must name THIS environment's API host. The widget bucket serves
+  # files and nothing else, so a page built without one (or for the other
+  # environment) would talk to the wrong gateway or to nobody.
+  API_HOST="$(sed -n "s/.*SOCKET_URL: 'https\?:\/\/\([^']*\)'.*/\1/p" "$CONFIG")"
+  grep -lq "$API_HOST" "$SRC"/assets/*.js \
+    || die "no page asset names the $ENV_NAME API host ($API_HOST) — built for the wrong environment? run scripts/build-widget.sh $ENV_NAME"
+
+  # Belt and braces after the build's own refusal: nothing that can mint a
+  # customer token leaves this machine.
+  if grep -rlE "SignJWT|dev-yiji-secret" "$SRC" --include='*.html' --include='*.js' | grep -q .; then
+    die "a page in $SRC carries the in-browser token mint — refusing to publish"
+  fi
+  if [ -n "${YIJI_JWT_SECRET:-}" ] && grep -rlF "$YIJI_JWT_SECRET" "$SRC" | grep -q .; then
+    die "a file in $SRC contains YIJI_JWT_SECRET — refusing to publish"
+  fi
 
   printf '\n\033[1m==> widget -> s3://%s\033[0m\n' "$BUCKET"
 
-  # The demo host page mints a JWT in the browser. It must never be published.
-  rm -f "$SRC/index.html" "$SRC/serve.json"
+  # The local static server's header file; meaningless on S3.
+  rm -f "$SRC/serve.json"
 
+  # Content-hashed page assets: cached hard, like the portals' bundles.
+  aws s3 sync "$SRC/assets" "s3://${BUCKET}/assets" --delete \
+    --cache-control "public,max-age=31536000,immutable" >/dev/null
+  # Everything else except the pages, five minutes: the widget bundle's stable
+  # name means a fix must be able to reach browsers the same day.
   aws s3 sync "$SRC" "s3://${BUCKET}" --delete \
+    --exclude "assets/*" --exclude "*.html" --exclude "walk-in" \
     --cache-control "public,max-age=300" >/dev/null
+  # The pages, never cached (they name the hashed assets).
+  for page in index.html walk-in.html; do
+    aws s3 cp "$SRC/$page" "s3://${BUCKET}/$page" \
+      --cache-control "no-cache" --content-type "text/html; charset=utf-8" >/dev/null
+  done
+  aws s3 cp "$SRC/walk-in.html" "s3://${BUCKET}/walk-in" \
+    --cache-control "no-cache" --content-type "text/html; charset=utf-8" >/dev/null
 
   ID=$(aws cloudfront create-invalidation --distribution-id "$WIDGET_DIST" \
          --paths "/*" --query 'Invalidation.Id' --output text)
+  HOST="$(aws cloudfront get-distribution --id "$WIDGET_DIST" \
+         --query 'Distribution.DomainName' --output text)"
+  ROOT="$(aws cloudfront get-distribution-config --id "$WIDGET_DIST" \
+         --query 'DistributionConfig.DefaultRootObject' --output text)"
   echo "  synced, invalidation $ID"
-  echo "  embed: https://$(aws cloudfront get-distribution --id "$WIDGET_DIST" \
-         --query 'Distribution.DomainName' --output text)/yiji-chat-widget.js"
+  echo "  chat    : https://${HOST}/"
+  echo "  QR page : https://${HOST}/walk-in"
+  echo "  embed   : https://${HOST}/yiji-chat-widget.js"
+  if [ "$ROOT" != "index.html" ]; then
+    echo "  WARN: $WIDGET_DIST has no DefaultRootObject, so https://${HOST}/ answers 403." >&2
+    echo "        One-time fix (see docs/AWS-RESOURCES.md): set it to index.html." >&2
+  fi
 fi
-
 echo
 echo "Done. Invalidations take a minute or two to report Completed." 

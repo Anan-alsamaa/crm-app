@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Socket } from 'socket.io-client';
 import { connectWidget, type WidgetMessage } from './socket.js';
+import { forgetConversation, recallConversation, rememberConversation } from './resume.js';
 import { t, isRtl, type WidgetLocale } from './i18n.js';
 
 export interface WidgetConfig {
@@ -348,90 +349,106 @@ export function Widget({ config }: { config: WidgetConfig }) {
   };
 
   useEffect(() => {
-    const socket = connectWidget(config.gatewayUrl, config.token, {
-      onStatus: setStatus,
-      onReady: ({
-        conversationId,
-        branding: b,
-        agentsOnline: count,
-        vendorName,
-        contact,
-        isNew,
-      }) => {
-        // null on a fresh session; `onConversationReady` fills it in when the
-        // customer's first message creates the conversation.
-        convoRef.current = conversationId;
-        if (b && typeof b === 'object') setBranding(b as Branding);
-        setAgentsOnline(count);
-        if (vendorName?.trim()) setVendorName(vendorName.trim());
-        setCustomer({ name: contact?.name ?? null, isNew: isNew ?? true });
-        setReady(true);
-        broadcastPresenceToHost(count);
-        // Drop a greeting into the thread as a real message — personalized for a
-        // returning customer, generic ("Hey there…") for a new one. onReady fires
-        // before messages:history, and onHistory prepends history
-        // (`[...history, ...prev]`), so the greeting lands AFTER the loaded
-        // history — and any message sent afterwards appends below it (pushing the
-        // greeting up), instead of being stuck at the bottom.
-        const name = contact?.name?.trim();
-        const greeting =
-          !(isNew ?? true) && name ? tr.welcomeNamed.replace('{name}', name) : tr.welcomeNew;
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === GREETING_ID)) return prev;
-          return [
-            ...prev,
-            {
-              id: GREETING_ID,
-              // '' until the conversation exists — the greeting is a local,
-              // client-side message and is never persisted, so it does not
-              // need a real id.
-              conversationId: conversationId ?? '',
-              senderType: 'agent',
-              content: greeting,
-              attachments: [],
-              createdAt: new Date().toISOString(),
-            },
-          ];
-        });
+    // The thread this device opened earlier, if any: offered back so a
+    // walk-in who reloads continues their conversation instead of opening a
+    // second one (resume.ts). The gateway decides whether to honour it.
+    const resume = recallConversation(config.token);
+    const socket = connectWidget(
+      config.gatewayUrl,
+      config.token,
+      {
+        onStatus: setStatus,
+        onReady: ({
+          conversationId,
+          branding: b,
+          agentsOnline: count,
+          vendorName,
+          contact,
+          isNew,
+        }) => {
+          // null on a fresh session; `onConversationReady` fills it in when the
+          // customer's first message creates the conversation.
+          convoRef.current = conversationId;
+          // Remember the thread this device holds; or drop an offered id the
+          // gateway declined (solved since, or never this customer's).
+          if (conversationId) rememberConversation(config.token, conversationId);
+          else forgetConversation(config.token);
+          if (b && typeof b === 'object') setBranding(b as Branding);
+          setAgentsOnline(count);
+          if (vendorName?.trim()) setVendorName(vendorName.trim());
+          setCustomer({ name: contact?.name ?? null, isNew: isNew ?? true });
+          setReady(true);
+          broadcastPresenceToHost(count);
+          // Drop a greeting into the thread as a real message — personalized for a
+          // returning customer, generic ("Hey there…") for a new one. onReady fires
+          // before messages:history, and onHistory prepends history
+          // (`[...history, ...prev]`), so the greeting lands AFTER the loaded
+          // history — and any message sent afterwards appends below it (pushing the
+          // greeting up), instead of being stuck at the bottom.
+          const name = contact?.name?.trim();
+          const greeting =
+            !(isNew ?? true) && name ? tr.welcomeNamed.replace('{name}', name) : tr.welcomeNew;
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === GREETING_ID)) return prev;
+            return [
+              ...prev,
+              {
+                id: GREETING_ID,
+                // '' until the conversation exists — the greeting is a local,
+                // client-side message and is never persisted, so it does not
+                // need a real id.
+                conversationId: conversationId ?? '',
+                senderType: 'agent',
+                content: greeting,
+                attachments: [],
+                createdAt: new Date().toISOString(),
+              },
+            ];
+          });
+        },
+        // The conversation now exists — the customer's first message created it.
+        // Until this fires the widget has no id, because opening the widget no
+        // longer creates a conversation.
+        onConversationReady: ({ conversationId }) => {
+          convoRef.current = conversationId;
+          rememberConversation(config.token, conversationId);
+        },
+        onAgentsPresence: (count) => {
+          setAgentsOnline(count);
+          // Agents came back → allow the offline notice to show again if they
+          // later go offline within this same session.
+          if (count > 0) offlineNoticedRef.current = false;
+          broadcastPresenceToHost(count);
+        },
+        onMessage: (msg) => {
+          setMessages((prev) => {
+            if (msg.clientMsgId && prev.some((m) => m.clientMsgId === msg.clientMsgId)) {
+              return prev.map((m) => (m.clientMsgId === msg.clientMsgId ? msg : m));
+            }
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
+          if (msg.senderType !== 'customer' && !openRef.current) setUnread((u) => u + 1);
+        },
+        onHistory: (history) => {
+          // Seed the existing thread on (re)connect. Keep any optimistic/live
+          // message that isn't already part of the loaded history (dedupe by id).
+          setMessages((prev) => {
+            const seen = new Set(history.map((m) => m.id));
+            return [...history, ...prev.filter((m) => !seen.has(m.id))];
+          });
+        },
+        onTyping: setAgentTyping,
+        onClosed: () => {
+          // Open the panel + show CSAT — but only once per conversation.
+          setOpen(true);
+          setCsat((cur) => cur ?? { score: 0, comment: '', submitted: false });
+          // A closed thread cannot be resumed; the next visit starts a new one.
+          forgetConversation(config.token);
+        },
       },
-      // The conversation now exists — the customer's first message created it.
-      // Until this fires the widget has no id, because opening the widget no
-      // longer creates a conversation.
-      onConversationReady: ({ conversationId }) => {
-        convoRef.current = conversationId;
-      },
-      onAgentsPresence: (count) => {
-        setAgentsOnline(count);
-        // Agents came back → allow the offline notice to show again if they
-        // later go offline within this same session.
-        if (count > 0) offlineNoticedRef.current = false;
-        broadcastPresenceToHost(count);
-      },
-      onMessage: (msg) => {
-        setMessages((prev) => {
-          if (msg.clientMsgId && prev.some((m) => m.clientMsgId === msg.clientMsgId)) {
-            return prev.map((m) => (m.clientMsgId === msg.clientMsgId ? msg : m));
-          }
-          if (prev.some((m) => m.id === msg.id)) return prev;
-          return [...prev, msg];
-        });
-        if (msg.senderType !== 'customer' && !openRef.current) setUnread((u) => u + 1);
-      },
-      onHistory: (history) => {
-        // Seed the existing thread on (re)connect. Keep any optimistic/live
-        // message that isn't already part of the loaded history (dedupe by id).
-        setMessages((prev) => {
-          const seen = new Set(history.map((m) => m.id));
-          return [...history, ...prev.filter((m) => !seen.has(m.id))];
-        });
-      },
-      onTyping: setAgentTyping,
-      onClosed: () => {
-        // Open the panel + show CSAT — but only once per conversation.
-        setOpen(true);
-        setCsat((cur) => cur ?? { score: 0, comment: '', submitted: false });
-      },
-    });
+      resume ? { resumeConversationId: resume } : {},
+    );
     socketRef.current = socket;
     return () => {
       socket.disconnect();

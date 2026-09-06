@@ -256,9 +256,34 @@ deliberate differences:
   content-hashed assets can be cached for ever, but caching
   `yiji-chat-widget.js` that long means a widget fix reaches nobody until every
   browser expires it.
-- **No `index.html`.** The dev demo host page mints a JWT in the browser and
-  must never be published; `deploy-portals.sh` deletes it before syncing, and
-  the deployed host returns 403 for it.
+- **Two customer pages beside the bundle.** `index.html` is the chat and
+  `walk-in.html` (also at `/walk-in`) is the store-QR phone form. These are NOT
+  the old dev demo page: that one minted a JWT in the browser and was deleted
+  from every deploy for it. The published chat page can only take a
+  gateway-minted walk-in session or send the visitor to the phone form
+  (`apps/chat-widget/src/host.ts`); the build refuses to emit a page carrying
+  the mint or the secret (`vite.pages.config.ts`), `deploy-portals.sh` checks
+  again, and `deploy.yml` a third time. The pages bake in the API host at
+  build time (`scripts/build-widget.sh staging`), so the QR form posts to
+  `/walk-in/session` on the API distribution and the chat's socket connects
+  there too; `WIDGET_CORS_ORIGIN=*` on the gateway is what allows that
+  cross-origin call.
+- **`DefaultRootObject = index.html`.** S3 behind CloudFront has no directory
+  index, so without it `https://dk7gqau5j3o4b.cloudfront.net/` is a 403 while
+  `/index.html` works. Set once on the distribution (2026-09-06);
+  `deploy-portals.sh` warns if it is ever missing.
+
+How a customer reaches the chat, and why both doors lead to one room:
+
+| Door                        | Token signed by | Conversation                                                                           |
+| --------------------------- | --------------- | -------------------------------------------------------------------------------------- |
+| Yiji app page embeds the JS | Yiji            | the contact's live thread (resolved by contact)                                        |
+| QR code → `/walk-in` → `/`  | the gateway     | known customer: same thread as above; unknown: the thread THIS device opened, else new |
+
+The unknown walk-in's thread is resumed by the id the widget was handed
+(`localStorage`, `apps/chat-widget/src/resume.ts`), which the gateway honours
+only after confirming it is that contact's live thread. Before this, a reload
+or a second scan opened a duplicate thread for the same person.
 
 There is **no production widget host yet**. `deploy-portals.sh prod widget`
 fails loudly rather than publishing production's widget to staging's

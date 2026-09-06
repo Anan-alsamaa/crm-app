@@ -174,18 +174,28 @@ jobs:
       # WIDGET_DEMO_HOST_PAGE is deliberately NOT set. With it, the build emits a
       # host page that inlines YIJI_JWT_SECRET into static HTML — publishing that
       # would put the customer-token signing key on a public URL.
+      #
+      # dist/index.html is EXPECTED now: it is the customer chat page, which
+      # takes a gateway-minted walk-in session or sends the visitor to the
+      # phone form, and mints nothing (apps/chat-widget/src/host.ts). The build
+      # itself refuses to emit a page carrying the mint or the secret
+      # (vite.pages.config.ts); the step after is the same check, once more.
       - name: Build widget (no demo host page)
         env:
           VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL }}
+          VITE_GATEWAY_HTTP_URL: ${{ vars.VITE_SOCKET_URL }}
         run: pnpm --filter @yiji/chat-widget build
-      - name: Fail if the demo host page leaked into the bundle
+      - name: Fail if anything that can mint a token is in the bundle
         run: |
-          if [ -f apps/chat-widget/dist/index.html ]; then
-            echo "::error::dist/index.html present — the demo host page (which inlines"
-            echo "::error::YIJI_JWT_SECRET) must never be published. Refusing to upload."
+          if grep -rlE "SignJWT|dev-yiji-secret" apps/chat-widget/dist --include='*.html' --include='*.js' | grep -q .; then
+            echo "::error::a published page carries the in-browser token mint. Refusing to upload."
+            grep -rlE "SignJWT|dev-yiji-secret" apps/chat-widget/dist
             exit 1
           fi
-          echo "widget dist:"; ls -1 apps/chat-widget/dist
+          for f in index.html walk-in.html yiji-chat-widget.js; do
+            [ -f "apps/chat-widget/dist/$f" ] || { echo "::error::dist/$f missing"; exit 1; }
+          done
+          echo "widget dist:"; ls -1R apps/chat-widget/dist
       - uses: actions/upload-artifact@v5
         with:
           name: chat-widget-${{ github.ref_name }}

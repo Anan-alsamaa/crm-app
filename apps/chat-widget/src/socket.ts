@@ -53,12 +53,33 @@ export interface SocketCallbacks {
   onConversationReady?: (info: { conversationId: string }) => void;
 }
 
-export function connectWidget(url: string, token: string, cb: SocketCallbacks): Socket {
+export interface ConnectOptions {
+  /**
+   * The conversation this device opened earlier (see resume.ts). The gateway
+   * honours it only for an unverified walk-in, and only after confirming the
+   * thread is this contact's; a gateway that predates it ignores it.
+   */
+  resumeConversationId?: string;
+}
+
+export function connectWidget(
+  url: string,
+  token: string,
+  cb: SocketCallbacks,
+  options: ConnectOptions = {},
+): Socket {
   const socket = io(url, {
     // Tells the gateway this bundle creates conversations on first message,
     // so it must NOT create one at handshake. A gateway that predates the flag
     // ignores it; a widget that predates it gets the old eager path.
-    auth: { kind: 'customer', token, lazyConversation: true },
+    auth: {
+      kind: 'customer',
+      token,
+      lazyConversation: true,
+      ...(options.resumeConversationId
+        ? { resumeConversationId: options.resumeConversationId }
+        : {}),
+    },
     transports: ['websocket', 'polling'],
     // Harmless off-ngrok; lets the polling handshake skip ngrok-free's browser
     // interstitial when the widget is served through an ngrok tunnel.

@@ -256,6 +256,41 @@ export class GatewayDirectus {
     return live[0]?.id ?? null;
   }
 
+  /**
+   * The thread a DEVICE claims to hold: its id if it really is this contact's
+   * live conversation, otherwise null. READ ONLY, creates nothing.
+   *
+   * For an unverified walk-in (see connection.ts) the phone number can resume
+   * nothing, because a typed number is not proof. The id the widget was handed
+   * when it opened the thread can, because nobody else was ever given it. The
+   * vendor and contact filters ARE the check: an id belonging to another
+   * contact, or to a thread solved since, is simply not found.
+   *
+   * A failed lookup is treated as "not found" rather than thrown: a broken
+   * resume must cost the customer their history, never their connection.
+   */
+  async findResumableConversation(
+    vendorUuid: string,
+    contactId: string,
+    conversationId: string,
+  ): Promise<string | null> {
+    const rows = (await this.client
+      .request(
+        readItems('conversations', {
+          filter: {
+            id: { _eq: conversationId },
+            vendor: { _eq: vendorUuid },
+            contact: { _eq: contactId },
+            status: { _in: ['open', 'pending'] },
+          },
+          fields: ['id'],
+          limit: 1,
+        }),
+      )
+      .catch(() => [])) as Array<{ id: string }>;
+    return rows[0]?.id ?? null;
+  }
+
   async findOrCreateConversation(
     vendorUuid: string,
     contactId: string,

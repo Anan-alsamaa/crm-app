@@ -132,7 +132,14 @@ describe('Widget — launcher and panel', () => {
   it('calls connectWidget with the configured gateway url and token', async () => {
     const { connectWidget } = await import('../src/socket.js');
     renderWidget();
-    expect(connectWidget).toHaveBeenCalledWith('https://gw.test', 'test-token', expect.any(Object));
+    // The fourth argument is the resume offer (resume.ts): empty on a device
+    // that holds no thread, so the auth the gateway sees is unchanged.
+    expect(connectWidget).toHaveBeenCalledWith(
+      'https://gw.test',
+      'test-token',
+      expect.any(Object),
+      {},
+    );
   });
 
   it('disconnects the socket on unmount', () => {
