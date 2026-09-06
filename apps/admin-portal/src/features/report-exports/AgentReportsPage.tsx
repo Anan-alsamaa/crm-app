@@ -728,10 +728,22 @@ function ComplaintsReport({
   rows,
   tr,
   days,
+  range,
 }: {
   rows: ComplaintReportRow[];
   tr: Translate;
   days: number;
+  /**
+   * The FETCHED window, not a filter.
+   *
+   * This report's own From/To narrow the rows already loaded, which cannot
+   * reach a complaint outside the window the query asked for. With the default
+   * month that meant the register showed twelve tickets out of 1,692 and
+   * widening its dates changed nothing — the older rows had never been
+   * fetched. The preset writes the range the QUERY uses, so asking for a year
+   * actually goes and gets the year.
+   */
+  range: RangeProps['range'];
 }) {
   const { t } = useTranslation();
   /**
@@ -1145,6 +1157,18 @@ function ComplaintsReport({
               value={draft.to ?? ''}
               onChange={(v) => setCriterion({ to: v })}
             />
+          </label>
+          {/* The one control here that changes what is FETCHED rather than what
+              is shown. Without it this register could only ever report on the
+              remembered window, which defaults to a month — and the operations
+              history it exists to show goes back a year. */}
+          <label className="flex flex-col gap-1">
+            <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              {t('agentReports.range', { defaultValue: 'Date range' })}
+            </span>
+            <div className="w-[10rem]">
+              <RangePreset range={range} />
+            </div>
           </label>
         </div>
         <div className="flex flex-wrap items-end gap-2">
@@ -2687,7 +2711,12 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
               )}
               {which === 'complaints' &&
                 (data.complaintFieldsAvailable ? (
-                  <ComplaintsReport rows={data.complaints} tr={tr} days={days} />
+                  <ComplaintsReport
+                    rows={data.complaints}
+                    tr={tr}
+                    days={days}
+                    range={{ from, to, setFrom, setTo, setRange, reset: resetRange }}
+                  />
                 ) : (
                   /* Better than 24 blank columns: this Directus simply has not
                      had the complaint schema applied yet, which is an operator

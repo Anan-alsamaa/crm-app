@@ -82,6 +82,16 @@ const HEADER_ALIASES: Record<string, ComplaintColumnKey> = (() => {
   return { ...map, ...extra };
 })();
 
+/**
+ * Headers that belong in the sheet but nowhere in a ticket.
+ *
+ * `customer_name` is in every operations export and is EMPTY in every row of
+ * it — the name lives on the contact, reached through the phone number, and
+ * the ticket report has no column for it. Warning about it made a clean import
+ * look faulty.
+ */
+const IGNORED_HEADERS = new Set(['customername', 'customer']);
+
 /** Split one CSV line, honouring double quotes and "" escapes. */
 function splitCsvLine(line: string): string[] {
   const out: string[] = [];
@@ -163,7 +173,12 @@ export function parseTicketsCells(
   const header = (table[0] ?? []).map((h) => String(h ?? ''));
   const colOf = header.map((h) => {
     const key = HEADER_ALIASES[foldHeader(h)];
-    if (!key && h.trim()) unmappedHeaders.push(h.trim());
+    // A column we KNOW about and deliberately do not store is not a typo.
+    // Reporting it as "not recognised" tells the reader their sheet is wrong
+    // when it is the expected export, so those are recognised and dropped.
+    if (!key && h.trim() && !IGNORED_HEADERS.has(foldHeader(h))) {
+      unmappedHeaders.push(h.trim());
+    }
     return key ?? null;
   });
 

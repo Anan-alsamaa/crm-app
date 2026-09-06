@@ -270,3 +270,21 @@ describe('the imported order snapshot is renderable', () => {
     expect(p.order_snapshot.total).toBe(0);
   });
 });
+
+describe('headers that are known but unused', () => {
+  it('does not report customer_name as unrecognised', () => {
+    // It is in every operations export and empty in every row; warning about
+    // it made a correct import look like a broken sheet.
+    const csv = 'date,customer_name,customer_mobile\n2026-01-01,,0510103375';
+    const { rows, unmappedHeaders } = parseTicketsCsv(csv);
+
+    expect(unmappedHeaders).toEqual([]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.customerMobile).toBe('0510103375');
+  });
+
+  it('still reports a header that really is a typo', () => {
+    const { unmappedHeaders } = parseTicketsCsv('date,custmer_mobil\n2026-01-01,05');
+    expect(unmappedHeaders).toEqual(['custmer_mobil']);
+  });
+});
