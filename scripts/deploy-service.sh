@@ -46,6 +46,19 @@ die()  { printf '\033[31mFAIL: %s\033[0m\n' "$*" >&2; exit 1; }
 # Program Files and are present in Git Bash's PATH but not always in a bash
 # launched from PowerShell, so the common fix is to add them rather than to
 # install anything.
+# Docker's CREDENTIAL HELPER is the one that `command -v docker` cannot vouch
+# for. `docker` itself was on PATH here, and `docker build` still died at the
+# first FROM with "docker-credential-desktop: executable file not found":
+# the helper lives beside docker in resources/bin, and a Git Bash that did not
+# inherit that directory has the client without the thing it shells out to.
+# Added rather than reported, since the fix is always the same.
+for dir in "/c/Program Files/Docker/Docker/resources/bin" \
+           "/c/Program Files/Amazon/AWSCLIV2" \
+           "/c/Program Files/nodejs"; do
+  case ":$PATH:" in *":$dir:"*) ;; *) [ -d "$dir" ] && PATH="$PATH:$dir" ;; esac
+done
+export PATH
+
 MISSING=()
 for tool in aws docker node git; do
   command -v "$tool" >/dev/null 2>&1 || MISSING+=("$tool")
