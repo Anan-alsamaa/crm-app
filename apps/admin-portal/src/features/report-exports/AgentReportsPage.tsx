@@ -61,6 +61,7 @@ import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { ViewSwitch } from '../../components/ViewSwitch.js';
 import { formatDuration } from '@yiji/reports';
 import { TicketHistoryDrawer } from './TicketHistoryDrawer.js';
+import { ImportTicketsButton } from './ImportTicketsDialog.js';
 import {
   buildTicketsSheets,
   COMPLAINT_COLUMN_KEYS,
@@ -1462,17 +1463,11 @@ function ComplaintsReport({
             </Button>
           )}
           {canImport && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ring-1 ring-border"
-              disabled
-              title={t('complaintReport.importDisabled', {
-                defaultValue: 'Importing is disabled',
-              })}
-            >
-              {t('complaintReport.importBtn', { defaultValue: 'Import file' })}
-            </Button>
+            <ImportTicketsButton
+              storeIndex={storeIndex}
+              onImported={() => void qc.invalidateQueries({ queryKey: ['agent-reports'] })}
+              label={t('complaintReport.importBtn', { defaultValue: 'Import file' })}
+            />
           )}
         </div>
       </div>
