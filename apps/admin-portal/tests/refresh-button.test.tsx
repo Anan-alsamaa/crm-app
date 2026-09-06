@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { RefreshButton } from '@yiji/ui';
-import { PageRefresh } from '../src/components/PageRefresh.js';
 
 describe('RefreshButton', () => {
   it('shows the word rather than a glyph, and uses it as the accessible name', () => {
@@ -64,23 +63,12 @@ describe('RefreshButton', () => {
   });
 });
 
-describe('PageRefresh', () => {
-  afterEach(() => vi.restoreAllMocks());
-
-  it('actually reloads the document', async () => {
-    // The whole point of the control. An earlier version refetched the query
-    // cache, which cannot fix a wedged component or a stale bundle — the cases
-    // somebody presses refresh FOR.
-    const reload = vi.fn();
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: { ...window.location, reload },
-    });
-
-    const user = userEvent.setup();
-    render(<PageRefresh />);
-    await user.click(screen.getByRole('button', { name: /refresh/i }));
-
-    expect(reload).toHaveBeenCalledTimes(1);
-  });
-});
+/*
+ * The PageRefresh test that lived here asserted the button called
+ * location.reload(). That was right while the control existed for a WEDGED
+ * page, but the ordinary use is "show me the new numbers", and rebuilding the
+ * document to answer it threw away the masthead, the route, every open drawer
+ * and the scroll position. The replacement contract — invalidate the active
+ * queries, stay busy until they settle — is asserted in page-refresh.test.tsx
+ * against a real QueryClient.
+ */

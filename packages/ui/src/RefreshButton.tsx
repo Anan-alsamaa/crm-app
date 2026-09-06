@@ -45,7 +45,7 @@ export function RefreshButton({
   const [busy, setBusy] = useState(false);
 
   const run = async () => {
-    if (busy) return; // a second press during a reload is the same request
+    if (busy) return; // a second press during a refresh is the same request
     setBusy(true);
     try {
       await onRefresh();
@@ -53,8 +53,16 @@ export function RefreshButton({
       /*
        * Swallowed on purpose: an async click handler that rejects becomes an
        * unhandled promise rejection, which trips error overlays suggesting
-       * something worse than "the reload did not start". Releasing `busy`
+       * something worse than "the refresh did not start". Releasing `busy`
        * below lets the person simply press it again.
+       */
+    } finally {
+      /*
+       * `finally`, not just the catch. When this button reloaded the document
+       * the success path never returned, so clearing on error alone was
+       * enough — the page was gone. Now that a refresh RESOLVES, that same
+       * code would leave the button spinning for ever over data that had
+       * already arrived.
        */
       setBusy(false);
     }

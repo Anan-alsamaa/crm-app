@@ -560,6 +560,26 @@ describe('AgentReportsPage — shell', () => {
     const days = (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000;
     expect(days).toBeCloseTo(7, 0);
   });
+
+  it('shows the period it is on, not a permanent placeholder', async () => {
+    /*
+     * Its value was pinned to "", so however many times it was used it went on
+     * reading "Quick range". On the ticket breakdown, where this control sets
+     * the whole reported period, a control that never shows its own value
+     * reads as a control that did not work.
+     */
+    api.useAgentReportData.mockReturnValue(ok);
+    renderPage('agents');
+    // The fallback range IS the last 30 days, so the control says so rather
+    // than describing a period nobody chose as "Quick range".
+    const combo = screen.getByRole('combobox', { name: 'Date range' });
+    expect(combo).toHaveTextContent('Last 30 days');
+
+    await userEvent.click(combo);
+    await userEvent.click(screen.getByText('Last 90 days'));
+
+    expect(screen.getByRole('combobox', { name: 'Date range' })).toHaveTextContent('Last 90 days');
+  });
 });
 
 describe('AgentReportsPage — tickets report', () => {

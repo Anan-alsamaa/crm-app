@@ -128,11 +128,35 @@ interface RangeProps {
  */
 function RangePreset({ range }: RangeProps): JSX.Element {
   const { t } = useTranslation();
+  /**
+   * Which preset the dates currently ARE, so the menu can say so.
+   *
+   * It used to be pinned to "" and so always read "Quick range", whatever had
+   * been picked — on the reports where the two date fields sit beside it that
+   * was merely quiet, but the ticket breakdown reads its whole period from
+   * this control, and a control that never shows its own value looks like a
+   * control that did not work.
+   *
+   * Derived rather than remembered: the dates are the truth, and a stored
+   * selection would go stale the moment someone typed a date by hand. A range
+   * that matches no preset falls back to the placeholder, which is honest —
+   * "last 47 days" is not one of the choices.
+   */
+  const active = useMemo(() => {
+    if (!range.from || !range.to) return '';
+    if (range.to !== isoDay(new Date())) return '';
+    const days = Math.round((Date.parse(range.to) - Date.parse(range.from)) / 86_400_000);
+    return RANGE_DAYS.includes(days as (typeof RANGE_DAYS)[number]) ? String(days) : '';
+  }, [range.from, range.to]);
+
   return (
     <SelectMenu
       fullWidth
-      value=""
+      value={active}
       onChange={(v) => {
+        // The placeholder is not a period: re-picking it should leave the
+        // dates alone rather than silently resetting them to today..today.
+        if (!v) return;
         const n = Number(v);
         const now = new Date();
         range.setRange({
