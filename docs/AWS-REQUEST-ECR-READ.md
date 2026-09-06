@@ -27,6 +27,38 @@ green — the portal publish was a second, separate denial and it is now FIXED
 
 ---
 
+## Two ways to grant it, and which to prefer
+
+The question came up as "would allowing `iam:PutRolePolicy` fix this?" — it
+would, and it is the bigger of the two grants. Both routes end with the same
+three actions on the same role; they differ in who holds the power afterwards.
+
+|                                      | **A — add the three ECR actions** (asked for above) | **B — grant me `iam:PutRolePolicy`**                                                              |
+| ------------------------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Who does the work                    | The admin, once                                     | Me, and thereafter anyone with my credential                                                      |
+| What it permits                      | Reading images in `crm/*`, nothing else             | Rewriting the inline policy of a role — including granting that role anything the admin can grant |
+| Blast radius if the credential leaks | One ECR namespace                                   | Privilege escalation: the role can be handed new permissions, then assumed                        |
+| Reversible                           | Remove three strings                                | Requires noticing the policy changed                                                              |
+
+**A is the one to ask for.** B is a standing power to re-permission a role,
+held to solve a problem that is a one-line policy edit; that trade is only
+worth making if these grants are expected to change often, and they are not —
+this policy has changed twice since the account was set up.
+
+If the admin would rather scope B than refuse it, `iam:PutRolePolicy`
+restricted by `Resource` to `arn:aws:iam::408568863712:role/crm-github-deploy`
+is far narrower than the unscoped version, though it still permits granting
+that one role anything.
+
+### What this does NOT fix
+
+- **An SNS alert role.** There is no such role in the account, no workflow
+  references SNS and no service publishes to it, so nothing in this pipeline
+  is waiting on it. Granting it would change nothing about these failures.
+- **Anything outside the five image builds.** The quality gate, the plan and
+  the portal upload all pass today; the ONLY remaining failure is
+  `ecr:BatchGetImage`, 15 occurrences from one cause.
+
 ## The S3 half, already solved — do not ask for it
 
 The same run failed TWICE for two unrelated reasons, and only one of them needs
