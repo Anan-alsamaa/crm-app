@@ -50,14 +50,38 @@ restricted by `Resource` to `arn:aws:iam::408568863712:role/crm-github-deploy`
 is far narrower than the unscoped version, though it still permits granting
 that one role anything.
 
+### Why "I already have that access" is true and changes nothing
+
+The owner's user DOES hold all three actions — verified, and it is the reason
+`scripts/deploy-service.sh` deploys happily from a laptop while CI cannot.
+
+    e.habibi@anan.sa            ecr:BatchGetImage  allowed
+    role/crm-github-deploy      ecr:BatchGetImage  implicitDeny
+
+Two identities. GitHub Actions never uses the owner's credential: it assumes
+`crm-github-deploy` through OIDC, and a role has only what its own policy
+grants. So the ask is not for new access to the account — it is to give the
+CI role the access the owner already has, narrowed to `crm/*`.
+
 ### What this does NOT fix
 
-- **An SNS alert role.** There is no such role in the account, no workflow
-  references SNS and no service publishes to it, so nothing in this pipeline
-  is waiting on it. Granting it would change nothing about these failures.
 - **Anything outside the five image builds.** The quality gate, the plan and
   the portal upload all pass today; the ONLY remaining failure is
   `ecr:BatchGetImage`, 15 occurrences from one cause.
+
+### A SECOND, unrelated ask worth sending in the same message
+
+`sns:Subscribe`, for the owner's user.
+
+The alarm topic `arn:aws:sns:us-east-2:408568863712:crm-alerts` exists and
+seven staging alarms publish to it — task count per service, Directus CPU and
+memory, log volume. Verified 2026-09-06: **the topic has zero subscribers**
+and `sns:Subscribe` is denied, so every one of those alarms fires into
+nothing. Nobody is told when a service dies.
+
+It has no bearing on the failing pipeline — the builds fail on ECR alone —
+but it is the difference between monitoring and decoration, and it is one
+grant to the same admin.
 
 ## The S3 half, already solved — do not ask for it
 
