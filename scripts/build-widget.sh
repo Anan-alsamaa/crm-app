@@ -35,5 +35,10 @@ API="$(sed -n "s/.*SOCKET_URL: '\([^']*\)'.*/\1/p" "$CONFIG")"
 unset WIDGET_DEMO_HOST_PAGE
 
 printf '\n\033[1m==> widget for %s, gateway %s\033[0m\n' "$ENV_NAME" "$API"
-VITE_SOCKET_URL="$API" VITE_GATEWAY_HTTP_URL="$API" pnpm --filter @yiji/chat-widget build
+export VITE_SOCKET_URL="$API" VITE_GATEWAY_HTTP_URL="$API"
+# The package script (`pnpm --filter @yiji/chat-widget build`) runs the same
+# three steps; they are spelled out here because pnpm's spawned shell cannot
+# find node on the deploy laptop, while node itself can.
+node node_modules/typescript/bin/tsc --noEmit -p apps/chat-widget
+( cd apps/chat-widget   && rm -rf dist   && node node_modules/vite/bin/vite.js build   && node node_modules/vite/bin/vite.js build --config vite.pages.config.ts )
 echo "built apps/chat-widget/dist; publish with scripts/deploy-portals.sh $ENV_NAME widget"
