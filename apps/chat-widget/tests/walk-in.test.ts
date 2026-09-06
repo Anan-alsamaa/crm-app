@@ -105,20 +105,35 @@ describe('walk-in phone field', () => {
   });
 
   it('treats digits after the prefix as the REST of the number', async () => {
-    /*
-     * The field is prefilled with `05` and the customer types the remaining
-     * eight digits, which is the flow the prefix exists to support.
-     *
-     * Documented rather than merely observed, because it is also the sharp
-     * edge here: everything after `05` is taken at face value, so a full local
-     * number pasted INTO the prefilled field reads as `05` + those digits and
-     * silently produces a different number. Worth a paste handler; not changed
-     * here, because nobody has reported it and guessing at the fix would be a
-     * second bug.
-     */
+    // The field is prefilled with `05` and the customer types the remaining
+    // eight digits, which is the flow the prefix exists to support.
     await loadPage();
     type('0512345678');
     expect(input().value).toBe('0512345678');
+  });
+
+  it('takes a FULL number typed over the prefix as the number itself', async () => {
+    /*
+     * The caret is held after the prefix, so typing one's whole number lands
+     * on top of it: `05` + `0500000771`. This used to keep eight digits of
+     * that and open a chat for `0505000007`, a stranger who did not exist.
+     * Found on staging by a probe doing exactly what a customer would.
+     */
+    await loadPage();
+    type('050500000771');
+    expect(input().value).toBe('0500000771');
+  });
+
+  it('leaves a genuine 0505… number alone when typed the intended way', async () => {
+    await loadPage();
+    type('0505000007');
+    expect(input().value).toBe('0505000007');
+  });
+
+  it('converts a +966 number pasted after the prefix', async () => {
+    await loadPage();
+    type('05+966 50 000 0771');
+    expect(input().value).toBe('0500000771');
   });
 
   it('never lets the number grow past 05 + eight digits', async () => {

@@ -159,10 +159,26 @@ const PREFIX = '05';
 function holdPrefix(): void {
   if (!input) return;
   let digits = input.value.replace(/\D/g, '');
+  /*
+   * The field is prefilled with 05 and the caret is held after it, so the
+   * natural thing — typing or pasting one's FULL number — lands ON TOP of the
+   * prefix: `05` + `0500000771`. Keeping eight digits of that produced
+   * `0505000007`, a different and perfectly valid-looking number, and the
+   * chat opened for a stranger who did not exist. Caught on staging by a
+   * probe that did exactly what a customer would.
+   *
+   * Twelve digits beginning 0505 can never be a real number (a Saudi mobile
+   * is exactly ten), so the duplicated prefix is dropped without ambiguity;
+   * `05` + `966…` is an international number pasted after it. A genuine
+   * 0505… number typed the intended way stays ten digits and is untouched.
+   */
+  if (digits.startsWith(`${PREFIX}966`)) digits = digits.slice(PREFIX.length);
   // A pasted number is as likely to be +966 5X… as 05X… — the country code is
   // the same number written another way, so convert rather than treating those
   // digits as the start of a local one.
   if (digits.startsWith('966')) digits = `0${digits.slice(3)}`;
+  if (digits.length > 10 && digits.startsWith(PREFIX + PREFIX))
+    digits = digits.slice(PREFIX.length);
   const rest = digits.startsWith(PREFIX) ? digits.slice(PREFIX.length) : digits.replace(/^0+/, '');
   input.value = PREFIX + rest.slice(0, 8);
   // Never let the caret sit inside the prefix — typing there would push digits
