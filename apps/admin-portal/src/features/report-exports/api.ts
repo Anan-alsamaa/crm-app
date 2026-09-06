@@ -430,21 +430,44 @@ async function loadAgentReport(
       // Attempt the richer field list first; fall back to the base one if this
       // Directus has no complaint schema (see COMPLAINT_FIELDS).
       let complaintFieldsAvailable = true;
+      /**
+       * Filter on WHEN THE COMPLAINT HAPPENED, falling back to creation.
+       *
+       * This report displays, sorts and groups by `complaint_date`; filtering
+       * on `date_created` asked a different question than the one the table
+       * answers. Imported history makes the gap total rather than subtle —
+       * 1,621 rows spanning nine months share one creation stamp, so "August"
+       * returned 7 tickets where the honest answer was 17, and narrowing the
+       * range to any window before today emptied the report of everything that
+       * was ever imported.
+       *
+       * The `_or` is what keeps older rows visible: tickets raised before the
+       * complaint-date field existed have none, and matching only on
+       * `complaint_date` would silently drop every one of them.
+       */
+      const ticketWindow = {
+        _or: [
+          inRange('complaint_date'),
+          { _and: [{ complaint_date: { _null: true } }, inRange('date_created')] },
+        ],
+      };
       const readTickets = async (): Promise<RawTicket[]> => {
-        const query = (fields: readonly unknown[]) =>
+        const query = (fields: readonly unknown[], filter: unknown) =>
           directus.request(
             readItems('tickets', {
-              filter: inRange('date_created'),
+              filter: filter as never,
               fields: fields as never,
               limit: -1,
               sort: ['-date_created'],
             }),
           ) as Promise<RawTicket[]>;
         try {
-          return await query([...BASE_TICKET_FIELDS, ...COMPLAINT_FIELDS]);
+          return await query([...BASE_TICKET_FIELDS, ...COMPLAINT_FIELDS], ticketWindow);
         } catch {
+          // No complaint schema here: neither the fields nor the window that
+          // reads `complaint_date` can work, so both fall back together.
           complaintFieldsAvailable = false;
-          return await query(BASE_TICKET_FIELDS);
+          return await query(BASE_TICKET_FIELDS, inRange('date_created'));
         }
       };
 

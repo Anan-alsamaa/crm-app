@@ -96,7 +96,13 @@ import {
 
 /** Which of the four exportable reports this page instance renders. */
 export type ReportKind = 'tickets' | 'agents' | 'conversations' | 'complaints';
-const RANGE_DAYS = [7, 30, 90] as const;
+/**
+ * 365 is here because the history is: the imported operations sheet reaches
+ * back to December, and 90 days stops in June — so the longest shortcut showed
+ * barely half of what the report holds, and seeing the rest meant typing two
+ * dates by hand every time.
+ */
+const RANGE_DAYS = [7, 30, 90, 365] as const;
 
 /** The remembered range, handed down so each report's filter bar can drive it. */
 interface RangeProps {
