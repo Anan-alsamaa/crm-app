@@ -1,7 +1,10 @@
 # One IAM change, so CI can deploy
 
-**Status:** blocking automated deploys. Manual deploys still work.
+**Status:** blocking the five image builds. Everything else in the pipeline is
+green — the portal publish was a second, separate denial and it is now FIXED
+(see "The S3 half, already solved" below).
 **Raised:** 2026-09-05, after the first CI deploy on `main` failed.
+**Still open:** 2026-09-06.
 
 ---
 
@@ -23,6 +26,39 @@
 > I cannot apply this myself: my user has no `iam:PutRolePolicy`.
 
 ---
+
+## The S3 half, already solved — do not ask for it
+
+The same run failed TWICE for two unrelated reasons, and only one of them needs
+an admin. The portal upload died on:
+
+```
+fatal error: An error occurred (AccessDenied) when calling the ListObjectsV2
+operation: ... not authorized to perform: s3:ListBucket on resource:
+"arn:aws:s3:::crm-staging-agent-portal"
+```
+
+`aws s3 sync` lists a bucket before copying, so `ListBucket` is not optional,
+and `--delete` also needs `DeleteObject`. The role had no S3 permission at all.
+
+That one did NOT need an IAM change: a **bucket** policy is resource-based and
+needs only `s3:PutBucketPolicy`, which the owner already has. Applied to the
+four portal buckets by `scripts/grant-deploy-s3.sh` on 2026-09-06, appending a
+single `AllowGitHubDeployPublish` statement and leaving each bucket's existing
+`AllowCloudFrontServicePrincipal` statement untouched. Verified: the
+"Build & upload portals" job now succeeds and really uploads.
+
+One caveat carried over from that fix: a resource-based grant is invisible to
+`aws iam simulate-principal-policy`, which evaluates identity policies only. It
+will keep reporting `implicitDeny` for these buckets even though the deploy
+demonstrably works — read the bucket policy itself, or the job log, not the
+simulator.
+
+**The same trick does NOT rescue ECR.** ECR repositories do take resource
+policies, but the owner has no `ecr:SetRepositoryPolicy` either (checked
+2026-09-06: `implicitDeny`), so there is no way around the ask below. It is the
+one remaining thing standing between this pipeline and a fully automated
+deploy.
 
 ## Why a push needs read permissions
 
