@@ -156,3 +156,29 @@ aws iam get-role-policy --role-name crm-github-deploy \
 
 Then re-run the failed workflow; the build jobs should push and the deploy jobs
 should follow.
+
+---
+
+## Verification, 2026-09-07: not applied to the principals asked for, and no longer needed from an admin
+
+Checked three ways, all agreeing: the inline policy `crm-github-deploy-policy`
+on the role still lists push-only ECR actions; `simulate-principal-policy`
+against every `crm/*` repository ARN returns implicit deny for the three read
+actions and for `sns:Subscribe` on the `crm-alerts` topic ARN; and the Deploy
+run for `c396c34` failed all five image jobs with
+`not authorized to perform: ecr:BatchGetImage … because no identity-based
+policy allows the action`.
+
+What the check also found: the owner's own IAM user, `r.obeid@anan.sa`, holds
+**AdministratorAccess** (and the `DevOps` group's SystemAdministrator). That
+user can apply both grants itself. `scripts/grant-deploy-access.sh` does
+exactly that, idempotently, dry-run by default:
+
+```bash
+AWS_PROFILE=<r.obeid profile> ALERT_EMAIL=<address> scripts/grant-deploy-access.sh          # plan
+AWS_PROFILE=<r.obeid profile> ALERT_EMAIL=<address> scripts/grant-deploy-access.sh --apply  # write
+```
+
+It ends by simulating the role and listing the topic's subscriptions, so the
+result is read back rather than assumed. Afterwards: re-run the failed Deploy
+run (`gh run rerun <id> --failed`) and click the SNS confirmation email.

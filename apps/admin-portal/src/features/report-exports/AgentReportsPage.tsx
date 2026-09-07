@@ -1119,7 +1119,11 @@ function ComplaintsReport({
           icon={<UsersIcon size={18} />}
         />
         <ReportKpi
-          label={t('agentReports.notMapped', { defaultValue: 'Not mapped' })}
+          // ROWS, not branches: eight tickets under one misspelt branch are
+          // eight here and one in the store master. The tile used to share
+          // the per-row pill's label and read as a branch count, which sent
+          // the owner counting branches that did not add up.
+          label={t('complaintReport.kpiUnmappedRows', { defaultValue: 'Rows not mapped' })}
           value={String(totals.unmapped)}
           tone="amber"
           icon={<InboxIcon size={18} />}
