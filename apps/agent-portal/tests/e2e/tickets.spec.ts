@@ -70,10 +70,25 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   // And it survives a reload, so the state was persisted rather than only set
   // in the client's cache.
   await agent.reload();
-  // A reload drops the in-memory access token and restores it from the cookie;
-  // on a loaded runner that round-trip outlasts a bare text assertion, so give
-  // the restored page room before asking about the ticket's state.
-  await expect(agent.getByText(/^solved ·/i)).toBeVisible({ timeout: 25_000 });
+  /*
+   * WAIT FOR THE SESSION, NOT FOR THE CLOCK.
+   *
+   * A reload drops the in-memory access token and restores it from the cookie,
+   * then refetches the ticket. Asserting on the text alone races that chain,
+   * and raising the timeout only made the race longer — this line failed twice
+   * on a runner where the assertion BEFORE the reload passed, which is the
+   * signature of a page still authenticating rather than a ticket that was
+   * never solved.
+   *
+   * So wait for the refetch to have LANDED first: a resolved ticket no longer
+   * offers "Mark as solved", so the button's disappearance proves the page
+   * reloaded the ticket under a restored session. Only then is asking about
+   * the status meaningful.
+   */
+  await expect(agent.getByRole('button', { name: /mark as solved/i })).toHaveCount(0, {
+    timeout: 25_000,
+  });
+  await expect(agent.getByText(/^solved ·/i)).toBeVisible({ timeout: 15_000 });
 });
 
 test('agent visits notification preferences page and saves', async ({ page }) => {
