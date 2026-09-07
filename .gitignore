@@ -98,6 +98,9 @@ dump.rdb
 coverage-buckets.mjs
 
 .env.prod
+# Production secrets for the AWS deployment. Distinct from staging by design,
+# so a leak here is a production compromise, not a test one.
+.env.prod.aws
 .env.staging
 .directus-prod/
 .load-env.ps1
