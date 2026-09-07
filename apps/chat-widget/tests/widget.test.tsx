@@ -570,3 +570,61 @@ describe('Widget — the offline footer in Arabic', () => {
     expect(container.querySelector('a[href^="mailto:"]')).toBeNull();
   });
 });
+
+describe('the customer can change language inside the chat', () => {
+  /*
+   * The language is decided before the chat opens (the phone, or an earlier
+   * choice). Somebody who guesses wrong for a customer — a shared phone, a
+   * handset bought abroad — must not leave them stuck reading a language they
+   * do not, one tap from the thing they came to complain about.
+   */
+  const langButton = () => screen.getByRole('button', { name: /العربية|English/ });
+
+  it('offers the OTHER language, written in that language', () => {
+    // "AR"/"EN" is only legible to someone who already reads both; a flag is a
+    // country, not a language.
+    renderWidget({ locale: 'en', autoOpen: true });
+    expect(langButton().textContent).toBe('العربية');
+  });
+
+  it('switches the whole panel, and flips it right-to-left', () => {
+    const { container } = renderWidget({ locale: 'en', autoOpen: true });
+    expect(container.querySelector('[dir="rtl"]')).toBeNull();
+    fireEvent.click(langButton());
+    expect(screen.getByPlaceholderText('اكتب رسالة…')).toBeInTheDocument();
+    expect(container.querySelector('[dir="rtl"]')).not.toBeNull();
+    // And back, so the switch is never a one-way door.
+    fireEvent.click(langButton());
+    expect(screen.getByPlaceholderText('Type a message…')).toBeInTheDocument();
+  });
+
+  it('tells the host page, so the choice outlives this visit', () => {
+    // The widget is embedded in pages it does not own, so it keeps no memory
+    // itself; the host stores it (see locale.ts).
+    const onLocaleChange = vi.fn();
+    renderWidget({ locale: 'ar', autoOpen: true, onLocaleChange });
+    fireEvent.click(langButton());
+    expect(onLocaleChange).toHaveBeenCalledWith('en');
+  });
+
+  it('re-says the greeting in the new language', () => {
+    /*
+     * The greeting is a local bubble, written when `ready` arrived. Leaving it
+     * behind means the first line of the conversation stays in the language
+     * the customer just rejected — the most visible line on the screen.
+     */
+    renderWidget({ locale: 'en', autoOpen: true });
+    driveReady({ isNew: true });
+    expect(screen.getByText('Hey there 👋 How can we help you?')).toBeInTheDocument();
+    fireEvent.click(langButton());
+    expect(screen.getByText('مرحبًا 👋 كيف يمكننا مساعدتك؟')).toBeInTheDocument();
+    expect(screen.queryByText('Hey there 👋 How can we help you?')).toBeNull();
+  });
+
+  it('keeps a returning customer’s name in the re-said greeting', () => {
+    renderWidget({ locale: 'en', autoOpen: true });
+    driveReady({ isNew: false, contact: { name: 'Sara', phone: '0501234567' } });
+    fireEvent.click(langButton());
+    expect(screen.getByText('مرحبًا Sara، كيف يمكننا مساعدتك؟')).toBeInTheDocument();
+  });
+});

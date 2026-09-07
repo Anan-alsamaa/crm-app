@@ -7,7 +7,14 @@ import { t, isRtl, type WidgetLocale } from './i18n.js';
 export interface WidgetConfig {
   gatewayUrl: string;
   token: string;
+  /** The language to open in. The customer can switch from the header. */
   locale?: WidgetLocale;
+  /**
+   * Called when the customer switches language from the header, so the host
+   * page can remember the choice for the next visit (see locale.ts). The
+   * widget itself keeps no memory: it is embedded in pages it does not own.
+   */
+  onLocaleChange?: (locale: WidgetLocale) => void;
   /**
    * Open the chat panel immediately on load instead of showing only the
    * launcher. Host pages that embed the widget on a dedicated support page
@@ -257,7 +264,7 @@ function EmptyArt() {
 }
 
 export function Widget({ config }: { config: WidgetConfig }) {
-  const locale: WidgetLocale = config.locale ?? 'en';
+  const [locale, setLocale] = useState<WidgetLocale>(config.locale ?? 'en');
   const tr = t(locale);
   const rtl = isRtl(locale);
 
@@ -346,6 +353,22 @@ export function Widget({ config }: { config: WidgetConfig }) {
       socketRef.current.emit('typing:stop', { conversationId: convoRef.current });
       isTypingRef.current = false;
     }
+  };
+
+  const switchLocale = () => {
+    const next: WidgetLocale = locale === 'ar' ? 'en' : 'ar';
+    setLocale(next);
+    config.onLocaleChange?.(next);
+    // The greeting is a local bubble written in the language of the moment it
+    // was added; say it again in the new one, or the first line of the chat
+    // stays in the language the customer just left.
+    const nt = t(next);
+    const name = customer.name?.trim();
+    const greeting =
+      !customer.isNew && name ? nt.welcomeNamed.replace('{name}', name) : nt.welcomeNew;
+    setMessages((prev) =>
+      prev.map((m) => (m.id === GREETING_ID ? { ...m, content: greeting } : m)),
+    );
   };
 
   useEffect(() => {
@@ -733,27 +756,38 @@ export function Widget({ config }: { config: WidgetConfig }) {
                   <p className="yiji-header-sub">{tr.subtitle}</p>
                 </div>
               </div>
-              <button
-                className="yiji-close"
-                onClick={() => {
-                  // In app mode the close button is a way OUT, not a way to
-                  // minimise. `assign` rather than `href =` so the attempt is
-                  // a navigation the app can intercept; if nothing handles the
-                  // scheme we still collapse, so the button is never dead.
-                  if (config.closeUrl) {
-                    try {
-                      window.location.assign(config.closeUrl);
-                      return;
-                    } catch {
-                      /* unhandled scheme — fall through to collapsing */
+              <div className="yiji-header-actions">
+                <button
+                  type="button"
+                  className="yiji-lang"
+                  onClick={switchLocale}
+                  lang={locale === 'ar' ? 'en' : 'ar'}
+                  aria-label={tr.switchLanguage}
+                >
+                  {tr.switchLanguage}
+                </button>
+                <button
+                  className="yiji-close"
+                  onClick={() => {
+                    // In app mode the close button is a way OUT, not a way to
+                    // minimise. `assign` rather than `href =` so the attempt is
+                    // a navigation the app can intercept; if nothing handles the
+                    // scheme we still collapse, so the button is never dead.
+                    if (config.closeUrl) {
+                      try {
+                        window.location.assign(config.closeUrl);
+                        return;
+                      } catch {
+                        /* unhandled scheme — fall through to collapsing */
+                      }
                     }
-                  }
-                  setOpen(false);
-                }}
-                aria-label={tr.close}
-              >
-                <CloseIcon />
-              </button>
+                    setOpen(false);
+                  }}
+                  aria-label={tr.close}
+                >
+                  <CloseIcon />
+                </button>
+              </div>
             </div>
             <div className="yiji-header-team">
               <span className={`yiji-header-status${agentsOnline === 0 ? ' offline' : ''}`}>

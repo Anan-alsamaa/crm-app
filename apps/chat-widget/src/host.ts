@@ -1,4 +1,5 @@
 import { YijiChat } from './embed.js';
+import { applyDocumentLocale, resolveLocale, storeLocale } from './locale.js';
 
 /**
  * The chat page: the ONE surface every customer lands on.
@@ -68,6 +69,10 @@ function takeWalkInSession(): { token: string; closeUrl?: string } | null {
   }
 }
 
+// Arabic unless the phone or an earlier choice says English; see locale.ts.
+const locale = resolveLocale();
+applyDocumentLocale(locale);
+
 const session = takeWalkInSession();
 if (session) {
   // Signed by the gateway; nothing is minted here. autoOpen: this page IS the
@@ -75,7 +80,8 @@ if (session) {
   YijiChat.init({
     gatewayUrl: GATEWAY_URL,
     token: session.token,
-    locale: 'en',
+    locale,
+    onLocaleChange: storeLocale,
     autoOpen: true,
     ...(session.closeUrl ? { closeUrl: session.closeUrl } : {}),
   });

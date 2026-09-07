@@ -49,6 +49,9 @@
  * VITE_GATEWAY_HTTP_URL only when the gateway genuinely lives somewhere else
  * and is reachable from the public internet.
  */
+import { applyDocumentLocale, resolveLocale, storeLocale } from './locale.js';
+import { walkInStrings } from './walk-in-strings.js';
+
 const GATEWAY_HTTP = (import.meta.env.VITE_GATEWAY_HTTP_URL as string | undefined) ?? '';
 const VENDOR_ID = (import.meta.env.VITE_WALK_IN_VENDOR_ID as string | undefined) ?? '1';
 /** The chat page this hands off to — same origin, so `/` is the whole answer. */
@@ -68,6 +71,49 @@ const form = document.getElementById('walk-in-form') as HTMLFormElement | null;
 const input = document.getElementById('phone') as HTMLInputElement | null;
 const error = document.getElementById('walk-in-error') as HTMLElement | null;
 const submit = document.getElementById('walk-in-submit') as HTMLButtonElement | null;
+const langButton = document.getElementById('walk-in-lang') as HTMLButtonElement | null;
+
+/*
+ * THE LANGUAGE.
+ *
+ * Arabic unless the phone or an earlier choice says otherwise (see locale.ts).
+ * The markup ships English so a page whose script failed still says something;
+ * everything visible is rewritten here, on load, in one pass.
+ *
+ * The customer's choice is stored, so the chat this page hands off to opens in
+ * the same language rather than deciding again.
+ */
+let locale = resolveLocale();
+let tr = walkInStrings(locale);
+
+function paint(): void {
+  tr = walkInStrings(locale);
+  applyDocumentLocale(locale);
+  document.title = tr.documentTitle;
+  const set = (id: string, text: string): void => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+  set('walk-in-heading', tr.heading);
+  set('walk-in-sub', tr.sub);
+  set('walk-in-label', tr.label);
+  set('walk-in-foot', tr.foot);
+  if (submit && !submit.disabled) submit.textContent = tr.submit;
+  if (langButton) {
+    langButton.textContent = tr.switchLanguage;
+    // The button is written in the language it switches TO, so it must be
+    // tagged as such or the browser hyphenates and shapes it with the wrong
+    // rules — and a screen reader reads Arabic with an English voice.
+    langButton.lang = locale === 'ar' ? 'en' : 'ar';
+  }
+}
+
+paint();
+langButton?.addEventListener('click', () => {
+  locale = locale === 'ar' ? 'en' : 'ar';
+  storeLocale(locale);
+  paint();
+});
 
 function showError(message: string): void {
   if (!error) return;
@@ -83,7 +129,7 @@ function revealForm(): void {
 function setBusy(busy: boolean): void {
   if (submit) {
     submit.disabled = busy;
-    submit.textContent = busy ? 'Starting…' : 'Start chat';
+    submit.textContent = busy ? tr.submitBusy : tr.submit;
   }
 }
 
@@ -110,20 +156,20 @@ async function start(input: { phone: string } | { code: string }): Promise<void>
     });
     const body = (await res.json().catch(() => ({}))) as { ok?: boolean; token?: string };
     if (res.status === 429) {
-      showError('Too many attempts. Please wait a moment and try again.');
+      showError(tr.errRateLimited);
       setBusy(false);
       return;
     }
     if (res.status === 401) {
       // An expired or tampered link. Say so plainly and leave the form usable,
       // so the customer is not stranded on a dead link.
-      showError('This link has expired. Please enter your number to start a chat.');
+      showError(tr.errLinkExpired);
       revealForm();
       setBusy(false);
       return;
     }
     if (!res.ok || !body.ok || !body.token) {
-      showError('We could not start the chat. Please check the number and try again.');
+      showError(tr.errRefused);
       revealForm();
       setBusy(false);
       return;
@@ -141,7 +187,7 @@ async function start(input: { phone: string } | { code: string }): Promise<void>
     sessionStorage.setItem('yiji.walkInCloseUrl', CLOSE_URL);
     window.location.replace(CHAT_URL);
   } catch {
-    showError('We could not reach support. Please check your connection.');
+    showError(tr.errOffline);
     setBusy(false);
   }
 }
@@ -201,7 +247,7 @@ form?.addEventListener('submit', (e) => {
   // 05 + 8 digits is the Saudi mobile shape. Checked here so the customer is
   // told at the field rather than by a 400 from the gateway.
   if (phone.replace(/\D/g, '').length < 10) {
-    showError('Please enter the full mobile number — 05 and eight more digits.');
+    showError(tr.errShort);
     return;
   }
   void start({ phone });

@@ -119,17 +119,38 @@
         color: var(--muted);
         line-height: 1.5;
       }
+      /* The language switch, pinned to the top corner on the reading side's
+         opposite edge (inset-inline-end follows dir), clear of the notch. */
+      .lang {
+        position: fixed;
+        top: max(14px, env(safe-area-inset-top));
+        inset-inline-end: 16px;
+        appearance: none;
+        background: rgba(255, 255, 255, 0.85);
+        border: 1px solid rgba(15, 23, 42, 0.12);
+        border-radius: 999px;
+        padding: 7px 13px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        color: inherit;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
+    <!-- The words are set by walk-in.ts in the customer's language (Arabic
+         unless the phone or an earlier choice says English); what is written
+         here is the English fallback for a page whose script never ran. -->
+    <button type="button" class="lang" id="walk-in-lang" lang="ar">العربية</button>
     <div class="wrap" id="walk-in-intro">
       <img class="logo" src="/yiji-logo.png" alt="" />
-      <h1>Something wrong with your order?</h1>
-      <p class="sub">
+      <h1 id="walk-in-heading">Something wrong with your order?</h1>
+      <p class="sub" id="walk-in-sub">
         Tell us the mobile number you order with and we will start a chat with our team.
       </p>
       <form id="walk-in-form" novalidate>
-        <label for="phone">Mobile number</label>
+        <label for="phone" id="walk-in-label">Mobile number</label>
         <!--
           Starts at 05 and stays there — see holdPrefix(). Every Saudi mobile
           begins with it, so typing it is wasted taps, and deleting it produces
@@ -151,7 +172,7 @@
         <button id="walk-in-submit" type="submit">Start chat</button>
         <p class="err" id="walk-in-error" hidden></p>
       </form>
-      <p class="foot">
+      <p class="foot" id="walk-in-foot">
         We use your number only to connect this chat to your order history and to reply to you.
       </p>
     </div>

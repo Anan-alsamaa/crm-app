@@ -42,6 +42,8 @@ export interface WidgetStrings {
   offlineAutoReply: string;
   offlineCallLabel: string;
   offlineWhatsappLabel: string;
+  /** The language switch: names the OTHER language, in that language. */
+  switchLanguage: string;
 }
 
 const strings: Record<WidgetLocale, WidgetStrings> = {
@@ -90,6 +92,7 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
       "Thanks for your message — our team is offline right now. We've received it and will reply as soon as we're back online.",
     offlineCallLabel: 'Call us',
     offlineWhatsappLabel: 'WhatsApp',
+    switchLanguage: 'العربية',
   },
   ar: {
     title: 'الدعم',
@@ -125,6 +128,7 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
       'شكرًا لرسالتك — فريقنا غير متصل حاليًا. لقد استلمنا رسالتك وسنردّ عليك فور عودتنا.',
     offlineCallLabel: 'اتصل بنا',
     offlineWhatsappLabel: 'واتساب',
+    switchLanguage: 'English',
   },
 };
 

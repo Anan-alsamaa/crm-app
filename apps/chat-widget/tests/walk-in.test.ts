@@ -14,17 +14,30 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
  */
 
 const PAGE = `
+  <button type="button" id="walk-in-lang">العربية</button>
+  <h1 id="walk-in-heading">Something wrong with your order?</h1>
+  <p id="walk-in-sub">sub</p>
   <form id="walk-in-form">
-    <input id="phone" />
+    <label for="phone" id="walk-in-label">Mobile number</label>
+    <input id="phone" dir="ltr" />
     <p id="walk-in-error" hidden></p>
     <button id="walk-in-submit" type="submit">Start chat</button>
   </form>
+  <p id="walk-in-foot">foot</p>
 `;
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-async function loadPage(search = ''): Promise<void> {
+async function loadPage(search = '', options: { pinEnglish?: boolean } = {}): Promise<void> {
   document.body.innerHTML = PAGE;
+  /*
+   * Pin the language unless a case says otherwise. The page is Arabic-first
+   * now, and most of these tests read its English words; the language block
+   * below passes `pinEnglish: false` to exercise what a real visitor gets.
+   */
+  if (options.pinEnglish !== false && !localStorage.getItem('yiji.locale')) {
+    localStorage.setItem('yiji.locale', 'en');
+  }
   /*
    * The page reads `?t=` on load, so the URL is part of the fixture. jsdom
    * refuses a real navigation, so `location` is stubbed — and the stub has to
@@ -65,6 +78,7 @@ beforeEach(() => {
   }));
   vi.stubGlobal('fetch', fetchMock);
   sessionStorage.clear();
+  localStorage.clear();
   // A default for the tests that never call loadPage with a query string;
   // loadPage replaces it with one carrying the right search.
   vi.stubGlobal('location', {
@@ -214,6 +228,78 @@ describe('walk-in submit', () => {
     await send();
     expect(error().textContent).toMatch(/could not reach support/i);
     expect(submit().disabled).toBe(false);
+  });
+});
+
+describe('the page speaks the customer’s language', () => {
+  const heading = () => document.getElementById('walk-in-heading') as HTMLElement;
+  const lang = () => document.getElementById('walk-in-lang') as HTMLButtonElement;
+
+  /**
+   * jsdom reports en-US, which IS a phone asking for English — so a test about
+   * the default has to say which languages the phone claims, or it silently
+   * asserts the English path and proves nothing about the default.
+   */
+  const phoneSpeaks = (...languages: string[]) =>
+    vi.stubGlobal('navigator', { languages, language: languages[0] });
+
+  it('opens in ARABIC when the phone asks for neither language', async () => {
+    // The markup ships English so a page whose script failed still says
+    // something; the script rewrites it in the customer's language on load.
+    phoneSpeaks('fr-FR');
+    await loadPage('', { pinEnglish: false });
+    expect(heading().textContent).toBe('هل هناك مشكلة في طلبك؟');
+    expect(document.documentElement.lang).toBe('ar');
+    expect(document.documentElement.dir).toBe('rtl');
+  });
+
+  it('opens in Arabic when the phone asks for Arabic', async () => {
+    phoneSpeaks('ar-SA');
+    await loadPage('', { pinEnglish: false });
+    expect(heading().textContent).toBe('هل هناك مشكلة في طلبك؟');
+  });
+
+  it('follows a phone set to English', async () => {
+    phoneSpeaks('en-US');
+    await loadPage('', { pinEnglish: false });
+    expect(heading().textContent).toBe('Something wrong with your order?');
+    expect(document.documentElement.dir).toBe('ltr');
+  });
+
+  it('switches on one tap, and names the other language in that language', async () => {
+    phoneSpeaks('ar-SA');
+    await loadPage('', { pinEnglish: false });
+    expect(lang().textContent).toBe('English');
+    lang().click();
+    expect(heading().textContent).toBe('Something wrong with your order?');
+    expect(lang().textContent).toBe('العربية');
+    // Tagged as the language it is written in, or the browser shapes it and a
+    // screen reader pronounces it with the wrong rules.
+    expect(lang().lang).toBe('ar');
+    expect(document.documentElement.dir).toBe('ltr');
+  });
+
+  it('remembers the choice, so the chat it hands off to opens the same way', async () => {
+    phoneSpeaks('ar-SA');
+    await loadPage('', { pinEnglish: false });
+    lang().click();
+    expect(localStorage.getItem('yiji.locale')).toBe('en');
+  });
+
+  it('shows validation errors in the language on screen', async () => {
+    phoneSpeaks('ar-SA');
+    await loadPage('', { pinEnglish: false });
+    type('0501');
+    await send();
+    expect(error().textContent).toBe('يرجى إدخال رقم الجوال كاملًا — 05 وثمانية أرقام بعدها.');
+  });
+
+  it('keeps the number left-to-right even in Arabic', async () => {
+    // A phone number is digits in a fixed order; mirroring it makes 0501… read
+    // as …1050 on a right-to-left line.
+    phoneSpeaks('ar-SA');
+    await loadPage('', { pinEnglish: false });
+    expect(input().getAttribute('dir') ?? 'ltr').toBe('ltr');
   });
 });
 

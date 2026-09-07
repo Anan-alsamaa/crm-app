@@ -52,17 +52,21 @@ describe('a walk-in handoff opens the chat', () => {
     await loadHost();
 
     expect(initSpy).toHaveBeenCalledTimes(1);
-    expect(initSpy.mock.calls[0][0]).toEqual({
+    const opts = initSpy.mock.calls[0][0] as Record<string, unknown>;
+    expect(opts).toMatchObject({
       gatewayUrl: 'http://localhost:8080',
       token: 'gateway-signed',
-      locale: 'en',
       autoOpen: true,
       closeUrl: 'closeapp://',
     });
+    // The language is the customer's, not a constant — see the language block
+    // below. What matters here is that the page passes one and can store a
+    // change, and that it invented no token of its own.
+    expect(['ar', 'en']).toContain(opts.locale);
+    expect(typeof opts.onLocaleChange).toBe('function');
     expect(demoSpy).not.toHaveBeenCalled();
     expect(location.replace).not.toHaveBeenCalled();
   });
-
   it('takes the handoff once, so a later refresh cannot replay the token', async () => {
     sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
     await loadHost();
@@ -121,5 +125,47 @@ describe('where the widget connects', () => {
     sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
     await loadHost();
     expect(initSpy.mock.calls[0][0]).toMatchObject({ gatewayUrl: 'http://localhost:8080' });
+  });
+});
+
+describe('the chat page opens in the customer’s language', () => {
+  const phoneSpeaks = (...languages: string[]) =>
+    vi.stubGlobal('navigator', { languages, language: languages[0] });
+
+  beforeEach(() => localStorage.clear());
+
+  it('hands the widget ARABIC when the phone asks for neither language', async () => {
+    phoneSpeaks('fr-FR');
+    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    await loadHost();
+    expect(initSpy.mock.calls[0][0]).toMatchObject({ locale: 'ar' });
+    expect(document.documentElement.dir).toBe('rtl');
+  });
+
+  it('follows a phone set to English', async () => {
+    phoneSpeaks('en-US');
+    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    await loadHost();
+    expect(initSpy.mock.calls[0][0]).toMatchObject({ locale: 'en' });
+    expect(document.documentElement.dir).toBe('ltr');
+  });
+
+  it('honours the choice made on the QR page, over the phone', async () => {
+    // The two pages are one journey: switching to English on the form and
+    // then being asked to read Arabic in the chat is the same bug twice.
+    phoneSpeaks('ar-SA');
+    localStorage.setItem('yiji.locale', 'en');
+    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    await loadHost();
+    expect(initSpy.mock.calls[0][0]).toMatchObject({ locale: 'en' });
+  });
+
+  it('stores a switch made inside the chat', async () => {
+    phoneSpeaks('ar-SA');
+    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    await loadHost();
+    const onLocaleChange = initSpy.mock.calls[0][0].onLocaleChange as (l: string) => void;
+    onLocaleChange('en');
+    expect(localStorage.getItem('yiji.locale')).toBe('en');
   });
 });
