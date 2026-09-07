@@ -51,10 +51,30 @@ internal, and nobody outside the company reads them.
 | `crm-agent-staging.anan.sa` | Agent portal        | `d57v6u4ytjrj7.cloudfront.net`  |
 | `crm-api-staging.anan.sa`   | Directus + gateways | `d2vi34f7wgjecb.cloudfront.net` |
 
-All eight distributions exist. The production widget (`E15DCMX8ZCU62R`) and
-API (`E2W0XLCJ48MTNE`) were created 2026-09-07, mirroring their staging
+All eight distributions exist and all eight serve real content — verified
+2026-09-07 by fetching each one. The production widget (`E15DCMX8ZCU62R`)
+and API (`E2W0XLCJ48MTNE`) were created that day, mirroring their staging
 counterparts setting for setting so production cannot drift from what
 staging proved.
+
+> **An empty bucket answers `403 AccessDenied`, not `404`.** All three
+> production front-ends returned that until they were first deployed, which
+> reads as a permissions fault and is not one. If a CRM host ever answers
+> AccessDenied, check whether the bucket has objects in it before touching a
+> policy.
+
+### The production API is NOT yet production
+
+`crm-api.anan.sa` points at a CloudFront distribution whose origin is the
+shared `crm-alb`, and **every listener rule on that ALB targets `crm-stg-*`**
+— the default included. There are no production ECS services and no
+production target groups, so the name currently reaches the STAGING
+database, and its health check answers `{"status":"ok"}`, which is how this
+hides.
+
+Safe to register the DNS now, because what a CloudFront distribution points
+at can be changed without touching DNS. **Not safe to use for anything real
+until the production backend is deployed and given its own listener rules.**
 
 ---
 
