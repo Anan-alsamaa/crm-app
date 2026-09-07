@@ -49,10 +49,7 @@ case "$ENV_NAME" in
   prod)
     AGENT_DIST=E3UK8T8DHFGMNW
     ADMIN_DIST=E37XKA7D2IPZLC
-    # No production widget host yet — created per environment, like the portal
-    # buckets. `deploy-portals.sh prod widget` fails loudly here rather than
-    # silently publishing the widget to staging's distribution.
-    WIDGET_DIST=""
+    WIDGET_DIST=E15DCMX8ZCU62R
     ;;
 esac
 
@@ -117,7 +114,20 @@ done
 #     one-time setting, checked below); S3 behind CloudFront has no notion of
 #     a directory index.
 if [ -z "$ONLY" ] || [ "$ONLY" = "widget" ]; then
-  BUCKET="crm-${ENV_NAME}-widget"
+  # NOT derived from the environment name like the portals'.
+  #
+  # S3 bucket names are global across every AWS account on earth, and
+  # `crm-prod-widget` is taken by somebody else's. Deriving the name would
+  # have pointed a production deploy at a stranger's bucket — an
+  # AccessDenied if we are lucky, and if that account were ever to grant
+  # public writes, publishing our widget into it.
+  #
+  # So production carries the account id, matching `crm-prod-uploads-…`,
+  # which was renamed for the same reason.
+  case "$ENV_NAME" in
+    prod) BUCKET="crm-prod-widget-408568863712" ;;
+    *)    BUCKET="crm-${ENV_NAME}-widget" ;;
+  esac
   [ -n "$WIDGET_DIST" ] || die "no widget host for $ENV_NAME — create the bucket and distribution first"
   SRC="apps/chat-widget/dist"
   [ -d "$SRC" ] || die "$SRC does not exist — run scripts/build-widget.sh $ENV_NAME first"

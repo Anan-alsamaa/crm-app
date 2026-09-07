@@ -285,9 +285,17 @@ The unknown walk-in's thread is resumed by the id the widget was handed
 only after confirming it is that contact's live thread. Before this, a reload
 or a second scan opened a duplicate thread for the same person.
 
-There is **no production widget host yet**. `deploy-portals.sh prod widget`
-fails loudly rather than publishing production's widget to staging's
-distribution.
+**Production** (created 2026-09-07): bucket
+`crm-prod-widget-408568863712` behind CloudFront **E15DCMX8ZCU62R** →
+`https://d6ww6tccn45er.cloudfront.net`, plus the API distribution
+**E2W0XLCJ48MTNE** → `https://d2ljjkmk6p5y4b.cloudfront.net` fronting the
+same ALB as staging (listener rules separate the environments).
+
+> **The prod widget bucket is NOT `crm-prod-widget`.** That name is taken by
+> another AWS account — S3's namespace is global — so it carries the account
+> id, like `crm-prod-uploads-…`. `deploy-portals.sh` hardcodes it for prod
+> rather than deriving it from the environment name, which would have aimed a
+> production deploy at a stranger's bucket.
 
 **Do not skip `create-listener-rules.sh`, and do not hand-build the routing.**
 A missing rule fails SILENTLY: the path falls through to the default target and

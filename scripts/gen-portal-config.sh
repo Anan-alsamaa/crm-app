@@ -54,7 +54,12 @@ case "$ENV_NAME" in
     SOCKET="$API"; AI="$API"; JOBS="$API"
     ;;
   prod)
-    echo "prod CloudFront distributions not created yet" >&2; exit 2
+    API="https://d2ljjkmk6p5y4b.cloudfront.net"
+    # Same shape as staging: one distribution fronts all three services and
+    # the ALB routes by path. It is the SAME load balancer as staging —
+    # the listener rules separate the two environments, so pointing this at
+    # a different origin would point production at nothing.
+    SOCKET="$API"; AI="$API"; JOBS="$API"
     ;;
   *) echo "usage: $0 <staging|prod> [outfile]" >&2; exit 2 ;;
 esac

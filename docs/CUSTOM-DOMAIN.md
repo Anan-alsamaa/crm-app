@@ -35,19 +35,26 @@ been an unfamiliar mechanism in exchange for nothing.
 
 Each is a CNAME to the distribution that serves it.
 
-| Hostname                     | Serves              | Target                            |
-| ---------------------------- | ------------------- | --------------------------------- |
-| `crm-admin.anan.sa`          | Admin portal        | `d3sw1ca3dpsao0.cloudfront.net`   |
-| `crm-agent.anan.sa`          | Agent portal        | `d1feea9xuruu0v.cloudfront.net`   |
-| `crm-api.anan.sa`            | Directus + gateways | prod distribution not yet created |
-| `crm-widget.anan.sa`         | Chat + QR pages     | prod distribution not yet created |
-| `crm-admin-staging.anan.sa`  | Admin portal        | `d1evkiaehtmzr0.cloudfront.net`   |
-| `crm-agent-staging.anan.sa`  | Agent portal        | `d57v6u4ytjrj7.cloudfront.net`    |
-| `crm-api-staging.anan.sa`    | Directus + gateways | `d2vi34f7wgjecb.cloudfront.net`   |
-| `crm-widget-staging.anan.sa` | Chat + QR pages     | `dk7gqau5j3o4b.cloudfront.net`    |
+**`crm.anan.sa` is the CUSTOMER's URL.** It serves the chat and the QR page —
+the only surface a customer ever sees, and the one that goes on a printed
+code in a branch. The staff hosts carry the `crm-` prefix instead: they are
+internal, and nobody outside the company reads them.
 
-The two production distributions that do not exist yet are created when
-production is built; their targets follow.
+| Hostname                    | Serves              | Target                          |
+| --------------------------- | ------------------- | ------------------------------- |
+| `crm.anan.sa`               | **Customer chat**   | `d6ww6tccn45er.cloudfront.net`  |
+| `crm-admin.anan.sa`         | Admin portal        | `d3sw1ca3dpsao0.cloudfront.net` |
+| `crm-agent.anan.sa`         | Agent portal        | `d1feea9xuruu0v.cloudfront.net` |
+| `crm-api.anan.sa`           | Directus + gateways | `d2ljjkmk6p5y4b.cloudfront.net` |
+| `crm-staging.anan.sa`       | Customer chat       | `dk7gqau5j3o4b.cloudfront.net`  |
+| `crm-admin-staging.anan.sa` | Admin portal        | `d1evkiaehtmzr0.cloudfront.net` |
+| `crm-agent-staging.anan.sa` | Agent portal        | `d57v6u4ytjrj7.cloudfront.net`  |
+| `crm-api-staging.anan.sa`   | Directus + gateways | `d2vi34f7wgjecb.cloudfront.net` |
+
+All eight distributions exist. The production widget (`E15DCMX8ZCU62R`) and
+API (`E2W0XLCJ48MTNE`) were created 2026-09-07, mirroring their staging
+counterparts setting for setting so production cannot drift from what
+staging proved.
 
 ---
 
