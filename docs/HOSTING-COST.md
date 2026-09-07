@@ -1,151 +1,214 @@
-# What the CRM costs to host, and what GCP would cost
+# What the CRM costs to host: AWS today vs GCP
 
-**Written 2026-09-07.** Every AWS figure below is derived from the resources
-actually deployed, listed by `aws` and counted — not from a proposal. Prices
-are us-east-2 (Ohio) on-demand list, September 2026.
+**Written 2026-09-07.** Resource counts come from the live account. Traffic
+comes from 30 days of CloudWatch metrics. Unit prices are published list
+prices, cited below — the AWS Pricing API is denied to this user, so they were
+taken from the vendors' pricing pages rather than queried.
 
-> **The account's real bill could not be read.** `ce:GetCostAndUsage` and every
-> other billing action is denied for `e.habibi@anan.sa`. So this is a
-> **build-up from the inventory**, not a copy of an invoice. Someone with
-> billing access should check it against Cost Explorer before it drives a
-> decision. Request `ce:GetCostAndUsage` if that is worth doing regularly.
-
----
-
-## The distinction that decides the answer
-
-The CRM runs on infrastructure it **shares with other teams**:
-
-| Resource                       | Whose     | Would leaving AWS save it?          |
-| ------------------------------ | --------- | ----------------------------------- |
-| RDS `test-yiji`                | shared    | **No** — other teams' data on it    |
-| ElastiCache Redis `redis-yiji` | shared    | **No** — same                       |
-| 2 NAT gateways in the VPC      | shared    | **No** — the EKS cluster needs them |
-| ALB `crm-alb`                  | **CRM's** | yes                                 |
-| 5 Fargate tasks                | **CRM's** | yes                                 |
-| 8 CloudFront distributions     | **CRM's** | yes                                 |
-| 8 S3 buckets (~5 MB total)     | **CRM's** | yes                                 |
-
-**So the CRM's marginal cost is far below the cost of running it alone.** The
-database and Redis it uses are already paid for by somebody else's workload.
-A move to GCP would have to buy those outright — which is the single biggest
-term in the comparison, and the one most easily missed.
+> **This is a build-up, not an invoice.** `ce:GetCostAndUsage` is denied for
+> `e.habibi@anan.sa`, so the real bill could not be read. Every figure here is
+> derived from what is deployed × a published rate, and the arithmetic is shown
+> so it can be checked. Ask for `ce:GetCostAndUsage` if this needs to be
+> tracked rather than estimated once.
 
 ---
 
-## What the CRM costs on AWS today
+## What is actually deployed
 
-Counted from the inventory. Staging runs four services; production currently
-runs one (Directus), with three still to start.
+Measured, not assumed:
 
-| Item                                              | Monthly (USD) |
-| ------------------------------------------------- | ------------: |
-| Fargate — staging, 4 tasks (1.5 vCPU, 3 GB total) |           ~52 |
-| Fargate — production, 4 tasks when complete       |           ~52 |
-| ALB `crm-alb`                                     |           ~18 |
-| CloudFront, 8 distributions at low traffic        |            ~5 |
-| S3 — 5 MB plus requests                           |            <1 |
-| CloudWatch Logs — 30-day retention                |            ~5 |
-| **CRM marginal total**                            |      **~132** |
+| Service                            | Environment | vCPU | Memory | Running |
+| ---------------------------------- | ----------- | ---: | -----: | ------: |
+| directus                           | staging     |  0.5 |   1 GB |       1 |
+| socket-gateway                     | staging     | 0.25 | 0.5 GB |       1 |
+| ai-gateway                         | staging     | 0.25 | 0.5 GB |       1 |
+| workers                            | staging     |  0.5 |   1 GB |       1 |
+| directus                           | production  |  0.5 |   1 GB |       1 |
+| _(3 prod services still to start)_ |             |  1.0 |   2 GB |       0 |
 
-Add the shared resources, if the CRM were charged its share rather than
-riding along:
+**Totals when production is complete: 3.0 vCPU and 6 GB across 8 tasks.**
 
-| Shared item                                     | Full price | CRM's share if split |
-| ----------------------------------------------- | ---------: | -------------------: |
-| RDS PostgreSQL (db.t3.medium, Multi-AZ assumed) |       ~120 |                  ~30 |
-| ElastiCache Redis (cache.t3.micro cluster)      |        ~50 |                  ~15 |
-| NAT gateways ×2                                 |        ~65 |                  ~16 |
-
-**CRM today: roughly 130 USD/month marginal, or ~190 if it paid a quarter
-share of the shared infrastructure.**
+**Traffic, 30 days across all 8 CloudFront distributions: 28,796 requests and
+114 MB.** That is small enough that CDN and egress are rounding errors — a fact
+that matters, because it removes the usual "GCP egress is cheaper" argument
+in either direction.
 
 ---
 
-## What the same thing costs on GCP
+## Unit prices used
 
-Like for like, us-central1, September 2026 list prices. GCP has no free
-equivalent of the shared database the CRM currently borrows, so this buys one.
+| Rate                                   | Price            | Source              |
+| -------------------------------------- | ---------------- | ------------------- |
+| Fargate vCPU-hour                      | $0.04048         | AWS Fargate pricing |
+| Fargate GB-hour                        | $0.004445        | AWS Fargate pricing |
+| Cloud Run vCPU-second (always-on)      | $0.000024        | Cloud Run pricing   |
+| Cloud Run GiB-second (always-on)       | $0.0000025       | Cloud Run pricing   |
+| RDS db.t3.medium PostgreSQL, single-AZ | ~$0.072/hr       | AWS RDS pricing     |
+| Cloud SQL per vCPU / per GB, monthly   | ~$30.11 / ~$5.11 | Cloud SQL pricing   |
+| ALB                                    | $0.0225/hr + LCU | AWS ELB pricing     |
 
-| Item                                             | Monthly (USD) |
-| ------------------------------------------------ | ------------: |
-| Cloud Run — 4 services, staging (scales to zero) |           ~15 |
-| Cloud Run — 4 services, production (min 1 each)  |           ~65 |
-| **Cloud SQL PostgreSQL (db-custom-1-3840, HA)**  |      **~150** |
-| Memorystore Redis (1 GB Basic)                   |           ~35 |
-| Cloud Load Balancing                             |           ~22 |
-| Cloud CDN + Cloud Storage                        |            ~8 |
-| Cloud Logging (beyond free tier)                 |            ~5 |
-| **Total**                                        |      **~300** |
+730 hours per month throughout.
 
-Cloud Run's scale-to-zero is a genuine advantage for staging, which sits idle
-most of the day: ~15 against Fargate's ~52. It does not help production, which
-must stay warm.
+---
+
+## AWS today
+
+### Compute
+
+```
+3.0 vCPU × $0.04048 × 730 h  =  $88.65
+6.0 GB   × $0.004445 × 730 h =  $19.47
+                                -------
+Fargate, 8 tasks                $108.12
+```
+
+### Everything else the CRM owns
+
+| Item                                         |   Monthly |
+| -------------------------------------------- | --------: |
+| Fargate (above)                              |   $108.12 |
+| ALB `crm-alb` — $0.0225 × 730, + ~1 LCU      |    $22.34 |
+| CloudFront — 28.8k requests, 114 MB          |     $0.02 |
+| S3 — 5 MB across 8 buckets                   |     $0.01 |
+| CloudWatch Logs — 5 groups, 30-day retention |       ~$3 |
+| **CRM's own resources**                      | **~$134** |
+
+### What the CRM does not pay for
+
+The database, Redis and NAT gateways belong to other teams' workloads and
+would keep running if the CRM disappeared:
+
+| Shared resource                          | Full cost | CRM's use          |
+| ---------------------------------------- | --------: | ------------------ |
+| RDS `test-yiji` (also hosts 5 other DBs) |      ~$53 | one database on it |
+| ElastiCache Redis cluster                |      ~$50 | one key prefix     |
+| 2 NAT gateways                           |      ~$65 | shared egress      |
+
+**AWS marginal cost today: ~$134/month.** If the CRM were charged a fair share
+of the shared infrastructure — say a fifth of the database, a third of Redis
+and a fifth of the NAT — add roughly $40, for **~$174**.
+
+---
+
+## GCP, like for like
+
+Cloud Run billed instance-based, because Directus, the socket gateway and the
+workers must stay warm — a chat gateway that cold-starts is a chat that drops.
+
+### Compute
+
+```
+Production, 4 services always on:
+  1.5 vCPU × $0.000024 × 2,628,000 s  =  $94.61
+  3.0 GiB  × $0.0000025 × 2,628,000 s =  $19.71
+                                          ------
+                                          $114.32
+
+Staging, 4 services, scale-to-zero, ~8 h/day active:
+  roughly one third of the above         ~$38
+```
+
+Cloud Run's scale-to-zero is a real saving on staging. It cannot help
+production, and Cloud Run's per-second rate is **higher** than Fargate's for
+an always-on workload — $114 against $108 for the same production shape.
+
+### Full GCP build
+
+| Item                                           |     Monthly |
+| ---------------------------------------------- | ----------: |
+| Cloud Run — production, always on              |     $114.32 |
+| Cloud Run — staging, scale-to-zero             |        ~$38 |
+| **Cloud SQL PostgreSQL, 2 vCPU / 4 GB, HA**    | **$161.32** |
+| Memorystore Redis, 1 GB Basic                  |        ~$35 |
+| Cloud Load Balancing — forwarding rule + rules |        ~$22 |
+| Cloud Storage + Cloud CDN, at this traffic     |         ~$1 |
+| Cloud Logging, beyond the free 50 GiB          |         ~$2 |
+| **Total**                                      |   **~$373** |
+
+Cloud SQL at 2 vCPU / 4 GB: `(2 × $30.11) + (4 × $5.11) = $80.66`, doubled for
+HA = **$161.32**. A one-year committed-use discount takes it to roughly $130;
+the table below uses the undiscounted figure, because the AWS side is
+undiscounted too and mixing the two would flatter GCP.
 
 ---
 
 ## Side by side
 
-|                  |  AWS (today) | AWS (paying a share) | GCP (standalone) |
-| ---------------- | -----------: | -------------------: | ---------------: |
-| Compute          |         ~104 |                 ~104 |              ~80 |
-| Database         | 0 (borrowed) |                  ~30 |             ~150 |
-| Redis            | 0 (borrowed) |                  ~15 |              ~35 |
-| Networking + CDN |          ~23 |                  ~39 |              ~30 |
-| Storage + logs   |           ~5 |                   ~5 |               ~5 |
-| **Total**        |     **~132** |             **~193** |         **~300** |
+|                      | AWS today | AWS, fair share |       GCP |
+| -------------------- | --------: | --------------: | --------: |
+| Compute              |      $108 |            $108 |      $152 |
+| Database             |  borrowed |            ~$11 |      $161 |
+| Redis                |  borrowed |            ~$17 |       $35 |
+| Load balancing       |       $22 |             $22 |       $22 |
+| NAT / egress         |  borrowed |            ~$13 |        $0 |
+| CDN + storage + logs |       ~$3 |             ~$3 |       ~$3 |
+| **Monthly**          | **~$134** |       **~$174** | **~$373** |
 
-**GCP is roughly 2.3× the current AWS bill, and ~1.5× even if the CRM paid a
-fair share of the shared infrastructure.** The gap is almost entirely the
-database: on AWS the CRM uses an instance that already exists for other
-workloads; on GCP it must buy its own.
+**GCP costs about $239/month more than today, or $199 more than a fully costed
+AWS — roughly $2,400–2,900 per year.**
+
+Two things drive that gap, and one of them is counter-intuitive:
+
+- **The database, ~$150 of it.** On AWS the CRM uses an instance that already
+  exists for other workloads; on GCP it must buy its own, with HA.
+- **Cloud Run is not cheaper than Fargate for always-on work.** For the same
+  3.0 vCPU and 6 GB running continuously, Cloud Run is **$228.64 against
+  Fargate's $108.12 — 111% more**. Scale-to-zero saves real money on staging,
+  which is idle most of the day, and nothing at all on production, which must
+  stay warm. The GCP compute figure above is only competitive _because_ staging
+  scales to zero.
 
 ---
 
-## The costs that are not on the invoice
+## What the numbers do not capture
 
-A migration's price is mostly labour and risk, and those do not appear above.
+**The rebuild.** ECS task definitions, host-based ALB routing separating
+staging from production, 8 CloudFront distributions, S3 bucket policies,
+service discovery, a bootstrap job, and 9 app roles carrying 563 permissions —
+all rewritten for Cloud Run, Cloud SQL and GCP load balancing. Two to four
+weeks, during which nothing else ships and everything proven on staging
+becomes unproven.
 
-**Rebuilding what is already working.** The current setup took this project
-weeks: ECS task definitions, host-based ALB routing that separates staging
-from production, CloudFront distributions, S3 policies, service discovery, a
-bootstrap job, and nine app roles carrying 563 permissions. All of it would be
-rewritten for Cloud Run, Cloud SQL and GCP load balancing. Realistically two
-to four weeks, during which nothing else ships.
+**Yiji stays on AWS.** The CRM reads Yiji's order and customer APIs, and
+Yiji's production runs in this account and VPC. Moving to GCP puts a public
+internet hop between the CRM and the system it exists to serve. If those APIs
+are ever restricted to internal traffic, that is a request to the same manager,
+with more urgency.
 
-**Yiji stays on AWS.** The CRM is not standalone: it reads Yiji's order and
-customer APIs, and Yiji's own production runs in this AWS account (its EKS
-cluster is in the same VPC). Moving the CRM to GCP puts a public internet hop
-between them where there is currently none — slower, and one more thing that
-can fail.
+**Two clouds to operate.** Two IAM models, two consoles, two billing
+relationships.
 
-**A second cloud to operate.** Two consoles, two IAM models, two billing
-relationships, two sets of access requests. The access delays this project has
-already hit — ECR permissions, a production database — would be duplicated on
-a platform where nobody on the team has standing.
-
-**The one real argument for GCP** is independence: a CRM in its own project
-does not compete for permissions with other teams, and no shared database
-means no shared blast radius. That is worth something. It is not worth
-~170 USD/month plus a month of rebuilding unless the friction is genuinely
-blocking delivery.
+**The argument on the other side: access.** The permission queue on this
+account is not hypothetical. As of today the ECR grant has been requested
+twice and still is not applied, the production database is waiting on
+approval, and billing is invisible. A GCP project where you hold Owner has
+none of that. If access delays cost even two days a month, $219 buys them
+back — that is the honest case for moving, and it is about control, not cost.
 
 ---
 
 ## Recommendation
 
-**Stay on AWS.** The CRM's marginal cost is ~130 USD/month because it shares
-infrastructure that is already paid for; GCP would cost ~300 and require
-rebuilding everything, while separating the CRM from the Yiji services it
-talks to.
+**A separate AWS account** answers the access problem without paying the GCP
+premium or rebuilding anything: full admin, clean IAM, no shared database,
+every existing script still valid, and the CRM stays on the same network as
+Yiji. It is usually an easier approval than a new cloud, because it changes
+nothing about the vendor relationship or the security review.
 
-Two cheaper ways to get most of what a move would buy:
+**Stay on the shared account** only if that separate account is refused and
+the current friction is tolerable.
 
-1. **A dedicated RDS instance** (already requested) removes the shared-database
-   risk for ~120 USD/month — a third of a GCP migration, and no rebuild.
-2. **A separate AWS account** under the same organisation gives full
-   independence and clean IAM, keeps every skill and script, and stays on the
-   same network as Yiji. This is what the access friction actually calls for.
+**Move to GCP** if — and only if — the access friction is genuinely blocking
+delivery and a separate AWS account has been refused. It is the most expensive
+option in both money and weeks, and it moves the CRM away from Yiji.
 
-Revisit if the CRM's traffic grows enough that Cloud Run's scale-to-zero
-outweighs the database, or if Yiji itself moves.
+---
+
+## Sources
+
+- [AWS Fargate pricing](https://aws.amazon.com/fargate/pricing/)
+- [Amazon RDS pricing](https://aws.amazon.com/rds/pricing/)
+- [Cloud Run pricing](https://cloud.google.com/run/pricing)
+- [Cloud SQL pricing](https://cloud.google.com/sql/pricing)
+- [db.t3.medium rates, Vantage](https://instances.vantage.sh/aws/rds/db.t3.medium)
+- [Cloud SQL machine-type pricing, Bytebase](https://www.bytebase.com/dbcost/cloudsql-pricing/)
