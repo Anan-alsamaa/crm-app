@@ -3,6 +3,16 @@
 _So you ask once, not five times over a fortnight. Everything below is derived
 from what the deployment actually touches; nothing is speculative._
 
+> **⚠ SUPERSEDED for the actual ask, 2026-08-31.** This page was written before
+> permissions were tested. Testing found that **EC2 security groups, EC2 launch
+> and VPC read already work** — so asking for them makes the request longer than
+> it needs to be, and a longer request is a slower one.
+>
+> **Send [`AWS-ACCESS-REQUEST-MANAGER.md`](./AWS-ACCESS-REQUEST-MANAGER.md)
+> instead** — it asks only for the five things that were actually denied.
+> Keep this page for the cost breakdown and the DNS reasoning, which are
+> unchanged.
+
 ---
 
 ## The short version (paste this)

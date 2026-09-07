@@ -17,7 +17,7 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     restart: unless-stopped
     # No `ports:` — internal network only (Directus reaches it by service name).
     environment:

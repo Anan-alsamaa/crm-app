@@ -1,9 +1,11 @@
 # Checking what AWS access you already have
 
-> ## RESULT, 2026-08-31 — checked in the console
+> ## RESULT, 2026-08-31 — checked in the console, READ **and** CREATE
 >
-> Account **`408568863712`** (matches the existing ECS runbook), region
-> **us-east-2**, IAM user `e.habibi@anan.sa`.
+> Account **`408568863712`**, region **us-east-2**, IAM user `e.habibi@anan.sa`,
+> VPC **`vpc-0036e2aa4b398c155`** (3 subnets).
+>
+> ### Read
 >
 > | service         | result                                                                              |
 > | --------------- | ----------------------------------------------------------------------------------- |
@@ -12,15 +14,68 @@
 > | IAM create user | ❌ `iam:CreateUser` denied — so the SMTP credential cannot be self-served           |
 > | ElastiCache     | ✅ list works (0 caches)                                                            |
 > | EC2             | ✅ list works — **6 instances already running**, incl. 2× t3.2xlarge and a bastion  |
-> | VPC             | ✅ visible                                                                          |
+> | VPC             | ✅ visible — `vpc-0036e2aa4b398c155`, 3 default subnets                             |
 >
-> Every denial read _"because no identity-based policy allows..."_ — the user has
-> **no policy at all** for those services, not a narrowed one. So this is an
-> additive ask, not an argument about scope.
+> ### Create — tested for real, because read proves nothing
 >
-> **Note the account is already in use by someone else** (those 6 instances).
-> Worth knowing whose before adding to it, and it is why a tag-scoped policy is
-> the easier thing for an owner to approve.
+> | action                              | result                                                                                 |
+> | ----------------------------------- | -------------------------------------------------------------------------------------- |
+> | `ec2:CreateSecurityGroup`           | ✅ created `sg-0f0331d67feeb55a0`                                                      |
+> | `ec2:RunInstances`                  | ✅ launched `i-074d05fe8afa6dfe5` (t2.micro)                                           |
+> | `ec2:CreateKeyPair`                 | ❌ denied                                                                              |
+> | `ec2:TerminateInstances`            | ❌ denied                                                                              |
+> | `elasticache:CreateServerlessCache` | ❌ denied                                                                              |
+> | `elasticache` node-based cluster    | ❌ fails — console reports only "one or more dependent API calls encountered an error" |
+> | `cloudshell:CreateEnvironment`      | ❌ denied — **not needed, do not ask for it**                                          |
+>
+> **The shape of this is the finding.** The EC2 policy allows _create_ but not
+> _destroy_, and not key pairs. That is a deliberate "deploy but do not delete"
+> policy, not an oversight — which changes how to ask for the rest. It is also
+> why `i-074d05fe8afa6dfe5` is still running: the test instance cannot be
+> terminated by the person who launched it.
+>
+> **Both ElastiCache paths fail, and only one names an action.** Serverless
+> denied cleanly (`CreateServerlessCache`); the node-based form failed with the
+> generic _"one or more dependent API calls encountered an error"_ and no
+> action name at all. The submit bundles several calls
+> (`CreateCacheSubnetGroup`, `CreateCacheCluster`, and describe calls behind the
+> form), and the console surfaces only the first failure without identifying it.
+> Quote the Serverless screenshot in the request — it is the one with an action
+> name in it — and ask for ElastiCache broadly rather than per-action.
+>
+> **Subnets confirmed across three AZs** — `us-east-2a` `subnet-0006ce336175b3212`,
+> `2b` `subnet-0982ec9a227abcad1`, `2c` `subnet-03f0ea47c7f88a3cc`, all /20 in
+> the default `172.31.0.0/16`. **RDS requires two AZs, so this is already
+> satisfied** and no subnet work is needed before the database.
+>
+> **CloudShell is a red herring.** `cloudshell:CreateEnvironment` is denied,
+> but CloudShell is only a browser terminal — the AWS CLI runs fine from the
+> local machine with an access key, and the deployment shells into EC2 over SSH
+> anyway. Leave it off the request; every extra line makes approval slower.
+>
+> **No existing key pair is reusable.** Five are present (`bastion`,
+> `afco-node2`, `mac-flutter`, 2× `eksctl-afco-nodegroup-*`) and all belong to
+> other systems. AWS keeps only the **public** half — the `.pem` is downloadable
+> once, at creation, and never again — so an existing row is not a credential
+> you can obtain. Fallback if `CreateKeyPair` stays denied: **SSM Session
+> Manager** (IAM instance role + `ssm:StartSession`), which needs no key pair
+> and no inbound SSH port.
+>
+> **The two traps this run exposed:**
+>
+> 1. **A rendered Create button means nothing.** SES, RDS and ElastiCache all
+>    drew the orange button above their own permission error. Only submitting
+>    the form tells you anything.
+> 2. **The ElastiCache console defaults to Serverless.** The denial names
+>    `CreateServerlessCache`, which is a _different_ permission from
+>    `CreateCacheCluster` — the node-based one this deployment actually wants.
+>    Test the one you will use, not the one the console offers.
+>
+> Every denial read _"because no identity-based policy allows..."_ — no policy
+> at all for those services, not a narrowed one. So this is an additive ask.
+>
+> **The account is already in use by someone else** (those 6 instances), which
+> is why a tag-scoped policy is the easier thing for an owner to approve.
 >
 > The exact ask is in [`AWS-ACCESS-REQUEST.md`](./AWS-ACCESS-REQUEST.md).
 

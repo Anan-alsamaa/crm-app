@@ -22,7 +22,7 @@
       "environment": [
         {
           "name": "DIRECTUS_INTERNAL_URL",
-          "value": "http://{{ALB_HOST}}"
+          "value": "http://directus.crm.local:8055"
         },
         {
           "name": "DB_HOST",
