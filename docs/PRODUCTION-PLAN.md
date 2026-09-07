@@ -1,5 +1,24 @@
 # Taking the CRM to production
 
+> **STATUS 2026-09-07 — the production DATABASE is temporary.** A dedicated
+> RDS instance has been requested from the manager. `crm_prod` on the shared
+> `test-yiji` instance is a placeholder that let the rest be built and proved;
+> when the real instance arrives, only `DB_HOST`, `DB_USER`, `DB_PASSWORD` and
+> `DB_DATABASE` change, in **two** task definitions (`crm-prod-directus` and
+> `crm-prod-bootstrap`) — nothing else in this document depends on where the
+> database lives.
+>
+> **Already standing and independent of that move:** the four target groups,
+> the host-based ALB rules, the five task definitions, the production Directus
+> service, the schema, and the nine app roles with their 563 permissions
+> (`scripts/copy-roles-to-prod.mjs`, idempotent — re-run it against the new
+> database).
+>
+> **The sequence when the instance arrives:** point the two task definitions at
+> it, re-run `crm-prod-bootstrap` for the schema, re-run the role copy, load the
+> stores and brands, create the three remaining services, then verify with the
+> chat probe before go-live.
+
 **Written 2026-09-07**, after reading what staging actually runs rather than
 what the runbooks assume. Everything below was verified against AWS and the
 live database, not inferred.
