@@ -37,7 +37,18 @@ import { applyDocumentLocale, resolveLocale, storeLocale } from './locale.js';
 const GATEWAY_URL =
   import.meta.env.VITE_SOCKET_URL ||
   (import.meta.env.DEV ? 'http://localhost:8080' : window.location.origin);
-const WALK_IN_URL = '/walk-in.html';
+/*
+ * The clean path, not `/walk-in.html`.
+ *
+ * The deploy uploads the QR page under BOTH keys, and they serve the same
+ * bytes — but this is the address a customer sees after being redirected, and
+ * the one that goes on a printed code in a branch. `.html` in it is a
+ * filename leaking into a poster.
+ *
+ * On the dev server there is no such key: Vite serves files, so the extension
+ * is required there.
+ */
+const WALK_IN_URL = import.meta.env.DEV ? '/walk-in.html' : '/walk-in';
 
 /*
  * The handoff from the QR page, if there is one.

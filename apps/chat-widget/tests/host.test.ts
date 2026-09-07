@@ -93,9 +93,13 @@ describe('with nothing waiting', () => {
   it('sends a published visitor to the phone form, and never near the harness', async () => {
     // Opened "normally", from a link or a typed address: the page IS the
     // walk-in flow. And a published page must not know the harness exists.
+    //
+    // The CLEAN path: the deploy serves the form under both keys, but this is
+    // the address the customer is left looking at and the one a printed QR
+    // code carries, so it must not end in `.html`.
     vi.stubEnv('DEV', false);
     await loadHost();
-    expect(location.replace).toHaveBeenCalledWith('/walk-in.html');
+    expect(location.replace).toHaveBeenCalledWith('/walk-in');
     expect(demoSpy).not.toHaveBeenCalled();
     expect(initSpy).not.toHaveBeenCalled();
   });
@@ -106,7 +110,7 @@ describe('with nothing waiting', () => {
       throw new Error('denied');
     });
     await loadHost();
-    expect(location.replace).toHaveBeenCalledWith('/walk-in.html');
+    expect(location.replace).toHaveBeenCalledWith('/walk-in');
   });
 });
 
@@ -167,5 +171,16 @@ describe('the chat page opens in the customer’s language', () => {
     const onLocaleChange = initSpy.mock.calls[0][0].onLocaleChange as (l: string) => void;
     onLocaleChange('en');
     expect(localStorage.getItem('yiji.locale')).toBe('en');
+  });
+});
+
+describe('the address the visitor is left on', () => {
+  it('never redirects on the dev server, so the .html path is not needed there', async () => {
+    // Vite serves files, so there is no extensionless key — but the dev server
+    // runs the harness instead of redirecting, so the question never arises.
+    vi.stubEnv('DEV', true);
+    sessionStorage.clear();
+    await loadHost();
+    expect(location.replace).not.toHaveBeenCalled();
   });
 });
