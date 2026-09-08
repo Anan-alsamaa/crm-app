@@ -122,7 +122,7 @@ two orders of magnitude.
 
 ---
 
-## Two structural risks
+## Three structural risks
 
 **One database credential reaches every database on the instance, and both
 environments share it.** Measured, not inferred: `yijicrm` can CONNECT to all
@@ -145,6 +145,18 @@ there is one user. Two things fix it, in order of effort:
 
 Neither is done here: creating roles on an instance other teams depend on is a
 change to shared infrastructure, and that needs the owner's go-ahead first.
+
+**One production service follows a mutable tag.** `directus`, `socket-gateway`
+and `workers` run pinned digests (`sha-ef6baab`, `sha-d5eb4f2`, `sha-5c2ce16`);
+`ai-gateway` runs `main`. The pipeline's rule is that a git tag is a promotion
+and `main` is staging only - byte-for-byte what staging tested is what ships -
+and this one service quietly opts out of it. Nothing is wrong today, because
+the running task predates the change. But the next restart for any reason - a
+task replacement, a scale event, an AZ evacuation - pulls whatever `main` last
+built, into production, with no promotion and no decision.
+
+Fixing it is a one-line change to that task definition (pin the digest it is
+already running), but it edits production, so it waits for the owner.
 
 **Production has no redundancy.** One task per service, so an ECS restart is a
 brief outage. Fine before launch, and worth revisiting when real customers
