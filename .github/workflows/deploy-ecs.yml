@@ -357,19 +357,46 @@ jobs:
         env:
           ENVIRONMENT: ${{ needs.plan.outputs.environment }}
         run: |
-          if [ "$ENVIRONMENT" = "prod" ]; then SUFFIX="crm.anan.sa"; else SUFFIX="staging.crm.anan.sa"; fi
+          # PROBE WHAT IS ACTUALLY SERVING.
+          #
+          # This used to probe api.staging.crm.anan.sa, a hostname that has
+          # never existed: the anan.sa records are still with the team that
+          # administers that domain. So the job failed on EVERY run with
+          # `curl: (6) Could not resolve host`, long after the deploy it was
+          # meant to be checking had succeeded — and the failure emails made a
+          # green pipeline indistinguishable from a broken one.
+          #
+          # It prefers the real hostname and falls back to the CloudFront one
+          # that serves today, so the day the DNS is published this starts
+          # exercising it with no edit here.
+          if [ "$ENVIRONMENT" = "prod" ]; then
+            NAMED="crm-api.anan.sa"; FALLBACK="d2ljjkmk6p5y4b.cloudfront.net"
+          else
+            NAMED="crm-api-staging.anan.sa"; FALLBACK="d2vi34f7wgjecb.cloudfront.net"
+          fi
+          if host "$NAMED" >/dev/null 2>&1; then
+            API="$NAMED"
+          else
+            API="$FALLBACK"
+            echo "::notice::$NAMED does not resolve yet — probing $FALLBACK"
+          fi
+
           fail=0
-          for probe in "api.${SUFFIX}/server/health" "ai.${SUFFIX}/health"; do
-            if curl -fsS --max-time 15 "https://${probe}" >/dev/null; then
-              echo "ok   $probe"
-            else
-              echo "FAIL $probe"; fail=1
-            fi
+          # PATHS THAT ARE ACTUALLY ROUTED.
+          #
+          # The old probe hit `/health`, which the ALB does not route at all —
+          # it is the container's internal check, reachable only from inside the
+          # VPC. Through CloudFront it is a 404, so this could never have passed
+          # even with the right hostname. `/admin/config` is the AI gateway's
+          # own routed path (see the crm-*-ai listener rules).
+          for probe in "/server/health" "/admin/config"; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://${API}${probe}")
+            # 2xx or 401 both prove the service answered: the AI endpoints are
+            # authenticated, and an unauthenticated 401 is a HEALTHY response.
+            # A 404 or 502 means nothing is behind that path.
+            case "$code" in
+              2*|401|403) echo "ok   ${API}${probe} ($code)" ;;
+              *)          echo "FAIL ${API}${probe} ($code)"; fail=1 ;;
+            esac
           done
-          # Directus names health checks by ROLE, not backend: there is no
-          # `redis` key, so grepping for one reads as "Redis is off" when it is
-          # connected. `cache` is the proof.
-          curl -fsS --max-time 15 "https://api.${SUFFIX}/server/health" | grep -q '"cache"' \
-            && echo "ok   redis (reported as 'cache')" \
-            || echo "warn redis/cache not reported"
           exit $fail
