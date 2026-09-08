@@ -532,7 +532,9 @@
     "reopen": "إعادة فتح",
     "activity": "النشاط",
     "viewLatestTicket": "عرض أحدث تذكرة",
-    "viewLatestOf": "يفتح أحدث تذكرة من {{n}} تذاكر: {{subject}}"
+    "viewLatestOf": "يفتح أحدث تذكرة من {{n}} تذاكر: {{subject}}",
+    "replaceFilter": "عرض هذه فقط",
+    "resizeList": "تغيير عرض قائمة التذاكر"
   },
   "notifications": {
     "title": "التنبيهات",

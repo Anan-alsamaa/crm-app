@@ -22,10 +22,13 @@ import {
   Spinner,
   TicketEmptyArt,
   toast,
+  ResizeHandle,
   Toolbar,
   ToolbarSpacer,
   useIsDesktop,
+  useResizable,
 } from '@yiji/ui';
+import { QueueStat } from '../../components/QueueStat.js';
 import {
   couponDiffers,
   isCouponRequested,
@@ -91,7 +94,26 @@ import { useAssetBlobUrl } from '../../lib/useAssetBlobUrl.js';
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 
 type TicketFilter = 'all' | TicketStatus | 'overdue';
-const FILTERS: TicketFilter[] = ['all', 'new', 'open', 'pending', 'resolved', 'overdue'];
+/*
+ * The six statuses do not all deserve a tile.
+ *
+ * "All" is the cleared state, reached by pressing the active tile again rather
+ * than by its own control, and "resolved" is the pile an agent has finished
+ * with — both are reachable from the row of chips below without taking a third
+ * of the strip. What is left is what somebody scans the queue FOR: work that
+ * has arrived, work in hand, and work that is late.
+ */
+const STAT_FILTERS = ['new', 'open', 'overdue'] as const satisfies readonly TicketFilter[];
+
+/** The rest, as quiet text below the tiles, so nothing becomes unreachable. */
+const REST_FILTERS = ['all', 'pending', 'resolved'] as const satisfies readonly TicketFilter[];
+
+/** Late is alarming, in-hand is not. `default` is the calm green dot. */
+const STAT_TONE: Record<(typeof STAT_FILTERS)[number], 'default' | 'primary' | 'destructive'> = {
+  new: 'primary',
+  open: 'default',
+  overdue: 'destructive',
+};
 
 /** Ticket status -> dot colour. Same hue ladder as the detail's status pill. */
 const STATUS_DOT: Record<string, string> = {
@@ -119,6 +141,24 @@ export function TicketsPage() {
   const { index: storeIndex } = useStoreIndex();
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<TicketFilter>('all');
+  /*
+   * The queue rail is DRAGGABLE, and remembers its width.
+   *
+   * It was pinned at 360px, which is a guess about somebody else's screen: an
+   * agent on a laptop wants it narrow to read the ticket, and one on a wide
+   * monitor wants the branch and the order number visible without truncation.
+   * The inbox has been resizable for a while, and a panel that resizes on one
+   * page and refuses on the next reads as a bug in the page that refuses.
+   *
+   * Its own storage key: the two rails hold different columns and there is no
+   * reason a comfortable chat list is a comfortable ticket list.
+   */
+  const rail = useResizable({
+    storageKey: 'yiji.agent.ticketsWidth',
+    defaultWidth: 360,
+    min: 300,
+    max: 520,
+  });
   const [criteria, setCriteria] = useState<TicketFilterCriteria>({});
   /* The rail's job is showing tickets. Filters are set once and then left, so
      they fold away and report how many are on rather than occupying four rows
@@ -184,54 +224,15 @@ export function TicketsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Dense toolbar: title + inline filter tabs (also stand in as stats) */}
+      {/* The toolbar keeps the page title and the one ACTION. The status
+          filters used to live here as chips and now sit in the rail as counted
+          tiles — carrying both meant every count appeared twice on screen,
+          which reads as two controls that might disagree. The inbox has no
+          toolbar filters at all, and matching it was the point. */}
       <Toolbar>
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
           {t('tickets.title')}
         </h1>
-        <span className="opacity-30 text-xs text-muted-foreground hidden sm:inline">·</span>
-        <div className="flex min-w-0 items-center gap-x-4 overflow-x-auto text-xs">
-          {FILTERS.map((f) => {
-            const active = filter === f;
-            const count = filterCount(f);
-            const tone =
-              f === 'overdue'
-                ? 'text-destructive'
-                : f === 'pending'
-                  ? 'text-warning-foreground'
-                  : '';
-            return (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setFilter(f)}
-                className={cn(
-                  'group relative inline-flex items-center gap-1.5 h-12 transition-colors duration-fast ease-out focus-visible:outline-none',
-                  active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <span className="font-medium">
-                  {f === 'all'
-                    ? t('tickets.filterAll', { defaultValue: 'All' })
-                    : f === 'overdue'
-                      ? t('tickets.overdue', { defaultValue: 'Overdue' })
-                      : t(`status.${f}`, { ns: 'common' })}
-                </span>
-                {/* The alarm hue only when there is something to be alarmed
-                    about — "Overdue 0" in red is a false alarm on every visit. */}
-                <span className={cn('tabular-nums text-2xs', !active && count > 0 && tone)}>
-                  {count}
-                </span>
-                {active && (
-                  <span
-                    aria-hidden
-                    className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary"
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
         <ToolbarSpacer />
         <Button type="button" size="sm" onClick={() => navigate('/new-ticket')}>
           {t('tickets.newTicket', { defaultValue: '+ New ticket' })}
@@ -248,10 +249,75 @@ export function TicketsPage() {
         {(isDesktop || selected === null) && (
           <aside
             className={cn(
-              'flex shrink-0 flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft',
-              isDesktop ? 'w-[360px]' : 'w-full',
+              'relative flex shrink-0 flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft',
+              !isDesktop && 'w-full',
             )}
+            style={isDesktop ? { width: rail.width } : undefined}
           >
+            {/* Header — the count is the whole queue, not the current filter,
+                so the number does not jump when a tile is pressed. */}
+            <div className="flex shrink-0 items-baseline gap-2 px-4 pt-4">
+              <h2 className="text-lg font-bold tracking-tight text-foreground">
+                {t('tickets.title')}
+              </h2>
+              <span className="rounded-md bg-secondary px-1.5 py-0.5 text-2xs font-semibold tabular-nums text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
+                {list.length}
+              </span>
+            </div>
+
+            {/* The status filters, moved out of the top toolbar and into the
+                rail as counted tiles — the same control the inbox uses.
+                EXCLUSIVE, unlike the inbox's: a ticket is open or pending,
+                never both, so pressing one replaces the last rather than
+                narrowing it. Pressing the active one clears back to All. */}
+            <div className="mt-3 grid grid-cols-3 gap-1.5 px-4">
+              {STAT_FILTERS.map((f) => (
+                <QueueStat
+                  key={f}
+                  t={t}
+                  label={
+                    f === 'overdue'
+                      ? t('tickets.overdue', { defaultValue: 'Overdue' })
+                      : t(`status.${f}`, { ns: 'common' })
+                  }
+                  value={filterCount(f)}
+                  tone={STAT_TONE[f]}
+                  mode="exclusive"
+                  active={filter === f}
+                  onClick={() => setFilter((cur) => (cur === f ? 'all' : f))}
+                />
+              ))}
+            </div>
+
+            {/* The statuses the tiles leave out, as quiet text. Everything the
+                toolbar used to offer is still reachable — All to clear, and the
+                two piles an agent visits rather than scans. */}
+            <div className="mt-2 flex items-center gap-3 px-4 text-2xs">
+              {REST_FILTERS.map((f) => {
+                const active = filter === f;
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setFilter(f)}
+                    className={cn(
+                      'inline-flex items-center gap-1 transition-colors duration-fast ease-out',
+                      active
+                        ? 'font-semibold text-foreground'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                    aria-pressed={active}
+                  >
+                    <span>
+                      {f === 'all'
+                        ? t('tickets.filterAll', { defaultValue: 'All' })
+                        : t(`status.${f}`, { ns: 'common' })}
+                    </span>
+                    <span className="tabular-nums opacity-70">{filterCount(f)}</span>
+                  </button>
+                );
+              })}
+            </div>
             {/* Search over the queue. One text box for anything with a value
                 in it — order number, phone, branch, or a word from what was
                 written — because an agent holding a number should not first
@@ -479,6 +545,17 @@ export function TicketsPage() {
                   total: list.length,
                 })}
               </div>
+            )}
+            {/* Drag the far edge. `side="end"` because this rail is on the
+                leading side, so the grabbable border is its trailing one —
+                which RTL flips for us, unlike a hardcoded `right`. */}
+            {isDesktop && (
+              <ResizeHandle
+                bind={rail.bind}
+                dragging={rail.dragging}
+                side="end"
+                label={t('tickets.resizeList', { defaultValue: 'Resize ticket list' })}
+              />
             )}
           </aside>
         )}

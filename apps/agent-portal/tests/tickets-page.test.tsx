@@ -361,3 +361,75 @@ describe('TicketsPage — marking a ticket solved', () => {
     expect(screen.queryByText('Mark as solved')).toBeNull();
   });
 });
+
+/*
+ * THE QUEUE RAIL.
+ *
+ * The status filters moved out of the top toolbar and into the left rail as
+ * counted tiles, matching the inbox. Two things about them are easy to get
+ * wrong and invisible until an agent hits them, so both are pinned here.
+ */
+describe('tickets rail: the counted status tiles', () => {
+  it('filters the list to the status it counts', async () => {
+    const open = { ...complaintRow, id: 't1', subject: 'Still open' };
+    const resolved = {
+      ...complaintRow,
+      id: 't2',
+      subject: 'Already done',
+      complaintStatus: 'resolved',
+    };
+    complaints.useMyComplaints.mockReturnValue({ data: [open, resolved], isLoading: false });
+    renderPage();
+
+    // Both are in the queue to begin with.
+    expect(screen.getByText('Still open')).toBeInTheDocument();
+    expect(screen.getByText('Already done')).toBeInTheDocument();
+
+    /*
+     * The tiles are named by count AND label, which is what tells them apart
+     * from the toolbar chips carrying the same status words. The label here is
+     * `status.open` rather than "Open" because this suite's `t` returns the
+     * key when there is no defaultValue — the shape is what matters, not the
+     * wording.
+     */
+    await userEvent.click(screen.getByRole('button', { name: '1 status.open' }));
+    expect(screen.getByText('Still open')).toBeInTheDocument();
+    expect(screen.queryByText('Already done')).toBeNull();
+  });
+
+  it('clears back to everything when the active tile is pressed again', async () => {
+    /*
+     * Ticket statuses are mutually EXCLUSIVE, unlike the inbox's tiles which
+     * combine. That leaves no "All" tile to return to, so the active tile has
+     * to be the way back — otherwise pressing Open is a one-way door and the
+     * rest of the queue looks lost.
+     */
+    const open = { ...complaintRow, id: 't1', subject: 'Still open' };
+    const resolved = {
+      ...complaintRow,
+      id: 't2',
+      subject: 'Already done',
+      complaintStatus: 'resolved',
+    };
+    complaints.useMyComplaints.mockReturnValue({ data: [open, resolved], isLoading: false });
+    renderPage();
+
+    const openTile = screen.getByRole('button', { name: '1 status.open' });
+    await userEvent.click(openTile);
+    expect(screen.queryByText('Already done')).toBeNull();
+
+    await userEvent.click(openTile);
+    expect(screen.getByText('Already done')).toBeInTheDocument();
+  });
+
+  it('does not offer a click on a tile counting zero', () => {
+    /*
+     * A tile showing 0 whose only possible outcome is an empty list reads as a
+     * broken button. The count is still worth showing — "0 overdue" is good
+     * news an agent wants — so it is disabled rather than hidden.
+     */
+    complaints.useMyComplaints.mockReturnValue({ data: [complaintRow], isLoading: false });
+    renderPage();
+    expect(screen.getByRole('button', { name: '0 Overdue' })).toBeDisabled();
+  });
+});
