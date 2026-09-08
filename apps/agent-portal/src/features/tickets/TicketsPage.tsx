@@ -254,23 +254,25 @@ export function TicketsPage() {
             )}
             style={isDesktop ? { width: rail.width } : undefined}
           >
-            {/* Header — the count is the whole queue, not the current filter,
-                so the number does not jump when a tile is pressed. */}
-            <div className="flex shrink-0 items-baseline gap-2 px-4 pt-4">
-              <h2 className="text-lg font-bold tracking-tight text-foreground">
-                {t('tickets.title')}
-              </h2>
-              <span className="rounded-md bg-secondary px-1.5 py-0.5 text-2xs font-semibold tabular-nums text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
-                {list.length}
-              </span>
-            </div>
+            {/* No header here on purpose.
+
+                The toolbar directly above already says "Tickets", and repeating
+                it a few pixels lower read as a second section rather than the
+                same one. The count badge went with it: left on its own it was a
+                bare number floating above the tiles with nothing to name it,
+                and the total is already stated twice over — the tiles below add
+                up to it, and the footer spells out "N of M tickets".
+
+                So the rail opens straight onto the tiles. */}
 
             {/* The status filters, moved out of the top toolbar and into the
                 rail as counted tiles — the same control the inbox uses.
                 EXCLUSIVE, unlike the inbox's: a ticket is open or pending,
                 never both, so pressing one replaces the last rather than
                 narrowing it. Pressing the active one clears back to All. */}
-            <div className="mt-3 grid grid-cols-3 gap-1.5 px-4">
+            {/* pt-4, not mt-3: this is the first thing in the rail now, so it
+                owns the top inset the removed header used to provide. */}
+            <div className="grid grid-cols-3 gap-1.5 px-4 pt-4">
               {STAT_FILTERS.map((f) => (
                 <QueueStat
                   key={f}
