@@ -323,7 +323,11 @@ export function TicketsPage() {
                 written — because an agent holding a number should not first
                 have to decide which kind of number it is. The type and the
                 dates are separate because they are chosen, not typed. */}
-            <div className="space-y-2 border-b border-border px-3 py-2.5">
+            {/* No rule under the search block. The inbox rail separates its
+                regions by spacing alone, and a hairline here plus one above the
+                footer was what boxed the list in — three stacked frames inside
+                one card. */}
+            <div className="space-y-2 px-3 pb-1 pt-2.5">
               <Input
                 value={criteria.query ?? ''}
                 onChange={(e) => setCriteria((c) => ({ ...c, query: e.target.value }))}
@@ -546,7 +550,7 @@ export function TicketsPage() {
                 without it a filtered list that happens to be short reads as
                 "I have no tickets". */}
             {!complaints.isLoading && list.length > 0 && (
-              <div className="flex h-9 shrink-0 items-center border-t border-border px-3.5 text-2xs tabular-nums text-muted-foreground">
+              <div className="flex h-9 shrink-0 items-center px-3.5 text-2xs tabular-nums text-muted-foreground">
                 {t('tickets.searchCount', {
                   defaultValue: '{{shown}} of {{total}} tickets',
                   shown: filtered.length,

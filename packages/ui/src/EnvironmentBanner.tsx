@@ -67,6 +67,11 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
           0%, 100% { opacity: .92; }
           50%      { opacity: 1; }
         }
+        /* On a phone the corner is scarce; the environment name alone carries
+           the warning there. */
+        @media (max-width: 640px) {
+          [data-env-banner] .crm-env-detail { display: none; }
+        }
       `}</style>
       <div
         role="status"
@@ -74,22 +79,36 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
         data-env-banner={env}
         style={{
           position: 'fixed',
-          top: 8,
-          // Centred without needing a width: the pill is only as wide as its
-          // text, so it never crowds the app's own header.
-          insetInlineStart: '50%',
-          transform: 'translateX(-50%)',
+          /*
+           * BOTTOM, not top.
+           *
+           * It was centred at the top on the theory that a pill sized to its
+           * text "never crowds the app's own header". It does: the navigation
+           * is centred too, so the two occupy the same strip and the badge sat
+           * over "Agent performance" and "Compensation" at every width. Making
+           * it smaller narrowed the overlap without ending it — centre against
+           * centre always collides.
+           *
+           * Down here it competes with nothing, stays visible on every page,
+           * and still cannot be missed: it is the only red thing on screen.
+           */
+          bottom: 12,
+          insetInlineEnd: 16,
           zIndex: 2147483647, // above dialogs, drawers and command palettes
           display: 'inline-flex',
           alignItems: 'center',
-          gap: '.6rem',
-          padding: '9px 20px 9px 16px',
+          gap: '.4rem',
+          // Small enough to sit BESIDE the navigation rather than over it.
+          // It was a full sentence in a pill wide enough to cover three nav
+          // items — a warning that hides the app is a worse warning, because
+          // the first thing anyone does is look for how to dismiss it.
+          padding: '5px 12px 5px 9px',
           borderRadius: 999,
           // A warm red that reads as "caution", not "error" — nothing is broken.
           background: 'linear-gradient(90deg,#B3261E 0%,#D93A2B 50%,#B3261E 100%)',
           color: '#fff',
-          font: '600 12px/1 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif',
-          letterSpacing: '.06em',
+          font: '600 10px/1 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif',
+          letterSpacing: '.04em',
           // A ring rather than a heavy shadow, so it reads as a badge sitting
           // ON the page rather than a bar attached to the window.
           boxShadow: '0 2px 10px rgba(0,0,0,.22), 0 0 0 1px rgba(255,255,255,.35) inset',
@@ -119,8 +138,8 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
         <span
           aria-hidden="true"
           style={{
-            width: 7,
-            height: 7,
+            width: 5,
+            height: 5,
             borderRadius: '50%',
             background: '#fff',
             boxShadow: '0 0 0 3px rgba(255,255,255,.28)',
@@ -138,8 +157,15 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
           <strong style={{ fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase' }}>
             {label}
           </strong>
-          <span style={{ opacity: 0.92, fontWeight: 500, letterSpacing: '.02em' }}>
-            {detail ?? 'Test environment — data here is not live'}
+          {/* "STAGING" carries the warning; this explains it. Kept short — the
+              badge sits in a corner, not across the top, and a long sentence
+              there is a wide rectangle over whatever the page put in its own
+              bottom corner. */}
+          <span
+            className="crm-env-detail"
+            style={{ opacity: 0.92, fontWeight: 500, letterSpacing: '.02em' }}
+          >
+            {detail ?? 'data is not live'}
           </span>
         </span>
       </div>
