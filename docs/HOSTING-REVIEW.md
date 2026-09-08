@@ -122,7 +122,7 @@ two orders of magnitude.
 
 ---
 
-## Three structural risks
+## Structural risks
 
 **One database credential reaches every database on the instance, and both
 environments share it.** Measured, not inferred: `yijicrm` can CONNECT to all
@@ -146,17 +146,26 @@ there is one user. Two things fix it, in order of effort:
 Neither is done here: creating roles on an instance other teams depend on is a
 change to shared infrastructure, and that needs the owner's go-ahead first.
 
-**One production service follows a mutable tag.** `directus`, `socket-gateway`
-and `workers` run pinned digests (`sha-ef6baab`, `sha-d5eb4f2`, `sha-5c2ce16`);
-`ai-gateway` runs `main`. The pipeline's rule is that a git tag is a promotion
-and `main` is staging only - byte-for-byte what staging tested is what ships -
-and this one service quietly opts out of it. Nothing is wrong today, because
-the running task predates the change. But the next restart for any reason - a
-task replacement, a scale event, an AZ evacuation - pulls whatever `main` last
-built, into production, with no promotion and no decision.
+**~~One production service follows a mutable tag.~~ RESOLVED 2026-09-08.** All
+four production services now run the pinned `v1.7.0` digests, and each running
+digest was checked against what staging tested — they match byte-for-byte.
 
-Fixing it is a one-line change to that task definition (pin the digest it is
-already running), but it edits production, so it waits for the owner.
+The underlying pipeline bug is fixed too, and it was worse than this entry
+described. The deploy workflow skips the build on a tag because "a tag is a
+promotion, not a build", then verifies `crm/*:v1.7.0` exists in ECR — but
+nothing ever created that tag; builds only apply `main` and `sha-<commit>`.
+`v1.6.0` and `v1.5.0` are not in ECR at all, so every previous release was
+hand-carried the same way. The workflow now performs the re-tag itself.
+
+**Node 20 is past end of life.** Every service image, the bootstrap image,
+`engines`, and nine CI workflow references pin Node 20, which reached EOL on
+2026-04-30 — 131 days before this was written. It receives no security patches
+at all, including for the runtime itself, so a future advisory in Node has no
+fix to upgrade to.
+
+Not urgent enough to hold a release that fixes six known advisories, but it is
+the next dependency work: Node 22 (EOL 2027-04-30) across five Dockerfiles and
+the workflows, built and verified on staging, then promoted.
 
 **Production has no redundancy.** One task per service, so an ECS restart is a
 brief outage. Fine before launch, and worth revisiting when real customers
@@ -166,12 +175,17 @@ depend on it: a second Directus task would cost ~$27/month.
 
 ## Recommendation
 
-The cost is proportionate and the architecture is sound. Two things worth
-doing, in order:
+The cost is proportionate and the architecture is sound. Four things worth
+doing, cheapest first:
 
 1. **Scale staging down out of hours.** ~$25–40/month for no loss, and no
    migration.
-2. **Move production to its own database instance** when it arrives — for the
+2. **A database role per environment.** Free, no migration, and it removes
+   both halves of the first risk: the other teams' data from reach, and the
+   shared credential between staging and production.
+3. **Upgrade to Node 22.** Five Dockerfiles and the CI workflows; the runtime
+   in production has had no security patches since 2026-04-30.
+4. **Move production to its own database instance** when it arrives — for the
    shared-credential risk, not for performance. Capacity is not close to a
    limit: 15 of 81 connections, 751 MB of storage.
 
