@@ -33,12 +33,34 @@ export interface EnvironmentBannerProps {
 /** Environments that are NOT production and therefore need the marker. */
 const NON_PRODUCTION = new Set(['staging', 'stg', 'test', 'dev', 'development', 'preview']);
 
+/** The vertical room the badge takes, and the offset the page gets. */
+const STRIP_HEIGHT = 30;
+
 export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProps) {
   const env = environment?.trim().toLowerCase();
   const show = !!env && NON_PRODUCTION.has(env);
 
-  /* No body offset. A full-width band has to push the page down; a floating
-   * pill overlays it, so nothing reflows and no app has to know it exists. */
+  /*
+   * IT RESERVES ITS OWN STRIP.
+   *
+   * The original note here read: "a floating pill overlays the page, so
+   * nothing reflows and no app has to know it exists." That is true and it is
+   * exactly why the badge covered the navigation — the portals centre their
+   * nav, the badge centred itself, and an overlay that reflows nothing lands
+   * on whatever was already there.
+   *
+   * So it pushes the page down by its own height instead. Costs one strip of
+   * vertical space in non-production only, and buys top-centre placement that
+   * hides nothing at any width.
+   */
+  useEffect(() => {
+    if (!show) return;
+    const prev = document.body.style.paddingBlockStart;
+    document.body.style.paddingBlockStart = `${STRIP_HEIGHT}px`;
+    return () => {
+      document.body.style.paddingBlockStart = prev;
+    };
+  }, [show]);
 
   // Respect the OS "reduce motion" setting: the sheen is decoration, and for
   // anyone who finds movement uncomfortable it is worse than useless.
@@ -67,12 +89,10 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
           0%, 100% { opacity: .92; }
           50%      { opacity: 1; }
         }
-        /* On a phone the corner is scarce; the environment name alone carries
-           the warning there, and with the nav collapsed to a menu the header
-           row has room for the badge again. */
+        /* On a phone the strip is scarce; the environment name alone carries
+           the warning there. */
         @media (max-width: 640px) {
           [data-env-banner] .crm-env-detail { display: none; }
-          [data-env-banner] { top: 20px !important; }
         }
       `}</style>
       <div
@@ -81,24 +101,11 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
         data-env-banner={env}
         style={{
           position: 'fixed',
-          /*
-           * TOP, but never CENTRED.
-           *
-           * Centred is where it started, and the navigation is centred too, so
-           * the two fought for the same strip and the badge covered "Agent
-           * performance" and "Compensation" at every width. Shrinking it
-           * narrowed the overlap without ending it: centre against centre
-           * always collides.
-           *
-           * The trailing corner is the one part of the header row with slack —
-           * measured at 137px on a 1440px viewport. That is not enough for a
-           * 164px badge, so it sits just BELOW the 80px header instead of
-           * inside it: same corner, same glance, nothing covered. Narrow
-           * viewports lose the header's nav to a menu anyway, so the rule
-           * below tucks it back up into the row it just vacated.
-           */
-          top: 88,
-          insetInlineEnd: 16,
+          // Centred in the strip the effect above reserves, so it sits over
+          // nothing: the page — header included — starts below it.
+          top: 3,
+          insetInlineStart: '50%',
+          transform: 'translateX(-50%)',
           zIndex: 2147483647, // above dialogs, drawers and command palettes
           display: 'inline-flex',
           alignItems: 'center',
