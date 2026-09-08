@@ -184,3 +184,64 @@ describe('the address the visitor is left on', () => {
     expect(location.replace).not.toHaveBeenCalled();
   });
 });
+
+/*
+ * THE YIJI APP'S DOOR.
+ *
+ * The app opens a web view at `…/?token=<JWT>` — one URL, no script tag, no
+ * JavaScript on their side. These pin the two things that make it safe: the
+ * token reaches the widget, and it does not stay in the address bar.
+ */
+describe('a token in the URL', () => {
+  function withUrl(search: string) {
+    vi.stubGlobal('location', {
+      replace: vi.fn(),
+      origin: 'https://chat.example',
+      href: `https://chat.example/${search}`,
+      pathname: '/',
+      search,
+    });
+  }
+
+  it('opens the chat with the token the app supplied', async () => {
+    withUrl('?token=app-signed-jwt');
+    await loadHost();
+    expect(initSpy).toHaveBeenCalledTimes(1);
+    expect(initSpy.mock.calls[0][0]).toMatchObject({ token: 'app-signed-jwt', autoOpen: true });
+  });
+
+  it('strips the token from the address bar before the widget mounts', async () => {
+    /*
+     * A URL carrying a customer's session lands in history, in the Referer of
+     * anything the page loads, and in any screenshot. A web view's history
+     * outlives the chat, so this is not cosmetic.
+     */
+    const spy = vi.spyOn(window.history, 'replaceState');
+    withUrl('?token=app-signed-jwt');
+    await loadHost();
+    expect(spy).toHaveBeenCalledWith(null, '', '/');
+    spy.mockRestore();
+  });
+
+  it('passes closeUrl through when the app names its own scheme', async () => {
+    withUrl('?token=app-signed-jwt&closeUrl=yijiapp%3A%2F%2Fclose');
+    await loadHost();
+    expect(initSpy.mock.calls[0][0]).toMatchObject({ closeUrl: 'yijiapp://close' });
+  });
+
+  it('wins over a stale walk-in handoff left in sessionStorage', async () => {
+    // An app arriving with a token means it; a leftover QR session must not
+    // open somebody else's chat instead.
+    sessionStorage.setItem('yiji.walkInToken', 'old-qr-token');
+    withUrl('?token=fresh-app-token');
+    await loadHost();
+    expect(initSpy.mock.calls[0][0]).toMatchObject({ token: 'fresh-app-token' });
+  });
+
+  it('falls through to the phone form when there is no token', async () => {
+    vi.stubEnv('DEV', false);
+    withUrl('');
+    await loadHost();
+    expect(location.replace).toHaveBeenCalledWith('/walk-in');
+  });
+});

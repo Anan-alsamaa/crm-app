@@ -80,11 +80,44 @@ function takeWalkInSession(): { token: string; closeUrl?: string } | null {
   }
 }
 
+/**
+ * A token handed over in the URL — how the Yiji app opens this page.
+ *
+ * The app cannot easily run a script tag and call `YijiChat.init`, so it
+ * navigates a web view to `…/?token=<JWT>` instead. One URL, no JavaScript on
+ * their side, and the customer is never asked for a phone number they have
+ * already given the app.
+ *
+ * The token is REMOVED from the address bar immediately, before the widget
+ * even mounts. A URL carrying a customer's session lands in history, in the
+ * `Referer` of anything the page later loads, and in any screenshot — and a
+ * web view's history outlives the chat. Same treatment the QR page gives its
+ * `?c=` code.
+ *
+ * `closeUrl` is optional and matches the walk-in handoff: the scheme the app
+ * registers, so the close button hands control back rather than leaving the
+ * customer on a blank page inside the app.
+ */
+function takeUrlSession(): { token: string; closeUrl?: string } | null {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (!token) return null;
+    const closeUrl = params.get('closeUrl') ?? undefined;
+    history.replaceState(null, '', window.location.pathname);
+    return { token, ...(closeUrl ? { closeUrl } : {}) };
+  } catch {
+    return null;
+  }
+}
+
 // Arabic unless the phone or an earlier choice says English; see locale.ts.
 const locale = resolveLocale();
 applyDocumentLocale(locale);
 
-const session = takeWalkInSession();
+// The URL first: an app that just navigated here with a token means it, and
+// a stale walk-in handoff in sessionStorage must not win over a fresh one.
+const session = takeUrlSession() ?? takeWalkInSession();
 if (session) {
   // Signed by the gateway; nothing is minted here. autoOpen: this page IS the
   // chat, so no launcher click stands between the customer and it.
