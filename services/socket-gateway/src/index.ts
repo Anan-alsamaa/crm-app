@@ -242,9 +242,14 @@ async function main(): Promise<void> {
 
   const app = Fastify({
     loggerInstance: logger as unknown as FastifyBaseLogger,
-    // See TRUST_PROXY_HOPS: without it the walk-in rate limit sees the load
-    // balancer address for everybody.
-    trustProxy: config.TRUST_PROXY_HOPS,
+    // See TRUST_PROXY_CIDRS: without it the walk-in rate limit sees the load
+    // balancer address for everybody. Empty means trust nothing, which Fastify
+    // spells `false` rather than an empty list.
+    trustProxy: config.TRUST_PROXY_CIDRS
+      ? config.TRUST_PROXY_CIDRS.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : false,
   });
   applySecurityHeaders(app);
 
