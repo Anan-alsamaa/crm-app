@@ -230,29 +230,49 @@ jobs:
           role-to-assume: arn:aws:iam::408568863712:role/crm-github-deploy
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Render task definition
+      # DERIVED FROM WHAT IS RUNNING, not from the repo template.
+      #
+      # The templates in deploy/aws/ecs/ carry {{SECRET:...}} placeholders for
+      # an SSM store this account cannot use, plus {{API_URL}} and
+      # {{PORTAL_ORIGINS}} that the old sed never substituted. So a rendered
+      # file reached ECS with the LITERAL string "{{SECRET:DB_PASSWORD}}" as
+      # the database password: the task started, Postgres answered 28P01
+      # "authentication failed", ECS rolled back, and the deploy job sat for
+      # ten minutes before failing on "Waiter ServicesStable: Max attempts
+      # exceeded" — an error that says nothing about the cause.
+      #
+      # The live revision already holds every value that works. Taking it and
+      # changing ONLY the image is what scripts/deploy-service.sh has always
+      # done, and it cannot reintroduce a placeholder.
+      - name: Build the task definition from the live one
         env:
-          ENVIRONMENT: ${{ needs.plan.outputs.environment }}
           IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
+          ENVIRONMENT: ${{ needs.plan.outputs.environment }}
         run: |
-          # The public hostname suffix differs per environment; everything else
-          # is substituted identically. Keep this in step with
-          # scripts/gen-portal-config.sh, which derives the same names.
-          if [ "$ENVIRONMENT" = "prod" ]; then
-            SUFFIX="crm.anan.sa"; COUPONS="on"; SMTP_FROM="Sara CRM <Yiji@anan.sa>"
-          else
-            SUFFIX="staging.crm.anan.sa"; COUPONS="off"; SMTP_FROM="Sara CRM (staging) <Yiji@anan.sa>"
+          FAMILY="crm-${ENVIRONMENT}-${{ matrix.service }}"
+          aws ecs describe-task-definition --task-definition "$FAMILY"             --query taskDefinition --output json > /tmp/live.json             || { echo "::error::no existing task definition for $FAMILY — bootstrap it once with scripts/bootstrap-prod-taskdefs.mjs"; exit 1; }
+
+          IMAGE="${{ env.ECR_REGISTRY }}/crm/${{ matrix.service }}:${IMAGE_TAG}"
+          node -e '
+            const fs = require("fs");
+            const td = JSON.parse(fs.readFileSync("/tmp/live.json", "utf8"));
+            // describe returns fields register rejects.
+            for (const k of ["taskDefinitionArn","revision","status","requiresAttributes",
+                             "compatibilities","registeredAt","registeredBy","deregisteredAt"]) delete td[k];
+            td.containerDefinitions[0].image = process.argv[1];
+            fs.writeFileSync("/tmp/taskdef.json", JSON.stringify(td, null, 2));
+            console.log("image ->", process.argv[1]);
+          ' "$IMAGE"
+
+      # An unsubstituted placeholder must never reach ECS again. This is the
+      # check that would have caught the 28P01 failure at the door.
+      - name: Guard — no unrendered placeholders
+        run: |
+          if grep -o "{{[A-Za-z_:]*}}" /tmp/taskdef.json | sort -u | grep .; then
+            echo "::error::the task definition contains unsubstituted placeholders (above) — refusing to register"
+            exit 1
           fi
-          sed -e "s|{{ENV}}|${ENVIRONMENT}|g" \
-              -e "s|{{IMAGE_TAG}}|${IMAGE_TAG}|g" \
-              -e "s|{{ACCOUNT_ID}}|408568863712|g" \
-              -e "s|{{REGION}}|${AWS_REGION}|g" \
-              -e "s|{{PUBLIC_SUFFIX}}|${SUFFIX}|g" \
-              -e "s|{{YIJI_COUPON_DELIVERY}}|${COUPONS}|g" \
-              -e "s|{{SMTP_FROM}}|${SMTP_FROM}|g" \
-              deploy/aws/ecs/${{ matrix.service }}.json > /tmp/taskdef.json
-          echo "--- rendered (secrets are SSM refs, not values) ---"
-          cat /tmp/taskdef.json
+          echo "no placeholders"
 
       - name: Guard — staging must never deliver coupons
         # Real money, real customers, and delivery works from a BACKLOG: the
