@@ -88,7 +88,19 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   await expect(agent.getByRole('button', { name: /mark as solved/i })).toHaveCount(0, {
     timeout: 25_000,
   });
-  await expect(agent.getByText(/^solved ·/i)).toBeVisible({ timeout: 15_000 });
+  /*
+   * REOPEN, not the "Solved ·" line.
+   *
+   * That line reads `Solved · {{when}}` where `when` is a RELATIVE time
+   * derived from `resolved_at`. So the assertion depended on a timestamp
+   * having been written, refetched AND formatted into a string still matching
+   * the pattern — three things, on a runner slow enough that the check above
+   * it needed 25s. It failed intermittently for exactly that reason.
+   *
+   * The Reopen button carries the same fact with none of the fragility: it is
+   * rendered only in the resolved branch, so its presence IS the status.
+   */
+  await expect(agent.getByRole('button', { name: /reopen/i })).toBeVisible({ timeout: 15_000 });
 });
 
 test('agent visits notification preferences page and saves', async ({ page }) => {
