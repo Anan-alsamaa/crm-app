@@ -17,6 +17,7 @@
  * production a few bytes and no layout.
  */
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface EnvironmentBannerProps {
   /** Environment name, e.g. 'staging'. Absent/'production' renders nothing. */
@@ -32,9 +33,6 @@ export interface EnvironmentBannerProps {
 
 /** Environments that are NOT production and therefore need the marker. */
 const NON_PRODUCTION = new Set(['staging', 'stg', 'test', 'dev', 'development', 'preview']);
-
-/** The vertical room the badge takes, and the offset the page gets. */
-const STRIP_HEIGHT = 30;
 
 export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProps) {
   const env = environment?.trim().toLowerCase();
@@ -53,13 +51,33 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
    * vertical space in non-production only, and buys top-centre placement that
    * hides nothing at any width.
    */
+  /*
+   * Find the app's own top bar and render INTO it.
+   *
+   * Every previous position was a compromise between two bad options: float
+   * over the bar and cover the navigation, or reserve a strip above it and
+   * spend vertical space. A slot inside the bar has neither cost — the nav is
+   * a flex child, so it simply shrinks by the badge's width.
+   *
+   * OBSERVED, not polled. This mounts at the app root, long before the shell
+   * renders its header — and on the login screen there is no header at all,
+   * so any bounded wait expires while the user is still typing their
+   * password. A first attempt at this used ~2s of animation frames and always
+   * fell back to floating, because signing in takes longer than that.
+   *
+   * The observer keeps watching, so the badge moves into the bar the moment
+   * one exists, and back out if it ever goes away. Until then it floats, so
+   * the warning is never simply absent.
+   */
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
     if (!show) return;
-    const prev = document.body.style.paddingBlockStart;
-    document.body.style.paddingBlockStart = `${STRIP_HEIGHT}px`;
-    return () => {
-      document.body.style.paddingBlockStart = prev;
-    };
+    const find = () =>
+      setSlot(document.querySelector<HTMLElement>('[data-app-topbar] [data-env-slot]'));
+    find();
+    const mo = new MutationObserver(find);
+    mo.observe(document.body, { childList: true, subtree: true });
+    return () => mo.disconnect();
   }, [show]);
 
   // Respect the OS "reduce motion" setting: the sheen is decoration, and for
@@ -78,7 +96,7 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
 
   const label = env === 'staging' ? 'STAGING' : env!.toUpperCase();
 
-  return (
+  const banner = (
     <>
       <style>{`
         @keyframes crm-env-sheen {
@@ -100,12 +118,15 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
         aria-live="polite"
         data-env-banner={env}
         style={{
-          position: 'fixed',
-          // Centred in the strip the effect above reserves, so it sits over
-          // nothing: the page — header included — starts below it.
-          top: 3,
-          insetInlineStart: '50%',
-          transform: 'translateX(-50%)',
+          // In the bar: a normal flex child, so the nav shrinks around it.
+          // Floating only when no bar was found — see the fallback below.
+          ...(slot
+            ? { position: 'relative' }
+            : {
+                position: 'fixed' as const,
+                top: 12,
+                insetInlineEnd: 16,
+              }),
           zIndex: 2147483647, // above dialogs, drawers and command palettes
           display: 'inline-flex',
           alignItems: 'center',
@@ -183,4 +204,8 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
       </div>
     </>
   );
+
+  // Into the app bar when there is one; a floating badge otherwise, so the
+  // warning survives on screens that have no bar at all (the login page).
+  return slot ? createPortal(banner, slot) : banner;
 }

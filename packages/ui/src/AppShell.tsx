@@ -153,11 +153,36 @@ export function AppShell({
     if (navBar) {
       return (
         <div className="flex h-full flex-col text-foreground">
-          <header className="relative z-30 flex h-20 shrink-0 items-center gap-4 bg-ink px-5 text-ink-foreground shadow-[0_10px_30px_-18px_oklch(var(--shadow-color)/0.85)] sm:px-8">
+          <header
+            /* The environment badge finds this bar by name and renders INSIDE
+               it (see EnvironmentBanner). Floating over the bar was what put a
+               STAGING pill on top of two nav items; a slot in the flow cannot
+               overlap anything, because the nav shrinks to make room. */
+            data-app-topbar=""
+            className="relative z-30 flex h-20 shrink-0 items-center gap-4 bg-ink px-5 text-ink-foreground shadow-[0_10px_30px_-18px_oklch(var(--shadow-color)/0.85)] sm:px-8"
+          >
             <div className="shrink-0">{topBarBrand}</div>
-            <nav aria-label={navLabel} className="flex min-w-0 flex-1 items-center justify-center">
-              {navBar}
-            </nav>
+            {/* The nav stays centred and the badge sits ABOVE it in the same
+                cell, so it is centred on the bar rather than shunting the
+                links sideways. A grid cell rather than a flex sibling for
+                exactly that reason: siblings push, stacked cells do not.
+                Both are centred, so they share one vertical axis, and the
+                badge is lifted clear of the links: half the nav's 40px plus
+                half the badge's 20px is 30px, which lands it exactly in the
+                20px of clear bar above the nav. Measured, not guessed — a
+                first attempt used 26px and clipped the links. */}
+            <div className="grid min-w-0 flex-1 place-items-center">
+              <nav
+                aria-label={navLabel}
+                className="col-start-1 row-start-1 flex min-w-0 items-center justify-center"
+              >
+                {navBar}
+              </nav>
+              <div
+                data-env-slot=""
+                className="col-start-1 row-start-1 -translate-y-[30px] empty:hidden"
+              />
+            </div>
             {topBar && <div className="flex shrink-0 items-center gap-2">{topBar}</div>}
           </header>
           <main className="app-aurora min-h-0 min-w-0 flex-1 overflow-hidden">{children}</main>
