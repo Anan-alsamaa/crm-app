@@ -135,8 +135,17 @@ function productionValue(name, value) {
       // Reached inside the cluster on the task's own IP, not by name.
       return value;
     case 'YIJI_COUPON_DELIVERY':
-      // Never inherited. Turning delivery on is a decision with a cost, and it
-      // is the owner's to make deliberately, not a side effect of a deploy.
+      /*
+       * Never inherited, and never turned on by this script.
+       *
+       * Production HAS delivery on — the owner enabled it on 2026-09-08, so
+       * an approved coupon reaches a real customer. That was a decision, and
+       * it must not be re-made by a rebuild: a script that copies the flag
+       * would flip production off the next time it runs from staging, and one
+       * that hardcodes `on` would arm a fresh environment nobody was watching.
+       * `off` is the safe default for anything this script creates; changing
+       * a live environment is a separate, deliberate act.
+       */
       return 'off';
     case 'REDIS_PREFIX':
       return 'prod:';
