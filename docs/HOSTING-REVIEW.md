@@ -9,19 +9,23 @@ from what is deployed rather than a copy of the invoice.
 
 ## Health: everything is running
 
-| Check                         | Staging | Production |
-| ----------------------------- | ------- | ---------- |
-| ECS services running          | 4 / 4   | 4 / 4      |
-| Target groups healthy         | 4 / 4   | 4 / 4      |
-| Public URLs answering         | 5 / 5   | 5 / 5      |
-| Unrendered placeholders       | none    | none       |
-| Secrets shared with the other | none    | none       |
-| Chat, end to end              | passing | **6 / 6**  |
+| Check                        | Staging | Production |
+| ---------------------------- | ------- | ---------- |
+| ECS services running         | 4 / 4   | 4 / 4      |
+| Target groups healthy        | 4 / 4   | 4 / 4      |
+| Public URLs answering        | 5 / 5   | 5 / 5      |
+| Unrendered placeholders      | none    | none       |
+| Own-service secrets isolated | yes     | yes        |
+| Chat, end to end             | passing | **6 / 6**  |
 
 Production's chat was exercised the way a customer will use it: a signed token
 in the URL, the panel opening with no phone form, a message written, and the
 row confirmed in the database. Nothing was left behind — production still holds
 zero contacts and zero conversations.
+
+The values the two environments DO share are the ones that should be shared —
+one Yiji service account, one SMTP mailbox, one Gemini key — with a single
+exception, the database credential, which is the first risk below.
 
 **No faults found.** The two that existed earlier today are fixed and verified:
 the deploy pipeline (six consecutive green runs) and staging's AI gateway,
@@ -118,13 +122,29 @@ two orders of magnitude.
 
 ---
 
-## Two structural risks, neither urgent
+## Two structural risks
 
-**One database credential reaches every database on the instance.** The CRM
-connects as `yijicrm`, and that role can read and write all ten databases,
-including other teams' live order data. Separate databases prevent accidents
-between them; they do not prevent this, because the isolation is per-user and
-there is one user. The dedicated RDS instance already requested solves it.
+**One database credential reaches every database on the instance, and both
+environments share it.** Measured, not inferred: `yijicrm` can CONNECT to all
+eight databases, and on another team's live data — `afcoOrderManangement`,
+`afcoCrm` — it holds SELECT, UPDATE _and_ DELETE on the tables sampled. There
+are only two login roles on the whole instance (`postgres` and `yijicrm`), so
+there is no per-team separation to fall back on.
+
+Staging and production use the **same user and the same password**; only
+`DB_DATABASE` differs. So the isolation between them is a connection string,
+not a permission — a wrong value in one variable points staging's workers at
+production, and nothing in the database would refuse it.
+
+Separate databases do not help here, because the isolation is per-USER and
+there is one user. Two things fix it, in order of effort:
+
+1. **A role per environment**, each owning only its own database. Cheap, no
+   migration, and it removes the other teams from reach entirely.
+2. **The dedicated RDS instance** already requested, which also settles it.
+
+Neither is done here: creating roles on an instance other teams depend on is a
+change to shared infrastructure, and that needs the owner's go-ahead first.
 
 **Production has no redundancy.** One task per service, so an ECS restart is a
 brief outage. Fine before launch, and worth revisiting when real customers
