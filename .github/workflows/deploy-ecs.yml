@@ -249,8 +249,18 @@ jobs:
           IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
           ENVIRONMENT: ${{ needs.plan.outputs.environment }}
         run: |
-          FAMILY="crm-${ENVIRONMENT}-${{ matrix.service }}"
-          aws ecs describe-task-definition --task-definition "$FAMILY"             --query taskDefinition --output json > /tmp/live.json             || { echo "::error::no existing task definition for $FAMILY — bootstrap it once with scripts/bootstrap-prod-taskdefs.mjs"; exit 1; }
+          # The revision the SERVICE is running, not the family's latest.
+          #
+          # Those differ, and the difference matters: earlier runs of this
+          # workflow registered broken renders that ECS refused to start and
+          # rolled back from. Those revisions are still the NEWEST in the
+          # family, so asking for the family by name returns the one that
+          # failed. Asking the service returns the one actually serving
+          # traffic — by definition a configuration that works.
+          RUNNING=$(aws ecs describe-services --cluster "crm-${ENVIRONMENT}" --services "${{ matrix.service }}" --query 'services[0].taskDefinition' --output text)
+          if [ -z "$RUNNING" ] || [ "$RUNNING" = "None" ]; then echo "::error::crm-${ENVIRONMENT}/${{ matrix.service }} is not running — bootstrap it once with scripts/bootstrap-prod-taskdefs.mjs"; exit 1; fi
+          echo "::notice::deriving from $RUNNING"
+          aws ecs describe-task-definition --task-definition "$RUNNING" --query taskDefinition --output json > /tmp/live.json
 
           IMAGE="${{ env.ECR_REGISTRY }}/crm/${{ matrix.service }}:${IMAGE_TAG}"
           node -e '
