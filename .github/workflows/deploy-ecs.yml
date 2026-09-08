@@ -297,6 +297,59 @@ jobs:
           fi
           echo "coupon delivery correctly off"
 
+      # A TAG IS A PROMOTION, so make the promotion actually happen.
+      #
+      # The plan job sets build=false for a tag: the image was built when the
+      # commit merged to main. But that build only ever applies two tags,
+      # `main` and `sha-<commit>` — nothing anywhere created `v1.2.3`. So the
+      # verify step below would fail on every service, and the release could
+      # not ship without someone re-tagging by hand. (It happened on v1.7.0.)
+      #
+      # Re-tagging is a manifest PUT, not a rebuild: the digest is unchanged,
+      # so what staging tested is byte-for-byte what production runs — which is
+      # the whole point of promoting by tag rather than building again.
+      #
+      # Idempotent: putting a tag that already points at this digest is a no-op,
+      # so a re-run is safe. If the tag already exists on a DIFFERENT digest we
+      # stop, because that means someone moved a release tag and the operator
+      # needs to decide, not us.
+      - name: Promote — tag the tested digest with the release version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
+        run: |
+          REPO="crm/${{ matrix.service }}"
+          SRC=$(aws ecr describe-images --repository-name "$REPO"             --image-ids imageTag=main             --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || true)
+          if [ -z "$SRC" ] || [ "$SRC" = "None" ]; then
+            echo "::error::$REPO:main not found — nothing to promote"; exit 1
+          fi
+
+          CUR=$(aws ecr describe-images --repository-name "$REPO"             --image-ids imageTag="${IMAGE_TAG}"             --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || true)
+          if [ "$CUR" = "$SRC" ]; then
+            echo "::notice::$REPO:${IMAGE_TAG} already points at $SRC"; exit 0
+          fi
+          if [ -n "$CUR" ] && [ "$CUR" != "None" ]; then
+            echo "::error::$REPO:${IMAGE_TAG} already exists on a different digest ($CUR, not $SRC) — refusing to move a release tag"
+            exit 1
+          fi
+
+          # --output text MANGLES the manifest (whitespace and escaping), and
+          # ECR then stores a re-serialised copy under a DIFFERENT digest — a
+          # different image identity than the one that was tested. Read it as
+          # JSON and write the raw string.
+          aws ecr batch-get-image --repository-name "$REPO"             --image-ids imageDigest="$SRC" --output json > /tmp/bgi.json
+          MEDIA=$(node -e '
+            const fs = require("fs");
+            const m = JSON.parse(fs.readFileSync("/tmp/bgi.json", "utf8")).images[0].imageManifest;
+            fs.writeFileSync("/tmp/manifest.json", m);
+            process.stdout.write(JSON.parse(m).mediaType);
+          ')
+          OUT=$(aws ecr put-image --repository-name "$REPO"             --image-tag "${IMAGE_TAG}"             --image-manifest file:///tmp/manifest.json             --image-manifest-media-type "$MEDIA"             --query 'image.imageId.imageDigest' --output text)
+          if [ "$OUT" != "$SRC" ]; then
+            echo "::error::promotion changed the digest ($OUT != $SRC) — the manifest was altered in transit"; exit 1
+          fi
+          echo "::notice::$REPO:${IMAGE_TAG} -> $SRC"
+
       # NOTHING is registered until the image is confirmed present in ECR.
       #
       # A task definition looks identical whether its image exists or not, so
