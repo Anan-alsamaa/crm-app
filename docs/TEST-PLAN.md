@@ -150,14 +150,15 @@ Not faults — these are decisions, so that a tester does not report them:
 
 - **Production is empty.** No tickets, contacts or conversations. It has
   never carried traffic.
-- **Coupon delivery is OFF in production.** Turning it on sends real coupons
-  to real customers, and that is the owner's decision.
+- **Coupon delivery is ON in production** (owner's decision, 2026-09-08). An
+  approved coupon reaches a real customer. Do not approve one to "see what
+  happens".
 - **The `anan.sa` hostnames do not resolve yet**, so everything is on
-  CloudFront URLs. Waiting on the DNS request.
-- **Alarms notify nobody.** Seven CloudWatch alarms publish to a topic with
-  no subscribers, pending `sns:Subscribe`.
-- **The Deploy pipeline fails on every push**, pending the ECR read grant.
-  CI itself is green.
+  CloudFront URLs. Waiting on the DNS request — this is the only thing still
+  outstanding before go-live.
+- **Alarms reach e.habibi@anan.sa.** Eleven production alarms, confirmed
+  subscription. Staging has none on purpose: a test environment that pages you
+  teaches you to ignore the alerts.
 - **Staging holds 81 teams named "QA Team …"** — test residue, deliberately
   not copied to production.
 

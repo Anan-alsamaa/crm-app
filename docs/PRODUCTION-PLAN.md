@@ -139,19 +139,28 @@ told it is ready.
 
 ## What is blocked, and what is not
 
-| Need                        | Status                                                   |
-| --------------------------- | -------------------------------------------------------- |
-| ECS create/register/update  | allowed                                                  |
-| Target groups + ALB rules   | allowed                                                  |
-| CloudWatch log groups       | allowed                                                  |
-| `CREATE DATABASE`           | allowed (database-level, not IAM)                        |
-| **Container images in ECR** | **BLOCKED** — the deploy role cannot pull; 5 builds fail |
-| SSM / Secrets Manager       | denied — plaintext env, accepted risk                    |
-| RDS describe/create         | denied — irrelevant, we reuse the instance               |
+_Resolved 2026-09-08. Everything below was re-tested against the live account
+on that date, not carried over._
 
-**The ECR grant is the real blocker for anything new.** Production runs the same
-images staging does. Steps 1–4 can proceed using the image tags already in ECR;
-anything built after today waits on the grant.
+| Need                       | Status                                                |
+| -------------------------- | ----------------------------------------------------- |
+| ECS create/register/update | allowed                                               |
+| Target groups + ALB rules  | allowed                                               |
+| CloudWatch log groups      | allowed                                               |
+| `CREATE DATABASE`          | allowed (database-level, not IAM)                     |
+| Container images in ECR    | **allowed** — granted; Deploy has been green since    |
+| S3 portal buckets          | allowed — write-tested on all three prod buckets      |
+| `sns:Subscribe`            | allowed — the alerts topic has a confirmed subscriber |
+| SSM / Secrets Manager      | denied — plaintext env, accepted risk                 |
+| RDS describe/create        | denied — irrelevant, we reuse the instance            |
+
+**Nothing in AWS is blocked any more.** The four grants that held this up were
+applied and each was verified by USE rather than by reading the policy: an ECR
+push, an S3 write, a subscription with a real ARN, and a green Deploy run.
+
+The one remaining prerequisite for go-live is **DNS** — eight hostnames under
+`anan.sa`, which is not ours to change. Until they resolve, everything is
+reachable on its CloudFront URL and works; see `CUSTOM-DOMAIN.md`.
 
 ---
 
