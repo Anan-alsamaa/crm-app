@@ -182,3 +182,24 @@ AWS_PROFILE=<r.obeid profile> ALERT_EMAIL=<address> scripts/grant-deploy-access.
 It ends by simulating the role and listing the topic's subscriptions, so the
 result is read back rather than assumed. Afterwards: re-run the failed Deploy
 run (`gh run rerun <id> --failed`) and click the SNS confirmation email.
+
+---
+
+## CLOSED, 2026-09-08 — all four grants applied
+
+**ECR read on `crm-github-deploy`** (`BatchGetImage`, `GetDownloadUrlForLayer`,
+`DescribeImages`): added to the existing `ECRPushCRMImages` statement rather
+than as a separate one, which is why `scripts/grant-deploy-access.sh` still
+offers to add `ECRPullCRMImages` — it matches on the Sid. Harmless; the
+simulation is the authority and it reports `allowed`.
+
+**`sns:Subscribe` for `e.habibi@anan.sa`**: applied. `e.habibi@anan.sa` is now
+subscribed to `crm-alerts`, pending the confirmation click AWS emails.
+
+The pipeline went green on the first run after the ECR grant, then failed on
+two faults it had never reached before — an unrendered task-definition
+template and a smoke test probing a hostname that has never existed. Both
+fixed; see the deploy workflow's own comments.
+
+**Still worth doing:** all seven alarms are `crm-staging-*`. Production has
+none, so nothing watches the environment that will carry real customers.
