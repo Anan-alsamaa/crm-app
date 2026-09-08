@@ -89,6 +89,45 @@ THRESHOLD_GB=${LOG_ALARM_GB:-25}
 aws cloudwatch put-metric-alarm --region "$REGION"   --alarm-name "crm-${ENV_NAME}-log-volume-high"   --alarm-description "Log ingestion above ${THRESHOLD_GB}GB this month — check for a logging loop before it reaches the bill"   --metric-name IncomingBytes --namespace AWS/Logs   --statistic Sum --period 86400 --evaluation-periods 1   --threshold $(( THRESHOLD_GB * 1073741824 / 30 ))   --comparison-operator GreaterThanThreshold --treat-missing-data notBreaching   --alarm-actions "$TOPIC"
 echo "  created: crm-${ENV_NAME}-log-volume-high (>${THRESHOLD_GB}GB/month pace)"
 
+# 8-11. RUNNING but not SERVING.
+#
+# Every alarm above watches the task COUNT, which stays at 1 while a container
+# answers nothing: it started, so ECS is satisfied and will never replace it.
+# That gap is where an outage hides. It is not hypothetical here - the staging
+# AI gateway ran for days on a placeholder API key, reporting healthy, with
+# every AI feature dead behind it.
+#
+# The load balancer already knows: it health-checks each target and stops
+# sending traffic to one that fails. UnHealthyHostCount turns that into a
+# notification.
+#
+# Target groups are named crm-prd-*/crm-stg-*, which is NOT the cluster name,
+# so they are looked up rather than derived. A group that does not exist is
+# skipped rather than fatal, so this stays re-runnable mid-build.
+TG_PREFIX=$([ "$ENV_NAME" = prod ] && echo crm-prd || echo crm-stg)
+LB_ARN=$(aws elbv2 describe-load-balancers --names crm-alb --region "$REGION" \
+  --query 'LoadBalancers[0].LoadBalancerArn' --output text 2>/dev/null || echo "")
+
+if [ -n "$LB_ARN" ] && [ "$LB_ARN" != None ]; then
+  LB_DIM="${LB_ARN##*:loadbalancer/}"
+  # "<target-group-suffix>:<service>" - the group name is abbreviated
+  # (crm-prd-socket) but the alarm is named for the SERVICE, so it sorts
+  # beside its -stopped twin and reads the same in the mail.
+  for pair in directus:directus socket:socket-gateway socketio:socketio ai:ai-gateway; do
+    tg="${pair%%:*}"; svc="${pair##*:}"
+    TG_ARN=$(aws elbv2 describe-target-groups --names "${TG_PREFIX}-${tg}" --region "$REGION" \
+      --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || echo "")
+    [ -n "$TG_ARN" ] && [ "$TG_ARN" != None ] || { echo "  skipped: ${TG_PREFIX}-${tg} (no such target group)"; continue; }
+    alarm "crm-${ENV_NAME}-${svc}-unhealthy" \
+      "${svc} is running but failing its health check - it is not serving traffic and ECS will not replace it" \
+      UnHealthyHostCount AWS/ApplicationELB \
+      "Name=TargetGroup,Value=${TG_ARN##*:} Name=LoadBalancer,Value=${LB_DIM}" \
+      Maximum 60 3 0 GreaterThanThreshold notBreaching
+  done
+else
+  echo "  skipped: unhealthy-host alarms (load balancer crm-alb not found)"
+fi
+
 echo
 echo "==> Done. Confirm the SNS subscription is CONFIRMED, or nothing is delivered:"
 echo "    aws sns list-subscriptions-by-topic --topic-arn $TOPIC --region $REGION"
