@@ -15,8 +15,31 @@ import { z } from 'zod';
 const blankToUndefined = (v: unknown): unknown =>
   v == null || (typeof v === 'string' && v.trim() === '') ? undefined : v;
 
+/**
+ * The tenant a token belongs to when it does not name one.
+ *
+ * `vendor_id` is a CRM-internal identifier: the Yiji app has no reason to know
+ * it, and asking an integrator to hardcode "1" in their signing code invites
+ * exactly one question — "what is vendor 2?" — with no useful answer. There is
+ * one vendor today, so the gateway supplies it and a token that DOES name one
+ * still wins, which keeps the door open for a second tenant without a
+ * migration.
+ */
+const DEFAULT_VENDOR_ID = process.env.DEFAULT_VENDOR_ID?.trim() || '1';
+
 export const CustomerClaims = z.object({
-  vendor_id: z.string().min(1),
+  vendor_id: z.preprocess((v) => {
+    const s = typeof v === 'string' ? v.trim() : '';
+    return s || DEFAULT_VENDOR_ID;
+  }, z.string().min(1)),
+  /**
+   * Who this is, in Yiji's own numbering.
+   *
+   * Still required for an app token: it is what the agent's order lookup uses,
+   * and a chat that cannot show a customer's orders is most of the product
+   * missing. The walk-in endpoint mints its own from the phone number, which
+   * is why this is never optional here.
+   */
   customer_id: z.string().min(1),
   // Phone is the ONLY mandatory contact identifier. null/absent normalize to
   // undefined; an empty/whitespace string is left to fail the explicit check in

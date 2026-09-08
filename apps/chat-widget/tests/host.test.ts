@@ -223,7 +223,15 @@ describe('a token in the URL', () => {
     spy.mockRestore();
   });
 
-  it('passes closeUrl through when the app names its own scheme', async () => {
+  it('uses OUR close scheme, so the app need not send one', async () => {
+    // The scheme is the same for every customer. Making the integrator carry
+    // a constant only creates a constant they can mistype.
+    withUrl('?token=app-signed-jwt');
+    await loadHost();
+    expect(initSpy.mock.calls[0][0]).toMatchObject({ closeUrl: 'closeapp://' });
+  });
+
+  it('still lets an app override the scheme when its own differs', async () => {
     withUrl('?token=app-signed-jwt&closeUrl=yijiapp%3A%2F%2Fclose');
     await loadHost();
     expect(initSpy.mock.calls[0][0]).toMatchObject({ closeUrl: 'yijiapp://close' });

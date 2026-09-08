@@ -50,6 +50,18 @@ const GATEWAY_URL =
  */
 const WALK_IN_URL = import.meta.env.DEV ? '/walk-in.html' : '/walk-in';
 
+/**
+ * Where the close button sends the customer, when the app has not said.
+ *
+ * The Yiji app opens this page in a web view and registers a scheme; visiting
+ * it hands control back so the customer never learns they left the app. OURS
+ * to configure rather than theirs to pass — it is the same for every customer,
+ * and a constant an integrator has to remember is a constant they can mistype.
+ * In an ordinary browser the scheme does not resolve and the widget collapses
+ * instead, so a wrong value is never a dead end.
+ */
+const CLOSE_URL = (import.meta.env.VITE_WALK_IN_CLOSE_URL as string | undefined) ?? 'closeapp://';
+
 /*
  * The handoff from the QR page, if there is one.
  *
@@ -94,16 +106,19 @@ function takeWalkInSession(): { token: string; closeUrl?: string } | null {
  * web view's history outlives the chat. Same treatment the QR page gives its
  * `?c=` code.
  *
- * `closeUrl` is optional and matches the walk-in handoff: the scheme the app
- * registers, so the close button hands control back rather than leaving the
- * customer on a blank page inside the app.
+ * The close scheme is OURS to know, not theirs to send. It is the same for
+ * every customer, so putting it in the URL made the integrator carry a
+ * constant that never varies — and a mistyped one strands people on a blank
+ * page inside the app. `VITE_WALK_IN_CLOSE_URL` already holds it for the QR
+ * flow; the same value serves here. A `?closeUrl=` is still honoured, so an
+ * app whose scheme differs can override without waiting for a deploy.
  */
 function takeUrlSession(): { token: string; closeUrl?: string } | null {
   try {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
     if (!token) return null;
-    const closeUrl = params.get('closeUrl') ?? undefined;
+    const closeUrl = params.get('closeUrl')?.trim() || CLOSE_URL;
     history.replaceState(null, '', window.location.pathname);
     return { token, ...(closeUrl ? { closeUrl } : {}) };
   } catch {

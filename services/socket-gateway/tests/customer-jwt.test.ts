@@ -90,3 +90,39 @@ describe('customer JWT verifier (T040)', () => {
     expect(claims.email).toBeUndefined();
   });
 });
+
+/*
+ * vendor_id is CRM-INTERNAL, so the app should not have to send it.
+ *
+ * Asking an integrator to hardcode "1" in their signing code invites exactly
+ * one question — "what is vendor 2?" — with no useful answer. The gateway
+ * supplies it, and a token that names one still wins so a second tenant needs
+ * no migration.
+ */
+describe('vendor_id defaults', () => {
+  it('accepts a token with no vendor_id at all', () => {
+    const claims = verifier.verify(sign({ customer_id: 'c1', phone: '0512345678' }));
+    expect(claims.vendor_id).toBe('1');
+    expect(claims.customer_id).toBe('c1');
+  });
+
+  it('treats a blank vendor_id as absent rather than rejecting it', () => {
+    // An integrator sending "" is likelier than one omitting the field, and
+    // failing there costs a support round-trip to explain a space.
+    const claims = verifier.verify(
+      sign({ vendor_id: '   ', customer_id: 'c1', phone: '0512345678' }),
+    );
+    expect(claims.vendor_id).toBe('1');
+  });
+
+  it('still honours a vendor_id the token DOES name', () => {
+    const claims = verifier.verify(
+      sign({ vendor_id: 'other-tenant', customer_id: 'c1', phone: '0512345678' }),
+    );
+    expect(claims.vendor_id).toBe('other-tenant');
+  });
+
+  it('still requires customer_id — the order lookup depends on it', () => {
+    expect(() => verifier.verify(sign({ phone: '0512345678' }))).toThrow(CustomerTokenError);
+  });
+});
