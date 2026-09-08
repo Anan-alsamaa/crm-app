@@ -419,12 +419,11 @@ export function TicketsPage() {
             </div>
             <div className="flex-1 overflow-auto">
               {complaints.isLoading ? (
-                <ul>
+                // Same spacing as the real list, or the rows jump into place
+                // when the data lands.
+                <ul className="space-y-1.5 p-2">
                   {Array.from({ length: 6 }).map((_, i) => (
-                    <li
-                      key={i}
-                      className="flex h-14 w-full items-center gap-3 border-b border-border/60 px-3.5"
-                    >
+                    <li key={i} className="flex h-14 w-full items-center gap-3 rounded-2xl px-3">
                       <Skeleton className="h-9 w-9 rounded-full" />
                       <div className="flex-1 space-y-2">
                         <Skeleton className="h-3 w-3/4" />
@@ -436,8 +435,15 @@ export function TicketsPage() {
               ) : filtered.length > 0 ? (
                 /* CARDS, not ruled rows. A bordered bar per ticket is what made
                    this list read as a spreadsheet from 2009; separated cards
-                   with air between them read as a modern queue. */
-                <ul className="divide-y divide-foreground/[0.06]">
+                   with air between them read as a modern queue.
+                   
+                   That was the stated intent long before it was the styling:
+                   the list kept a `divide-y` hairline between full-bleed rows,
+                   so the comment described a queue and the code drew a table.
+                   The spacing and the card treatment below are the inbox's,
+                   deliberately — the two lists are the same idea and looked
+                   like different products. */
+                <ul className="space-y-1.5 p-2">
                   {filtered.map((r) => {
                     const active = selected === r.id;
                     const overdue = isOverdue(r);
@@ -447,11 +453,13 @@ export function TicketsPage() {
                           type="button"
                           onClick={() => setSelected(r.id)}
                           className={cn(
-                            'group relative flex w-full items-center gap-3 px-4 py-3 text-start',
-                            'transition-[background-color,box-shadow,transform] duration-base ease-out',
+                            // The inbox's card grammar: a rounded surface that
+                            // LIFTS on hover, rather than a strip that tints.
+                            'group relative flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-start',
+                            'transition-[background-color,box-shadow] duration-base ease-out',
                             active
-                              ? 'bg-primary/[0.07] before:absolute before:inset-y-0 before:start-0 before:w-[3px] before:rounded-e-full before:bg-primary'
-                              : 'hover:bg-foreground/[0.03]',
+                              ? 'bg-primary/10 shadow-[0_6px_18px_-10px_oklch(var(--shadow-color)/0.5)] ring-1 ring-inset ring-primary/25'
+                              : 'hover:bg-card hover:shadow-[0_4px_14px_-10px_oklch(var(--shadow-color)/0.45)]',
                           )}
                         >
                           <span className="relative shrink-0">
