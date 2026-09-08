@@ -68,9 +68,11 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
           50%      { opacity: 1; }
         }
         /* On a phone the corner is scarce; the environment name alone carries
-           the warning there. */
+           the warning there, and with the nav collapsed to a menu the header
+           row has room for the badge again. */
         @media (max-width: 640px) {
           [data-env-banner] .crm-env-detail { display: none; }
+          [data-env-banner] { top: 20px !important; }
         }
       `}</style>
       <div
@@ -80,19 +82,22 @@ export function EnvironmentBanner({ environment, detail }: EnvironmentBannerProp
         style={{
           position: 'fixed',
           /*
-           * BOTTOM, not top.
+           * TOP, but never CENTRED.
            *
-           * It was centred at the top on the theory that a pill sized to its
-           * text "never crowds the app's own header". It does: the navigation
-           * is centred too, so the two occupy the same strip and the badge sat
-           * over "Agent performance" and "Compensation" at every width. Making
-           * it smaller narrowed the overlap without ending it — centre against
-           * centre always collides.
+           * Centred is where it started, and the navigation is centred too, so
+           * the two fought for the same strip and the badge covered "Agent
+           * performance" and "Compensation" at every width. Shrinking it
+           * narrowed the overlap without ending it: centre against centre
+           * always collides.
            *
-           * Down here it competes with nothing, stays visible on every page,
-           * and still cannot be missed: it is the only red thing on screen.
+           * The trailing corner is the one part of the header row with slack —
+           * measured at 137px on a 1440px viewport. That is not enough for a
+           * 164px badge, so it sits just BELOW the 80px header instead of
+           * inside it: same corner, same glance, nothing covered. Narrow
+           * viewports lose the header's nav to a menu anyway, so the rule
+           * below tucks it back up into the row it just vacated.
            */
-          bottom: 12,
+          top: 88,
           insetInlineEnd: 16,
           zIndex: 2147483647, // above dialogs, drawers and command palettes
           display: 'inline-flex',
