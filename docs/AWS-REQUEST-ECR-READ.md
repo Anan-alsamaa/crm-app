@@ -201,5 +201,14 @@ two faults it had never reached before — an unrendered task-definition
 template and a smoke test probing a hostname that has never existed. Both
 fixed; see the deploy workflow's own comments.
 
-**Still worth doing:** all seven alarms are `crm-staging-*`. Production has
-none, so nothing watches the environment that will carry real customers.
+**Alarms moved to production, 2026-09-08.** They were all `crm-staging-*`,
+which is the wrong way round: staging breaking is something we discover by
+using it, and an alert for it only trains you to ignore the ones that matter.
+The seven now exist as `crm-prod-*` — service-stopped for all four services,
+Directus CPU and memory above 85%, and log volume — and staging's were
+deleted. All seven reached `OK` rather than sitting at `INSUFFICIENT_DATA`,
+which is the check that matters: Container Insights is enabled on the cluster,
+so `RunningTaskCount` is actually published. Without it the stopped-service
+alarms stay silent for ever and look healthy doing it.
+
+`e.habibi@anan.sa` is CONFIRMED on the topic, so these now reach a person.
