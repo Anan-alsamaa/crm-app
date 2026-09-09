@@ -217,7 +217,10 @@ jobs:
       - name: Build the customer chat widget
         env:
           NODE_OPTIONS: --max-old-space-size=4096
-        run: ./scripts/build-widget.sh ${{ needs.plan.outputs.environment }}
+        # `bash script` rather than `./script`: the file mode is set in git too,
+        # but a mode is easy to lose on a Windows checkout or a re-add, and the
+        # failure is a bare "Permission denied" that says nothing about why.
+        run: bash scripts/build-widget.sh ${{ needs.plan.outputs.environment }}
 
       - name: Upload the widget to S3
         env:
