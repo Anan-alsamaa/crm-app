@@ -31,6 +31,7 @@ import {
   WalkInCodeRequest,
   WalkInLinkRequest,
   WalkInSessionRequest,
+  createYijiUserReader,
 } from '@yiji/shared-types';
 import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
@@ -234,6 +235,15 @@ async function main(): Promise<void> {
       config.ATTACHMENT_MAX_BYTES,
       config.ATTACHMENT_ALLOWED_MIME,
     ),
+    /* Null unless the Yiji service credential is configured, in which case a
+       token issued by the Yiji app resolves to a real customer instead of
+       being refused. */
+    yijiUsers: createYijiUserReader({
+      apiUrl: config.YIJI_API_URL,
+      adminApiUrl: config.YIJI_ADMIN_API_URL,
+      adminEmail: config.YIJI_ADMIN_EMAIL,
+      adminPassword: config.YIJI_ADMIN_PASSWORD,
+    }),
     rateLimit: {
       capacity: config.MSG_RATE_CAPACITY,
       refillPerSec: config.MSG_RATE_REFILL_PER_SEC,

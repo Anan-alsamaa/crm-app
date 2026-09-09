@@ -10,9 +10,11 @@ import {
   ReadAck,
   CsatSubmit,
   type MessageNew,
+  type YijiUserReader,
 } from '@yiji/shared-types';
 import type { GatewayDirectus } from './directus.js';
 import type { CustomerVerifier } from './auth/customer-jwt.js';
+import { CustomerClaims, DEFAULT_VENDOR_ID } from './auth/customer-jwt.js';
 import { CustomerTokenError } from './auth/customer-jwt.js';
 import { validateAgentToken } from './auth/agent-jwt.js';
 import type { SideEffectProducer } from './queue.js';
@@ -80,6 +82,13 @@ export interface ConnectionDeps {
   attachmentPolicy?: AttachmentPolicy;
   rateLimit?: { capacity: number; refillPerSec: number };
   /**
+   * Resolves a Yiji user id to their phone, so the chat can be opened straight
+   * from the Yiji app with the app's OWN session token and no changes on their
+   * side. Null when no Yiji service credential is configured, and then a
+   * foreign token is simply refused as before.
+   */
+  yijiUsers?: YijiUserReader | null;
+  /**
    * Cross-instance presence, used by auto-assignment. Optional: without Redis
    * there is no shared presence and no routing, and the gateway still works as a
    * single in-memory instance.
@@ -143,8 +152,111 @@ export function getAgentPresenceSnapshot() {
   return agentPresence.snapshot();
 }
 
+/**
+ * The `Id` claim in a Yiji-issued session token, and nothing else we trust.
+ *
+ * Their token is `{ Id, role[], Brand, Restaurant, exp, iss: 'SecureApi' }`,
+ * signed with THEIR secret. We cannot verify that signature and do not try:
+ * the id is treated as a lookup key, never as proof of anything.
+ */
+interface YijiSessionClaims {
+  Id?: unknown;
+  iss?: unknown;
+  exp?: unknown;
+}
+
+/** Read a JWT payload without verifying it. Null if it is not a JWT at all. */
+function peekPayload(token: string): YijiSessionClaims | null {
+  const parts = token.split('.');
+  if (parts.length !== 3 || !parts[1]) return null;
+  try {
+    return JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as YijiSessionClaims;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Turn whatever the widget was opened with into customer claims.
+ *
+ * TWO KINDS OF TOKEN ARRIVE HERE, and the difference is not the customer's
+ * problem:
+ *
+ *   1. OURS — minted by `/walk-in/session` or by an integrator holding the
+ *      shared secret. Verified cryptographically; carries `phone` directly.
+ *   2. YIJI'S — the customer's own app session token, forwarded unchanged when
+ *      they open the chat from inside the Yiji app. Signed with Yiji's secret,
+ *      carries a user `Id` and NO phone number.
+ *
+ * The second used to be a dead end: the signature is unverifiable here and the
+ * phone is absent, so the chat sat on "Connecting…" for ever while the gateway
+ * logged `invalid signature`. The fix is not to trust their token — it is to
+ * stop needing to. `GET /api/User/GetUserById/{id}` answers with the phone,
+ * name and email, called with OUR service credential.
+ *
+ * WHY THAT IS SOUND. The id is an opaque lookup key, and the lookup is
+ * authenticated as us. A forged `Id` therefore resolves to whichever real
+ * customer owns it — the same exposure the QR walk-in already accepts by
+ * design, where anyone may type any phone number. It grants no more than that:
+ * `walk_in: true` on the resulting session means no history is replayed, so a
+ * guessed id cannot read a stranger's past conversations.
+ *
+ * Ours is tried FIRST so the common path costs nothing, and so a token that is
+ * ours-but-expired reports that honestly instead of being re-read as a Yiji id.
+ */
+export async function resolveCustomerClaims(
+  token: string,
+  verifier: CustomerVerifier,
+  yijiUsers: YijiUserReader | null,
+  logger: Logger,
+): Promise<CustomerClaims> {
+  try {
+    return verifier.verify(token);
+  } catch (ourError) {
+    /* Only a SIGNATURE failure is worth a second look. A malformed token, an
+       expired one of ours, or a missing phone are all answered correctly by the
+       first attempt, and re-reading them as Yiji ids would replace a precise
+       message with a vague one. */
+    const looksForeign =
+      ourError instanceof CustomerTokenError && /invalid signature/i.test(ourError.message);
+    const peeked = looksForeign ? peekPayload(token) : null;
+    const yijiId = typeof peeked?.Id === 'string' ? peeked.Id.trim() : '';
+    if (!yijiId || !yijiUsers) throw ourError;
+
+    /* Their own expiry still applies. We cannot verify the signature, but an
+       expired session is expired whoever issued it, and honouring `exp` costs
+       one comparison. */
+    if (typeof peeked?.exp === 'number' && peeked.exp * 1000 < Date.now()) {
+      throw new CustomerTokenError('token invalid: jwt expired');
+    }
+
+    const profile = await yijiUsers(yijiId).catch((err: unknown) => {
+      // Yiji being down must not read as "your token is bad" — those need
+      // opposite responses from whoever is looking at the log.
+      logger.warn({ yijiId, err: String(err) }, 'yiji user lookup failed');
+      return null;
+    });
+    if (!profile) throw ourError;
+
+    logger.info({ yijiId }, 'resolved a Yiji app session by user lookup');
+    return CustomerClaims.parse({
+      vendor_id: DEFAULT_VENDOR_ID,
+      customer_id: profile.id,
+      phone: profile.phone,
+      ...(profile.name ? { name: profile.name } : {}),
+      ...(profile.email ? { email: profile.email } : {}),
+      /* Not a walk-in in the "typed a number at a counter" sense, but the
+         session carries no proof of identity either — the id was asserted, not
+         verified. `true` keeps history replay off, which is the guard that
+         makes a guessed id harmless. */
+      walk_in: true,
+    });
+  }
+}
+
 export function registerConnection(deps: ConnectionDeps): void {
   const { io, directus, directusUrl, verifier, logger } = deps;
+  const yijiUsers = deps.yijiUsers ?? null;
 
   // --- Auth middleware: validate token, onboard, attach socket.data ---
   io.use(async (socket, next) => {
@@ -183,7 +295,7 @@ export function registerConnection(deps: ConnectionDeps): void {
       }
       // Default: customer (widget)
       if (!auth.token) throw new CustomerTokenError('missing token');
-      const claims = verifier.verify(auth.token);
+      const claims = await resolveCustomerClaims(auth.token, verifier, yijiUsers, logger);
       const vendor = await directus.resolveVendor(claims.vendor_id);
       if (!vendor) throw new CustomerTokenError('unknown or inactive vendor');
       const contact = await directus.upsertContact(vendor.id, claims);

@@ -598,6 +598,40 @@ export class HttpYijiClient implements YijiClient {
   }
 
   /**
+   * One customer, by their Yiji user id.
+   *
+   * Used to turn the `Id` claim in the Yiji app's own session token into a
+   * phone number, which is the only identifier the CRM can match a contact on.
+   *
+   * Returns null when the user is unknown (404) or has no phone on file. A
+   * profile without a number is not usable here: the chat would open a contact
+   * that can never be matched to the same person again, so an honest null and
+   * a clear refusal beat a half-identified session.
+   *
+   * The response carries far more than this — addresses, roles, permission
+   * claims, an FCM token. Only four fields are read, deliberately: anything
+   * else would be a second copy of Yiji's user model living in the CRM, going
+   * stale.
+   */
+  async getUserProfile(userId: string): Promise<YijiUserProfile | null> {
+    const raw = await this.adminFetch<{
+      id?: string;
+      phoneNumber?: string | null;
+      fullName?: string | null;
+      email?: string | null;
+    }>(`/api/User/GetUserById/${encodeURIComponent(userId)}`);
+    if (!raw) return null;
+    const phone = raw.phoneNumber?.trim();
+    if (!phone) return null;
+    return {
+      id: raw.id?.trim() || userId,
+      phone,
+      ...(raw.fullName?.trim() ? { name: raw.fullName.trim() } : {}),
+      ...(raw.email?.trim() ? { email: raw.email.trim() } : {}),
+    };
+  }
+
+  /**
    * POST to the admin API with the service credential, refreshing the token
    * once on a 401.
    *
@@ -962,6 +996,59 @@ export function createYijiAdminPoster(env: YijiClientEnv = {}): YijiAdminPoster 
     adminPassword: env.adminPassword,
   });
   return (path, body, headers) => client.adminPost(path, body, headers);
+}
+
+/**
+ * The customer behind a Yiji user id: their phone, and what else Yiji knows.
+ *
+ * `phone` is the only field the CRM cannot do without — it is how contacts are
+ * matched — so the reader returns null rather than a partial record when Yiji
+ * has no number for the user.
+ */
+export interface YijiUserProfile {
+  /** Yiji's own id, echoed back so a caller can store it verbatim. */
+  id: string;
+  /** E.164 as Yiji stores it, e.g. `+966515553891`. Normalise before use. */
+  phone: string;
+  name?: string;
+  email?: string;
+}
+
+/** Looks a customer up by their Yiji user id, or null when unknown. */
+export type YijiUserReader = (userId: string) => Promise<YijiUserProfile | null>;
+
+/**
+ * Build a user reader, or null when no service credential is configured.
+ *
+ * WHY THIS EXISTS. The Yiji app opens the chat with its OWN session token —
+ * `iss: SecureApi`, signed with Yiji's secret, carrying a user `Id` and no
+ * phone number. The CRM can neither verify that signature nor read a phone out
+ * of it, so for a while the only path forward was asking the app to send us a
+ * phone in a request body.
+ *
+ * `GET /api/User/GetUserById/{id}` removes that: we take the id from the
+ * token, look the customer up with OUR service credential, and get the phone,
+ * name and email. The app changes nothing, no secret is shared, and the
+ * customer's real Yiji id lands in `external_customer_id` — which is what the
+ * coupon push needs to reach the right account.
+ *
+ * Same shape as `createYijiAdminPoster`: the caller holds a function, not a
+ * client, so it cannot wander into the rest of the admin API. Null rather than
+ * a throwing stub, so "not configured" stays distinguishable from "configured
+ * and failing".
+ */
+export function createYijiUserReader(env: YijiClientEnv = {}): YijiUserReader | null {
+  if (!env.adminApiUrl?.trim() || !env.adminEmail?.trim() || !env.adminPassword?.trim()) {
+    return null;
+  }
+  const client = new HttpYijiClient({
+    baseUrl: env.apiUrl || env.adminApiUrl,
+    token: env.token,
+    adminUrl: env.adminApiUrl,
+    adminEmail: env.adminEmail,
+    adminPassword: env.adminPassword,
+  });
+  return (userId) => client.getUserProfile(userId);
 }
 
 /**

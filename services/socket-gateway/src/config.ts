@@ -38,6 +38,19 @@ const schema = z
     // cross-instance fanout + side-effect jobs).
     REDIS_ENABLED: booleanEnv(true),
     YIJI_JWT_SECRET: z.string().min(1, 'YIJI_JWT_SECRET is required'),
+    /*
+     * Yiji's ADMIN API, used for one thing here: turning the user id in a Yiji
+     * app session token into a phone number, so the chat opens straight from
+     * their app with no changes on their side.
+     *
+     * Optional. Unset simply means a Yiji-issued token is refused as before —
+     * the walk-in and shared-secret paths are unaffected. The workers service
+     * already carries the same three values for coupon delivery.
+     */
+    YIJI_ADMIN_API_URL: z.string().url().optional(),
+    YIJI_ADMIN_EMAIL: z.string().optional(),
+    YIJI_ADMIN_PASSWORD: z.string().optional(),
+    YIJI_API_URL: z.string().url().optional(),
     SVC_GATEWAY_TOKEN: z.string().min(1, 'SVC_GATEWAY_TOKEN is required'),
     // CORS allow-list for the ADMIN/AI surfaces (the REST app — /jobs/* enqueue,
     // etc.). Comma-separated exact origins; production refuses `*`.
