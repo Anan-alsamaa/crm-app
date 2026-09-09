@@ -26,6 +26,21 @@ export interface CustomerPushDeps {
   /** Blank disables delivery — see below. */
   yijiNotifyUrl: string;
   yijiApiKey: string;
+  /**
+   * Yiji's `NotifTopic` for "a support agent replied".
+   *
+   * THIS IS THE ONE THING WE DO NOT KNOW. Yiji's real endpoint is
+   * `POST /api/NotificationData/SendNotification`, and it takes NO free text:
+   * the body the customer reads is rendered on their side from a template
+   * chosen by this integer. The published enum is 0-38 with no names attached,
+   * and none is documented as a support reply.
+   *
+   * So it stays unset until Yiji names it. Guessing would not fail safe — it
+   * would deliver a confident, wrong notification ("your order is ready") to a
+   * real customer's handset, which cannot be recalled. Silence is the better
+   * of the two failures, and the log keeps the evidence either way.
+   */
+  yijiNotifyTopic?: number | null;
   /** Injectable for tests. */
   fetchImpl?: typeof fetch;
 }
@@ -53,6 +68,34 @@ export function customerPushPayload(job: CustomerPushJob): Record<string, unknow
     // than the app's home screen.
     deep_link: `yiji://support/conversation/${job.conversationId}`,
     source: 'sara-crm',
+  };
+}
+
+/**
+ * The same notification in YIJI's shape, for their real endpoint.
+ *
+ * `POST /api/NotificationData/SendNotification` takes `SendPushNotificationsObj`:
+ * `{ topic, notifParams, phoneNumber, userId, tenantId }`. Both identifiers may
+ * travel — Yiji resolves the handset from whichever it can.
+ *
+ * NOTE WHAT IS MISSING: there is nowhere to put `preview`. `NotifParams` holds
+ * order ids, coupon codes and OTPs, not prose, so the agent's actual words
+ * cannot cross this boundary. The customer gets a templated nudge that support
+ * replied, and reads the reply by opening the chat. That is a limitation of
+ * their contract, not a shortcut taken here — and it is worth confirming with
+ * Yiji whether a free-text topic exists before settling for it.
+ */
+export function yijiNotifyPayload(job: CustomerPushJob, topic: number, tenantId = 0) {
+  return {
+    topic,
+    notifParams: {
+      // The deep link target, in the one field their schema leaves general
+      // enough to carry it. Confirm against their template before enabling.
+      orderId: job.conversationId,
+    },
+    phoneNumber: job.phone,
+    userId: job.externalCustomerId,
+    tenantId,
   };
 }
 
@@ -93,6 +136,30 @@ export async function processCustomerPushJob(
     return 'disabled';
   }
 
+  /*
+   * Yiji's own endpoint needs their shape AND a topic. Detected from the URL so
+   * that a generic webhook (a relay, a test collector) still receives the
+   * self-describing payload above.
+   */
+  const isYijiEndpoint = /\/api\/NotificationData\/SendNotification\b/i.test(yijiNotifyUrl);
+  const topic = deps.yijiNotifyTopic;
+
+  if (isYijiEndpoint && (topic === undefined || topic === null)) {
+    /*
+     * Configured to call Yiji, but nobody has said which template to use. The
+     * honest outcome is to send nothing: their API would render SOME other
+     * notification's text at a real customer, and a wrong push cannot be
+     * unsent. Not thrown — a retry would not discover the topic either.
+     */
+    logger.warn(
+      { conversationId: data.conversationId, payload },
+      'YIJI_NOTIFY_TOPIC not set — refusing to send an untyped push to Yiji, nothing sent',
+    );
+    return 'disabled';
+  }
+
+  const body = isYijiEndpoint ? yijiNotifyPayload(data, topic as number) : payload;
+
   const res = await doFetch(yijiNotifyUrl, {
     method: 'POST',
     headers: {
@@ -102,7 +169,7 @@ export async function processCustomerPushJob(
       // succeeded cannot buzz the customer's phone twice.
       'idempotency-key': `${data.conversationId}:${data.sentAt}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

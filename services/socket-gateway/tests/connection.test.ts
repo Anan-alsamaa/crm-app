@@ -415,6 +415,36 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
         expect(history?.conversationId).toBe('conv-1');
         expect(stubs.directus.findResumableConversation).not.toHaveBeenCalled();
       });
+
+      /*
+       * REPORTED FROM PRODUCTION: an agent replied while the customer was away
+       * and the customer never learned of it. Nothing pushes such a reply to a
+       * handset (`customer-push` has no Yiji endpoint yet), so reopening the
+       * widget is the ONLY way they can find it — and a 7-day `since` window
+       * here was hiding replies to anything asked longer ago than that, while
+       * the agent still saw the same thread whole.
+       */
+      it('replays the WHOLE live thread, with no time window', async () => {
+        const stubs = makeStubs({
+          upsertContact: vi.fn(async () => ({
+            id: 'contact-1',
+            isNew: false,
+            name: 'Sara',
+            phone: '0537301009',
+            externalCustomerId: 'yiji-77',
+          })),
+          loadConversationMessages: vi.fn(async () => [
+            { id: 'm1', content: 'a reply from days ago' },
+          ]),
+        });
+        harness = await startGateway(stubs);
+        const { history } = await openCustomer({});
+        expect(history?.messages?.[0]?.content).toBe('a reply from days ago');
+        // The decisive assertion: asked for the thread, not for a slice of it.
+        const call = (stubs.directus.loadConversationMessages as ReturnType<typeof vi.fn>).mock
+          .calls[0];
+        expect(call?.[1]?.since).toBeUndefined();
+      });
     });
 
     it('an OLD widget (no lazyConversation flag) still gets a conversation at handshake', async () => {

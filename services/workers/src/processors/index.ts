@@ -236,6 +236,9 @@ export const processors: Record<QueueName, Processor> = {
       // hand the mobile developer when agreeing the contract.
       yijiNotifyUrl: process.env.YIJI_NOTIFY_URL ?? '',
       yijiApiKey: process.env.YIJI_API_KEY ?? '',
+      // Which of Yiji's notification templates means "a support agent replied".
+      // Unset until they name it; see the note on CustomerPushDeps.
+      yijiNotifyTopic: process.env.YIJI_NOTIFY_TOPIC ? Number(process.env.YIJI_NOTIFY_TOPIC) : null,
     });
   },
 };

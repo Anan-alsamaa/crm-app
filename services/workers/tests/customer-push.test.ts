@@ -98,3 +98,68 @@ describe('processCustomerPushJob', () => {
     ).rejects.toThrow(/502/);
   });
 });
+
+/**
+ * Sending through YIJI'S OWN endpoint.
+ *
+ * `POST /api/NotificationData/SendNotification` was found in their published
+ * Swagger after the ops manager reported that a reply sent while the customer
+ * was away never reached them. It takes `{ topic, notifParams, phoneNumber,
+ * userId, tenantId }` — and critically NO free-text field: the words the
+ * customer reads come from a template on Yiji's side, selected by `topic`.
+ *
+ * The enum is 0-38 with no names published, and none is documented as "support
+ * agent replied". So the send is gated on someone at Yiji naming it. A wrong
+ * topic does not fail quietly — it delivers a confident, unrelated notification
+ * ("your order is ready") to a real customer, and cannot be recalled.
+ */
+describe('delivering through Yiji', () => {
+  const YIJI = 'https://admin.yiji-app.com/api/NotificationData/SendNotification';
+
+  it('REFUSES to send to Yiji with no topic, rather than guessing one', async () => {
+    const fetchImpl = vi.fn();
+    const out = await processCustomerPushJob(job(), {
+      logger,
+      yijiNotifyUrl: YIJI,
+      yijiApiKey: 'k',
+      yijiNotifyTopic: null,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(out).toBe('disabled');
+    // The decisive assertion: nothing left the building.
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("sends YIJI's shape once the topic is known", async () => {
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
+    const out = await processCustomerPushJob(job(), {
+      logger,
+      yijiNotifyUrl: YIJI,
+      yijiApiKey: 'k',
+      yijiNotifyTopic: 12,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(out).toBe('delivered');
+    const body = JSON.parse(fetchImpl.mock.calls[0]![1]!.body as string);
+    expect(body.topic).toBe(12);
+    // Both identifiers travel: Yiji resolves the handset from whichever it can.
+    expect(body.phoneNumber).toBe('+966555123456');
+    expect(body.userId).toBe('cust-966555123456');
+  });
+
+  it('still sends the self-describing payload to a NON-Yiji endpoint', async () => {
+    // A relay or test collector gets the full shape, preview and all — the
+    // topic requirement is Yiji's constraint, not ours.
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
+    await processCustomerPushJob(job(), {
+      logger,
+      yijiNotifyUrl: 'https://relay.example.com/hook',
+      yijiApiKey: '',
+      yijiNotifyTopic: null,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const body = JSON.parse(fetchImpl.mock.calls[0]![1]!.body as string);
+    expect(body.preview).toContain('refunded');
+    expect(body.deep_link).toBe('yiji://support/conversation/conv-1');
+  });
+});

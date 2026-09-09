@@ -588,8 +588,26 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
    */
   if ((!data.walkIn || data.contactExternalId || data.resumedByDevice) && data.conversationId) {
     try {
-      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const history = await directus.loadConversationMessages(data.conversationId, { since });
+      /*
+       * NO TIME WINDOW.
+       *
+       * This used to replay only the last 7 days, which quietly broke the one
+       * recovery path a customer has. Nothing notifies a customer that an agent
+       * replied while they were away (`customer-push` is built but has no Yiji
+       * endpoint to call yet), so reopening the widget is how they find the
+       * answer — and a reply to a question asked eight days ago was hidden from
+       * them by this line while the agent could still see it in the same
+       * thread. The reported symptom is exactly that shape.
+       *
+       * Only a LIVE thread ever reaches here: both resume paths above go
+       * through `findLiveConversation` / `findResumableConversation`, and a
+       * closed thread is forgotten by the widget (`onClosed`). So this cannot
+       * drag a finished conversation back into view.
+       *
+       * Unbounded in time is not unbounded in size — `loadConversationMessages`
+       * still caps at 200 messages.
+       */
+      const history = await directus.loadConversationMessages(data.conversationId);
       if (history.length > 0) {
         socket.emit('messages:history', { conversationId: data.conversationId, messages: history });
       }
