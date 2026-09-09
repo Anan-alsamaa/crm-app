@@ -34,7 +34,7 @@ import {
 } from '@yiji/shared-types';
 import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
-import { createHs256Verifier } from './auth/customer-jwt.js';
+import { createHs256Verifier, DEFAULT_VENDOR_ID } from './auth/customer-jwt.js';
 import jwt from 'jsonwebtoken';
 import { randomBytes } from 'node:crypto';
 import { createTokenBucket } from './rate-limit.js';
@@ -561,6 +561,11 @@ async function main(): Promise<void> {
     const asCode = WalkInCodeRequest.safeParse(req.body);
     let phone: string;
     let vendorId: string;
+    /* The caller's own identifiers, when it HAS them. A QR walk-in does not:
+       nobody at a counter knows the Yiji id, so these stay null and the token
+       carries a phone-derived handle as before. */
+    let yijiCustomerId: string | null = null;
+    let displayName: string | null = null;
     if (asCode.success) {
       const link = await directus.resolveWalkInLink(asCode.data.code).catch(() => null);
       if (!link) {
@@ -577,7 +582,11 @@ async function main(): Promise<void> {
         return reply.code(400).send({ ok: false, error: 'a valid phone number is required' });
       }
       phone = parsed.data.phone;
-      vendorId = parsed.data.vendorId;
+      /* Optional now: the Yiji app knows its customer but not our vendor id,
+         and requiring one only invited it to guess. */
+      vendorId = parsed.data.vendorId ?? DEFAULT_VENDOR_ID;
+      yijiCustomerId = parsed.data.customerId ?? null;
+      displayName = parsed.data.name ?? null;
     }
 
     const vendor = await directus.resolveVendor(vendorId).catch(() => null);
@@ -597,15 +606,26 @@ async function main(): Promise<void> {
     const token = jwt.sign(
       {
         vendor_id: vendorId,
-        customer_id: phoneCustomerId(normalized),
+        /*
+         * The REAL Yiji id when the caller supplied one.
+         *
+         * `external_customer_id` is what the coupon push sends to Yiji as
+         * `userId`, so a phone-derived handle here means a coupon that cannot
+         * be delivered. The handle stays the fallback for a QR walk-in, where
+         * the id is genuinely unknown and inventing one would be worse.
+         */
+        customer_id: yijiCustomerId ?? phoneCustomerId(normalized),
         phone: normalized,
-        walk_in: true,
+        ...(displayName ? { name: displayName } : {}),
+        /* Only a session with no proven identity is a walk-in. One opened by
+           the app carries the customer's own id, so it is not. */
+        walk_in: !yijiCustomerId,
       },
       config.YIJI_JWT_SECRET,
       { algorithm: 'HS256', expiresIn: '2h' },
     );
 
-    logger.info({ vendorId, walkIn: true }, 'walk-in session issued');
+    logger.info({ vendorId, walkIn: !yijiCustomerId }, 'walk-in session issued');
     return reply.send({ ok: true, token });
   });
 

@@ -25,7 +25,9 @@ const blankToUndefined = (v: unknown): unknown =>
  * still wins, which keeps the door open for a second tenant without a
  * migration.
  */
-const DEFAULT_VENDOR_ID = process.env.DEFAULT_VENDOR_ID?.trim() || '1';
+/* Exported so the walk-in endpoint defaults to the SAME vendor this verifier
+   assumes. Two copies of "1" would drift the moment one of them changed. */
+export const DEFAULT_VENDOR_ID = process.env.DEFAULT_VENDOR_ID?.trim() || '1';
 
 export const CustomerClaims = z.object({
   vendor_id: z.preprocess((v) => {
