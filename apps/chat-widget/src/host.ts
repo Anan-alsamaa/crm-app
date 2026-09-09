@@ -126,8 +126,10 @@ function takeUrlSession(): { token: string; closeUrl?: string } | null {
   }
 }
 
-// Arabic unless the phone or an earlier choice says English; see locale.ts.
-const locale = resolveLocale();
+/* The app's language wins over the handset and over a remembered tap — read
+   BEFORE the token is stripped from the address bar, because that strip takes
+   `?lang=` with it. See locale.ts for the full order. */
+const locale = resolveLocale(window.location.search);
 applyDocumentLocale(locale);
 
 // The URL first: an app that just navigated here with a token means it, and

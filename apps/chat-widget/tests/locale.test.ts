@@ -101,3 +101,67 @@ describe('isLocale', () => {
     expect(isLocale(undefined)).toBe(false);
   });
 });
+
+describe('the language the HOST APP asked for', () => {
+  /*
+   * The chat opens inside the Yiji app, and the app knows which language the
+   * customer picked IN IT. Landing in a different language than the screen
+   * they came from reads as a different product — so `?lang=` outranks both
+   * the handset and any earlier tap on our own switch.
+   *
+   * The handset is the weaker signal on purpose: plenty of people run an
+   * Arabic app on an English phone, and the app is the one they chose.
+   */
+  it('beats an English phone', () => {
+    navigatorLanguages(['en-US']);
+    expect(resolveLocale('?lang=ar')).toBe('ar');
+  });
+
+  it('beats an Arabic phone', () => {
+    navigatorLanguages(['ar-SA']);
+    expect(resolveLocale('?lang=en')).toBe('en');
+  });
+
+  it('beats a choice the customer made here on a previous visit', () => {
+    // An app that names a language on every open is reporting the customer's
+    // CURRENT setting; a tap from last week should not override it.
+    storeLocale('en');
+    navigatorLanguages(['en-US']);
+    expect(resolveLocale('?lang=ar')).toBe('ar');
+  });
+
+  it('is not remembered, so a changed app setting is not overridden later', () => {
+    // Storing it would let today's value outlive a customer who has since
+    // switched the app to the other language.
+    resolveLocale('?lang=en');
+    expect(localStorage.getItem('yiji.locale')).toBeNull();
+  });
+
+  it('accepts the shapes an app actually sends', () => {
+    navigatorLanguages(['fr-FR']);
+    for (const tag of ['ar', 'AR', 'ar-SA', 'ar_SA', 'ar-sa,en;q=0.9']) {
+      expect(resolveLocale(`?lang=${encodeURIComponent(tag)}`)).toBe('ar');
+    }
+    for (const tag of ['en', 'EN', 'en-US', 'en_GB']) {
+      expect(resolveLocale(`?lang=${encodeURIComponent(tag)}`)).toBe('en');
+    }
+  });
+
+  it('ignores a language it does not recognise instead of guessing', () => {
+    // A typo must fall through to the ordinary rules, not pin the customer to
+    // whichever language the parser happened to reach for.
+    storeLocale('en');
+    expect(resolveLocale('?lang=xx')).toBe('en');
+    expect(resolveLocale('?lang=')).toBe('en');
+  });
+
+  it('falls through to the phone when the app says nothing', () => {
+    navigatorLanguages(['en-US']);
+    expect(resolveLocale('?token=abc')).toBe('en');
+  });
+
+  it('survives a URL that cannot be parsed', () => {
+    navigatorLanguages(['ar-SA']);
+    expect(resolveLocale('%%%not-a-query')).toBe('ar');
+  });
+});
