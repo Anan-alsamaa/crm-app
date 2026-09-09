@@ -142,7 +142,16 @@ if (session) {
     gatewayUrl: GATEWAY_URL,
     token: session.token,
     locale,
-    onLocaleChange: storeLocale,
+    /* Remember the choice AND re-dress the document.
+       The widget re-renders itself in the new language, but `<html lang>` and
+       `dir` are outside it and were left at whatever the page loaded with — so
+       after a switch the page still announced the wrong language to screen
+       readers and to anything styling on `[dir]`. Storing alone was never
+       enough. */
+    onLocaleChange: (next) => {
+      storeLocale(next);
+      applyDocumentLocale(next);
+    },
     autoOpen: true,
     ...(session.closeUrl ? { closeUrl: session.closeUrl } : {}),
   });

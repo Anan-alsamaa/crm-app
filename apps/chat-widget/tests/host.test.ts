@@ -172,6 +172,64 @@ describe('the chat page opens in the customer’s language', () => {
     onLocaleChange('en');
     expect(localStorage.getItem('yiji.locale')).toBe('en');
   });
+
+  it('re-dresses the DOCUMENT when the switch is used, not just localStorage', async () => {
+    /*
+     * The widget re-renders itself in the new language, but `<html lang>` and
+     * `dir` live outside it and were left at whatever the page loaded with —
+     * so after a switch the page still announced the wrong language to screen
+     * readers and to anything styling on `[dir]`. Storing the choice was never
+     * enough on its own.
+     *
+     * Caught by driving the real switch in the built bundle: the placeholder
+     * and panel direction flipped while `document.documentElement.lang` stayed
+     * `en`.
+     */
+    phoneSpeaks('en-US');
+    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    await loadHost();
+    expect(document.documentElement.lang).toBe('en');
+
+    const onLocaleChange = initSpy.mock.calls[0][0].onLocaleChange as (l: string) => void;
+    onLocaleChange('ar');
+
+    expect(document.documentElement.lang).toBe('ar');
+    expect(document.documentElement.dir).toBe('rtl');
+    expect(localStorage.getItem('yiji.locale')).toBe('ar');
+  });
+
+  it('opens in the language the HOST APP names, over the phone', async () => {
+    // The chat opens inside the Yiji app; landing in a different language than
+    // the screen they came from reads as a different product.
+    phoneSpeaks('en-US');
+    // `location` is stubbed in beforeEach, so the query lives there rather
+    // than in the real history.
+    vi.stubGlobal('location', {
+      replace: vi.fn(),
+      origin: 'https://chat.example',
+      href: 'https://chat.example/?token=app-signed&lang=ar',
+      pathname: '/',
+      search: '?token=app-signed&lang=ar',
+    });
+    await loadHost();
+    expect(document.documentElement.lang).toBe('ar');
+    expect(document.documentElement.dir).toBe('rtl');
+  });
+
+  it('does not remember what the app said, so a changed setting is honoured', async () => {
+    // The app names a language on every open. Storing it would let today's
+    // value outlive a customer who has since switched the app over.
+    phoneSpeaks('en-US');
+    vi.stubGlobal('location', {
+      replace: vi.fn(),
+      origin: 'https://chat.example',
+      href: 'https://chat.example/?token=app-signed&lang=ar',
+      pathname: '/',
+      search: '?token=app-signed&lang=ar',
+    });
+    await loadHost();
+    expect(localStorage.getItem('yiji.locale')).toBeNull();
+  });
 });
 
 describe('the address the visitor is left on', () => {
