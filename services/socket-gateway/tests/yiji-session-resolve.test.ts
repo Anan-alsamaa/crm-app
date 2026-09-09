@@ -52,14 +52,24 @@ describe('a session opened from the Yiji app', () => {
     const claims = await resolveCustomerClaims(yijiToken(), verifier, yijiUsers, logger);
 
     expect(yijiUsers).toHaveBeenCalledWith('cd32f3aa-fbaa-438c-abfb-1c122a6f3130');
-    expect(claims.phone).toBe('+966515553891');
+    /*
+     * `05…`, NOT the `+9665…` Yiji returns.
+     *
+     * Contacts are matched by exact phone equality and every stored number is
+     * `05…`, so keeping E.164 here creates a second contact for a customer who
+     * already exists and loses their order history. Found by reading the
+     * contacts table after the first end-to-end run: the row came back as
+     * `+966515553891` beside a table of `05…` numbers.
+     */
+    expect(claims.phone).toBe('0515553891');
     // The REAL Yiji id, not a phone-derived handle: this becomes
     // `external_customer_id`, which the coupon push sends to Yiji as `userId`.
     expect(claims.customer_id).toBe('cd32f3aa-fbaa-438c-abfb-1c122a6f3130');
     expect(claims.name).toBe('Test orders');
-    // No proof of identity was presented — the id was asserted, not verified —
-    // so history replay stays off.
-    expect(claims.walk_in).toBe(true);
+    /* NOT a walk-in: they came through the app and Yiji's own lookup confirmed
+       the id. Drives `acquisition_channel: 'app'` and lets the session resume
+       their existing thread. */
+    expect(claims.walk_in).toBe(false);
   });
 
   it('still prefers OUR token, and never calls Yiji for one', async () => {

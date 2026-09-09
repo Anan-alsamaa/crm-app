@@ -11,6 +11,7 @@ import {
   CsatSubmit,
   type MessageNew,
   type YijiUserReader,
+  normalizePhone,
 } from '@yiji/shared-types';
 import type { GatewayDirectus } from './directus.js';
 import type { CustomerVerifier } from './auth/customer-jwt.js';
@@ -242,14 +243,30 @@ export async function resolveCustomerClaims(
     return CustomerClaims.parse({
       vendor_id: DEFAULT_VENDOR_ID,
       customer_id: profile.id,
-      phone: profile.phone,
+      /*
+       * `05…`, not the `+9665…` Yiji returns.
+       *
+       * Contacts are matched by exact phone equality and every stored number is
+       * `05…`, so signing the raw E.164 string creates a SECOND contact for a
+       * customer who already exists — losing their order history, which is the
+       * whole point of identifying them. Caught by reading the contacts table
+       * after the first end-to-end run, not from the code.
+       */
+      phone: normalizePhone(profile.phone),
       ...(profile.name ? { name: profile.name } : {}),
       ...(profile.email ? { email: profile.email } : {}),
-      /* Not a walk-in in the "typed a number at a counter" sense, but the
-         session carries no proof of identity either — the id was asserted, not
-         verified. `true` keeps history replay off, which is the guard that
-         makes a guessed id harmless. */
-      walk_in: true,
+      /*
+       * NOT a walk-in. This customer arrived through the Yiji app and their id
+       * was confirmed by Yiji's own user lookup, which is stronger proof than
+       * a number typed at a counter.
+       *
+       * It matters twice over: `acquisition_channel` records `app` rather than
+       * `walk_in`, and the session resumes the customer's existing thread. The
+       * history guard that `walk_in: true` would buy is redundant here — the
+       * contact always carries an `external_customer_id`, and the resume rule
+       * (`!walkIn || contactExternalId`) already admits it on that basis.
+       */
+      walk_in: false,
     });
   }
 }
