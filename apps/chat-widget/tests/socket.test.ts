@@ -84,7 +84,22 @@ describe('connectWidget — connection setup', () => {
     // walk-in visitor who reloads or re-scans the QR code no longer leaves an
     // empty duplicate thread. A gateway that predates the flag simply ignores it.
     expect(opts.auth).toEqual({ kind: 'customer', token: 'tok-abc', lazyConversation: true });
-    expect(opts.transports).toEqual(['websocket', 'polling']);
+    /*
+     * POLLING FIRST. The order is the whole assertion.
+     *
+     * `['websocket', 'polling']` reads like a fallback and is not one: where
+     * the WebSocket constructor is missing or the upgrade is blocked, socket.io
+     * can fail on the first transport without ever trying the second. Deleting
+     * `window.WebSocket` reproduced it exactly — zero socket.io requests, and
+     * the panel stuck on "Connecting…" for ever with no send, no online state
+     * and no offline details, because none of that runs before the socket is
+     * up. That is what a customer saw inside the Yiji app's webview
+     * (2026-09-09); a desktop browser never showed it.
+     *
+     * Polling is plain HTTP over the same CloudFront path, so it always
+     * connects, and socket.io upgrades to WebSocket afterwards when it can.
+     */
+    expect(opts.transports).toEqual(['polling', 'websocket']);
     expect(opts.reconnection).toBe(true);
     expect(opts.extraHeaders).toEqual({ 'ngrok-skip-browser-warning': 'true' });
   });

@@ -80,7 +80,27 @@ export function connectWidget(
         ? { resumeConversationId: options.resumeConversationId }
         : {}),
     },
-    transports: ['websocket', 'polling'],
+    /**
+     * POLLING FIRST, then upgrade. Not websocket-first.
+     *
+     * `['websocket', 'polling']` looks like it has a fallback and does not
+     * really have one: socket.io tries the first transport, and where the
+     * WebSocket constructor is absent or the upgrade is blocked outright it
+     * can fail without ever reaching the second. Reproduced by deleting
+     * `window.WebSocket`: ZERO socket.io requests were made and the panel sat
+     * on "Connecting…" for ever — no send, no online state, no offline
+     * details, because none of that code runs until the socket is up.
+     *
+     * That is the customer's view from inside the Yiji app's webview, which is
+     * exactly where this was reported (2026-09-09). A desktop browser never
+     * showed it, because the upgrade always succeeded there.
+     *
+     * Polling always works: it is ordinary HTTP through the same CloudFront
+     * path. socket.io then upgrades to WebSocket in the background when it
+     * can, so a healthy network still ends up on a socket — it just is not
+     * the thing standing between the customer and their first message.
+     */
+    transports: ['polling', 'websocket'],
     // Harmless off-ngrok; lets the polling handshake skip ngrok-free's browser
     // interstitial when the widget is served through an ngrok tunnel.
     extraHeaders: { 'ngrok-skip-browser-warning': 'true' },

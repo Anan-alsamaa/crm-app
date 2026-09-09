@@ -238,8 +238,19 @@ jobs:
           test -f "$SRC/index.html" && test -f "$SRC/walk-in.html" \
             || { echo "::error::the widget pages are missing"; exit 1; }
 
-          # Hashed assets: cached hard, because the filename changes when they do.
-          aws s3 sync "$SRC/assets" "s3://${BUCKET}/assets" --delete \
+          # Hashed assets: cached hard, and NOT deleted.
+          #
+          # `--delete` here breaks the chat for anyone holding the page when a
+          # deploy lands. Their HTML still names the previous chunk, the deploy
+          # removes it, the request 403s, and the widget never boots - it sits
+          # on "connecting" for ever, cannot send, and shows neither the online
+          # nor the offline details, because the code that decides all three
+          # never ran. Reported by the owner immediately after v1.8.0, and
+          # reproduced exactly by pointing a current page at the deleted chunk.
+          #
+          # Filenames are content-hashed, so keeping the old ones costs a few KB
+          # and nothing else: a name can never resolve to the wrong bytes.
+          aws s3 sync "$SRC/assets" "s3://${BUCKET}/assets" \
             --cache-control "public,max-age=31536000,immutable" >/dev/null
           # Everything else except the pages, five minutes: the bundle's name is
           # STABLE, so a fix has to be able to reach browsers the same day.
