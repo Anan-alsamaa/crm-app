@@ -234,15 +234,37 @@ jobs:
           test -f "$SRC/yiji-chat-widget.js" || { echo "::error::the widget bundle is missing"; exit 1; }
           test -f "$SRC/index.html" && test -f "$SRC/walk-in.html" \
             || { echo "::error::the widget pages are missing"; exit 1; }
-          # Hashed assets cached hard; the three STABLE names never cached, or a
-          # customer keeps yesterday's widget until they hard-refresh.
-          aws s3 sync "$SRC" "s3://${BUCKET}" \
-            --delete --cache-control "public,max-age=31536000,immutable" \
-            --exclude "index.html" --exclude "walk-in.html" --exclude "yiji-chat-widget.js"
-          for f in index.html walk-in.html yiji-chat-widget.js; do
-            aws s3 cp "$SRC/$f" "s3://${BUCKET}/$f" --cache-control "no-cache"
+
+          # Hashed assets: cached hard, because the filename changes when they do.
+          aws s3 sync "$SRC/assets" "s3://${BUCKET}/assets" --delete \
+            --cache-control "public,max-age=31536000,immutable" >/dev/null
+          # Everything else except the pages, five minutes: the bundle's name is
+          # STABLE, so a fix has to be able to reach browsers the same day.
+          aws s3 sync "$SRC" "s3://${BUCKET}" --delete \
+            --exclude "assets/*" --exclude "*.html" --exclude "walk-in" \
+            --cache-control "public,max-age=300" >/dev/null
+          # The pages, never cached — they name the hashed assets.
+          for page in index.html walk-in.html; do
+            aws s3 cp "$SRC/$page" "s3://${BUCKET}/$page" \
+              --cache-control "no-cache" --content-type "text/html; charset=utf-8" >/dev/null
           done
-          echo "::notice::widget uploaded to $BUCKET"
+          # The QR poster's URL has no extension, so S3 needs its own object at
+          # that key. Miss it and every scanned code 404s.
+          aws s3 cp "$SRC/walk-in.html" "s3://${BUCKET}/walk-in" \
+            --cache-control "no-cache" --content-type "text/html; charset=utf-8" >/dev/null
+
+          # WITHOUT THIS THE UPLOAD IS INVISIBLE. CloudFront keeps serving what
+          # it already has until told otherwise, so a customer would get the old
+          # widget for up to the cache lifetime — which is exactly the failure
+          # this whole step exists to stop.
+          #
+          # The ids are LITERAL, not discovered: the deploy role is granted
+          # `cloudfront:CreateInvalidation` and nothing else, so a
+          # list-distributions lookup returns empty and the invalidation would
+          # be skipped in silence. Same two ids as scripts/deploy-portals.sh.
+          if [ "$ENVIRONMENT" = prod ]; then DIST=E15DCMX8ZCU62R; else DIST=E2QVORODPLQHNB; fi
+          aws cloudfront create-invalidation --distribution-id "$DIST" --paths '/*' >/dev/null
+          echo "::notice::widget uploaded to $BUCKET and $DIST invalidated"
 
   # ── 5. Deploy the ECS services ────────────────────────────────────────────
   deploy:
