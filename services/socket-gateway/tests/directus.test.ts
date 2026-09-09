@@ -477,17 +477,19 @@ describe('GatewayDirectus.loadConversationMessages', () => {
   it('returns visible messages with attachment ids grouped from the junction', async () => {
     request
       .mockResolvedValueOnce([
-        {
-          id: 'm1',
-          sender_type: 'customer',
-          content: 'hi',
-          date_created: '2026-01-01T00:00:00.000Z',
-        },
+        // The query sorts NEWEST first, so the stub answers in that order; the
+        // method reverses it back into reading order.
         {
           id: 'm2',
           sender_type: 'agent',
           content: 'hello',
           date_created: '2026-01-01T00:01:00.000Z',
+        },
+        {
+          id: 'm1',
+          sender_type: 'customer',
+          content: 'hi',
+          date_created: '2026-01-01T00:00:00.000Z',
         },
       ]) // messages
       .mockResolvedValueOnce([
@@ -517,6 +519,41 @@ describe('GatewayDirectus.loadConversationMessages', () => {
     request.mockResolvedValueOnce([]);
     expect(await makeGateway().loadConversationMessages('conv-1')).toEqual([]);
     expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  /*
+   * The widget no longer passes a `since`, so the 200 cap is the ONLY bound on
+   * a long thread — and which 200 it keeps decides whether the customer sees
+   * the agent's latest reply or a wall of ancient history. Ascending + limit
+   * would have kept the oldest, recreating the very bug the caller exists to
+   * fix, so the sort must be descending.
+   */
+  it('takes the NEWEST messages when a thread is longer than the cap', async () => {
+    /*
+     * The API is asked for newest-first and answers that way. What must come
+     * back is the RECENT end, in reading order — an ascending query would have
+     * capped to the oldest 200 and buried the reply the customer returned for.
+     */
+    request
+      .mockResolvedValueOnce([
+        {
+          id: 'newest',
+          sender_type: 'agent',
+          content: 'the reply',
+          date_created: '2026-03-01T00:00:00.000Z',
+        },
+        {
+          id: 'older',
+          sender_type: 'customer',
+          content: 'my question',
+          date_created: '2026-02-01T00:00:00.000Z',
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    const msgs = await makeGateway().loadConversationMessages('conv-1');
+    expect(msgs.map((m) => m.id)).toEqual(['older', 'newest']);
+    // The newest message is present, and it is the one the customer came back for.
+    expect(msgs.at(-1)?.content).toBe('the reply');
   });
 });
 

@@ -719,10 +719,17 @@ export class GatewayDirectus {
    * (re)connect. Attachment ids come from the messages_files junction (there is
    * no alias field on `messages`); a denied junction read fails soft to no chips.
    *
-   * `since` caps how far back the seed reaches (ISO instant). The WIDGET passes
-   * a 7-day cutoff: the customer sees only their recent week, while every older
-   * message stays in Directus and remains fully visible to agents — the agent
-   * portal reads the thread with its own token and never through this method.
+   * `since` caps how far back the seed reaches (ISO instant), and is now
+   * OPTIONAL — the widget stopped passing one. A customer is not reliably told
+   * that an agent replied while they were away, so reopening the chat is how
+   * they find out, and a time window there silently hid exactly the reply they
+   * came back for.
+   *
+   * The 200-message cap is what bounds the payload instead. It takes the
+   * NEWEST 200 (sorted descending, then reversed for display): with no `since`
+   * an ascending cap would have handed a long thread its oldest 200 messages
+   * and buried the recent reply — the very bug this method's caller exists to
+   * avoid.
    */
   async loadConversationMessages(
     conversationId: string,
@@ -744,11 +751,14 @@ export class GatewayDirectus {
           ...(opts.since ? { date_created: { _gte: opts.since } } : {}),
         },
         fields: ['id', 'sender_type', 'content', 'date_created'],
-        sort: ['date_created'],
+        // NEWEST first so the cap keeps the recent end of a long thread; put
+        // back in reading order below.
+        sort: ['-date_created'],
         limit: 200,
       }),
     )) as Array<{ id: string; sender_type: SenderType; content: string; date_created: string }>;
     if (msgs.length === 0) return [];
+    msgs.reverse();
 
     const byMessage = new Map<string, string[]>();
     try {
