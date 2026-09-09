@@ -476,6 +476,35 @@ describe('Widget — empty state and offline fallback', () => {
     const headerStatus = container.querySelector('.yiji-header-status');
     expect(headerStatus).not.toHaveClass('offline');
   });
+
+  /**
+   * A REFUSED session must not read as a slow one.
+   *
+   * Reported twice from the Yiji app: "connecting forever, cannot send, no
+   * offline details, no online details". The gateway was rejecting the token
+   * and SAYING SO on the wire — `{"message":"token invalid: jwt malformed"}` —
+   * and the widget threw it away, rendering "Connecting…" for every state
+   * except `reconnecting`. Waiting cannot fix a refused token, and nothing on
+   * screen said so.
+   */
+  it('says the chat cannot start when the gateway refuses the token', () => {
+    const { container } = renderWidget({ autoOpen: true });
+    drive(() => lastCallbacks!.onStatus('error'));
+
+    const banner = container.querySelector('[data-testid="yiji-status"]');
+    expect(banner).toHaveTextContent('We could not start this chat');
+    // Not the amber "wait a moment" treatment: waiting will not help.
+    expect(container.querySelector('.yiji-status-error')).not.toBeNull();
+  });
+
+  it('offers the phone and WhatsApp when the session was refused', () => {
+    // Their only route to a human: the chat itself is never going to open.
+    renderWidget({ autoOpen: true });
+    drive(() => lastCallbacks!.onStatus('error'));
+    expect(
+      screen.getByRole('region', { name: 'Our agents are offline right now' }),
+    ).toBeInTheDocument();
+  });
 });
 
 describe('Widget — CSAT on conversation close', () => {

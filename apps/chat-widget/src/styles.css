@@ -282,6 +282,14 @@
   border-bottom: 1px solid #fde68a;
 }
 
+/* A refused session is not a slow one. Amber says "wait"; this one must not,
+   because waiting cannot help — the chat will never start on this token. */
+.yiji-status-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border-bottom-color: #fecaca;
+}
+
 /* ───── Messages ───── */
 .yiji-messages {
   flex: 1;

@@ -816,8 +816,34 @@ export function Widget({ config }: { config: WidgetConfig }) {
           </header>
 
           {(!ready || status !== 'connected') && (
-            <div className="yiji-status" data-testid="yiji-status">
-              {status === 'reconnecting' ? tr.reconnecting : tr.connecting}
+            <div
+              className={`yiji-status${status === 'error' ? ' yiji-status-error' : ''}`}
+              data-testid="yiji-status"
+            >
+              {/*
+               * A REFUSED session must not read as a slow one.
+               *
+               * Every state except `reconnecting` used to render "Connecting…",
+               * so a token the gateway rejects — expired, minted with the other
+               * environment's secret, or malformed — produced a panel that said
+               * "Connecting…" for ever, could not send, and showed neither the
+               * online nor the offline details. That is exactly what a customer
+               * reported from the Yiji app, twice, and it is indistinguishable
+               * from a network problem: waiting cannot fix it, and nothing on
+               * screen says so.
+               *
+               * The gateway already sends the reason on the wire
+               * (`{"message":"token invalid: jwt malformed"}`); the widget was
+               * throwing it away. It stays out of the customer's message — a
+               * JWT error means nothing to them — but the message now tells
+               * them the truth: this will not come good on its own, so reopen
+               * from the app or phone us.
+               */}
+              {status === 'error'
+                ? tr.cannotConnect
+                : status === 'reconnecting'
+                  ? tr.reconnecting
+                  : tr.connecting}
             </div>
           )}
 
@@ -1000,7 +1026,12 @@ export function Widget({ config }: { config: WidgetConfig }) {
                 does not repeat it. Email is gone: the slowest of the channels
                 and the one nobody uses from a phone at a counter.
               */}
-              {ready && agentsOnline === 0 && (
+              {/* Also shown when the session was REFUSED. A customer whose
+                  token the gateway rejected cannot chat at all, so the phone
+                  and WhatsApp numbers are the only way through — withholding
+                  them because `ready` never arrived leaves them with a dead
+                  panel and no route to a human. */}
+              {(status === 'error' || (ready && agentsOnline === 0)) && (
                 <div className="yiji-offline" role="region" aria-label={tr.offlineTitle}>
                   <p className="yiji-offline-body">
                     <span className="yiji-offline-body-icon" aria-hidden>

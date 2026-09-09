@@ -11,6 +11,8 @@ export interface WidgetStrings {
   typing: string;
   connecting: string;
   reconnecting: string;
+  /** The gateway refused this session's token — retrying cannot help. */
+  cannotConnect: string;
   attach: string;
   attachment: string;
   attachFailed: string;
@@ -57,6 +59,7 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     typing: 'Typing',
     connecting: 'Connecting…',
     reconnecting: 'Reconnecting…',
+    cannotConnect: 'We could not start this chat. Please reopen it from the app, or call us.',
     attach: 'Attach file',
     attachment: 'Attachment',
     attachFailed: 'Could not upload the file.',
@@ -104,6 +107,7 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     typing: 'يكتب',
     connecting: 'جارٍ الاتصال…',
     reconnecting: 'إعادة الاتصال…',
+    cannotConnect: 'تعذّر بدء المحادثة. يُرجى فتحها من التطبيق مرة أخرى أو الاتصال بنا.',
     attach: 'إرفاق ملف',
     attachment: 'مرفق',
     attachFailed: 'تعذّر رفع الملف.',
