@@ -298,6 +298,7 @@
     "bulkTagDone_many": "تم وسم {{count}} محادثة.",
     "bulkTagDone_other": "تم وسم {{count}} محادثة.",
     "clearFilter": "انقر مرة أخرى لإزالة هذا الفلتر",
+    "quickReplyReplaced": "تم استبدال ما كتبته — اضغط Ctrl+Z للتراجع",
     "assignedMine": "قائمتي",
     "assignedAll": "كل المحادثات",
     "emptyFiltered": "لا شيء يطابق عوامل التصفية هذه.",

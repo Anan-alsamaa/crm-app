@@ -567,30 +567,47 @@ export function ConversationView({
    * to stop trusting the row. A "/query" is consumed (it was the search, not the
    * message); anything else is appended to what is already written.
    */
-  /** The canned reply currently sitting in the composer, so picking another
-   *  swaps it instead of stacking — but a hand-typed draft is never lost. */
+  /** The canned reply currently sitting in the composer. Kept only so the
+   *  UNDO below can tell "I just replaced your text" from a normal edit. */
   const lastQuickReplyRef = useRef<string | null>(null);
+  /** What the composer held before the last canned reply replaced it. */
+  const replacedDraftRef = useRef<string | null>(null);
 
   /**
-   * A canned reply REPLACES the draft; it does not stack onto it.
+   * A canned reply REPLACES the draft. Always — typed text included.
    *
-   * Appending was the old behaviour and it was wrong in practice: picking a
-   * second canned reply is how an agent says "not that one, this one", and
-   * they were left having to delete the first by hand every time. Anything the
-   * agent TYPED is still protected — see the guard below.
+   * It used to stack onto anything hand-written, on the reasoning that a
+   * mis-click must never cost a half-written reply. In practice that made the
+   * row untrustworthy in the other direction: an agent who typed a few words,
+   * then reached for the canned version, got the two glued together and had to
+   * delete their own sentence by hand every time. Reported from production
+   * (owner, 2026-09-09) as the remaining half of a fix that only ever covered
+   * canned-over-canned.
+   *
+   * Replacing is what the button looks like it does, so it is what it does.
+   * The mis-click worry is answered by making the replacement UNDOABLE rather
+   * than by refusing to replace: Ctrl/Cmd+Z in the composer restores exactly
+   * what was there, and the row says so the first time it takes something.
    */
   const insertQuickReply = (text: string) => {
     setDraft((prev) => {
       const base = prev.trimEnd();
-      // Nothing to lose, or what is there is a previous canned reply: swap it.
-      if (!base || lastQuickReplyRef.current === base) {
-        lastQuickReplyRef.current = text;
-        return text;
+      // Remember only real work — not blank, and not a canned reply we put
+      // there ourselves, which nobody needs restored.
+      const tookRealWork = !!base && base !== lastQuickReplyRef.current;
+      replacedDraftRef.current = tookRealWork ? prev : null;
+      /* Say so when we take something the agent wrote. Silently swallowing a
+         half-typed sentence is what makes a row untrustworthy — one line, only
+         when there was something to lose, and it names the way back. */
+      if (tookRealWork) {
+        toast(
+          t('inbox.quickReplyReplaced', {
+            defaultValue: 'Replaced your text — press Ctrl+Z to undo',
+          }),
+        );
       }
-      // The agent has written something of their own — never destroy it.
-      lastQuickReplyRef.current = null;
-      return `${base}
-${text}`;
+      lastQuickReplyRef.current = text;
+      return text;
     });
     requestAnimationFrame(() => {
       draftRef.current?.focus();
@@ -599,6 +616,24 @@ ${text}`;
         draftRef.current.style.height = `${Math.min(draftRef.current.scrollHeight, 160)}px`;
       }
     });
+  };
+
+  /**
+   * Ctrl/Cmd+Z immediately after a canned reply gives the agent their own
+   * words back.
+   *
+   * The browser's native undo cannot: the value was changed programmatically,
+   * so the textarea's own history has no entry to step back to. Without this,
+   * "replace" would mean "lose", which is the whole reason the old code
+   * appended instead.
+   */
+  const undoQuickReply = (): boolean => {
+    const prior = replacedDraftRef.current;
+    if (prior === null) return false;
+    replacedDraftRef.current = null;
+    lastQuickReplyRef.current = null;
+    setDraft(prior);
+    return true;
   };
 
   const insertMention = (email: string) => {
@@ -1130,6 +1165,15 @@ ${text}`;
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       send();
+                    }
+                    /* Undo a canned reply that just replaced typed text. The
+                       browser cannot do this itself — the value was set
+                       programmatically, so the textarea's own history has no
+                       step to go back to — and without it "replace" would mean
+                       "lose". Only handled when there IS something to restore,
+                       so ordinary undo is untouched. */
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                      if (undoQuickReply()) e.preventDefault();
                     }
                     if (e.key === 'Escape') setMentionMenu(null);
                   }}
