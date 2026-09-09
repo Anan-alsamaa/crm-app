@@ -238,10 +238,13 @@ describe('ticket-ops api — useTicketOps', () => {
     mockData(fullWindow());
     const data = await load();
 
+    /* Live vocabulary first (open/pending/solved), then the retired values the
+       imported history still stores. This fixture predates the narrowing, so it
+       exercises the retired half — which is the half that must keep working. */
     expect(data.byStatus).toEqual([
-      { key: 'new', count: 1 },
       { key: 'open', count: 1 },
       { key: 'pending', count: 1 },
+      { key: 'new', count: 1 },
       { key: 'resolved', count: 1 },
       { key: 'closed', count: 2 },
     ]);

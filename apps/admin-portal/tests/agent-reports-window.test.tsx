@@ -102,4 +102,54 @@ describe('the ticket window', () => {
     const csat = calls.find((c) => c?.collection === 'csat_responses');
     expect(JSON.stringify(csat!.opts.filter)).toContain('submitted_at');
   });
+
+  /**
+   * THE SECOND BUG, reported by operations 2026-09-09:
+   * "a created ticket is not showing in the admin portal."
+   *
+   * Nothing was lost. The report filters by when a complaint HAPPENED, so a
+   * ticket logged today about a three-week-old complaint sits under the older
+   * date — correct for "complaints in August", and indistinguishable from a
+   * failed save for the person who just created it.
+   *
+   * Widening the filter was tried and reverted: on real data the whole
+   * imported history shares one creation stamp, so every window returned all
+   * 1,693 rows and "August" listed January. The report keeps its honest filter
+   * and reports what the filter excludes instead.
+   */
+  it('counts the tickets logged in the window but dated outside it', async () => {
+    renderHook(() => useAgentReportData(0, labels, { from: '2026-08-01', to: '2026-08-31' }), {
+      wrapper: wrapper(),
+    });
+
+    await waitFor(() => expect(request).toHaveBeenCalled());
+    const calls = request.mock.calls.map(([arg]) => arg as Captured);
+    // The LAST tickets read is the outside-the-window count.
+    const outside = calls.filter((c) => c?.collection === 'tickets').at(-1);
+    const asText = JSON.stringify(outside!.opts.filter);
+
+    // Logged in the window...
+    expect(asText).toContain('date_created');
+    // ...but happening before it or after it, and never a null date (those are
+    // already visible through the fallback branch).
+    expect(asText).toContain('_nnull');
+    expect(asText).toContain('"_lt"');
+    expect(asText).toContain('"_gt"');
+  });
+
+  it('asks only about the earlier edge when the range is open-ended', async () => {
+    // With no end date the window runs to now, so nothing can fall after it.
+    // Asking `_gt ""` would match every row and invent a warning.
+    renderHook(() => useAgentReportData(30, labels), { wrapper: wrapper() });
+
+    await waitFor(() => expect(request).toHaveBeenCalled());
+    const calls = request.mock.calls.map(([arg]) => arg as Captured);
+    const outside = calls.filter((c) => c?.collection === 'tickets').at(-1);
+    const asText = JSON.stringify(outside!.opts.filter);
+
+    // `"_gt"` with its quotes: a bare `_gt` also matches `_gte`, which the
+    // window's own lower bound always carries.
+    expect(asText).toContain('"_lt"');
+    expect(asText).not.toContain('"_gt"');
+  });
 });

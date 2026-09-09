@@ -18,7 +18,9 @@ export type VendorStatus = z.infer<typeof VendorStatus>;
  * alone would leave rows holding a value no filter matches, so those chats
  * would vanish from the inbox rather than error.
  *
- * TICKET status is separate and still has its own five; do not unify them.
+ * TICKET status is separate and has its own three (open/pending/solved).
+ * They now SHARE the word `solved`, but they are still different columns on
+ * different collections: do not unify the enums.
  */
 export const ConversationStatus = z.enum(['open', 'solved']);
 export type ConversationStatus = z.infer<typeof ConversationStatus>;
@@ -37,8 +39,50 @@ export function normaliseConversationStatus(raw: string | null | undefined): Con
   return RETIRED_CONVERSATION_STATUS[raw ?? ''] ?? 'open';
 }
 
-export const TicketStatus = z.enum(['new', 'open', 'pending', 'resolved', 'closed']);
+/**
+ * THREE states, not five (owner, 2026-09-09).
+ *
+ * `new` / `open` / `resolved` / `closed` asked agents to make distinctions
+ * nobody acted on: a "new" ticket and an "open" one were worked identically,
+ * and "resolved" versus "closed" was a difference operations could not state.
+ * Five buttons where three would do is five chances to file the same ticket
+ * two ways, which is what made the status column unreportable.
+ *
+ * What survives is the three states that carry a decision:
+ *   open    — being worked
+ *   pending — waiting on somebody else (the customer, a branch)
+ *   solved  — done
+ *
+ * `solved` rather than `resolved`, matching the chat status, so the two halves
+ * of the product stop using different words for the same thing.
+ */
+export const TicketStatus = z.enum(['open', 'pending', 'solved']);
 export type TicketStatus = z.infer<typeof TicketStatus>;
+
+/**
+ * What each retired ticket status becomes.
+ *
+ * Rows are NOT rewritten in place. 1,671 of staging's 1,693 tickets are
+ * `closed` imported history, and rewriting them would destroy the only record
+ * of what operations actually filed while gaining nothing — every reader goes
+ * through `normaliseTicketStatus`, so a stored `closed` and a stored `solved`
+ * already read the same. The map is the migration; running one is optional.
+ *
+ * `new` folds into `open` because that is what it always meant — nobody had
+ * picked it up yet, which is a queue position, not a state. Assignment already
+ * records that.
+ */
+export const RETIRED_TICKET_STATUS: Record<string, TicketStatus> = {
+  new: 'open',
+  resolved: 'solved',
+  closed: 'solved',
+};
+
+/** Normalise any stored ticket status, including the retired ones. */
+export function normaliseTicketStatus(raw: string | null | undefined): TicketStatus {
+  if (raw === 'open' || raw === 'pending' || raw === 'solved') return raw;
+  return RETIRED_TICKET_STATUS[raw ?? ''] ?? 'open';
+}
 
 export const Priority = z.enum(['low', 'medium', 'high', 'urgent']);
 export type Priority = z.infer<typeof Priority>;

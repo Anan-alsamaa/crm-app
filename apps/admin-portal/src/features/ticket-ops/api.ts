@@ -15,7 +15,10 @@ import { directus } from '../../lib/directus.js';
  *   - The full ticket register with every lifecycle timestamp, exportable.
  */
 
-export type LifecycleStatus = 'new' | 'open' | 'pending' | 'resolved' | 'closed';
+/* The live vocabulary AND the retired one. This page reports on what is
+   STORED, and historical rows keep `new`/`resolved`/`closed` — see
+   RETIRED_TICKET_STATUS. */
+export type LifecycleStatus = 'open' | 'pending' | 'solved' | 'new' | 'resolved' | 'closed';
 
 export interface TicketOpsRow {
   id: string;
@@ -95,8 +98,10 @@ interface RawTicket {
   } | null;
 }
 
-const OPEN_STATES = new Set(['new', 'open', 'pending']);
-const DONE_STATES = new Set(['resolved', 'closed']);
+/* Live vocabulary plus the retired one — historical rows keep their stored
+   value, so `new`/`resolved`/`closed` must still be recognised here. */
+const OPEN_STATES = new Set(['open', 'pending', 'new']);
+const DONE_STATES = new Set(['solved', 'resolved', 'closed']);
 
 function median(nums: number[]): number | null {
   if (nums.length === 0) return null;
@@ -212,7 +217,8 @@ export function useTicketOps(days: number) {
           if (r.status === 'pending') pending += 1;
           if (!r.agentId) unassigned += 1;
         }
-        if (r.status === 'resolved') resolved += 1;
+        // `solved` is the live value; `resolved` its retired spelling.
+        if (r.status === 'solved' || r.status === 'resolved') resolved += 1;
         if (r.status === 'closed') closed += 1;
         if (r.overdue) overdue += 1;
         if (r.resolutionMinutes != null) resolutionMins.push(r.resolutionMinutes);
@@ -252,7 +258,7 @@ export function useTicketOps(days: number) {
         }))
         .sort((a, b) => b.overdue - a.overdue || b.open - a.open || b.total - a.total);
 
-      const order = ['new', 'open', 'pending', 'resolved', 'closed'];
+      const order = ['open', 'pending', 'solved', 'new', 'resolved', 'closed'];
       const prioOrder = ['urgent', 'high', 'medium', 'low'];
       const byStatus = Array.from(byStatusMap.entries())
         .map(([key, count]) => ({ key, count }))

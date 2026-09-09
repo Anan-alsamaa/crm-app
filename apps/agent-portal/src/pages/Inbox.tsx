@@ -46,6 +46,18 @@ const STATUS_TONE: Record<ConversationStatus, 'success' | 'primary'> = {
   solved: 'primary',
 };
 
+/**
+ * The three tiles pick ONE view, not a combination (owner, 2026-09-09).
+ *
+ * They read as a mutually exclusive set — three identical chips in a row — so
+ * lighting a second one looked like the first was stuck, and pressing UNREAD
+ * while OPEN was on could produce an empty list that read as broken. They sit
+ * on three different columns (`status`, `priority`, `unread`), so "one at a
+ * time" has to be spelled out: every tile resets the other two, then applies
+ * its own.
+ */
+const CLEAR_TILES = { status: 'all', priority: 'all', unread: false } as const;
+
 async function broadcast(conversationId: string): Promise<void> {
   const socket = await getSocket();
   socket.emit(SOCKET_EVENTS.conversationUpdated, { conversationId });
@@ -117,8 +129,10 @@ function InboxStat({
             })
           : active
             ? t('inbox.clearFilter', { defaultValue: 'Click again to clear this filter' })
-            : t('inbox.addFilter', {
-                defaultValue: 'Adds to the filters already applied',
+            : /* Not "adds to": the tiles replace each other now, and a tooltip
+                 promising otherwise is worse than none. */
+              t('inbox.replaceFilter', {
+                defaultValue: 'Shows only these',
               })
       }
     >
@@ -365,7 +379,11 @@ export function Inbox() {
                   tone="default"
                   active={filters.status === 'open'}
                   onClick={() =>
-                    setFilters((f) => ({ ...f, status: f.status === 'open' ? 'all' : 'open' }))
+                    setFilters((f) => ({
+                      ...f,
+                      ...CLEAR_TILES,
+                      status: f.status === 'open' ? 'all' : 'open',
+                    }))
                   }
                 />
                 <InboxStat
@@ -377,6 +395,7 @@ export function Inbox() {
                   onClick={() =>
                     setFilters((f) => ({
                       ...f,
+                      ...CLEAR_TILES,
                       priority: f.priority === 'urgent' ? 'all' : 'urgent',
                     }))
                   }
@@ -390,18 +409,17 @@ export function Inbox() {
                   value={unreadCount}
                   tone="primary"
                   active={filters.unread === true}
-                  onClick={() => setFilters((f) => ({ ...f, unread: !f.unread }))}
+                  onClick={() => setFilters((f) => ({ ...f, ...CLEAR_TILES, unread: !f.unread }))}
                 />
               </div>
             );
           })()}
 
-          {/* These three tiles are INDEPENDENT filters that combine — open AND
-              unread is a valid, useful selection. But three identical chips in
-              a row read as a mutually exclusive set, so lighting a second one
-              looks like the first is stuck. This line says what is actually
-              applied and gives one click to clear it, which is the affordance
-              that was missing. */}
+          {/* One tile at a time, so this line names a single view rather than a
+              combination. It stays because the CLEAR is the affordance that was
+              missing — pressing the lit tile again also works, but nothing said
+              so. The `+` join is kept for the moment a filter is set from
+              somewhere other than these tiles. */}
           {(filters.status === 'open' || filters.priority === 'urgent' || filters.unread) && (
             <div className="mt-2 flex items-center gap-2 px-4 text-2xs text-muted-foreground">
               <span>

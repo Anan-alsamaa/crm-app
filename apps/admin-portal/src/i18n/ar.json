@@ -464,6 +464,8 @@
     "allChains": "كل مديري السلاسل"
   },
   "complaintReport": {
+    "outsideWindow": "{{count}} تذكرة أخرى سُجّلت في هذه الفترة لكنها حدثت بين {{earliest}} و {{latest}}، لذا فهي مُدرجة تحت تلك التواريخ.",
+    "outsideWindowShow": "أظهرها",
     "allColumns": "جميع الأعمدة ظاهرة",
     "any": "الكل",
     "apply": "تطبيق",

@@ -195,7 +195,7 @@ export function useDashboardMetrics(days: number) {
           )
             slaOnTime += 1;
         }
-        if (tk.status === 'resolved' || tk.status === 'closed') {
+        if (tk.status === 'solved' || tk.status === 'resolved' || tk.status === 'closed') {
           resolvedOrClosed += 1;
           if (tk.assigned_agent)
             byAgent.set(tk.assigned_agent, (byAgent.get(tk.assigned_agent) ?? 0) + 1);

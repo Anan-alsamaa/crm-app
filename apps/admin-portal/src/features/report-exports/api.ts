@@ -274,6 +274,24 @@ export interface AgentReportData {
    * instead of rendering 24 columns of blanks and looking broken.
    */
   complaintFieldsAvailable: boolean;
+  /**
+   * Tickets LOGGED in this window whose complaint date falls outside it.
+   *
+   * The report is filtered by when a complaint HAPPENED, which is the right
+   * question for "complaints in August" — but it means somebody who logs a
+   * three-week-old complaint today does not find it in today's window, and
+   * reads that as the ticket having failed to save. Reported by operations as
+   * "a created ticket is not showing in the admin portal".
+   *
+   * Widening the filter is the wrong fix: on this data the whole imported
+   * history shares one creation stamp, so every window would return all 1,693
+   * rows and "August" would list January. Instead the report keeps its honest
+   * filter and SAYS what it is leaving out, with the range that would show it.
+   *
+   * Null when the count could not be taken — a failed extra query must never
+   * empty a report that already has its rows.
+   */
+  loggedOutsideWindow: { count: number; earliest: string; latest: string } | null;
   agents: AgentKpiRow[];
   conversations: ConversationStatusReport;
   /** Overall CSAT across all rated conversations in the window. */
@@ -907,10 +925,53 @@ async function loadAgentReport(
         total: conversations.length,
       };
 
+      /*
+       * What this window is LEAVING OUT — tickets logged in it, dated outside.
+       *
+       * Best-effort and last: the report is already complete without it, and a
+       * count that fails must not cost anyone their rows. Fields are kept to
+       * the two dates so this stays cheap next to the main read.
+       */
+      let loggedOutsideWindow: AgentReportData['loggedOutsideWindow'] = null;
+      try {
+        /* "Outside" needs both edges to mean anything. With no end date the
+           window runs to now, so only the earlier edge can exclude a ticket. */
+        const outsideEdges = until
+          ? [{ complaint_date: { _lt: since } }, { complaint_date: { _gt: until } }]
+          : [{ complaint_date: { _lt: since } }];
+        const outside = (await directus.request(
+          readItems('tickets', {
+            limit: -1,
+            fields: ['complaint_date'] as never,
+            filter: {
+              _and: [
+                inRange('date_created'),
+                { complaint_date: { _nnull: true } },
+                { _or: outsideEdges },
+              ],
+            } as never,
+          }),
+        )) as Array<{ complaint_date: string | null }>;
+        const dates = outside
+          .map((r) => String(r.complaint_date ?? ''))
+          .filter(Boolean)
+          .sort();
+        if (dates.length > 0) {
+          loggedOutsideWindow = {
+            count: dates.length,
+            earliest: dates[0]!.slice(0, 10),
+            latest: dates[dates.length - 1]!.slice(0, 10),
+          };
+        }
+      } catch {
+        // Left null: the report stands on its own rows.
+      }
+
       return {
         tickets: ticketRows,
         complaints: complaintRows,
         complaintFieldsAvailable,
+        loggedOutsideWindow,
         agents,
         conversations: conversationsReport,
         csatOverall: {

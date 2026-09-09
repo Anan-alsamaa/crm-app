@@ -237,7 +237,7 @@ export function useCreateTicket() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateTicketInput) =>
-      directus.request(createItem('tickets', { ...input, status: 'new' } as never)),
+      directus.request(createItem('tickets', { ...input, status: 'open' } as never)),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['tickets'] });
       // The conversation sidebar's linked-tickets list keys on
@@ -357,7 +357,7 @@ export function useCreateTicketFromConversation() {
       storeNotifyTypes,
     }: CreateTicketFromConversationInput) => {
       const created = (await directus.request(
-        createItem('tickets', { ...ticket, status: 'new' } as never),
+        createItem('tickets', { ...ticket, status: 'open' } as never),
       )) as { id: string };
       if (attachmentFileIds && attachmentFileIds.length > 0) {
         await Promise.allSettled(

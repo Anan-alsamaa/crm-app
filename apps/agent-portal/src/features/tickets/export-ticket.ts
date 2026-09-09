@@ -57,7 +57,9 @@ export function exportTicketWorkbook(
     brands: [],
     cities: [],
     agents: [],
-    statuses: ['new', 'open', 'pending', 'resolved', 'closed'],
+    // The three an agent can choose. Retired values still READ from stored
+    // rows, but nothing should offer them as a new choice in a sheet.
+    statuses: ['open', 'pending', 'solved'],
   });
   const headers = sheets[0]!.columns.map((c) => c.header);
   sheets[0]!.rows = [headers.map((h) => fill[h] ?? '')];

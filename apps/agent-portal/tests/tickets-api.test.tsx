@@ -85,7 +85,7 @@ describe('tickets api — mutation hooks', () => {
   it('useUpdateTicket patches a ticket and resolves', async () => {
     request.mockResolvedValueOnce({ id: 't1' });
     const { result } = renderHook(() => useUpdateTicket(), { wrapper: wrapper() });
-    await result.current.mutateAsync({ id: 't1', patch: { status: 'resolved' } });
+    await result.current.mutateAsync({ id: 't1', patch: { status: 'solved' } });
     expect(request).toHaveBeenCalledTimes(1);
   });
 });

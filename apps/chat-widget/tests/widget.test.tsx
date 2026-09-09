@@ -446,6 +446,36 @@ describe('Widget — empty state and offline fallback', () => {
     expect(headerStatus).toHaveClass('offline');
     expect(headerStatus).toHaveTextContent('Our agents are offline right now');
   });
+
+  /**
+   * THE BUG (owner, 2026-09-09): "I see a message on top which says our agents
+   * are offline right now / connecting..."
+   *
+   * `agentsOnline` started at 0, and 0 is also the honest answer "nobody is
+   * online" — so the widget asserted OFFLINE the instant it painted, seconds
+   * before the socket had said anything, then corrected itself to "we're
+   * available now" once `ready` landed. Measured on production: offline at
+   * t+0s, available at t+6s, with an agent signed in the whole time and the
+   * gateway reporting distinctOnline: 1.
+   *
+   * The customer's first impression of a working service was that nobody was
+   * there — and the offline contact block appeared under it, inviting them to
+   * phone instead of using the chat that was about to work.
+   */
+  it('says NOTHING about availability until the gateway has reported', () => {
+    const { container } = renderWidget({ autoOpen: true });
+    // Deliberately no driveReady(): this is the connecting window.
+    expect(container.querySelector('.yiji-header-status')).toBeNull();
+    // And it must not offer the offline fallback either.
+    expect(screen.queryByRole('region', { name: 'Our agents are offline right now' })).toBeNull();
+  });
+
+  it('shows the online status once the gateway reports an agent', () => {
+    const { container } = renderWidget({ autoOpen: true });
+    driveReady({ agentsOnline: 1 });
+    const headerStatus = container.querySelector('.yiji-header-status');
+    expect(headerStatus).not.toHaveClass('offline');
+  });
 });
 
 describe('Widget — CSAT on conversation close', () => {

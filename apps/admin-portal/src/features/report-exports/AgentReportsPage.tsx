@@ -180,6 +180,56 @@ function RangePreset({ range }: RangeProps): JSX.Element {
   );
 }
 
+/**
+ * "12 tickets were logged in this period but happened earlier."
+ *
+ * The report filters by when a complaint HAPPENED. That is the right question
+ * for "complaints in August", and the wrong one for the person who logged a
+ * three-week-old complaint this morning and cannot find it — which is how this
+ * reached us: "a created ticket is not showing in the admin portal". Nothing
+ * was lost; it was filed under the day it happened, with no hint on screen
+ * that the window had excluded anything.
+ *
+ * So the report keeps its filter and states what the filter costs, with the
+ * range that would show those rows one press away. Renders nothing when the
+ * window hides nothing, which is the normal case.
+ */
+function OutsideWindowNotice({
+  info,
+  onShow,
+}: {
+  info: { count: number; earliest: string; latest: string } | null;
+  onShow: (range: { from: string; to: string }) => void;
+}): JSX.Element | null {
+  const { t } = useTranslation();
+  if (!info || info.count < 1) return null;
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-secondary/60 px-3.5 py-2.5 text-xs ring-1 ring-inset ring-foreground/[0.06]">
+      <span className="text-muted-foreground">
+        {t('complaintReport.outsideWindow', {
+          count: info.count,
+          earliest: info.earliest,
+          latest: info.latest,
+          defaultValue:
+            '{{count}} more ticket(s) were logged in this period but happened between {{earliest}} and {{latest}}, so they are filed under those dates.',
+        })}
+      </span>
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        onClick={() =>
+          /* Widen to cover both: from the earliest complaint date, to today —
+             the smallest range that certainly contains every hidden row. */
+          onShow({ from: info.earliest, to: isoDay(new Date()) })
+        }
+      >
+        {t('complaintReport.outsideWindowShow', { defaultValue: 'Include them' })}
+      </Button>
+    </div>
+  );
+}
+
 const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructive'> = {
   low: 'muted',
   medium: 'neutral',
@@ -2739,12 +2789,33 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
               )}
               {which === 'complaints' &&
                 (data.complaintFieldsAvailable ? (
-                  <ComplaintsReport
-                    rows={data.complaints}
-                    tr={tr}
-                    days={days}
-                    range={{ from, to, setFrom, setTo, setRange, reset: resetRange }}
-                  />
+                  <>
+                    {/* Say what the window is leaving out.
+
+                        This report is filtered by when a complaint HAPPENED,
+                        which is the right question for "complaints in August".
+                        The cost is that a ticket logged today about a
+                        three-week-old complaint is not in today's window, and
+                        the person who just created it reads that as the ticket
+                        having failed to save — reported by operations as "a
+                        created ticket is not showing".
+
+                        Widening the filter would be the wrong fix: the imported
+                        history all shares one creation stamp, so every window
+                        would return everything and "August" would list January.
+                        So the filter stays honest and the absence stops being
+                        silent. */}
+                    <OutsideWindowNotice
+                      info={data.loggedOutsideWindow}
+                      onShow={(r) => setRange(r)}
+                    />
+                    <ComplaintsReport
+                      rows={data.complaints}
+                      tr={tr}
+                      days={days}
+                      range={{ from, to, setFrom, setTo, setRange, reset: resetRange }}
+                    />
+                  </>
                 ) : (
                   /* Better than 24 blank columns: this Directus simply has not
                      had the complaint schema applied yet, which is an operator

@@ -291,7 +291,20 @@ export function Widget({ config }: { config: WidgetConfig }) {
   const [csat, setCsat] = useState<{ score: number; comment: string; submitted: boolean } | null>(
     null,
   );
-  const [agentsOnline, setAgentsOnline] = useState<number>(0);
+  /**
+   * How many agents are online — or NULL while we do not yet know.
+   *
+   * This started at 0, and 0 is also the answer "nobody is online", so the
+   * widget asserted "our agents are offline" the instant it painted, several
+   * seconds before the socket had said anything. Reported by the owner: the
+   * header claimed offline while the panel still read "connecting…", and it
+   * then corrected itself to "we're available now" ~6s later. The customer's
+   * first impression of a working service was that nobody was there.
+   *
+   * Null keeps "unknown" distinct from "nobody", so the header can stay quiet
+   * until there is something true to say.
+   */
+  const [agentsOnline, setAgentsOnline] = useState<number | null>(null);
   // True once the "agents are offline" auto-reply has been shown for the current
   // offline period; reset when an agent comes online so it can show again later.
   const offlineNoticedRef = useRef(false);
@@ -790,9 +803,15 @@ export function Widget({ config }: { config: WidgetConfig }) {
               </div>
             </div>
             <div className="yiji-header-team">
-              <span className={`yiji-header-status${agentsOnline === 0 ? ' offline' : ''}`}>
-                {agentsOnline === 0 ? tr.offlineTitle : tr.online}
-              </span>
+              {/* Nothing at all until the gateway has told us. Saying either
+                  "available" or "unavailable" before the socket has reported is
+                  a guess, and the wrong guess turns a working service into one
+                  that looks abandoned. */}
+              {agentsOnline !== null && (
+                <span className={`yiji-header-status${agentsOnline === 0 ? ' offline' : ''}`}>
+                  {agentsOnline === 0 ? tr.offlineTitle : tr.online}
+                </span>
+              )}
             </div>
           </header>
 

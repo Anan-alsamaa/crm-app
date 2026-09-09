@@ -75,7 +75,7 @@ describe('useUpdateTicket — assignment notification', () => {
     request.mockResolvedValue({ id: 't1' });
     const { result } = renderHook(() => useUpdateTicket(), { wrapper: wrapper() });
     await result.current.mutateAsync({ id: 't1', patch: { assigned_agent: null } });
-    await result.current.mutateAsync({ id: 't1', patch: { status: 'resolved' } });
+    await result.current.mutateAsync({ id: 't1', patch: { status: 'solved' } });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(notifySpy).not.toHaveBeenCalled();
   });

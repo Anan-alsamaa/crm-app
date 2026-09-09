@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
@@ -78,6 +79,119 @@ export interface CouponRequestDialogProps {
    * means a failed coupon can never leave a half-created ticket behind.
    */
   onCollect?: (draft: CouponRequestDraft) => void;
+}
+
+/** How a list of item names/ids is stored in the single text column. */
+const ITEM_SEP = ', ';
+
+/**
+ * Pick the order lines a coupon compensates — one, several, or none.
+ *
+ * Operations asked for this (2026-09-09): one order can go wrong in more than
+ * one line, and a single-item picker forced the agent either to raise several
+ * coupons for one complaint or to knowingly under-compensate. Selecting several
+ * defaults the coupon to the SUM of what they cost.
+ *
+ * Names round-trip through one comma-joined string rather than a new column,
+ * because nothing downstream parses these: Yiji never receives them (the coupon
+ * attaches to the ORDER), and the approvals screen and the reports both render
+ * them as text. So multi-item works on the rows already written, with no
+ * migration.
+ */
+function ItemPicker({
+  items,
+  names,
+  onChange,
+  t,
+}: {
+  items: Array<{ name: string; price?: number | null; sku?: string | null }>;
+  names: string;
+  onChange: (names: string, skus: string, sum: number) => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}): JSX.Element {
+  // De-duplicated: an order with 2× the same line offers it once.
+  const unique = useMemo(
+    () => Array.from(new Map(items.map((it) => [it.name, it])).values()),
+    [items],
+  );
+  const selected = useMemo(
+    () =>
+      new Set(
+        names
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
+    [names],
+  );
+
+  const toggle = (name: string) => {
+    const next = new Set(selected);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    /* Emitted in the ORDER LINES' order, not click order, so two agents
+       picking the same items produce the same string — which is what makes
+       these values comparable in a report. */
+    const picked = unique.filter((it) => next.has(it.name));
+    onChange(
+      picked.map((it) => it.name).join(ITEM_SEP),
+      // Only real ids, so a line without one cannot shift the others out of
+      // step with their names.
+      picked
+        .map((it) => it.sku)
+        .filter(Boolean)
+        .join(ITEM_SEP),
+      picked.reduce(
+        (sum, it) => sum + (typeof it.price === 'number' && it.price > 0 ? it.price : 0),
+        0,
+      ),
+    );
+  };
+
+  const total = unique
+    .filter((it) => selected.has(it.name))
+    .reduce((s, it) => s + (typeof it.price === 'number' && it.price > 0 ? it.price : 0), 0);
+
+  return (
+    <div className="grid gap-1.5">
+      <div
+        role="group"
+        aria-label={t('coupons.itemField', { defaultValue: 'Items (optional)' })}
+        className="grid max-h-52 gap-0.5 overflow-y-auto rounded-xl bg-secondary/40 p-1.5 ring-1 ring-inset ring-foreground/[0.06]"
+      >
+        {unique.map((it) => (
+          <label
+            key={it.name}
+            className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-card"
+          >
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 accent-primary"
+              checked={selected.has(it.name)}
+              onChange={() => toggle(it.name)}
+            />
+            <span className="min-w-0 flex-1 truncate">{it.name}</span>
+            {typeof it.price === 'number' && it.price > 0 && (
+              <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
+                {it.price}
+              </span>
+            )}
+          </label>
+        ))}
+      </div>
+      {/* The arithmetic, shown. The agent is about to see this number land in
+          the value field, and seeing it add up is what makes that unsurprising. */}
+      {selected.size > 0 && (
+        <p className="text-2xs text-muted-foreground">
+          {t('coupons.itemsSelected', {
+            count: selected.size,
+            total,
+            defaultValue: '{{count}} selected · total {{total}}',
+          })}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export function CouponRequestDialog({
@@ -474,12 +588,16 @@ export function CouponRequestDialog({
           </FormField>
         </div>
         <FormField
-          label={t('coupons.itemField', { defaultValue: 'Item (optional)' })}
+          label={
+            orderItems && orderItems.length > 0
+              ? t('coupons.itemFieldMulti', { defaultValue: 'Items (optional)' })
+              : t('coupons.itemField', { defaultValue: 'Item (optional)' })
+          }
           hint={
             orderItems && orderItems.length > 0
-              ? t('coupons.itemHint', {
+              ? t('coupons.itemHintMulti', {
                   defaultValue:
-                    'The order item this compensates — e.g. the one that was missing or wrong.',
+                    'The order items this compensates — pick as many as went wrong; the value defaults to their total.',
                 })
               : t('coupons.itemHintManual', {
                   defaultValue:
@@ -488,42 +606,39 @@ export function CouponRequestDialog({
           }
         >
           {orderItems && orderItems.length > 0 ? (
-            // From the inbox the order is known, so the item is a CHOICE from
-            // its lines — a picked name always matches what was actually
-            // ordered.
-            <SelectMenu
-              fullWidth
-              value={draft.item_name ?? ''}
-              onChange={(v) => {
-                const picked = orderItems?.find((it) => it.name === v);
-                set('item_name', v || null);
-                // The id travels with the name. Cleared alongside it, so
-                // "not about one item" cannot leave a stale sku behind.
-                set('item_sku', (v && picked?.sku) || null);
-                // Compensating for one item means compensating what that item
-                // cost, so the amount follows the choice. It stays editable —
-                // this is the agent's starting point, not the answer, and a
-                // supervisor can still amend it on the way through.
-                const price = picked?.price;
-                if (v && typeof price === 'number' && price > 0) set('coupon_value', price);
+            /*
+             * MANY items, not one (operations, 2026-09-09). One order can go
+             * wrong in more than one line, and forcing the agent to pick a
+             * single item meant either raising several coupons or under-
+             * compensating on purpose.
+             *
+             * Checkboxes rather than a multi-select menu: the list is an
+             * order's lines, so it is short, and every option needs its price
+             * visible next to it — that price is what the total is built from,
+             * and a closed menu hides the arithmetic the agent is doing.
+             *
+             * Stored comma-joined in the same two columns. Nothing downstream
+             * parses them — Yiji never receives either (the coupon attaches to
+             * the ORDER), and the approvals screen and reports both treat them
+             * as display text — so a list needs no schema change and no
+             * migration of the rows already written.
+             */
+            <ItemPicker
+              items={orderItems}
+              names={draft.item_name ?? ''}
+              onChange={(names, skus, sum) => {
+                set('item_name', names || null);
+                // The ids travel with the names, in the same order. Cleared
+                // together, so an emptied selection cannot leave stale skus.
+                set('item_sku', skus || null);
+                /* Compensating for these items means compensating what they
+                   cost, so the amount follows the selection — now a SUM rather
+                   than one price. It stays editable: this is the agent's
+                   starting point, not the answer, and a supervisor can still
+                   amend it on the way through. */
+                if (sum > 0) set('coupon_value', sum);
               }}
-              options={[
-                {
-                  value: '',
-                  label: t('coupons.itemNone', { defaultValue: 'Not about one item' }),
-                },
-                // De-duplicated: an order with 2× the same line offers it once.
-                ...Array.from(new Map(orderItems.map((it) => [it.name, it])).values()).map(
-                  (it) => ({
-                    value: it.name,
-                    label:
-                      typeof it.price === 'number' && it.price > 0
-                        ? `${it.name} · ${it.price}`
-                        : it.name,
-                  }),
-                ),
-              ]}
-              aria-label={t('coupons.itemField', { defaultValue: 'Item (optional)' })}
+              t={t}
             />
           ) : (
             // A manually raised ticket has no order to choose from — the agent

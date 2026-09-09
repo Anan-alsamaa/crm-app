@@ -414,31 +414,36 @@ describe('opening it from the add-ticket page', () => {
 });
 
 /**
- * The Item field names the order line the coupon is about — the missing or
- * wrong one. Where the ticket came from decides how it is answered: from the
- * inbox the order is known, so the agent CHOOSES a real line; raised manually
+ * The Items field names the order lines the coupon is about — the missing or
+ * wrong ones. Where the ticket came from decides how it is answered: from the
+ * inbox the order is known, so the agent TICKS real lines; raised manually
  * there is no order to choose from, so they type what the customer said.
- * Optional either way — not every ticket is about one item.
+ * Optional either way — not every ticket is about a line.
+ *
+ * Several, not one (operations, 2026-09-09): an order can go wrong in more
+ * than one line, and a single pick forced the agent either to raise several
+ * coupons for one complaint or to under-compensate deliberately.
  */
-describe('the item a coupon compensates', () => {
-  it('offers the order lines to choose from when the ticket came from an order', async () => {
+describe('the items a coupon compensates', () => {
+  const box = (name: RegExp) => screen.getByRole('checkbox', { name });
+
+  it('offers the order lines to tick when the ticket came from an order', async () => {
     renderDialog({
       orderItems: [
         { name: 'Vegetable Pasta', price: 26 },
-        { name: 'Garlic Bread', price: 26 },
+        { name: 'Garlic Bread', price: 12 },
       ],
     });
-    await userEvent.click(screen.getByLabelText(/item \(optional\)/i));
-    expect(await screen.findByRole('button', { name: /Vegetable Pasta/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Garlic Bread/ })).toBeInTheDocument();
-    // Optional: an explicit way to say the coupon is not about one line.
-    expect(screen.getByRole('button', { name: /not about one item/i })).toBeInTheDocument();
+    expect(box(/Vegetable Pasta/)).toBeInTheDocument();
+    expect(box(/Garlic Bread/)).toBeInTheDocument();
+    // Nothing ticked is how "not about a line" is said now — there is no
+    // option to choose, because choosing nothing already means it.
+    expect(box(/Vegetable Pasta/)).not.toBeChecked();
   });
 
   it('fills the coupon with what the chosen item cost, still editable', async () => {
     renderDialog({ orderItems: [{ name: 'Vegetable Pasta', price: 26 }] });
-    await userEvent.click(screen.getByLabelText(/item \(optional\)/i));
-    await userEvent.click(await screen.findByRole('button', { name: /Vegetable Pasta/ }));
+    await userEvent.click(box(/Vegetable Pasta/));
 
     const amount = screen.getByLabelText(/coupon value/i) as HTMLInputElement;
     await waitFor(() => expect(amount.value).toBe('26'));
@@ -449,19 +454,45 @@ describe('the item a coupon compensates', () => {
     await waitFor(() => expect(amount.value).toBe('15'));
   });
 
-  it('records the item ID beside the name when the item was PICKED', async () => {
+  it('SUMS the prices when several lines went wrong', async () => {
+    // The whole point of the change: two items wrong is one coupon worth both.
+    renderDialog({
+      orderItems: [
+        { name: 'Vegetable Pasta', price: 26 },
+        { name: 'Garlic Bread', price: 12 },
+        { name: 'Cola', price: 5 },
+      ],
+    });
+    await userEvent.click(box(/Vegetable Pasta/));
+    await userEvent.click(box(/Garlic Bread/));
+
+    const amount = screen.getByLabelText(/coupon value/i) as HTMLInputElement;
+    await waitFor(() => expect(amount.value).toBe('38'));
+
+    // And un-ticking takes its price back out again.
+    await userEvent.click(box(/Garlic Bread/));
+    await waitFor(() => expect(amount.value).toBe('26'));
+  });
+
+  it('records every chosen id beside its name, in the order the lines came', async () => {
     /*
      * The name is the label; the id is the key. Grouping by name cannot answer
      * "which customers complained about the pasta" — this database already
      * holds `Vegetable Pasta.yy` in an `item_name`, one typo that is now
      * permanently its own distinct value.
+     *
+     * Ticking in a different order must not produce a different string, or two
+     * agents compensating the same two lines file two incomparable values.
      */
-    renderDialog({ orderItems: [{ name: 'Vegetable Pasta', price: 26, sku: '1047' }] });
-    await userEvent.click(screen.getByLabelText(/item \(optional\)/i));
-    await userEvent.click(await screen.findByRole('button', { name: /Vegetable Pasta/ }));
+    renderDialog({
+      orderItems: [
+        { name: 'Vegetable Pasta', price: 26, sku: '1047' },
+        { name: 'Garlic Bread', price: 12, sku: '1048' },
+      ],
+    });
+    await userEvent.click(box(/Garlic Bread/));
+    await userEvent.click(box(/Vegetable Pasta/));
 
-    // The dropdowns operations owns, plus a value — the same minimum the
-    // "sends the branch it resolved" test above establishes.
     await userEvent.click(screen.getByLabelText(/issuing side/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
     await userEvent.click(screen.getByLabelText(/delivery type/i));
@@ -473,33 +504,27 @@ describe('the item a coupon compensates', () => {
        earlier test in the same run may already have sent one — reading
        `calls[0]` then asserts against somebody else's payload. */
     const sent = mutateAsync.mock.calls.at(-1)?.[0] as Record<string, unknown>;
-    expect(sent.item_name).toBe('Vegetable Pasta');
-    expect(sent.item_sku).toBe('1047');
+    expect(sent.item_name).toBe('Vegetable Pasta, Garlic Bread');
+    expect(sent.item_sku).toBe('1047, 1048');
   });
 
-  it('clears the id when the agent says it is NOT about one item', async () => {
+  it('clears the ids when every line is un-ticked', async () => {
     // Otherwise a stale sku outlives the name it belonged to and files the
     // coupon under an item nobody chose.
     renderDialog({ orderItems: [{ name: 'Vegetable Pasta', price: 26, sku: '1047' }] });
-    const itemBox = screen.getByLabelText(/item \(optional\)/i);
-    await userEvent.click(itemBox);
-    await userEvent.click(await screen.findByRole('button', { name: /Vegetable Pasta/ }));
-    // Reopen and choose the explicit "no single item" option.
-    await userEvent.click(itemBox);
-    await userEvent.click(await screen.findByRole('button', { name: /not about one item/i }));
+    await userEvent.click(box(/Vegetable Pasta/));
+    await userEvent.click(box(/Vegetable Pasta/));
 
-    // The dropdowns operations owns, plus a value — the same minimum the
-    // "sends the branch it resolved" test above establishes.
     await userEvent.click(screen.getByLabelText(/issuing side/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
     await userEvent.click(screen.getByLabelText(/delivery type/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
+    const amount = screen.getByLabelText(/coupon value/i);
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '25');
     await userEvent.click(screen.getByRole('button', { name: /send for approval/i }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
-    /* The LAST call, not the first. The spy is shared across this file and an
-       earlier test in the same run may already have sent one — reading
-       `calls[0]` then asserts against somebody else's payload. */
     const sent = mutateAsync.mock.calls.at(-1)?.[0] as Record<string, unknown>;
     expect(sent.item_name).toBeNull();
     expect(sent.item_sku).toBeNull();
@@ -513,9 +538,7 @@ describe('the item a coupon compensates', () => {
         { name: 'Vegetable Pasta', price: 26 },
       ],
     });
-    await userEvent.click(screen.getByLabelText(/item \(optional\)/i));
-    await screen.findByRole('button', { name: /Vegetable Pasta/ });
-    expect(screen.getAllByRole('button', { name: /Vegetable Pasta/ })).toHaveLength(1);
+    expect(screen.getAllByRole('checkbox', { name: /Vegetable Pasta/ })).toHaveLength(1);
   });
 
   it('takes a typed item when the ticket was raised by hand', async () => {
@@ -537,24 +560,29 @@ describe('the item a coupon compensates', () => {
     await waitFor(() => expect(typed).toHaveValue('Chicken Shawarma'));
   });
 
-  it('sends the chosen line with the request', async () => {
+  it('sends the chosen lines with the request', async () => {
     const onCollect = vi.fn();
-    renderDialog({ orderItems: [{ name: 'Vegetable Pasta', price: 26 }], onCollect });
+    renderDialog({
+      orderItems: [
+        { name: 'Vegetable Pasta', price: 26 },
+        { name: 'Garlic Bread', price: 12 },
+      ],
+      onCollect,
+    });
     await userEvent.click(screen.getByLabelText(/issuing side/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
     await userEvent.click(screen.getByLabelText(/delivery type/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
-    await userEvent.click(screen.getByLabelText(/item \(optional\)/i));
-    await userEvent.click(await screen.findByRole('button', { name: /Vegetable Pasta/ }));
-
-    // A coupon needs an amount before it can be sent — see couponTermsProblems.
-    const amount = screen.getByLabelText(/coupon value/i);
-    await userEvent.clear(amount);
-    await userEvent.type(amount, '25');
+    await userEvent.click(box(/Vegetable Pasta/));
+    await userEvent.click(box(/Garlic Bread/));
 
     await userEvent.click(screen.getByRole('button', { name: /attach to this ticket/i }));
     await waitFor(() => expect(onCollect).toHaveBeenCalled());
-    expect(onCollect.mock.calls[0]![0]).toMatchObject({ item_name: 'Vegetable Pasta' });
+    // The value came from the two prices without anyone typing it.
+    expect(onCollect.mock.calls[0]![0]).toMatchObject({
+      item_name: 'Vegetable Pasta, Garlic Bread',
+      coupon_value: 38,
+    });
   });
 
   it('leaves the item null when the ticket is not about one', async () => {

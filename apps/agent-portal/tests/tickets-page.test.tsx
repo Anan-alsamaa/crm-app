@@ -317,7 +317,7 @@ describe('TicketsPage — marking a ticket solved', () => {
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     const patch = mutateAsync.mock.calls[0]![0].patch;
-    expect(patch.status).toBe('resolved');
+    expect(patch.status).toBe('solved');
     expect(patch.resolved_at).toEqual(expect.any(String));
   });
 

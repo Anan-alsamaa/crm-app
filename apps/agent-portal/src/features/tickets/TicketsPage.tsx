@@ -34,6 +34,7 @@ import {
   isCouponRequested,
   splitCouponForApproval,
   type Priority,
+  normaliseTicketStatus,
   type TicketStatus,
 } from '@yiji/shared-types';
 import {
@@ -95,33 +96,40 @@ const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 
 type TicketFilter = 'all' | TicketStatus | 'overdue';
 /*
- * The six statuses do not all deserve a tile.
+ * Three statuses now (owner, 2026-09-09), and they do not all deserve a tile.
  *
  * "All" is the cleared state, reached by pressing the active tile again rather
- * than by its own control, and "resolved" is the pile an agent has finished
- * with — both are reachable from the row of chips below without taking a third
- * of the strip. What is left is what somebody scans the queue FOR: work that
- * has arrived, work in hand, and work that is late.
+ * than by its own control, and "solved" is the pile an agent has finished with
+ * — both are reachable from the row of chips below without taking a third of
+ * the strip. What is left is what somebody scans the queue FOR: work in hand,
+ * work waiting on somebody else, and work that is late.
  */
-const STAT_FILTERS = ['new', 'open', 'overdue'] as const satisfies readonly TicketFilter[];
+const STAT_FILTERS = ['open', 'pending', 'overdue'] as const satisfies readonly TicketFilter[];
 
 /** The rest, as quiet text below the tiles, so nothing becomes unreachable. */
-const REST_FILTERS = ['all', 'pending', 'resolved'] as const satisfies readonly TicketFilter[];
+const REST_FILTERS = ['all', 'solved'] as const satisfies readonly TicketFilter[];
 
 /** Late is alarming, in-hand is not. `default` is the calm green dot. */
 const STAT_TONE: Record<(typeof STAT_FILTERS)[number], 'default' | 'primary' | 'destructive'> = {
-  new: 'primary',
   open: 'default',
+  pending: 'primary',
   overdue: 'destructive',
 };
 
-/** Ticket status -> dot colour. Same hue ladder as the detail's status pill. */
+/**
+ * Ticket status -> dot colour. Same hue ladder as the detail's status pill.
+ *
+ * The retired values keep their entries: rows are not rewritten, so a stored
+ * `closed` still has to render, and it renders as what it now means.
+ */
 const STATUS_DOT: Record<string, string> = {
-  new: 'bg-sky',
   open: 'bg-primary',
   pending: 'bg-warning',
+  solved: 'bg-success',
+  // Retired, still stored on historical rows.
+  new: 'bg-primary',
   resolved: 'bg-success',
-  closed: 'bg-muted-foreground/40',
+  closed: 'bg-success',
 };
 
 export function TicketsPage() {
@@ -921,14 +929,12 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
     return 'text-foreground';
   };
 
-  // Board pill hues: arrivals sky, live work jade, waiting warning-treated,
-  // finished success, closed neutral — one ladder shared with the list dots.
-  const statusTone: Record<TicketStatus, 'blue' | 'primary' | 'warning' | 'success' | 'neutral'> = {
-    new: 'blue',
+  // Board pill hues: live work jade, waiting warning-treated, finished success
+  // — one ladder shared with the list dots.
+  const statusTone: Record<TicketStatus, 'primary' | 'warning' | 'success'> = {
     open: 'primary',
     pending: 'warning',
-    resolved: 'success',
-    closed: 'neutral',
+    solved: 'success',
   };
 
   return (
@@ -1140,7 +1146,10 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 />
               </label>
             </div>
-            {tk.status !== 'resolved' && tk.status !== 'closed' ? (
+            {/* `normaliseTicketStatus`, not `!== 'solved'`: 1,671 historical rows
+                still store `closed` and would otherwise offer a Solve button on
+                a ticket that is already finished. */}
+            {normaliseTicketStatus(tk.status) !== 'solved' ? (
               <div className="mt-3 space-y-1.5 rounded-xl bg-secondary/40 p-3">
                 <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   {t('tickets.solve', { defaultValue: 'Resolution' })}
@@ -1157,7 +1166,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                     // floor, not a measurement: it says "no later than this",
                     // which beats a null that reads as "never".
                     patch({
-                      status: 'resolved',
+                      status: 'solved',
                       resolved_at: now,
                       ...(tk.first_responded_at ? {} : { first_responded_at: now }),
                     });

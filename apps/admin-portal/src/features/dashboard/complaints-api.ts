@@ -269,9 +269,12 @@ export interface ComplaintMetrics {
   rows: ComplaintRow[];
 }
 
+/* Both the live vocabulary (open/pending/solved) and the retired one, because
+   rows are NOT rewritten: 1,671 imported tickets still store `closed`. Dropping
+   the old values here would quietly stop counting them. */
 /** Statuses that mean "still being worked". */
-const OPEN_STATUSES = new Set(['new', 'open', 'pending']);
-const CLOSED_STATUSES = new Set(['resolved', 'closed']);
+const OPEN_STATUSES = new Set(['open', 'pending', 'new']);
+const CLOSED_STATUSES = new Set(['solved', 'resolved', 'closed']);
 
 interface TicketRecord {
   id: string;
