@@ -566,6 +566,7 @@ async function main(): Promise<void> {
        carries a phone-derived handle as before. */
     let yijiCustomerId: string | null = null;
     let displayName: string | null = null;
+    let email: string | null = null;
     if (asCode.success) {
       const link = await directus.resolveWalkInLink(asCode.data.code).catch(() => null);
       if (!link) {
@@ -587,6 +588,7 @@ async function main(): Promise<void> {
       vendorId = parsed.data.vendorId ?? DEFAULT_VENDOR_ID;
       yijiCustomerId = parsed.data.customerId ?? null;
       displayName = parsed.data.name ?? null;
+      email = parsed.data.email ?? null;
     }
 
     const vendor = await directus.resolveVendor(vendorId).catch(() => null);
@@ -617,6 +619,7 @@ async function main(): Promise<void> {
         customer_id: yijiCustomerId ?? phoneCustomerId(normalized),
         phone: normalized,
         ...(displayName ? { name: displayName } : {}),
+        ...(email ? { email } : {}),
         /* Only a session with no proven identity is a walk-in. One opened by
            the app carries the customer's own id, so it is not. */
         walk_in: !yijiCustomerId,

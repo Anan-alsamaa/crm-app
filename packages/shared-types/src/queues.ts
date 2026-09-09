@@ -143,30 +143,50 @@ export const DEFAULT_JOB_OPTIONS = {
  * worse than accepting a malformed one the gateway will simply fail to match.
  */
 export const WalkInSessionRequest = z.object({
+  /**
+   * THE ONLY MANDATORY FIELD. Everything else is optional.
+   *
+   * The phone is what identifies a customer here: contacts are matched by it,
+   * and it is the one thing both callers always have — the Yiji app knows it
+   * from the account, and somebody at a counter types it.
+   */
   phone: z
     .string()
     .trim()
     .min(7, 'phone is too short')
     .max(24, 'phone is too long')
     .regex(/^[+()\-\s\d]+$/, 'phone may only contain digits and + - ( ) spaces'),
-  /* Optional so a QR walk-in — which has no vendor to name — still works; the
-     gateway falls back to its DEFAULT_VENDOR_ID. */
-  vendorId: z.string().min(1).optional(),
   /**
-   * The customer's id IN YIJI, when the caller is the Yiji app.
+   * The customer's id IN YIJI. Optional, and it should not be.
    *
-   * Absent for a QR walk-in at a counter: nobody there knows it, and the
-   * gateway derives a phone handle instead. Present when the app opens the
-   * chat for a signed-in customer, and then it matters more than it looks —
-   * `external_customer_id` is what the coupon push sends to Yiji as `userId`,
-   * so a fabricated handle means a coupon that cannot be delivered.
+   * It becomes `external_customer_id`, which the coupon push sends to Yiji as
+   * `userId` — so without it a coupon cannot reach the right account, and the
+   * gateway falls back to a phone-derived `cust-05…` handle that Yiji cannot
+   * resolve. Every caller that HAS one must send it.
    *
-   * Never invented: a caller that does not know the real id must omit this
-   * rather than pass something phone-shaped.
+   * It stays optional for exactly one reason: a QR walk-in at a counter has no
+   * way to know it (Yiji's API is keyed by customer id and order id, with no
+   * lookup by phone), and refusing that customer a chat over an id nobody can
+   * supply would be worse than the degraded coupon path.
+   *
+   * Never invented. A caller that does not know it omits it rather than
+   * passing something phone-shaped, because a fabricated value in that column
+   * is indistinguishable from a real one downstream.
    */
   customerId: z.string().trim().min(1).max(64).optional(),
-  /** The customer's display name, when the app knows it. Cosmetic. */
+  /** The customer's display name, when the caller knows it. Cosmetic. */
   name: z.string().trim().min(1).max(120).optional(),
+  /** The customer's email, when the caller knows it. Stored on the contact. */
+  email: z.string().trim().email('email is not a valid address').max(254).optional(),
+  /**
+   * INTERNAL. Not part of the integration contract, and deliberately not asked
+   * of the Yiji app (owner, 2026-09-09): a vendor id is a CRM concept, and
+   * asking a third party for one only invites a wrong value.
+   *
+   * Present so our own callers — the QR page, admin tooling, tests — can name a
+   * vendor in a multi-tenant setup. Absent means DEFAULT_VENDOR_ID.
+   */
+  vendorId: z.string().min(1).optional(),
 });
 export type WalkInSessionRequest = z.infer<typeof WalkInSessionRequest>;
 

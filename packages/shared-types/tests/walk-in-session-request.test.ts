@@ -72,4 +72,37 @@ describe('WalkInSessionRequest', () => {
     expect(r.success).toBe(true);
     if (r.success) expect(r.data.vendorId).toBeUndefined();
   });
+
+  it('accepts email, which the app has and a counter does not', () => {
+    const r = WalkInSessionRequest.safeParse({
+      phone: '+966512345678',
+      customerId: '12345',
+      name: 'Fatima',
+      email: 'fatima@example.com',
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.email).toBe('fatima@example.com');
+  });
+
+  it('rejects an email that is not one, rather than storing it', () => {
+    // A malformed address on a contact is worse than none: it looks like a way
+    // to reach the customer and is not.
+    expect(
+      WalkInSessionRequest.safeParse({ phone: '0512345678', email: 'not-an-email' }).success,
+    ).toBe(false);
+  });
+
+  it('needs ONLY the phone — every other field may be omitted', () => {
+    /* The contract given to the Yiji app (owner, 2026-09-09): phone mandatory,
+       customerId/name/email optional-but-send-them, and vendorId not asked for
+       at all because it is a CRM concept. */
+    const r = WalkInSessionRequest.safeParse({ phone: '+966512345678' });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.customerId).toBeUndefined();
+      expect(r.data.name).toBeUndefined();
+      expect(r.data.email).toBeUndefined();
+      expect(r.data.vendorId).toBeUndefined();
+    }
+  });
 });
