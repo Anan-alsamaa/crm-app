@@ -204,6 +204,46 @@ jobs:
               --cache-control "no-cache"
           done
 
+      # THE CUSTOMER-FACING BUNDLE, which CI did not ship until 2026-09-09.
+      #
+      # The loop above covers the two staff portals; the widget had its own
+      # bucket that nothing in this workflow wrote to, so it shipped only when
+      # somebody remembered to run scripts/deploy-portals.sh by hand. A fix
+      # could pass every gate, merge, deploy green — and not reach a single
+      # customer. Found when a widget fix verified on localhost was still
+      # absent from staging after a successful deploy.
+      #
+      # Built by the same script a human would run, so the two cannot drift.
+      - name: Build the customer chat widget
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: ./scripts/build-widget.sh ${{ needs.plan.outputs.environment }}
+
+      - name: Upload the widget to S3
+        env:
+          ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+        run: |
+          # `crm-prod-widget` belongs to somebody else's account-wide name, so
+          # production carries the account id — see scripts/deploy-portals.sh.
+          if [ "$ENVIRONMENT" = prod ]; then
+            BUCKET="crm-prod-widget-408568863712"
+          else
+            BUCKET="crm-${ENVIRONMENT}-widget"
+          fi
+          SRC=apps/chat-widget/dist
+          test -f "$SRC/yiji-chat-widget.js" || { echo "::error::the widget bundle is missing"; exit 1; }
+          test -f "$SRC/index.html" && test -f "$SRC/walk-in.html" \
+            || { echo "::error::the widget pages are missing"; exit 1; }
+          # Hashed assets cached hard; the three STABLE names never cached, or a
+          # customer keeps yesterday's widget until they hard-refresh.
+          aws s3 sync "$SRC" "s3://${BUCKET}" \
+            --delete --cache-control "public,max-age=31536000,immutable" \
+            --exclude "index.html" --exclude "walk-in.html" --exclude "yiji-chat-widget.js"
+          for f in index.html walk-in.html yiji-chat-widget.js; do
+            aws s3 cp "$SRC/$f" "s3://${BUCKET}/$f" --cache-control "no-cache"
+          done
+          echo "::notice::widget uploaded to $BUCKET"
+
   # ── 5. Deploy the ECS services ────────────────────────────────────────────
   deploy:
     name: Deploy ${{ matrix.service }} to ${{ needs.plan.outputs.environment }}
