@@ -503,11 +503,22 @@ jobs:
           else
             NAMED="crm-api-staging.anan.sa"; FALLBACK="d2vi34f7wgjecb.cloudfront.net"
           fi
-          if host "$NAMED" >/dev/null 2>&1; then
+          # RESOLVING IS NOT THE SAME AS SERVING.
+          #
+          # This used to switch to the named host the moment DNS answered. The
+          # CNAMEs were published before the certificate existed, so the probe
+          # moved to a hostname CloudFront cannot serve: TLS fails, curl exits
+          # 60, and three deploys in a row mailed a failure for a rollout that
+          # had in fact succeeded — every service deployed, only the probe was
+          # wrong.
+          #
+          # So prove the domain actually answers over HTTPS before trusting it.
+          # One real request decides; anything short of a response falls back.
+          if curl -sf -o /dev/null --max-time 10 "https://${NAMED}/server/health"; then
             API="$NAMED"
           else
             API="$FALLBACK"
-            echo "::notice::$NAMED does not resolve yet — probing $FALLBACK"
+            echo "::notice::$NAMED is not serving yet (DNS or certificate) — probing $FALLBACK"
           fi
 
           fail=0
