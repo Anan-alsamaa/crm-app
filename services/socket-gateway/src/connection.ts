@@ -106,6 +106,8 @@ export interface ConnectionDeps {
     online(userId: string): Promise<void>;
     offline(userId: string): Promise<void>;
     touch(userId: string): Promise<void>;
+    /** Cross-instance count; optional so older callers/tests still satisfy this. */
+    onlineCount?(): Promise<number>;
   };
 }
 
@@ -182,8 +184,34 @@ export async function reclaimConversationsOf(
   return ids.length;
 }
 
-function broadcastAgentPresence(io: import('socket.io').Server): void {
-  io.emit(SOCKET_EVENTS.agentsPresence, { count: agentPresence.distinctOnline() });
+/**
+ * Tell every customer how many agents are available.
+ *
+ * COUNTS ACROSS INSTANCES, not just this one. `agentPresence` is per-process:
+ * with two gateway tasks and a single agent, every customer served by the OTHER
+ * task saw `0` and was shown "our agents are offline right now" plus the phone
+ * fallback — while that agent sat idle. Production runs one task today, so this
+ * is a bug that would appear the moment it is scaled, silently.
+ *
+ * The Redis set is the shared truth (`online` on connect, `offline` on
+ * disconnect and sign-out). Falls back to the local count when Redis is not
+ * configured, which is the single-instance dev setup where the two agree.
+ */
+function broadcastAgentPresence(io: import('socket.io').Server, deps?: ConnectionDeps): void {
+  const local = agentPresence.distinctOnline();
+  const store = deps?.presenceStore;
+  if (!store?.onlineCount) {
+    io.emit(SOCKET_EVENTS.agentsPresence, { count: local });
+    return;
+  }
+  void store
+    .onlineCount()
+    .then((shared) => {
+      // Never report FEWER than this instance can see: a Redis hiccup must not
+      // tell a customer nobody is there when somebody demonstrably is.
+      io.emit(SOCKET_EVENTS.agentsPresence, { count: Math.max(shared, local) });
+    })
+    .catch(() => io.emit(SOCKET_EVENTS.agentsPresence, { count: local }));
 }
 
 /** Diagnostic snapshot — wired to GET /debug/presence in index.ts. */
@@ -463,7 +491,7 @@ export function registerConnection(deps: ConnectionDeps): void {
       // agentPresence.add returns true only for a brand-new agent (not a
       // tab dup or a reconnect inside the grace window) — that's the only
       // case we need to broadcast for.
-      if (agentPresence.add(socket.id, data.agentId)) broadcastAgentPresence(io);
+      if (agentPresence.add(socket.id, data.agentId)) broadcastAgentPresence(io, deps);
       // Publish to the shared registry so the workers service can route to this
       // agent. Fire-and-forget: presence is a routing hint, and failing to
       // record it must never stop an agent connecting.
@@ -485,7 +513,7 @@ export function registerConnection(deps: ConnectionDeps): void {
         // never broadcast offline → no flicker.
         const leavingAgentId = data.agentId;
         agentPresence.remove(socket.id, false, () => {
-          broadcastAgentPresence(io);
+          broadcastAgentPresence(io, deps);
           if (leavingAgentId) {
             void deps.presenceStore?.offline(leavingAgentId).catch(() => undefined);
             /*
@@ -758,7 +786,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       io.sockets.sockets.get(sid)?.disconnect(true);
     }
     if (presenceWasDropped) {
-      broadcastAgentPresence(io);
+      broadcastAgentPresence(io, deps);
       /*
        * SCHEDULE THE RECLAIM HERE TOO — the disconnect path cannot.
        *
@@ -879,8 +907,21 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       io.to(rooms.conversation(convId)).emit(SOCKET_EVENTS.messageNew, payload);
       // Signal every agent inbox to refresh (covers conversations they haven't joined).
       io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId: convId });
-      // Carry the message text so keyword-based automation rules can match.
-      await producer.messageReceived(convId, content);
+      /*
+       * FIRE AND FORGET, like every other side effect here.
+       *
+       * This was awaited inside the handler's try, so a degraded Redis — the
+       * exact condition the client's retry strategy exists to survive — threw
+       * AFTER the message was persisted and already broadcast to the agent, and
+       * the catch below told the customer `persist_failed`. They then retry a
+       * message that did land, and the agent gets the same complaint twice.
+       *
+       * Automation matching is worth a log line, never worth telling somebody
+       * their message failed when it did not.
+       */
+      void producer
+        .messageReceived(convId, content)
+        .catch((err: unknown) => logger.warn({ err, convId }, 'automation enqueue failed'));
 
       // Auto-assignment: only a CUSTOMER message starts the ladder. An agent
       // typing is the opposite signal — the conversation is already being

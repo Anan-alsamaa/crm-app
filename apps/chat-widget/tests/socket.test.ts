@@ -407,3 +407,48 @@ describe('connect_error while already connected', () => {
     expect(cb.onStatus).not.toHaveBeenCalledWith('error');
   });
 });
+
+/**
+ * THE GATEWAY'S REFUSALS, WHICH NOBODY WAS LISTENING TO.
+ *
+ * The gateway emits twelve distinct `error` responses — rate_limited,
+ * bad_payload, attachment_rejected, conversation_unavailable, forbidden,
+ * persist_failed — each carrying a message written for a human. The widget
+ * registered no handler for any of them.
+ *
+ * So an INSTANT refusal was indistinguishable from a slow network: the bubble
+ * sat "sending" for the full 15-second timeout, then went red with no reason.
+ * Worst on `rate_limited`, where the customer's natural response — send it
+ * again — is the one thing guaranteed to fail again.
+ */
+describe('server refusals', () => {
+  it('forwards a refusal to the widget, with the reason', () => {
+    const cb = makeCallbacks();
+    (cb as Record<string, unknown>).onServerError = vi.fn();
+    connectWidget('u', 't', cb);
+    sock.fire('error', { code: 'rate_limited', message: 'too many messages, slow down' });
+    expect((cb as { onServerError: ReturnType<typeof vi.fn> }).onServerError).toHaveBeenCalledWith({
+      code: 'rate_limited',
+      message: 'too many messages, slow down',
+    });
+  });
+
+  it('survives a malformed error payload rather than throwing', () => {
+    // Never let a bad frame from the server take the whole widget down.
+    const cb = makeCallbacks();
+    (cb as Record<string, unknown>).onServerError = vi.fn();
+    connectWidget('u', 't', cb);
+    expect(() => sock.fire('error', undefined)).not.toThrow();
+    expect((cb as { onServerError: ReturnType<typeof vi.fn> }).onServerError).toHaveBeenCalledWith({
+      code: 'unknown',
+      message: '',
+    });
+  });
+
+  it('does not throw when no handler is supplied', () => {
+    const cb = makeCallbacks();
+    delete (cb as Record<string, unknown>).onServerError;
+    connectWidget('u', 't', cb);
+    expect(() => sock.fire('error', { code: 'forbidden' })).not.toThrow();
+  });
+});

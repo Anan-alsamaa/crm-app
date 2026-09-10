@@ -49,6 +49,12 @@ export interface SocketCallbacks {
   onStatus: (status: 'connecting' | 'connected' | 'reconnecting' | 'error') => void;
   /** The customer's most recent Yiji order id, when there is one. */
   onLatestOrder?: (orderId: string) => void;
+  /**
+   * The gateway refused something — a rate limit, a bad attachment, a
+   * conversation that is no longer available. Carries the server's own wording
+   * so the customer is told what happened instead of waiting out a timeout.
+   */
+  onServerError?: (e: { code: string; message: string }) => void;
   /** Live agent-presence updates from the gateway. */
   onAgentsPresence?: (count: number) => void;
   /** Fires when the agent marks the conversation closed/resolved. Triggers CSAT. */
@@ -176,6 +182,22 @@ export function connectWidget(
   // `ready` (the upstream call is slow) and may never arrive at all.
   socket.on('customer:latest-order', (info: { orderId?: string }) => {
     if (info?.orderId) cb.onLatestOrder?.(info.orderId);
+  });
+  /*
+   * THE GATEWAY'S REFUSALS, WHICH NOBODY WAS LISTENING TO.
+   *
+   * It emits twelve distinct `error` responses — rate_limited, bad_payload,
+   * attachment_rejected, conversation_unavailable, forbidden, persist_failed —
+   * each with a message written for a human. The widget registered no handler
+   * for any of them, so an INSTANT refusal was indistinguishable from a slow
+   * network: the bubble sat "sending" for the full 15-second timeout and then
+   * went red with no reason given.
+   *
+   * The worst of those is `rate_limited`, where the customer's natural response
+   * — send it again — is the one thing guaranteed to fail again.
+   */
+  socket.on('error', (e: { code?: string; message?: string }) => {
+    cb.onServerError?.({ code: e?.code ?? 'unknown', message: e?.message ?? '' });
   });
   socket.on('message:new', (msg: WidgetMessage) => cb.onMessage(msg));
   socket.on(

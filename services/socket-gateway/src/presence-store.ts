@@ -33,6 +33,16 @@ export interface PresenceStore {
   idleFirst(): Promise<string[]>;
   /** Mark activity, pushing the agent to the BACK of the idle queue. */
   touch(userId: string): Promise<void>;
+  /**
+   * How many agents hold a session RIGHT NOW, across every gateway instance.
+   *
+   * Deliberately does NOT sweep by activity. The score is last-activity,
+   * refreshed only when an agent sends a message, so sweeping here would count
+   * an agent who is signed in and reading — but has not typed for 90 seconds —
+   * as offline, and tell every customer "our agents are offline right now".
+   * Membership is the question; recency is a different one.
+   */
+  onlineCount(): Promise<number>;
 }
 
 export function createPresenceStore(redis: Redis | Cluster): PresenceStore {
@@ -56,6 +66,9 @@ export function createPresenceStore(redis: Redis | Cluster): PresenceStore {
       // signed out must not resurrect them.
       const score = await redis.zscore(KEY, userId);
       if (score !== null) await redis.zadd(KEY, now(), userId);
+    },
+    async onlineCount() {
+      return redis.zcard(KEY);
     },
     async idleFirst() {
       await sweep();

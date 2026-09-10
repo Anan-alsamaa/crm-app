@@ -452,6 +452,32 @@ export function Widget({ config }: { config: WidgetConfig }) {
       {
         onStatus: setStatus,
         onLatestOrder: setLatestOrderId,
+        /*
+         * A refusal from the gateway, surfaced NOW rather than as a 15-second
+         * timeout with no reason. Marks whatever is still in flight as failed
+         * (so Retry/Delete appear) and states the cause in the thread.
+         */
+        onServerError: ({ code, message }) => {
+          setMessages((prev) =>
+            prev.map((m) => (m.status === 'sending' ? { ...m, status: 'failed' as const } : m)),
+          );
+          for (const t of sendTimers.current.values()) clearTimeout(t);
+          sendTimers.current.clear();
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: clientId(),
+              conversationId: convoRef.current ?? '',
+              senderType: 'system',
+              // The gateway writes these for a human ("too many messages, slow
+              // down"); fall back to our own wording if it ever sends none.
+              content: message?.trim() ? message : tr.sendFailed,
+              attachments: [],
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          if (code === 'rate_limited') setUploading(false);
+        },
         onReady: ({
           conversationId,
           branding: b,
@@ -728,6 +754,19 @@ export function Widget({ config }: { config: WidgetConfig }) {
 
   const send = () => {
     const content = draft.trim();
+    /*
+     * NEVER SEND A PLACEHOLDER ID.
+     *
+     * A chip carries a temporary local id until the gateway answers with the
+     * real one. Pressing Enter during a slow upload sent that placeholder, the
+     * gateway could not resolve it, and the WHOLE message was refused — text
+     * and photo both vanished, and the chip had already been cleared. A 9 MB
+     * photo leaves a 20-second window for that.
+     *
+     * Holding the send until every upload has landed is the honest behaviour:
+     * the customer meant to send the picture, not the sentence alone.
+     */
+    if (pending.some((p) => p.uploading)) return;
     const attachmentIds = pending.map((p) => p.id);
     // NOT gated on convoRef: the conversation is created BY the first message,
     // so on a fresh session there is no id yet and requiring one here would

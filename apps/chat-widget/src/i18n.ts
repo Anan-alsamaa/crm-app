@@ -43,6 +43,7 @@ export interface WidgetStrings {
   /** Auto-reply appended once when the customer messages while agents are offline. */
   offlineAutoReply: string;
   /** Delivery state of a message the customer sent (revealed on hold). */
+  sendFailed: string;
   msgSending: string;
   msgSent: string;
   msgFailed: string;
@@ -100,6 +101,7 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     offlineAutoReply:
       "Thanks for your message — our team is offline right now. We've received it and will reply as soon as we're back online.",
     msgSending: 'Sending…',
+    sendFailed: "That didn't send. Please try again.",
     msgSent: 'Sent',
     msgFailed: 'Not sent',
     msgRetry: 'Try again',
@@ -142,6 +144,7 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     offlineAutoReply:
       'شكرًا لرسالتك — فريقنا غير متصل حاليًا. لقد استلمنا رسالتك وسنردّ عليك فور عودتنا.',
     msgSending: 'جارٍ الإرسال…',
+    sendFailed: 'لم يتم الإرسال. حاول مرة أخرى.',
     msgSent: 'تم الإرسال',
     msgFailed: 'لم يتم الإرسال',
     msgRetry: 'إعادة المحاولة',
