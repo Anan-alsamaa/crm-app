@@ -537,6 +537,21 @@ export const roles: RoleSpec[] = [
       { collection: 'reports', action: 'update' },
       ...readOnly('sla_policies'),
       ...readOnly('directus_users'),
+      /*
+       * ROUTING READS THE ROLE, NOT JUST THE USER.
+       *
+       * `agentsByLoad` filters the roster by `role.name` so that a chat is
+       * never offered to a service account or an Administrator. Reading a
+       * user's role traverses into `directus_roles`, and without permission
+       * there Directus refuses the WHOLE query — FORBIDDEN, not an empty list.
+       *
+       * That broke every routing job on both staging and production: each one
+       * threw before choosing anybody and retried five times, so auto-assignment
+       * never assigned a single conversation. Found by an end-to-end probe on
+       * staging (2026-09-10); the worker log said only "job failed", because the
+       * SDK's rejection is not an Error and its message was being dropped.
+       */
+      ...readOnly('directus_roles'),
       ...readOnly('contacts'),
       // CSV import (imports processor) creates new contacts after dedup.
       { collection: 'contacts', action: 'create' },

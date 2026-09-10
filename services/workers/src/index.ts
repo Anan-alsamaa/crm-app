@@ -233,7 +233,23 @@ async function main(): Promise<void> {
     w.on('completed', () => jobsProcessed.inc({ queue: w.name }));
     w.on('failed', (job, err) => {
       jobsFailed.inc({ queue: w.name });
-      logger.error({ queue: w.name, jobId: job?.id, err: err.message }, 'job failed');
+      /*
+       * `err.message` ALONE LOSES THE FAILURE.
+       *
+       * A Directus SDK rejection is not an Error — it is `{ errors: [...] }` —
+       * so `.message` is undefined and pino drops the key entirely. The log
+       * then says only "job failed", which is what a real staging failure
+       * looked like while it was being diagnosed: five identical lines, no
+       * cause, nothing to act on.
+       */
+      const detail =
+        err?.message ||
+        (err as unknown as { errors?: Array<{ message?: string }> })?.errors?.[0]?.message ||
+        (typeof err === 'object' ? JSON.stringify(err).slice(0, 400) : String(err));
+      logger.error(
+        { queue: w.name, jobId: job?.id, err: detail, stack: err?.stack?.slice(0, 600) },
+        'job failed',
+      );
     });
   }
   logger.info(`workers started for queues: ${Object.values(QUEUES).join(', ')}`);
