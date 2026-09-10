@@ -52,6 +52,24 @@ export interface WidgetConfig {
   };
 }
 
+/**
+ * The WhatsApp link, with the customer's order already typed for them.
+ *
+ * When every agent is offline the customer is handed a WhatsApp number, and the
+ * first thing WeCare asks for is the order. `wa.me` supports `?text=`, so the
+ * message arrives pre-written and the customer only presses send — one tap
+ * instead of hunting for an order id they may not have to hand.
+ *
+ * No order id (no Yiji account, no orders, or the lookup did not answer in
+ * time) means a plain link, exactly as before. An empty `?text=` would be worse
+ * than none: it opens the composer with a blank draft and no clue what to say.
+ */
+export function whatsappHref(number: string, orderId: string | null): string {
+  const base = `https://wa.me/${waNumber(number)}`;
+  if (!orderId) return base;
+  return `${base}?text=${encodeURIComponent(`orderId: ${orderId}`)}`;
+}
+
 const DEFAULT_FALLBACK = {
   phone: '920012111',
   whatsapp: '0565266122',
@@ -282,6 +300,12 @@ export function Widget({ config }: { config: WidgetConfig }) {
   // rather than flashing the wrong name.
   const [vendorName, setVendorName] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  /**
+   * The customer's most recent Yiji order id, prefilled into the WhatsApp
+   * fallback. Null until the gateway sends it, and for a customer with no Yiji
+   * id or no orders it never arrives — the link then carries no order line.
+   */
+  const [latestOrderId, setLatestOrderId] = useState<string | null>(null);
   // The customer's own identity from the gateway `ready` event: a returning
   // customer (isNew === false) with a name on file gets greeted by name.
   const [customer, setCustomer] = useState<{ name: string | null; isNew: boolean }>({
@@ -394,6 +418,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
       config.token,
       {
         onStatus: setStatus,
+        onLatestOrder: setLatestOrderId,
         onReady: ({
           conversationId,
           branding: b,
@@ -1055,7 +1080,10 @@ export function Widget({ config }: { config: WidgetConfig }) {
                       </span>
                     </a>
                     <a
-                      href={`https://wa.me/${waNumber(config.fallback?.whatsapp ?? DEFAULT_FALLBACK.whatsapp)}`}
+                      href={whatsappHref(
+                        config.fallback?.whatsapp ?? DEFAULT_FALLBACK.whatsapp,
+                        latestOrderId,
+                      )}
                       className="yiji-offline-link yiji-offline-link-wa"
                       target="_blank"
                       rel="noopener noreferrer"

@@ -360,3 +360,34 @@ describe('a personal link starts the chat without the form', () => {
     expect(form().hasAttribute('hidden')).toBe(false);
   });
 });
+
+/**
+ * The WhatsApp fallback, with the order already written.
+ *
+ * When every agent is offline the customer is handed a WhatsApp number, and the
+ * first thing WeCare asks is "which order?". Prefilling it means one tap to
+ * send instead of hunting for an id the customer may not have to hand.
+ */
+describe('whatsappHref', () => {
+  it('prefills the most recent order id', async () => {
+    const { whatsappHref } = await import('../src/Widget.js');
+    const href = whatsappHref('0565266122', '91716');
+    expect(href).toContain('https://wa.me/966565266122');
+    // Encoded, because a raw space would break the query string.
+    expect(href).toContain('?text=orderId%3A%2091716');
+    expect(decodeURIComponent(href.split('?text=')[1]!)).toBe('orderId: 91716');
+  });
+
+  it('falls back to a PLAIN link when there is no order', async () => {
+    // No Yiji account, no orders, or the lookup did not answer in time. An
+    // empty ?text= would be worse than none — a blank draft and no clue what
+    // to write.
+    const { whatsappHref } = await import('../src/Widget.js');
+    expect(whatsappHref('0565266122', null)).toBe('https://wa.me/966565266122');
+  });
+
+  it('still converts the number to wa.me form', async () => {
+    const { whatsappHref } = await import('../src/Widget.js');
+    expect(whatsappHref('0565266122', '1')).toMatch(/^https:\/\/wa\.me\/966565266122\?/);
+  });
+});

@@ -11,6 +11,8 @@ import { connectWidget } from '../src/socket.js';
 type Handler = (...args: unknown[]) => void;
 
 interface FakeSocket {
+  /** Mirrors socket.io's own flag: is a transport actually carrying traffic? */
+  connected: boolean;
   handlers: Map<string, Handler>;
   ioHandlers: Map<string, Handler>;
   on: ReturnType<typeof vi.fn>;
@@ -27,6 +29,7 @@ function makeSocket(): FakeSocket {
   const handlers = new Map<string, Handler>();
   const ioHandlers = new Map<string, Handler>();
   const sock: FakeSocket = {
+    connected: false,
     handlers,
     ioHandlers,
     on: vi.fn((event: string, fn: Handler) => {
@@ -351,5 +354,56 @@ describe('connectWidget — incoming event dispatch', () => {
     expect(() =>
       sock.fire('conversation:closed', { conversationId: 'c', status: 'closed' }),
     ).not.toThrow();
+  });
+});
+
+/**
+ * A FAILED TRANSPORT IS NOT A FAILED SESSION.
+ *
+ * REPORTED FROM PRODUCTION: a customer opened the chat while agents were
+ * offline, sent a message, and then an agent came online — but the widget went
+ * on showing offline/reconnecting and would not let them send.
+ *
+ * The cause was here. The widget asks for `['polling', 'websocket']`, and the
+ * WebSocket upgrade fails over CloudFront (HTTP/2 has no Upgrade header, so it
+ * 400s). That fires `connect_error` on a socket that is ALREADY CONNECTED and
+ * happily carrying traffic over polling. Reporting 'error' for it froze the
+ * whole panel: the banner claimed we could not connect, the composer locked,
+ * and the offline block pinned itself open — so the `agents:presence` pulse
+ * announcing the agent arrived and changed nothing anyone could see.
+ */
+describe('connect_error while already connected', () => {
+  it('IGNORES a transport failure on a live socket', () => {
+    const cb = makeCallbacks();
+    connectWidget('u', 't', cb);
+    sock.connected = true;
+    sock.fire('connect');
+    cb.onStatus.mockClear();
+
+    // The CloudFront WebSocket upgrade failing behind a working polling socket.
+    sock.fire('connect_error', new Error('websocket error'));
+
+    expect(cb.onStatus).not.toHaveBeenCalledWith('error');
+  });
+
+  it('still reports a REAL refusal, where nothing is connected', () => {
+    const cb = makeCallbacks();
+    connectWidget('u', 't', cb);
+    sock.connected = false;
+    sock.fire('connect_error', new Error('token invalid: jwt malformed'));
+    expect(cb.onStatus).toHaveBeenCalledWith('error');
+  });
+
+  it('lets presence through after a transport wobble', () => {
+    // The end-to-end shape of the report: agent comes online AFTER the failed
+    // upgrade, and the widget must hear it.
+    const cb = makeCallbacks();
+    connectWidget('u', 't', cb);
+    sock.connected = true;
+    sock.fire('connect');
+    sock.fire('connect_error', new Error('websocket error'));
+    sock.fire('agents:presence', { count: 2 });
+    expect(cb.onAgentsPresence).toHaveBeenCalledWith(2);
+    expect(cb.onStatus).not.toHaveBeenCalledWith('error');
   });
 });

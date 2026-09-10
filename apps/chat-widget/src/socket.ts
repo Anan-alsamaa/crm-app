@@ -38,6 +38,8 @@ export interface SocketCallbacks {
   onHistory?: (messages: WidgetMessage[]) => void;
   onTyping: (isTyping: boolean) => void;
   onStatus: (status: 'connecting' | 'connected' | 'reconnecting' | 'error') => void;
+  /** The customer's most recent Yiji order id, when there is one. */
+  onLatestOrder?: (orderId: string) => void;
   /** Live agent-presence updates from the gateway. */
   onAgentsPresence?: (count: number) => void;
   /** Fires when the agent marks the conversation closed/resolved. Triggers CSAT. */
@@ -115,6 +117,26 @@ export function connectWidget(
   socket.on('connect', () => cb.onStatus('connected'));
   socket.io.on('reconnect_attempt', () => cb.onStatus('reconnecting'));
   socket.on('connect_error', (err: Error) => {
+    /*
+     * ONLY an error if we are not actually connected.
+     *
+     * `connect_error` fires for a failed TRANSPORT attempt, not only for a
+     * failed session. The widget asks for `['polling', 'websocket']`, and the
+     * WebSocket upgrade FAILS over CloudFront — it serves HTTP/2, which has no
+     * Upgrade header, so the attempt 400s. That is harmless: polling is already
+     * connected and carrying traffic.
+     *
+     * Setting 'error' unconditionally made that harmless failure permanent. The
+     * banner said "cannot connect" over a live socket, `canSend` went false so
+     * the composer locked, and the offline block pinned itself open through
+     * `status === 'error'` — so an agent coming online changed nothing on
+     * screen even though the `agents:presence` pulse was arriving. Reported
+     * from production: "the agent is online but it still shows offline".
+     *
+     * `socket.connected` distinguishes the two: a genuine refusal (bad token,
+     * gateway down) leaves it false and still reports the error.
+     */
+    if (socket.connected) return;
     cb.onStatus('error');
     // The customer token is minted once by the host page and can't be refreshed
     // in-place (the widget has no signing secret). When it expires mid-session
@@ -141,6 +163,11 @@ export function connectWidget(
   socket.on('conversation:ready', (info: { conversationId: string }) =>
     cb.onConversationReady?.(info),
   );
+  // The customer's most recent order, for the WhatsApp prefill. Arrives after
+  // `ready` (the upstream call is slow) and may never arrive at all.
+  socket.on('customer:latest-order', (info: { orderId?: string }) => {
+    if (info?.orderId) cb.onLatestOrder?.(info.orderId);
+  });
   socket.on('message:new', (msg: WidgetMessage) => cb.onMessage(msg));
   socket.on(
     'messages:history',

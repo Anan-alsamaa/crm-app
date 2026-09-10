@@ -1018,6 +1018,39 @@ export interface YijiUserProfile {
 export type YijiUserReader = (userId: string) => Promise<YijiUserProfile | null>;
 
 /**
+ * The id of a customer's most recent order, or null when they have none.
+ *
+ * For the WhatsApp fallback: when every agent is offline the widget offers a
+ * WhatsApp link, and prefilling it with the order the customer is most likely
+ * calling about saves them typing it — and saves the WeCare agent asking.
+ *
+ * Deliberately returns ONE id rather than the order list. `GetOrderByUser`
+ * answers with every order the customer has ever placed — 2.1 MB and 792 orders
+ * for a real customer measured on production — and the widget needs a single
+ * string. Narrowing here keeps that payload out of the gateway's hot path and
+ * out of the socket handshake.
+ */
+export type YijiLatestOrderReader = (externalCustomerId: string) => Promise<string | null>;
+
+export function createYijiLatestOrderReader(env: YijiClientEnv = {}): YijiLatestOrderReader | null {
+  if (!env.apiUrl?.trim()) return null;
+  const client = new HttpYijiClient({
+    baseUrl: env.apiUrl,
+    token: env.token,
+    adminUrl: env.adminApiUrl,
+    adminEmail: env.adminEmail,
+    adminPassword: env.adminPassword,
+  });
+  return async (externalCustomerId) => {
+    // limit 1 AFTER the newest-first sort — `getOrders` sorts by `placedAt`
+    // before slicing, so this is genuinely the most recent, not the first row
+    // the API happened to return (it does not answer in date order).
+    const [latest] = await client.getOrders('', externalCustomerId, { limit: 1 });
+    return latest?.orderId ?? null;
+  };
+}
+
+/**
  * Build a user reader, or null when no service credential is configured.
  *
  * WHY THIS EXISTS. The Yiji app opens the chat with its OWN session token —

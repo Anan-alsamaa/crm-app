@@ -32,6 +32,7 @@ import {
   WalkInLinkRequest,
   WalkInSessionRequest,
   createYijiUserReader,
+  createYijiLatestOrderReader,
 } from '@yiji/shared-types';
 import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
@@ -239,6 +240,16 @@ async function main(): Promise<void> {
        token issued by the Yiji app resolves to a real customer instead of
        being refused. */
     yijiUsers: createYijiUserReader({
+      apiUrl: config.YIJI_API_URL,
+      adminApiUrl: config.YIJI_ADMIN_API_URL,
+      adminEmail: config.YIJI_ADMIN_EMAIL,
+      adminPassword: config.YIJI_ADMIN_PASSWORD,
+    }),
+    /* The customer's most recent order id, prefilled into the WhatsApp
+       fallback so an offline handover starts with the order already named.
+       Null without YIJI_API_URL, in which case the link simply carries no
+       order line. */
+    yijiLatestOrder: createYijiLatestOrderReader({
       apiUrl: config.YIJI_API_URL,
       adminApiUrl: config.YIJI_ADMIN_API_URL,
       adminEmail: config.YIJI_ADMIN_EMAIL,

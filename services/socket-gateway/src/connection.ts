@@ -11,6 +11,7 @@ import {
   CsatSubmit,
   type MessageNew,
   type YijiUserReader,
+  type YijiLatestOrderReader,
   normalizePhone,
 } from '@yiji/shared-types';
 import type { GatewayDirectus } from './directus.js';
@@ -89,6 +90,13 @@ export interface ConnectionDeps {
    * foreign token is simply refused as before.
    */
   yijiUsers?: YijiUserReader | null;
+  /**
+   * The customer's most recent Yiji order id, for the WhatsApp fallback.
+   *
+   * Null when YIJI_API_URL is unset, in which case the prefilled message simply
+   * carries no order line — the link still works.
+   */
+  yijiLatestOrder?: YijiLatestOrderReader | null;
   /**
    * Cross-instance presence, used by auto-assignment. Optional: without Redis
    * there is no shared presence and no routing, and the gateway still works as a
@@ -563,6 +571,32 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
     contact: { name: data.contactName ?? null, phone: data.contactPhone ?? null },
     isNew: data.contactIsNew ?? true,
   });
+
+  /*
+   * The customer's most recent order id, for the WhatsApp fallback.
+   *
+   * SENT AFTER `ready`, DELIBERATELY. Yiji answers `GetOrderByUser` with every
+   * order the customer has ever placed — 2.1 MB and 792 rows for a real
+   * customer measured on production — and awaiting that before `ready` would
+   * put a slow third-party call in front of the handshake. That is exactly how
+   * this widget came to sit on "Connecting…" before; the chat must open first
+   * and the prefill catch up.
+   *
+   * Best-effort in every direction: no Yiji id, no reader, an error or no
+   * orders all end the same way — the WhatsApp link simply carries no order
+   * line, which is what it does today.
+   */
+  const externalId = data.contactExternalId;
+  if (externalId && deps.yijiLatestOrder) {
+    void (async () => {
+      try {
+        const orderId = await deps.yijiLatestOrder!(externalId);
+        if (orderId) socket.emit(SOCKET_EVENTS.customerLatestOrder, { orderId });
+      } catch (err) {
+        logger.warn({ err, externalId }, 'latest order lookup failed');
+      }
+    })();
+  }
   // Seed the existing thread so a returning customer (or a reconnect) sees their
   // history instead of a blank panel. Best-effort: a failure just means no seed.
   // CUSTOMER-side view is capped to the last 7 days by request: a months-long

@@ -148,6 +148,15 @@ export const SOCKET_EVENTS = {
   /** Server → client. Agent-presence pulse broadcast to every vendor room
    * so customer widgets can render an "agents offline" fallback. */
   agentsPresence: 'agents:presence',
+  /**
+   * Server → one customer socket. The id of that customer's most recent Yiji
+   * order, used to prefill the WhatsApp fallback so an offline handover starts
+   * with the order already named.
+   *
+   * Sent after `ready` rather than inside it: the upstream call is large and
+   * slow, and must never sit in front of the handshake.
+   */
+  customerLatestOrder: 'customer:latest-order',
   notificationPushed: 'notification:pushed',
   error: 'error',
 } as const;
