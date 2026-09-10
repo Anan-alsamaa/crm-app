@@ -760,6 +760,23 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     if (presenceWasDropped) {
       broadcastAgentPresence(io);
       /*
+       * SCHEDULE THE RECLAIM HERE TOO — the disconnect path cannot.
+       *
+       * This handler removes the presence itself (`immediate = true`) and then
+       * closes the sockets. By the time the transport `disconnect` fires,
+       * `agentPresence.remove` finds no mapping for that socket and returns
+       * false WITHOUT running its callback — which is where the reclaim is
+       * scheduled. So an agent who signed out properly, the exact case the
+       * owner asked about, was the one case that never handed its chats on.
+       *
+       * Proven by an end-to-end probe on staging: the logout was logged, no
+       * reclaim was scheduled, and the conversation was still owned by the
+       * signed-out agent 105 seconds later.
+       */
+      void reclaimConversationsOf(userId, deps).catch((err: unknown) =>
+        logger.warn({ err, agentId: userId }, 'reclaim scheduling failed after logout'),
+      );
+      /*
        * A SIGN-OUT MUST LEAVE THE SHARED REGISTRY TOO.
        *
        * This path only ever cleared the in-process tracker, so an agent who
