@@ -95,6 +95,12 @@ const schema = z
      * The customer saw none of that: the widget showed a generic failure, or
      * nothing at all. Widening this is what makes "attach a photo" work on the
      * devices customers actually hold.
+     *
+     * THE DEFAULT IS WHAT SHIPS. Setting this in `deploy/aws/ecs/*.json` would
+     * NOT reach a running service: the deploy workflow copies the LIVE task
+     * revision and changes only the image, deliberately, so a stale placeholder
+     * cannot be reintroduced. A value that must take effect in production
+     * belongs here, not in that file.
      */
     ATTACHMENT_ALLOWED_MIME: z
       .string()
