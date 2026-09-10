@@ -151,3 +151,37 @@ describe('socket-gateway config prod guards', () => {
     );
   });
 });
+
+/**
+ * The attachment limits a customer actually meets.
+ *
+ * REPORTED FROM PRODUCTION (2026-09-10): "unable to send attachment — on
+ * selecting a file it's not getting attached." Two causes lived here.
+ */
+describe('attachment policy', () => {
+  const saved = { ...process.env };
+  beforeEach(() => Object.assign(process.env, REQUIRED));
+  afterEach(() => {
+    process.env = { ...saved };
+  });
+
+  it('accepts what a PHONE camera produces, not just desktop formats', () => {
+    const allowed = loadConfig().ATTACHMENT_ALLOWED_MIME.split(',');
+    // iOS writes HEIC — this was rejected 100% of the time, so "attach a photo"
+    // could never work from an iPhone.
+    expect(allowed).toContain('image/heic');
+    expect(allowed).toContain('image/heif');
+    // Some Android camera intents report this non-standard type.
+    expect(allowed).toContain('image/jpg');
+    // The originals still work.
+    expect(allowed).toContain('image/jpeg');
+    expect(allowed).toContain('application/pdf');
+  });
+
+  it('keeps a 10MB attachment budget', () => {
+    // The socket's own frame limit is derived from this in index.ts; if this
+    // shrinks silently, uploads start being dropped at the engine level with no
+    // error, which is exactly the failure that was reported.
+    expect(loadConfig().ATTACHMENT_MAX_BYTES).toBe(10 * 1024 * 1024);
+  });
+});

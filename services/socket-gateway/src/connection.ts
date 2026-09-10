@@ -723,6 +723,9 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   // One token bucket per socket — throttles inbound write events (message:send,
   // note:add) to a burst + sustained rate.
   const writeBucket = createTokenBucket(rateLimit.capacity, rateLimit.refillPerSec);
+  // Attachments get their own, smaller-but-independent budget — see the note in
+  // the `attachment:upload` handler.
+  const uploadBucket = createTokenBucket(10, 1);
 
   // Explicit logout signal from an agent. We mirror the disconnect cleanup
   // up-front so the host-page "agents online" pill flips immediately —
@@ -938,7 +941,21 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   //   ack res: { ok:true, id, type, filesize } | { ok:false, error }
   socket.on('attachment:upload', async (raw: unknown, ack?: (res: unknown) => void) => {
     const respond = typeof ack === 'function' ? ack : () => undefined;
-    if (!writeBucket.tryRemove()) return respond({ ok: false, error: 'rate_limited' });
+    /*
+     * ITS OWN BUDGET, NOT THE MESSAGE BUDGET.
+     *
+     * Uploads used to draw on the same token bucket as `message:send`, so a
+     * customer who had been typing could pick a photo and have it refused with
+     * a bare `rate_limited` — which the widget rendered as a generic failure,
+     * or as nothing at all. Attaching three photos at once could exhaust it by
+     * itself.
+     *
+     * Still limited, because an unbounded upload path is a denial-of-service
+     * vector: just limited on its own terms, and generously enough that picking
+     * a handful of files never trips it.
+     */
+    if (!uploadBucket.tryRemove())
+      return respond({ ok: false, error: 'too many uploads, wait a moment' });
     const data = raw as { filename?: unknown; mimetype?: unknown; content?: unknown };
     const filename = sanitizeFilename(data?.filename);
     const mimetype = typeof data?.mimetype === 'string' ? data.mimetype.toLowerCase() : '';

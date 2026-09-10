@@ -333,7 +333,14 @@ export function Widget({ config }: { config: WidgetConfig }) {
   // offline period; reset when an agent comes online so it can show again later.
   const offlineNoticedRef = useRef(false);
   const [pending, setPending] = useState<
-    Array<{ id: string; name: string; type: string; preview?: string }>
+    Array<{
+      id: string;
+      name: string;
+      type: string;
+      preview?: string;
+      /** Still in flight — the chip is on screen before the gateway answers. */
+      uploading?: boolean;
+    }>
   >([]);
   const [uploading, setUploading] = useState(false);
   // Open image preview (same-page lightbox), and per-id <img> decode failures so
@@ -635,51 +642,91 @@ export function Widget({ config }: { config: WidgetConfig }) {
     new Promise((resolve, reject) => {
       const socket = socketRef.current;
       if (!socket) return reject(new Error('not_connected'));
-      void file.arrayBuffer().then((content) => {
-        socket
-          .timeout(20_000)
-          .emit(
-            'attachment:upload',
-            { filename: file.name, mimetype: file.type, content },
-            (err: Error | null, res?: { ok?: boolean; id?: string; error?: string }) => {
-              if (err) return reject(new Error('timeout'));
-              if (res?.ok && res.id) resolve(res.id);
-              else reject(new Error(res?.error ?? 'upload_failed'));
-            },
-          );
-      });
+      file
+        .arrayBuffer()
+        .then((content) => {
+          socket
+            .timeout(20_000)
+            .emit(
+              'attachment:upload',
+              { filename: file.name, mimetype: file.type, content },
+              (err: Error | null, res?: { ok?: boolean; id?: string; error?: string }) => {
+                if (err) return reject(new Error('timeout'));
+                if (res?.ok && res.id) resolve(res.id);
+                else reject(new Error(res?.error ?? 'upload_failed'));
+              },
+            );
+        })
+        /* `arrayBuffer()` CAN REJECT, and used to reject into nothing.
+           iOS Safari fails here when a photo is still syncing from iCloud, and
+           the unhandled rejection left the promise pending for ever: the spinner
+           never stopped and the attach button stayed disabled for the rest of
+           the session. */
+        .catch(() => reject(new Error('unreadable')));
     });
 
   const onPickFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploading(true);
-    try {
-      for (const file of Array.from(files)) {
+    /*
+     * ONE FILE AT A TIME, AND ONE FAILURE STAYS ONE FAILURE.
+     *
+     * This used to be a `for...of` inside a single try: the first rejection
+     * skipped every remaining file, so picking three photos and having the
+     * first one refused silently dropped the other two as well.
+     *
+     * It also showed the chip only AFTER the upload resolved, which is what
+     * made a failed attachment look like nothing had happened at all — the
+     * customer tapped, chose a photo, and the composer stayed empty for the
+     * full 20-second timeout.
+     */
+    const failures: string[] = [];
+    for (const file of Array.from(files)) {
+      // Local object URL → instant image thumbnail in the composer and in the
+      // sent bubble, with no need to refetch a private file the customer
+      // can't access anyway.
+      const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
+      // A placeholder id so the chip can appear NOW and be reconciled (or
+      // removed) once the gateway answers.
+      const tempId = clientId();
+      setPending((prev) => [
+        ...prev,
+        { id: tempId, name: file.name, type: file.type, preview, uploading: true },
+      ]);
+      try {
         const id = await uploadOne(file);
-        // Local object URL → instant image thumbnail in the composer and in the
-        // sent bubble, with no need to refetch a private file the customer
-        // can't access anyway.
-        const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
         attachMetaRef.current[id] = { name: file.name, type: file.type, preview };
-        setPending((prev) => [...prev, { id, name: file.name, type: file.type, preview }]);
+        setPending((prev) =>
+          prev.map((p) =>
+            p.id === tempId ? { id, name: file.name, type: file.type, preview } : p,
+          ),
+        );
+      } catch (err) {
+        // Drop this file's chip; keep every other file's.
+        setPending((prev) => prev.filter((p) => p.id !== tempId));
+        if (preview) URL.revokeObjectURL(preview);
+        failures.push(
+          `${file.name}${err instanceof Error && err.message ? ` (${err.message})` : ''}`,
+        );
       }
-    } catch {
-      // Surface inline by appending a system note; keeps the widget dependency-free.
+    }
+    if (failures.length > 0) {
+      // Name the files and say WHY. "Could not upload the file" left the
+      // customer with no idea whether to retry, shrink it, or pick another.
       setMessages((prev) => [
         ...prev,
         {
           id: clientId(),
           conversationId: convoRef.current ?? '',
           senderType: 'system',
-          content: tr.attachFailed,
+          content: `${tr.attachFailed} ${failures.join(', ')}`,
           attachments: [],
           createdAt: new Date().toISOString(),
         },
       ]);
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
     }
+    setUploading(false);
+    if (fileRef.current) fileRef.current.value = '';
   };
   const removePending = (id: string) =>
     setPending((prev) => {
@@ -1105,7 +1152,9 @@ export function Widget({ config }: { config: WidgetConfig }) {
                 <div className="yiji-pending">
                   {pending.map((p) => (
                     <span
-                      className={`yiji-chip${p.preview ? ' yiji-chip-img' : ''}`}
+                      className={`yiji-chip${p.preview ? ' yiji-chip-img' : ''}${
+                        p.uploading ? ' yiji-chip-uploading' : ''
+                      }`}
                       key={p.id}
                       title={p.name}
                     >
@@ -1117,13 +1166,15 @@ export function Widget({ config }: { config: WidgetConfig }) {
                           <span className="yiji-chip-name">{p.name}</span>
                         </>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => removePending(p.id)}
-                        aria-label={tr.removeAttachment}
-                      >
-                        ×
-                      </button>
+                      {!p.uploading && (
+                        <button
+                          type="button"
+                          onClick={() => removePending(p.id)}
+                          aria-label={tr.removeAttachment}
+                        >
+                          ×
+                        </button>
+                      )}
                     </span>
                   ))}
                 </div>

@@ -130,6 +130,22 @@ async function main(): Promise<void> {
   const io = new SocketServer(httpServer, {
     cors: { origin: widgetCorsOrigin },
     transports: config.SOCKET_TRANSPORTS,
+    /*
+     * THE ATTACHMENT LIMIT WE ADVERTISE MUST BE THE ONE THE SOCKET ALLOWS.
+     *
+     * Socket.IO defaults `maxHttpBufferSize` to 1 MB, while
+     * ATTACHMENT_MAX_BYTES is 10 MB. Anything between the two was killed at the
+     * ENGINE level: the connection is torn down before the handler runs, so no
+     * ack is ever sent, no validation error is produced, and the widget waits
+     * out its 20-second timeout and shows nothing. Essentially every phone
+     * photo lands in that gap — which is what "the file just doesn't attach"
+     * turned out to be.
+     *
+     * Headroom on top of the file itself: the frame carries the filename and
+     * mimetype too, and over the polling transport the payload is base64, which
+     * inflates it by about a third.
+     */
+    maxHttpBufferSize: Math.ceil(config.ATTACHMENT_MAX_BYTES * 1.4) + 65536,
   });
 
   // Say the operational requirement OUT LOUD at boot. Missing stickiness cannot

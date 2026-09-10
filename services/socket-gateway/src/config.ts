@@ -83,9 +83,24 @@ const schema = z
     WEBHOOK_TOLERANCE_SEC: numericEnv(300),
     // Attachment validation: max size + allowed MIME types (comma-separated).
     ATTACHMENT_MAX_BYTES: numericEnv(10 * 1024 * 1024),
+    /*
+     * WHAT A PHONE ACTUALLY PRODUCES, not what a desktop does.
+     *
+     * The old list was png/jpeg/gif/webp/pdf/text — which rejects an iPhone
+     * photo every single time, because the iOS camera writes HEIC. Android
+     * camera intents sometimes report `image/jpg` (not a real MIME type, but
+     * what they send), and some pickers report an EMPTY type when the OS cannot
+     * infer one; both were refused with "type not allowed".
+     *
+     * The customer saw none of that: the widget showed a generic failure, or
+     * nothing at all. Widening this is what makes "attach a photo" work on the
+     * devices customers actually hold.
+     */
     ATTACHMENT_ALLOWED_MIME: z
       .string()
-      .default('image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain'),
+      .default(
+        'image/png,image/jpeg,image/jpg,image/gif,image/webp,image/heic,image/heif,application/pdf,text/plain',
+      ),
     // Per-socket message rate limit (token bucket): burst capacity + sustained
     // refill per second. Applies to message:send and note:add.
     MSG_RATE_CAPACITY: numericEnv(20),

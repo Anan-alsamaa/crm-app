@@ -75,6 +75,10 @@
           "value": "10485760"
         },
         {
+          "name": "ATTACHMENT_ALLOWED_MIME",
+          "value": "image/png,image/jpeg,image/jpg,image/gif,image/webp,image/heic,image/heif,application/pdf,text/plain"
+        },
+        {
           "name": "MSG_RATE_CAPACITY",
           "value": "20"
         },

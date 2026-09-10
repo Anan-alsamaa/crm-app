@@ -1171,3 +1171,30 @@
     animation: none;
   }
 }
+
+/* A chip that is still uploading: visibly provisional, and not yet removable.
+   Before this the chip appeared only AFTER the upload succeeded, so a slow or
+   failing upload looked exactly like nothing having happened. */
+.yiji-chip-uploading {
+  opacity: 0.6;
+}
+.yiji-chip-uploading::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  margin-inline-start: 6px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: yiji-chip-spin 0.7s linear infinite;
+}
+@keyframes yiji-chip-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .yiji-chip-uploading::after {
+    animation: none;
+  }
+}
