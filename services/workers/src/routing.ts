@@ -107,15 +107,25 @@ export interface RoutingDeps {
  * Is this agent present right now?
  *
  * The reclaim timer runs 90 s after a socket dropped, and in that time the
- * agent may have reconnected — a reload, a network change, a lift. Asking
- * again at run time is what makes the delay a grace period rather than a
- * countdown to losing your conversation.
+ * agent may have signed back in. Asking again at run time is what makes the
+ * delay a grace period rather than a countdown to losing your conversation.
  *
- * Reads the same sorted set the gateway writes, sweeping expired entries first
- * exactly as `nextAgent` does, so "online" means the same thing in both.
+ * DELIBERATELY DOES NOT SWEEP THE TTL, and that is the whole point of this
+ * function existing separately from the membership test inside `nextAgent`.
+ *
+ * The set's score is the agent's last ACTIVITY, refreshed only when they send
+ * a message — so the TTL sweep that `nextAgent` performs evicts an agent who
+ * is signed in and reading but has not typed for 90 seconds. Sweeping here
+ * would therefore take a live conversation away from an agent sitting at their
+ * desk, which is exactly the behaviour the owner ruled out (2026-09-10): a
+ * chat moves only if the agent LOGGED OUT and did not come back, never because
+ * they were quiet.
+ *
+ * Membership alone answers that. `online()` adds on connect and `offline()`
+ * removes on disconnect and on sign-out, so presence in the set means "holds a
+ * session", independent of how long ago they last typed.
  */
-async function isOnline(redis: Redis | Cluster, agentId: string): Promise<boolean> {
-  await redis.zremrangebyscore(PRESENCE_KEY, '-inf', Date.now() - PRESENCE_TTL_MS);
+async function isSignedIn(redis: Redis | Cluster, agentId: string): Promise<boolean> {
   return (await redis.zscore(PRESENCE_KEY, agentId)) !== null;
 }
 
@@ -197,8 +207,11 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
     }
     /* THEY CAME BACK. The whole point of the delay: a reload or a network
        change must not cost an agent their conversation. */
-    if (await isOnline(redis, previous)) {
-      log('routing: previous owner is back, keeping the chat', { id: convo.id, agent: previous });
+    if (await isSignedIn(redis, previous)) {
+      log('routing: previous owner is signed back in, keeping the chat', {
+        id: convo.id,
+        agent: previous,
+      });
       return;
     }
     // Never hand it back to the agent who just vanished.

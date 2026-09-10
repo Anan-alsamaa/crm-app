@@ -754,7 +754,23 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       if (agentPresence.remove(sid, true, () => undefined)) presenceWasDropped = true;
       io.sockets.sockets.get(sid)?.disconnect(true);
     }
-    if (presenceWasDropped) broadcastAgentPresence(io);
+    if (presenceWasDropped) {
+      broadcastAgentPresence(io);
+      /*
+       * A SIGN-OUT MUST LEAVE THE SHARED REGISTRY TOO.
+       *
+       * This path only ever cleared the in-process tracker, so an agent who
+       * clicked "sign out" stayed in Redis until the TTL swept them — up to 90
+       * seconds during which routing could still hand them a new chat, and
+       * during which a reclaim would conclude they were still signed in and
+       * leave their conversations with them.
+       *
+       * The transport close that follows `disconnect(true)` also schedules the
+       * reclaim for their open chats; doing it here as well would be redundant,
+       * so this only corrects the registry.
+       */
+      void deps.presenceStore?.offline(userId).catch(() => undefined);
+    }
   });
 
   socket.on(SOCKET_EVENTS.messageSend, async (raw: unknown) => {

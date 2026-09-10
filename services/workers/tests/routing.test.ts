@@ -352,12 +352,42 @@ describe('reclaim: the assigned agent went offline', () => {
     expect(t.assign).toHaveBeenCalledWith('c1', 'other');
   });
 
-  it('KEEPS the chat when the agent came back inside the window', async () => {
-    // The whole reason for the delay. A reload must not cost an agent the
-    // conversation they are in the middle of.
+  it('KEEPS the chat when the agent signed back in inside the window', async () => {
+    // The whole reason for the delay. Logging back in must not cost an agent
+    // the conversation they are in the middle of.
     const t = deps({ convo: owned, online: ['gone', 'other'], roster: ['other'] });
     await handleRouting(job(), t.d);
     expect(t.assign).not.toHaveBeenCalled();
+  });
+
+  it('KEEPS the chat for an agent who is signed in but has not TYPED', async () => {
+    /*
+     * THE OWNER'S RULE (2026-09-10): a chat moves only if the agent logged out
+     * and did not come back within 90 s — never because they went quiet.
+     *
+     * The presence score is last-activity, refreshed only on sending a message,
+     * so an agent reading rather than typing falls past the TTL. Sweeping it
+     * here (as the assignment path does) would take a live conversation off
+     * somebody sitting at their desk. Membership, not recency, decides.
+     */
+    const t = deps({ convo: owned, online: ['gone'], roster: ['other'] });
+    // A stale score: signed in, silent far longer than the TTL.
+    (t.d.redis as unknown as { zscore: ReturnType<typeof vi.fn> }).zscore = vi
+      .fn()
+      .mockResolvedValue('1');
+    await handleRouting(job(), t.d);
+    expect(t.assign).not.toHaveBeenCalled();
+  });
+
+  it('does NOT sweep the presence set when checking the previous owner', async () => {
+    // The sweep is what conflates "quiet" with "gone". Asserting its absence
+    // pins the distinction, because reintroducing it would still pass every
+    // other test here.
+    const t = deps({ convo: owned, online: ['gone'], roster: ['other'] });
+    const redis = t.d.redis as unknown as { zremrangebyscore: ReturnType<typeof vi.fn> };
+    redis.zremrangebyscore = vi.fn().mockResolvedValue(0);
+    await handleRouting(job(), t.d);
+    expect(redis.zremrangebyscore).not.toHaveBeenCalled();
   });
 
   it('stands down when a HUMAN already moved it', async () => {
