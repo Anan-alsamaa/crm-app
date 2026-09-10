@@ -152,6 +152,36 @@ function removePresence(vendorId: string, id: string): string[] {
  */
 const agentPresence = createAgentPresence();
 
+/**
+ * Hand on the conversations of an agent who has gone offline.
+ *
+ * Schedules one `reclaim` per open conversation they own. Nothing is decided
+ * here: the job re-reads ownership and presence when it runs, so an agent who
+ * reconnects inside the window keeps everything. This function only says "look
+ * at these again in 90 seconds".
+ *
+ * Best-effort by design. A failure to schedule must never break a disconnect —
+ * the socket is already gone, and throwing here would only lose the log line.
+ */
+export async function reclaimConversationsOf(
+  agentId: string,
+  deps: Pick<ConnectionDeps, 'directus' | 'producer' | 'logger'>,
+): Promise<number> {
+  const ids = await deps.directus.listAgentOwnedOpenConversationIds(agentId);
+  if (ids.length === 0) return 0;
+  for (const conversationId of ids) {
+    await deps.producer.enqueueRouting({
+      conversationId,
+      stage: 'reclaim',
+      previousAgentId: agentId,
+      attemptedAgentIds: [],
+      outboundCountAtSchedule: 0,
+    });
+  }
+  deps.logger.info({ agentId, count: ids.length }, 'scheduled reclaim for an offline agent');
+  return ids.length;
+}
+
 function broadcastAgentPresence(io: import('socket.io').Server): void {
   io.emit(SOCKET_EVENTS.agentsPresence, { count: agentPresence.distinctOnline() });
 }
@@ -458,6 +488,23 @@ export function registerConnection(deps: ConnectionDeps): void {
           broadcastAgentPresence(io);
           if (leavingAgentId) {
             void deps.presenceStore?.offline(leavingAgentId).catch(() => undefined);
+            /*
+             * THEIR LIVE CHATS MUST NOT LEAVE WITH THEM.
+             *
+             * Until this existed, a conversation stayed pinned to an agent
+             * whose connection had gone, for ever: the routing ladder stands
+             * down the moment it sees an owner, so even the customer's next
+             * message did not rescue it. The chat simply went quiet until a
+             * human noticed.
+             *
+             * One `reclaim` job per owned open conversation, delayed by
+             * ROUTING_RECLAIM_WAIT_MS. The delay is the point — the job
+             * re-checks at run time whether they came back, so a reload or a
+             * network change costs nobody their conversation.
+             */
+            void reclaimConversationsOf(leavingAgentId, deps).catch((err: unknown) =>
+              logger.warn({ err, agentId: leavingAgentId }, 'reclaim scheduling failed'),
+            );
           }
         });
       }

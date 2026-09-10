@@ -15,6 +15,13 @@ function fakeRedis(onlineIdleFirst: string[]) {
   return {
     zremrangebyscore: vi.fn().mockResolvedValue(0),
     zrange: vi.fn().mockResolvedValue(onlineIdleFirst),
+    // Membership, for the reclaim stage's "did they come back?" check. A score
+    // exists exactly for the agents in the online set.
+    zscore: vi
+      .fn()
+      .mockImplementation(async (_k: string, id: string) =>
+        onlineIdleFirst.includes(id) ? '1' : null,
+      ),
   } as never;
 }
 
@@ -304,5 +311,115 @@ describe('auto-assignment ladder', () => {
         expect.objectContaining({ agentId: 'a2', outcome: 'missed' }),
       );
     });
+  });
+});
+
+/**
+ * RECLAIM — the owner's connection dropped mid-conversation.
+ *
+ * REPORTED BY THE OWNER (2026-09-10): an agent goes offline partway through a
+ * live chat and the conversation stays pinned to them. Nothing rescued it — the
+ * ladder stands down the instant it sees an owner, so even the customer's next
+ * message left the chat with a ghost until a human noticed.
+ *
+ * The delay before this runs is a GRACE PERIOD, not a countdown: everything is
+ * re-checked here, because in 90 seconds the agent may have reloaded, crossed a
+ * network boundary, or been handed the chat by someone else.
+ */
+describe('reclaim: the assigned agent went offline', () => {
+  const job = (over: Partial<RoutingJob> = {}): RoutingJob => ({
+    conversationId: 'c1',
+    stage: 'reclaim',
+    previousAgentId: 'gone',
+    attemptedAgentIds: [],
+    outboundCountAtSchedule: 0,
+    ...over,
+  });
+  const owned = { id: 'c1', assigned_agent: 'gone', assigned_team: null, status: 'open' };
+
+  it('moves the chat to the idlest ONLINE agent', async () => {
+    // The same rule that assigns a new chat: online first, idlest of those.
+    const t = deps({ convo: owned, online: ['idlest', 'busier'], roster: ['busier', 'idlest'] });
+    await handleRouting(job(), t.d);
+    expect(t.assign).toHaveBeenCalledWith('c1', 'idlest');
+  });
+
+  it('NEVER hands it back to the agent who vanished', async () => {
+    // Even if they somehow top the roster, they are the one person who cannot
+    // take it — they are the reason it is moving.
+    const t = deps({ convo: owned, online: ['other'], roster: ['gone', 'other'] });
+    await handleRouting(job(), t.d);
+    expect(t.assign).toHaveBeenCalledWith('c1', 'other');
+  });
+
+  it('KEEPS the chat when the agent came back inside the window', async () => {
+    // The whole reason for the delay. A reload must not cost an agent the
+    // conversation they are in the middle of.
+    const t = deps({ convo: owned, online: ['gone', 'other'], roster: ['other'] });
+    await handleRouting(job(), t.d);
+    expect(t.assign).not.toHaveBeenCalled();
+  });
+
+  it('stands down when a HUMAN already moved it', async () => {
+    // Somebody made a deliberate choice while the timer was pending. That
+    // outranks anything this job would decide.
+    const t = deps({
+      convo: { ...owned, assigned_agent: 'chosen-by-a-human' },
+      online: ['someone'],
+      roster: ['someone'],
+    });
+    await handleRouting(job(), t.d);
+    expect(t.assign).not.toHaveBeenCalled();
+  });
+
+  it('releases to the POOL when nobody can take it', async () => {
+    // Leaving it with an offline agent hides it. Unassigned makes it visible to
+    // every agent, which is the same choice `assign` makes with an empty roster.
+    const t = deps({ convo: owned, online: [], roster: [] });
+    await handleRouting(job(), t.d);
+    expect(t.assign).toHaveBeenCalledWith('c1', null);
+  });
+
+  it('MEASURES every handover', async () => {
+    // The owner asked for this to be tracked. `routing_events` is what the
+    // reports already read.
+    const t = deps({ convo: owned, online: ['taker'], roster: ['taker'] });
+    await handleRouting(job(), t.d);
+    expect(t.recordOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'c1',
+        agentId: 'gone',
+        outcome: 'missed',
+        stage: 'reclaim',
+      }),
+    );
+  });
+
+  it('records the miss even when the chat goes to the pool', async () => {
+    const t = deps({ convo: owned, online: [], roster: [] });
+    await handleRouting(job(), t.d);
+    expect(t.recordOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: 'gone', stage: 'reclaim' }),
+    );
+  });
+
+  it('does nothing to a chat that is already solved', async () => {
+    const t = deps({ convo: { ...owned, status: 'solved' }, online: ['x'], roster: ['x'] });
+    await handleRouting(job(), t.d);
+    expect(t.assign).not.toHaveBeenCalled();
+  });
+
+  it('ignores a reclaim with no previous owner rather than guessing', async () => {
+    const t = deps({ convo: owned, online: ['x'], roster: ['x'] });
+    await handleRouting(job({ previousAgentId: undefined }), t.d);
+    expect(t.assign).not.toHaveBeenCalled();
+  });
+
+  it('does not start an escalation ladder for a reclaimed chat', async () => {
+    // A reclaim is a handover, not a fresh offer: the customer is mid-conversation
+    // and the new owner should not be put on a 60-second miss timer.
+    const t = deps({ convo: owned, online: ['taker'], roster: ['taker'] });
+    await handleRouting(job(), t.d);
+    expect(t.schedule).not.toHaveBeenCalled();
   });
 });

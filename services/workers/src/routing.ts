@@ -31,7 +31,13 @@
  * somebody this ladder did not choose, a human intervened and the ladder stops.
  */
 import type { Redis, Cluster } from 'ioredis';
-import { ROUTING_FIRST_WAIT_MS, ROUTING_SECOND_WAIT_MS, type RoutingJob } from '@yiji/shared-types';
+import {
+  ROUTING_FIRST_WAIT_MS,
+  ROUTING_SECOND_WAIT_MS,
+  ROUTING_RECLAIM_WAIT_MS,
+  normaliseConversationStatus,
+  type RoutingJob,
+} from '@yiji/shared-types';
 
 /** Same key the gateway writes; see services/socket-gateway/src/presence-store.ts. */
 const PRESENCE_KEY = 'presence:agents';
@@ -48,7 +54,12 @@ export interface RoutingDeps {
       status: string;
     } | null>;
     countOutboundMessages(conversationId: string): Promise<number>;
-    assign(conversationId: string, agentId: string): Promise<void>;
+    /**
+     * Set the owner. `null` RELEASES the conversation to the unassigned pool,
+     * which is where a reclaim puts a chat when nobody can take it — an
+     * offline owner hides it, no owner makes it visible to everyone.
+     */
+    assign(conversationId: string, agentId: string | null): Promise<void>;
     /**
      * Agent ids eligible for this conversation, LEAST BUSY FIRST, where "busy"
      * is their count of open conversations. Scoped to `teamId` when the chat
@@ -92,6 +103,22 @@ export interface RoutingDeps {
  * otherwise. Passing it in (rather than filtering afterwards) is what stops a
  * team handover being answered by the shift that handed it over.
  */
+/**
+ * Is this agent present right now?
+ *
+ * The reclaim timer runs 90 s after a socket dropped, and in that time the
+ * agent may have reconnected — a reload, a network change, a lift. Asking
+ * again at run time is what makes the delay a grace period rather than a
+ * countdown to losing your conversation.
+ *
+ * Reads the same sorted set the gateway writes, sweeping expired entries first
+ * exactly as `nextAgent` does, so "online" means the same thing in both.
+ */
+async function isOnline(redis: Redis | Cluster, agentId: string): Promise<boolean> {
+  await redis.zremrangebyscore(PRESENCE_KEY, '-inf', Date.now() - PRESENCE_TTL_MS);
+  return (await redis.zscore(PRESENCE_KEY, agentId)) !== null;
+}
+
 async function nextAgent(
   redis: Redis | Cluster,
   attempted: string[],
@@ -125,14 +152,89 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
   const { redis, directus, schedule, log } = deps;
   const convo = await directus.getConversation(job.conversationId);
 
-  // Gone, or already wrapped up — nothing to route.
-  if (!convo || convo.status === 'closed' || convo.status === 'resolved') {
+  /*
+   * Gone, or already wrapped up — nothing to route.
+   *
+   * Compared through `normaliseConversationStatus` rather than against literals.
+   * The live vocabulary is `open` / `solved`; `closed` and `resolved` are
+   * RETIRED names that this guard was still checking for, so a conversation
+   * marked `solved` read as routable and could be assigned to somebody after it
+   * had been finished. Found by a reclaim test asserting a solved chat is left
+   * alone. Historical rows still carry the retired values, which is exactly
+   * what the normaliser is for.
+   */
+  if (!convo || normaliseConversationStatus(convo.status) === 'solved') {
     log('routing: conversation not routable', { id: job.conversationId });
     return;
   }
 
   // The pool this chat may be offered to: its team's roster, or everyone.
   const eligible = await directus.agentsByLoad(convo.assigned_team);
+
+  /*
+   * RECLAIM — the owner's connection dropped mid-conversation.
+   *
+   * Everything below assumes "nobody has answered yet"; this stage is the one
+   * case where a chat that IS owned must move. It is scheduled by the gateway
+   * when an agent's socket goes away, and it deliberately runs late
+   * (ROUTING_RECLAIM_WAIT_MS) so an agent who reloads or crosses a network
+   * boundary keeps their chat.
+   *
+   * It re-checks EVERYTHING at run time rather than trusting the schedule:
+   * ownership may have changed, and the agent may simply be back.
+   */
+  if (job.stage === 'reclaim') {
+    const previous = job.previousAgentId;
+    if (!previous) {
+      log('routing: reclaim without a previous owner, ignoring', { id: convo.id });
+      return;
+    }
+    /* Somebody else already owns it — a human moved it, or the agent came back
+       and handed it on. Their decision outranks this timer. */
+    if (convo.assigned_agent !== previous) {
+      log('routing: reclaim superseded, standing down', { id: convo.id });
+      return;
+    }
+    /* THEY CAME BACK. The whole point of the delay: a reload or a network
+       change must not cost an agent their conversation. */
+    if (await isOnline(redis, previous)) {
+      log('routing: previous owner is back, keeping the chat', { id: convo.id, agent: previous });
+      return;
+    }
+    // Never hand it back to the agent who just vanished.
+    const agent = await nextAgent(redis, [previous, ...job.attemptedAgentIds], eligible);
+    if (!agent) {
+      /* Nobody to take it. Leaving it with an offline agent would hide it, so
+         it goes to the unassigned pool where every agent can see and rescue
+         it — the same choice `assign` makes when the roster is empty. */
+      await directus.assign(convo.id, null);
+      await directus.recordOutcome({
+        conversationId: convo.id,
+        agentId: previous,
+        outcome: 'missed',
+        stage: 'reclaim',
+        secondsHeld: Math.round(ROUTING_RECLAIM_WAIT_MS / 1000),
+      });
+      log('routing: owner offline and nobody to take it — released to the pool', {
+        id: convo.id,
+        previous,
+      });
+      return;
+    }
+    await directus.assign(convo.id, agent);
+    /* Measured, per the owner's request: every handover leaves a row saying
+       whose chat moved, to whom, and why. `routing_events` is what the reports
+       already read. */
+    await directus.recordOutcome({
+      conversationId: convo.id,
+      agentId: previous,
+      outcome: 'missed',
+      stage: 'reclaim',
+      secondsHeld: Math.round(ROUTING_RECLAIM_WAIT_MS / 1000),
+    });
+    log('routing: reclaimed from an offline agent', { id: convo.id, from: previous, to: agent });
+    return;
+  }
 
   if (job.stage === 'assign') {
     // Someone already owns it (manual assignment, or a human grabbed it first).

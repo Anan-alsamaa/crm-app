@@ -88,7 +88,27 @@ export type ReportJob = z.infer<typeof ReportJob>;
  */
 export const RoutingJob = z.object({
   conversationId: z.string(),
-  stage: z.enum(['assign', 'escalate', 'broadcast']),
+  /**
+   * `reclaim` is the OWNER-VANISHED stage.
+   *
+   * The other three all start from "nobody has answered yet". This one starts
+   * from "somebody owned this and their connection dropped", which the ladder
+   * could not express: `assign` stands down the moment it sees a non-null
+   * `assigned_agent`, so a chat whose owner went offline mid-conversation
+   * stayed pinned to them for ever — the customer's next message did not
+   * rescue it either.
+   */
+  stage: z.enum(['assign', 'escalate', 'broadcast', 'reclaim']),
+  /**
+   * Who owned it when the disconnect was noticed (`reclaim` only).
+   *
+   * Two jobs at once: it is the agent to move the chat AWAY from, and it is the
+   * proof that this job is still valid. If the conversation is no longer theirs
+   * by the time the job runs, somebody else has already dealt with it — a human
+   * reassigned it, or the agent came back and handed it on — and the reclaim
+   * stands down rather than overwriting that decision.
+   */
+  previousAgentId: z.string().optional(),
   attemptedAgentIds: z.array(z.string()).default([]),
   /**
    * Message count at the moment the timer was scheduled. A later stage compares
@@ -104,6 +124,19 @@ export type RoutingJob = z.infer<typeof RoutingJob>;
 export const ROUTING_FIRST_WAIT_MS = 60_000;
 /** Still no reply → release to every agent. */
 export const ROUTING_SECOND_WAIT_MS = 30_000;
+
+/**
+ * How long an owner may be gone before their live chat is handed on.
+ *
+ * Not the 5 s socket grace: that only has to outlast a reload. This has to
+ * outlast a phone changing networks, a laptop lid, a lift — the ordinary ways a
+ * working agent briefly drops. Reassigning faster would bounce the customer
+ * between agents mid-sentence and take the chat off someone who never left.
+ *
+ * The cost of waiting is a customer whose reply is unattended for that long,
+ * which is why it is not longer. Owner's call, 2026-09-10.
+ */
+export const ROUTING_RECLAIM_WAIT_MS = 90_000;
 
 // --- coupons ---
 /**

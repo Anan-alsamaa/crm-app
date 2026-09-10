@@ -12,6 +12,7 @@ import {
   type RoutingJob,
   type CustomerPushJob,
   CouponPushJob,
+  ROUTING_RECLAIM_WAIT_MS,
 } from '@yiji/shared-types';
 
 /**
@@ -196,8 +197,19 @@ class BullProducer implements SideEffectProducer {
   async enqueueRouting(job: RoutingJob): Promise<string | null> {
     // Deterministic id per conversation+stage: a burst of customer messages must
     // start ONE ladder, not race several that fight over the same assignee.
+    /*
+     * A reclaim runs LATE on purpose — it is a grace period for an agent whose
+     * connection dropped, not an immediate handover. Every other stage is
+     * scheduled by the ladder itself with its own delay; this one is enqueued
+     * by the gateway at the moment of the disconnect, so the wait belongs here.
+     *
+     * The deterministic jobId does double duty for it: an agent whose network
+     * flaps three times in a minute produces one pending reclaim per
+     * conversation, not three.
+     */
     const added = await this.routing.add(job.stage, job, {
       ...DEFAULT_JOB_OPTIONS,
+      ...(job.stage === 'reclaim' ? { delay: ROUTING_RECLAIM_WAIT_MS } : {}),
       jobId: `route-${job.stage}-${job.conversationId}`,
     });
     return added.id ?? null;

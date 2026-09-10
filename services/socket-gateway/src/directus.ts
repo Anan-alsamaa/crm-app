@@ -699,6 +699,30 @@ export class GatewayDirectus {
     }));
   }
 
+  /**
+   * The OPEN conversations this agent actually owns.
+   *
+   * Deliberately not `listAgentConversationIds`, which also returns unassigned
+   * chats because it answers a different question ("what may they see"). Handing
+   * that list to the reclaim path would re-route the whole unassigned pool every
+   * time anybody's connection dropped.
+   *
+   * Open only: a solved or closed chat has nobody waiting on it.
+   */
+  async listAgentOwnedOpenConversationIds(agentId: string): Promise<string[]> {
+    const rows = (await this.client.request(
+      readItems('conversations', {
+        filter: {
+          assigned_agent: { _eq: agentId },
+          status: { _eq: 'open' },
+        },
+        fields: ['id'],
+        limit: -1,
+      }),
+    )) as Array<{ id: string }>;
+    return rows.map((r) => r.id);
+  }
+
   /** Conversations an agent may see (assigned to them or unassigned). */
   async listAgentConversationIds(agentId: string): Promise<string[]> {
     const rows = (await this.client.request(
