@@ -1252,3 +1252,12 @@
     transition: none;
   }
 }
+
+/* A rating that could not be saved. Quiet, but impossible to miss under the
+   button the customer just pressed. */
+.yiji-csat-error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #dc2626;
+  text-align: center;
+}

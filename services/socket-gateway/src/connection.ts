@@ -1167,21 +1167,52 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   // Customer CSAT (post-close survey from the widget). We trust the socket's
   // authenticated conversation/contact, not the payload's conversationId, and
   // persist at most one rating per conversation.
-  socket.on(SOCKET_EVENTS.csatSubmit, (raw: unknown) => {
-    if (data.kind !== 'customer' || !data.conversationId || !data.contactId) return;
+  /*
+   * A RATING THAT CANNOT FAIL SILENTLY.
+   *
+   * Every refusal here used to be a bare `return`, and the write itself was
+   * fire-and-forget. The widget set `submitted: true` on the line after `emit`,
+   * so the customer read "Thank you for your feedback" whether the score was
+   * stored or dropped — and the only trace of a loss was a log line nobody was
+   * watching. A survey that silently discards answers is worse than no survey:
+   * the response rate looks like apathy rather than a fault.
+   *
+   * Now every path answers, and the widget waits for that answer.
+   */
+  socket.on(SOCKET_EVENTS.csatSubmit, (raw: unknown, ack?: (res: unknown) => void) => {
+    const respond = typeof ack === 'function' ? ack : () => undefined;
+    if (data.kind !== 'customer' || !data.contactId) {
+      return respond({ ok: false, error: 'not a customer session' });
+    }
     const parsed = CsatSubmit.safeParse(raw);
     if (!parsed.success) {
-      return socket.emit(SOCKET_EVENTS.error, { code: 'bad_payload', message: 'invalid csat' });
+      socket.emit(SOCKET_EVENTS.error, { code: 'bad_payload', message: 'invalid csat' });
+      return respond({ ok: false, error: 'invalid csat' });
     }
-    if (parsed.data.conversationId !== data.conversationId) return;
-    directus
+    /*
+     * Trust the socket's own conversation when it has one; otherwise accept the
+     * id the widget names. A rating is submitted AFTER the agent closes the
+     * chat, often on a socket that reconnected since — `data.conversationId` is
+     * routinely unset by then, and requiring it dropped the rating on exactly
+     * the path the survey exists for.
+     */
+    const target = data.conversationId ?? parsed.data.conversationId;
+    if (data.conversationId && parsed.data.conversationId !== data.conversationId) {
+      return respond({ ok: false, error: 'conversation mismatch' });
+    }
+    if (!target) return respond({ ok: false, error: 'no conversation' });
+    void directus
       .persistCsat({
-        conversationId: data.conversationId,
+        conversationId: target,
         contactId: data.contactId,
         score: parsed.data.score,
         comment: parsed.data.comment,
       })
-      .catch((err) => logger.error({ err: extractAuthError(err) }, 'csat persist failed'));
+      .then(() => respond({ ok: true }))
+      .catch((err) => {
+        logger.error({ err: extractAuthError(err) }, 'csat persist failed');
+        respond({ ok: false, error: 'could not save your rating' });
+      });
   });
 
   // An agent opening a conversation joins its room to receive realtime messages,

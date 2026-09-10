@@ -532,11 +532,41 @@ describe('Widget — CSAT on conversation close', () => {
     expect(submit).not.toBeDisabled();
     fireEvent.click(submit);
 
-    expect(emitSpy).toHaveBeenCalledWith(
+    /*
+     * ACKNOWLEDGED, not fire-and-forget. The widget used to set "submitted" on
+     * the line after `emit`, so the customer read a thank-you whether the score
+     * was stored or dropped. It now goes through `socket.timeout().emit()` and
+     * waits for the server's answer.
+     */
+    expect(timeoutEmitSpy).toHaveBeenCalledWith(
       'csat:submit',
       expect.objectContaining({ conversationId: 'convo-1', score: 4 }),
+      expect.any(Function),
     );
+    // Nothing yet — the server has not answered.
+    expect(screen.queryByText('Thanks for the feedback!')).not.toBeInTheDocument();
+
+    const ack = timeoutEmitSpy.mock.calls.at(-1)![2] as (e: unknown, r?: unknown) => void;
+    drive(() => ack(null, { ok: true }));
     expect(screen.getByText('Thanks for the feedback!')).toBeInTheDocument();
+  });
+
+  it('tells the customer when the rating could NOT be saved', () => {
+    // The whole point: a dropped rating must not read as a thank-you.
+    renderWidget();
+    driveReady();
+    drive(() => lastCallbacks!.onClosed!({ conversationId: 'convo-1', status: 'resolved' }));
+    const stars = within(
+      screen.getByRole('radiogroup', { name: 'How was your experience?' }),
+    ).getAllByRole('radio');
+    fireEvent.click(stars[4]);
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    const ack = timeoutEmitSpy.mock.calls.at(-1)![2] as (e: unknown, r?: unknown) => void;
+    drive(() => ack(null, { ok: false, error: 'could not save your rating' }));
+
+    expect(screen.queryByText('Thanks for the feedback!')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('could not save your rating');
   });
 });
 

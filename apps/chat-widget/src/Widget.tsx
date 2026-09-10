@@ -317,6 +317,16 @@ export function Widget({ config }: { config: WidgetConfig }) {
   const sendTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   /** Which failed message is showing its Retry/Delete actions. */
   const [openStatusFor, setOpenStatusFor] = useState<string | null>(null);
+  /** Why the rating did not go through, shown under the survey. */
+  const [csatError, setCsatError] = useState<string | null>(null);
+  /**
+   * The conversation that was just closed.
+   *
+   * The survey is answered AFTER the thread ends, and `onClosed` deliberately
+   * forgets the resume id — so by the time the customer picks a score there may
+   * be nothing left to name. Keeping it here is what makes a late rating land.
+   */
+  const lastClosedRef = useRef<string | null>(null);
   const [agentTyping, setAgentTyping] = useState(false);
   const [unread, setUnread] = useState(0);
   const [draft, setDraft] = useState('');
@@ -557,15 +567,42 @@ export function Widget({ config }: { config: WidgetConfig }) {
           if (msg.senderType !== 'customer' && !openRef.current) setUnread((u) => u + 1);
         },
         onHistory: (history) => {
-          // Seed the existing thread on (re)connect. Keep any optimistic/live
-          // message that isn't already part of the loaded history (dedupe by id).
+          /*
+           * Seed the existing thread on (re)connect, keeping anything local
+           * that history does not already contain.
+           *
+           * DEDUPE BY ID *AND* BY CONTENT. An optimistic bubble carries our own
+           * client id, not the server's, so an id-only check could not match it
+           * against the real row. When a message landed but its echo was lost
+           * across a reconnect — common on the weak in-branch networks this
+           * widget serves — the customer saw it TWICE: once as a real bubble,
+           * once as a failed one inviting a Retry that genuinely duplicated it
+           * in the agent's inbox.
+           *
+           * Only our own outgoing messages are matched this way; an agent
+           * legitimately repeating themselves must still show twice.
+           */
           setMessages((prev) => {
-            const seen = new Set(history.map((m) => m.id));
-            return [...history, ...prev.filter((m) => !seen.has(m.id))];
+            const seenIds = new Set(history.map((m) => m.id));
+            const mine = new Set(
+              history.filter((m) => m.senderType === 'customer').map((m) => m.content.trim()),
+            );
+            return [
+              ...history,
+              ...prev.filter((m) => {
+                if (seenIds.has(m.id)) return false;
+                const echoedBack =
+                  m.senderType === 'customer' && !!m.clientMsgId && mine.has(m.content.trim());
+                return !echoedBack;
+              }),
+            ];
           });
         },
         onTyping: setAgentTyping,
         onClosed: () => {
+          // Remember which thread this rating belongs to before the resume id
+          // is dropped below — the survey outlives the conversation.
+          lastClosedRef.current = convoRef.current;
           // Open the panel + show CSAT — but only once per conversation.
           setOpen(true);
           setCsat((cur) => cur ?? { score: 0, comment: '', submitted: false });
@@ -932,6 +969,20 @@ export function Widget({ config }: { config: WidgetConfig }) {
         },
       ) => {
         if (err || !res?.ok || typeof res.content !== 'string') {
+          /*
+           * LET IT BE TRIED AGAIN.
+           *
+           * The id stayed in `attemptedRef` for ever, so one timeout — a tunnel,
+           * a lift, a moment of bad signal — meant the agent's photo rendered as
+           * a grey "Attachment" chip that could never open, for the rest of the
+           * session, with no way to retry. Releasing the id lets the next render
+           * (a new message, a reconnect) fetch it properly.
+           *
+           * A genuine refusal is not retried: `err` is a TIMEOUT, while
+           * `res.ok === false` is the gateway saying no, and hammering that
+           * would spin.
+           */
+          if (err) attemptedRef.current.delete(id);
           setResolved((prev) => ({ ...prev, [id]: { error: true } }));
           return;
         }
@@ -1268,17 +1319,41 @@ export function Widget({ config }: { config: WidgetConfig }) {
                     className="yiji-csat-submit"
                     disabled={csat.score === 0}
                     onClick={() => {
-                      if (!convoRef.current || !socketRef.current) return;
-                      socketRef.current.emit('csat:submit', {
-                        conversationId: convoRef.current,
-                        score: csat.score,
-                        comment: csat.comment,
-                      });
-                      setCsat({ ...csat, submitted: true });
+                      /*
+                       * WAIT FOR THE SERVER before saying thank you.
+                       *
+                       * This used to set `submitted` on the line after `emit`,
+                       * so the customer read "Thank you for your feedback"
+                       * whether the rating was stored or silently dropped — and
+                       * with no conversation id it was a dead click that did
+                       * nothing at all, for ever.
+                       */
+                      const socket = socketRef.current;
+                      if (!socket) return setCsatError(tr.csatFailed);
+                      setCsatError(null);
+                      socket.timeout(15_000).emit(
+                        'csat:submit',
+                        {
+                          conversationId: convoRef.current ?? lastClosedRef.current,
+                          score: csat.score,
+                          comment: csat.comment,
+                        },
+                        (err: Error | null, res?: { ok?: boolean; error?: string }) => {
+                          if (!err && res?.ok)
+                            return setCsat((c) => (c ? { ...c, submitted: true } : c));
+                          setCsatError(res?.error?.trim() ? res.error : tr.csatFailed);
+                        },
+                      );
                     }}
                   >
                     {tr.csatSubmit}
                   </button>
+                  {/* A failed rating must say so, not silently do nothing. */}
+                  {csatError && (
+                    <p className="yiji-csat-error" role="alert">
+                      {csatError}
+                    </p>
+                  )}
                 </>
               )}
             </div>
