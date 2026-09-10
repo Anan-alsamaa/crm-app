@@ -453,3 +453,74 @@ describe('reclaim: the assigned agent went offline', () => {
     expect(t.schedule).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * A ROSTER TOO SMALL TO ESCALATE.
+ *
+ * REPORTED FROM PRODUCTION (WeCare, 2026-09-10): "auto-assignment is not
+ * working — it assigns to one agent, and if they don't reply it does not move
+ * on." The routing was correct. Production had exactly ONE user in a routable
+ * role at the time, so `assign` gave the chat to them and `escalate` had nobody
+ * left to offer it to.
+ *
+ * The behaviour is right and must not change: a chat with one possible owner
+ * stays with them rather than being churned. What was wrong is that the system
+ * said "everyone tried" — a sentence that reads identically with a roster of
+ * one or of twenty, and left a correct ladder looking broken.
+ */
+describe('escalating with too few agents', () => {
+  const owned = { id: 'c1', assigned_agent: 'only-one', assigned_team: null, status: 'open' };
+  const job = (over: Partial<RoutingJob> = {}): RoutingJob => ({
+    conversationId: 'c1',
+    stage: 'escalate',
+    attemptedAgentIds: ['only-one'],
+    outboundCountAtSchedule: 0,
+    ...over,
+  });
+
+  it('KEEPS the chat when there is nobody else — never unassigns it', async () => {
+    const t = deps({ convo: owned, online: ['only-one'], roster: ['only-one'] });
+    await handleRouting(job(), t.d);
+    expect(t.assign).not.toHaveBeenCalled();
+  });
+
+  it('says the ROSTER is the problem, not that everyone was tried', async () => {
+    /*
+     * The diagnostic that was missing. Without it the only evidence is a log
+     * line that sounds like normal exhaustion, so the next person to hit this
+     * re-investigates the ladder instead of the roster.
+     */
+    const logged: string[] = [];
+    const t = deps({ convo: owned, online: ['only-one'], roster: ['only-one'] });
+    (t.d as { log: (m: string, x?: unknown) => void }).log = (m) => logged.push(m);
+    await handleRouting(job(), t.d);
+    expect(logged.join(' ')).toMatch(/ROSTER TOO SMALL/);
+  });
+
+  it('still escalates normally the moment a second agent exists', async () => {
+    // The same conversation, the same job — one more agent on the roster is the
+    // whole difference between "broken" and "working".
+    const t = deps({
+      convo: owned,
+      online: ['only-one', 'second'],
+      roster: ['only-one', 'second'],
+    });
+    await handleRouting(job(), t.d);
+    expect(t.assign).toHaveBeenCalledWith('c1', 'second');
+  });
+
+  it('reports exhaustion normally when the roster really was worked through', async () => {
+    // Three agents, all three already offered it: that IS "everyone tried", and
+    // must not be mislabelled a configuration problem.
+    const logged: string[] = [];
+    const t = deps({
+      convo: { ...owned, assigned_agent: 'c' },
+      online: [],
+      roster: ['a', 'b', 'c'],
+    });
+    (t.d as { log: (m: string, x?: unknown) => void }).log = (m) => logged.push(m);
+    await handleRouting(job({ attemptedAgentIds: ['a', 'b', 'c'] }), t.d);
+    expect(logged.join(' ')).toMatch(/everyone available has been tried/);
+    expect(logged.join(' ')).not.toMatch(/ROSTER TOO SMALL/);
+  });
+});

@@ -321,10 +321,40 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
   if (job.stage === 'escalate') {
     const agent = await nextAgent(redis, job.attemptedAgentIds, eligible);
     if (!agent) {
-      // Everyone eligible has already been offered it. Waiting out a second
-      // timer cannot change that, and there is nobody new to hand it to — so
-      // it stays where it is, owned, and the ladder stops.
-      log('routing: everyone tried, leaving it with the current owner', { id: convo.id });
+      /*
+       * Nobody new to hand it to, so it stays where it is and the ladder stops.
+       *
+       * SAY WHICH OF THE TWO THIS IS. The message used to be "everyone tried",
+       * which reads identically whether the roster holds twenty agents or one —
+       * and when production briefly had a single routable agent, that line was
+       * the only evidence, so a correct ladder looked like a broken one to the
+       * team testing it (reported 2026-09-10).
+       *
+       * A roster at or below the number already attempted is a CONFIGURATION
+       * problem: no amount of waiting produces another agent. Logged as a
+       * warning with the counts, so it is visible without reading the code.
+       */
+      /*
+       * Fewer than two eligible agents is a CONFIGURATION problem: the ladder
+       * cannot escalate to anybody, ever, no matter how long it waits.
+       *
+       * Deliberately NOT `eligible.length <= attempted.length` — with three
+       * agents all legitimately tried that comparison is also true, and would
+       * mislabel healthy exhaustion as a misconfigured roster. Caught by the
+       * test below, which is exactly why it is there.
+       */
+      const exhausted = eligible.length < 2;
+      log(
+        exhausted
+          ? 'routing: ROSTER TOO SMALL to escalate — add more agents in a routable role'
+          : 'routing: everyone available has been tried, leaving it with the current owner',
+        {
+          id: convo.id,
+          eligibleAgents: eligible.length,
+          alreadyOffered: job.attemptedAgentIds.length,
+          team: convo.assigned_team,
+        },
+      );
       return;
     }
     await directus.assign(convo.id, agent);

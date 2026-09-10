@@ -61,6 +61,101 @@ async function missingPermissions(client: Client): Promise<string[]> {
   return missing;
 }
 
+/**
+ * Is this environment actually able to SERVE customers?
+ *
+ * Structure being correct is not the same as being usable, and every failure
+ * reported from production on 2026-09-10 was of the second kind: the schema was
+ * perfect and the behaviour was wrong.
+ *
+ *   - `option_lists` was EMPTY, so every dropdown silently fell back to a
+ *     reduced hard-coded list and the coupon screen was missing values.
+ *   - `app_roles` was EMPTY, so every portal answered "This portal is not for
+ *     your role" to everyone except the owner.
+ *   - exactly ONE user held a routable role, so auto-assignment assigned that
+ *     one agent and could escalate to nobody — which the team testing it
+ *     reasonably read as "escalation is broken".
+ *
+ * None of those is a code bug and none would fail a schema check. They are
+ * reported here as WARNINGS: an empty table is legitimate on a fresh install,
+ * so this must not block a bootstrap — it must simply stop the emptiness being
+ * invisible until a customer or a tester finds it.
+ */
+async function readinessWarnings(client: Client): Promise<string[]> {
+  const warn: string[] = [];
+  const count = async (collection: string, query = ''): Promise<number | null> => {
+    try {
+      const rows = (await client.request({
+        method: 'GET',
+        path: `/items/${collection}`,
+        params: { limit: -1, fields: 'id', ...(query ? { filter: query } : {}) },
+      } as never)) as Array<unknown>;
+      return Array.isArray(rows) ? rows.length : null;
+    } catch {
+      /*
+       * NULL IS NOT ZERO, and conflating them is how a false alarm is born.
+       * An unreadable collection (permissions, an expired session) must not be
+       * reported as "empty" — that is a different fault with a different fix,
+       * and crying wolf here would train people to ignore the warning that
+       * matters. Callers check `=== 0`, never falsiness.
+       */
+      return null;
+    }
+  };
+
+  const lists = await count('option_lists');
+  if (lists === 0) {
+    warn.push(
+      'option_lists is EMPTY — every dropdown (issuing side, complaint type, ' +
+        'source…) will fall back to a reduced built-in list. Seed it or copy it ' +
+        'from a working environment.',
+    );
+  }
+
+  const appRoles = await count('app_roles');
+  if (appRoles === 0) {
+    warn.push(
+      'app_roles is EMPTY — no role carries any privilege, so BOTH portals will ' +
+        'answer "This portal is not for your role" to every non-owner account.',
+    );
+  }
+
+  /*
+   * The routable roster. Two agents is the minimum for the ladder to mean
+   * anything: with one, `assign` works and `escalate` has nowhere to go, which
+   * is indistinguishable from a broken escalation to anyone watching.
+   */
+  try {
+    const agents = (await client.request({
+      method: 'GET',
+      path: '/users',
+      params: {
+        limit: -1,
+        fields: 'id',
+        'filter[status][_eq]': 'active',
+        'filter[role][name][_in]': 'Agent,WeCare Agent',
+      },
+    } as never)) as Array<unknown>;
+    const n = Array.isArray(agents) ? agents.length : 0;
+    if (n === 0) {
+      warn.push(
+        'NO active user holds a routable role (Agent / WeCare Agent) — every ' +
+          'customer chat will be left unowned.',
+      );
+    } else if (n === 1) {
+      warn.push(
+        `Only ONE routable agent exists — auto-assignment will assign to them ` +
+          `and then have nobody to escalate to. The ladder needs at least two ` +
+          `to do anything visible.`,
+      );
+    }
+  } catch {
+    /* Permission to read users is verified separately. */
+  }
+
+  return warn;
+}
+
 async function main(): Promise<void> {
   const env = loadEnv();
   const client = createDirectus(env.directusUrl).with(authentication('json')).with(rest());
@@ -117,9 +212,19 @@ async function main(): Promise<void> {
     }
   }
 
+  /*
+   * Structure is sound; is the environment USABLE? These are warnings on
+   * purpose — an empty table is normal on a fresh install — but they must be
+   * said out loud, because each of them previously reached production and was
+   * found by a person rather than by a check.
+   */
+  const readiness = await readinessWarnings(client as unknown as Client);
+  for (const w of readiness) console.warn(`WARN: ${w}`);
+
   console.log(
     `OK: ${expectedCollections.length} collections + ${expectedRoles.length} custom roles + ` +
-      `permissions verified.`,
+      `permissions verified.` +
+      (readiness.length ? ` ${readiness.length} readiness warning(s) above.` : ''),
   );
 }
 
