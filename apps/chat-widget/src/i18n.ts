@@ -42,6 +42,12 @@ export interface WidgetStrings {
   offlineBody: string;
   /** Auto-reply appended once when the customer messages while agents are offline. */
   offlineAutoReply: string;
+  /** Delivery state of a message the customer sent (revealed on hold). */
+  msgSending: string;
+  msgSent: string;
+  msgFailed: string;
+  msgRetry: string;
+  msgDelete: string;
   offlineCallLabel: string;
   offlineWhatsappLabel: string;
   /** The language switch: names the OTHER language, in that language. */
@@ -93,6 +99,11 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     offlineBody: "Leave a message and we'll reply as soon as we're back.",
     offlineAutoReply:
       "Thanks for your message — our team is offline right now. We've received it and will reply as soon as we're back online.",
+    msgSending: 'Sending…',
+    msgSent: 'Sent',
+    msgFailed: 'Not sent',
+    msgRetry: 'Try again',
+    msgDelete: 'Delete',
     offlineCallLabel: 'Call us',
     offlineWhatsappLabel: 'WhatsApp',
     switchLanguage: 'العربية',
@@ -130,6 +141,11 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     offlineBody: 'اترك رسالتك وسنرد فور عودتنا.',
     offlineAutoReply:
       'شكرًا لرسالتك — فريقنا غير متصل حاليًا. لقد استلمنا رسالتك وسنردّ عليك فور عودتنا.',
+    msgSending: 'جارٍ الإرسال…',
+    msgSent: 'تم الإرسال',
+    msgFailed: 'لم يتم الإرسال',
+    msgRetry: 'إعادة المحاولة',
+    msgDelete: 'حذف',
     offlineCallLabel: 'اتصل بنا',
     offlineWhatsappLabel: 'واتساب',
     switchLanguage: 'English',

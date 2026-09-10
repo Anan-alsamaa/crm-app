@@ -70,6 +70,28 @@ export function whatsappHref(number: string, orderId: string | null): string {
   return `${base}?text=${encodeURIComponent(`orderId: ${orderId}`)}`;
 }
 
+/**
+ * The clock time a message was sent, in the reader's own language.
+ *
+ * Time only, not the date: this is revealed on a bubble the customer is
+ * already looking at in a thread they are already reading, so the day is
+ * context they have. `ar` gets Arabic-Indic digits from the locale, which is
+ * what the rest of the widget does.
+ */
+export function formatTime(iso: string, locale: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  try {
+    return new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(d);
+  } catch {
+    // A runtime without full ICU still has to render something sensible.
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+}
+
 const DEFAULT_FALLBACK = {
   phone: '920012111',
   whatsapp: '0565266122',
@@ -291,6 +313,10 @@ export function Widget({ config }: { config: WidgetConfig }) {
     'connecting',
   );
   const [messages, setMessages] = useState<WidgetMessage[]>([]);
+  /** Per-message send timeouts, so an echo can cancel its own. */
+  const sendTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  /** Which failed message is showing its Retry/Delete actions. */
+  const [openStatusFor, setOpenStatusFor] = useState<string | null>(null);
   const [agentTyping, setAgentTyping] = useState(false);
   const [unread, setUnread] = useState(0);
   const [draft, setDraft] = useState('');
@@ -491,7 +517,13 @@ export function Widget({ config }: { config: WidgetConfig }) {
         onMessage: (msg) => {
           setMessages((prev) => {
             if (msg.clientMsgId && prev.some((m) => m.clientMsgId === msg.clientMsgId)) {
-              return prev.map((m) => (m.clientMsgId === msg.clientMsgId ? msg : m));
+              // It landed: stop the failure timer and mark the bubble delivered.
+              const t = sendTimers.current.get(msg.clientMsgId);
+              if (t) clearTimeout(t);
+              sendTimers.current.delete(msg.clientMsgId);
+              return prev.map((m) =>
+                m.clientMsgId === msg.clientMsgId ? { ...msg, status: 'sent' as const } : m,
+              );
             }
             if (prev.some((m) => m.id === msg.id)) return prev;
             return [...prev, msg];
@@ -585,6 +617,115 @@ export function Widget({ config }: { config: WidgetConfig }) {
    */
   const canSend = ready && status === 'connected';
 
+  /**
+   * Put one message on the wire and track whether it lands.
+   *
+   * Shared by the first attempt and by Retry, so a retried message follows
+   * exactly the same path as the original — including the timeout. The ack
+   * is the gateway echoing the message back with our `clientMsgId`; until
+   * that arrives the bubble stays `sending`, and if it never arrives the
+   * bubble goes `failed` and offers Retry and Delete.
+   *
+   * 15 seconds because the gateway's own attachment timeout is 20 and a plain
+   * message is far smaller; waiting longer just leaves the customer unsure
+   * whether to retype it.
+   */
+  const sendPayload = (cmid: string, content: string, attachmentIds: string[]) => {
+    const socket = socketRef.current;
+    if (!socket) {
+      setMessages((prev) =>
+        prev.map((m) => (m.clientMsgId === cmid ? { ...m, status: 'failed' as const } : m)),
+      );
+      return;
+    }
+    setMessages((prev) =>
+      prev.map((m) => (m.clientMsgId === cmid ? { ...m, status: 'sending' as const } : m)),
+    );
+    const timer = setTimeout(() => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.clientMsgId === cmid && m.status === 'sending'
+            ? { ...m, status: 'failed' as const }
+            : m,
+        ),
+      );
+      sendTimers.current.delete(cmid);
+    }, 15_000);
+    sendTimers.current.set(cmid, timer);
+    socket.emit('message:send', {
+      // Omitted entirely on a first message — the server decides which
+      // conversation this belongs to, and creates it if there is none.
+      ...(convoRef.current ? { conversationId: convoRef.current } : {}),
+      content,
+      ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
+      clientMsgId: cmid,
+    });
+  };
+
+  /**
+   * WhatsApp's gesture for "when was this sent, and did it arrive".
+   *
+   * Press and hold, or drag the bubble a little to the left, and the message
+   * reveals its timestamp and delivery state. Both gestures are offered because
+   * they are the two people already know, and neither costs a visible control
+   * in a chat that has to stay uncluttered.
+   *
+   * Only on the customer's OWN messages: delivery state is a fact about
+   * something you sent, and the greeting is not a real message.
+   *
+   * Tap-to-toggle is kept as the keyboard/desktop path — a long-press has no
+   * keyboard equivalent, and a mouse user should not have to hold still for
+   * half a second to see a timestamp.
+   */
+  const bubbleGesture = (id: string) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let startX = 0;
+    const open = () => setOpenStatusFor((cur) => (cur === id ? cur : id));
+    const cancel = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+    };
+    return {
+      onPointerDown: (e: { clientX: number }) => {
+        startX = e.clientX;
+        timer = setTimeout(open, 450);
+      },
+      onPointerMove: (e: { clientX: number }) => {
+        // A deliberate leftward drag reveals immediately; anything else (a
+        // scroll, a stray wobble) cancels the hold rather than firing it.
+        if (startX - e.clientX > 24) {
+          cancel();
+          open();
+        } else if (Math.abs(e.clientX - startX) > 12) {
+          cancel();
+        }
+      },
+      onPointerUp: cancel,
+      onPointerLeave: cancel,
+      // Long-press on a touch screen otherwise raises the text-selection menu
+      // over the top of what we are trying to show.
+      onContextMenu: (e: { preventDefault: () => void }) => e.preventDefault(),
+      onClick: () => setOpenStatusFor((cur) => (cur === id ? null : id)),
+    };
+  };
+
+  /** Try a failed message again, exactly as it was first sent. */
+  const retryMessage = (m: WidgetMessage) => {
+    if (!m.clientMsgId) return;
+    sendPayload(m.clientMsgId, m.content, m.attachments ?? []);
+  };
+
+  /** Give up on a failed message and take it off the screen. */
+  const discardMessage = (m: WidgetMessage) => {
+    const cmid = m.clientMsgId;
+    if (cmid) {
+      const t = sendTimers.current.get(cmid);
+      if (t) clearTimeout(t);
+      sendTimers.current.delete(cmid);
+    }
+    setMessages((prev) => prev.filter((x) => x.id !== m.id));
+  };
+
   const send = () => {
     const content = draft.trim();
     const attachmentIds = pending.map((p) => p.id);
@@ -604,16 +745,10 @@ export function Widget({ config }: { config: WidgetConfig }) {
         attachments: attachmentIds,
         createdAt: new Date().toISOString(),
         clientMsgId: cmid,
+        status: 'sending',
       },
     ]);
-    socketRef.current.emit('message:send', {
-      // Omitted entirely on a first message — the server decides which
-      // conversation this belongs to, and creates it if there is none.
-      ...(convoRef.current ? { conversationId: convoRef.current } : {}),
-      content,
-      ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
-      clientMsgId: cmid,
-    });
+    sendPayload(cmid, content, attachmentIds);
     // Agents offline: reassure the customer their message was received and an
     // agent will reply once back. Shown once per offline period so we never spam
     // it; the presence handler resets the flag when an agent comes online.
@@ -946,7 +1081,12 @@ export function Widget({ config }: { config: WidgetConfig }) {
                           : 'theirs'
                     }${
                       !m.content?.trim() && m.attachments && m.attachments.length > 0 ? ' bare' : ''
-                    }${m.id === GREETING_ID ? ' yiji-msg-greeting' : ''}`}
+                    }${m.id === GREETING_ID ? ' yiji-msg-greeting' : ''}${
+                      openStatusFor === m.id ? ' yiji-msg-revealed' : ''
+                    }${m.status === 'failed' ? ' yiji-msg-failed' : ''}`}
+                    {...(m.senderType === 'customer' && m.id !== GREETING_ID
+                      ? bubbleGesture(m.id)
+                      : {})}
                   >
                     {m.content}
                     {m.attachments && m.attachments.length > 0 && (
@@ -1006,6 +1146,36 @@ export function Widget({ config }: { config: WidgetConfig }) {
                         })}
                       </div>
                     )}
+                    {/*
+                     * The revealed status row: when it was sent, whether it
+                     * arrived, and — if it did not — what to do about it.
+                     * Hidden until the customer asks for it (hold, or drag
+                     * left) so the thread stays clean.
+                     */}
+                    {m.senderType === 'customer' &&
+                      m.id !== GREETING_ID &&
+                      (openStatusFor === m.id || m.status === 'failed') && (
+                        <div className="yiji-msg-status">
+                          <span className="yiji-msg-time">{formatTime(m.createdAt, locale)}</span>
+                          <span className="yiji-msg-state">
+                            {m.status === 'failed'
+                              ? tr.msgFailed
+                              : m.status === 'sending'
+                                ? tr.msgSending
+                                : tr.msgSent}
+                          </span>
+                          {m.status === 'failed' && (
+                            <span className="yiji-msg-actions">
+                              <button type="button" onClick={() => retryMessage(m)}>
+                                {tr.msgRetry}
+                              </button>
+                              <button type="button" onClick={() => discardMessage(m)}>
+                                {tr.msgDelete}
+                              </button>
+                            </span>
+                          )}
+                        </div>
+                      )}
                   </div>
                 ))}
                 {agentTyping && (

@@ -13,6 +13,15 @@ export interface WidgetMessage {
   attachments: string[];
   createdAt: string;
   clientMsgId?: string;
+  /**
+   * Delivery state of a message THIS device sent. Absent on anything received.
+   *
+   * `sending` until the gateway echoes it back, `sent` once it has, `failed`
+   * when the send was refused or timed out. Before this existed a failed send
+   * looked identical to a delivered one — the bubble appeared and simply never
+   * arrived, with nothing on screen saying so and no way to retry.
+   */
+  status?: 'sending' | 'sent' | 'failed';
 }
 
 export interface SocketCallbacks {

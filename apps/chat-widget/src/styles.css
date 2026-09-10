@@ -1198,3 +1198,57 @@
     animation: none;
   }
 }
+
+/* --- Message status, revealed by holding or dragging a bubble left --- */
+.yiji-msg-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 11px;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+.yiji-msg-time {
+  font-variant-numeric: tabular-nums;
+}
+/* A failed message stays visibly unsent whether or not it is revealed —
+   silence is what made a lost message look delivered in the first place. */
+.yiji-msg-failed {
+  border: 1px solid rgba(220, 38, 38, 0.55);
+}
+.yiji-msg-failed .yiji-msg-state {
+  color: #dc2626;
+  font-weight: 600;
+  opacity: 1;
+}
+.yiji-msg-actions {
+  display: flex;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+.yiji-msg-actions button {
+  border: 0;
+  background: transparent;
+  padding: 2px 6px;
+  font: inherit;
+  font-weight: 600;
+  color: currentColor;
+  cursor: pointer;
+  border-radius: 6px;
+  text-decoration: underline;
+}
+.yiji-msg-actions button:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+/* The drag/hold reveal shifts the bubble a touch, echoing the gesture. */
+.yiji-msg-revealed {
+  transform: translateX(-4px);
+  transition: transform 0.12s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .yiji-msg-revealed {
+    transform: none;
+    transition: none;
+  }
+}
