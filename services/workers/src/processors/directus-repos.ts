@@ -18,8 +18,15 @@ import type {
  * Everything else — the three svc-* accounts and Administrator — is active,
  * holds zero conversations forever, and would otherwise sort to the front of
  * every least-loaded list. See agentsByLoad.
+ *
+ * BOTH NAMES, because the deployed role model uses `WeCare Agent` and this list
+ * only had `Agent`. Measured on staging (2026-09-10): 11 active agents, ALL of
+ * them `WeCare Agent`, and ZERO holding `Agent`. So the filter matched nobody
+ * and auto-assignment had nobody to assign to — a filter that matches nothing
+ * and reads as a plausible empty roster, which is this codebase's recurring bug
+ * shape. `Agent` is kept for older deployments that still use it.
  */
-const ROUTABLE_ROLES = ['Agent'] as const;
+const ROUTABLE_ROLES = ['Agent', 'WeCare Agent'] as const;
 
 /** Real (Directus-backed) implementations of the processor repos. */
 
