@@ -46,9 +46,21 @@ design and is for proving the plumbing, not for exploring features.
 
 ### Production
 
-Only the owner account exists (`e.habibi@anan.sa`, password in
-`.env.prod.aws`). **Staff accounts have not been created** — that decision is
-the owner's. The nine roles are in place and ready to assign.
+| Role          | Email              | Password  |
+| ------------- | ------------------ | --------- |
+| Administrator | `e.habibi@anan.sa` | in `.env` |
+| WeCare Agent  | `agent@anan.sa`    | `123456`  |
+| WeCare Admin  | `admin@anan.sa`    | `123456`  |
+
+`e.habibi@anan.sa` is the **only Administrator**, and Administrator is the only
+role carrying `admin_access`. A Directus user holds exactly ONE role, so that
+account cannot also be an Agent — and moving it would remove owner access from
+production with no other account able to restore it. The two accounts above
+exist so each portal can be used as a real agent/admin sees it.
+
+The WeCare Agent account also matters operationally: auto-assignment routes to
+`role.name in (Agent, WeCare Agent)`, and until it existed production had no
+assignable agent at all, so every chat stayed unowned.
 
 ---
 
