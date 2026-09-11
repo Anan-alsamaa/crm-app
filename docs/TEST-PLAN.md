@@ -64,6 +64,28 @@ assignable agent at all, so every chat stayed unowned.
 
 ---
 
+## An agent seeing only their own chats = drifted permissions, not a code bug
+
+The requirement is two-tier: a CUSTOMER sees only their current session, an
+AGENT sees that customer's whole history. `roles.ts` grants the agent unfiltered
+`conversations.read` and `messages.read` for exactly that reason.
+
+Production and staging had drifted: the deployed WeCare Agent policy carried
+ONLY the `ASSIGNED_OR_UNASSIGNED` filter, so an agent saw their own open chats
+and nothing else — a returning customer looked like a brand-new one with no
+past. WeCare Admin had both rows and worked, which is what made it look like a
+code difference rather than drift.
+
+Two things to know if it recurs:
+
+- Adding the permission is not enough. Directus caches the permission graph,
+  and the LIST endpoint caches separately from a by-id read — for a while
+  `/items/conversations/:id` worked while `/items/conversations` still returned
+  the old, narrower set. `POST /utils/cache/clear` plus a few minutes settles
+  it; a service restart alone did not.
+- Verify as a REAL agent token, never as the owner. The owner reads everything
+  regardless, so the bug is invisible from that account.
+
 ## A portal origin missing from CORS_ORIGIN reads as a bad password
 
 A portal is blocked by the BROWSER, not the server, when its origin is not in
