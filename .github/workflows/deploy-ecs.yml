@@ -159,6 +159,18 @@ jobs:
           # Baked-in FALLBACKS only. The real values come from config.js at
           # runtime (see below), which is what keeps one bundle serving both
           # environments.
+          # THESE ARE BAKED INTO THE BUNDLE AT BUILD TIME.
+          #
+          # A portal cannot be repointed by changing DNS or a task definition —
+          # the hostname is compiled in, so a wrong value here ships a portal
+          # that loads perfectly and cannot reach its own API. That is exactly
+          # what happened: these were set to api./ai./ws.crm.anan.sa on
+          # 2026-09-02, hostnames that were planned and never created, so every
+          # login silently failed against a host that does not resolve.
+          #
+          # They must name a host that actually SERVES. Today all three are
+          # crm-api.anan.sa, which fronts Directus, socket.io and the AI gateway
+          # on one distribution.
           VITE_DIRECTUS_URL: ${{ vars.VITE_DIRECTUS_URL }}
           VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL }}
           VITE_AI_GATEWAY_URL: ${{ vars.VITE_AI_GATEWAY_URL }}
