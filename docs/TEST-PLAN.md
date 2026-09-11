@@ -64,6 +64,28 @@ assignable agent at all, so every chat stayed unowned.
 
 ---
 
+## A portal origin missing from CORS_ORIGIN reads as a bad password
+
+A portal is blocked by the BROWSER, not the server, when its origin is not in
+`CORS_ORIGIN` on directus and socket-gateway. The symptom is indistinguishable
+from a wrong password: the login POST returns **200 with a valid token**, and the
+browser then discards the response because no `access-control-allow-origin`
+header came back with it.
+
+So adding a hostname takes TWO steps — point DNS at the distribution, and add the
+origin to `CORS_ORIGIN` on both services. Missing the second is what made
+`e.habibi@anan.sa` look like a broken account on the new anan.sa domains while
+the same credentials worked perfectly against the API directly.
+
+The live task revisions are the source of truth; `deploy/aws/ecs/*.json` holds a
+`{{PORTAL_ORIGINS}}` placeholder used only at first bootstrap, and the deploy
+workflow copies the running revision rather than that file.
+
+- prod: the two CloudFront portal URLs + `crm-admin.anan.sa`, `crm-agent.anan.sa`,
+  `crm.anan.sa`
+- staging: the two CloudFront portal URLs + `crm-admin-staging.anan.sa`,
+  `crm-agent-staging.anan.sa`, `crm-staging.anan.sa`
+
 ## Test phone numbers
 
 Any `05` number works; nothing is verified. Use a number nobody owns, and say
