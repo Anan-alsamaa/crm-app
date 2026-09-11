@@ -22,7 +22,12 @@ import {
   useIsDesktop,
   useResizable,
 } from '@yiji/ui';
-import { SOCKET_EVENTS, type ConversationStatus, type Priority } from '@yiji/shared-types';
+import {
+  SOCKET_EVENTS,
+  normaliseConversationStatus,
+  type ConversationStatus,
+  type Priority,
+} from '@yiji/shared-types';
 import {
   conversationIdsForOrder,
   useConversations,
@@ -1004,7 +1009,10 @@ export function Inbox() {
                                       </span>
                                     )}
                                   </span>
-                                  <Pill tone={STATUS_TONE[c.status]} size="sm">
+                                  <Pill
+                                    tone={STATUS_TONE[normaliseConversationStatus(c.status)]}
+                                    size="sm"
+                                  >
                                     {t(`status.${c.status}`, { ns: 'common' })}
                                   </Pill>
                                   <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">

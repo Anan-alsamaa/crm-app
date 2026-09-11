@@ -1191,7 +1191,11 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
 
   socket.on(SOCKET_EVENTS.readAck, (raw: unknown) => {
     const parsed = ReadAck.safeParse(raw);
-    if (!parsed.success) return;
+    // Say so rather than returning into silence — the client cannot tell a
+    // malformed ack from one that simply had no effect.
+    if (!parsed.success) {
+      return socket.emit(SOCKET_EVENTS.error, { code: 'bad_payload', message: 'invalid read ack' });
+    }
     // IDOR guard: a customer may only ack reads on its own bound conversation
     // (otherwise a customer could spoof read receipts into another thread).
     if (data.kind === 'customer' && parsed.data.conversationId !== data.conversationId) return;

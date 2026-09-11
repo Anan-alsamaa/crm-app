@@ -244,7 +244,10 @@ export function ConversationToolbar({
             <span
               className={cn(
                 'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-background',
-                statusDot[conversation.status],
+                // Normalised: a row still holding a retired value ('pending',
+                // 'closed') indexed a two-key record and produced `undefined`,
+                // rendering the presence dot with no colour at all.
+                statusDot[normaliseConversationStatus(conversation.status)],
               )}
               aria-hidden
             />

@@ -275,7 +275,17 @@ export function ConversationView({
       };
       const onChanged = (e: { conversationId: string }) => {
         if (e.conversationId !== conversationId) return;
+        /*
+         * Refetch the THREAD as well as the row.
+         *
+         * This is a shared inbox: `conversation:changed` means a colleague
+         * acted on the chat you are reading. Refetching only the conversation
+         * row flipped the toolbar under the agent's cursor while the messages
+         * beside it stayed stale — so whatever the other agent said, or the
+         * reply that prompted them to solve it, was not on screen.
+         */
         void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+        void qc.invalidateQueries({ queryKey: ['messages', conversationId] });
       };
       const onNoteDeleted = (e: { conversationId: string; noteId: string }) => {
         if (e.conversationId !== conversationId) return;
@@ -355,9 +365,23 @@ export function ConversationView({
     const lastId = threadMessages[threadMessages.length - 1]!.id;
     if (lastReadRef.current === lastId) return;
     lastReadRef.current = lastId;
-    void getSocket().then((s) =>
-      s.emit(SOCKET_EVENTS.readAck, { conversationId, lastMessageId: lastId }),
-    );
+    /*
+     * AN ACK THAT FAILED MUST BE ALLOWED TO HAPPEN AGAIN.
+     *
+     * `lastReadRef` was stamped BEFORE the emit and the promise had no catch,
+     * so a socket that could not be obtained (a token refresh failure) produced
+     * an unhandled rejection AND permanently suppressed the retry for that
+     * message. The badge was zeroed on the next line regardless, so the agent
+     * saw it clear — and the true count came back on the next refetch, reading
+     * as a new message that was never there.
+     *
+     * Releasing the stamp on failure lets the next render try again.
+     */
+    void getSocket()
+      .then((s) => s.emit(SOCKET_EVENTS.readAck, { conversationId, lastMessageId: lastId }))
+      .catch(() => {
+        if (lastReadRef.current === lastId) lastReadRef.current = null;
+      });
     qc.setQueriesData({ queryKey: ['conversations'] }, (old: unknown) =>
       Array.isArray(old)
         ? old.map((c) =>

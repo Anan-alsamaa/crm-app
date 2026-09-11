@@ -456,8 +456,18 @@ export function useConversationPreviews(conversationIds: string[]) {
             },
             fields: ['conversation', 'content', 'sender_type'],
             sort: ['-date_created'],
-            // Generous cap: the inbox shows a bounded list; the newest message
-            // per conversation is comfortably within this window at app scale.
+            /*
+             * Generous cap over ALL the listed conversations at once, newest
+             * first, reduced to one preview each below.
+             *
+             * The budget is SHARED, so it starves rather than truncates: a
+             * quiet chat whose last message falls outside the newest 1000
+             * across the whole set gets no preview and the inbox prints "No
+             * messages yet" for a conversation that plainly has some. Measured
+             * on staging: 511 messages across 241 conversations, so the whole
+             * corpus fits twice over — but the failure is silent and looks like
+             * data, not a cap, so it is worth knowing where it comes from.
+             */
             limit: 1000,
           }),
         )) as Array<{
@@ -492,10 +502,26 @@ export function useMessages(conversationId: string | null) {
         readItems('messages', {
           filter: { conversation: { _eq: conversationId } },
           fields: ['id', 'sender_type', 'content', 'is_internal_note', 'date_created'],
-          sort: ['date_created'],
-          limit: -1,
+          /*
+           * NEWEST 500, put back in reading order.
+           *
+           * This was `limit: -1` — every message a customer has ever sent,
+           * fetched into the browser before the thread would render, plus a
+           * second unbounded read for attachments. Harmless today (the longest
+           * real thread is 85 messages) and unbounded by construction: a
+           * customer who writes in weekly for a year eventually holds the agent
+           * behind a multi-megabyte fetch, exactly when the inbox is busiest.
+           *
+           * Descending + reverse, never ascending + limit — an ascending cap
+           * keeps the OLDEST 500 and buries the message the agent opened the
+           * chat to read. That is the same mistake the gateway's own history
+           * loader documents having made.
+           */
+          sort: ['-date_created'],
+          limit: 500,
         }),
       )) as ConversationMessage[];
+      msgs.reverse();
       const ids = msgs.map((m) => m.id);
       if (ids.length === 0) return msgs;
       // Attachments live in the messages_files m2m junction (there is no alias
