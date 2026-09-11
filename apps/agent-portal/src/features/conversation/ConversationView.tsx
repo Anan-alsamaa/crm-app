@@ -177,6 +177,27 @@ export function ConversationView({
       socketRef.current = socket;
       socket.emit(SOCKET_EVENTS.conversationSubscribe, { conversationId });
 
+      /*
+       * RE-SUBSCRIBE AFTER A RECONNECT, OR THE THREAD GOES MUTE.
+       *
+       * Socket.IO rooms are per socket id. A reconnect issues a NEW id and
+       * every room membership is lost, so the one subscribe above stops
+       * covering this conversation. The gateway re-joins an agent's own rooms
+       * on connect, but only for chats assigned to them or unassigned — a chat
+       * handed to their team and owned by a colleague is not re-joined at all.
+       *
+       * The React effect does not re-run on a reconnect, so nothing repaired
+       * it: the agent kept an open thread that had simply gone quiet, while the
+       * customer typed into it and waited. Refetching too, because anything
+       * that arrived during the gap was never delivered.
+       */
+      const onReconnect = () => {
+        socket.emit(SOCKET_EVENTS.conversationSubscribe, { conversationId });
+        void qc.invalidateQueries({ queryKey: ['messages', conversationId] });
+        void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+      };
+      socket.on('connect', onReconnect);
+
       const onNew = (msg: MessageNew) => {
         if (msg.conversationId !== conversationId) return;
         const confirmed: ConversationMessage = {
@@ -289,10 +310,19 @@ export function ConversationView({
         socket.off(SOCKET_EVENTS.customerPresence, onCustomerPresence);
         socket.off(SOCKET_EVENTS.conversationChanged, onChanged);
         socket.off(SOCKET_EVENTS.error, onSocketError);
+        socket.off('connect', onReconnect);
       };
     })();
     return () => {
       cancelled = true;
+      /*
+       * Detach here too. The cleanup returned from the async IIFE above is
+       * handed to a Promise, not to React, so React never calls it — every
+       * conversation switch left its listeners attached, and `onReconnect`
+       * would then re-subscribe to threads the agent has long since left.
+       */
+      const socket = socketRef.current;
+      if (socket) socket.off('connect');
     };
   }, [conversationId, qc, t]);
 

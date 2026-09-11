@@ -874,6 +874,30 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     }
     const convId: string = conversationId;
     try {
+      /*
+       * THE CONVERSATION MUST EXIST BEFORE WE WRITE TO IT.
+       *
+       * A customer socket is pinned to one thread and guarded above. An agent
+       * names the thread — they work a shared inbox — and that id went straight
+       * to `persistMessage` with the gateway's own unscoped service token, with
+       * nothing checking it resolved to anything real. A stale id in a client's
+       * state, or a crafted payload from any of the many people holding an agent
+       * token, wrote into whatever it named.
+       *
+       * Existence is the check the service token can honestly make. WHO may
+       * reply is enforced by Directus on the agent's own token everywhere else;
+       * this closes the gap where the gateway's token was doing the writing.
+       */
+      if (data.kind === 'agent') {
+        const exists = await directus.getConversationStatus(convId);
+        if (exists === null) {
+          logger.warn({ convId, agentId: data.agentId }, 'agent named an unknown conversation');
+          return socket.emit(SOCKET_EVENTS.error, {
+            code: 'conversation_unavailable',
+            message: 'that conversation no longer exists',
+          });
+        }
+      }
       // Attachment validation (MIME allow-list + size cap) before persisting.
       if (attachments && attachments.length > 0) {
         const metas = await directus.getFilesMeta(attachments);
@@ -1107,8 +1131,23 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
         code: 'rate_limited',
         message: 'too many notes, slow down',
       });
+    /*
+     * A NOTE THAT FAILS MUST SAY SO.
+     *
+     * This was the only agent write that reported neither a bad payload nor a
+     * persist failure — `message:send` and `note:delete` both emit. The portal
+     * renders the note optimistically and reconciles it when `note:new` echoes
+     * back, so with no echo and no error it sat on "Sending…" for ever and then
+     * vanished on the next conversation switch.
+     *
+     * Internal notes are handover context — "already refunded once", "do not
+     * offer a coupon". Losing one silently means the next agent re-asks the
+     * customer, or compensates them twice.
+     */
     const parsed = NoteAdd.safeParse(raw);
-    if (!parsed.success) return;
+    if (!parsed.success) {
+      return socket.emit(SOCKET_EVENTS.error, { code: 'bad_payload', message: 'invalid note' });
+    }
     const { conversationId, content, clientMsgId } = parsed.data;
     try {
       const saved = await directus.persistMessage({
@@ -1129,6 +1168,10 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       });
     } catch (err) {
       logger.error({ err }, 'note:add failed');
+      socket.emit(SOCKET_EVENTS.error, {
+        code: 'note_failed',
+        message: 'could not save that note',
+      });
     }
   });
 
