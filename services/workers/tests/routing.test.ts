@@ -235,17 +235,32 @@ describe('auto-assignment ladder', () => {
   });
 
   describe('broadcast — the last rung', () => {
-    it('hands the conversation ON rather than releasing it to nobody', async () => {
+    /*
+     * THE RULE (owner, 2026-09-12): first agent 60s, next-most-free 30s, then
+     * the chat is shown to EVERY logged-in agent so whoever is free takes it.
+     *
+     * This used to hand the last rung to a third NAMED agent instead, on the
+     * reasoning that an unowned chat is a chat nobody answers. That is a real
+     * concern but it was not the specified behaviour, and it failed worse: with
+     * four agents the ladder never reached the fourth, and the customer waited
+     * on one person who had already passed twice.
+     *
+     * Unassigned is VISIBLE, not lost — the inbox query admits
+     * `assigned_agent _null` for every agent.
+     */
+    it('RELEASES the chat to every agent, even when others are untried', async () => {
       const { d, assign } = deps({
         online: ['a1', 'a2', 'a3'],
         convo: { id: 'c1', assigned_agent: 'a2', assigned_team: null, status: 'open' },
         outbound: 0,
       });
       await handleRouting(job({ stage: 'broadcast', attemptedAgentIds: ['a1', 'a2'] }), d);
-      expect(assign).toHaveBeenCalledWith('c1', 'a3');
+      expect(assign).toHaveBeenCalledWith('c1', null);
     });
 
-    it('keeps it with the current owner once everyone has been tried', async () => {
+    it('releases it once everyone has been tried, rather than parking it', async () => {
+      // The worst previous outcome: it stayed with the agent who had already
+      // ignored it, and no one else could see that it needed answering.
       const { d, assign } = deps({
         online: ['a1', 'a2'],
         roster: ['a1', 'a2'],
@@ -253,7 +268,21 @@ describe('auto-assignment ladder', () => {
         outbound: 0,
       });
       await handleRouting(job({ stage: 'broadcast', attemptedAgentIds: ['a1', 'a2'] }), d);
-      expect(assign).not.toHaveBeenCalled();
+      expect(assign).toHaveBeenCalledWith('c1', null);
+    });
+
+    it('records the miss ONCE, against the agent who was holding it', async () => {
+      // Released-to-the-pool must still be attributable, and must not
+      // double-count the same agent in the routing report.
+      const { d, recordOutcome } = deps({
+        online: ['a1', 'a2'],
+        convo: { id: 'c1', assigned_agent: 'a2', assigned_team: null, status: 'open' },
+        outbound: 0,
+      });
+      await handleRouting(job({ stage: 'broadcast', attemptedAgentIds: ['a1', 'a2'] }), d);
+      const forA2 = recordOutcome.mock.calls.filter((c) => c[0]?.agentId === 'a2');
+      expect(forA2).toHaveLength(1);
+      expect(forA2[0]![0]).toMatchObject({ outcome: 'missed', stage: 'broadcast' });
     });
 
     it('does nothing if the second agent replied in time', async () => {

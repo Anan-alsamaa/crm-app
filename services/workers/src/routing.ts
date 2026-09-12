@@ -371,15 +371,30 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
     return;
   }
 
-  // stage === 'broadcast' — the last rung. It used to release the chat to the
-  // pool by nulling the assignee, which is the diffusion-of-responsibility
-  // failure this whole ladder exists to prevent. Hand it on instead; if there
-  // is nobody left to hand it to, it stays with whoever holds it.
-  const agent = await nextAgent(redis, job.attemptedAgentIds, eligible);
-  if (!agent) {
-    log('routing: nobody left to try, leaving it with the current owner', { id: convo.id });
-    return;
-  }
-  await directus.assign(convo.id, agent);
-  log('routing: handed on at the end of the ladder', { id: convo.id, agent });
+  /*
+   * stage === 'broadcast' — THE LAST RUNG RELEASES IT TO EVERYONE.
+   *
+   * The rule (owner, 2026-09-12): first agent has 60s, the next-most-free has
+   * 30s, and after that the chat is shown to EVERY logged-in agent so whoever
+   * is free can take it.
+   *
+   * This previously handed it to a third named agent instead. That was a
+   * deliberate change — the concern was diffusion of responsibility, a chat
+   * nobody owns being a chat nobody answers — but it is not the behaviour the
+   * owner specified, and it had a worse failure of its own: with four agents
+   * the ladder silently never reached the fourth, and a customer waited on one
+   * person who had already ignored them twice.
+   *
+   * Unassigned is VISIBLE, not hidden: the inbox query admits
+   * `assigned_agent _null` for every agent, so the pool is the one state the
+   * whole team can see and act on.
+   */
+  await directus.assign(convo.id, null);
+  /* The miss against whoever was holding it is ALREADY recorded above, for
+     both stages — recording it again here would double-count the same agent
+     in the routing report. */
+  log('routing: released to every agent — whoever is free can take it', {
+    id: convo.id,
+    eligibleAgents: eligible.length,
+  });
 }
