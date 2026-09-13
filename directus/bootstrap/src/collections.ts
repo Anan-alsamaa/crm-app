@@ -161,9 +161,33 @@ export const collections: CollectionSpec[] = [
       {
         field: 'acquisition_channel',
         type: 'string',
-        choices: ['app', 'walk_in'],
+        /*
+         * THREE STATES, because two conflated the wrong pair (owner,
+         * 2026-09-13).
+         *
+         * This used to be `['app', 'walk_in']`, derived from a single boolean:
+         * "did we get a Yiji id?". That put an app customer STANDING IN A
+         * BRANCH into `app`, indistinguishable from one on their sofa — so the
+         * question "how many of our app customers actually visit the shops?"
+         * could not be asked at all.
+         *
+         * The fix is to stop making one field answer two questions. The door
+         * they came through and whether they hold a Yiji account are
+         * independent, and the three combinations that can occur are:
+         *
+         *   app          -> opened the chat inside the Yiji app
+         *   walk_in_app  -> scanned the branch QR code AND has a Yiji account
+         *   walk_in      -> scanned the branch QR code, no known account
+         *
+         * (The fourth combination — in the app without an account — cannot
+         * happen, which is why there are three and not four.)
+         *
+         * Existing rows stay valid: `app` and `walk_in` keep their meanings and
+         * nothing needs migrating. Only the middle case is newly expressible.
+         */
+        choices: ['app', 'walk_in_app', 'walk_in'],
         index: true,
-        note: 'How the customer first reached us. walk_in = scanned the QR code in a branch and has no known Yiji account.',
+        note: 'How the customer first reached us. app = opened from the Yiji app. walk_in_app = scanned the branch QR code and has a Yiji account. walk_in = scanned the QR code with no known Yiji account.',
       },
       { field: 'name', type: 'string' },
       { field: 'phone', type: 'string', index: true },

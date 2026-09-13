@@ -19,6 +19,31 @@ import type { AssignmentEntity, AssignmentEntityType } from './assignment-notify
  * writer of chat messages (research D-03). Handles vendor resolution, per-vendor
  * contact dedup, conversation resume/create, and message writes.
  */
+/**
+ * Which of the THREE ways this customer reached us.
+ *
+ * Two independent facts, not one:
+ *   - the door: `entry_point`, set only by the store QR page
+ *   - the account: `walk_in` is true exactly when no Yiji id was proven
+ *
+ * This was `claims.walk_in ? 'walk_in' : 'app'`, which answered both with one
+ * boolean and so could not express the middle case at all — an app customer
+ * standing in a branch was filed as `app`, identical to one on their sofa, and
+ * "how many app customers visit our shops?" became unanswerable.
+ *
+ * The fourth combination (in the app, no account) cannot occur: the app only
+ * issues a session to somebody it has authenticated. So there are three.
+ */
+export function acquisitionChannel(claims: {
+  walk_in?: boolean;
+  entry_point?: 'app' | 'store_qr';
+}): 'app' | 'walk_in_app' | 'walk_in' {
+  const fromStore = claims.entry_point === 'store_qr';
+  if (!fromStore) return 'app';
+  // In a branch. The only question left is whether they hold a Yiji account.
+  return claims.walk_in ? 'walk_in' : 'walk_in_app';
+}
+
 export class GatewayDirectus {
   private readonly client: YijiDirectusClient;
   private readonly url: string;
@@ -186,7 +211,7 @@ export class GatewayDirectus {
            * the sort of thing an offer wants to know. Its own column rather
            * than `metadata`, because Directus cannot filter inside json — the
            * same reason tickets.order_id is a column. */
-          acquisition_channel: claims.walk_in ? 'walk_in' : 'app',
+          acquisition_channel: acquisitionChannel(claims),
           name,
           phone,
           email,

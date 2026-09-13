@@ -63,6 +63,20 @@ export const CustomerClaims = z.object({
    * customer it has already authenticated.
    */
   walk_in: z.boolean().optional(),
+  /**
+   * WHICH DOOR they came through — independent of whether they have an account.
+   *
+   * `walk_in` above answers "is this identity unproven?". That is not the same
+   * question as "where did this person start?", and using one boolean for both
+   * lost a case the owner needs (2026-09-13): an app customer STANDING IN A
+   * BRANCH proved their account, so `walk_in` was false, so they were recorded
+   * as `app` and became indistinguishable from a customer at home.
+   *
+   * Set only by the QR page's endpoint, which is the one caller that knows the
+   * customer is physically in a store. Absent on an in-app token, where the
+   * door is implied.
+   */
+  entry_point: z.enum(['app', 'store_qr']).optional(),
   iat: z.number().optional(),
   exp: z.number().optional(),
 });

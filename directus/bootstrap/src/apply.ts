@@ -15,6 +15,7 @@ import {
   createDirectus,
   createCollection,
   createField,
+  updateField,
   createRelation,
   updateRelation,
   createRole,
@@ -216,6 +217,36 @@ async function applyCollections(client: AnyClient): Promise<void> {
       await idempotent(`${spec.collection}.${field.field}`, () =>
         client.request(createField(spec.collection, fieldPayload(field) as never)),
       );
+      /*
+       * CREATING A FIELD IS NOT THE SAME AS KEEPING IT CORRECT.
+       *
+       * `createField` above is wrapped in `idempotent`, which swallows the
+       * "already exists" error — so on every run after the first, a field's
+       * META IS NEVER TOUCHED. Adding a value to a choice list therefore had no
+       * effect on any environment that already had the field: the code wrote
+       * the new value happily (Directus does not enforce choices on writes),
+       * but the admin dropdown still offered the old two, so a human could
+       * never select it and a report grouping by it showed a value nobody could
+       * reproduce. Found adding `walk_in_app` to `acquisition_channel`
+       * (2026-09-13), where staging kept reporting ['app','walk_in'] after the
+       * deploy.
+       *
+       * Only the choice list is re-synced, deliberately. Re-applying the whole
+       * meta would fight anything an administrator has legitimately customised
+       * in the Directus UI; a choice list is generated from this file and has
+       * no other author.
+       */
+      if (field.choices) {
+        await synced(`${spec.collection}.${field.field} choices`, () =>
+          client.request(
+            updateField(spec.collection, field.field, {
+              meta: {
+                options: { choices: field.choices!.map((c) => ({ text: c, value: c })) },
+              },
+            } as never),
+          ),
+        );
+      }
     }
   }
 }

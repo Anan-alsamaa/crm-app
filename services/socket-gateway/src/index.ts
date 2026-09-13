@@ -756,6 +756,17 @@ async function main(): Promise<void> {
         /* Only a session with no proven identity is a walk-in. One opened by
            the app carries the customer's own id, so it is not. */
         walk_in: !yijiCustomerId,
+        /*
+         * THE DOOR, recorded separately from the account.
+         *
+         * Every session minted here began at the branch QR page — that is what
+         * this endpoint is for. Saying so lets `acquisitionChannel` tell an app
+         * customer standing in a shop (`walk_in_app`) from one at home (`app`),
+         * which a single `walk_in` boolean could not express: proving an
+         * account set `walk_in: false` and filed them as though they had never
+         * left the sofa.
+         */
+        entry_point: 'store_qr' as const,
       },
       config.YIJI_JWT_SECRET,
       { algorithm: 'HS256', expiresIn: '2h' },
