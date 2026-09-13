@@ -513,7 +513,58 @@ async function applyRoles(client: AnyClient): Promise<void> {
       fields: string[] | null;
       permissions: Record<string, unknown> | null;
     }>;
-    const byKey = new Map(existingPerms.map((p) => [`${p.collection}|${p.action}`, p]));
+    /*
+     * GROUP, do not overwrite. Directus permits MANY rows for one
+     * (policy, collection, action), and it merges them PERMISSIVELY — so an
+     * unrestricted `{}` row sitting beside a scoped one makes the scoped one
+     * decorative.
+     *
+     * This was `new Map(existingPerms.map(...))`, which keeps only the LAST row
+     * per key. The duplicate was therefore invisible to both passes below: the
+     * reconcile updated whichever row the map happened to hold, and the revoke
+     * skipped the pair because `collection|action` was still declared. Bootstrap
+     * could run to completion, print "(exists)", and leave the leak in place.
+     *
+     * Found on 2026-09-14: production and staging each carried 13 such pairs —
+     * WeCare Agent could read every colleague's conversation AND its messages,
+     * including the customer's phone number in the walk-in note.
+     */
+    const byKeyAll = new Map<string, typeof existingPerms>();
+    for (const perm of existingPerms) {
+      const key = `${perm.collection}|${perm.action}`;
+      const list = byKeyAll.get(key);
+      if (list) list.push(perm);
+      else byKeyAll.set(key, [perm]);
+    }
+    /*
+     * Keep the row this file will reconcile, and DELETE the rest of its
+     * duplicates — but only on collections this file governs, the same test the
+     * revoke pass uses, so another provisioning tool's grants are left alone.
+     *
+     * The survivor is chosen deliberately: the most restrictive row, so that if
+     * anything below fails the environment is left tighter rather than looser.
+     */
+    for (const [key, rows] of byKeyAll) {
+      if (rows.length < 2) continue;
+      const collection = key.split('|')[0] ?? '';
+      if (!managedCollections.has(collection)) continue;
+      const ranked = [...rows].sort((a, b) => {
+        const openA = !a.permissions || Object.keys(a.permissions).length === 0 ? 1 : 0;
+        const openB = !b.permissions || Object.keys(b.permissions).length === 0 ? 1 : 0;
+        return openA - openB;
+      });
+      const keep = ranked[0];
+      const drop = ranked.slice(1);
+      if (!keep) continue;
+      byKeyAll.set(key, [keep]);
+      for (const dupe of drop) {
+        await idempotent(
+          `perm ${role.name} ${dupe.action} ${dupe.collection} (DUPLICATE REMOVED, id ${dupe.id})`,
+          () => client.request(deletePermission(dupe.id)),
+        );
+      }
+    }
+    const byKey = new Map([...byKeyAll].map(([k, rows]) => [k, rows[0]]));
     for (const p of role.permissions) {
       const current = byKey.get(`${p.collection}|${p.action}`);
       if (current) {
