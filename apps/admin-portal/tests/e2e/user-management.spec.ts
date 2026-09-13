@@ -52,7 +52,10 @@ test.afterAll(removeTestAgents);
 
 async function login(page: import('@playwright/test').Page) {
   await page.goto(`${BASE}/login`);
-  await page.getByLabel(/email/i).fill(ADMIN_EMAIL);
+  // BY ID, NOT BY LABEL. The field accepts an employee id as well as an
+  // address, so its label is "Login name" — selecting on /email/i matched
+  // nothing and every test in this file timed out at 30s on the fill.
+  await page.locator('#email').fill(ADMIN_EMAIL);
   await page.locator('#password').fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   // Wait for the post-login landing — the admin lands on the Dashboard, whose
