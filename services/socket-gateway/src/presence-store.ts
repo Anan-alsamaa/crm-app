@@ -43,6 +43,14 @@ export interface PresenceStore {
    * Membership is the question; recency is a different one.
    */
   onlineCount(): Promise<number>;
+  /**
+   * Keep every currently-connected agent's entry fresh.
+   *
+   * Called on a timer by the gateway with the agents it actually holds sockets
+   * for. This is what lets `onlineCount` sweep: without it the score means
+   * "last typed" and a quiet agent would be swept out from under a customer.
+   */
+  heartbeatAll(userIds: string[]): Promise<void>;
 }
 
 export function createPresenceStore(redis: Redis | Cluster): PresenceStore {
@@ -68,7 +76,41 @@ export function createPresenceStore(redis: Redis | Cluster): PresenceStore {
       if (score !== null) await redis.zadd(KEY, now(), userId);
     },
     async onlineCount() {
+      /*
+       * SWEEP FIRST, THEN COUNT — and this is only safe because the gateway
+       * now heartbeats every CONNECTED agent (see `heartbeatAll`).
+       *
+       * Counting without sweeping reported agents who were long gone: nothing
+       * removes an entry when a task is hard-killed or replaced during a
+       * deploy, so every rollout leaked a ghost. Measured on staging with ZERO
+       * agents connected, `/debug/presence` said `distinctOnline: 0` while this
+       * count said 3, and the widget duly told customers agents were available.
+       * Waiting for a reply that cannot come is worse than being told to use
+       * WhatsApp.
+       *
+       * Sweeping here was previously WRONG because the score only moved when an
+       * agent sent a message, so a signed-in agent reading quietly for 90s
+       * looked gone. The heartbeat fixes the meaning of the score: it now says
+       * "still holding a socket", not "last typed". Recency and membership
+       * finally answer the same question, so the sweep is correct both ways.
+       */
+      await sweep();
       return redis.zcard(KEY);
+    },
+    async heartbeatAll(userIds) {
+      if (userIds.length === 0) return;
+      /*
+       * Refresh only agents ALREADY present. A heartbeat must never re-add
+       * someone who signed out — that is the same resurrection `touch` guards
+       * against, and here it would undo a logout on the very next tick.
+       */
+      const scores = await Promise.all(userIds.map((id) => redis.zscore(KEY, id)));
+      const live = userIds.filter((_, i) => scores[i] !== null);
+      if (live.length === 0) return;
+      const at = now();
+      const pipe = redis.multi();
+      for (const id of live) pipe.zadd(KEY, at, id);
+      await pipe.exec();
     },
     async idleFirst() {
       await sweep();

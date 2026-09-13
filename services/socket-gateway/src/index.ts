@@ -42,7 +42,7 @@ import { randomBytes } from 'node:crypto';
 import { createTokenBucket } from './rate-limit.js';
 import { validateAgentToken } from './auth/agent-jwt.js';
 import { createProducer } from './queue.js';
-import { createPresenceStore } from './presence-store.js';
+import { createPresenceStore, PRESENCE_TTL_MS } from './presence-store.js';
 import { registerConnection, getAgentPresenceSnapshot } from './connection.js';
 import { Registry } from './metrics.js';
 import { parseAttachmentPolicy } from './attachments.js';
@@ -239,6 +239,39 @@ async function main(): Promise<void> {
   // than opening a third connection — it is a plain key/sorted-set writer, and
   // the pub client is not blocked on a subscription the way the sub client is.
   const presenceStore = pubClient ? createPresenceStore(pubClient) : undefined;
+
+  /*
+   * HEARTBEAT EVERY CONNECTED AGENT, so "online" cannot go stale in either
+   * direction.
+   *
+   * The shared registry is a sorted set scored by last activity, and the only
+   * thing that used to move the score was an agent SENDING a message. That left
+   * the count unable to be swept safely, and an unswept count counts ghosts: a
+   * task killed or replaced during a deploy never removes its agents, so
+   * staging reported 3 agents online while the gateway itself held none, and
+   * customers were told help was available when nobody was there.
+   *
+   * Refreshing from the sockets we actually hold redefines the score as "still
+   * connected". `onlineCount` can then sweep, which is what makes a ghost
+   * expire on its own — and a quiet agent who is genuinely signed in keeps
+   * their entry without having to type.
+   *
+   * Half the TTL, so an entry is refreshed twice before it could ever expire
+   * and one missed tick is harmless. Unref'd: a timer must not hold the process
+   * open during shutdown.
+   */
+  const presenceHeartbeat = presenceStore
+    ? setInterval(
+        () => {
+          const ids = getAgentPresenceSnapshot().agents.map((a) => a.userId);
+          void presenceStore.heartbeatAll(ids).catch((err: unknown) => {
+            logger.warn({ err }, 'presence heartbeat failed');
+          });
+        },
+        Math.floor(PRESENCE_TTL_MS / 2),
+      )
+    : undefined;
+  presenceHeartbeat?.unref();
 
   registerConnection({
     io,
@@ -725,6 +758,20 @@ async function main(): Promise<void> {
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'shutting down');
+    if (presenceHeartbeat) clearInterval(presenceHeartbeat);
+    /*
+     * HAND BACK THIS INSTANCE'S AGENTS BEFORE DYING.
+     *
+     * The sweep would expire them eventually, but "eventually" is up to 90
+     * seconds of telling customers that agents are available while this task is
+     * already draining — and a rolling deploy does this on every release.
+     * Removing them here makes the common case instant; the sweep stays as the
+     * backstop for the kill -9 that never reaches this line.
+     */
+    if (presenceStore) {
+      const leaving = getAgentPresenceSnapshot().agents.map((a) => a.userId);
+      await Promise.all(leaving.map((id) => presenceStore.offline(id).catch(() => undefined)));
+    }
     io.close();
     await app.close();
     httpServer.close();
