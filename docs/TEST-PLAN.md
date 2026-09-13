@@ -64,6 +64,31 @@ assignable agent at all, so every chat stayed unowned.
 
 ---
 
+## One inaccessible field empties a WHOLE page
+
+Directus rejects an entire query when any requested field is missing or
+unreadable — it does not return the rows without that column. So a single
+schema gap renders as "no data", which reads as an empty queue rather than a
+fault.
+
+Found 2026-09-13: a coupon request was created correctly (`CC-VNB9RVDP`, status
+pending, linked to its ticket) and the admin approvals page showed nothing. The
+page asks for 30 fields; production's `coupon_approvals` had 22. Staging had 37.
+The coupon-detail columns had been added to staging by hand and production never
+received them, and no bootstrap file defines them — so a fresh environment would
+drift the same way again.
+
+Two shapes to know:
+
+- A field missing outright — create it from the other environment's definition.
+- A field present in the DATABASE but with no Directus metadata (`item_name`
+  here): `POST /fields` reports "already exists" while reads still fail. Register
+  it by posting `meta` with NO `schema` block, so Directus adopts the existing
+  column instead of trying to create it.
+
+When a list is unexpectedly empty, request `fields=*` first. If that works and
+the named-field query does not, it is this.
+
 ## An agent seeing only their own chats = drifted permissions, not a code bug
 
 The requirement is two-tier: a CUSTOMER sees only their current session, an
