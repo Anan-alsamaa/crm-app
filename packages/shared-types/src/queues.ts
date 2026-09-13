@@ -207,6 +207,28 @@ export const WalkInSessionRequest = z.object({
    * is indistinguishable from a real one downstream.
    */
   customerId: z.string().trim().min(1).max(64).optional(),
+  /**
+   * The app's OWN Yiji session token — how an in-app customer proves who they
+   * are without a token ever appearing in a URL.
+   *
+   * WHY THIS EXISTS. The app used to open the chat by navigating a web view to
+   * `…/?token=<JWT>`. The widget stripped it from the address bar immediately,
+   * but by then the session had already been written to web-view history, sent
+   * as a `Referer`, and captured by any screenshot — a 2-hour credential
+   * carrying a customer's phone and id. Moving it into a POST body removes the
+   * exposure without changing who is trusted.
+   *
+   * NOT A CLAIM, A PROOF. `customerId` above is self-asserted and therefore
+   * only safe from callers we already control. This is different: the gateway
+   * does not trust the signature (it is Yiji's, not ours) — it reads the `Id`,
+   * looks the customer up through Yiji's admin API with our service credential,
+   * and builds the identity from what comes back. A forged token resolves to
+   * nothing and the session degrades to a walk-in rather than impersonating
+   * somebody.
+   *
+   * Optional because a QR walk-in at a counter has none.
+   */
+  yijiSessionToken: z.string().trim().min(1).max(4096).optional(),
   /** The customer's display name, when the caller knows it. Cosmetic. */
   name: z.string().trim().min(1).max(120).optional(),
   /** The customer's email, when the caller knows it. Stored on the contact. */

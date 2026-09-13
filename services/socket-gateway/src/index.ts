@@ -43,7 +43,11 @@ import { createTokenBucket } from './rate-limit.js';
 import { validateAgentToken } from './auth/agent-jwt.js';
 import { createProducer } from './queue.js';
 import { createPresenceStore, PRESENCE_TTL_MS } from './presence-store.js';
-import { registerConnection, getAgentPresenceSnapshot } from './connection.js';
+import {
+  registerConnection,
+  getAgentPresenceSnapshot,
+  resolveCustomerClaims,
+} from './connection.js';
 import { Registry } from './metrics.js';
 import { parseAttachmentPolicy } from './attachments.js';
 import { verifyWebhookSignature } from './webhook.js';
@@ -273,6 +277,26 @@ async function main(): Promise<void> {
     : undefined;
   presenceHeartbeat?.unref();
 
+  /*
+   * ONE Yiji user reader, shared by both ways into a chat.
+   *
+   * The socket path uses it to resolve an app-issued session token; the
+   * `/walk-in/session` endpoint now uses the same reader for the same purpose,
+   * so an in-app customer is identified identically however they arrive. It
+   * was constructed inline inside `registerConnection` before, which put it out
+   * of reach of the HTTP route defined further down.
+   *
+   * Null unless the Yiji service credential is configured, in which case a
+   * token issued by the Yiji app resolves to a real customer instead of being
+   * refused.
+   */
+  const yijiUsers = createYijiUserReader({
+    apiUrl: config.YIJI_API_URL,
+    adminApiUrl: config.YIJI_ADMIN_API_URL,
+    adminEmail: config.YIJI_ADMIN_EMAIL,
+    adminPassword: config.YIJI_ADMIN_PASSWORD,
+  });
+
   registerConnection({
     io,
     directus,
@@ -288,12 +312,7 @@ async function main(): Promise<void> {
     /* Null unless the Yiji service credential is configured, in which case a
        token issued by the Yiji app resolves to a real customer instead of
        being refused. */
-    yijiUsers: createYijiUserReader({
-      apiUrl: config.YIJI_API_URL,
-      adminApiUrl: config.YIJI_ADMIN_API_URL,
-      adminEmail: config.YIJI_ADMIN_EMAIL,
-      adminPassword: config.YIJI_ADMIN_PASSWORD,
-    }),
+    yijiUsers,
     /* The customer's most recent order id, prefilled into the WhatsApp
        fallback so an offline handover starts with the order already named.
        Null without YIJI_API_URL, in which case the link simply carries no
@@ -659,6 +678,50 @@ async function main(): Promise<void> {
       yijiCustomerId = parsed.data.customerId ?? null;
       displayName = parsed.data.name ?? null;
       email = parsed.data.email ?? null;
+
+      /*
+       * A YIJI SESSION TOKEN IS PROOF; `customerId` IN THE BODY IS NOT.
+       *
+       * This endpoint is how the app opens a chat now that a token no longer
+       * travels in the URL. That makes `customerId` dangerous in a way it was
+       * not before: it decides `walk_in`, and `walk_in: false` replays the
+       * customer's previous conversations and writes their real
+       * `external_customer_id`. Self-asserted, it would let anyone who guessed
+       * a phone number read somebody else's chat history by adding a plausible
+       * id — an attack that previously needed our signing secret.
+       *
+       * So when a session token is supplied it WINS, and it is resolved rather
+       * than believed: the signature is Yiji's and unverifiable here, so the
+       * gateway reads the `Id`, looks the customer up through Yiji's admin API
+       * with our own service credential, and takes the identity from the
+       * answer. Exactly what the socket path already does — same function, so
+       * an in-app customer is identified identically however they arrive.
+       *
+       * A token that resolves to nothing degrades to a walk-in instead of
+       * failing: the customer still reaches an agent, just without history.
+       * Losing a chat is worse than losing history.
+       */
+      if (parsed.data.yijiSessionToken) {
+        const resolved = await resolveCustomerClaims(
+          parsed.data.yijiSessionToken,
+          verifier,
+          yijiUsers,
+          logger,
+        ).catch(() => null);
+        if (resolved?.customer_id) {
+          yijiCustomerId = resolved.customer_id;
+          /* Yiji's record of the person beats anything typed alongside it, but
+             a field they leave blank must not erase what the caller supplied. */
+          displayName = resolved.name ?? displayName;
+          email = resolved.email ?? email;
+          /* Their number as Yiji holds it, when we got one: the phone is what
+             matches the contact, and the account's own number is better
+             evidence than a box on a form. */
+          if (resolved.phone) phone = resolved.phone;
+        } else {
+          logger.warn('walk-in: a Yiji session token did not resolve — continuing as a walk-in');
+        }
+      }
     }
 
     const vendor = await directus.resolveVendor(vendorId).catch(() => null);
