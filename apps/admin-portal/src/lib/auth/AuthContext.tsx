@@ -207,8 +207,8 @@ export function isAdmin(user: AuthUser | null): boolean {
  */
 export const COUPON_MONEY_ROLES = [
   'Administrator',
-  'Admin',
-  'Supervisor',
+  // The legacy `Admin` and `Supervisor` roles were removed on 2026-09-13 —
+  // superseded by the WeCare tiers, and no user held either.
   'WeCare Admin',
   'WeCare Supervisor',
 ];

@@ -136,9 +136,9 @@ describe('createRoutingRepo.agentsByLoad', () => {
     // toolbar shows nobody.
     expect(userFilter()).toEqual({
       status: { _eq: 'active' },
-      // BOTH names: the deployed role model uses `WeCare Agent`, and listing
-      // only `Agent` matched nobody at all — see the note on ROUTABLE_ROLES.
-      role: { name: { _in: ['Agent', 'WeCare Agent'] } },
+      // `WeCare Agent` is the one routable role. The legacy `Agent` was removed
+      // from both environments on 2026-09-13 — see the note on ROUTABLE_ROLES.
+      role: { name: { _in: ['WeCare Agent'] } },
     });
   });
 
@@ -147,7 +147,7 @@ describe('createRoutingRepo.agentsByLoad', () => {
     await repo.agentsByLoad('day-shift');
     expect(userFilter()).toMatchObject({
       team: { _eq: 'day-shift' },
-      role: { name: { _in: ['Agent', 'WeCare Agent'] } },
+      role: { name: { _in: ['WeCare Agent'] } },
     });
   });
 

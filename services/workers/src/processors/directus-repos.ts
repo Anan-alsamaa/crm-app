@@ -19,14 +19,15 @@ import type {
  * holds zero conversations forever, and would otherwise sort to the front of
  * every least-loaded list. See agentsByLoad.
  *
- * BOTH NAMES, because the deployed role model uses `WeCare Agent` and this list
- * only had `Agent`. Measured on staging (2026-09-10): 11 active agents, ALL of
- * them `WeCare Agent`, and ZERO holding `Agent`. So the filter matched nobody
- * and auto-assignment had nobody to assign to — a filter that matches nothing
- * and reads as a plausible empty roster, which is this codebase's recurring bug
- * shape. `Agent` is kept for older deployments that still use it.
+ * `WeCare Agent` is the ONE routable role. It briefly also listed `Agent`,
+ * because the deployed model used `WeCare Agent` while this list said `Agent` —
+ * the filter matched nobody and auto-assignment had nobody to assign to, which
+ * reads as a plausible empty roster rather than a fault. The legacy `Agent`,
+ * `Admin` and `Supervisor` roles were removed from both environments on
+ * 2026-09-13 (no user held any of them), so naming `Agent` here would now
+ * describe a role that does not exist.
  */
-const ROUTABLE_ROLES = ['Agent', 'WeCare Agent'] as const;
+const ROUTABLE_ROLES = ['WeCare Agent'] as const;
 
 /** Real (Directus-backed) implementations of the processor repos. */
 
