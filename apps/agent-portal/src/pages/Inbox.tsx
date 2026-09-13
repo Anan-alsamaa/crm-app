@@ -178,17 +178,25 @@ export function Inbox() {
     max: 480,
   });
   const { user } = useAuth();
-  /**
-   * A manager sees everything; an agent sees their own work plus the unassigned
-   * pool. `admin_access` is the authoritative signal — in Directus 11 admin is a
-   * property of policies, not of the role's name, so matching on "Administrator"
-   * would miss anyone granted it a different way.
+  /*
+   * NO FILTERS ON ARRIVAL — the inbox opens on everything, most recent first
+   * (owner, 2026-09-13).
+   *
+   * It used to open on `status: 'open'` + `assignment: 'mine'`. Both are
+   * defensible in isolation and together they hid the thing an agent most needs
+   * to see: a chat released to the pool by the routing ladder. Three agents
+   * signed in, heard the new-chat notification, and found an empty list —
+   * because "mine" is evaluated against a chat that, by design, belongs to
+   * nobody at that moment.
+   *
+   * `sort: 'recent'` stays: it is an ORDER, not a filter, and "most recent
+   * first" is what makes an unfiltered list usable rather than arbitrary.
+   * Everything else is left unset, which `buildFilter` reads as "no narrowing"
+   * — archived chats are still excluded there, unconditionally, because that is
+   * what archiving means.
    */
-  const isManager = !!user?.admin_access;
   const [filters, setFilters] = useState<InboxFilters>({
-    status: 'open',
     sort: 'recent',
-    assignment: 'mine',
   });
   /* Whether ANYTHING is narrowing the list. Used to tell "there are none"
      apart from "none match", which is the difference between an empty inbox
@@ -199,10 +207,15 @@ export function Inbox() {
     (filters.assignment ?? 'all') !== 'all' ||
     !!filters.search?.trim();
 
-  // Managers default to the whole inbox; agents to their own queue.
-  useEffect(() => {
-    setFilters((f) => ({ ...f, assignment: isManager ? 'all' : 'mine' }));
-  }, [isManager]);
+  /*
+   * Deliberately NO effect re-imposing an assignment scope.
+   *
+   * This used to set `assignment: <manager> ? 'all' : 'mine'` once the user
+   * loaded, which quietly re-applied the agent filter a moment AFTER the first
+   * render — so even clearing it by hand was undone on reload. Everyone now
+   * starts on the whole working set and narrows it themselves; the dropdown
+   * still offers Mine/All for anyone who wants it.
+   */
   // Order-id search runs as its own query because the order lives on the
   // ticket, not the conversation. Kept separate from the list query so a slow
   // or failed ticket lookup degrades to a name/phone search instead of
