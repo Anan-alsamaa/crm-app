@@ -700,6 +700,40 @@ export class GatewayDirectus {
   }
 
   /**
+   * Claim an UNOWNED conversation for the agent who just answered it.
+   *
+   * Only ever null -> agent: it must never take a chat away from whoever holds
+   * it, so a colleague replying on a thread you own leaves ownership alone.
+   *
+   * WHY THIS EXISTS. An agent could answer and solve a chat without it ever
+   * being assigned to them — routine now that an unanswered chat is released
+   * to the pool for anyone to pick up. Everything keyed on `assigned_agent`
+   * then has nobody to credit: the customer's rating counted for no one, and
+   * the agent's own performance row missed the chat they actually handled.
+   * Answering IS claiming; this records what already happened.
+   */
+  async claimConversationIfUnassigned(conversationId: string, agentId: string): Promise<boolean> {
+    try {
+      const rows = (await this.client.request(
+        readItems('conversations', {
+          filter: { id: { _eq: conversationId }, assigned_agent: { _null: true } },
+          fields: ['id'],
+          limit: 1,
+        }),
+      )) as Array<{ id: string }>;
+      if (rows.length === 0) return false;
+      await this.client.request(
+        updateItem('conversations', conversationId, { assigned_agent: agentId } as never),
+      );
+      return true;
+    } catch {
+      /* Best effort: a failed claim must never fail the reply the agent just
+         sent. The message is already persisted and delivered. */
+      return false;
+    }
+  }
+
+  /**
    * The OPEN conversations this agent actually owns.
    *
    * Deliberately not `listAgentConversationIds`, which also returns unassigned

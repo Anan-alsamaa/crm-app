@@ -53,6 +53,8 @@ function makeStubs(over: Partial<Record<keyof GatewayDirectus, unknown>> = {}): 
     listAgentConversationIds: vi.fn(async () => ['conv-1']),
     loadConversationMessages: vi.fn(async () => []),
     getConversationStatus: vi.fn(async () => 'open'),
+    // An agent replying to an UNOWNED chat claims it — see claim-on-reply.test.ts.
+    claimConversationIfUnassigned: vi.fn(async () => true),
     getConversationAttachment: vi.fn(async () => null),
     ...over,
   } as unknown as GatewayDirectus;

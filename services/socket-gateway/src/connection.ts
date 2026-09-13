@@ -932,6 +932,38 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       // Signal every agent inbox to refresh (covers conversations they haven't joined).
       io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId: convId });
       /*
+       * ANSWERING A CHAT NOBODY OWNS CLAIMS IT.
+       *
+       * An agent could answer and solve a chat that stayed `assigned_agent:
+       * null` — routine now that an unanswered chat is released to the pool for
+       * anyone to take. Everything keyed on the assignee then had nobody to
+       * credit: a customer's rating counted for no one (reported 2026-09-13,
+       * a 4-star that read as "no ratings yet"), and the agent's own
+       * performance row missed a chat they had actually handled.
+       *
+       * Only ever null -> this agent, so replying on a colleague's thread never
+       * takes it from them. Fire-and-forget: a failed claim must not fail a
+       * reply that has already been delivered.
+       */
+      if (data.kind === 'agent' && data.agentId) {
+        const agentId = data.agentId;
+        void directus
+          .claimConversationIfUnassigned(convId, agentId)
+          .then((claimed) => {
+            if (claimed) {
+              io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, {
+                conversationId: convId,
+              });
+              logger.info(
+                { convId, agentId },
+                'agent claimed an unassigned conversation by replying',
+              );
+            }
+          })
+          .catch(() => undefined);
+      }
+
+      /*
        * FIRE AND FORGET, like every other side effect here.
        *
        * This was awaited inside the handler's try, so a degraded Redis — the
