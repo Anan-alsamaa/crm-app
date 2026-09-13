@@ -292,17 +292,46 @@ jobs:
           aws cloudfront create-invalidation --distribution-id "$DIST" --paths '/*' >/dev/null
           echo "::notice::widget uploaded to $BUCKET and $DIST invalidated"
 
-  # ── 5. Deploy the ECS services ────────────────────────────────────────────
-  deploy:
-    name: Deploy ${{ matrix.service }} to ${{ needs.plan.outputs.environment }}
+  # ── 5a. ONE approval for the whole release ────────────────────────────────
+  #
+  # The gate lives here, on a job with NO matrix, and nothing else in the
+  # workflow declares `environment:`.
+  #
+  # It used to sit on the deploy matrix itself. A GitHub Environment gate is
+  # evaluated PER JOB, and a matrix is four jobs, so a protected environment
+  # asked for the same release to be approved four times — once per service —
+  # and each approval released only its own leg. Worse, `smoke` needs the whole
+  # matrix, so while any leg was still waiting its dependency was unsatisfied
+  # and the smoke job SKIPPED: production shipped with no end-to-end check at
+  # all, which is exactly the "green pipeline that proves nothing" this file
+  # warns about elsewhere. Both symptoms were one cause (2026-09-13, v1.14.1).
+  #
+  # An empty job is the whole point: approving it is the decision, and the
+  # deploy matrix simply waits on it.
+  approve:
+    name: Approve ${{ needs.plan.outputs.environment }} release
     needs: [plan, build, portals]
-    # `always()` + the failure check: build is SKIPPED on a tag promotion (no
-    # rebuild), and a skipped dependency would otherwise block this job.
     if: always() && needs.plan.result == 'success' && needs.build.result != 'failure' && needs.portals.result == 'success'
     runs-on: ubuntu-latest
-    # A GitHub Environment named `prod` can carry a required-reviewer rule, so
-    # production waits for a human even though the tag triggered it.
     environment: ${{ needs.plan.outputs.environment }}
+    steps:
+      - name: Record what is being released
+        env:
+          ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+          IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
+        run: echo "::notice::approved ${IMAGE_TAG} -> ${ENVIRONMENT}"
+
+  # ── 5b. Deploy the ECS services ───────────────────────────────────────────
+  deploy:
+    name: Deploy ${{ matrix.service }} to ${{ needs.plan.outputs.environment }}
+    needs: [plan, build, portals, approve]
+    # `always()` + the failure check: build is SKIPPED on a tag promotion (no
+    # rebuild), and a skipped dependency would otherwise block this job.
+    # `approve` must genuinely have SUCCEEDED — `always()` would otherwise let a
+    # rejected or cancelled approval through, which is the one thing the gate
+    # exists to prevent.
+    if: always() && needs.plan.result == 'success' && needs.build.result != 'failure' && needs.portals.result == 'success' && needs.approve.result == 'success'
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       # Deploy one at a time: directus first, since the others depend on it.
@@ -492,6 +521,12 @@ jobs:
   smoke:
     name: Smoke
     needs: [plan, deploy]
+    # RUN THIS, OR THE RELEASE IS UNVERIFIED.
+    #
+    # With no condition, a single skipped/gated leg in `deploy` left this job
+    # skipped — so the v1.14.1 production release shipped with nothing probing
+    # it. Stated explicitly: if the deploys succeeded, the smoke test runs.
+    if: always() && needs.deploy.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Probe the public endpoints
