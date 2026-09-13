@@ -80,7 +80,10 @@ interface Harness {
   close: () => Promise<void>;
 }
 
-async function startGateway(stubs: Stubs): Promise<Harness> {
+async function startGateway(
+  stubs: Stubs,
+  extra: { presenceStore?: unknown } = {},
+): Promise<Harness> {
   const http = createServer();
   const io = new SocketServer(http, { cors: { origin: '*' } });
   registerConnection({
@@ -90,6 +93,7 @@ async function startGateway(stubs: Stubs): Promise<Harness> {
     verifier: stubs.verifier,
     producer: stubs.producer,
     logger: silentLogger,
+    ...(extra as Record<string, unknown>),
   });
   await new Promise<void>((resolve) => http.listen(0, resolve));
   const port = (http.address() as AddressInfo).port;
@@ -790,6 +794,87 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
       const payload = await update;
       expect(payload.vendorId).toBe('vendor-uuid');
       expect(payload.online.length).toBeGreaterThanOrEqual(2);
+    });
+
+    /*
+     * THE ORDER OF TWO LINES, WHICH IS THE WHOLE BUG.
+     *
+     * `broadcastAgentPresence` reads the SHARED Redis set and floors it at the
+     * local count, so announcing before removing the agent announces them as
+     * still present. The customer's header stayed "Online" after the only agent
+     * signed out, and corrected itself only when the panel was closed and
+     * reopened (a reconnect recomputes the count) — reported from production.
+     *
+     * This fake store has real Redis semantics: a set, and a count read from it.
+     * With the broadcast ahead of the removal the asserted count here is 1, so
+     * this test fails on the pre-fix source rather than merely describing it.
+     */
+    function fakePresenceStore() {
+      const members = new Set<string>();
+      const order: string[] = [];
+      return {
+        members,
+        order,
+        online: async (id: string) => {
+          members.add(id);
+        },
+        offline: async (id: string) => {
+          order.push('offline');
+          members.delete(id);
+        },
+        onlineCount: async () => {
+          order.push('count');
+          return members.size;
+        },
+        touch: async () => undefined,
+      };
+    }
+
+    it('announces ZERO agents online the moment the last agent logs out', async () => {
+      /*
+       * ASSERTED AS A DROP, NOT AS AN ABSOLUTE ZERO.
+       *
+       * `agentPresence` is MODULE-level state with no reset, and agent sockets
+       * from earlier tests in this file linger behind a 5s reconnect grace, so
+       * the local floor here is whatever those left behind (it was 3). That is
+       * a harness artefact; the product behaviour under test is that signing
+       * out REMOVES this agent from the shared registry before the count is
+       * read, so the announced figure falls. The Redis call order below is the
+       * precise assertion — it is what inverted in the bug.
+       */
+      const store = fakePresenceStore();
+      harness = await startGateway(makeStubs(), { presenceStore: store });
+      const observer = await connectCustomerReady(harness.port, sockets);
+
+      mockedValidateAgentToken.mockResolvedValue({ id: 'agent-logout-1', role: 'agent' });
+      const agent = await connect(harness.port, { kind: 'agent', token: 'good' });
+      sockets.push(agent);
+      // The connect pulse first, so the logout pulse is the one measured. Its
+      // count is the baseline the logout has to fall below.
+      const connectPulse = (
+        await waitFor<{ count: number }>(observer, SOCKET_EVENTS.agentsPresence)
+      ).count;
+      await store.online('agent-logout-1');
+
+      // What the gateway can see locally, EXCLUDING the agent about to leave:
+      // the logout pulse must come back to exactly this.
+      const localFloorBefore = connectPulse - 1;
+      // Measure only the calls the LOGOUT makes: the connect pulse has already
+      // read the count once, so an indexOf over the whole history would match
+      // that earlier read and prove nothing about this ordering.
+      store.order.length = 0;
+      const offlinePulse = waitFor<{ count: number }>(observer, SOCKET_EVENTS.agentsPresence);
+      agent.emit(SOCKET_EVENTS.agentLogout);
+
+      // The customer is told immediately, without reconnecting — and the agent
+      // who signed out is NOT counted among those online.
+      const pulsed = (await offlinePulse).count;
+      expect(pulsed).toBe(localFloorBefore);
+      expect(pulsed).toBeLessThan(localFloorBefore + 1);
+      // And the registry was cleared BEFORE the count was read: this exact
+      // sequence is the fix. Reversed, the count reads 1 and the header lies.
+      expect(store.order).toEqual(['offline', 'count']);
+      expect(store.members.has('agent-logout-1')).toBe(false);
     });
   });
 

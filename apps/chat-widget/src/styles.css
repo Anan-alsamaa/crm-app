@@ -219,6 +219,23 @@
   background: #fbbf24;
   box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.25);
 }
+/*
+ * "Our agents are offline right now" is the one line in the header a customer
+ * MUST read before they type — it is what sends them to WhatsApp instead of
+ * waiting for a reply that is not coming tonight. At 12px/0.92 it looked
+ * identical in weight to "Online", so it read as decoration and was missed.
+ * Bigger, bold and fully opaque; the online state keeps its quiet styling.
+ */
+.yiji-header-status.offline {
+  font-size: 15px;
+  font-weight: 700;
+  opacity: 1;
+  letter-spacing: 0.1px;
+}
+.yiji-header-status.offline::before {
+  width: 8px;
+  height: 8px;
+}
 .yiji-close {
   appearance: none;
   background: rgba(255, 255, 255, 0.16);

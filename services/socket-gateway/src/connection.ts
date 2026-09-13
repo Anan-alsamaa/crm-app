@@ -513,9 +513,27 @@ export function registerConnection(deps: ConnectionDeps): void {
         // never broadcast offline → no flicker.
         const leavingAgentId = data.agentId;
         agentPresence.remove(socket.id, false, () => {
-          broadcastAgentPresence(io, deps);
           if (leavingAgentId) {
-            void deps.presenceStore?.offline(leavingAgentId).catch(() => undefined);
+            /*
+             * SAME ORDERING RULE AS THE LOGOUT PATH: leave the shared registry
+             * FIRST, announce SECOND.
+             *
+             * `broadcastAgentPresence` floors the Redis count at this process's
+             * own, so broadcasting before the removal re-announced the agent as
+             * present and the customer's header stayed "online" until they
+             * reopened the panel. This is the grace-timer path — a closed tab or
+             * a dropped network rather than a deliberate sign-out — so it had
+             * the identical fault.
+             *
+             * The broadcast is chained off the removal instead of awaited: this
+             * callback is synchronous (it runs from a timer inside the presence
+             * tracker), and `.finally` keeps the announcement happening even if
+             * Redis is unreachable, where the floor at the local count is the
+             * right answer anyway.
+             */
+            void (deps.presenceStore?.offline(leavingAgentId) ?? Promise.resolve())
+              .catch(() => undefined)
+              .finally(() => broadcastAgentPresence(io, deps));
             /*
              * THEIR LIVE CHATS MUST NOT LEAVE WITH THEM.
              *
@@ -533,6 +551,12 @@ export function registerConnection(deps: ConnectionDeps): void {
             void reclaimConversationsOf(leavingAgentId, deps).catch((err: unknown) =>
               logger.warn({ err, agentId: leavingAgentId }, 'reclaim scheduling failed'),
             );
+          } else {
+            // No agentId to remove from the shared registry, but the local count
+            // still changed, so the announcement must still go out. Moving the
+            // broadcast inside the branch above without this would have left
+            // that case silent.
+            broadcastAgentPresence(io, deps);
           }
         });
       }
@@ -761,7 +785,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   // delayed by tens of seconds, especially if the browser is in the middle
   // of navigating away from the route). Then we close the socket ourselves
   // so further events from this socket are dropped.
-  socket.on(SOCKET_EVENTS.agentLogout, () => {
+  socket.on(SOCKET_EVENTS.agentLogout, async () => {
     if (data.kind !== 'agent' || !data.agentId) return;
     const userId = data.agentId;
     // Disconnect every socket we hold for this user, not just the one
@@ -786,6 +810,20 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       io.sockets.sockets.get(sid)?.disconnect(true);
     }
     if (presenceWasDropped) {
+      /*
+       * CLEAR THE SHARED REGISTRY *BEFORE* ANNOUNCING, or the announcement is
+       * wrong.
+       *
+       * `broadcastAgentPresence` reads the Redis set (so the count is right
+       * across gateway instances) and floors it at this process's own count.
+       * Removing the agent afterwards meant the broadcast still saw them
+       * present: a customer watching the chat was told agents were online for
+       * as long as the panel stayed open, and only saw "offline" after closing
+       * and reopening it — which is exactly what was reported.
+       *
+       * Awaited, not fire-and-forget: the ORDER is the fix.
+       */
+      await deps.presenceStore?.offline(userId).catch(() => undefined);
       broadcastAgentPresence(io, deps);
       /*
        * SCHEDULE THE RECLAIM HERE TOO — the disconnect path cannot.
@@ -814,10 +852,8 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
        * leave their conversations with them.
        *
        * The transport close that follows `disconnect(true)` also schedules the
-       * reclaim for their open chats; doing it here as well would be redundant,
-       * so this only corrects the registry.
+       * reclaim for their open chats; doing it here as well would be redundant.
        */
-      void deps.presenceStore?.offline(userId).catch(() => undefined);
     }
   });
 
