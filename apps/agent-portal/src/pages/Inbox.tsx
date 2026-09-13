@@ -177,7 +177,21 @@ export function Inbox() {
     min: 288,
     max: 480,
   });
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  /*
+   * WHO MAY SEE SOMEBODY ELSE'S CHAT.
+   *
+   * `view_all_chats` is held by WeCare Admin, Supervisor, Viewer and the
+   * manager roles — never by WeCare Agent. An agent therefore sees only the
+   * chats the ladder gave them; a WeCare Admin sees every chat, assigned to
+   * them or not (owner, 2026-09-14).
+   *
+   * Derived from the PRIVILEGE, not the role name: Directus 11 carries access
+   * on policies, so matching on "WeCare Admin" would miss anyone granted the
+   * same rights a different way, and would silently break the day a role is
+   * renamed.
+   */
+  const seesAllChats = can('view_all_chats');
   /*
    * NO FILTERS ON ARRIVAL — the inbox opens on everything, most recent first
    * (owner, 2026-09-13).
@@ -198,6 +212,21 @@ export function Inbox() {
   const [filters, setFilters] = useState<InboxFilters>({
     sort: 'recent',
   });
+  /*
+   * An agent's queue is not a filter they chose, so it is not one they can
+   * clear. Applied as an effect rather than as initial state because
+   * `privileges` resolve after the first render — seeding it would leave a
+   * one-frame window showing every chat before the scope snaps shut.
+   */
+  useEffect(() => {
+    setFilters((f) =>
+      seesAllChats
+        ? f.assignment
+          ? { ...f, assignment: undefined }
+          : f
+        : { ...f, assignment: 'mine' },
+    );
+  }, [seesAllChats]);
   /* Whether ANYTHING is narrowing the list. Used to tell "there are none"
      apart from "none match", which is the difference between an empty inbox
      and an inbox that looks broken. */
@@ -494,27 +523,31 @@ export function Inbox() {
             {/* One quiet cluster, same anatomy as the conversation toolbar's
                 property group, so the selects read as one filter control. */}
             <div className="flex flex-wrap items-center gap-0.5 rounded-xl bg-secondary/40 p-1 ring-1 ring-inset ring-foreground/[0.06]">
-              {/* Whose queue. Shown to everyone: a manager needs to narrow to
-                  their own work, and an agent needs to reach the wider inbox to
-                  pick up something the ladder released. */}
-              <GhostSelect
-                size="sm"
-                value={filters.assignment ?? 'all'}
-                display={
-                  (filters.assignment ?? 'all') === 'mine'
-                    ? t('inbox.assignedMine', { defaultValue: 'My queue' })
-                    : t('inbox.assignedAll', { defaultValue: 'All chats' })
-                }
-                aria-label={t('inbox.assignedAll', { defaultValue: 'All chats' })}
-                onChange={(v) => setFilters((f) => ({ ...f, assignment: v as 'mine' | 'all' }))}
-                options={[
-                  { value: 'mine', label: t('inbox.assignedMine', { defaultValue: 'My queue' }) },
-                  {
-                    value: 'all',
-                    label: t('inbox.assignedAll', { defaultValue: 'All chats' }),
-                  },
-                ]}
-              />
+              {/* Whose queue — ONLY for someone who may actually see other
+                  people's chats. For an agent the control had exactly one
+                  useful position and one that showed them nothing they are
+                  entitled to, so it is not rendered at all rather than shown
+                  disabled: a disabled control still invites the question. */}
+              {seesAllChats && (
+                <GhostSelect
+                  size="sm"
+                  value={filters.assignment ?? 'all'}
+                  display={
+                    (filters.assignment ?? 'all') === 'mine'
+                      ? t('inbox.assignedMine', { defaultValue: 'My queue' })
+                      : t('inbox.assignedAll', { defaultValue: 'All chats' })
+                  }
+                  aria-label={t('inbox.assignedAll', { defaultValue: 'All chats' })}
+                  onChange={(v) => setFilters((f) => ({ ...f, assignment: v as 'mine' | 'all' }))}
+                  options={[
+                    { value: 'mine', label: t('inbox.assignedMine', { defaultValue: 'My queue' }) },
+                    {
+                      value: 'all',
+                      label: t('inbox.assignedAll', { defaultValue: 'All chats' }),
+                    },
+                  ]}
+                />
+              )}
               <GhostSelect
                 size="sm"
                 value={filters.status ?? 'all'}

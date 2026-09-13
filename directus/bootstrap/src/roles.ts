@@ -148,6 +148,22 @@ const ASSIGNED_OR_UNASSIGNED = {
 };
 
 /**
+ * The same ownership test, reached THROUGH the parent conversation.
+ *
+ * `messages` carries no `assigned_agent` of its own — only a `conversation`
+ * foreign key — so scoping the conversation without scoping this leaves the
+ * thread contents readable by anybody. That is not a smaller leak than the
+ * conversation row: the row is metadata, the messages are what the customer
+ * actually said, including the phone number in the walk-in note. Verified
+ * against production before fixing: an agent could read "Hey there" and the
+ * contact's number on a chat owned by a colleague.
+ *
+ * A message you may not read is also one you may not mark read or reply to,
+ * which the update/create grants already gate separately.
+ */
+const CONVERSATION_ASSIGNED_OR_UNASSIGNED = { conversation: ASSIGNED_OR_UNASSIGNED };
+
+/**
  * The same scoping, reached through a message's parent conversation.
  *
  * `messages.read` used to carry no filter at all, so an agent who could not
@@ -325,28 +341,43 @@ export const roles: RoleSpec[] = [
       },
       { collection: 'contacts', action: 'read' },
       { collection: 'contacts', action: 'update' },
-      /* conversations: READ everything, WRITE only your own / your team's.
+      /* conversations: an agent READS AND WRITES only their own / their team's.
        *
-       * Reading was scoped to own+unassigned+team until 2026-08-16, when the
-       * operations manager reported the cost: a returning customer routed to a
-       * different agent arrived with no history, so the new agent asked them to
-       * repeat a story the company already had. Support is a shared desk —
-       * whoever picks the customer up needs what came before.
+       * THE HISTORY OF THIS LINE, because it has moved twice and each move had
+       * a real cost:
        *
-       * The 2026-08-14 incident this replaces was about MODIFICATION and about
-       * team-less agents inheriting everything through a null-team match; that
-       * guard stays exactly where it was. An agent still cannot touch a chat
-       * that is not theirs, and `assigned_team _nnull` still gates the team
-       * branch on the write rule below.
+       *   2026-08-14  scoped, after an incident where team-less agents
+       *               inherited everything through a null-team match.
+       *   2026-08-16  widened to unrestricted read: the operations manager
+       *               reported that a returning customer routed to a different
+       *               agent arrived with no history, so the new agent asked
+       *               them to repeat a story the company already had.
+       *   2026-09-14  scoped again, by the owner: a chat assigned to one agent
+       *       must not be visible to the others. Only a role holding
+       *               `view_all_chats` — WeCare Admin, Supervisor, Viewer, the
+       *               managers — sees every chat.
+       *
+       * The 08-16 concern is real and is NOT solved by this rule, so say so
+       * plainly: an agent picking up a returning customer will no longer see
+       * the earlier conversations of a colleague. What they still get is the
+       * customer's own thread once it is assigned to them, and a supervisor or
+       * WeCare Admin can always see the whole picture. If the history gap bites
+       * again, the fix is a read-only history surface scoped to the CONTACT,
+       * not re-opening every chat to everybody.
        */
-      { collection: 'conversations', action: 'read' },
+      { collection: 'conversations', action: 'read', permissions: ASSIGNED_OR_UNASSIGNED },
       { collection: 'conversations', action: 'create' },
       { collection: 'conversations', action: 'update', permissions: ASSIGNED_OR_UNASSIGNED },
       { collection: 'messages', action: 'create' },
-      // Messages follow their conversation. Now that agents read every chat
-      // (customer history — see above), the thread contents follow; a history
-      // list you cannot open is not history.
-      { collection: 'messages', action: 'read' },
+      /* Messages follow their conversation — in BOTH directions.
+       *
+       * This was unrestricted while `conversations.read` was, on the reasoning
+       * that a history list you cannot open is not history. Now that the
+       * conversation is scoped again (2026-09-14), leaving this open would have
+       * been the worse half of the pair: the conversation row is metadata, the
+       * messages are what the customer actually wrote.
+       */
+      { collection: 'messages', action: 'read', permissions: CONVERSATION_ASSIGNED_OR_UNASSIGNED },
       // NOTE (H-3): `messages.update` is intentionally NOT granted to agents.
       // Messages are an immutable chat record; agents must not edit historical
       // content (tampering), and the app never PATCHes a message via the agent
