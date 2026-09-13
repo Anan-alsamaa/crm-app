@@ -87,6 +87,39 @@ describe('Login', () => {
     await waitFor(() => expect(screen.getByText('login.error')).toBeInTheDocument());
   });
 
+  it('signs in with an EMPLOYEE ID, minting the staff identity', async () => {
+    /*
+     * The admin portal used to validate this field as an email, so a member of
+     * staff whose login is an employee id could sign in to the AGENT portal and
+     * was refused by this one — the browser rejected `4417` before the form was
+     * even submitted. Same person, same credential, two different answers.
+     */
+    authState.login.mockResolvedValueOnce({
+      user: { role: { name: 'WeCare Admin' } },
+      allowed: true,
+    });
+    renderLogin();
+    await userEvent.type(document.getElementById('email') as HTMLInputElement, '4417');
+    await userEvent.type(document.getElementById('password') as HTMLInputElement, 'secret');
+    await userEvent.click(screen.getByText('login.submit'));
+    await waitFor(() =>
+      expect(authState.login).toHaveBeenCalledWith('4417@staff.example.com', 'secret'),
+    );
+  });
+
+  it('still passes a real email address through untouched', async () => {
+    // The administrator's own identity IS an address. Minting a domain onto it
+    // would lock the owner out of their own portal.
+    authState.login.mockResolvedValueOnce({
+      user: { role: { name: 'Administrator' } },
+      allowed: true,
+    });
+    renderLogin();
+    await fillCredentials();
+    await userEvent.click(screen.getByText('login.submit'));
+    await waitFor(() => expect(authState.login).toHaveBeenCalledWith('a@b.com', 'secret'));
+  });
+
   it('toggles password visibility', async () => {
     renderLogin();
     const pw = document.getElementById('password') as HTMLInputElement;

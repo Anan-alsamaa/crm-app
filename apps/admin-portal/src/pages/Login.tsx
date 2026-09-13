@@ -5,11 +5,26 @@ import { z } from 'zod';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button, cn, FormField, Input, toast, Toaster } from '@yiji/ui';
+import { loginIdentity } from '@yiji/shared-types';
 import { useAuth } from '../lib/auth/AuthContext.js';
 import { LanguageToggle } from '../components/LanguageToggle.js';
 import { RESET_PASSWORD_PATH } from './ResetPassword.js';
 
-const schema = z.object({ email: z.string().email(), password: z.string().min(1) });
+/**
+ * Staff sign in with an EMPLOYEE ID, so this field is no longer an email.
+ *
+ * It still accepts one — `loginIdentity` passes anything containing `@`
+ * through untouched — because every account that predates employee-id login,
+ * the administrator's included, has a real address as its identity and must
+ * keep working. Validating as an email would have locked every employee-id
+ * holder out of this portal, which is exactly what it did: the agent portal
+ * took employee ids while this one still demanded an address, so the same
+ * person could sign in to one surface and not the other.
+ *
+ * The RESET form below keeps `.email()` on purpose — a reset link has to go to
+ * a real mailbox, and a minted `4417@staff.example.com` is not one.
+ */
+const schema = z.object({ email: z.string().min(1), password: z.string().min(1) });
 type FormValues = z.infer<typeof schema>;
 
 const forgotSchema = z.object({ email: z.string().email() });
@@ -101,7 +116,11 @@ export function Login() {
       // only. An operations lead given a carefully scoped role used to be told
       // "Administrator access required" at the door — which reads as a wrong
       // password rather than as a rule.
-      const { allowed } = await login(values.email, values.password);
+      // Employee id -> the identity Directus authenticates. A deterministic
+      // rule, not a lookup: a lookup endpoint would also answer "does this
+      // employee id exist?" for anyone who asked. Same helper the agent portal
+      // uses, so one person has one login name across both.
+      const { allowed } = await login(loginIdentity(values.email) ?? values.email, values.password);
       if (!allowed) {
         await logout();
         setAuthError(t('login.notAdmin'));
@@ -184,16 +203,20 @@ export function Login() {
             {view === 'signin' && (
               <form onSubmit={onSubmit} className="space-y-4 px-8 py-7" noValidate>
                 <FormField
-                  label={t('auth.email', { ns: 'common' })}
+                  label={t('login.loginName', { defaultValue: 'Login name' })}
                   htmlFor="email"
                   error={errors.email?.message}
                 >
                   <Input
                     id="email"
-                    type="email"
+                    // NOT type="email": the browser's own validation rejects a
+                    // bare employee id before the form is ever submitted.
+                    type="text"
                     autoComplete="username"
                     autoFocus
-                    placeholder={t('login.emailPlaceholder')}
+                    placeholder={t('login.loginNamePlaceholder', {
+                      defaultValue: 'Employee ID or email',
+                    })}
                     invalid={!!errors.email}
                     {...register('email')}
                   />
