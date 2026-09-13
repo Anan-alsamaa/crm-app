@@ -85,7 +85,27 @@ export interface RoutingDeps {
       stage: RoutingJob['stage'];
       secondsHeld: number;
     }): Promise<void>;
+    /**
+     * Who to tell when a chat runs out of agents to offer it to.
+     *
+     * Resolved by ROLE against the live database rather than by privilege: the
+     * one time this was done by privilege it reached nobody at all. Optional so
+     * an older wiring keeps working — the ladder still releases the chat, it
+     * just cannot raise the alarm.
+     */
+    supervisorIds?(): Promise<string[]>;
   };
+  /**
+   * Raise a supervisor alert. Optional and deliberately best-effort: failing to
+   * notify must never stop the chat being released, which is the part the
+   * customer feels.
+   */
+  notify?(input: {
+    recipientId: string;
+    conversationId: string;
+    title: string;
+    body: string;
+  }): Promise<void>;
   /** Enqueue the next stage after `delayMs`. */
   schedule(job: RoutingJob, delayMs: number): Promise<void>;
   log: (msg: string, extra?: Record<string, unknown>) => void;
@@ -156,6 +176,55 @@ async function nextAgent(
   // Nobody online (or nobody online on this team). `eligible` is already
   // ordered least-loaded first.
   return eligible.find((id) => !skip.has(id)) ?? null;
+}
+
+/**
+ * NOBODY LEFT TO OFFER IT TO — so make it everyone's, and say so out loud.
+ *
+ * The chat is released to the unassigned pool rather than left pinned to the
+ * agent who did not answer. Those are not the same thing: an owned chat is
+ * filtered out of "unassigned" views and looks handled, so leaving it owned
+ * hides it from the very people who could rescue it. Unassigned, every agent —
+ * INCLUDING the one who was holding it — can see and take it.
+ *
+ * Then alert a supervisor, because this is the state nobody is watching by
+ * definition: the roster is exhausted, so no amount of waiting produces an
+ * owner. Best-effort and after the release, so a notification failure cannot
+ * cost the customer their place in the queue.
+ */
+async function releaseToPoolAndAlert(
+  deps: RoutingDeps,
+  convo: { id: string },
+  reason: string,
+  extra: Record<string, unknown>,
+): Promise<void> {
+  const { directus, notify, log } = deps;
+  await directus.assign(convo.id, null);
+  log(reason, { id: convo.id, ...extra });
+
+  if (!notify || !directus.supervisorIds) return;
+  try {
+    const supervisors = await directus.supervisorIds();
+    if (supervisors.length === 0) {
+      // Worth a line of its own: an alert nobody receives is indistinguishable
+      // from an alert that was never raised, and that silence is what made the
+      // previous "notify the admins" bug invisible for so long.
+      log('routing: nobody to alert — no supervisor or admin accounts exist', { id: convo.id });
+      return;
+    }
+    await Promise.all(
+      supervisors.map((recipientId) =>
+        notify({
+          recipientId,
+          conversationId: convo.id,
+          title: 'Chat waiting with no agent',
+          body: 'Nobody answered and there was no one else to offer it to. It is now unassigned and visible to every agent.',
+        }).catch(() => undefined),
+      ),
+    );
+  } catch {
+    // Alerting is the secondary duty here; the release above already happened.
+  }
 }
 
 export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise<void> {
@@ -344,12 +413,26 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
        * test below, which is exactly why it is there.
        */
       const exhausted = eligible.length < 2;
-      log(
+      /*
+       * RELEASE IT — do not leave it with the agent who did not answer.
+       *
+       * This used to log and return, so the chat stayed pinned to that agent
+       * for ever. With a single agent online that is the common case, not an
+       * edge case: they miss it, the ladder finds nobody else, and the chat sat
+       * owned-but-unanswered where no "unassigned" view would ever surface it.
+       *
+       * Unassigned is strictly better and is what the owner asked for: every
+       * agent can see it, INCLUDING the one who was holding it — they have not
+       * had it taken away, it has been opened up. Then tell a supervisor,
+       * because by definition nobody is watching this state.
+       */
+      await releaseToPoolAndAlert(
+        deps,
+        convo,
         exhausted
-          ? 'routing: ROSTER TOO SMALL to escalate — add more agents in a routable role'
-          : 'routing: everyone available has been tried, leaving it with the current owner',
+          ? 'routing: ROSTER TOO SMALL to escalate — released to every agent and alerted a supervisor'
+          : 'routing: everyone available has been tried — released to every agent and alerted a supervisor',
         {
-          id: convo.id,
           eligibleAgents: eligible.length,
           alreadyOffered: job.attemptedAgentIds.length,
           team: convo.assigned_team,

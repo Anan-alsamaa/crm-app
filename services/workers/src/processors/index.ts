@@ -202,6 +202,28 @@ export const processors: Record<QueueName, Processor> = {
           jobId: `route-${next.stage}-${next.conversationId}-${Date.now()}`,
         });
       },
+      /*
+       * Supervisor alert for a chat with nobody left to offer it to.
+       *
+       * Goes through the existing notifications queue rather than writing a row
+       * directly, so it inherits the in-app + email delivery both channels
+       * already do. The jobId is deterministic per conversation+recipient, so a
+       * ladder that runs twice for the same chat cannot notify twice.
+       */
+      notify: async ({ recipientId, conversationId, title, body }) => {
+        await deps.queues[QUEUES.notifications].add(
+          'send',
+          {
+            recipientId,
+            type: 'escalation',
+            title,
+            body,
+            link: `/inbox/${conversationId}`,
+            payload: { conversationId, reason: 'no_agent_available' },
+          },
+          { jobId: `route-noagent-${conversationId}-${recipientId}` },
+        );
+      },
       log: (msg, extra) => deps.logger.info(extra ?? {}, msg),
     });
   },

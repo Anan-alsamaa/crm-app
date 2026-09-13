@@ -38,16 +38,24 @@ function deps(over: {
   roster?: string[];
   convo?: Convo | null;
   outbound?: number;
+  /** Who the supervisor alert would reach. Empty models a real prod risk. */
+  supervisors?: string[];
 }) {
   const assign = vi.fn().mockResolvedValue(undefined);
   const schedule = vi.fn().mockResolvedValue(undefined);
   const recordOutcome = vi.fn().mockResolvedValue(undefined);
   const agentsByLoad = vi.fn().mockResolvedValue(over.roster ?? over.online ?? []);
+  // Who hears about a chat with nobody left to offer it to, and the alert
+  // itself. Defaulted so every existing test keeps working untouched.
+  const supervisorIds = vi.fn().mockResolvedValue(over.supervisors ?? ['sup-1']);
+  const notify = vi.fn().mockResolvedValue(undefined);
   return {
     assign,
     schedule,
     recordOutcome,
     agentsByLoad,
+    supervisorIds,
+    notify,
     d: {
       redis: fakeRedis(over.online ?? []),
       directus: {
@@ -62,8 +70,10 @@ function deps(over: {
         assign,
         agentsByLoad,
         recordOutcome,
+        supervisorIds,
       },
       schedule,
+      notify,
       log: () => undefined,
     },
   };
@@ -209,18 +219,34 @@ describe('auto-assignment ladder', () => {
       );
     });
 
-    it('leaves it with its owner when there is no second agent to try', async () => {
-      // It used to null the assignee here. There being nobody else to ask is
-      // not a reason to take the chat away from the one person who has it.
-      const { d, assign, schedule } = deps({
+    it('releases it to every agent when there is no second agent to try', async () => {
+      /*
+       * THE RULE CHANGED (owner, 2026-09-13), and this test changed with it.
+       *
+       * It used to assert the chat STAYED with its owner, on the reasoning that
+       * nobody else to ask is not a reason to take it away. In practice that is
+       * the single-agent case — the common one out of hours — and leaving it
+       * owned hid it: an owned chat is filtered out of every "unassigned" view,
+       * so the one person who missed it was also the only person who could see
+       * it.
+       *
+       * Unassigned does not take it away from them; it opens it up. They still
+       * see it, and now so does everyone else.
+       */
+      const { d, assign, schedule, notify } = deps({
         online: ['a1'],
         roster: ['a1'],
         convo: { id: 'c1', assigned_agent: 'a1', assigned_team: null, status: 'open' },
         outbound: 0,
       });
       await handleRouting(job({ stage: 'escalate', attemptedAgentIds: ['a1'] }), d);
-      expect(assign).not.toHaveBeenCalled();
+      expect(assign).toHaveBeenCalledWith('c1', null);
+      // The ladder stops here: there is no rung left to schedule.
       expect(schedule).not.toHaveBeenCalled();
+      // And somebody is told, because nobody is watching this state.
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({ recipientId: 'sup-1', conversationId: 'c1' }),
+      );
     });
 
     it('stands down when a human reassigned it mid-ladder', async () => {
@@ -507,10 +533,47 @@ describe('escalating with too few agents', () => {
     ...over,
   });
 
-  it('KEEPS the chat when there is nobody else — never unassigns it', async () => {
+  it('RELEASES the chat to everyone when there is nobody else, and alerts', async () => {
+    // Was 'KEEPS the chat ... never unassigns it'. Reversed deliberately: see
+    // the escalate test above for why holding it hid the chat from the team.
     const t = deps({ convo: owned, online: ['only-one'], roster: ['only-one'] });
     await handleRouting(job(), t.d);
-    expect(t.assign).not.toHaveBeenCalled();
+    expect(t.assign).toHaveBeenCalledWith('c1', null);
+    expect(t.notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('alerts EVERY supervisor, not just the first', async () => {
+    const t = deps({
+      convo: owned,
+      online: ['only-one'],
+      roster: ['only-one'],
+      supervisors: ['sup-1', 'sup-2', 'sup-3'],
+    });
+    await handleRouting(job(), t.d);
+    expect(t.notify).toHaveBeenCalledTimes(3);
+  });
+
+  it('still releases the chat when there is nobody to alert', async () => {
+    /*
+     * Production has ZERO `WeCare Supervisor` accounts, so this is not a
+     * hypothetical. The release is what the customer feels; the alert is
+     * secondary and must never be able to block it.
+     */
+    const logged: string[] = [];
+    const t = deps({ convo: owned, online: ['only-one'], roster: ['only-one'], supervisors: [] });
+    (t.d as { log: (m: string, x?: unknown) => void }).log = (m) => logged.push(m);
+    await handleRouting(job(), t.d);
+    expect(t.assign).toHaveBeenCalledWith('c1', null);
+    expect(t.notify).not.toHaveBeenCalled();
+    // Said out loud: an alert nobody receives must not look like one that was sent.
+    expect(logged.join(' ')).toMatch(/nobody to alert/i);
+  });
+
+  it('still releases the chat when the alert itself fails', async () => {
+    const t = deps({ convo: owned, online: ['only-one'], roster: ['only-one'] });
+    t.notify.mockRejectedValue(new Error('notifications queue is down'));
+    await handleRouting(job(), t.d);
+    expect(t.assign).toHaveBeenCalledWith('c1', null);
   });
 
   it('says the ROSTER is the problem, not that everyone was tried', async () => {

@@ -29,6 +29,18 @@ import type {
  */
 const ROUTABLE_ROLES = ['WeCare Agent'] as const;
 
+/**
+ * Who is told when a chat runs out of agents to offer it to.
+ *
+ * BY ROLE, AND MORE THAN ONE ROLE, counted against the real database. A
+ * previous "notify the admins" reached NOBODY because it selected by privilege
+ * and the builtin roles carry none — and production today has ZERO `WeCare
+ * Supervisor` accounts, so naming that role alone would repeat the bug exactly.
+ * `WeCare Admin` (2 active) and `Administrator` (1) are who actually exists, so
+ * they are listed too and the alert has a real recipient.
+ */
+const SUPERVISOR_ROLES = ['WeCare Supervisor', 'WeCare Admin', 'Administrator'] as const;
+
 /** Real (Directus-backed) implementations of the processor repos. */
 
 export function createTicketRepo(client: YijiDirectusClient): TicketRepo {
@@ -323,6 +335,23 @@ export function createRoutingRepo(client: YijiDirectusClient) {
       // Ties broken by id so the order is stable: an unstable order makes the
       // fallback non-deterministic and the tests flaky for no benefit.
       return ids.sort((a, b) => (load.get(a) ?? 0) - (load.get(b) ?? 0) || a.localeCompare(b));
+    },
+
+    /**
+     * Active users who should hear that a chat has run out of agents.
+     *
+     * Same allow-list shape as `agentsByLoad`: naming roles, never excluding
+     * emails, so a new service account cannot join the alert list by accident.
+     */
+    async supervisorIds(): Promise<string[]> {
+      const filter = {
+        status: { _eq: 'active' },
+        role: { name: { _in: [...SUPERVISOR_ROLES] } },
+      } as never;
+      const users = (await client.request(
+        readUsers({ filter, fields: ['id'], limit: -1 }) as never,
+      )) as Array<{ id: string }>;
+      return users.map((u) => u.id);
     },
 
     /**
