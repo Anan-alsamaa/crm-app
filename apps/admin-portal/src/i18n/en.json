@@ -850,7 +850,7 @@
     "avgEach": "{{v}} avg each",
     "kpiChats": "Open chats",
     "ofChats": "{{n}} total",
-    "satBasis": "Satisfaction is the customer’s own CSAT rating on the linked chat, so it covers {{rated}} of {{closed}} closed tickets — the rest were never rated (or were not raised from a chat).",
+    "satBasis": "Satisfaction is the customer’s own CSAT rating at the end of a chat, so it covers {{rated}} of {{chats}} chats — the rest were never rated.",
     "perMonth": "Tickets per month",
     "perMonthHint": "Volume as columns, compensation paid overlaid as a line.",
     "complaintsAxis": "Tickets",
