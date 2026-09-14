@@ -639,6 +639,58 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
       return client;
     }
 
+    it('a WeCare Admin replying does NOT take ownership of the chat', async () => {
+      /*
+       * A manager may read any chat and reply to it — that is their job — but
+       * the chat must never become theirs (owner, 2026-09-14).
+       *
+       * Claiming checked only that nobody owned it yet, so a manager answering
+       * an unassigned chat took it out of the queue: it stopped being
+       * unassigned, so no agent saw it in the pool, and the ladder's own
+       * "already assigned" path skipped it. The chat quietly belonged to
+       * somebody who is not on the floor.
+       */
+      mockedValidateAgentToken.mockResolvedValue({ id: 'admin-2', role: 'WeCare Admin' });
+      harness = await startGateway(makeStubs());
+      const admin = await connect(harness.port, { kind: 'agent', token: 'good' });
+      sockets.push(admin);
+      await new Promise((r) => setTimeout(r, 30));
+
+      const delivered = waitFor<{ id: string }>(admin, SOCKET_EVENTS.messageNew);
+      admin.emit(SOCKET_EVENTS.messageSend, {
+        conversationId: 'conv-1',
+        content: 'let me help with that',
+        clientMsgId: 'admin-msg-1',
+      });
+      await delivered; // the reply itself still lands
+
+      expect(harness.stubs.directus.claimConversationIfUnassigned).not.toHaveBeenCalled();
+    });
+
+    it('a WeCare Agent replying to an unowned chat still claims it', async () => {
+      // The counterpart: the credit for the work has to land on somebody, or a
+      // customer's rating counts for no one.
+      mockedValidateAgentToken.mockResolvedValue({ id: 'agent-claim-1', role: 'WeCare Agent' });
+      harness = await startGateway(makeStubs());
+      const agent = await connect(harness.port, { kind: 'agent', token: 'good' });
+      sockets.push(agent);
+      await new Promise((r) => setTimeout(r, 30));
+
+      const delivered = waitFor<{ id: string }>(agent, SOCKET_EVENTS.messageNew);
+      agent.emit(SOCKET_EVENTS.messageSend, {
+        conversationId: 'conv-1',
+        content: 'on it',
+        clientMsgId: 'agent-msg-1',
+      });
+      await delivered;
+      await new Promise((r) => setTimeout(r, 30));
+
+      expect(harness.stubs.directus.claimConversationIfUnassigned).toHaveBeenCalledWith(
+        'conv-1',
+        'agent-claim-1',
+      );
+    });
+
     it('message:send persists and broadcasts message:new + producer side-effect', async () => {
       harness = await startGateway(makeStubs());
       const agent = await connectedAgent();

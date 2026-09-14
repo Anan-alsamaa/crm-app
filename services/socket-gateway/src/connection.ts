@@ -1042,7 +1042,20 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
        * takes it from them. Fire-and-forget: a failed claim must not fail a
        * reply that has already been delivered.
        */
-      if (data.kind === 'agent' && data.agentId) {
+      /*
+       * ONLY A ROUTABLE ROLE MAY BECOME THE OWNER.
+       *
+       * A WeCare Admin or Administrator may read any chat and reply to it —
+       * that is their job — but the chat must never become theirs (owner,
+       * 2026-09-14). This claimed for whoever replied, checking only that
+       * nobody owned it yet, so a manager answering an unassigned chat took it
+       * out of the queue: it stopped being unassigned, so no agent saw it in
+       * the pool, and the ladder's own "already assigned" path skipped it.
+       *
+       * Same predicate as presence, for the same reason: assignment follows the
+       * roles that actually work the queue.
+       */
+      if (data.kind === 'agent' && data.agentId && isRoutableRole(data.agentRole)) {
         const agentId = data.agentId;
         void directus
           .claimConversationIfUnassigned(convId, agentId)

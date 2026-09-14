@@ -207,10 +207,38 @@ class BullProducer implements SideEffectProducer {
      * flaps three times in a minute produces one pending reclaim per
      * conversation, not three.
      */
+    /*
+     * A COMPLETED JOB'S ID STILL BLOCKS THE NEXT ONE.
+     *
+     * `route-assign-<conversation>` was fixed for the life of a conversation,
+     * and BullMQ IGNORES an add() whose id already exists — completed or not.
+     * So the ladder could be armed exactly once per chat, ever. Measured in
+     * production: conversation aa581e1a ran its ladder at 06:16:50, the
+     * customer wrote again at 12:32:15, and the worker logged NOTHING at all —
+     * not even "standing down". The job never existed; the enqueue was
+     * swallowed as a duplicate of one that had finished six hours earlier.
+     *
+     * The same shape as the coupon bug already on record here: a custom jobId
+     * outliving its completed job, and the producer reporting success while
+     * queueing nothing.
+     *
+     * `assign` now carries the moment it was raised, so every time a customer
+     * is left waiting the ladder can start again. Idempotency inside one
+     * wake-up still holds — the worker stands down when somebody is already
+     * being given the chat, and a burst of messages in the same millisecond
+     * collapses to one job.
+     *
+     * RECLAIM KEEPS ITS FIXED ID on purpose: it is a delayed grace period, and
+     * an agent whose network flaps three times in a minute must produce one
+     * pending reclaim per conversation, not three.
+     */
     const added = await this.routing.add(job.stage, job, {
       ...DEFAULT_JOB_OPTIONS,
       ...(job.stage === 'reclaim' ? { delay: ROUTING_RECLAIM_WAIT_MS } : {}),
-      jobId: `route-${job.stage}-${job.conversationId}`,
+      jobId:
+        job.stage === 'reclaim'
+          ? `route-reclaim-${job.conversationId}`
+          : `route-${job.stage}-${job.conversationId}-${Date.now()}`,
     });
     return added.id ?? null;
   }

@@ -135,12 +135,60 @@ describe('auto-assignment ladder', () => {
       expect(schedule).not.toHaveBeenCalled();
     });
 
-    it('stands down if a human already assigned it', async () => {
+    it('does not REASSIGN a chat that already has an owner', async () => {
       const { d, assign } = deps({
         online: ['a1'],
         convo: { id: 'c1', assigned_agent: 'someone', assigned_team: null, status: 'open' },
       });
       await handleRouting(job(), d);
+      expect(assign).not.toHaveBeenCalled();
+    });
+
+    it('ARMS THE LADDER when the owner has an unanswered customer', async () => {
+      /*
+       * The ladder used to protect only the first message of a conversation.
+       * Once an agent replied even once, the chat left the escalation system
+       * permanently — the customer could write again and wait for ever.
+       *
+       * Production, 2026-09-14: a customer wrote at 12:32 into a chat answered
+       * at 07:10. No escalation, no second agent, no release to the pool.
+       */
+      const { d, schedule, assign } = deps({
+        online: ['owner', 'next-idlest'],
+        roster: ['owner', 'next-idlest'],
+        convo: { id: 'c1', assigned_agent: 'owner', assigned_team: null, status: 'open' },
+        outbound: 3, // the owner HAS replied before — three times
+      });
+      await handleRouting(job(), d);
+
+      // The chat stays theirs for now; they get the first 60 seconds.
+      expect(assign).not.toHaveBeenCalled();
+      expect(schedule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stage: 'escalate',
+          // The owner is the agent being timed, so the next rung offers it
+          // onward rather than back to them.
+          attemptedAgentIds: ['owner'],
+          // "Has anyone replied SINCE this moment" — agent messages only.
+          outboundCountAtSchedule: 3,
+        }),
+        ROUTING_FIRST_WAIT_MS,
+      );
+    });
+
+    it('the armed ladder cancels itself the moment the owner replies', async () => {
+      // A chat actively being worked must be untouched: the escalate rung sees
+      // the reply count has moved and stands down.
+      const { d, assign } = deps({
+        online: ['owner', 'next-idlest'],
+        roster: ['owner', 'next-idlest'],
+        convo: { id: 'c1', assigned_agent: 'owner', assigned_team: null, status: 'open' },
+        outbound: 4, // one more than the baseline below
+      });
+      await handleRouting(
+        job({ stage: 'escalate', attemptedAgentIds: ['owner'], outboundCountAtSchedule: 3 }),
+        d,
+      );
       expect(assign).not.toHaveBeenCalled();
     });
 

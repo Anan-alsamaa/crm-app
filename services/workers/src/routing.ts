@@ -337,9 +337,44 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
   }
 
   if (job.stage === 'assign') {
-    // Someone already owns it (manual assignment, or a human grabbed it first).
     if (convo.assigned_agent) {
-      log('routing: already assigned, standing down', { id: convo.id });
+      /*
+       * OWNED — BUT IS THE CUSTOMER STILL WAITING?
+       *
+       * This used to stand down unconditionally, which left the ladder
+       * protecting only the FIRST message of a conversation. Once an agent had
+       * replied even once, the chat was outside the escalation system for ever:
+       * the customer could write again and wait indefinitely, and nothing moved
+       * it. Reported from production (owner, 2026-09-14) — a customer wrote at
+       * 12:32 into a chat answered at 07:10 and it never escalated, never went
+       * to a second agent, and never reached the pool.
+       *
+       * THE RULE (owner, 2026-09-14): when a customer sends a message into an
+       * open chat and no agent has replied since, start the ladder from that
+       * message — 60s to the owner, then the next-idlest, then everyone. The
+       * timer cancels the moment any agent replies, so a chat actively being
+       * worked is untouched.
+       *
+       * `countOutboundMessages` counts AGENT messages only, so passing the
+       * current count as the baseline means exactly "has anyone replied since
+       * this moment". The owner goes into `attemptedAgentIds` as the agent
+       * whose turn is being timed: the escalate rung then offers it onward to
+       * somebody new rather than back to them.
+       */
+      const outboundNow = await directus.countOutboundMessages(convo.id);
+      await schedule(
+        {
+          conversationId: convo.id,
+          stage: 'escalate',
+          attemptedAgentIds: [convo.assigned_agent],
+          outboundCountAtSchedule: outboundNow,
+        },
+        ROUTING_FIRST_WAIT_MS,
+      );
+      log('routing: owner has an unanswered customer — arming the ladder', {
+        id: convo.id,
+        agent: convo.assigned_agent,
+      });
       return;
     }
     const agent = await nextAgent(redis, job.attemptedAgentIds, eligible);
