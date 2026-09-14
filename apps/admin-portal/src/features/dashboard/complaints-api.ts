@@ -199,7 +199,7 @@ export interface ComplaintMetrics {
   open: number;
   overdue: number;
   closed: number;
-  /** Closed tickets whose conversation came back with a CSAT score. */
+  /** CHATS the customer rated (CSAT), regardless of any ticket. */
   rated: number;
   satisfied: number;
   satisfiedPct: number | null;
@@ -655,6 +655,13 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       let rated = 0;
       let satisfied = 0;
       let closedUnsatisfied = 0;
+      /* Closed TICKETS whose chat was rated. Distinct from `rated`, which now
+         counts chats: the health strip is a composition of tickets and must sum
+         to the ticket total, so it cannot borrow a chat-based denominator. */
+      let closedRated = 0;
+      /* Closed tickets rated 4+. The strip's own population — `satisfied` now
+         counts chats and would break the sum-equals-total invariant. */
+      let closedSatisfiedTickets = 0;
       let openNotOverdue = 0;
       let compensated = 0;
       let firstDate: string | null = null;
@@ -715,12 +722,14 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         }
         if (CLOSED_STATUSES.has(r.status)) {
           closed += 1;
-          // Satisfaction is the customer's answer on the linked chat, not a
-          // status an agent set — so it exists only for some closed complaints.
+          /* Kept for the ticket-side reading only. `rated`/`satisfied` moved to
+             CHATS below (owner, 2026-09-14) — a rating belongs to the
+             conversation the customer answered on, not to whether somebody
+             later raised a ticket from it. */
           const score = r.conversation ? scoreByConversation.get(r.conversation) : undefined;
           if (typeof score === 'number') {
-            rated += 1;
-            if (score >= 4) satisfied += 1;
+            closedRated += 1;
+            if (score >= 4) closedSatisfiedTickets += 1;
             else closedUnsatisfied += 1;
           }
         }
@@ -905,6 +914,31 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
           a.localeCompare(b),
         );
 
+      /*
+       * CUSTOMER RATINGS ARE COUNTED OVER CHATS, NOT TICKETS (owner,
+       * 2026-09-14).
+       *
+       * This used to increment only inside the closed-ticket branch above, so
+       * the tile answered "of the tickets we closed, how many were rated?".
+       * Production had three real CSAT scores and exactly one ticket — open —
+       * so the denominator was zero and the tile read "No ratings yet" while
+       * customers had plainly rated. Arithmetically correct, and useless.
+       *
+       * A CSAT row belongs to a CONVERSATION: the customer answers at the end
+       * of a chat, whether or not anybody raised a ticket from it. Counting the
+       * scores themselves is therefore the honest denominator.
+       *
+       * Scoped to conversations this board can actually see, so the number
+       * never describes a wider population than the rest of the page — a
+       * rating whose chat is outside the current filters is not counted.
+       */
+      const visibleConversationIds = new Set(conversations.map((c) => c.id));
+      for (const [conversationId, score] of scoreByConversation) {
+        if (!visibleConversationIds.has(conversationId)) continue;
+        rated += 1;
+        if (score >= 4) satisfied += 1;
+      }
+
       const agentLabels = new Map(
         [...byAgentCount.keys(), ...byOpenAgentCount.keys()].map((id) => [id, nameOf(id)] as const),
       );
@@ -942,9 +976,12 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         health: {
           openNotOverdue,
           overdue,
-          closedSatisfied: satisfied,
+          closedSatisfied: closedSatisfiedTickets,
           closedUnsatisfied,
-          closedUnrated: closed - rated,
+          /* TICKET arithmetic. Was `closed - rated`, which silently mixed
+             populations once `rated` began counting chats — in production that
+             read 0 closed tickets minus 3 rated chats = -3. */
+          closedUnrated: closed - closedRated,
           chatsAnswered: answeredTotal,
           chatsWaiting,
           avgChatWaitMinutes: allWaits.length

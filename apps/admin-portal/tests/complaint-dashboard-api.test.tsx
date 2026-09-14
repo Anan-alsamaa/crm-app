@@ -293,7 +293,7 @@ describe('ticket dashboard — status, satisfaction and agents', () => {
     expect(d.overdue).toBe(1);
   });
 
-  it('rates satisfaction only over tickets whose chat was actually rated', async () => {
+  it('rates satisfaction over CHATS the customer rated, not over tickets', async () => {
     mockData({
       tickets: [
         ticket({ status: 'closed', conversation: 'c1' }),
@@ -306,14 +306,33 @@ describe('ticket dashboard — status, satisfaction and agents', () => {
         { id: 'r1', score: 5, conversation: 'c1' },
         { id: 'r2', score: 2, conversation: 'c2' },
       ],
+      /* The board counts ratings against the chats it can SEE, so the rated
+         conversations have to exist in this fixture — otherwise the denominator
+         is empty and the assertion below would pass for the wrong reason. */
+      conversations: [
+        { id: 'c1', status: 'solved', assigned_agent: 'u1' },
+        { id: 'c2', status: 'solved', assigned_agent: 'u1' },
+      ],
     });
     const d = await run();
     expect(d.closed).toBe(3);
-    // Denominator is the RATED ones, not all closed — and the page prints that
-    // gap so 50% is not read as "half our customers are unhappy".
+    /*
+     * THE DENOMINATOR IS CHATS (owner, 2026-09-14).
+     *
+     * This asserted satisfaction over CLOSED TICKETS. Production then showed
+     * why that was wrong: three real customer ratings and exactly one ticket —
+     * open — so the tile read "No ratings yet" while customers had plainly
+     * rated. A CSAT answer belongs to the conversation it was given on,
+     * whether or not anybody raised a ticket from it.
+     *
+     * Both ratings here are on conversations the board can see, so both count;
+     * the ticket that carries no conversation is irrelevant to this number.
+     */
     expect(d.rated).toBe(2);
     expect(d.satisfied).toBe(1);
     expect(d.satisfiedPct).toBe(50);
+    // The health strip is still a TICKET composition and must keep summing.
+    expect(d.health.closedUnrated).toBe(1);
   });
 
   it('reports null satisfaction rather than 0% when nothing was rated', async () => {

@@ -1355,13 +1355,13 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
 
           {/* Say what the satisfaction number is actually over. A percentage
               whose denominator is invisible is the easiest number to misread. */}
-          {view === 'agent' && d.closed > d.rated && (
+          {view === 'agent' && d.chatsTotal > d.rated && (
             <p className="px-1 text-2xs leading-relaxed text-muted-foreground">
               {t('complaintDash.satBasis', {
                 defaultValue:
-                  'Satisfaction is the customer’s own CSAT rating on the linked chat, so it covers {{rated}} of {{closed}} closed tickets — the rest were never rated (or were not raised from a chat).',
+                  'Satisfaction is the customer’s own CSAT rating at the end of a chat, so it covers {{rated}} of {{chats}} chats — the rest were never rated.',
                 rated: d.rated,
-                closed: d.closed,
+                chats: d.chatsTotal,
               })}
             </p>
           )}
