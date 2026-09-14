@@ -177,74 +177,59 @@ export function Inbox() {
     min: 288,
     max: 480,
   });
-  const { user, can } = useAuth();
+  const { user } = useAuth();
+
   /*
-   * WHO MAY SEE SOMEBODY ELSE'S CHAT.
+   * THE QUEUE IS NOT A FILTER — it is what this screen IS.
    *
-   * `view_all_chats` is held by WeCare Admin, Supervisor, Viewer and the
-   * manager roles — never by WeCare Agent. An agent therefore sees only the
-   * chats the ladder gave them; a WeCare Admin sees every chat, assigned to
-   * them or not (owner, 2026-09-14).
+   * Only `sort` is seeded here. The queue itself is applied by the effect
+   * below, once `user.id` exists; `buildFilter` drops the clause when it has no
+   * id, so seeding it eagerly would show every chat for one frame.
    *
-   * Derived from the PRIVILEGE, not the role name: Directus 11 carries access
-   * on policies, so matching on "WeCare Admin" would miss anyone granted the
-   * same rights a different way, and would silently break the day a role is
-   * renamed.
-   */
-  const seesAllChats = can('view_all_chats');
-  /*
-   * NO FILTERS ON ARRIVAL — the inbox opens on everything, most recent first
-   * (owner, 2026-09-13).
-   *
-   * It used to open on `status: 'open'` + `assignment: 'mine'`. Both are
-   * defensible in isolation and together they hid the thing an agent most needs
-   * to see: a chat released to the pool by the routing ladder. Three agents
-   * signed in, heard the new-chat notification, and found an empty list —
-   * because "mine" is evaluated against a chat that, by design, belongs to
-   * nobody at that moment.
-   *
-   * `sort: 'recent'` stays: it is an ORDER, not a filter, and "most recent
-   * first" is what makes an unfiltered list usable rather than arbitrary.
-   * Everything else is left unset, which `buildFilter` reads as "no narrowing"
-   * — archived chats are still excluded there, unconditionally, because that is
-   * what archiving means.
+   * History, because this line has moved three times in two days and each move
+   * had a reason:
+   *   status: 'open'      removed 2026-09-13 — it hid solved chats an agent was
+   *                       still being asked about.
+   *   assignment: 'mine'  removed the same day, then RESTORED 2026-09-14 as
+   *                       unconditional. Removing it was the wrong half of the
+   *                       fix: the real bug was server-side, where a duplicate
+   *                       unrestricted permission row let every agent read every
+   *                       chat. With that closed, "mine" is simply the truth of
+   *                       what an agent may open.
    */
   const [filters, setFilters] = useState<InboxFilters>({
     sort: 'recent',
   });
   /*
-   * An agent's queue is not a filter they chose, so it is not one they can
-   * clear. Applied as an effect rather than as initial state because
-   * `privileges` resolve after the first render — seeding it would leave a
-   * one-frame window showing every chat before the scope snaps shut.
+   * EVERY account works its own queue. No exceptions, no privilege branch.
+   *
+   * This briefly keyed off `view_all_chats`, which meant an Administrator — for
+   * whom `can()` short-circuits to true on `admin_access` — still saw the
+   * My queue / All chats control and landed unfiltered. From the owner's seat
+   * the filter looked unremoved, because the one account they sign in with was
+   * the one account exempted (2026-09-14).
+   *
+   * Oversight lives in the ADMIN portal, which is built for it. The agent
+   * portal is a working queue: what you see is what is yours to answer.
+   *
+   * Applied as an effect, not as initial state, because `user.id` resolves
+   * after the first render and `buildFilter` drops the clause when it has no
+   * id — seeding it would show every chat for a frame.
    */
   useEffect(() => {
-    setFilters((f) =>
-      seesAllChats
-        ? f.assignment
-          ? { ...f, assignment: undefined }
-          : f
-        : { ...f, assignment: 'mine' },
-    );
-  }, [seesAllChats]);
+    setFilters((f) => (f.assignment === 'mine' ? f : { ...f, assignment: 'mine' }));
+  }, []);
   /* Whether ANYTHING is narrowing the list. Used to tell "there are none"
      apart from "none match", which is the difference between an empty inbox
      and an inbox that looks broken. */
+  /* `assignment` is deliberately NOT counted: it is always 'mine' and cannot
+     be cleared, so counting it would render "Clear filters" permanently and
+     offer to clear something that is not a choice. */
   const anyFilterOn =
     (filters.status ?? 'all') !== 'all' ||
     (filters.priority ?? 'all') !== 'all' ||
-    (filters.assignment ?? 'all') !== 'all' ||
     !!filters.search?.trim();
 
-  /*
-   * Deliberately NO effect re-imposing an assignment scope.
-   *
-   * This used to set `assignment: <manager> ? 'all' : 'mine'` once the user
-   * loaded, which quietly re-applied the agent filter a moment AFTER the first
-   * render — so even clearing it by hand was undone on reload. Everyone now
-   * starts on the whole working set and narrows it themselves; the dropdown
-   * still offers Mine/All for anyone who wants it.
-   */
   // Order-id search runs as its own query because the order lives on the
   // ticket, not the conversation. Kept separate from the list query so a slow
   // or failed ticket lookup degrades to a name/phone search instead of
@@ -523,31 +508,9 @@ export function Inbox() {
             {/* One quiet cluster, same anatomy as the conversation toolbar's
                 property group, so the selects read as one filter control. */}
             <div className="flex flex-wrap items-center gap-0.5 rounded-xl bg-secondary/40 p-1 ring-1 ring-inset ring-foreground/[0.06]">
-              {/* Whose queue — ONLY for someone who may actually see other
-                  people's chats. For an agent the control had exactly one
-                  useful position and one that showed them nothing they are
-                  entitled to, so it is not rendered at all rather than shown
-                  disabled: a disabled control still invites the question. */}
-              {seesAllChats && (
-                <GhostSelect
-                  size="sm"
-                  value={filters.assignment ?? 'all'}
-                  display={
-                    (filters.assignment ?? 'all') === 'mine'
-                      ? t('inbox.assignedMine', { defaultValue: 'My queue' })
-                      : t('inbox.assignedAll', { defaultValue: 'All chats' })
-                  }
-                  aria-label={t('inbox.assignedAll', { defaultValue: 'All chats' })}
-                  onChange={(v) => setFilters((f) => ({ ...f, assignment: v as 'mine' | 'all' }))}
-                  options={[
-                    { value: 'mine', label: t('inbox.assignedMine', { defaultValue: 'My queue' }) },
-                    {
-                      value: 'all',
-                      label: t('inbox.assignedAll', { defaultValue: 'All chats' }),
-                    },
-                  ]}
-                />
-              )}
+              {/* The Mine/All control is GONE, for every role. It had one
+                  honest position — your own queue — and the other showed
+                  chats the API will not return anyway. */}
               <GhostSelect
                 size="sm"
                 value={filters.status ?? 'all'}
@@ -862,7 +825,8 @@ export function Inbox() {
                         ...f,
                         status: 'all',
                         priority: 'all',
-                        assignment: 'all',
+                        /* NOT assignment: clearing filters must not hand
+                           somebody the whole inbox. The queue is not a filter. */
                         query: '',
                       }))
                     }
