@@ -113,6 +113,10 @@ export const processors: Record<QueueName, Processor> = {
       tickets: createTicketRepo(deps.directus),
       conversations: createConversationRepo(deps.directus),
       teams: createTeamRepo(deps.directus),
+      /* Last resort when a breached chat has neither an owner nor a team —
+         which, in this deployment, is every unowned chat. Same resolver the
+         routing ladder alerts with, so "who is a supervisor" has one answer. */
+      supervisorIds: () => createRoutingRepo(deps.directus).supervisorIds!(),
       slaQueue: deps.queues[QUEUES.sla],
       notificationsQueue: deps.queues[QUEUES.notifications],
       logger: deps.logger,

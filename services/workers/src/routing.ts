@@ -490,12 +490,31 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
    * `assigned_agent _null` for every agent, so the pool is the one state the
    * whole team can see and act on.
    */
-  await directus.assign(convo.id, null);
   /* The miss against whoever was holding it is ALREADY recorded above, for
      both stages — recording it again here would double-count the same agent
-     in the routing report. */
-  log('routing: released to every agent — whoever is free can take it', {
-    id: convo.id,
-    eligibleAgents: eligible.length,
-  });
+     in the routing report.
+
+     ALERT A SUPERVISOR HERE TOO, not only at the escalate dead-end.
+
+     This rung used to release the chat silently. The alert was wired only to
+     the escalate branch, which needs a roster too small to escalate — with the
+     eight agents production actually has, that branch never runs, so in the
+     whole life of the feature not one supervisor alert was ever raised (the
+     notifications table held zero rows in BOTH environments, and no
+     `releaseToPoolAndAlert` line ever appeared in the worker logs). Meanwhile
+     THIS rung fires on every unanswered chat.
+
+     The owner's rule is about the state, not the route that reached it: when a
+     chat ends up waiting with nobody owning it, tell a supervisor. Both rungs
+     land in that state, so both announce it. */
+  await releaseToPoolAndAlert(
+    deps,
+    convo,
+    'routing: released to every agent — whoever is free can take it, and a supervisor was alerted',
+    {
+      eligibleAgents: eligible.length,
+      alreadyOffered: job.attemptedAgentIds.length,
+      team: convo.assigned_team,
+    },
+  );
 }

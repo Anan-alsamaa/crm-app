@@ -40,6 +40,19 @@ export interface SlaDeps {
    */
   conversations?: ConversationRepo;
   teams: TeamRepo;
+  /**
+   * Last-resort recipients for a breach nobody else can be told about.
+   *
+   * Optional, like `conversations` above, so every ticket test and any
+   * deployment that has not wired it keeps working unchanged.
+   *
+   * Needed because the owner/team pair can resolve to NOBODY in a real
+   * deployment: production carries eleven conversations, none of which has a
+   * team, and not one of the fourteen users has a team set either — so an
+   * unowned chat breaching its first-response target notified precisely no
+   * one, logged as "nobody to notify" and otherwise invisible.
+   */
+  supervisorIds?(): Promise<string[]>;
   slaQueue: Queue;
   notificationsQueue: Queue;
   logger: Logger;
@@ -493,6 +506,30 @@ export async function runChatReconcile(deps: SlaDeps): Promise<void> {
         deps.logger.warn(
           { conversationId: c.id, err: err instanceof Error ? err.message : String(err) },
           'could not read team members for an unanswered chat',
+        );
+      }
+    }
+
+    /*
+     * NOBODY OWNS IT AND THERE IS NO TEAM — tell a supervisor rather than
+     * nobody.
+     *
+     * Not a hypothetical: in production NO conversation carries a team and no
+     * user carries one either, so for an unowned chat both branches above
+     * yield an empty set and the breach was announced to no one at all. A
+     * promise that pages nobody is indistinguishable from no promise, which is
+     * the failure this whole sweep exists to prevent.
+     *
+     * Deliberately last: an owner, or their team, is always the better
+     * recipient. This only catches what would otherwise fall on the floor.
+     */
+    if (recipients.size === 0 && deps.supervisorIds) {
+      try {
+        for (const id of await deps.supervisorIds()) recipients.add(id);
+      } catch (err) {
+        deps.logger.warn(
+          { conversationId: c.id, err: err instanceof Error ? err.message : String(err) },
+          'could not read supervisors for an unanswered chat',
         );
       }
     }

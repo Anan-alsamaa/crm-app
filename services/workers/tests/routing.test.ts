@@ -311,6 +311,54 @@ describe('auto-assignment ladder', () => {
       expect(forA2[0]![0]).toMatchObject({ outcome: 'missed', stage: 'broadcast' });
     });
 
+    it('ALERTS A SUPERVISOR when it releases the chat to the pool', async () => {
+      /*
+       * The rung that actually fires in production had no alert at all.
+       *
+       * `releaseToPoolAndAlert` was called only from the escalate dead-end,
+       * which requires a roster too small to escalate. Production has eight
+       * eligible agents, so that branch never ran and every real release came
+       * through here — silently. Measured on the live stack: zero notification
+       * rows in either environment, and not one alert line in the worker logs,
+       * while the ladder released chats to the pool six times in 24 hours.
+       */
+      const t = deps({
+        online: ['a1', 'a2', 'a3'],
+        roster: ['a1', 'a2', 'a3'],
+        convo: { id: 'c1', assigned_agent: 'a2', assigned_team: null, status: 'open' },
+        outbound: 0,
+      });
+      await handleRouting(job({ stage: 'broadcast', attemptedAgentIds: ['a1', 'a2'] }), t.d);
+      expect(t.assign).toHaveBeenCalledWith('c1', null);
+      expect(t.notify).toHaveBeenCalledTimes(1);
+    });
+
+    it('alerts every supervisor on release, and still releases when there are none', async () => {
+      const many = deps({
+        online: ['a1', 'a2'],
+        roster: ['a1', 'a2'],
+        convo: { id: 'c1', assigned_agent: 'a2', assigned_team: null, status: 'open' },
+        outbound: 0,
+        supervisors: ['sup-1', 'sup-2', 'sup-3'],
+      });
+      await handleRouting(job({ stage: 'broadcast', attemptedAgentIds: ['a1', 'a2'] }), many.d);
+      expect(many.notify).toHaveBeenCalledTimes(3);
+
+      // Production has ZERO `WeCare Supervisor` accounts, so the empty case is
+      // the real one: the release is what the customer feels and must happen
+      // regardless of whether anybody can be told about it.
+      const none = deps({
+        online: ['a1', 'a2'],
+        roster: ['a1', 'a2'],
+        convo: { id: 'c1', assigned_agent: 'a2', assigned_team: null, status: 'open' },
+        outbound: 0,
+        supervisors: [],
+      });
+      await handleRouting(job({ stage: 'broadcast', attemptedAgentIds: ['a1', 'a2'] }), none.d);
+      expect(none.assign).toHaveBeenCalledWith('c1', null);
+      expect(none.notify).not.toHaveBeenCalled();
+    });
+
     it('does nothing if the second agent replied in time', async () => {
       const { d, assign } = deps({
         online: ['a1'],

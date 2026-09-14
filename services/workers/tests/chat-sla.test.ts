@@ -186,6 +186,34 @@ describe('runChatReconcile — the breach', () => {
     expect(String(notifications[0]?.data.body)).toMatch(/unassigned/);
   });
 
+  it('tells a SUPERVISOR when there is no owner and no team', async () => {
+    /*
+     * The case production is actually in: not one of its conversations carries
+     * a team, and not one of its users does either. So an unowned chat that
+     * breached reached NOBODY — the sweep logged "nobody to notify" and moved
+     * on, which is the silent-empty shape this codebase keeps producing.
+     */
+    const overdue = new Date(Date.now() - 60_000).toISOString();
+    const { deps, notifications } = harness([
+      chat({ first_response_due_at: overdue, assigned_agent: null, assigned_team: null }),
+    ]);
+    deps.supervisorIds = async () => ['sup-1', 'sup-2'];
+    await runChatReconcile(deps);
+    expect(notifications.map((n) => n.data.recipientId).sort()).toEqual(['sup-1', 'sup-2']);
+  });
+
+  it('prefers the team over supervisors when the chat has one', async () => {
+    // Supervisors are the last resort, never the default: an owner or their
+    // team is always the better recipient.
+    const overdue = new Date(Date.now() - 60_000).toISOString();
+    const { deps, notifications } = harness([
+      chat({ first_response_due_at: overdue, assigned_agent: null }),
+    ]);
+    deps.supervisorIds = async () => ['sup-1'];
+    await runChatReconcile(deps);
+    expect(notifications.map((n) => n.data.recipientId).sort()).toEqual(['mate-1', 'mate-2']);
+  });
+
   it('does not copy the team when the chat has an owner', async () => {
     // Paging eight people about one agent's late reply is the noise that stops
     // anyone reading these at all.
