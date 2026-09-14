@@ -39,14 +39,18 @@ test('customer message reaches the agent and the agent reply returns', async ({ 
 
   // 3. The conversation appears in the inbox; open it and see the customer's message.
   //
-  // Widen to ALL conversations first, and find the chat by its own text rather
-  // than clicking whatever happens to be at the top. Auto-assignment routes a
-  // new chat to whichever agent it picks — on a seeded machine that is rarely
-  // the one this test signs in as — so "the first row of my queue" was asserting
-  // something the product never promised, and failing for a reason that had
-  // nothing to do with delivery.
-  await agent.getByLabel(/all chats/i).click();
-  await agent.getByRole('option', { name: /all chats/i }).click();
+  // NO WIDENING. The My queue / All chats control was removed on 2026-09-14 —
+  // an agent works their own queue and nothing else, so there is no longer a
+  // way (or a reason) to ask for somebody else's chats.
+  //
+  // This chat is still reachable because an agent's queue is "mine OR nobody's"
+  // (see buildFilter): a brand-new chat has no owner until the routing ladder
+  // gives it one, and CI runs no workers service, so it stays unassigned for
+  // the life of the test.
+  //
+  // Still found by its own text rather than by taking the first row: the seed
+  // puts other conversations in this inbox, and "whatever is at the top" was
+  // asserting something the product never promised.
   const convo = agent.locator('aside li button').filter({ hasText: text });
   await convo.first().waitFor({ timeout: 15_000 });
   await convo.first().click();
