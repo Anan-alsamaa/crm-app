@@ -93,8 +93,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       toast.error(
         t('auth.sessionExpired', { defaultValue: 'Your session expired. Please sign in again.' }),
       );
+      /*
+       * Drop the session LOCALLY. Deliberately no `auth.logout()` here.
+       *
+       * Calling it revoked the refresh cookie on the server — which is right
+       * when the session really is dead, and catastrophic when it is not. The
+       * gateway rejects a handshake with "missing token" for a reason that has
+       * nothing to do with the session being invalid: on a page reload the
+       * in-memory access token is briefly empty, and whatever opened the socket
+       * first got rejected. That turned a momentary race into a hard sign-out,
+       * because the still-valid cookie had been destroyed on the way past and
+       * signing in again was the only way back.
+       *
+       * `getToken` now refreshes before handing over an empty token, so this
+       * path should only be reached by a genuinely expired session — in which
+       * case the cookie is already worthless and there is nothing to revoke.
+       */
       setUser(null);
-      void auth.logout().catch(() => undefined); // best-effort: token already dead
     });
     return () => setSessionExpiredHandler(null);
   }, [t]);

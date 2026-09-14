@@ -19,15 +19,25 @@ import type {
  * holds zero conversations forever, and would otherwise sort to the front of
  * every least-loaded list. See agentsByLoad.
  *
- * `WeCare Agent` is the ONE routable role. It briefly also listed `Agent`,
- * because the deployed model used `WeCare Agent` while this list said `Agent` —
- * the filter matched nobody and auto-assignment had nobody to assign to, which
- * reads as a plausible empty roster rather than a fault. The legacy `Agent`,
- * `Admin` and `Supervisor` roles were removed from both environments on
- * 2026-09-13 (no user held any of them), so naming `Agent` here would now
- * describe a role that does not exist.
+ * `WeCare Agent` and `WeCare Supervisor` are the customer-facing roles (owner,
+ * 2026-09-14): a supervisor works the queue alongside their team, so a chat may
+ * be routed to them. `WeCare Admin` and `Administrator` are NOT routable no
+ * matter how idle they look — being signed in is not the same as being on the
+ * floor.
+ *
+ * A supervisor therefore appears in BOTH this list and `SUPERVISOR_ROLES`
+ * below, which is intended: they can be handed a chat, and they are told when a
+ * chat runs out of agents. Being alerted about one they now own is noise worth
+ * accepting next to a chat nobody is offered at all.
+ *
+ * It briefly also listed `Agent`, because the deployed model used `WeCare
+ * Agent` while this list said `Agent` — the filter matched nobody and
+ * auto-assignment had nobody to assign to, which reads as a plausible empty
+ * roster rather than a fault. The legacy `Agent`, `Admin` and `Supervisor`
+ * roles were removed from both environments on 2026-09-13 (no user held any of
+ * them), so naming `Agent` here would now describe a role that does not exist.
  */
-const ROUTABLE_ROLES = ['WeCare Agent'] as const;
+const ROUTABLE_ROLES = ['WeCare Agent', 'WeCare Supervisor'] as const;
 
 /**
  * Who is told when a chat runs out of agents to offer it to.

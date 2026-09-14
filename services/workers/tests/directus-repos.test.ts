@@ -136,9 +136,12 @@ describe('createRoutingRepo.agentsByLoad', () => {
     // toolbar shows nobody.
     expect(userFilter()).toEqual({
       status: { _eq: 'active' },
-      // `WeCare Agent` is the one routable role. The legacy `Agent` was removed
-      // from both environments on 2026-09-13 — see the note on ROUTABLE_ROLES.
-      role: { name: { _in: ['WeCare Agent'] } },
+      // The two customer-facing roles. A supervisor works the queue alongside
+      // their team, so a chat may be routed to them (owner, 2026-09-14); a
+      // WeCare Admin or Administrator never is, however idle they look. The
+      // legacy `Agent` was removed from both environments on 2026-09-13 — see
+      // the note on ROUTABLE_ROLES.
+      role: { name: { _in: ['WeCare Agent', 'WeCare Supervisor'] } },
     });
   });
 
@@ -147,7 +150,7 @@ describe('createRoutingRepo.agentsByLoad', () => {
     await repo.agentsByLoad('day-shift');
     expect(userFilter()).toMatchObject({
       team: { _eq: 'day-shift' },
-      role: { name: { _in: ['WeCare Agent'] } },
+      role: { name: { _in: ['WeCare Agent', 'WeCare Supervisor'] } },
     });
   });
 

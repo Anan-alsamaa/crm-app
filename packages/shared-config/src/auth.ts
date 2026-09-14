@@ -154,8 +154,30 @@ export function createAuthClient({ url, storage }: AuthClientOptions) {
     async refresh(): Promise<void> {
       await client.refresh();
     },
-    /** Current access token (for authenticating the realtime socket). */
+    /**
+     * Current access token (for authenticating the realtime socket).
+     *
+     * REFRESHES FIRST WHEN THERE IS NOTHING IN MEMORY. The access token lives
+     * in memory only (H-2), so immediately after a page reload it is empty
+     * until `restore()`'s refresh lands. Anything that opened the socket in
+     * that window — the inbox, the notification bell, the new-message sound,
+     * all of which connect on mount — handed the gateway no token at all. The
+     * gateway answered "missing token", the client read that as a dead session,
+     * and the agent was thrown out to the login screen by the simple act of
+     * pressing refresh.
+     *
+     * Asking for a refresh here closes the gap: a browser holding a valid
+     * session cookie gets a real token, and one genuinely signed out still
+     * resolves null and is treated as expired exactly as before.
+     */
     async getToken(): Promise<string | null> {
+      const current = await client.getToken();
+      if (current) return current;
+      try {
+        await client.refresh();
+      } catch {
+        return null; // genuinely signed out — the caller treats this as expiry
+      }
       return client.getToken();
     },
     /** Current user with role name + computed admin_access, or null if not authenticated. */

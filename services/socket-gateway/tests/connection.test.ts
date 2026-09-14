@@ -521,6 +521,33 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
     });
   });
 
+  /**
+   * A presence registry with real Redis semantics: a set, and a count read from
+   * it. Declared at this level because both the agent-onboarding tests (which
+   * check WHO gets published) and the presence-broadcast tests (which check the
+   * ORDER of publish and count) need it.
+   */
+  function fakePresenceStore() {
+    const members = new Set<string>();
+    const order: string[] = [];
+    return {
+      members,
+      order,
+      online: async (id: string) => {
+        members.add(id);
+      },
+      offline: async (id: string) => {
+        order.push('offline');
+        members.delete(id);
+      },
+      onlineCount: async () => {
+        order.push('count');
+        return members.size;
+      },
+      touch: async () => undefined,
+    };
+  }
+
   describe('agent auth + onboarding', () => {
     it('rejects an agent with a missing token', async () => {
       harness = await startGateway(makeStubs());
@@ -536,13 +563,47 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
     });
 
     it('onboards an agent and joins their assigned conversation rooms', async () => {
-      mockedValidateAgentToken.mockResolvedValue({ id: 'agent-1', role: 'agent' });
+      mockedValidateAgentToken.mockResolvedValue({ id: 'agent-1', role: 'WeCare Agent' });
       harness = await startGateway(makeStubs());
       const client = await connect(harness.port, { kind: 'agent', token: 'good' });
       sockets.push(client);
       // Give the async onAgentConnect joins a tick to settle.
       await new Promise((r) => setTimeout(r, 30));
       expect(harness.stubs.directus.listAgentConversationIds).toHaveBeenCalledWith('agent-1');
+    });
+
+    it('publishes a WeCare Supervisor to presence — they work the queue too', async () => {
+      const store = fakePresenceStore();
+      mockedValidateAgentToken.mockResolvedValue({ id: 'sup-1', role: 'WeCare Supervisor' });
+      harness = await startGateway(makeStubs(), { presenceStore: store });
+      const client = await connect(harness.port, { kind: 'agent', token: 'good' });
+      sockets.push(client);
+      await new Promise((r) => setTimeout(r, 30));
+      expect(store.members.has('sup-1')).toBe(true);
+    });
+
+    it('does NOT publish an admin to presence, though it still lets them in', async () => {
+      /*
+       * "Idle" must mean idle ON THE FLOOR (owner, 2026-09-14).
+       *
+       * Presence used to record anyone whose token validated, so a WeCare Admin
+       * or Administrator reading the agent portal was published as an available
+       * agent. Routing never picked them — the roster filters by role — but the
+       * same set tells a CUSTOMER how many agents are available, so a manager
+       * with the tab open made the widget promise somebody was there.
+       *
+       * They are still admitted: watching the queue in realtime is the whole
+       * point of their being in this portal.
+       */
+      const store = fakePresenceStore();
+      mockedValidateAgentToken.mockResolvedValue({ id: 'admin-1', role: 'WeCare Admin' });
+      harness = await startGateway(makeStubs(), { presenceStore: store });
+      const client = await connect(harness.port, { kind: 'agent', token: 'good' });
+      sockets.push(client);
+      await new Promise((r) => setTimeout(r, 30));
+      expect(client.connected).toBe(true);
+      expect(harness.stubs.directus.listAgentConversationIds).toHaveBeenCalledWith('admin-1');
+      expect(store.members.has('admin-1')).toBe(false);
     });
   });
 
@@ -809,27 +870,6 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
      * With the broadcast ahead of the removal the asserted count here is 1, so
      * this test fails on the pre-fix source rather than merely describing it.
      */
-    function fakePresenceStore() {
-      const members = new Set<string>();
-      const order: string[] = [];
-      return {
-        members,
-        order,
-        online: async (id: string) => {
-          members.add(id);
-        },
-        offline: async (id: string) => {
-          order.push('offline');
-          members.delete(id);
-        },
-        onlineCount: async () => {
-          order.push('count');
-          return members.size;
-        },
-        touch: async () => undefined,
-      };
-    }
-
     it('announces ZERO agents online the moment the last agent logs out', async () => {
       /*
        * ASSERTED AS A DROP, NOT AS AN ABSOLUTE ZERO.
@@ -846,7 +886,10 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
       harness = await startGateway(makeStubs(), { presenceStore: store });
       const observer = await connectCustomerReady(harness.port, sockets);
 
-      mockedValidateAgentToken.mockResolvedValue({ id: 'agent-logout-1', role: 'agent' });
+      mockedValidateAgentToken.mockResolvedValue({
+        id: 'agent-logout-1',
+        role: 'WeCare Agent',
+      });
       const agent = await connect(harness.port, { kind: 'agent', token: 'good' });
       sockets.push(agent);
       // The connect pulse first, so the logout pulse is the one measured. Its

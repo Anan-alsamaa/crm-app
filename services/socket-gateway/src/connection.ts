@@ -29,6 +29,26 @@ import {
 } from './attachments.js';
 import { createTokenBucket } from './rate-limit.js';
 
+/**
+ * Roles that may be handed a customer chat — and therefore the only ones worth
+ * publishing to the shared presence registry.
+ *
+ * Must stay in step with `ROUTABLE_ROLES` in
+ * services/workers/src/processors/directus-repos.ts, which is what actually
+ * picks an agent. The two are deliberately separate constants rather than a
+ * shared import: this service and the workers deploy independently, and a
+ * presence set that briefly disagrees with the router costs one skipped
+ * assignment, whereas coupling their release cycles costs far more.
+ *
+ * Anyone else — WeCare Admin, Administrator, a service account — may still hold
+ * a socket and use the portal. They are simply not staff waiting for a chat.
+ */
+const PRESENCE_ROLES: ReadonlySet<string> = new Set(['WeCare Agent', 'WeCare Supervisor']);
+
+function isRoutableRole(role: string | null | undefined): boolean {
+  return !!role && PRESENCE_ROLES.has(role);
+}
+
 interface SocketData {
   kind: 'customer' | 'agent';
   vendorId?: string; // CRM vendor UUID
@@ -62,6 +82,11 @@ interface SocketData {
    */
   resumedByDevice?: boolean;
   agentId?: string;
+  /**
+   * The agent's Directus role name, kept so presence can be limited to roles a
+   * chat may actually be routed to. See `isRoutableRole`.
+   */
+  agentRole?: string | null;
   /**
    * Serialises conversation creation for THIS socket.
    *
@@ -374,6 +399,7 @@ export function registerConnection(deps: ConnectionDeps): void {
         if (!agent) throw new Error('invalid agent token');
         data.kind = 'agent';
         data.agentId = agent.id;
+        data.agentRole = agent.role;
         return next();
       }
       // Default: customer (widget)
@@ -492,10 +518,28 @@ export function registerConnection(deps: ConnectionDeps): void {
       // tab dup or a reconnect inside the grace window) — that's the only
       // case we need to broadcast for.
       if (agentPresence.add(socket.id, data.agentId)) broadcastAgentPresence(io, deps);
-      // Publish to the shared registry so the workers service can route to this
-      // agent. Fire-and-forget: presence is a routing hint, and failing to
-      // record it must never stop an agent connecting.
-      void deps.presenceStore?.online(data.agentId).catch(() => undefined);
+      /*
+       * Publish to the shared registry so the workers service can route to this
+       * agent — but ONLY for a role that may actually be handed a chat.
+       *
+       * "Idle" has to mean idle ON THE FLOOR (owner, 2026-09-14). This used to
+       * record every valid Directus token that completed the handshake, so an
+       * Administrator or WeCare Admin reading the agent portal was published as
+       * an available agent. Routing itself never picked them — `agentsByLoad`
+       * filters by role — but the shared set is also what tells a CUSTOMER how
+       * many agents are available, so a manager with the tab open made the
+       * widget claim somebody was there to answer when nobody was.
+       *
+       * The handshake stays open to them on purpose: a WeCare Admin still needs
+       * realtime in the agent portal to watch the queue. They are simply not
+       * counted as staff waiting for a chat.
+       *
+       * Fire-and-forget: presence is a routing hint, and failing to record it
+       * must never stop an agent connecting.
+       */
+      if (isRoutableRole(data.agentRole)) {
+        void deps.presenceStore?.online(data.agentId).catch(() => undefined);
+      }
     }
 
     registerHandlers(socket, deps);

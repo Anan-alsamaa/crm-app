@@ -117,7 +117,18 @@ describe('AuthProvider / useAuth', () => {
     });
 
     await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('anon'));
-    expect(authMock.logout).toHaveBeenCalled();
+    /*
+     * The session is dropped LOCALLY and the refresh cookie is left alone.
+     *
+     * This used to assert the opposite. Revoking on expiry is correct only when
+     * the session really is dead, and the gateway says "missing token" for a
+     * reason that has nothing to do with that: on a page reload the in-memory
+     * access token is briefly empty, so whichever component opened the socket
+     * first was rejected. Revoking there destroyed a perfectly good cookie and
+     * turned a momentary race into a hard sign-out — the "refreshing the portal
+     * logs the agent out" report (owner, 2026-09-14).
+     */
+    expect(authMock.logout).not.toHaveBeenCalled();
   });
 
   it('useAuth throws when used outside the provider', () => {
