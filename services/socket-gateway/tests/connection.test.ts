@@ -13,7 +13,7 @@ vi.mock('../src/auth/agent-jwt.js', () => ({
 }));
 
 import { validateAgentToken } from '../src/auth/agent-jwt.js';
-import { registerConnection } from '../src/connection.js';
+import { registerConnection, getAgentPresenceSnapshot } from '../src/connection.js';
 import type { GatewayDirectus } from '../src/directus.js';
 import type { CustomerVerifier } from '../src/auth/customer-jwt.js';
 import { CustomerTokenError } from '../src/auth/customer-jwt.js';
@@ -605,6 +605,29 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
       expect(harness.stubs.directus.listAgentConversationIds).toHaveBeenCalledWith('admin-1');
       expect(store.members.has('admin-1')).toBe(false);
     });
+
+    it('keeps a non-routable role out of the LOCAL map too, not just the shared one', async () => {
+      /*
+       * BOTH HALVES OR NEITHER.
+       *
+       * Gating only the shared registry fixed routing and left the customer
+       * lied to: the announced count is `max(shared, local)`, and
+       * `/debug/presence` reports the local map by itself. Measured against
+       * production after v1.15.7 — the Redis set correctly omitted the
+       * Administrator while this map still listed them with three sockets.
+       */
+      const store = fakePresenceStore();
+      mockedValidateAgentToken.mockResolvedValue({ id: 'admin-local-1', role: 'Administrator' });
+      harness = await startGateway(makeStubs(), { presenceStore: store });
+      const client = await connect(harness.port, { kind: 'agent', token: 'good' });
+      sockets.push(client);
+      await new Promise((r) => setTimeout(r, 30));
+      const listed = getAgentPresenceSnapshot().agents.map((a) => a.userId);
+      expect(listed).not.toContain('admin-local-1');
+      expect(store.members.has('admin-local-1')).toBe(false);
+      // Still admitted and still joined to their rooms — they watch the queue.
+      expect(client.connected).toBe(true);
+    });
   });
 
   describe('message + note + signal handlers', () => {
@@ -836,7 +859,13 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
       const observer = await connectCustomerReady(harness.port, sockets);
 
       const presence = waitFor<{ count: number }>(observer, SOCKET_EVENTS.agentsPresence);
-      mockedValidateAgentToken.mockResolvedValue({ id: 'agent-presence-1', role: 'agent' });
+      // A ROUTABLE role, because only those produce a presence pulse now: the
+      // count exists to tell a customer whether anyone can answer, so somebody
+      // who can never be handed a chat must not move it.
+      mockedValidateAgentToken.mockResolvedValue({
+        id: 'agent-presence-1',
+        role: 'WeCare Agent',
+      });
       const agent = await connect(harness.port, { kind: 'agent', token: 'good' });
       sockets.push(agent);
       expect((await presence).count).toBeGreaterThanOrEqual(1);

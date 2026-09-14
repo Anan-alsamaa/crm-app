@@ -514,10 +514,27 @@ export function registerConnection(deps: ConnectionDeps): void {
     if (data.kind === 'customer') void onCustomerConnect(socket, deps);
     else if (data.agentId) {
       void onAgentConnect(socket, deps);
-      // agentPresence.add returns true only for a brand-new agent (not a
-      // tab dup or a reconnect inside the grace window) — that's the only
-      // case we need to broadcast for.
-      if (agentPresence.add(socket.id, data.agentId)) broadcastAgentPresence(io, deps);
+      /*
+       * The LOCAL map takes the same role gate as the shared registry below.
+       *
+       * Gating only the Redis set left this half of presence wrong: the count
+       * broadcast to customers is `max(shared, local)`, and `/debug/presence`
+       * reports this map alone — so an Administrator with the agent portal open
+       * still made the widget promise somebody was available, and still showed
+       * up as online to anyone diagnosing it. Verified against production after
+       * v1.15.7: the shared set correctly omitted them, this map did not.
+       *
+       * Removal needs no matching gate: `agentPresence.remove` returns false
+       * for a socket it never mapped, so a non-routable account disconnects
+       * without a grace timer or a stray broadcast.
+       *
+       * add() returns true only for a brand-new agent (not a tab dup or a
+       * reconnect inside the grace window) — that's the only case worth
+       * broadcasting.
+       */
+      if (isRoutableRole(data.agentRole) && agentPresence.add(socket.id, data.agentId)) {
+        broadcastAgentPresence(io, deps);
+      }
       /*
        * Publish to the shared registry so the workers service can route to this
        * agent — but ONLY for a role that may actually be handed a chat.
