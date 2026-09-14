@@ -393,10 +393,41 @@ describe('reclaim: the assigned agent went offline', () => {
   const owned = { id: 'c1', assigned_agent: 'gone', assigned_team: null, status: 'open' };
 
   it('moves the chat to the idlest ONLINE agent', async () => {
-    // The same rule that assigns a new chat: online first, idlest of those.
-    const t = deps({ convo: owned, online: ['idlest', 'busier'], roster: ['busier', 'idlest'] });
+    /*
+     * The same rule that assigns a new chat: online first, IDLEST OF THOSE.
+     *
+     * `roster` is what `agentsByLoad` returns and is documented least-loaded
+     * FIRST, so the idlest agent has to lead it. This fixture used to list
+     * `['busier','idlest']` and still expect `idlest`, which only passed
+     * because the old code read the Redis presence order instead of the load
+     * order — the very bug this rule exists to prevent.
+     */
+    const t = deps({ convo: owned, online: ['idlest', 'busier'], roster: ['idlest', 'busier'] });
     await handleRouting(job(), t.d);
     expect(t.assign).toHaveBeenCalledWith('c1', 'idlest');
+  });
+
+  it('picks the least-loaded online agent even when presence lists another first', async () => {
+    /*
+     * THE BUG THIS EXISTS FOR (reported 2026-09-14).
+     *
+     * Presence is a Redis sorted set scored by last ACTIVITY, and that score
+     * only moves when an agent sends a message. An agent who is signed in and
+     * quiet therefore keeps the same score for ever and sits at the head of the
+     * set permanently — so `online.find(...)` handed every new chat to the same
+     * person while their colleagues sat idle. Two consecutive customers both
+     * went to Amjad; Nada and Shatha, equally online, got nothing.
+     *
+     * `busy-but-first` models that agent: first in presence order, last in load
+     * order. The least-loaded online agent must win.
+     */
+    const t = deps({
+      convo: owned,
+      online: ['busy-but-first', 'least-loaded'],
+      roster: ['least-loaded', 'busy-but-first'],
+    });
+    await handleRouting(job(), t.d);
+    expect(t.assign).toHaveBeenCalledWith('c1', 'least-loaded');
   });
 
   it('NEVER hands it back to the agent who vanished', async () => {

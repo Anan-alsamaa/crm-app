@@ -177,7 +177,7 @@ export function Inbox() {
     min: 288,
     max: 480,
   });
-  const { user } = useAuth();
+  const { user, can } = useAuth();
 
   /*
    * THE QUEUE IS NOT A FILTER — it is what this screen IS.
@@ -201,24 +201,28 @@ export function Inbox() {
     sort: 'recent',
   });
   /*
-   * EVERY account works its own queue. No exceptions, no privilege branch.
+   * AN AGENT WORKS THEIR OWN QUEUE; A WeCare ADMIN SEES EVERYTHING.
    *
-   * This briefly keyed off `view_all_chats`, which meant an Administrator — for
-   * whom `can()` short-circuits to true on `admin_access` — still saw the
-   * My queue / All chats control and landed unfiltered. From the owner's seat
-   * the filter looked unremoved, because the one account they sign in with was
-   * the one account exempted (2026-09-14).
+   * The control is gone for everybody — nobody chooses a scope any more — but
+   * the SCOPE ITSELF still depends on who you are. `view_all_chats` is held by
+   * WeCare Admin, Supervisor, Viewer and the managers, never by WeCare Agent.
    *
-   * Oversight lives in the ADMIN portal, which is built for it. The agent
-   * portal is a working queue: what you see is what is yours to answer.
+   * Pinning every account to 'mine' (as this did for a few hours on 2026-09-14)
+   * removed the control correctly and took the admin's oversight with it: the
+   * API returned all 9 chats and the inbox then filtered 5 of them back out
+   * client-side. Removing a control is not the same as removing a capability.
    *
-   * Applied as an effect, not as initial state, because `user.id` resolves
-   * after the first render and `buildFilter` drops the clause when it has no
-   * id — seeding it would show every chat for a frame.
+   * Applied as an effect, not as initial state, because both `user.id` and the
+   * privileges resolve after the first render; `buildFilter` drops the clause
+   * when it has no id, so seeding it would show every chat for a frame.
    */
+  const seesAllChats = can('view_all_chats');
   useEffect(() => {
-    setFilters((f) => (f.assignment === 'mine' ? f : { ...f, assignment: 'mine' }));
-  }, []);
+    setFilters((f) => {
+      const want = seesAllChats ? undefined : 'mine';
+      return f.assignment === want ? f : { ...f, assignment: want };
+    });
+  }, [seesAllChats]);
   /* Whether ANYTHING is narrowing the list. Used to tell "there are none"
      apart from "none match", which is the difference between an empty inbox
      and an inbox that looks broken. */

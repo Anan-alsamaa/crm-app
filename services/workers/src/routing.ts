@@ -169,8 +169,26 @@ async function nextAgent(
   const allowed = new Set(eligible);
 
   await redis.zremrangebyscore(PRESENCE_KEY, '-inf', Date.now() - PRESENCE_TTL_MS);
-  const online = await redis.zrange(PRESENCE_KEY, 0, -1);
-  const onlineHit = online.find((id) => !skip.has(id) && allowed.has(id));
+  const online = new Set(await redis.zrange(PRESENCE_KEY, 0, -1));
+
+  /*
+   * AMONG THE ONLINE AGENTS, TAKE THE LEAST LOADED — not whoever Redis lists
+   * first.
+   *
+   * This used to be `online.find(...)`, which walks the presence set in SCORE
+   * order. That score is last ACTIVITY, and it only moves when an agent sends a
+   * message — so an agent who is signed in and quiet keeps the same score for
+   * ever and sits at the head of the set permanently. Every new chat therefore
+   * went to the same person while their colleagues sat idle: reported
+   * 2026-09-14 with two consecutive customers both routed to Amjad and nothing
+   * to Nada or Shatha, who were equally online.
+   *
+   * `eligible` is already ordered least-loaded-first by `agentsByLoad`, which
+   * is the definition of "most idle" the owner asked for. Walking THAT order
+   * and keeping the first online candidate gives both properties at once:
+   * present, and carrying the fewest open chats.
+   */
+  const onlineHit = eligible.find((id) => !skip.has(id) && allowed.has(id) && online.has(id));
   if (onlineHit) return onlineHit;
 
   // Nobody online (or nobody online on this team). `eligible` is already
