@@ -70,6 +70,7 @@ const METRICS = {
   rated: 4,
   satisfied: 3,
   satisfiedPct: 75,
+  avgScore: 4.25,
   compensation: 250,
   avgCompensation: 25,
   compensated: 4,

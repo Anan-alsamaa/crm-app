@@ -130,6 +130,42 @@ const KPI_NUMERALS = {
   amber: 'text-[oklch(0.42_0.10_75)]',
 } as const;
 
+/**
+ * Five stars with the mean filled in, the last one partially.
+ *
+ * A rating is the one number on this board people already have a mental image
+ * for, and it is not a percentage — it is stars. Drawing them makes 3.3 legible
+ * at a glance in a way "67%" never was, and it matches what the customer
+ * actually saw in the chat widget when they gave the score.
+ *
+ * The partial star is a width-clipped overlay rather than a half-star glyph, so
+ * 3.3 and 3.7 look different instead of both rounding to "three and a half".
+ * `aria-label` carries the number itself: the stars are an illustration of a
+ * value that is already printed beside them, so screen readers get the reading
+ * rather than five separate star characters.
+ */
+function StarScore({ score }: { score: number }) {
+  const pct = Math.max(0, Math.min(100, (score / 5) * 100));
+  return (
+    <div
+      className="relative inline-block leading-none"
+      role="img"
+      aria-label={`${score.toFixed(1)} / 5`}
+    >
+      <span className="text-base tracking-tight text-muted-foreground/30" aria-hidden="true">
+        ★★★★★
+      </span>
+      <span
+        className="absolute inset-0 overflow-hidden text-base tracking-tight text-amber-500"
+        style={{ width: `${pct}%` }}
+        aria-hidden="true"
+      >
+        ★★★★★
+      </span>
+    </div>
+  );
+}
+
 function Kpi({
   value,
   unit,
@@ -1248,28 +1284,43 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                   tone="violet"
                   icon={<SparkleIcon size={17} />}
                   order={3}
+                  /*
+                   * THE AVERAGE, NOT THE SHARE.
+                   *
+                   * This read "67%" — the proportion of ratings that were 4 or
+                   * 5. Accurate and nearly unreadable: a percentage with no
+                   * visible denominator invites the reader to guess what it is
+                   * a percentage OF, and it flattens a 5 and a 4 into one thing
+                   * while a 3 and a 1 are equally "not satisfied". Production's
+                   * three ratings — 4, 4 and 2 — are the case in point: 67%
+                   * says nothing a person can act on, 3.3 out of 5 does.
+                   *
+                   * The share is still worth having, so it moves to the
+                   * sub-line where it is qualified by the count.
+                   */
                   value={
-                    d.satisfiedPct === null
+                    d.avgScore === null
                       ? t('complaintDash.notRatedYet', { defaultValue: 'No ratings yet' })
-                      : `${Math.round(d.satisfiedPct)}%`
+                      : d.avgScore.toFixed(1)
+                  }
+                  unit={
+                    d.avgScore === null
+                      ? undefined
+                      : t('complaintDash.outOfFive', { defaultValue: '/ 5' })
                   }
                   label={t('complaintDash.kpiSatisfied', { defaultValue: 'Customer ratings' })}
                   sub={
                     d.rated
-                      ? t('complaintDash.ratedOf', {
-                          defaultValue: '{{sat}} of {{rated}} rated',
-                          sat: d.satisfied,
+                      ? t('complaintDash.avgBasis', {
+                          defaultValue: '{{rated}} ratings · {{pct}}% rated 4 or 5',
                           rated: d.rated,
+                          pct: Math.round(d.satisfiedPct ?? 0),
                         })
                       : t('complaintDash.ratedNone', {
                           defaultValue: 'Customers have not rated these yet',
                         })
                   }
-                  visual={
-                    d.satisfiedPct === null ? undefined : (
-                      <ProgressRing value={d.satisfiedPct} tone="success" />
-                    )
-                  }
+                  visual={d.avgScore === null ? undefined : <StarScore score={d.avgScore} />}
                 />
                 {/* Row two: the CHATS, and what the desk paid out. The two chat
                     numbers sit side by side — one is the denominator of the

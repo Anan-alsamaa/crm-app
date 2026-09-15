@@ -331,6 +331,17 @@ describe('ticket dashboard — status, satisfaction and agents', () => {
     expect(d.rated).toBe(2);
     expect(d.satisfied).toBe(1);
     expect(d.satisfiedPct).toBe(50);
+    /*
+     * THE MEAN, over the same chats as the count beside it.
+     *
+     * The tile led with `satisfiedPct` alone — the share scoring 4 or 5 — which
+     * is true and nearly unreadable: it hides the denominator and flattens a 5
+     * and a 4 into one thing. Production's three ratings (4, 4, 2) read as
+     * "67%", which tells nobody what customers actually said. 5 and 2 average
+     * to 3.5, and that is the number people mean when they ask how the ratings
+     * look.
+     */
+    expect(d.avgScore).toBe(3.5);
     // The health strip is still a TICKET composition and must keep summing.
     expect(d.health.closedUnrated).toBe(1);
   });
@@ -339,6 +350,9 @@ describe('ticket dashboard — status, satisfaction and agents', () => {
     mockData({ tickets: [ticket({ status: 'closed' })], stores: STORES, users: USERS });
     const d = await run();
     expect(d.satisfiedPct).toBeNull();
+    // Null, never 0: an unrated desk has no average, and printing "0.0 / 5"
+    // would accuse the team of the worst possible score.
+    expect(d.avgScore).toBeNull();
   });
 
   it('builds the agent table with solved rate, time to close and cost', async () => {

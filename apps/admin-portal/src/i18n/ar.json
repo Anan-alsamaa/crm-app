@@ -461,7 +461,9 @@
     "opsTrendOneMonth": "شهر واحد فقط في هذا النطاق — وسّع التواريخ لمقارنة الأشهر.",
     "kpiCompensationShort": "التعويضات المعتمدة",
     "chain": "سلسلة",
-    "allChains": "كل مديري السلاسل"
+    "allChains": "كل مديري السلاسل",
+    "outOfFive": "‏/ ٥",
+    "avgBasis": "{{rated}} تقييمات · {{pct}}٪ أعطوا ٤ أو ٥"
   },
   "complaintReport": {
     "outsideWindow": "{{count}} تذكرة أخرى سُجّلت في هذه الفترة لكنها حدثت بين {{earliest}} و {{latest}}، لذا فهي مُدرجة تحت تلك التواريخ.",

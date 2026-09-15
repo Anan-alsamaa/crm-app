@@ -204,6 +204,22 @@ export interface ComplaintMetrics {
   satisfied: number;
   satisfiedPct: number | null;
   /**
+   * The MEAN score out of 5, or null when nothing has been rated.
+   *
+   * The headline used to be `satisfiedPct` alone — the share of ratings that
+   * were 4 or 5. "67%" is true and nearly unreadable: it hides how many people
+   * answered, and it flattens a 5 and a 4 into the same thing while a 3 and a 1
+   * are equally "not satisfied". Three real ratings of 4, 4 and 2 read as 67%,
+   * which sounds like a percentage of something rather than what customers
+   * actually said. The mean (3.3) is the number people mean when they ask how
+   * the ratings look; the share stays as supporting detail.
+   *
+   * Same population as `rated` and `satisfied` — one loop, one denominator, so
+   * the average can never describe a different set of chats than the count
+   * printed beside it.
+   */
+  avgScore: number | null;
+  /**
    * Complaints marked Compensated. A COUNT, deliberately — there is no money
    * figure on this type any more.
    *
@@ -933,9 +949,13 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
        * rating whose chat is outside the current filters is not counted.
        */
       const visibleConversationIds = new Set(conversations.map((c) => c.id));
+      /* Summed in the SAME pass as the count, so the mean and the "n ratings"
+         printed beside it can never disagree about which chats they cover. */
+      let scoreSum = 0;
       for (const [conversationId, score] of scoreByConversation) {
         if (!visibleConversationIds.has(conversationId)) continue;
         rated += 1;
+        scoreSum += score;
         if (score >= 4) satisfied += 1;
       }
 
@@ -952,6 +972,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         rated,
         satisfied,
         satisfiedPct: rated ? (satisfied / rated) * 100 : null,
+        avgScore: rated ? scoreSum / rated : null,
         compensated,
         firstDate,
         lastDate,

@@ -946,7 +946,11 @@
     "byChain": "By chain manager",
     "byChainHint": "The manager above the area — for problems that span areas.",
     "opsWidestArea": "Area manager most affected",
-    "opsOfBranches": "of {{count}} branches"
+    "opsOfBranches": "of {{count}} branches",
+    "outOfFive": "/ 5",
+    "avgBasis": "{{rated}} ratings · {{pct}}% rated 4 or 5",
+    "notRatedYet": "No ratings yet",
+    "ratedNone": "Customers have not rated these yet"
   },
   "performance": {
     "title": "Agent performance",
