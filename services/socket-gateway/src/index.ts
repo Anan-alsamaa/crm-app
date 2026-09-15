@@ -656,6 +656,9 @@ async function main(): Promise<void> {
     let yijiCustomerId: string | null = null;
     let displayName: string | null = null;
     let email: string | null = null;
+    /* The door, when the caller says. `store_qr` unless told otherwise — the
+       branch QR page sends no such field and must keep its behaviour. */
+    let entryPoint: 'app' | 'store_qr' = 'store_qr';
     if (asCode.success) {
       const link = await directus.resolveWalkInLink(asCode.data.code).catch(() => null);
       if (!link) {
@@ -678,6 +681,7 @@ async function main(): Promise<void> {
       yijiCustomerId = parsed.data.customerId ?? null;
       displayName = parsed.data.name ?? null;
       email = parsed.data.email ?? null;
+      entryPoint = parsed.data.entryPoint ?? 'store_qr';
 
       /*
        * THE CALLER IS THE YIJI BACKEND, AND `customerId` IS THEIR WORD FOR IT.
@@ -776,16 +780,21 @@ async function main(): Promise<void> {
            the app carries the customer's own id, so it is not. */
         walk_in: !yijiCustomerId,
         /*
-         * THE DOOR, recorded separately from the account.
+         * THE DOOR, recorded separately from the account — and no longer
+         * assumed.
          *
-         * Every session minted here began at the branch QR page — that is what
-         * this endpoint is for. Saying so lets `acquisitionChannel` tell an app
-         * customer standing in a shop (`walk_in_app`) from one at home (`app`),
-         * which a single `walk_in` boolean could not express: proving an
-         * account set `walk_in: false` and filed them as though they had never
-         * left the sofa.
+         * This was hardcoded to `store_qr` back when the branch QR page was the
+         * only caller. Yiji's backend now calls the same endpoint for a
+         * customer inside their app, so the constant filed every one of them as
+         * `walk_in_app` — "in a branch, holds an account" — when they may be at
+         * home. Telling those two apart is the entire reason the door is
+         * recorded separately from the account, so it has to be said rather
+         * than guessed.
+         *
+         * Defaults to `store_qr` so the QR page, which sends no such field,
+         * behaves exactly as before.
          */
-        entry_point: 'store_qr' as const,
+        entry_point: entryPoint,
       },
       config.YIJI_JWT_SECRET,
       { algorithm: 'HS256', expiresIn: '2h' },

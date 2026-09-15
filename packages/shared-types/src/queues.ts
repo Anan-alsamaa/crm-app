@@ -242,6 +242,21 @@ export const WalkInSessionRequest = z.object({
    * vendor in a multi-tenant setup. Absent means DEFAULT_VENDOR_ID.
    */
   vendorId: z.string().min(1).optional(),
+  /**
+   * WHICH DOOR the customer came through, when the caller knows.
+   *
+   * This endpoint serves two callers now. The branch QR page knows its
+   * visitor is standing in a shop; Yiji's backend knows theirs is in the app,
+   * and may be anywhere. The token used to be stamped `store_qr`
+   * unconditionally, so `acquisitionChannel` filed every app customer as
+   * `walk_in_app` — "in a branch, holds an account" — including someone
+   * sitting at home. The whole point of recording the door separately from
+   * the account was to tell those two apart, and a constant could not.
+   *
+   * Defaults to `store_qr`: the QR page sends only a phone and a vendor id,
+   * and its behaviour must not change because a new field exists.
+   */
+  entryPoint: z.enum(['app', 'store_qr']).optional(),
 });
 export type WalkInSessionRequest = z.infer<typeof WalkInSessionRequest>;
 

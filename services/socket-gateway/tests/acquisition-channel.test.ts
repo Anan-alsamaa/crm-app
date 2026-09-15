@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { acquisitionChannel } from '../src/directus.js';
+import { WalkInSessionRequest } from '@yiji/shared-types';
 
 /**
  * THREE ways a customer reaches us, not two.
@@ -15,6 +16,46 @@ import { acquisitionChannel } from '../src/directus.js';
  * These pin all three, and the backward-compatible default, because the failure
  * was silent — a plausible value in the column, just the wrong one.
  */
+describe('the door the session endpoint stamps on a token', () => {
+  /*
+   * THE ENDPOINT SERVES TWO CALLERS, SO IT CANNOT ASSUME ONE DOOR.
+   *
+   * `/walk-in/session` hardcoded `entry_point: 'store_qr'` from the days when
+   * the branch QR page was its only caller. Yiji's backend now calls the same
+   * endpoint for a customer inside their app (owner + Yiji developer,
+   * 2026-09-15), so every one of those was filed as `walk_in_app` — "in a
+   * branch, holds an account" — including a customer sitting at home.
+   *
+   * That is precisely the distinction the door exists to record, so these pin
+   * the request field end-to-end: what the caller says becomes what the token
+   * carries, and silence still means the QR page.
+   */
+  const doorFor = (entryPoint?: 'app' | 'store_qr') =>
+    WalkInSessionRequest.parse({ phone: '0512345678', ...(entryPoint ? { entryPoint } : {}) })
+      .entryPoint ?? 'store_qr';
+
+  it("takes the caller's word when Yiji says the customer is in the app", () => {
+    expect(doorFor('app')).toBe('app');
+    // ...and that token then files as an app customer, not a branch visitor.
+    expect(acquisitionChannel({ walk_in: false, entry_point: doorFor('app') })).toBe('app');
+  });
+
+  it('still defaults to the branch QR page, which sends no such field', () => {
+    // The QR page posts only a phone and a vendor id. Adding a field to the
+    // schema must not change what it mints.
+    expect(doorFor()).toBe('store_qr');
+    expect(acquisitionChannel({ walk_in: true, entry_point: doorFor() })).toBe('walk_in');
+  });
+
+  it('keeps an in-store app customer distinguishable from one at home', () => {
+    // Both hold an account; only the door tells them apart.
+    expect(acquisitionChannel({ walk_in: false, entry_point: doorFor('store_qr') })).toBe(
+      'walk_in_app',
+    );
+    expect(acquisitionChannel({ walk_in: false, entry_point: doorFor('app') })).toBe('app');
+  });
+});
+
 describe('which of the three doors a customer came through', () => {
   it('app customer at home -> app', () => {
     // Opened inside the Yiji app: no store entry point, account proven.
