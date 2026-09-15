@@ -87,7 +87,16 @@ export function addOrder(conversationId: string, order: YijiOrder): void {
   const all = read<AddedMap>(ADDED_KEY);
   const list = all[conversationId] ?? [];
   if (list.some((o) => o.orderId === order.orderId)) return;
-  write(ADDED_KEY, { ...all, [conversationId]: [...list, order] });
+  /*
+   * NEWEST KEPT ORDER FIRST.
+   *
+   * This appended, so an order the agent had just looked up and deliberately
+   * kept landed at the BOTTOM of the panel — below orders they had kept
+   * earlier and below the automatic one. The agent types a number precisely
+   * because that is the order being discussed, then has to scroll past
+   * everything else to find it (owner, 2026-09-15).
+   */
+  write(ADDED_KEY, { ...all, [conversationId]: [order, ...list] });
 }
 
 export function removeOrder(conversationId: string, orderId: string): void {

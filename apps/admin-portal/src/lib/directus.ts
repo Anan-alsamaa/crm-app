@@ -1,4 +1,4 @@
-import { createAuthClient, resolveUrl } from '@yiji/shared-config';
+import { browserAuthStorage, createAuthClient, resolveUrl } from '@yiji/shared-config';
 
 const DIRECTUS_URL = resolveUrl(
   'DIRECTUS_URL',
@@ -6,9 +6,20 @@ const DIRECTUS_URL = resolveUrl(
   'http://localhost:8055',
 );
 
-// H-2: no storage arg → in-memory access token only; the refresh token lives in
-// an httpOnly cookie set by Directus (unreadable by JS).
-export const auth = createAuthClient({ url: DIRECTUS_URL });
+/*
+ * THIS PORTAL'S OWN SESSION — see the matching note in the agent portal.
+ *
+ * A shared Directus host meant a shared session cookie, so the two portals were
+ * one login. Separate storage keys make them separate sign-ins.
+ */
+export const auth = createAuthClient({
+  url: DIRECTUS_URL,
+  mode: 'json',
+  storage:
+    typeof localStorage === 'undefined'
+      ? undefined
+      : browserAuthStorage('yiji.admin.session', localStorage),
+});
 
 /** The authenticated Directus client, for CRUD (users, teams, ...). */
 export const directus = auth.client;

@@ -166,14 +166,60 @@ describe('auto-assignment ladder', () => {
       expect(schedule).toHaveBeenCalledWith(
         expect.objectContaining({
           stage: 'escalate',
-          // The owner is the agent being timed, so the next rung offers it
-          // onward rather than back to them.
-          attemptedAgentIds: ['owner'],
+          /*
+           * EMPTY, not `['owner']`.
+           *
+           * `attemptedAgentIds` is a SKIP-LIST — `nextAgent` refuses anybody in
+           * it — so naming the owner made the rung structurally unable to leave
+           * the chat where it was. See the regression test below.
+           */
+          attemptedAgentIds: [],
           // "Has anyone replied SINCE this moment" — agent messages only.
           outboundCountAtSchedule: 3,
         }),
         ROUTING_FIRST_WAIT_MS,
       );
+    });
+
+    it('KEEPS the chat with an owner who is answering, rather than passing it on', async () => {
+      /*
+       * "Once Nada receives the chat and replies, it should remain assigned to
+       * Nada" (owner, 2026-09-15).
+       *
+       * The re-arm put the current owner into `attemptedAgentIds`, which is a
+       * skip-list: `nextAgent` will not offer a chat to anybody named in it. So
+       * the rung could not leave the chat where it was even when the owner was
+       * the idlest agent online and had just answered.
+       *
+       * Measured in production on chat 65138bfb — Nada replied at 08:02:25, the
+       * customer wrote again at 08:03:21, and 60 seconds later the ladder moved
+       * it to Shatha.
+       */
+      const t = deps({
+        online: ['nada', 'shatha'],
+        roster: ['nada', 'shatha'],
+        convo: { id: 'c1', assigned_agent: 'nada', assigned_team: null, status: 'open' },
+        outbound: 1,
+      });
+      // The re-arm the customer's new message schedules.
+      await handleRouting(job(), t.d);
+      const armed = t.schedule.mock.calls[0]?.[0] as { attemptedAgentIds: string[] };
+      expect(armed.attemptedAgentIds).toEqual([]);
+
+      // That timer expiring must offer it back to Nada — the idlest eligible
+      // agent — not hand it to Shatha.
+      const t2 = deps({
+        online: ['nada', 'shatha'],
+        roster: ['nada', 'shatha'],
+        convo: { id: 'c1', assigned_agent: 'nada', assigned_team: null, status: 'open' },
+        outbound: 1,
+      });
+      await handleRouting(
+        job({ stage: 'escalate', attemptedAgentIds: [], outboundCountAtSchedule: 1 }),
+        t2.d,
+      );
+      const handedTo = t2.assign.mock.calls.map((c) => c[1]);
+      expect(handedTo).not.toContain('shatha');
     });
 
     it('the armed ladder cancels itself the moment the owner replies', async () => {

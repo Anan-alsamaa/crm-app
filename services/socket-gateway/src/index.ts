@@ -680,6 +680,25 @@ async function main(): Promise<void> {
       email = parsed.data.email ?? null;
 
       /*
+       * THE CALLER IS THE YIJI BACKEND, AND `customerId` IS THEIR WORD FOR IT.
+       *
+       * THE AGREED FLOW (owner + Yiji developer, 2026-09-15): their server
+       * calls this endpoint with phone, user id, name and email; we answer with
+       * a token; they open the chat web view with it. They do NOT send a Yiji
+       * session token, so nothing here may require one.
+       *
+       * That makes `customerId` authoritative when it arrives — it decides
+       * `walk_in`, which in turn replays the customer's own history and writes
+       * their real `external_customer_id` for coupon delivery. The protection
+       * is no longer "prove it with a token" but WHO MAY CALL THIS AT ALL: the
+       * endpoint is rate-limited per IP and, in production, should be reachable
+       * only by Yiji's backend. A phone number alone still opens a walk-in
+       * session with no history, exactly as the in-store QR page does.
+       *
+       * The block below stays as OPTIONAL enrichment: if a session token ever
+       * is supplied it is resolved and its answer wins, because Yiji's own
+       * record of a customer beats anything typed alongside it.
+       *
        * A YIJI SESSION TOKEN IS PROOF; `customerId` IN THE BODY IS NOT.
        *
        * This endpoint is how the app opens a chat now that a token no longer

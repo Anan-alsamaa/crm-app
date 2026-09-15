@@ -20,6 +20,7 @@ import {
   StatCard,
   toast,
   useIsDesktop,
+  useNow,
   useResizable,
 } from '@yiji/ui';
 import {
@@ -170,6 +171,16 @@ function InboxStat({
 export function Inbox() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  /*
+   * A TICKING CLOCK, so "39m" does not freeze.
+   *
+   * `formatRelative` reads the time when it is CALLED; nothing re-rendered
+   * these rows, so an agent working in another tab returned to an inbox still
+   * showing the ages it had when they left — a chat waiting five minutes read
+   * as one, and only a manual refresh corrected it (owner, 2026-09-15).
+   * Referencing `now` in the render makes every tick redraw the timestamps.
+   */
+  const now = useNow();
   const isDesktop = useIsDesktop();
   const list = useResizable({
     storageKey: 'yiji.agent.inboxWidth',
@@ -741,7 +752,7 @@ export function Inbox() {
                                   unread ? 'font-semibold text-primary' : 'text-muted-foreground',
                                 )}
                               >
-                                {formatRelative(c.last_message_at)}
+                                {formatRelative(c.last_message_at, undefined, now)}
                               </span>
                             </div>
                             <div className="mt-0.5 flex items-center gap-2">
@@ -1030,7 +1041,7 @@ export function Inbox() {
                                     {t(`status.${c.status}`, { ns: 'common' })}
                                   </Pill>
                                   <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-                                    {formatRelative(c.last_message_at)}
+                                    {formatRelative(c.last_message_at, undefined, now)}
                                   </span>
                                 </button>
                               </li>

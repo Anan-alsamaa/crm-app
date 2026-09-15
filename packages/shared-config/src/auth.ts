@@ -73,12 +73,28 @@ export interface AuthClientOptions {
    * production should leave it unset so the access token never persists.
    */
   storage?: AuthenticationStorage;
+  /**
+   * How the session is carried. `'cookie'` (the default) keeps the refresh
+   * token in an httpOnly cookie on the DIRECTUS origin — which is why it
+   * cannot separate two portals: they share one API host, so they share one
+   * cookie, and signing into the admin portal silently signed you into the
+   * agent portal as the same person (owner, 2026-09-15).
+   *
+   * `'json'` hands the refresh token to the app instead, so each portal keeps
+   * its own in its own `storage` key and the two sessions are genuinely
+   * independent. That is a real trade-off — a readable refresh token is
+   * reachable by any script running on that origin, where an httpOnly cookie
+   * is not — and it is taken deliberately: the portals are separate products
+   * with separate roles, and one bleeding into the other is both a
+   * usability and an access-control problem.
+   */
+  mode?: 'cookie' | 'json' | 'session';
 }
 
-export function createAuthClient({ url, storage }: AuthClientOptions) {
+export function createAuthClient({ url, storage, mode = 'cookie' }: AuthClientOptions) {
   const client = createDirectus(url)
     .with(
-      authentication('cookie', {
+      authentication(mode, {
         credentials: 'include',
         autoRefresh: true,
         ...(storage ? { storage } : {}),

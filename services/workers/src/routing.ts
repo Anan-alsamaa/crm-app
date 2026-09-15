@@ -366,7 +366,27 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
         {
           conversationId: convo.id,
           stage: 'escalate',
-          attemptedAgentIds: [convo.assigned_agent],
+          /*
+           * THE OWNER IS NOT "ALREADY TRIED" — they are the one being timed.
+           *
+           * `attemptedAgentIds` is a SKIP-LIST: `nextAgent` refuses to offer
+           * the chat to anybody in it. Passing the owner here therefore made
+           * the escalate rung structurally incapable of leaving the chat where
+           * it was, so an agent who picked it up and answered lost it 60
+           * seconds later to somebody else.
+           *
+           * Measured in production: chat 65138bfb, Nada replied at 08:02:25,
+           * the customer wrote again at 08:03:21, and the re-arm handed it to
+           * Shatha at 08:04:21 — the "assigned back to Shatha after Nada had
+           * replied" the owner reported (2026-09-15).
+           *
+           * Empty, so the rung re-offers it to the idlest eligible agent —
+           * which, when the owner is online and carrying this chat, is
+           * normally the owner themselves. They keep it unless they go quiet
+           * for the full 60 seconds, and a reply in that window cancels the
+           * timer outright via the outbound count below.
+           */
+          attemptedAgentIds: [],
           outboundCountAtSchedule: outboundNow,
         },
         ROUTING_FIRST_WAIT_MS,

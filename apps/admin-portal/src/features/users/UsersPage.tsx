@@ -54,10 +54,25 @@ const schema = z.object({
    * part of an address, and a space or an `@` in there produces an identity
    * nobody can authenticate as.
    */
+  /*
+   * OPTIONAL, and `@` IS ALLOWED.
+   *
+   * Two changes the owner asked for (2026-09-15):
+   *
+   *  - `@` was rejected, so an account whose sign-in name IS an address
+   *    (e.habibi@anan.sa) could not be saved. `loginIdentity` has always
+   *    passed anything containing `@` straight through as a real address, so
+   *    the form was refusing something the rest of the stack already handled.
+   *
+   *  - Empty is now legal: a person with no employee id signs in with their
+   *    email instead. The submit path falls back to `contact_email`, so the
+   *    rule is simply "login name if there is one, otherwise the email".
+   */
   login_name: z
     .string()
-    .min(1)
-    .regex(/^[A-Za-z0-9._-]+$/, 'Letters, numbers, dot, dash and underscore only.'),
+    .regex(/^[A-Za-z0-9._@-]*$/, 'Letters, numbers, dot, dash, underscore and @ only.')
+    .optional()
+    .or(z.literal('')),
   /**
    * A real address for contacting them. OPTIONAL, and never the sign-in
    * identity: most staff have no work address, and requiring one only meant
@@ -139,7 +154,24 @@ export function UsersPage() {
   // Guard against locking yourself out / removing the project owner.
   const isSelf = editing?.id === currentUser?.id;
   const isOwner = editing?.role?.name?.toLowerCase() === 'administrator';
-  const canDelete = !!editing && !isSelf && !isOwner;
+  /*
+   * DELETING A PERSON IS AN ADMIN ACT.
+   *
+   * This checked only that you were not deleting yourself or the project
+   * owner — so any role that could reach this page could remove accounts
+   * (owner, 2026-09-15). Deletion is irreversible and takes the person's
+   * history with it, so it belongs to the two roles that own the user list:
+   * WeCare Admin and Administrator.
+   *
+   * Hiding the button is not the security boundary — Directus is — but a
+   * control nobody should press should not be on screen either.
+   */
+  const viewerRole = currentUser?.role?.name?.toLowerCase() ?? '';
+  const viewerMayDelete =
+    currentUser?.admin_access === true ||
+    viewerRole === 'administrator' ||
+    viewerRole === 'wecare admin';
+  const canDelete = !!editing && !isSelf && !isOwner && viewerMayDelete;
 
   // Administrator is the system superuser (full schema + permission control) and
   // must NOT be assignable from the portal — granting it is a privilege-escalation
@@ -151,10 +183,22 @@ export function UsersPage() {
     .map((r) => ({ value: r.id, label: r.name }));
 
   const onSubmit = handleSubmit(async (values) => {
+    /*
+     * LOGIN NAME IF THERE IS ONE, OTHERWISE THE EMAIL (owner, 2026-09-15).
+     *
+     * Staff who have an employee id sign in with it; people who do not — an
+     * administrator, a manager with a real work address — sign in with their
+     * email instead. `loginIdentity` already handles both shapes: it passes
+     * anything containing `@` through untouched and mints
+     * `<id>@staff.example.com` for a bare employee id. The only thing missing
+     * was allowing the field to be blank and falling through to the address.
+     */
+    const signInName = (values.login_name ?? '').trim();
+    const signInIdentity = loginIdentity(signInName || (values.contact_email ?? '').trim());
     try {
       if (editing) {
         const patch: Record<string, unknown> = {
-          login_name: normalizeLoginName(values.login_name),
+          login_name: signInName ? normalizeLoginName(signInName) : null,
           contact_email: values.contact_email || null,
           // The identity follows the login name WHENEVER IT CHANGES.
           //
@@ -166,7 +210,7 @@ export function UsersPage() {
           //
           // Untouched login name, untouched identity: nobody's sign-in changes
           // as a side effect of editing their team.
-          ...(dirtyFields.login_name ? { email: loginIdentity(values.login_name) } : {}),
+          ...(dirtyFields.login_name && signInIdentity ? { email: signInIdentity } : {}),
           first_name: values.first_name || null,
           last_name: values.last_name || null,
           role: values.role,
@@ -187,8 +231,8 @@ export function UsersPage() {
         await createUser.mutateAsync({
           // Minted, never typed: nobody has to invent an address for a person
           // who does not have one.
-          email: loginIdentity(values.login_name) ?? '',
-          login_name: normalizeLoginName(values.login_name),
+          email: signInIdentity ?? '',
+          login_name: signInName ? normalizeLoginName(signInName) : '',
           contact_email: values.contact_email || null,
           password: values.password,
           first_name: values.first_name,
@@ -551,12 +595,17 @@ export function UsersPage() {
         }
         footer={
           <>
+            {/* Delete sits on the SAME ROW as Cancel and Save (owner,
+                2026-09-15), pushed to the opposite end by `me-auto` so a
+                destructive action is never adjacent to the one people reach
+                for by habit. `w-full` on the wrapper keeps all three in one
+                line rather than letting Delete wrap above them. */}
             {canDelete && (
               <Button
                 type="button"
                 variant="ghost"
                 onClick={() => setConfirmDelete(true)}
-                className="text-destructive hover:bg-destructive/10 me-auto"
+                className="me-auto text-destructive hover:bg-destructive/10"
               >
                 {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
               </Button>

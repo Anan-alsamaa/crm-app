@@ -1,5 +1,5 @@
 import { readAssetBlob } from '@directus/sdk';
-import { createAuthClient, resolveUrl } from '@yiji/shared-config';
+import { browserAuthStorage, createAuthClient, resolveUrl } from '@yiji/shared-config';
 
 export const DIRECTUS_URL = resolveUrl(
   'DIRECTUS_URL',
@@ -32,9 +32,27 @@ export async function downloadAsset(fileId: string, filename?: string): Promise<
   URL.revokeObjectURL(url);
 }
 
-// H-2: no storage arg → in-memory access token only; the refresh token lives in
-// an httpOnly cookie set by Directus (unreadable by JS).
-export const auth = createAuthClient({ url: DIRECTUS_URL });
+/*
+ * THIS PORTAL'S OWN SESSION, not whatever the admin portal is signed in as.
+ *
+ * Both portals talk to the SAME Directus host, so under cookie auth they shared
+ * one `directus_session_token` — opening the agent portal while signed into the
+ * admin portal logged you straight in as the admin account, with no prompt
+ * (owner, 2026-09-15). Two products with different roles must not share one
+ * identity.
+ *
+ * `json` mode keeps the refresh token in this app's own storage key instead of
+ * a shared cookie, so each portal signs in, stays signed in, and signs out on
+ * its own. Reopening this portal still restores THIS session when it is valid.
+ */
+export const auth = createAuthClient({
+  url: DIRECTUS_URL,
+  mode: 'json',
+  storage:
+    typeof localStorage === 'undefined'
+      ? undefined
+      : browserAuthStorage('yiji.agent.session', localStorage),
+});
 
 /** Authenticated Directus client for reads (conversations, messages, ...). */
 export const directus = auth.client;

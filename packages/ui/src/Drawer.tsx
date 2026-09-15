@@ -168,9 +168,22 @@ export function Drawer({
         {/* Optional sticky footer — borderless, sits on a faded fade */}
         {footer && (
           <div
+            /*
+             * ONE ROW, not a stack.
+             *
+             * This was `flex-col`, so every drawer's actions were stacked
+             * vertically — on the user editor that put Delete, Cancel and Save
+             * on three separate lines (owner, 2026-09-15), which reads as three
+             * unrelated decisions rather than one set of choices, and pushes
+             * Save below the fold on a short window.
+             *
+             * `flex-wrap` keeps it honest on a narrow drawer: the buttons wrap
+             * to a second line instead of overflowing, which is what a column
+             * was presumably guarding against.
+             */
             className={cn(
-              'flex shrink-0 flex-col',
-              hideChrome ? '' : 'items-end justify-end gap-2 px-8 py-5',
+              'flex shrink-0 flex-row flex-wrap',
+              hideChrome ? '' : 'items-center justify-end gap-2 px-8 py-5',
             )}
           >
             {footer}

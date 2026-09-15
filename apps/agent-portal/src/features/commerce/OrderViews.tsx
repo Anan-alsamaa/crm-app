@@ -722,13 +722,21 @@ function ManualOrderLookup({
             above it wraps instead of squeezing this. `font-mono` +
             `tabular-nums` so every digit is the same width and a transposed
             one is visible. */}
+        {/*
+          READS AS A FIELD, not as a line of text.
+          It was a flat card-coloured box on a card-coloured panel, separated
+          from its surroundings by a single hairline ring — so an agent could
+          not tell it was somewhere to TYPE (owner, 2026-09-15). A recessed
+          input surface, a heavier border and a magnifier make it obviously an
+          entry box before anyone clicks it.
+        */}
         <input
           value={input}
           onChange={(e) => setInput(e.currentTarget.value)}
           inputMode="numeric"
           aria-label={t('commerce.lookupLabel', { defaultValue: 'Look up an order by ID' })}
-          placeholder={t('commerce.lookupPlaceholder', { defaultValue: 'Order ID…' })}
-          className="h-8 min-w-[7.5rem] flex-1 rounded-lg bg-card px-2.5 font-mono text-xs tabular-nums text-foreground ring-1 ring-border placeholder:font-sans placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+          placeholder={t('commerce.lookupPlaceholder', { defaultValue: 'Type an order ID…' })}
+          className="h-8 min-w-[8rem] flex-1 rounded-lg bg-input px-2.5 font-mono text-xs tabular-nums text-foreground ring-1 ring-inset ring-foreground/15 placeholder:font-sans placeholder:text-muted-foreground/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         />
         <button
           type="submit"

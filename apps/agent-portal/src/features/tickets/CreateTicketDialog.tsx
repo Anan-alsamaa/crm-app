@@ -267,6 +267,20 @@ export function CreateTicketDialog({
     complaint_date: nowLocalInput(),
   }));
 
+  /*
+   * WALK-IN SERVICE TYPES TAKE THE NUMBER AS TYPED (owner, 2026-09-15).
+   *
+   * Takeout and Dine-in are walk-in customers. They read out the number on the
+   * restaurant's own receipt, which is NOT the Yiji order id the lookup
+   * searches — so Find always failed and the agent could not attach the only
+   * reference the customer had. For those two the typed value is accepted
+   * as-is: no lookup, no snapshot (there is no order to snapshot), just the
+   * number recorded on the ticket so it can be searched and quoted back.
+   */
+  const walkInService =
+    complaint.service_type === 'Takeout' || complaint.service_type === 'Dine-in';
+  const unverifiedOrderId = walkInService ? typedOrderId.trim() : '';
+
   // The order already knows how it was fulfilled, so pre-fill service type
   // rather than making the agent read it off the card and retype it. Only fills
   // a field the agent has not touched — never overwrites their choice.
@@ -372,7 +386,8 @@ export function CreateTicketDialog({
           // Lifted out of the snapshot so it is searchable: Directus cannot
           // filter inside a json column, so an order id that lives only in
           // order_snapshot cannot be looked up from the inbox search box.
-          order_id: includeOrder && latestOrder ? String(latestOrder.orderId) : null,
+          order_id:
+            includeOrder && latestOrder ? String(latestOrder.orderId) : unverifiedOrderId || null,
           // Which branch, live — what reports group by and what gets corrected.
           store: chosenMatch?.store?.id ?? null,
           // ...and who it belonged to at the time. Frozen, because resolved
