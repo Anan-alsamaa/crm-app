@@ -14,6 +14,23 @@ vi.mock('react-i18next', () => ({
 
 // Mock the tickets feature api: canned query/mutation objects.
 const hooks = vi.hoisted(() => ({
+  /*
+   * REAL implementations, not stubs.
+   *
+   * These are pure functions, and the page uses them to decide what a ticket
+   * row SAYS about its customer — including the walk-in case where there is no
+   * contact and the number was typed onto the ticket. A `vi.fn()` returning
+   * undefined would make every customer read "Unknown" and the specs would
+   * still pass, asserting nothing about the fallback they exist to cover.
+   */
+  customerPhone: (t: {
+    contact?: { phone: string | null } | null;
+    customer_phone?: string | null;
+  }) => t.contact?.phone ?? t.customer_phone ?? null,
+  customerLabel: (t: {
+    contact?: { name: string | null; phone: string | null; email: string | null } | null;
+    customer_phone?: string | null;
+  }) => t.contact?.name ?? t.contact?.phone ?? t.contact?.email ?? t.customer_phone ?? null,
   useTickets: vi.fn(),
   useTicket: vi.fn(),
   useTicketEvents: vi.fn(),

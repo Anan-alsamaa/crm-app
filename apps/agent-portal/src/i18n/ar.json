@@ -536,7 +536,11 @@
     "viewLatestTicket": "عرض أحدث تذكرة",
     "viewLatestOf": "يفتح أحدث تذكرة من {{n}} تذاكر: {{subject}}",
     "replaceFilter": "عرض هذه فقط",
-    "resizeList": "تغيير عرض قائمة التذاكر"
+    "resizeList": "تغيير عرض قائمة التذاكر",
+    "pickContactOrPhone": "اختر عميلاً، أو اكتب رقم جواله",
+    "customerPhone": "رقم جوال العميل",
+    "customerPhoneHint": "لعميل غير مسجّل في النظام. أي رقم مقبول — يُحفظ على التذكرة.",
+    "customerPhonePlaceholder": "مثال 0501234567"
   },
   "notifications": {
     "title": "التنبيهات",

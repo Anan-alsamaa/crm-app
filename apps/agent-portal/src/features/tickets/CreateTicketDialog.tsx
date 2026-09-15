@@ -73,6 +73,14 @@ interface Props {
    * know whether the contact came from a chat or a search.
    */
   contactField?: React.ReactNode;
+  /**
+   * A phone number typed for a customer who is NOT in the CRM.
+   *
+   * Owned by the route, like `contactField`, because the two are one decision:
+   * pick a contact, or type a number for somebody who has no row. Empty from a
+   * chat, where the customer came with the conversation.
+   */
+  typedPhone?: string;
   conversationId?: string | null;
   onClose: () => void;
   /** Names where Cancel returns to, e.g. "Back to the chat". Renders the arrow. */
@@ -162,6 +170,7 @@ export function CreateTicketDialog({
   conversationId,
   onClose,
   contactField,
+  typedPhone = '',
   backLabel,
   onCreated,
 }: Props) {
@@ -380,6 +389,11 @@ export function CreateTicketDialog({
           priority: values.priority,
           contact: contactId,
           vendor: vendorId,
+          /* The customer's number when no CRM contact stands behind the
+             ticket — a walk-in who is not in the system. Null when a contact
+             IS chosen: their own record is the better copy, and storing it
+             twice invites the two to disagree. */
+          customer_phone: contactId ? null : typedPhone.trim() || null,
           conversation: conversationId ?? null,
           assigned_agent: user?.id ?? null,
           order_snapshot: includeOrder && latestOrder ? orderSnapshot(latestOrder) : null,
@@ -502,7 +516,20 @@ export function CreateTicketDialog({
   });
 
   const hasChatContext = !!conversationId && (!!latestOrder || sessionFileIds.length > 0);
-  const canSubmit = !!contactId && !!vendorId && !complaintHasErrors(complaint) && !!subject;
+  /*
+   * A CUSTOMER, NOT NECESSARILY A CONTACT.
+   *
+   * This required a picked `contactId`, so a complaint from somebody who is
+   * not in the CRM could not be raised at all: the picker searched our own
+   * contacts, found nothing, and the button stayed dead. A walk-in is exactly
+   * the person least likely to have a row — and exactly the person standing
+   * in front of an agent (owner, 2026-09-15).
+   *
+   * Either identifies the customer now: a chosen contact, or a number typed
+   * on the ticket.
+   */
+  const hasCustomer = !!contactId || !!typedPhone.trim();
+  const canSubmit = hasCustomer && !!vendorId && !complaintHasErrors(complaint) && !!subject;
 
   // Identify the ticket by who and what it is about, not by restating the
   // page's purpose. Empty on a blank standalone form, where the generic hint
@@ -517,8 +544,10 @@ export function CreateTicketDialog({
     chosenMatch?.store ? chosenMatch.restaurantName : null,
   ].filter((v): v is string => !!v);
 
-  const blockedReason = !contactId
-    ? t('tickets.pickContactFirst', { defaultValue: 'Choose a customer to continue' })
+  const blockedReason = !hasCustomer
+    ? t('tickets.pickContactOrPhone', {
+        defaultValue: 'Choose a customer, or type their phone number',
+      })
     : !subject
       ? // Named, not vague: "check the highlighted fields" sends the agent
         // hunting across a fourteen-field form for the one thing missing.

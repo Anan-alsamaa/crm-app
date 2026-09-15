@@ -38,6 +38,8 @@ import {
   type TicketStatus,
 } from '@yiji/shared-types';
 import {
+  customerLabel,
+  customerPhone,
   useTicket,
   useTicketEvents,
   useUpdateTicket,
@@ -959,7 +961,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
               <Avatar
                 name={tk.contact?.name}
                 email={tk.contact?.email}
-                phone={tk.contact?.phone}
+                phone={customerPhone(tk)}
                 size="lg"
               />
             </span>
@@ -986,10 +988,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                   {t('tickets.metaCustomer', { defaultValue: 'Customer' })}
                 </div>
                 <div className="mt-0.5 truncate text-xs font-medium text-foreground">
-                  {tk.contact?.name ??
-                    tk.contact?.phone ??
-                    tk.contact?.email ??
-                    t('inbox.unknownContact')}
+                  {customerLabel(tk) ?? t('inbox.unknownContact')}
                 </div>
               </div>
               {tk.date_created && (

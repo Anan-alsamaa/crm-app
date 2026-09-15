@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Button, toast } from '@yiji/ui';
 import { useAuth } from '../../lib/auth/AuthContext.js';
-import { useStampContacted, type TicketRow } from './api.js';
+import { customerPhone, useStampContacted, type TicketRow } from './api.js';
 import { fillWaTemplate, useWaTemplate, waUrl } from './whatsapp.js';
 
 /**
@@ -19,7 +19,10 @@ export function WhatsAppReply({ ticket }: { ticket: TicketRow }) {
   const template = useWaTemplate();
   const stamp = useStampContacted();
 
-  const phone = ticket.contact?.phone ?? null;
+  /* The contact's number, or the one typed on the ticket for a walk-in with
+     no contact behind them — see `customerPhone`. Reading only the contact
+     left the WhatsApp button inert for precisely those customers. */
+  const phone = customerPhone(ticket);
   const message = fillWaTemplate(template.data ?? '', {
     order: ticket.order_id ?? ticket.order_snapshot?.orderId?.toString() ?? null,
     name: ticket.contact?.name ?? null,

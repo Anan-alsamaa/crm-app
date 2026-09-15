@@ -6,6 +6,8 @@ import { conversationVendorId, useConversation } from '../inbox/api.js';
 import type { ContactRow } from '../contacts/api.js';
 import { ContactPicker } from './ContactPicker.js';
 import { CreateTicketDialog } from './CreateTicketDialog.js';
+import { useVendors } from './api.js';
+import { FormField, Input } from '@yiji/ui';
 
 /**
  * "Add ticket" — the one place a ticket is raised, in either of its two shapes.
@@ -30,15 +32,30 @@ export function NewTicketPage() {
 
   const conversation = useConversation(conversationId);
   const [picked, setPicked] = useState<ContactRow | null>(null);
+  /* A number for a customer with no CRM row — see the field below. */
+  const [typedPhone, setTypedPhone] = useState('');
+  const vendors = useVendors();
 
   // From a chat the customer is settled; standalone, the agent picks one. A
   // contact with no vendor cannot carry a ticket, so it does not count as
   // chosen — submit stays disabled rather than failing on save.
   const fromChat = !!conversationId;
   const contactId = fromChat ? (conversation.data?.contact?.id ?? null) : (picked?.id ?? null);
+  /*
+   * The vendor, in order of how well it is known.
+   *
+   * From the chat, then from the chosen contact — and failing both, THE vendor
+   * this deployment has. A walk-in ticket has neither a conversation nor a
+   * contact to inherit one from, and without a vendor it could not be saved at
+   * all. Read at runtime rather than written down: prod and staging each run a
+   * single vendor under a DIFFERENT id, so a constant would be right in one
+   * and quietly wrong in the other. Only used when there is exactly one, which
+   * is the case a guess cannot get wrong.
+   */
+  const soleVendorId = vendors.data?.length === 1 ? vendors.data[0]!.id : null;
   const vendorId = fromChat
     ? conversationVendorId(conversation.data) || null
-    : (picked?.vendor?.id ?? null);
+    : (picked?.vendor?.id ?? soleVendorId);
 
   const goBack = () =>
     navigate(conversationId ? `/inbox/${conversationId}` : '/tickets', { replace: true });
@@ -71,7 +88,44 @@ export function NewTicketPage() {
         }
         // Standalone only: from a chat the customer is not a choice, and
         // offering to change it would invite filing against the wrong one.
-        contactField={fromChat ? undefined : <ContactPicker value={picked} onChange={setPicked} />}
+        typedPhone={typedPhone}
+        contactField={
+          fromChat ? undefined : (
+            <div className="space-y-3">
+              <ContactPicker value={picked} onChange={setPicked} />
+              {/*
+                THE CUSTOMER WHO IS NOT IN THE CRM.
+                A walk-in — phoned in, or Takeout/Dine-in at a counter — has no
+                contacts row, so the picker searches, finds nothing, and there
+                is nothing to select. The ticket that most needs raising was the
+                one that could not be (owner, 2026-09-15). Hidden once a contact
+                IS chosen: their own record is the better number, and offering
+                both invites the two to disagree.
+              */}
+              {!picked && (
+                <FormField
+                  label={t('tickets.customerPhone', { defaultValue: 'Customer phone number' })}
+                  htmlFor="ticket-customer-phone"
+                  hint={t('tickets.customerPhoneHint', {
+                    defaultValue:
+                      'For a customer who is not in the CRM. Any number is accepted — it is recorded on the ticket.',
+                  })}
+                >
+                  <Input
+                    id="ticket-customer-phone"
+                    value={typedPhone}
+                    onChange={(e) => setTypedPhone(e.target.value)}
+                    inputMode="tel"
+                    autoComplete="off"
+                    placeholder={t('tickets.customerPhonePlaceholder', {
+                      defaultValue: 'e.g. 0501234567',
+                    })}
+                  />
+                </FormField>
+              )}
+            </div>
+          )
+        }
         // Land on the ticket just raised, not back where it was started.
         onCreated={(ticketId) => navigate(`/tickets/${ticketId}`, { replace: true })}
       />

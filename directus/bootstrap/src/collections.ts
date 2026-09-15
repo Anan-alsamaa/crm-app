@@ -376,6 +376,27 @@ export const collections: CollectionSpec[] = [
        * you search on. Same reasoning as stores.yiji_restaurant_id.
        */
       { field: 'order_id', type: 'string', index: true },
+      /**
+       * The customer's number, typed on the ticket itself.
+       *
+       * A ticket normally reaches its customer through `contact`, and that
+       * stays the better link — it carries their history, their other tickets
+       * and their orders. But a walk-in complaint has no such row: somebody
+       * phones in, or stands at a counter after a Takeout or Dine-in order,
+       * and they are simply not in the CRM. The contact picker searches our
+       * own `contacts`, found nothing, so there was nothing to select and the
+       * form stayed disabled — the agent could not raise the ticket at all
+       * (owner, 2026-09-15).
+       *
+       * A column rather than prose in `description`, for the same reason
+       * `order_id` is one: "find the ticket for 0501234567" has to be
+       * answerable, and free text is not reliably searchable. Indexed, because
+       * that lookup happens while a customer is waiting.
+       *
+       * NOT a replacement for `contact`: every reader prefers the contact and
+       * falls back to this only when there is none.
+       */
+      { field: 'customer_phone', type: 'string', index: true },
       // The store's ATTRIBUTION (branch, brand, city, area/chain manager) as it
       // stood when the ticket was raised. Resolving it live at report time
       // would let one edit rewrite history: move a branch to a new area

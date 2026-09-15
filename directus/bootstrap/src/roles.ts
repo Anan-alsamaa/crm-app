@@ -213,6 +213,16 @@ const TICKET_FIELDS_AGENT_WRITABLE = [
   'communication_method',
   'response_desc',
   'compensation',
+  /*
+   * Editable, not just creatable.
+   *
+   * `tickets.create` grants every field, so leaving this out would let an
+   * agent SET the number when raising the ticket and then never correct a
+   * typo — the write would be accepted by the client and dropped by Directus,
+   * which is the silent-failure shape this codebase keeps producing. A phone
+   * number taken down by ear is exactly the field that needs correcting.
+   */
+  'customer_phone',
 ];
 
 const SELF_RECIPIENT = { recipient: { _eq: '$CURRENT_USER' } };

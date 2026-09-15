@@ -457,7 +457,11 @@
     "template": "Excel template",
     "templateHint": "An .xlsx with today’s dropdown lists baked in — fill it and import it back.",
     "importCsv": "Import CSV / Excel",
-    "exportTicket": "Export to Excel"
+    "exportTicket": "Export to Excel",
+    "pickContactOrPhone": "Choose a customer, or type their phone number",
+    "customerPhone": "Customer phone number",
+    "customerPhoneHint": "For a customer who is not in the CRM. Any number is accepted — it is recorded on the ticket.",
+    "customerPhonePlaceholder": "e.g. 0501234567"
   },
   "notifications": {
     "title": "Notifications",

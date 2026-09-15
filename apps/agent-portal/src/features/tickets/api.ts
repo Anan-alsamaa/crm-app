@@ -59,6 +59,12 @@ export interface TicketRow extends Partial<TicketComplaintFields> {
   order_snapshot?: TicketOrderSnapshot | null;
   /** Searchable copy of order_snapshot.orderId — json columns cannot be filtered. */
   order_id?: string | null;
+  /**
+   * The customer's number when the ticket has no `contact` behind it — a
+   * walk-in who is not in the CRM. Readers prefer the contact and fall back to
+   * this; see `customerPhone` / `customerLabel`.
+   */
+  customer_phone?: string | null;
   /** Branch attribution frozen at creation — see StoreSnapshot. */
   store_snapshot?: StoreSnapshot | null;
   status: TicketStatus;
@@ -97,6 +103,60 @@ export interface TicketEvent {
   date_created: string | null;
 }
 
+/**
+ * The number to reach this customer on: the contact's, or the one typed on the
+ * ticket when there is no contact.
+ *
+ * The contact wins deliberately. It is the maintained record — corrected when
+ * a customer updates their details — where `customer_phone` is a copy taken
+ * down once, by ear, and never revisited.
+ */
+export function customerPhone(t: {
+  contact?: { phone: string | null } | null;
+  customer_phone?: string | null;
+}): string | null {
+  return t.contact?.phone ?? t.customer_phone ?? null;
+}
+
+/**
+ * What to CALL the customer on a ticket.
+ *
+ * Every surface used `contact?.name ?? contact?.phone ?? contact?.email` and
+ * fell through to "Unknown" — which is what a walk-in ticket would read as,
+ * even though the agent had typed the customer's number into it. Falling back
+ * to that number means the row says who it is for.
+ *
+ * Returns null when there is genuinely nothing, so callers keep their own
+ * "unknown" wording rather than having it invented here.
+ */
+export function customerLabel(t: {
+  contact?: { name: string | null; phone: string | null; email: string | null } | null;
+  customer_phone?: string | null;
+}): string | null {
+  return t.contact?.name ?? t.contact?.phone ?? t.contact?.email ?? t.customer_phone ?? null;
+}
+
+/**
+ * The vendors this deployment has.
+ *
+ * Used by the Add-ticket page to resolve a vendor when there is neither a chat
+ * nor a chosen contact to take one from. Both environments run a SINGLE vendor
+ * today, but with different ids, so the value has to be read rather than
+ * written down — a hardcoded id would be right in one environment and silently
+ * wrong in the other.
+ */
+export function useVendors() {
+  return useQuery({
+    queryKey: ['vendors'],
+    // Rarely changes; this only exists to answer "which vendor?" on a form.
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      directus.request(readItems('vendors', { fields: ['id', 'name'], limit: -1 })) as Promise<
+        Array<{ id: string; name: string | null }>
+      >,
+  });
+}
+
 export function useTickets() {
   return useQuery({
     queryKey: ['tickets'],
@@ -120,6 +180,9 @@ export function useTickets() {
             // The list is scanned by category the way the ops team scan their
             // own sheet, so the type rides along with the summary read.
             'complaint_type',
+            // Fetched explicitly: a column absent from `fields` simply is not
+            // there, so a walk-in ticket would render with a blank customer.
+            'customer_phone',
             { contact: ['id', 'name', 'email', 'phone'] },
           ],
           sort: ['-date_created'],
@@ -153,6 +216,7 @@ export function useTicket(id: string | null) {
             'date_updated',
             'order_snapshot',
             'store',
+            'customer_phone',
             ...COMPLAINT_FIELDS,
             // Expanded, not the bare id: "changed by 3f2a…" names nobody a
             // supervisor could follow up with.
@@ -212,8 +276,24 @@ export interface CreateTicketInput extends Partial<TicketComplaintFields> {
   subject: string;
   description?: string;
   priority: Priority;
-  contact: string;
-  vendor: string;
+  /**
+   * The CRM customer, when there is one.
+   *
+   * Null for a walk-in complaint: somebody who phoned in, or ordered Takeout
+   * or Dine-in at a counter, and has no `contacts` row at all. The picker
+   * searched, found nothing, and the form could not be submitted — so the
+   * ticket that most needed raising was the one that could not be
+   * (owner, 2026-09-15). `customer_phone` carries them instead.
+   */
+  contact: string | null;
+  /**
+   * Which vendor the ticket belongs to. Null only if none can be resolved —
+   * from the chat, from the chosen contact, or from the single vendor this
+   * deployment has.
+   */
+  vendor: string | null;
+  /** The customer's number when no `contact` stands behind the ticket. */
+  customer_phone?: string | null;
   conversation?: string | null;
   assigned_agent?: string | null;
   /** Structured point-in-time copy of the order the ticket is about. */

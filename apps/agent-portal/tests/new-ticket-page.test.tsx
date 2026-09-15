@@ -32,6 +32,17 @@ vi.mock('../src/features/tickets/ContactPicker.js', () => ({
   ContactPicker: () => <div data-testid="contact-picker" />,
 }));
 
+/*
+ * The page resolves a vendor from the deployment when there is neither a chat
+ * nor a chosen contact to take one from — a walk-in ticket. Mocked here rather
+ * than wrapping this spec in a QueryClientProvider: what is under test is which
+ * ids the page hands the form, not how vendors are fetched.
+ */
+const ticketsApi = vi.hoisted(() => ({
+  useVendors: vi.fn(() => ({ data: [{ id: 'sole-vendor', name: 'Yiji' }] })),
+}));
+vi.mock('../src/features/tickets/api.js', () => ticketsApi);
+
 /** The form itself has its own tests; here it is just a marker for its inputs. */
 vi.mock('../src/features/tickets/CreateTicketDialog.js', () => ({
   CreateTicketDialog: (p: {
