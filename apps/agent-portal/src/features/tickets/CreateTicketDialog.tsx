@@ -660,15 +660,24 @@ export function CreateTicketDialog({
                   <FormField
                     label={t('complaint.orderId', { defaultValue: 'Order number (optional)' })}
                     hint={
-                      typedOrderQuery.isError
-                        ? undefined
-                        : t('complaint.orderIdHint', {
+                      walkInService
+                        ? t('complaint.orderIdWalkInHint', {
                             defaultValue:
-                              'If the customer has their order number, add it — a coupon can only be sent against an order.',
+                              'Takeout and Dine-in: type the number on the restaurant receipt. It is recorded as given — there is nothing to look up.',
                           })
+                        : typedOrderQuery.isError
+                          ? undefined
+                          : t('complaint.orderIdHint', {
+                              defaultValue:
+                                'If the customer has their order number, add it — a coupon can only be sent against an order.',
+                            })
                     }
+                    /* A walk-in receipt number is NOT a Yiji order id, so a
+                       lookup against it can only ever fail. Showing "no order
+                       with that number" for Takeout/Dine-in told the agent
+                       their perfectly good number was wrong. */
                     error={
-                      typedOrderQuery.isError
+                      !walkInService && typedOrderQuery.isError
                         ? t('complaint.orderNotFound', {
                             defaultValue: 'No order with that number for this vendor.',
                           })
@@ -684,8 +693,10 @@ export function CreateTicketDialog({
                           // a half-filled form saved by a stray keypress is
                           // worse than a button nobody found.
                           if (e.key === 'Enter') {
+                            // Never submits the ticket; and for a walk-in there
+                            // is nothing to look up, so it simply does nothing.
                             e.preventDefault();
-                            setLookupId(typedOrderId.trim());
+                            if (!walkInService) setLookupId(typedOrderId.trim());
                           }
                         }}
                         inputMode="numeric"
@@ -697,15 +708,23 @@ export function CreateTicketDialog({
                         })}
                         className="h-10 min-w-[8rem] flex-1 rounded-2xl bg-input px-3.5 font-mono text-sm tabular-nums text-foreground ring-1 ring-inset ring-foreground/[0.08] placeholder:font-sans placeholder:text-muted-foreground/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        loading={typedOrderQuery.isFetching}
-                        disabled={!typedOrderId.trim() || !yijiVendorId}
-                        onClick={() => setLookupId(typedOrderId.trim())}
-                      >
-                        {t('commerce.lookupGo', { defaultValue: 'Find' })}
-                      </Button>
+                      {/* NO FIND FOR A WALK-IN.
+                          Takeout and Dine-in customers read out the number on
+                          the restaurant's own receipt, which the Yiji lookup
+                          cannot resolve — so the button could only ever fail,
+                          and offering it invited the agent to keep pressing it
+                          (owner, 2026-09-15). The number is taken as typed. */}
+                      {!walkInService && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          loading={typedOrderQuery.isFetching}
+                          disabled={!typedOrderId.trim() || !yijiVendorId}
+                          onClick={() => setLookupId(typedOrderId.trim())}
+                        >
+                          {t('commerce.lookupGo', { defaultValue: 'Find' })}
+                        </Button>
+                      )}
                     </div>
                   </FormField>
                 )}

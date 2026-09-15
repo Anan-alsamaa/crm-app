@@ -668,7 +668,12 @@
       "order_id": "Order number"
     },
     "whatHappenedHint": "The ticket as the customer reported it",
-    "resolutionHint": "Optional — what you did about it"
+    "resolutionHint": "Optional — what you did about it",
+    "orderId": "Order number (optional)",
+    "orderIdPlaceholder": "e.g. 1234535",
+    "orderIdHint": "If the customer has their order number, add it — a coupon can only be sent against an order.",
+    "orderNotFound": "No order with that number for this vendor.",
+    "orderIdWalkInHint": "Takeout and Dine-in: type the number on the restaurant receipt. It is recorded as given — there is nothing to look up."
   },
   "complaints": {
     "title": "My tickets",
