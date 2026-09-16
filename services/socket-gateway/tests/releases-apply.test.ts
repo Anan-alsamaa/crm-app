@@ -119,22 +119,38 @@ describe('releasePortal', () => {
     if (!res.ok) expect(res.error).toContain('403');
   });
 
-  it('SUCCEEDS with a warning when only the invalidation failed', async () => {
+  it('is a plain success when the purge is REFUSED — that is the expected path', async () => {
     /*
-     * `ok` answers one question: is the new build live? The copy decides that,
-     * and it already happened — so reporting failure here would be untrue, and
-     * worse, would leave the banner up for ever offering an update that has
-     * been applied.
+     * 403 is what production actually returns: `cloudfront:CreateInvalidation`
+     * is not granted to the task role and cannot be, because every AWS user on
+     * this account has IAMReadOnlyAccess.
      *
-     * This is the EXPECTED path on production today: the gateway's task role
-     * has S3 through a bucket policy but no cloudfront:CreateInvalidation,
-     * which needs an IAM change nobody on this account can make. `index.html`
-     * is served `no-cache`, so the build reaches people as browsers
-     * revalidate — minutes, not instantly.
+     * It does not matter. The entry points are served `no-cache` and the edge
+     * revalidates them against S3 on every request — verified against
+     * production by rewriting the origin object and watching CloudFront pick
+     * up the new ETag with no invalidation. The copy IS the release.
+     *
+     * So no warning: telling the owner something went wrong on every single
+     * release would train them to ignore the one message this button shows,
+     * which is how a real failure later goes unread.
      */
     const fetchImpl = vi.fn(async (url: string | URL) =>
       String(url).includes('cloudfront')
         ? ({ ok: false, status: 403, text: async () => 'AccessDenied' } as unknown as Response)
+        : ok(),
+    ) as unknown as typeof fetch;
+
+    const res = await releasePortal(target, creds, fetchImpl);
+
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('still warns when the purge fails for a reason nobody expects', async () => {
+    // A 500 is not the known-and-accepted refusal, so it is worth saying out
+    // loud — the distinction is what keeps the quiet case meaningful.
+    const fetchImpl = vi.fn(async (url: string | URL) =>
+      String(url).includes('cloudfront')
+        ? ({ ok: false, status: 500, text: async () => 'boom' } as unknown as Response)
         : ok(),
     ) as unknown as typeof fetch;
 
@@ -240,6 +256,74 @@ describe('readParkedBuild — the bucket is the fact', () => {
 
     expect(await readParkedBuild(target, creds, fetchImpl)).toEqual({
       bundle: '/assets/index-xCc40TZI.js',
+    });
+  });
+
+  it('reads the version CI wrote beside the parked page', async () => {
+    /*
+     * CI cannot call the gateway: this repo has NO secrets — it authenticates
+     * to AWS by OIDC role assumption — so there is no token to give it. The
+     * version travels in the bucket instead, written with the S3 access the
+     * deploy already has.
+     */
+    const fetchImpl = vi.fn(async (url: string | URL) =>
+      String(url).includes('release.json')
+        ? ({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              version: 'v1.2.3',
+              commit: 'abc1234',
+              bundle: '/assets/index-A.js',
+              app: 'agent',
+            }),
+          } as unknown as Response)
+        : ({
+            ok: true,
+            status: 200,
+            text: async () => '<script src="/assets/index-A.js"></script>',
+          } as unknown as Response),
+    ) as unknown as typeof fetch;
+
+    const parked = await readParkedBuild(target, creds, fetchImpl);
+    expect(parked).toMatchObject({ bundle: '/assets/index-A.js', version: 'v1.2.3' });
+  });
+
+  it('IGNORES a stale release.json that describes a different build', async () => {
+    // An earlier deploy's metadata left behind would otherwise label the parked
+    // page with a version it is not — worse than having no version at all.
+    const fetchImpl = vi.fn(async (url: string | URL) =>
+      String(url).includes('release.json')
+        ? ({
+            ok: true,
+            status: 200,
+            json: async () => ({ version: 'v0.0.1', bundle: '/assets/index-OLD.js' }),
+          } as unknown as Response)
+        : ({
+            ok: true,
+            status: 200,
+            text: async () => '<script src="/assets/index-NEW.js"></script>',
+          } as unknown as Response),
+    ) as unknown as typeof fetch;
+
+    const parked = await readParkedBuild(target, creds, fetchImpl);
+    expect(parked).toEqual({ bundle: '/assets/index-NEW.js' });
+  });
+
+  it('is still releasable when the version file is missing', async () => {
+    // The page is what makes a build releasable; the version only names it.
+    const fetchImpl = vi.fn(async (url: string | URL) =>
+      String(url).includes('release.json')
+        ? ({ ok: false, status: 404, text: async () => '' } as unknown as Response)
+        : ({
+            ok: true,
+            status: 200,
+            text: async () => '<script src="/assets/index-A.js"></script>',
+          } as unknown as Response),
+    ) as unknown as typeof fetch;
+
+    expect(await readParkedBuild(target, creds, fetchImpl)).toEqual({
+      bundle: '/assets/index-A.js',
     });
   });
 

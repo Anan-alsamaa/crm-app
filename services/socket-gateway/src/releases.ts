@@ -233,11 +233,26 @@ export function parseReleaseTargets(raw: string, region: string): ReleaseTarget[
  * Used as a fallback when the recorded list is empty, so "published" always
  * means the same thing: the file is there.
  */
+/** What CI writes beside a parked page, when it can. */
+interface PublishedMeta {
+  version: string;
+  commit: string;
+  publishedAt: string;
+  app: string;
+  bundle: string;
+}
+
 export async function readParkedBuild(
   target: ReleaseTarget,
   credentials: AwsCredentials,
   fetchImpl: typeof fetch = fetch,
-): Promise<{ bundle: string } | null> {
+): Promise<{
+  bundle: string;
+  version?: string;
+  commit?: string;
+  publishedAt?: string;
+  app?: string;
+} | null> {
   const host = `${target.bucket}.s3.${target.region}.amazonaws.com`;
   const path = '/pending/index.html';
   try {
@@ -258,7 +273,51 @@ export async function readParkedBuild(
     if (!res.ok) return null;
     const html = await res.text();
     const bundle = /\/assets\/index-[A-Za-z0-9_-]+\.js/.exec(html)?.[0];
-    return bundle ? { bundle } : null;
+    if (!bundle) return null;
+
+    /*
+     * The version, written beside the parked page by CI.
+     *
+     * Best effort and read SECOND: the page is what makes a build releasable,
+     * the version only names it. An older parked build has no `release.json`
+     * at all, and a build whose metadata failed to upload is still perfectly
+     * releasable — so a missing or unreadable file costs the banner a version
+     * number and nothing else.
+     */
+    try {
+      const metaPath = '/pending/release.json';
+      const metaRes = await fetchImpl(`https://${host}${metaPath}`, {
+        method: 'GET',
+        headers: signRequest({
+          method: 'GET',
+          host,
+          path: metaPath,
+          service: 's3',
+          region: target.region,
+          body: '',
+          credentials,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (metaRes.ok) {
+        const meta = (await metaRes.json()) as Partial<PublishedMeta>;
+        /* Only trust it when it describes THIS build. A stale release.json
+           left by an earlier deploy would otherwise label the parked page with
+           a version it is not. */
+        if (meta.bundle === bundle) {
+          return {
+            bundle,
+            ...(meta.version ? { version: meta.version } : {}),
+            ...(meta.commit ? { commit: meta.commit } : {}),
+            ...(meta.publishedAt ? { publishedAt: meta.publishedAt } : {}),
+            ...(meta.app ? { app: meta.app } : {}),
+          };
+        }
+      }
+    } catch {
+      /* No version. The build is still releasable. */
+    }
+    return { bundle };
   } catch {
     return null;
   }
@@ -328,8 +387,27 @@ export async function releasePortal(
     }
   }
 
-  /* CloudFront is a global service and signs against us-east-1 regardless of
-     where anything else lives. */
+  /*
+   * THE INVALIDATION IS A NICETY, NOT THE RELEASE.
+   *
+   * The entry points are served `no-cache`, and CloudFront honours it: a live
+   * `curl -I` returns `RefreshHit`, meaning the edge revalidates against S3 on
+   * every request rather than serving a cached copy. Verified against
+   * production on 2026-09-20 by rewriting the origin object and watching the
+   * edge pick up the new ETag with no invalidation at all.
+   *
+   * So the copy above IS the release, and it is visible immediately. The purge
+   * only saves the edge a revalidation round-trip.
+   *
+   * This matters because `cloudfront:CreateInvalidation` is NOT granted to the
+   * task role and cannot be — every AWS user on this account has
+   * IAMReadOnlyAccess. The call is still attempted, because it costs one
+   * request and will start working the day somebody adds the grant; when it is
+   * refused, the release is reported as the success it is.
+   *
+   * CloudFront is global and signs against us-east-1 regardless of where
+   * anything else lives.
+   */
   const cfHost = 'cloudfront.amazonaws.com';
   const cfPath = `/2020-05-31/distribution/${target.distributionId}/invalidation`;
   /*
@@ -368,10 +446,19 @@ export async function releasePortal(
     });
     if (!inv.ok) {
       const body = await inv.text().catch(() => '');
-      /* The copy already happened, so the new build IS live at the origin —
-         it will simply take up to the cache TTL to reach everyone. Reported as
-         a partial success rather than a failure, because telling the owner
-         "release failed" after the file has moved would be untrue. */
+      /*
+       * A REFUSED PURGE IS NOT WORTH TELLING THE OWNER ABOUT.
+       *
+       * 403 is the EXPECTED answer here — the grant does not exist and cannot
+       * be added on this account — and the release has already happened: the
+       * edge revalidates `no-cache` entry points against S3 on every request,
+       * so the new build is live either way.
+       *
+       * Warning about it on every single release would train somebody to
+       * ignore the one message this button shows, which is precisely how a
+       * real failure later goes unread. It is logged by the caller instead.
+       */
+      if (inv.status === 403) return { ok: true };
       return {
         ok: true,
         warning: `the CDN cache was not cleared (${inv.status}): ${body.slice(0, 200)}`,

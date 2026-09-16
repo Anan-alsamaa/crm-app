@@ -915,10 +915,14 @@ async function main(): Promise<void> {
          from the last release, not something new waiting. */
       if (!parked || parked.bundle === liveBundle) continue;
       found.push({
-        version: 'unreleased build',
-        commit: '',
-        publishedAt: '',
-        app: releaseSurfaceName(target.bucket),
+        /* CI writes these beside the parked page when it can; the placeholder
+           is what an older build, or one whose metadata upload failed, looks
+           like. The banner omits a placeholder rather than showing it as
+           though it were a version. */
+        version: parked.version ?? 'unreleased build',
+        commit: parked.commit ?? '',
+        publishedAt: parked.publishedAt ?? '',
+        app: parked.app ?? releaseSurfaceName(target.bucket),
         bundle: parked.bundle,
       });
     }
@@ -993,10 +997,10 @@ async function main(): Promise<void> {
         const parked = await readParkedBuild(target, credentials);
         if (!parked || parked.bundle === (live?.bundle ?? null)) continue;
         found.push({
-          version: 'unreleased build',
-          commit: '',
-          publishedAt: '',
-          app: releaseSurfaceName(target.bucket),
+          version: parked.version ?? 'unreleased build',
+          commit: parked.commit ?? '',
+          publishedAt: parked.publishedAt ?? '',
+          app: parked.app ?? releaseSurfaceName(target.bucket),
           bundle: parked.bundle,
         });
       }

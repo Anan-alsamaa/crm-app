@@ -215,8 +215,6 @@ jobs:
       - name: Upload to S3
         env:
           ENVIRONMENT: ${{ needs.plan.outputs.environment }}
-          RELEASE_API: ${{ secrets.RELEASE_API_URL }}
-          SVC_GATEWAY_TOKEN: ${{ secrets.SVC_GATEWAY_TOKEN }}
           RELEASE_VERSION: ${{ github.ref_name }}
         run: |
           for app in agent admin; do
@@ -258,22 +256,23 @@ jobs:
                 --cache-control "no-cache"
               BUNDLE=$(grep -o "/assets/index-[A-Za-z0-9_-]*[.]js" "apps/${app}-portal/dist/index.html" | head -1)
               echo "::notice::${app} portal published (${BUNDLE}) - waiting for Update now"
-              # Record it so the admin portal can name the version. BEST EFFORT:
-              # the build is published either way, and the gateway falls back to
-              # reading the bucket, so a failure here costs the version number
-              # and nothing else.
-              if [ -n "$RELEASE_API" ] && [ -n "$SVC_GATEWAY_TOKEN" ]; then
-                PAYLOAD=$(printf '{"version":"%s","commit":"%s","publishedAt":"%s","app":"%s","bundle":"%s"}' \
-                  "$RELEASE_VERSION" "$(echo "$GITHUB_SHA" | cut -c1-7)" \
-                  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$app" "$BUNDLE")
-                curl -sS -X POST "${RELEASE_API}/jobs/releases/published" \
-                  -H "authorization: Bearer ${SVC_GATEWAY_TOKEN}" \
-                  -H "content-type: application/json" \
-                  -d "$PAYLOAD" \
-                  || echo "::warning::could not record the published build - it is parked, and the banner will still find it in the bucket"
-              else
-                echo "::warning::RELEASE_API_URL or SVC_GATEWAY_TOKEN is unset - the build is parked and the banner will find it in the bucket, without a version number"
-              fi
+              # THE VERSION TRAVELS IN THE BUCKET, not over HTTP.
+              #
+              # This used to POST the build to the gateway so the banner could
+              # name a version. That needed two repository secrets, and this
+              # repo has NONE — CI authenticates to AWS by OIDC role assumption,
+              # so there is no token to give it and never will be. The callback
+              # was dead code that warned on every run.
+              #
+              # A tiny JSON file beside the parked page carries the same facts,
+              # written with the S3 access the deploy already has. The gateway
+              # reads it when it reads the parked build: same trip, no secret,
+              # and it cannot drift out of step with the page it describes.
+              printf '{"version":"%s","commit":"%s","publishedAt":"%s","app":"%s","bundle":"%s"}' \
+                "$RELEASE_VERSION" "$(echo "$GITHUB_SHA" | cut -c1-7)" \
+                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$app" "$BUNDLE" > /tmp/release.json
+              aws s3 cp /tmp/release.json "s3://${BUCKET}/pending/release.json" \
+                --cache-control "no-cache" --content-type "application/json"
             else
               aws s3 cp "apps/${app}-portal/dist/index.html" "s3://${BUCKET}/index.html" \
                 --cache-control "no-cache"
@@ -301,6 +300,7 @@ jobs:
       - name: Upload the widget to S3
         env:
           ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+          RELEASE_VERSION: ${{ github.ref_name }}
         run: |
           # `crm-prod-widget` belongs to somebody else's account-wide name, so
           # production carries the account id — see scripts/deploy-portals.sh.
@@ -363,6 +363,14 @@ jobs:
               --cache-control "no-cache" --content-type "text/html; charset=utf-8" >/dev/null
             WBUNDLE=$(grep -o "/assets/index-[A-Za-z0-9_-]*[.]js" "$SRC/index.html" | head -1)
             echo "::notice::chat widget published (${WBUNDLE}) - waiting for Update now"
+            # The version, beside the parked pages — see the note on the portal
+            # loop. No secret, no HTTP callback, and it cannot drift out of step
+            # with the build it describes.
+            printf '{"version":"%s","commit":"%s","publishedAt":"%s","app":"%s","bundle":"%s"}' \
+              "$RELEASE_VERSION" "$(echo "$GITHUB_SHA" | cut -c1-7)" \
+              "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "chat widget" "$WBUNDLE" > /tmp/widget-release.json
+            aws s3 cp /tmp/widget-release.json "s3://${BUCKET}/pending/release.json" \
+              --cache-control "no-cache" --content-type "application/json" >/dev/null
           else
             for page in index.html walk-in.html; do
               aws s3 cp "$SRC/$page" "s3://${BUCKET}/$page" \

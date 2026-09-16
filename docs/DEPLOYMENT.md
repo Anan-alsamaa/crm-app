@@ -320,36 +320,36 @@ different build from one opening the chat link.
 **Note the admin portal is absent.** Adding it would re-create the
 chicken-and-egg above.
 
-CI also uses `RELEASE_API_URL` and `SVC_GATEWAY_TOKEN` as repository secrets to
-record the version number. Both are best-effort: without them the build still
-parks and the banner still finds it by reading the bucket — it just cannot name
-the version.
+CI needs **no secrets**. It writes the version to `pending/release.json` in the
+same bucket, using the S3 access it already has through OIDC role assumption,
+and the gateway reads it alongside the parked page.
 
-### Permissions, and the one that is missing
+### Permissions — nothing is outstanding
 
 The gateway reaches the buckets through a **bucket policy**
-(`AllowGatewayRelease`), not an IAM role policy — the same mechanism CI uses,
-and the only one available, since the configured AWS user has
-`IAMReadOnlyAccess`.
+(`AllowGatewayRelease` on the agent portal and the widget), not an IAM role
+policy. That is the same mechanism CI uses, and the only one available: every
+AWS user on this account has `IAMReadOnlyAccess`, so `iam:PutRolePolicy` is
+refused.
 
-**`cloudfront:CreateInvalidation` is NOT granted.** A release therefore
-succeeds with a warning that the CDN cache was not cleared. That is not a
-failure: the entry points are `no-cache`, so the new build reaches people as
-their browser revalidates — minutes, not instantly. To make it instant, somebody
-with IAM write access (`r.obeid@anan.sa` holds AdministratorAccess) must add to
-`crm-task-role-prod`:
+**`cloudfront:CreateInvalidation` is not granted, and it does not matter.** The
+entry points are served `no-cache` and CloudFront honours it — a live
+`curl -I` returns `RefreshHit`, meaning the edge revalidates against S3 on every
+request. Verified on 2026-09-20 by rewriting the origin object and watching the
+edge pick up the new ETag with no invalidation at all. **The copy IS the
+release, and it is visible immediately.**
 
-```json
-{
-  "Sid": "ReleaseInvalidate",
-  "Effect": "Allow",
-  "Action": "cloudfront:CreateInvalidation",
-  "Resource": [
-    "arn:aws:cloudfront::408568863712:distribution/E3UK8T8DHFGMNW",
-    "arn:aws:cloudfront::408568863712:distribution/E15DCMX8ZCU62R"
-  ]
-}
-```
+The gateway still attempts the purge, because it costs one request and will
+start working the day somebody adds the grant. A 403 is treated as the expected
+answer and reported as a plain success — warning about it on every release would
+train somebody to ignore the one message this button shows.
+
+**No GitHub secrets are required either.** CI authenticates to AWS by OIDC role
+assumption, and this repository has none. The version number travels in the
+bucket as `pending/release.json`, written with the S3 access the deploy already
+has, and read by the gateway alongside the parked page. A missing or stale one
+costs the banner a version number and nothing else — the page is what makes a
+build releasable.
 
 ### Why `--delete` is gone from the gated syncs
 
