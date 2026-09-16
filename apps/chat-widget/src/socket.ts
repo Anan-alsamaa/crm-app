@@ -132,6 +132,26 @@ export function connectWidget(
      * the thing standing between the customer and their first message.
      */
     transports: ['polling', 'websocket'],
+    /*
+     * SEND THE STICKINESS COOKIE. Without this, polling cannot survive.
+     *
+     * engine.io defaults `withCredentials` to FALSE, so the browser sent no
+     * cookies on these cross-origin requests — including the ALB's `AWSALB`
+     * cookie, which is the entire mechanism keeping a polling session on the
+     * instance that owns it. Every poll after the handshake was balanced
+     * afresh, and whichever task did not hold the session answered HTTP 400
+     * "Session ID unknown".
+     *
+     * With two gateway tasks that is a coin toss on every request: the panel
+     * flipped between "Reconnecting…" and the red error until it happened to
+     * land on the right instance. Reproduced in a real browser against
+     * production, where it never recovered at all.
+     *
+     * The gateway must answer with `credentials: true` and a concrete origin
+     * for this to be legal — a `*` wildcard makes the browser refuse the
+     * cookie. Both halves ship together; neither works alone.
+     */
+    withCredentials: true,
     // Harmless off-ngrok; lets the polling handshake skip ngrok-free's browser
     // interstitial when the widget is served through an ngrok tunnel.
     extraHeaders: { 'ngrok-skip-browser-warning': 'true' },

@@ -562,3 +562,37 @@ describe('the reload that re-mints an expired token', () => {
     vi.useRealTimers();
   });
 });
+
+/*
+ * THE STICKINESS COOKIE MUST BE SENT.
+ *
+ * The polling transport keeps a session on ONE gateway instance, and the ALB
+ * keeps the client there with an `AWSALB` cookie. engine.io defaults
+ * `withCredentials` to false, so the browser sent no cookies at all: every
+ * poll after the handshake was balanced afresh and the task that did not hold
+ * the session answered HTTP 400 "Session ID unknown".
+ *
+ * With two tasks that is a coin toss per request — the panel flipped between
+ * "Reconnecting…" and the red error until it happened to land right.
+ * Reproduced in a real browser against production, where it never recovered.
+ *
+ * The gateway half (cors credentials + a concrete origin rather than `*`)
+ * ships with this; neither half works alone.
+ */
+describe('polling stickiness', () => {
+  it('sends credentials, so the ALB cookie survives', () => {
+    connectWidget('https://gw.example', 'tok', makeCallbacks());
+    expect(ioMock).toHaveBeenCalledWith(
+      'https://gw.example',
+      expect.objectContaining({ withCredentials: true }),
+    );
+  });
+
+  it('still asks for polling first, which is what needs the cookie', () => {
+    connectWidget('https://gw.example', 'tok', makeCallbacks());
+    expect(ioMock).toHaveBeenCalledWith(
+      'https://gw.example',
+      expect.objectContaining({ transports: ['polling', 'websocket'] }),
+    );
+  });
+});

@@ -142,7 +142,34 @@ async function main(): Promise<void> {
   // REQUIRES stickiness on the ALB target group. Set SOCKET_TRANSPORTS=websocket
   // to drop the fallback and remove the stickiness requirement entirely.
   const io = new SocketServer(httpServer, {
-    cors: { origin: widgetCorsOrigin },
+    /*
+     * CREDENTIALS, OR STICKINESS CANNOT WORK.
+     *
+     * The polling transport keeps a session on ONE instance, and the ALB keeps
+     * the client there with an `AWSALB` cookie. A browser only stores and
+     * returns that cookie on a cross-origin request when the response says
+     * `access-control-allow-credentials: true` AND names a concrete origin —
+     * a `*` wildcard makes it refuse both.
+     *
+     * The gateway was answering `access-control-allow-origin: *` with no
+     * credentials header, so the cookie was dropped on the floor, every poll
+     * after the handshake was balanced afresh, and the instance that did not
+     * hold the session answered HTTP 400 "Session ID unknown". With two tasks
+     * that is a coin toss per request: the widget showed "Reconnecting…" and a
+     * red error over and over before it happened to land right (owner,
+     * 2026-09-16, and reproduced in a real browser against production).
+     *
+     * `origin: true` reflects the caller's own origin instead of `*`, which is
+     * what makes the credentialed request legal. It does NOT widen who may
+     * connect: the widget is embedded on arbitrary vendor storefronts, so the
+     * deployed policy is already `*`, and the token is what authorises a
+     * session — not the origin it came from. Where `WIDGET_CORS_ORIGIN` names
+     * a list, that list is still enforced exactly as before.
+     */
+    cors: {
+      origin: widgetCorsOrigin === '*' ? true : widgetCorsOrigin,
+      credentials: true,
+    },
     transports: config.SOCKET_TRANSPORTS,
     /*
      * THE ATTACHMENT LIMIT WE ADVERTISE MUST BE THE ONE THE SOCKET ALLOWS.
