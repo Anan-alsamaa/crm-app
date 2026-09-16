@@ -102,7 +102,9 @@ describe('connectWidget — connection setup', () => {
      * Polling is plain HTTP over the same CloudFront path, so it always
      * connects, and socket.io upgrades to WebSocket afterwards when it can.
      */
-    expect(opts.transports).toEqual(['polling', 'websocket']);
+    // websocket leads where the constructor exists (jsdom provides one); the
+    // no-WebSocket webview case is covered under 'polling stickiness' below.
+    expect(opts.transports).toEqual(['websocket', 'polling']);
     expect(opts.reconnection).toBe(true);
     expect(opts.extraHeaders).toEqual({ 'ngrok-skip-browser-warning': 'true' });
   });
@@ -370,9 +372,10 @@ describe('connectWidget — incoming event dispatch', () => {
  * offline, sent a message, and then an agent came online — but the widget went
  * on showing offline/reconnecting and would not let them send.
  *
- * The cause was here. The widget asks for `['polling', 'websocket']`, and the
- * WebSocket upgrade fails over CloudFront (HTTP/2 has no Upgrade header, so it
- * 400s). That fires `connect_error` on a socket that is ALREADY CONNECTED and
+ * The cause was here. A transport attempt can fail while another transport is
+ * already connected and carrying traffic — an upgrade probe that does not
+ * complete, or the second transport in the list failing after the first
+ * succeeded. That fires `connect_error` on a socket that is ALREADY CONNECTED and
  * happily carrying traffic over polling. Reporting 'error' for it froze the
  * whole panel: the banner claimed we could not connect, the composer locked,
  * and the offline block pinned itself open — so the `agents:presence` pulse
@@ -588,11 +591,36 @@ describe('polling stickiness', () => {
     );
   });
 
-  it('still asks for polling first, which is what needs the cookie', () => {
+  /*
+   * WEBSOCKET FIRST WHERE IT EXISTS — that is what removes the dependency on
+   * the cookie entirely, rather than mitigating it. A websocket is ONE
+   * connection, routed once, so no stickiness is needed for its whole life.
+   */
+  it('leads with websocket when the browser has one', () => {
     connectWidget('https://gw.example', 'tok', makeCallbacks());
     expect(ioMock).toHaveBeenCalledWith(
       'https://gw.example',
-      expect.objectContaining({ transports: ['polling', 'websocket'] }),
+      expect.objectContaining({ transports: ['websocket', 'polling'] }),
     );
+  });
+
+  /*
+   * ...but a webview WITHOUT the constructor must still lead with polling.
+   * Asking for websocket there made socket.io issue zero requests and the
+   * panel sat on "Connecting…" for ever (Yiji app webview, 2026-09-09).
+   */
+  it('falls back to polling first where there is no WebSocket', () => {
+    const orig = globalThis.WebSocket;
+    // @ts-expect-error — deliberately removing it, as the webview does.
+    delete globalThis.WebSocket;
+    try {
+      connectWidget('https://gw.example', 'tok', makeCallbacks());
+      expect(ioMock).toHaveBeenCalledWith(
+        'https://gw.example',
+        expect.objectContaining({ transports: ['polling', 'websocket'] }),
+      );
+    } finally {
+      globalThis.WebSocket = orig;
+    }
   });
 });

@@ -93,6 +93,25 @@ export interface ConnectOptions {
   canRemintToken?: boolean;
 }
 
+/**
+ * Can this browser actually open a WebSocket?
+ *
+ * Not a style question — it decides the transport ORDER. A webview without the
+ * constructor (the Yiji app, 2026-09-09) must lead with polling or socket.io
+ * issues no requests at all; everywhere else leading with websocket avoids the
+ * ALB stickiness cookie that Chrome refuses to store.
+ *
+ * Defensive rather than a bare `'WebSocket' in window`: some embedded webviews
+ * define the property and throw on access.
+ */
+function hasWebSocket(): boolean {
+  try {
+    return typeof WebSocket === 'function';
+  } catch {
+    return false;
+  }
+}
+
 export function connectWidget(
   url: string,
   token: string,
@@ -111,27 +130,52 @@ export function connectWidget(
         ? { resumeConversationId: options.resumeConversationId }
         : {}),
     },
-    /**
-     * POLLING FIRST, then upgrade. Not websocket-first.
+    /*
+     * A WEBVIEW WITH NO `WebSocket` MUST STILL GET POLLING FIRST.
      *
-     * `['websocket', 'polling']` looks like it has a fallback and does not
-     * really have one: socket.io tries the first transport, and where the
-     * WebSocket constructor is absent or the upgrade is blocked outright it
-     * can fail without ever reaching the second. Reproduced by deleting
-     * `window.WebSocket`: ZERO socket.io requests were made and the panel sat
-     * on "Connecting…" for ever — no send, no online state, no offline
-     * details, because none of that code runs until the socket is up.
+     * Kept from 2026-09-09, because the incident is still real: inside the
+     * Yiji app's webview `window.WebSocket` was absent, and asking for
+     * websocket first made socket.io issue ZERO requests — the panel sat on
+     * "Connecting…" for ever, with no send, no online state and no offline
+     * details, because none of that runs until the socket is up.
      *
-     * That is the customer's view from inside the Yiji app's webview, which is
-     * exactly where this was reported (2026-09-09). A desktop browser never
-     * showed it, because the upgrade always succeeded there.
-     *
-     * Polling always works: it is ordinary HTTP through the same CloudFront
-     * path. socket.io then upgrades to WebSocket in the background when it
-     * can, so a healthy network still ends up on a socket — it just is not
-     * the thing standing between the customer and their first message.
+     * The order is therefore DECIDED AT RUNTIME rather than assumed either
+     * way: where the constructor exists we lead with websocket (which needs no
+     * stickiness cookie — see below), and where it does not we lead with
+     * polling exactly as before. Neither environment can strand the other.
      */
-    transports: ['polling', 'websocket'],
+    transports: hasWebSocket() ? ['websocket', 'polling'] : ['polling', 'websocket'],
+    /*
+     * WEBSOCKET FIRST, because polling cannot be made reliable behind the ALB.
+     *
+     * Polling spreads one session across many HTTP requests, so it depends on
+     * the ALB's `AWSALB` cookie to keep them on the instance that owns the
+     * session. That cookie CANNOT be stored by a browser here: the ALB sets
+     * `AWSALBCORS` with `SameSite=None` and no `Secure` flag, which Chrome
+     * rejects outright, and plain `AWSALB` carries no `SameSite` at all, which
+     * Chrome treats as Lax and never sends cross-site. Allowing credentials
+     * (below) was necessary and is still not sufficient — the cookie is
+     * refused before it is ever sent back.
+     *
+     * The consequence with two gateway tasks is a coin toss per request: the
+     * task that does not hold the session answers HTTP 400 "Session ID
+     * unknown". Measured in a real browser against production, the chat
+     * flipped between "Reconnecting…" and the red error indefinitely.
+     *
+     * A WEBSOCKET is ONE connection. It is routed once, stays on that
+     * instance for its whole life, and needs no cookie — so the entire class
+     * of failure disappears rather than being mitigated. Verified through this
+     * CloudFront distribution with a real `WebSocket`: it opens.
+     *
+     * Polling REMAINS as the fallback, second. Where websockets are blocked
+     * outright (a corporate proxy, some captive portals) socket.io still falls
+     * back to it and the chat still works — it is simply no longer the thing
+     * every customer depends on. The earlier comment warned that
+     * websocket-first "can fail without ever reaching the second"; that was
+     * about environments with NO WebSocket constructor, which socket.io now
+     * detects before choosing, and the measured failure here is the reverse
+     * of the one that comment feared.
+     */
     /*
      * SEND THE STICKINESS COOKIE. Without this, polling cannot survive.
      *
@@ -194,10 +238,16 @@ export function connectWidget(
      * ONLY an error if we are not actually connected.
      *
      * `connect_error` fires for a failed TRANSPORT attempt, not only for a
-     * failed session. The widget asks for `['polling', 'websocket']`, and the
-     * WebSocket upgrade FAILS over CloudFront — it serves HTTP/2, which has no
-     * Upgrade header, so the attempt 400s. That is harmless: polling is already
-     * connected and carrying traffic.
+     * failed session. Two transports are always offered, so the one that is
+     * not carrying traffic can fail — an upgrade probe that does not complete,
+     * or the fallback failing after the first transport already connected.
+     * That is harmless: the live transport keeps working.
+     *
+     * (This once said the WebSocket upgrade "fails over CloudFront, which
+     * serves HTTP/2 and has no Upgrade header". That was WRONG, and it sent
+     * the search in the wrong direction for a while: a real `WebSocket` opens
+     * through the distribution, measured 2026-09-16. `curl --http2` returning
+     * 400 was an artefact of curl's own upgrade, not of CloudFront.)
      *
      * Setting 'error' unconditionally made that harmless failure permanent. The
      * banner said "cannot connect" over a live socket, `canSend` went false so
