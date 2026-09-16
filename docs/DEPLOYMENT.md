@@ -251,6 +251,31 @@ When a single host isn't enough (or policy requires it):
 - K8s/Helm manifests are **not** in this repo yet — generate them from the compose
   topology when you commit to that target.
 
+## Permissions do not ride a deploy — check them
+
+Schema and role permissions reach an environment ONLY through a manual
+bootstrap apply. A full apply rewrites roles and has twice taken production
+agent access down, so it is deliberately not run on deploy. The consequence is a
+gap nobody can see: a grant added to `roles.ts`, reviewed, merged, deployed
+green — and absent from the database.
+
+It has happened twice, and both times the symptom was silence:
+
+- `tickets.customer_phone` — the field existed in code and not in Directus, and
+  Directus refuses a whole query that names an inaccessible field.
+- `app_settings` for `svc-socket-gateway` — the release button worked, wrote
+  nothing, and the banner returned for ever.
+
+```
+pnpm check:permissions            # both environments
+pnpm check:permissions --env prod
+```
+
+Read-only, so it is safe against production at any time. **Run it after
+touching `directus/bootstrap/src/roles.ts`, and add the new grant to its
+`EXPECTED` list** — that list is the thing somebody updates when they add a
+permission, and it is what makes the gap visible instead of silent.
+
 ## Releasing to production: the owner decides when a change is visible
 
 Since 2026-09-16, a production deploy does **not** immediately change what
