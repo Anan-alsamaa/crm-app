@@ -55,6 +55,7 @@ import {
 import { useAgents, useTeamOptions } from '../inbox/api.js';
 import { WhatsAppReply } from './WhatsAppReply.js';
 import { ChangeHistory } from './ChangeHistory.js';
+import { canSeeFieldHistory } from './history-visibility.js';
 import { exportTicketWorkbook } from './export-ticket.js';
 import {
   distinctValues,
@@ -817,6 +818,9 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
   // Excel export of one ticket is an administrator action, by request — the
   // file is operations paperwork, not part of an agent's queue work.
   const isAdmin = ['administrator', 'admin'].includes(me?.role?.name?.toLowerCase() ?? '');
+  /* The edit history is a supervisory view — see `canSeeFieldHistory`, which
+     carries the reasoning and the fail-closed rule, and is tested on its own. */
+  const canSeeHistory = canSeeFieldHistory(me?.role?.name);
   const ticket = useTicket(ticketId);
   const events = useTicketEvents(ticketId);
   const update = useUpdateTicket();
@@ -1365,13 +1369,32 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
               edits show here too, with the actor attached. Named for the
               question it answers: "Change history" and "History" side by side
               told nobody which held what. */}
-          <SectionCard title={t('tickets.fieldHistory', { defaultValue: 'What changed' })}>
-            <ChangeHistory ticketId={tk.id} />
-          </SectionCard>
+          {/*
+            ACTIVITY — who edited this ticket and what they changed.
+            Renamed from "What changed" (owner, 2026-09-16): this is the panel
+            people mean when they ask what happened to a ticket, so it takes the
+            plain word. The SLA panel below took its old name's place in the
+            page, and now says what it actually holds.
+          */}
+          {canSeeHistory && (
+            <SectionCard title={t('tickets.fieldHistory', { defaultValue: 'Activity' })}>
+              <ChangeHistory ticketId={tk.id} />
+            </SectionCard>
+          )}
 
-          {/* The worked timeline: notes, replies, assignments — what PEOPLE did,
-              as opposed to which FIELDS moved above. */}
-          <SectionCard title={t('tickets.activity', { defaultValue: 'Activity' })}>
+          {/*
+            SLA HISTORY — the deadline record for this ticket.
+            This was called "Activity" and was described as the worked timeline
+            of notes, replies and assignments. In practice it holds none of
+            those: on production `ticket_events` contains ONLY sla_warning,
+            sla_breached and sla_escalated rows. The name promised a timeline
+            and delivered a deadline log, which is why it read as a duplicate of
+            the panel above it (owner, 2026-09-16).
+            Kept rather than removed because it is the only place a breach is
+            visible on the ticket it happened to — everywhere else, SLA lives in
+            a report.
+          */}
+          <SectionCard title={t('tickets.slaHistory', { defaultValue: 'SLA history' })}>
             {events.isLoading ? (
               <div className="space-y-2">
                 <Skeleton className="h-10 w-full" />
