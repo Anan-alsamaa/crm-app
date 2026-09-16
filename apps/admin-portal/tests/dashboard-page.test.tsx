@@ -17,7 +17,10 @@ const complaintsApi = vi.hoisted(() => ({
   useComplaintYears: vi.fn(() => ({ data: [2026], isLoading: false })),
   yearBounds: (y: number) => ({ from: `${y}-01-01`, to: `${y}-12-31` }),
   selectedYear: () => null,
-  emptyComplaintFilters: { from: '', to: '', brand: '', city: '', store: '' },
+  emptyComplaintFilters: { from: '', to: '', brand: '', city: '', store: '', agent: '' },
+  /* A factory mock REPLACES the module, so every export the page imports must
+     be listed — a missing one fails the whole file at load. */
+  UNASSIGNED_AGENT: '__unassigned__',
 }));
 vi.mock('../src/features/dashboard/complaints-api.js', () => complaintsApi);
 

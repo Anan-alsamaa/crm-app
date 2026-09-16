@@ -23,6 +23,7 @@ import {
 } from '@yiji/ui';
 import {
   emptyComplaintFilters,
+  UNASSIGNED_AGENT,
   selectedYear,
   useComplaintMetrics,
   useComplaintYears,
@@ -1036,6 +1037,41 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             onChange={(v) => setDraft((f) => ({ ...f, store: v }))}
             aria-label={t('complaintDash.restaurant', { defaultValue: 'Restaurant' })}
             options={storeChoices}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            {t('complaintDash.agent', { defaultValue: 'Agent' })}
+          </span>
+          {/*
+           * WHOSE TICKETS (owner, 2026-09-16).
+           *
+           * Every other control on this bar narrows by WHERE the complaint came
+           * from. This one narrows by who owns it, which is the question a
+           * supervisor arrives with when they are reviewing one person rather
+           * than one region — and it composes with the rest, so "this agent, in
+           * this city, last month" is one query.
+           *
+           * "Unassigned" is its own option rather than part of "All agents":
+           * work nobody has picked up is a real thing to go looking for, and
+           * folding it into the default would hide it behind a word that reads
+           * like it includes everything.
+           */}
+          <SelectMenu
+            size="sm"
+            searchable
+            className="w-[13rem]"
+            value={draft.agent}
+            onChange={(v) => setDraft((f) => ({ ...f, agent: v }))}
+            aria-label={t('complaintDash.agent', { defaultValue: 'Agent' })}
+            options={[
+              { value: '', label: t('complaintDash.allAgents', { defaultValue: 'All agents' }) },
+              {
+                value: UNASSIGNED_AGENT,
+                label: t('complaintDash.unassigned', { defaultValue: 'Unassigned' }),
+              },
+              ...(d?.agentOptions ?? []).map((a) => ({ value: a.id, label: a.name })),
+            ]}
           />
         </label>
         {/* `ms-auto` pins the actions to the END of the filter row rather than

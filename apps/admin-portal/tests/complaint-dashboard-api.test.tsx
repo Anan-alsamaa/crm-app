@@ -19,6 +19,7 @@ vi.mock('@directus/sdk', () => ({
 import {
   useComplaintMetrics,
   emptyComplaintFilters,
+  UNASSIGNED_AGENT,
   type ComplaintFilters,
 } from '../src/features/dashboard/complaints-api.js';
 
@@ -109,7 +110,12 @@ const STORES = [
   },
 ];
 
-const USERS = [{ id: 'u1', first_name: 'Amjad', last_name: null, email: 'a@x.com' }];
+const USERS = [
+  { id: 'u1', first_name: 'Amjad', last_name: null, email: 'a@x.com' },
+  // A second agent who owns nothing in most fixtures — the agent filter must
+  // still offer them.
+  { id: 'u2', first_name: 'Nada', last_name: null, email: 'n@x.com' },
+];
 
 /** A ticket with sensible defaults; override what the test is about. */
 function ticket(over: Record<string, unknown> = {}) {
@@ -240,6 +246,60 @@ describe('ticket dashboard — filters', () => {
 
     mockData({ tickets, stores: STORES, users: USERS });
     expect((await run({ ...emptyComplaintFilters, store: 'st2' })).total).toBe(2);
+  });
+
+  /*
+   * WHOSE TICKETS (owner, 2026-09-16).
+   *
+   * The rest of this bar narrows by WHERE a complaint came from; the agent
+   * filter narrows by who owns it. The distinction that matters, and the one a
+   * naive implementation gets wrong, is that "All agents" and "Unassigned" are
+   * different questions: work nobody has picked up is a real thing to go
+   * looking for, and folding it into the default hides it.
+   */
+  it('narrows to one agent', async () => {
+    const tickets = [
+      ticket({ assigned_agent: 'u1' }),
+      ticket({ assigned_agent: 'u2' }),
+      ticket({ assigned_agent: null }),
+    ];
+    mockData({ tickets, stores: STORES, users: USERS });
+    expect((await run({ ...emptyComplaintFilters, agent: 'u1' })).total).toBe(1);
+  });
+
+  it('treats Unassigned as its own filter, not as everybody', async () => {
+    const tickets = [
+      ticket({ assigned_agent: 'u1' }),
+      ticket({ assigned_agent: null }),
+      ticket({ assigned_agent: null }),
+    ];
+    mockData({ tickets, stores: STORES, users: USERS });
+    expect((await run({ ...emptyComplaintFilters, agent: UNASSIGNED_AGENT })).total).toBe(2);
+  });
+
+  it('counts everybody when no agent is chosen', async () => {
+    const tickets = [ticket({ assigned_agent: 'u1' }), ticket({ assigned_agent: null })];
+    mockData({ tickets, stores: STORES, users: USERS });
+    expect((await run(emptyComplaintFilters)).total).toBe(2);
+  });
+
+  it('composes with the location filters — one question, not three', async () => {
+    const tickets = [
+      ticket({ store: 'st1', assigned_agent: 'u1' }),
+      ticket({ store: 'st2', assigned_agent: 'u1' }),
+      ticket({ store: 'st1', assigned_agent: 'u2' }),
+    ];
+    mockData({ tickets, stores: STORES, users: USERS });
+    expect((await run({ ...emptyComplaintFilters, agent: 'u1', store: 'st1' })).total).toBe(1);
+  });
+
+  it('offers every agent as an option, not just those with tickets in range', async () => {
+    // Otherwise the filter removes itself: an agent with nothing this month
+    // cannot be selected, so "why does this person have no tickets?" becomes
+    // unanswerable.
+    mockData({ tickets: [ticket({ assigned_agent: 'u1' })], stores: STORES, users: USERS });
+    const d = await run(emptyComplaintFilters);
+    expect(d.agentOptions.map((a) => a.id)).toContain('u2');
   });
 
   it('sends an inclusive end date so a range ending today contains today', async () => {

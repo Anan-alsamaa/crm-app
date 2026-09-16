@@ -245,6 +245,21 @@ const STATUS_TONE: Record<
   new: 'primary',
   open: 'blue',
   pending: 'warning',
+  /*
+   * `solved` IS THE LIVE VALUE — the other two are history.
+   *
+   * The vocabulary is `open | pending | solved`; `resolved` and `closed` are
+   * retired names kept because 1,671 imported rows still carry them. This map
+   * listed only the retired pair, so a ticket the agent had just marked solved
+   * fell through to the neutral grey used for "no idea" — indistinguishable at
+   * a glance from an untouched row, on the one report operations read to see
+   * what is finished (owner, 2026-09-16).
+   *
+   * All three are kept: the historical rows must still render, and a lookup
+   * that silently returns a fallback is exactly the shape of failure that let
+   * this sit unnoticed.
+   */
+  solved: 'success',
   resolved: 'success',
   closed: 'neutral',
 };

@@ -15,7 +15,7 @@ import {
   splitLocalDateTime,
   type ComplaintReportRow,
 } from '@yiji/reports';
-import { normaliseConversationStatus } from '@yiji/shared-types';
+import { normaliseConversationStatus, normaliseTicketStatus } from '@yiji/shared-types';
 
 export type { ComplaintReportRow };
 
@@ -680,7 +680,18 @@ async function loadAgentReport(
           couponCode: t.coupon_code ?? '',
           couponValue: toNumber(t.coupon_value),
           couponPercent: toNumber(t.coupon_percent),
-          complaintStatus: t.status,
+          /*
+           * THE LIVE VOCABULARY, not whatever the row happens to store.
+           *
+           * Ticket status is `open | pending | solved`; `resolved` and `closed`
+           * are retired names still carried by 1,671 imported rows, which are
+           * deliberately never rewritten. Every reader is supposed to go
+           * through the normaliser so that a stored `closed` and a stored
+           * `solved` read the same — this report did not, so the status column
+           * reported the database's history rather than the ticket's state
+           * (owner, 2026-09-16).
+           */
+          complaintStatus: normaliseTicketStatus(t.status),
           agent: agentOf(t.assigned_agent),
           compensation: t.compensation ?? '',
           // Blank until the first edit — a creation is not a modification, and

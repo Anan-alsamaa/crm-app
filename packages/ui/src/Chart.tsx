@@ -1,5 +1,15 @@
 import { cn } from './cn.js';
 
+/*
+ * CHART TEXT IS 12px, NOT 10px (owner, 2026-09-16).
+ *
+ * Axis values, bar labels, legends and tooltips were all `text-2xs` — 10px.
+ * That is small enough that a reviewer reads the SHAPE of a chart and gives up
+ * on the numbers, which defeats the point of labelling them at all. `text-xs`
+ * is still visibly secondary to the panel heading beside it and costs nothing
+ * in layout: the charts size from their container, not their type.
+ */
+
 /**
  * Small chart kit, hand-drawn in SVG.
  *
@@ -103,7 +113,7 @@ export function HBarChart({
                 {row.label}
               </span>
               {row.note && (
-                <span className="shrink-0 text-2xs text-muted-foreground">{row.note}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">{row.note}</span>
               )}
             </div>
             <div className="space-y-1">
@@ -119,7 +129,7 @@ export function HBarChart({
                         />
                       )}
                     </div>
-                    <span className="w-16 shrink-0 text-end text-2xs tabular-nums text-muted-foreground">
+                    <span className="w-16 shrink-0 text-end text-xs tabular-nums text-muted-foreground">
                       {v == null ? '—' : format(v)}
                     </span>
                   </div>
@@ -140,7 +150,7 @@ function Legend({ series }: { series: readonly ChartSeries[] }) {
       {series.map((s) => (
         <span
           key={s.key}
-          className="inline-flex items-center gap-1.5 text-2xs text-muted-foreground"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
         >
           <span aria-hidden className={cn('h-2 w-2 rounded-full', DOT_TONE[s.tone])} />
           {s.label}
@@ -235,7 +245,7 @@ export function TrendChart({
       <Legend series={series} />
       <div className="mt-2 flex gap-2">
         <div
-          className="flex shrink-0 flex-col justify-between text-2xs tabular-nums text-muted-foreground"
+          className="flex shrink-0 flex-col justify-between text-xs tabular-nums text-muted-foreground"
           style={{ height }}
         >
           <span>{format(safeMax)}</span>
@@ -315,7 +325,7 @@ export function TrendChart({
                     )}
                   />
                   {r.length === 1 && (
-                    <span className="absolute -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-md bg-secondary px-1.5 py-0.5 text-2xs font-semibold tabular-nums text-foreground">
+                    <span className="absolute -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-md bg-secondary px-1.5 py-0.5 text-xs font-semibold tabular-nums text-foreground">
                       {format(v)}
                     </span>
                   )}
@@ -327,7 +337,7 @@ export function TrendChart({
       </div>
       {/* First, middle and last label only — every date on a narrow chart is an
           unreadable smear. */}
-      <div className="mt-1 flex justify-between ps-10 text-2xs text-muted-foreground">
+      <div className="mt-1 flex justify-between ps-10 text-xs text-muted-foreground">
         <span>{points[0]?.label}</span>
         {points.length > 2 && <span>{points[Math.floor(points.length / 2)]?.label}</span>}
         {points.length > 1 && <span>{points[points.length - 1]?.label}</span>}
@@ -375,7 +385,7 @@ export function SplitBar({
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
         {parts.map((p) => (
-          <span key={p.label} className="inline-flex items-center gap-1.5 text-2xs">
+          <span key={p.label} className="inline-flex items-center gap-1.5 text-xs">
             <span aria-hidden className={cn('h-2 w-2 rounded-full', DOT_TONE[p.tone])} />
             <span className="text-muted-foreground">{p.label}</span>
             <span className="font-semibold tabular-nums text-foreground">{p.value}</span>

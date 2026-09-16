@@ -44,7 +44,23 @@ export interface ComplaintFilters {
   chain: string;
   city: string;
   store: string;
+  /**
+   * The agent a ticket is assigned to. Empty = every agent.
+   *
+   * Added 2026-09-16 (owner). The rest of this filter bar answers "where did
+   * the complaint come from"; this one answers "whose is it", which is the
+   * question a supervisor arrives with when they are reviewing one person's
+   * work rather than one region's.
+   *
+   * The empty string means "all" — NOT "unassigned". A ticket nobody owns is a
+   * real state worth filtering for, so it has its own option rather than being
+   * conflated with the default.
+   */
+  agent: string;
 }
+
+/** The option value meaning "tickets nobody owns", distinct from "all". */
+export const UNASSIGNED_AGENT = '__unassigned__';
 
 export const emptyComplaintFilters: ComplaintFilters = {
   from: '',
@@ -54,6 +70,7 @@ export const emptyComplaintFilters: ComplaintFilters = {
   area: '',
   city: '',
   store: '',
+  agent: '',
 };
 
 /** One row of a "By X" breakdown, already sorted and capped. */
@@ -270,6 +287,15 @@ export interface ComplaintMetrics {
   areaOptions: string[];
   chainOptions: string[];
   cityOptions: string[];
+  /**
+   * Everybody who could own a ticket, whether or not they own one in THIS cut.
+   *
+   * Built from the user list rather than from the tickets in range, so the
+   * options do not shrink as you filter: an agent with nothing this month must
+   * still be selectable, or "why does this person have no tickets?" becomes
+   * unanswerable — the filter that would show you removes itself.
+   */
+  agentOptions: Array<{ id: string; name: string }>;
   storeOptions: Array<{
     id: string;
     name: string;
@@ -659,6 +685,13 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         if (filters.chain && chain !== filters.chain) continue;
         if (filters.city && city !== filters.city) continue;
         if (filters.store && storeId !== filters.store) continue;
+        /* Agent, applied here with the rest so it composes with them: "this
+           agent, in this city, last month" is one question, not three. */
+        if (filters.agent) {
+          const owner = tk.assigned_agent ?? null;
+          const wanted = filters.agent === UNASSIGNED_AGENT ? null : filters.agent;
+          if (owner !== wanted) continue;
+        }
 
         rows.push({ ...tk, storeId, restaurantName, brandId, brandName, area, chain, city });
       }
@@ -1013,6 +1046,15 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         areaOptions: uniqueSorted(storeRows.map((s) => s.area_manager)),
         chainOptions: uniqueSorted(storeRows.map((s) => s.chain_manager)),
         cityOptions: uniqueSorted(storeRows.map((s) => s.city)),
+        agentOptions: users
+          .map((u) => ({
+            id: u.id,
+            name:
+              [u.first_name, u.last_name].filter(Boolean).join(' ').trim() ||
+              u.email?.trim() ||
+              u.id,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
         storeOptions: storeRows
           .map((s) => ({
             id: s.id,

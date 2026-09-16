@@ -364,10 +364,23 @@ export function SectionCard({
               of white cards individual identity without tinting the surface. */}
           <span aria-hidden className={cn('mt-0.5 h-4 w-1 shrink-0 rounded-full', TONE_BG[tone])} />
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
-            {hint && (
-              <p className="mt-0.5 text-2xs leading-relaxed text-muted-foreground">{hint}</p>
-            )}
+            {/*
+             * READABLE AT A GLANCE (owner, 2026-09-16).
+             *
+             * These were `text-sm` over `text-2xs` — 14px above a 10px hint.
+             * On a reporting console read across a desk, at a laptop's default
+             * zoom, that is a title you lean in for and an explanation most
+             * people never notice is there. A panel heading is the one piece of
+             * text that has to survive being skimmed.
+             *
+             * `text-base` (16px) and `text-xs` (12px) keep the same hierarchy
+             * — the hint is still visibly secondary — while both sit above the
+             * threshold where text stops being read and starts being scanned
+             * past. Applied on the shared card, so every report panel in the
+             * console moves together rather than this page drifting.
+             */}
+            <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
+            {hint && <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{hint}</p>}
           </div>
         </div>
         {aside && <div className="shrink-0 text-2xs text-muted-foreground">{aside}</div>}

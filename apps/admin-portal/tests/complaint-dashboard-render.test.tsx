@@ -20,7 +20,19 @@ const api = vi.hoisted(() => ({
   useComplaintYears: vi.fn(() => ({ data: [2026], isLoading: false })),
   yearBounds: (y: number) => ({ from: `${y}-01-01`, to: `${y}-12-31` }),
   selectedYear: () => null,
-  emptyComplaintFilters: { from: '', to: '', brand: '', area: '', city: '', store: '' },
+  emptyComplaintFilters: {
+    from: '',
+    to: '',
+    brand: '',
+    area: '',
+    city: '',
+    store: '',
+    agent: '',
+  },
+  /* `vi.mock` with a factory REPLACES the module, so every export the page
+     imports has to be listed here — a new one breaks the whole file at load
+     with "No X export is defined on the mock", not as a failed assertion. */
+  UNASSIGNED_AGENT: '__unassigned__',
 }));
 vi.mock('../src/features/dashboard/complaints-api.js', () => api);
 

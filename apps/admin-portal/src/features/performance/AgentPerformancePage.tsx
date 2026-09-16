@@ -647,6 +647,41 @@ export function AgentPerformancePage() {
                 />
               </section>
 
+              {/* THE TWO PER-DAY CHARTS COME FIRST (owner, 2026-09-16).
+                  Shape before attribution: "how busy was it, and were we
+                  keeping up" is the question a reviewer opens this page with,
+                  and it is answerable for the whole team. The per-agent
+                  breakdown below answers "who", which only makes sense once
+                  you know there was something to hand out. */}
+              <section className="grid gap-4 lg:grid-cols-2">
+                <Card
+                  title={t('performance.perDayTitle', { defaultValue: 'Chats per day' })}
+                  help={t('performance.perDayHelp', { defaultValue: 'How busy each day was' })}
+                >
+                  <TrendChart
+                    points={trend}
+                    series={volumeSeries}
+                    format={countFmt}
+                    emptyLabel={nothingToChart}
+                  />
+                </Card>
+                <Card
+                  title={t('performance.speedPerDayTitle', {
+                    defaultValue: 'Response times per day',
+                  })}
+                  help={t('performance.speedPerDayHelp', {
+                    defaultValue: 'A gap is a day nothing was measurable',
+                  })}
+                >
+                  <TrendChart
+                    points={trend}
+                    series={timeSeries}
+                    format={durFmt}
+                    emptyLabel={nothingMeasured}
+                  />
+                </Card>
+              </section>
+
               {!filters.agentId && (
                 <section className="grid gap-4 lg:grid-cols-2">
                   <Card
@@ -669,11 +704,17 @@ export function AgentPerformancePage() {
                     />
                   </Card>
                   <Card
+                    /* "General chats answered" (owner, 2026-09-16). The old
+                       title described the mechanism — picked up FOR THE TEAM —
+                       which only makes sense if you already know how the
+                       routing ladder releases a chat to everybody. The general
+                       queue is what agents call it, so the chart is named after
+                       the thing rather than the plumbing. */
                     title={t('performance.commonTitle', {
-                      defaultValue: 'Chats picked up for the team',
+                      defaultValue: 'General chats answered',
                     })}
                     help={t('performance.commonHelp', {
-                      defaultValue: 'Chats answered after somebody else let them go',
+                      defaultValue: 'Chats that reached the general queue and this agent answered',
                     })}
                   >
                     <HBarChart
@@ -705,35 +746,6 @@ export function AgentPerformancePage() {
                   </Card>
                 </section>
               )}
-
-              <section className="grid gap-4 lg:grid-cols-2">
-                <Card
-                  title={t('performance.perDayTitle', { defaultValue: 'Chats per day' })}
-                  help={t('performance.perDayHelp', { defaultValue: 'How busy each day was' })}
-                >
-                  <TrendChart
-                    points={trend}
-                    series={volumeSeries}
-                    format={countFmt}
-                    emptyLabel={nothingToChart}
-                  />
-                </Card>
-                <Card
-                  title={t('performance.speedPerDayTitle', {
-                    defaultValue: 'Response times per day',
-                  })}
-                  help={t('performance.speedPerDayHelp', {
-                    defaultValue: 'A gap is a day nothing was measurable',
-                  })}
-                >
-                  <TrendChart
-                    points={trend}
-                    series={timeSeries}
-                    format={durFmt}
-                    emptyLabel={nothingMeasured}
-                  />
-                </Card>
-              </section>
 
               {/* The numbers behind the charts. No row opens anything — this page
               reviews the team, it does not work the queue. */}

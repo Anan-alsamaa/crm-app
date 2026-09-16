@@ -375,6 +375,49 @@ describe('compensationLabel', () => {
   });
 });
 
+describe('the Status column', () => {
+  /*
+   * "THE TICKET IS SOLVED AND THE REPORT SAYS OTHERWISE" (owner, 2026-09-16).
+   *
+   * Ticket status is `open | pending | solved`. `resolved` and `closed` are
+   * RETIRED names that 1,671 imported rows still carry, deliberately never
+   * rewritten — every reader is meant to normalise instead, so that a stored
+   * `closed` and a stored `solved` read identically. The Ticket breakdown
+   * report did not, and reported the database's history rather than the
+   * ticket's state.
+   *
+   * Pinned on the CELL, which is what an operations reader actually sees and
+   * what the Excel export writes.
+   */
+  /* Mirrors the real translator's signature: (key, { ns, defaultValue }). */
+  const t = (k: string, o?: { defaultValue?: string }) => {
+    const labels: Record<string, string> = {
+      'status.open': 'Open',
+      'status.pending': 'Pending',
+      'status.solved': 'Solved',
+    };
+    return labels[k] ?? o?.defaultValue ?? k;
+  };
+  const cell = (complaintStatus: string) =>
+    complaintCell({ complaintStatus } as Parameters<typeof complaintCell>[0], 'complaintStatus', t);
+
+  it('shows a solved ticket as solved', () => {
+    expect(cell('solved')).toBe('Solved');
+  });
+
+  it('reads the retired names as what they mean today', () => {
+    // The whole reason rows are not rewritten: both spellings are the same
+    // state, so both must render the same.
+    expect(cell('closed')).toBe('Solved');
+    expect(cell('resolved')).toBe('Solved');
+  });
+
+  it('still shows the states that are genuinely not finished', () => {
+    expect(cell('open')).toBe('Open');
+    expect(cell('pending')).toBe('Pending');
+  });
+});
+
 describe('the Date column', () => {
   const t = (_k: string, o?: { defaultValue: string }) => o?.defaultValue ?? '';
 

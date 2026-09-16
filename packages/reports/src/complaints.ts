@@ -17,6 +17,7 @@
 import {
   isUnmappedStore,
   matchStore,
+  normaliseTicketStatus,
   resolveStoreAttribution,
   type StoreIndex,
   type StoreSnapshot,
@@ -309,7 +310,24 @@ export function complaintCell(
     couponCode: (r) => r.couponCode,
     couponValue: (r) => r.couponValue ?? '',
     couponPercent: (r) => r.couponPercent ?? '',
-    complaintStatus: (r) => common(`status.${r.complaintStatus}`, r.complaintStatus, t),
+    /*
+     * THE LIVE VOCABULARY, not whatever the row happens to store.
+     *
+     * Ticket status is `open | pending | solved`. `resolved` and `closed` are
+     * RETIRED names that 1,671 imported rows still carry — deliberately never
+     * rewritten, because every reader is supposed to normalise so that a
+     * stored `closed` and a stored `solved` read the same. This cell did not,
+     * so the one report operations use to see what is finished showed the
+     * database's history instead of the ticket's state (owner, 2026-09-16).
+     *
+     * Normalised HERE rather than at each call site: this function is what
+     * both the on-screen table and the Excel export go through, so fixing it
+     * once is the only way the two cannot disagree.
+     */
+    complaintStatus: (r) => {
+      const status = normaliseTicketStatus(r.complaintStatus);
+      return common(`status.${status}`, status, t);
+    },
     restaurantManagerId: () => '',
     agent: (r) => r.agent,
     compensation: (r) => compensationLabel(r, t),
