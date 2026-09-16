@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { parseReleaseTargets, releasePortal } from '../src/releases.js';
+import { parseReleaseTargets, readParkedBuild, releasePortal } from '../src/releases.js';
 
 /*
  * RELEASING IS TWO REQUESTS, AND THEIR ORDER IS NOT INTERCHANGEABLE.
@@ -131,5 +131,65 @@ describe('releasePortal', () => {
       expect(h['x-amz-security-token']).toBe('ST');
       expect(h.Authorization).toContain('AWS4-HMAC-SHA256');
     }
+  });
+});
+
+/*
+ * WHAT COUNTS AS "PENDING" — AND WHY BOTH ENDPOINTS MUST AGREE.
+ *
+ * CI records a published build over HTTP, best effort, so the recorded list can
+ * be empty while a build really is parked. `GET /jobs/releases` falls back to
+ * the bucket for exactly that reason — and `POST /jobs/releases/apply` did NOT,
+ * so the banner offered an update, pressing it did nothing, and it reported
+ * success. Found on the first real release (2026-09-16).
+ *
+ * `readParkedBuild` is the shared answer. These pin its behaviour so the two
+ * endpoints cannot drift apart again.
+ */
+describe('readParkedBuild — the bucket is the fact', () => {
+  const target = { bucket: 'crm-prod-admin-portal', distributionId: 'E1', region: 'us-east-2' };
+  const creds = { accessKeyId: 'AK', secretAccessKey: 'SK' };
+
+  it('reads the bundle out of a parked index.html', async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        '<script type="module" crossorigin src="/assets/index-xCc40TZI.js"></script>',
+    })) as unknown as typeof fetch;
+
+    expect(await readParkedBuild(target, creds, fetchImpl)).toEqual({
+      bundle: '/assets/index-xCc40TZI.js',
+    });
+  });
+
+  it('returns null on 404 — nothing published since the last release', async () => {
+    // The ordinary state, and it must not read as an error.
+    const fetchImpl = vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      text: async () => '',
+    })) as unknown as typeof fetch;
+
+    expect(await readParkedBuild(target, creds, fetchImpl)).toBeNull();
+  });
+
+  it('returns null when the parked file names no bundle', async () => {
+    // A truncated or half-written upload must not be offered as releasable.
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '<html><body>nothing here</body></html>',
+    })) as unknown as typeof fetch;
+
+    expect(await readParkedBuild(target, creds, fetchImpl)).toBeNull();
+  });
+
+  it('stays quiet when S3 is unreachable rather than failing the page', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error('network down');
+    }) as unknown as typeof fetch;
+
+    expect(await readParkedBuild(target, creds, fetchImpl)).toBeNull();
   });
 });

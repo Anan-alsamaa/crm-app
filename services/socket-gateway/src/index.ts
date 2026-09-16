@@ -958,18 +958,50 @@ async function main(): Promise<void> {
         .code(503)
         .send({ ok: false, error: 'releases are not configured for this environment' });
 
-    const pending = (await directus.pendingReleases()) as Array<{
+    const credentials = await taskRoleCredentials();
+    if (!credentials)
+      return reply.code(503).send({ ok: false, error: 'no AWS credentials available' });
+
+    /*
+     * THE SAME SOURCE OF TRUTH AS THE READ, which is the BUCKET.
+     *
+     * This asked `pendingReleases()` alone — the list CI writes over HTTP —
+     * and answered `released: false` when it was empty. But GET /jobs/releases
+     * falls back to reading the bucket precisely because that list can be
+     * empty while a build really is parked (no CI secrets, an unreachable
+     * gateway). So the banner offered an update and pressing it did nothing
+     * and reported success: the two endpoints disagreed about what "pending"
+     * means. Caught on the first real release (2026-09-16).
+     *
+     * A parked `pending/index.html` whose bundle differs from the live one IS
+     * a pending release. The recorded list is a nicety that carries the
+     * version number; the file is the fact.
+     */
+    const recorded = (await directus.pendingReleases()) as Array<{
       version: string;
       commit: string;
       publishedAt: string;
       app: string;
       bundle: string;
     }>;
+    const live = (await directus.liveRelease()) as { bundle?: string } | null;
+    let pending = recorded;
+    if (pending.length === 0) {
+      const found: typeof recorded = [];
+      for (const target of targets) {
+        const parked = await readParkedBuild(target, credentials);
+        if (!parked || parked.bundle === (live?.bundle ?? null)) continue;
+        found.push({
+          version: 'unreleased build',
+          commit: '',
+          publishedAt: '',
+          app: target.bucket.includes('admin') ? 'admin' : 'agent',
+          bundle: parked.bundle,
+        });
+      }
+      pending = found;
+    }
     if (pending.length === 0) return reply.send({ ok: true, released: false });
-
-    const credentials = await taskRoleCredentials();
-    if (!credentials)
-      return reply.code(503).send({ ok: false, error: 'no AWS credentials available' });
 
     /*
      * Both portals move together, sequentially rather than in parallel.
