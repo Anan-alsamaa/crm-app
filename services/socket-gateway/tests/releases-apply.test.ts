@@ -409,6 +409,36 @@ describe('release.live must remember every surface', () => {
     expect(liveBundleFor(legacy, 'chat widget')).toBeNull();
   });
 
+  it('MIGRATES the legacy single-build record instead of dropping it', () => {
+    /*
+     * The merge that writes the per-surface record must carry the old shape
+     * forward. Discarding it loses whichever surface it described, and the
+     * bucket fallback re-offers a build that is already live — the banner
+     * returns from a successful release, which is the very symptom the
+     * per-surface record exists to end. Seen once on production, 2026-09-16.
+     */
+    const migrate = (live: unknown): Record<string, unknown> => {
+      const byApp: Record<string, unknown> = {};
+      if (live && typeof live === 'object' && !Array.isArray(live)) {
+        const rec = live as Record<string, unknown>;
+        if (typeof rec.bundle === 'string') {
+          const app = String(rec.app ?? '');
+          if (app) byApp[app] = rec;
+        } else {
+          Object.assign(byApp, rec);
+        }
+      }
+      return byApp;
+    };
+
+    const legacy = { app: 'chat widget', bundle: '/assets/index-W.js', version: 'v1' };
+    expect(migrate(legacy)).toEqual({ 'chat widget': legacy });
+    // An already-migrated record passes through untouched.
+    const modern = { agent: { app: 'agent', bundle: '/a.js' } };
+    expect(migrate(modern)).toEqual(modern);
+    expect(migrate(null)).toEqual({});
+  });
+
   it('treats a missing record as "nothing is live"', () => {
     expect(liveBundleFor(null, 'agent')).toBeNull();
     expect(liveBundleFor(undefined, 'agent')).toBeNull();

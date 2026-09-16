@@ -1123,13 +1123,28 @@ export class GatewayDirectus {
     const remaining = current.filter((b) => !released.has(b.app ?? ''));
     await this.putSetting('release.pending', JSON.stringify(remaining));
 
-    /* Merge rather than replace: a surface nobody released this time keeps the
-       record of what IT is serving. */
+    /*
+     * Merge rather than replace: a surface nobody released this time keeps the
+     * record of what IT is serving.
+     *
+     * CARRY THE LEGACY SHAPE FORWARD rather than dropping it. `release.live`
+     * used to hold ONE build; discarding that on the first per-surface write
+     * loses whichever surface it described, and the bucket fallback
+     * immediately re-offers a build that is already live — the banner comes
+     * back from a successful release, which is the exact symptom this change
+     * exists to end. Converted in place instead, so the migration happens once
+     * and silently.
+     */
     const live = (await this.liveRelease()) as Record<string, unknown> | null;
-    const byApp: Record<string, unknown> =
-      live && typeof live === 'object' && !Array.isArray(live) && !('bundle' in live)
-        ? { ...(live as Record<string, unknown>) }
-        : {};
+    const byApp: Record<string, unknown> = {};
+    if (live && typeof live === 'object' && !Array.isArray(live)) {
+      if (typeof live.bundle === 'string') {
+        const app = String(live.app ?? '');
+        if (app) byApp[app] = live;
+      } else {
+        Object.assign(byApp, live);
+      }
+    }
     for (const entry of applied) {
       const app = String(entry.app ?? '');
       if (app) byApp[app] = entry;
