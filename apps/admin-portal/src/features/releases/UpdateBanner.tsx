@@ -68,14 +68,21 @@ export function UpdateBanner(): JSX.Element | null {
   if (pending.length === 0) return null;
 
   /*
-   * ONE LINE, NAMING WHAT IS WAITING.
+   * ONE LINE, NAMING WHAT CHANGES AND FOR WHOM.
    *
-   * Both portals are built from one commit and released together, so a pending
-   * list of two entries is ONE update, not two. Counting distinct versions is
-   * what makes the sentence true.
+   * Every gated surface is built from one commit and released together, so a
+   * pending list of two entries is ONE update. What the owner needs to know is
+   * not how many files moved but WHO sees the difference — the agents, the
+   * customers, or both — because that is what decides whether now is a good
+   * moment to press it.
+   *
+   * The admin portal is never in this list: it deploys immediately, which is
+   * what keeps this button from being trapped inside the build it releases.
    */
+  const surfaces = [...new Set(pending.map((p) => p.app))];
   const versions = [...new Set(pending.map((p) => p.version))];
   const newest = versions[0] ?? '';
+  const who = surfaces.join(' + ');
 
   return (
     <div
@@ -83,21 +90,24 @@ export function UpdateBanner(): JSX.Element | null {
       className="flex flex-wrap items-center gap-3 rounded-2xl bg-primary/10 px-4 py-3 text-sm ring-1 ring-primary/25"
     >
       <span className="font-medium text-foreground">
-        {versions.length > 1
-          ? t('releases.pendingMany', {
-              defaultValue: '{{count}} updates are ready — newest is {{version}}.',
-              count: versions.length,
-              version: newest,
-            })
-          : t('releases.pendingOne', {
-              defaultValue: 'Version {{version}} is ready to install.',
-              version: newest,
-            })}
+        {t('releases.pendingFor', {
+          defaultValue: 'An update is waiting for the {{who}}.',
+          who,
+        })}
       </span>
       <span className="text-xs text-muted-foreground">
-        {t('releases.hint', {
-          defaultValue: 'Nobody sees it until you apply it.',
-        })}
+        {/* The version is secondary — useful for matching against a release
+            note, not the thing that decides whether to press the button. It is
+            omitted entirely when CI could not record it, rather than showing
+            the "unreleased build" placeholder as if it were a version. */}
+        {newest && newest !== 'unreleased build'
+          ? t('releases.hintVersion', {
+              defaultValue: '{{version}} · nobody sees it until you apply it.',
+              version: newest,
+            })
+          : t('releases.hint', {
+              defaultValue: 'Nobody sees it until you apply it.',
+            })}
       </span>
       <Button
         type="button"

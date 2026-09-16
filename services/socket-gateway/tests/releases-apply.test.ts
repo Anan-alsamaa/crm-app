@@ -37,7 +37,33 @@ describe('parseReleaseTargets', () => {
     expect(parseReleaseTargets('just-a-bucket', 'us-east-2')).toEqual([]);
     expect(parseReleaseTargets(':E1', 'us-east-2')).toEqual([]);
     expect(parseReleaseTargets('a:', 'us-east-2')).toEqual([]);
-    expect(parseReleaseTargets('a:E1:extra', 'us-east-2')).toEqual([]);
+    // A FOURTH part means something this does not implement.
+    expect(parseReleaseTargets('a:E1:index.html:extra', 'us-east-2')).toEqual([]);
+  });
+
+  it('reads the optional file list, which is what the widget needs', () => {
+    /*
+     * The chat widget serves three entry points — `index.html`,
+     * `walk-in.html`, and the extensionless `walk-in` key a QR poster points
+     * at — all naming the same hashed assets. They must release together or a
+     * customer scanning a poster gets a different build from one opening the
+     * chat link.
+     */
+    expect(parseReleaseTargets('w-bucket:E9:index.html|walk-in.html|walk-in', 'us-east-2')).toEqual(
+      [
+        {
+          bucket: 'w-bucket',
+          distributionId: 'E9',
+          region: 'us-east-2',
+          files: ['index.html', 'walk-in.html', 'walk-in'],
+        },
+      ],
+    );
+  });
+
+  it('leaves `files` unset for a portal, which releases index.html alone', () => {
+    const [t] = parseReleaseTargets('crm-prod-agent-portal:E1', 'us-east-2');
+    expect(t?.files).toBeUndefined();
   });
 
   it('treats an empty setting as "no targets", which the endpoint reports as 503', () => {
@@ -116,6 +142,60 @@ describe('releasePortal', () => {
 
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.warning).toContain('the CDN cache was not cleared');
+  });
+
+  it('promotes EVERY file of a multi-page surface, then purges them all', async () => {
+    /*
+     * The chat widget's three entry points must move together. Releasing some
+     * and not others would serve one build to a customer who scans a QR poster
+     * and another to one who opens the chat link — from the same deploy, with
+     * nothing to indicate anything is wrong.
+     */
+    const widget = {
+      bucket: 'crm-prod-widget-408568863712',
+      distributionId: 'E9',
+      region: 'us-east-2',
+      files: ['index.html', 'walk-in.html', 'walk-in'],
+    };
+    const copies: string[] = [];
+    let invalidation = '';
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (init?.method === 'PUT') copies.push(u.split('.com')[1] ?? u);
+      if (u.includes('cloudfront')) invalidation = String(init?.body ?? '');
+      return ok();
+    }) as unknown as typeof fetch;
+
+    const res = await releasePortal(widget, creds, fetchImpl);
+
+    expect(res.ok).toBe(true);
+    expect(copies).toEqual(['/index.html', '/walk-in.html', '/walk-in']);
+    // `/` is a separate cache object from `/index.html` — a customer opening
+    // the bare origin would otherwise keep the old page.
+    for (const p of ['/', '/index.html', '/walk-in.html', '/walk-in']) {
+      expect(invalidation).toContain(`<Path>${p}</Path>`);
+    }
+    expect(invalidation).toContain('<Quantity>4</Quantity>');
+  });
+
+  it('stops at the first file that fails, leaving the rest untouched', async () => {
+    // A half-release is far easier to reason about when it is the FIRST half
+    // that landed.
+    const widget = { ...target, files: ['index.html', 'walk-in.html', 'walk-in'] };
+    const calls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (init?.method === 'PUT') calls.push(u);
+      return u.includes('walk-in.html')
+        ? ({ ok: false, status: 403, text: async () => 'AccessDenied' } as unknown as Response)
+        : ok();
+    }) as unknown as typeof fetch;
+
+    const res = await releasePortal(widget, creds, fetchImpl);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain('walk-in.html');
+    expect(calls).toHaveLength(2); // index.html, then the one that failed
   });
 
   it('signs both requests with the session token ECS credentials carry', async () => {

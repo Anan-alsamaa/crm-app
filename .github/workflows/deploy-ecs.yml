@@ -195,18 +195,23 @@ jobs:
           role-to-assume: arn:aws:iam::408568863712:role/crm-github-deploy
           aws-region: ${{ env.AWS_REGION }}
 
-      # PRODUCTION PUBLISHES; THE ADMINISTRATOR RELEASES (owner, 2026-09-16).
+      # WHAT THE OWNER SEES IMMEDIATELY, AND WHAT WAITS FOR THEM.
       #
-      # A deploy used to BE the release: it overwrote `index.html`, and every
-      # portal already open noticed the new bundle and nagged its own user to
-      # reload. Production changed the moment CI went green, and the owner found
-      # out at the same time as everybody else.
+      # On prod the AGENT portal parks its new entry point at
+      # `pending/index.html` and leaves the live one alone, so a design change
+      # or new feature reaches agents at a moment the owner chooses rather than
+      # mid-shift. The ADMIN portal always deploys straight to live.
       #
-      # On prod the new entry point is now parked at `pending/index.html` while
-      # the live one is left alone, so nobody sees the change until Update now
-      # is pressed in the admin portal. STAGING KEEPS THE OLD BEHAVIOUR: it
-      # exists to be looked at immediately, and gating it would mean pressing a
-      # button before you could test what you just merged.
+      # That asymmetry is the whole reason this works. The release button lives
+      # in the admin portal, so gating the admin portal traps the button inside
+      # the build it is meant to release — you cannot press the thing that
+      # would ship the thing. We hit exactly that on 2026-09-16. An always-live
+      # admin portal means the button always exists and is always the newest
+      # one.
+      #
+      # STAGING IS NEVER GATED: it exists to be looked at immediately, and
+      # asking somebody to press a button before they can test what they merged
+      # is friction with nothing behind it.
       - name: Upload to S3
         env:
           ENVIRONMENT: ${{ needs.plan.outputs.environment }}
@@ -216,36 +221,47 @@ jobs:
         run: |
           for app in agent admin; do
             BUCKET="crm-${ENVIRONMENT}-${app}-portal"
+            # Does THIS surface wait for the owner? Only the agent portal, and
+            # only on prod.
+            if [ "$ENVIRONMENT" = "prod" ] && [ "$app" = "agent" ]; then
+              GATED=1
+            else
+              GATED=0
+            fi
+
             # Hashed assets first, cached hard. Vite content-hashes filenames,
             # so a year is safe and correct.
             #
-            # `--delete` ONLY on staging. On prod it would prune the bucket to
-            # exactly the new build, deleting the assets the LIVE build is still
-            # serving — so production would go blank between deploy and release.
-            # A flag that was correct right up until releases stopped being
+            # `--delete` is dropped for a GATED surface. It prunes the bucket to
+            # exactly the new build, which would delete the assets the LIVE
+            # build is still serving — the portal would go blank between deploy
+            # and release. Correct right up until a release stopped being
             # immediate.
-            if [ "$ENVIRONMENT" = "prod" ]; then DELETE=""; else DELETE="--delete"; fi
+            if [ "$GATED" = "1" ]; then DELETE=""; else DELETE="--delete"; fi
             aws s3 sync "apps/${app}-portal/dist" "s3://${BUCKET}" \
               $DELETE --cache-control "public,max-age=31536000,immutable" \
               --exclude "index.html" --exclude "config.js"
+
             # index.html and config.js have STABLE names and must never be
             # cached: a cached config.js means the portal talks to the previous
             # environment's API until someone hard-refreshes — an outage with no
             # error message.
             #
-            # config.js is written on BOTH: it is environment config, identical
-            # across builds of the same environment, so it does not wait.
+            # config.js goes live even on a gated surface: it is environment
+            # config, identical across builds of the same environment, and a
+            # portal pointed at the wrong API is an outage nobody can see.
             aws s3 cp "apps/${app}-portal/dist/config.js" "s3://${BUCKET}/config.js" \
               --cache-control "no-cache"
-            if [ "$ENVIRONMENT" = "prod" ]; then
+
+            if [ "$GATED" = "1" ]; then
               aws s3 cp "apps/${app}-portal/dist/index.html" "s3://${BUCKET}/pending/index.html" \
                 --cache-control "no-cache"
               BUNDLE=$(grep -o "/assets/index-[A-Za-z0-9_-]*[.]js" "apps/${app}-portal/dist/index.html" | head -1)
               echo "::notice::${app} portal published (${BUNDLE}) - waiting for Update now"
-              # Record it so the admin portal can offer it. BEST EFFORT: a
-              # failure here must not fail a deploy that has already uploaded
-              # everything. The build is published either way; the banner is how
-              # somebody learns about it, not where it lives.
+              # Record it so the admin portal can name the version. BEST EFFORT:
+              # the build is published either way, and the gateway falls back to
+              # reading the bucket, so a failure here costs the version number
+              # and nothing else.
               if [ -n "$RELEASE_API" ] && [ -n "$SVC_GATEWAY_TOKEN" ]; then
                 PAYLOAD=$(printf '{"version":"%s","commit":"%s","publishedAt":"%s","app":"%s","bundle":"%s"}' \
                   "$RELEASE_VERSION" "$(echo "$GITHUB_SHA" | cut -c1-7)" \
@@ -254,9 +270,9 @@ jobs:
                   -H "authorization: Bearer ${SVC_GATEWAY_TOKEN}" \
                   -H "content-type: application/json" \
                   -d "$PAYLOAD" \
-                  || echo "::warning::could not record the published build - it is uploaded, but the admin banner will not list it"
+                  || echo "::warning::could not record the published build - it is parked, and the banner will still find it in the bucket"
               else
-                echo "::warning::RELEASE_API_URL or SVC_GATEWAY_TOKEN is unset - the build is published but the admin banner will not list it"
+                echo "::warning::RELEASE_API_URL or SVC_GATEWAY_TOKEN is unset - the build is parked and the banner will find it in the bucket, without a version number"
               fi
             else
               aws s3 cp "apps/${app}-portal/dist/index.html" "s3://${BUCKET}/index.html" \
@@ -314,18 +330,49 @@ jobs:
             --cache-control "public,max-age=31536000,immutable" >/dev/null
           # Everything else except the pages, five minutes: the bundle's name is
           # STABLE, so a fix has to be able to reach browsers the same day.
+          #
+          # `pending/` is EXCLUDED from the prune. Without it this sync would
+          # delete the parked pages it had just uploaded — the release would
+          # have nothing to promote, and the deploy would report success. A
+          # gated surface and a `--delete` sync in the same bucket is exactly
+          # the pairing that goes wrong quietly.
           aws s3 sync "$SRC" "s3://${BUCKET}" --delete \
             --exclude "assets/*" --exclude "*.html" --exclude "walk-in" \
+            --exclude "pending/*" \
             --cache-control "public,max-age=300" >/dev/null
-          # The pages, never cached — they name the hashed assets.
-          for page in index.html walk-in.html; do
-            aws s3 cp "$SRC/$page" "s3://${BUCKET}/$page" \
+          # THE PAGES, and on prod they WAIT FOR THE OWNER.
+          #
+          # Never cached, because they name the hashed assets. On prod the new
+          # ones are parked under `pending/` and the live pages are left alone,
+          # so a design change reaches customers when the owner releases it
+          # rather than the moment CI goes green. That matters most here: this
+          # is the surface people outside the company see.
+          #
+          # The assets above are uploaded WITHOUT `--delete`, so both builds'
+          # chunks coexist and the live page keeps working untouched while the
+          # new one waits.
+          if [ "$ENVIRONMENT" = prod ]; then
+            for page in index.html walk-in.html; do
+              aws s3 cp "$SRC/$page" "s3://${BUCKET}/pending/$page" \
+                --cache-control "no-cache" --content-type "text/html; charset=utf-8" >/dev/null
+            done
+            # The QR poster's extensionless key needs its own object, parked
+            # too — releasing must swap all three together or a scanned code
+            # would serve a page from a different build.
+            aws s3 cp "$SRC/walk-in.html" "s3://${BUCKET}/pending/walk-in" \
               --cache-control "no-cache" --content-type "text/html; charset=utf-8" >/dev/null
-          done
-          # The QR poster's URL has no extension, so S3 needs its own object at
-          # that key. Miss it and every scanned code 404s.
-          aws s3 cp "$SRC/walk-in.html" "s3://${BUCKET}/walk-in" \
-            --cache-control "no-cache" --content-type "text/html; charset=utf-8" >/dev/null
+            WBUNDLE=$(grep -o "/assets/index-[A-Za-z0-9_-]*[.]js" "$SRC/index.html" | head -1)
+            echo "::notice::chat widget published (${WBUNDLE}) - waiting for Update now"
+          else
+            for page in index.html walk-in.html; do
+              aws s3 cp "$SRC/$page" "s3://${BUCKET}/$page" \
+                --cache-control "no-cache" --content-type "text/html; charset=utf-8" >/dev/null
+            done
+            # The QR poster's URL has no extension, so S3 needs its own object
+            # at that key. Miss it and every scanned code 404s.
+            aws s3 cp "$SRC/walk-in.html" "s3://${BUCKET}/walk-in" \
+              --cache-control "no-cache" --content-type "text/html; charset=utf-8" >/dev/null
+          fi
 
           # WITHOUT THIS THE UPLOAD IS INVISIBLE. CloudFront keeps serving what
           # it already has until told otherwise, so a customer would get the old

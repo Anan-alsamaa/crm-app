@@ -1302,11 +1302,11 @@
   },
   "releases": {
     "updateNow": "Update now",
-    "pendingOne": "Version {{version}} is ready to install.",
-    "pendingMany": "{{count}} updates are ready — newest is {{version}}.",
     "hint": "Nobody sees it until you apply it.",
     "applied": "Update applied. Everyone gets it on their next page load.",
     "alreadyCurrent": "Already up to date.",
-    "failed": "Update failed."
+    "failed": "Update failed.",
+    "pendingFor": "An update is waiting for the {{who}}.",
+    "hintVersion": "{{version}} · nobody sees it until you apply it."
   }
 }

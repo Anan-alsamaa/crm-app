@@ -46,6 +46,7 @@ import {
   parseReleaseTargets,
   readParkedBuild,
   releasePortal,
+  releaseSurfaceName,
   taskRoleCredentials,
 } from './releases.js';
 import { createProducer } from './queue.js';
@@ -917,7 +918,7 @@ async function main(): Promise<void> {
         version: 'unreleased build',
         commit: '',
         publishedAt: '',
-        app: target.bucket.includes('admin') ? 'admin' : 'agent',
+        app: releaseSurfaceName(target.bucket),
         bundle: parked.bundle,
       });
     }
@@ -995,7 +996,7 @@ async function main(): Promise<void> {
           version: 'unreleased build',
           commit: '',
           publishedAt: '',
-          app: target.bucket.includes('admin') ? 'admin' : 'agent',
+          app: releaseSurfaceName(target.bucket),
           bundle: parked.bundle,
         });
       }

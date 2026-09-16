@@ -150,7 +150,22 @@ export interface ReleaseTarget {
   bucket: string;
   distributionId: string;
   region: string;
+  /**
+   * The files a release promotes from `pending/`, relative to the bucket root.
+   *
+   * One for a portal; THREE for the chat widget, which serves `index.html`,
+   * `walk-in.html` and an extensionless `walk-in` key for the QR poster. All of
+   * them name the same hashed assets, so releasing some and not others would
+   * serve two different builds depending on which door a customer came
+   * through.
+   *
+   * Defaults to `index.html`, which is every portal.
+   */
+  files?: string[];
 }
+
+/** What a release promotes when the target does not say otherwise. */
+export const DEFAULT_RELEASE_FILES = ['index.html'];
 
 /**
  * Parse `RELEASE_TARGETS` — comma-separated `bucket:distribution` pairs.
@@ -167,12 +182,30 @@ export function parseReleaseTargets(raw: string, region: string): ReleaseTarget[
   for (const piece of raw.split(',')) {
     const entry = piece.trim();
     if (!entry) continue;
-    const [bucket, distributionId, ...rest] = entry.split(':').map((p) => p.trim());
-    // Exactly two parts, both present. A third means somebody meant something
-    // this does not implement, which is worth ignoring loudly rather than
+    const [bucket, distributionId, files, ...rest] = entry.split(':').map((p) => p.trim());
+    // Two parts required, a third optional. A FOURTH means somebody meant
+    // something this does not implement, which is worth dropping rather than
     // half-honouring.
     if (!bucket || !distributionId || rest.length > 0) continue;
-    out.push({ bucket, distributionId, region });
+    /*
+     * The optional third part lists the files to promote, separated by `|`.
+     *
+     * The widget needs it: it serves `index.html`, `walk-in.html` and an
+     * extensionless `walk-in` key, all naming the same hashed assets, so they
+     * release together or a customer scanning a QR poster gets a different
+     * build from one opening the chat link. A portal omits it and gets
+     * `index.html`.
+     */
+    const list = (files ?? '')
+      .split('|')
+      .map((f) => f.trim())
+      .filter(Boolean);
+    out.push({
+      bucket,
+      distributionId,
+      region,
+      ...(list.length > 0 ? { files: list } : {}),
+    });
   }
   return out;
 }
@@ -245,48 +278,75 @@ export async function releasePortal(
   { ok: true; warning?: string } | { ok: false; error: string }
 > {
   const host = `${target.bucket}.s3.${target.region}.amazonaws.com`;
-  const copyHeaders = signRequest({
-    method: 'PUT',
-    host,
-    path: '/index.html',
-    service: 's3',
-    region: target.region,
-    body: '',
-    credentials,
-    headers: {
-      /* The source must be URL-encoded and bucket-qualified. */
-      'x-amz-copy-source': `/${target.bucket}/pending/index.html`,
-      /* Carried explicitly: a copy does NOT inherit the source's metadata
-         unless told to, and an index.html that becomes cacheable is a release
-         that reaches some users and not others, for a year. */
-      'x-amz-metadata-directive': 'REPLACE',
-      'cache-control': 'no-cache',
-      'content-type': 'text/html',
-    },
-  });
+  const files = target.files ?? DEFAULT_RELEASE_FILES;
 
-  try {
-    const copy = await fetchImpl(`https://${host}/index.html`, {
+  /*
+   * Every file of this surface, promoted in turn.
+   *
+   * A portal has one; the widget has three, and they must all move or a
+   * customer scanning a QR poster would get a page from a different build than
+   * one opening the chat link. Sequentially, stopping at the first failure:
+   * a half-release is far easier to reason about when it is the FIRST half
+   * that landed.
+   */
+  for (const file of files) {
+    const copyHeaders = signRequest({
       method: 'PUT',
-      headers: copyHeaders,
-      signal: AbortSignal.timeout(20_000),
+      host,
+      path: `/${file}`,
+      service: 's3',
+      region: target.region,
+      body: '',
+      credentials,
+      headers: {
+        /* The source must be bucket-qualified. */
+        'x-amz-copy-source': `/${target.bucket}/pending/${file}`,
+        /* Carried explicitly: a copy does NOT inherit the source's metadata
+           unless told to, and an entry point that becomes cacheable is a
+           release that reaches some users and not others, for a year. */
+        'x-amz-metadata-directive': 'REPLACE',
+        'cache-control': 'no-cache',
+        'content-type': 'text/html; charset=utf-8',
+      },
     });
-    if (!copy.ok) {
-      const body = await copy.text().catch(() => '');
-      return { ok: false, error: `s3 copy failed (${copy.status}): ${body.slice(0, 200)}` };
+
+    try {
+      const copy = await fetchImpl(`https://${host}/${file}`, {
+        method: 'PUT',
+        headers: copyHeaders,
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!copy.ok) {
+        const body = await copy.text().catch(() => '');
+        return {
+          ok: false,
+          error: `s3 copy of ${file} failed (${copy.status}): ${body.slice(0, 200)}`,
+        };
+      }
+    } catch (err) {
+      return { ok: false, error: `s3 copy of ${file} failed: ${(err as Error).message}` };
     }
-  } catch (err) {
-    return { ok: false, error: `s3 copy failed: ${(err as Error).message}` };
   }
 
   /* CloudFront is a global service and signs against us-east-1 regardless of
      where anything else lives. */
   const cfHost = 'cloudfront.amazonaws.com';
   const cfPath = `/2020-05-31/distribution/${target.distributionId}/invalidation`;
+  /*
+   * Purge EVERY path this release touched, plus `/` itself.
+   *
+   * `/` is not the same cache object as `/index.html` — a customer opening the
+   * bare origin would keep getting the old page while somebody who typed the
+   * full path got the new one. The widget adds `/walk-in.html` and `/walk-in`,
+   * which is the QR poster's extensionless key.
+   */
+  const paths = [...new Set(['/', ...files.map((f) => `/${f}`)])];
   const cfBody =
     '<?xml version="1.0" encoding="UTF-8"?>' +
     '<InvalidationBatch xmlns="http://cloudfront.amazonaws.com/doc/2020-05-31/">' +
-    '<Paths><Quantity>2</Quantity><Items><Path>/index.html</Path><Path>/</Path></Items></Paths>' +
+    `<Paths><Quantity>${paths.length}</Quantity><Items>` +
+    paths.map((p) => `<Path>${p}</Path>`).join('') +
+    '</Items></Paths>' +
     `<CallerReference>release-${Date.now()}</CallerReference>` +
     '</InvalidationBatch>';
 
@@ -322,4 +382,23 @@ export async function releasePortal(
   }
 
   return { ok: true };
+}
+
+/**
+ * A human name for the surface a bucket holds.
+ *
+ * Used in the banner, so it has to read as the thing the owner is about to
+ * change rather than as an S3 bucket name. Derived from the bucket because
+ * that is what the configuration already carries — adding a fourth field to
+ * `RELEASE_TARGETS` would be one more thing to keep in step for a label.
+ *
+ * Falls back to the bucket name rather than guessing: an unrecognised bucket
+ * shown honestly is better than one confidently mislabelled as a portal it is
+ * not.
+ */
+export function releaseSurfaceName(bucket: string): string {
+  if (bucket.includes('admin-portal')) return 'admin';
+  if (bucket.includes('agent-portal')) return 'agent';
+  if (bucket.includes('widget')) return 'chat widget';
+  return bucket;
 }
