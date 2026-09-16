@@ -251,6 +251,35 @@ When a single host isn't enough (or policy requires it):
 - K8s/Helm manifests are **not** in this repo yet — generate them from the compose
   topology when you commit to that target.
 
+## Two gateway tasks REQUIRE sticky sessions
+
+The socket-gateway runs 2 tasks on production (redundancy: one task is a single
+point of failure). **Socket.IO's HTTP long-polling handshake must reach the same
+instance for every request in a session** — the first call creates a session id,
+the next sends the auth frame, and an instance that never saw that id answers
+`{"code":1,"message":"Session ID unknown"}`.
+
+Scaling to 2 tasks with stickiness OFF broke every walk-in chat: the customer
+saw "Reconnecting…" and then "We could not start this chat. Please reopen it
+from the app, or call us." Measured on production — **6 of 6 handshakes hit the
+wrong instance**. It had worked at 1 task only because there was nowhere else to
+land.
+
+Both socket target groups need:
+
+```
+stickiness.enabled = true
+stickiness.type = lb_cookie
+stickiness.lb_cookie.duration_seconds = 86400
+```
+
+on `crm-prd-socketio` (`/socket.io`) **and** `crm-prd-socket` (`/webhooks/*`,
+`/jobs/*`, `/walk-in/*`). CloudFront already forwards cookies to the ALB, so no
+change is needed there — but if the origin-request policy is ever narrowed to
+drop cookies, this breaks again with exactly the same symptom.
+
+**Before scaling any websocket service past one task, check stickiness first.**
+
 ## Permissions do not ride a deploy — check them
 
 Schema and role permissions reach an environment ONLY through a manual
