@@ -36,6 +36,8 @@ export interface WidgetConfig {
    * collapse the panel and leave the host page alone.
    */
   closeUrl?: string;
+  /** Called when the customer leaves for good, so the host can end the session. */
+  onClose?: () => void;
   /**
    * Fallback contact details surfaced when no support agent is online.
    * Host pages can override per vendor; defaults match the Yiji CS desk.
@@ -1084,6 +1086,16 @@ export function Widget({ config }: { config: WidgetConfig }) {
                     // a navigation the app can intercept; if nothing handles the
                     // scheme we still collapse, so the button is never dead.
                     if (config.closeUrl) {
+                      /*
+                       * Leaving for good, so END the walk-in session.
+                       *
+                       * The token used to be deleted the instant the chat page
+                       * read it, which meant a reload lost the session and the
+                       * page bounced back to the phone form — the flicker a
+                       * customer saw. It is kept now, so the deliberate exit is
+                       * the place that clears it.
+                       */
+                      config.onClose?.();
                       try {
                         window.location.assign(config.closeUrl);
                         return;

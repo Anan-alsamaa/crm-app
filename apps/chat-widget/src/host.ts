@@ -83,12 +83,42 @@ function takeWalkInSession(): { token: string; closeUrl?: string } | null {
     const token = sessionStorage.getItem(WALK_IN_TOKEN_KEY);
     if (!token) return null;
     const closeUrl = sessionStorage.getItem(WALK_IN_CLOSE_KEY) ?? undefined;
-    sessionStorage.removeItem(WALK_IN_TOKEN_KEY);
-    sessionStorage.removeItem(WALK_IN_CLOSE_KEY);
+    /*
+     * KEPT, NOT CONSUMED.
+     *
+     * This deleted the token as it read it, so the chat page worked exactly
+     * ONCE. Anything that re-ran the page — a pull-to-refresh, a web view
+     * restoring after the app was backgrounded, an OS reclaiming memory — then
+     * found nothing and redirected to `/walk-in`, which sends the customer
+     * back to the chat, which finds nothing... The customer sees the page
+     * flickering between the phone form and the chat (owner, 2026-09-16).
+     *
+     * A one-shot read was meant to stop a closed session being resurrected by
+     * a Back navigation. It is the wrong tool: the token is short-lived and
+     * scoped to this tab's `sessionStorage`, which the browser discards when
+     * the tab closes — so the session already ends when the customer leaves.
+     * Closing the chat clears it explicitly (see `clearWalkInSession`), which
+     * is the case that actually needed handling.
+     */
     return { token, closeUrl };
   } catch {
     // Private mode / storage disabled: no handoff to take.
     return null;
+  }
+}
+
+/**
+ * End the walk-in session deliberately — the customer closed the chat.
+ *
+ * This is what the one-shot read above was reaching for, done at the moment it
+ * actually means something rather than on every page load.
+ */
+export function clearWalkInSession(): void {
+  try {
+    sessionStorage.removeItem(WALK_IN_TOKEN_KEY);
+    sessionStorage.removeItem(WALK_IN_CLOSE_KEY);
+  } catch {
+    /* storage unavailable — nothing to clear */
   }
 }
 
@@ -136,6 +166,13 @@ applyDocumentLocale(locale);
 // a stale walk-in handoff in sessionStorage must not win over a fresh one.
 const session = takeUrlSession() ?? takeWalkInSession();
 if (session) {
+  /* A good session means the loop guard below has nothing to protect against
+     any more. Cleared here so a later reload gets its one retry back. */
+  try {
+    sessionStorage.removeItem('yiji.walkInBounced');
+  } catch {
+    /* storage unavailable */
+  }
   // Signed by the gateway; nothing is minted here. autoOpen: this page IS the
   // chat, so no launcher click stands between the customer and it.
   YijiChat.init({
@@ -153,10 +190,36 @@ if (session) {
       applyDocumentLocale(next);
     },
     autoOpen: true,
+    /* The customer pressed close: end the walk-in session deliberately, which
+       is what the old consume-on-read was reaching for. */
+    onClose: clearWalkInSession,
     ...(session.closeUrl ? { closeUrl: session.closeUrl } : {}),
   });
 } else if (import.meta.env.DEV) {
   void import('./demo.js');
 } else {
-  window.location.replace(WALK_IN_URL);
+  /*
+   * NO SESSION — send them to the phone form, BUT ONLY ONCE.
+   *
+   * `/walk-in` hands off to this page and this page bounces back when it finds
+   * no token, so the two can chase each other: the customer watches the phone
+   * form and the chat alternate, with nothing ever settling. A marker in
+   * `sessionStorage` makes the bounce one-way — go back at most once per tab,
+   * and if we land here again, stop and let the walk-in page ask for a phone
+   * number like it is a first visit.
+   *
+   * Cleared on a successful session above, so a customer who completes the
+   * form and later reloads gets the same single retry rather than being
+   * stranded by a marker from an hour ago.
+   */
+  const BOUNCED = 'yiji.walkInBounced';
+  let bounced = false;
+  try {
+    bounced = sessionStorage.getItem(BOUNCED) === '1';
+    if (!bounced) sessionStorage.setItem(BOUNCED, '1');
+  } catch {
+    /* storage unavailable: fall through and bounce, which is the old
+       behaviour — one redirect is still better than a blank page. */
+  }
+  if (!bounced) window.location.replace(WALK_IN_URL);
 }

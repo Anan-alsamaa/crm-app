@@ -67,11 +67,36 @@ describe('a walk-in handoff opens the chat', () => {
     expect(demoSpy).not.toHaveBeenCalled();
     expect(location.replace).not.toHaveBeenCalled();
   });
-  it('takes the handoff once, so a later refresh cannot replay the token', async () => {
+  it('KEEPS the handoff, so a refresh does not lose the chat', async () => {
+    /*
+     * REVERSED DELIBERATELY. This used to assert the token was consumed on
+     * read, which meant the chat page worked exactly once: any reload — a
+     * pull-to-refresh, a web view restoring after the app was backgrounded,
+     * the OS reclaiming memory — found nothing and redirected to the phone
+     * form, which hands back to the chat, which finds nothing. The customer
+     * watched the two pages flicker (owner, 2026-09-16).
+     *
+     * The one-shot read was guarding against a closed session being
+     * resurrected by a Back navigation. It is the wrong tool: the token is
+     * short-lived and lives in this TAB's sessionStorage, which the browser
+     * discards when the tab closes. Pressing close clears it explicitly.
+     */
+    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    sessionStorage.setItem('yiji.walkInCloseUrl', 'closeapp://');
+    await loadHost();
+    expect(sessionStorage.getItem('yiji.walkInToken')).toBe('gateway-signed');
+    expect(sessionStorage.getItem('yiji.walkInCloseUrl')).toBe('closeapp://');
+  });
+
+  it('ends the session when the customer closes the chat', async () => {
+    // The deliberate exit is where the token SHOULD be cleared — at the moment
+    // it means something, not on every page load.
     sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
     await loadHost();
+    const opts = initSpy.mock.calls[0][0] as { onClose?: () => void };
+    expect(typeof opts.onClose).toBe('function');
+    opts.onClose?.();
     expect(sessionStorage.getItem('yiji.walkInToken')).toBeNull();
-    expect(sessionStorage.getItem('yiji.walkInCloseUrl')).toBeNull();
   });
 
   it('omits closeUrl when the QR page set none', async () => {
@@ -102,6 +127,33 @@ describe('with nothing waiting', () => {
     expect(location.replace).toHaveBeenCalledWith('/walk-in');
     expect(demoSpy).not.toHaveBeenCalled();
     expect(initSpy).not.toHaveBeenCalled();
+  });
+
+  it('BOUNCES ONCE, never in a loop', async () => {
+    /*
+     * `/walk-in` hands off to this page and this page bounces back when it
+     * finds no token, so the two can chase each other — the customer watches
+     * the phone form and the chat alternate with nothing settling. One retry
+     * per tab, then stop and let the form ask for a number like a first visit.
+     */
+    vi.stubEnv('DEV', false);
+    await loadHost();
+    expect(location.replace).toHaveBeenCalledTimes(1);
+
+    // The page loads again with still no token — this is the second lap.
+    (location.replace as ReturnType<typeof vi.fn>).mockClear();
+    await loadHost();
+    expect(location.replace).not.toHaveBeenCalled();
+  });
+
+  it('restores the retry once a real session arrives', async () => {
+    // A customer who completes the form and reloads an hour later must not be
+    // stranded by a marker left over from a bounce.
+    vi.stubEnv('DEV', false);
+    await loadHost(); // bounces, sets the marker
+    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    await loadHost(); // good session — clears the marker
+    expect(sessionStorage.getItem('yiji.walkInBounced')).toBeNull();
   });
 
   it('treats unreadable storage as nothing waiting', async () => {
