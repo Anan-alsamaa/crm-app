@@ -73,14 +73,6 @@ interface Props {
    * know whether the contact came from a chat or a search.
    */
   contactField?: React.ReactNode;
-  /**
-   * A phone number typed for a customer who is NOT in the CRM.
-   *
-   * Owned by the route, like `contactField`, because the two are one decision:
-   * pick a contact, or type a number for somebody who has no row. Empty from a
-   * chat, where the customer came with the conversation.
-   */
-  typedPhone?: string;
   conversationId?: string | null;
   onClose: () => void;
   /** Names where Cancel returns to, e.g. "Back to the chat". Renders the arrow. */
@@ -170,7 +162,6 @@ export function CreateTicketDialog({
   conversationId,
   onClose,
   contactField,
-  typedPhone = '',
   backLabel,
   onCreated,
 }: Props) {
@@ -389,11 +380,18 @@ export function CreateTicketDialog({
           priority: values.priority,
           contact: contactId,
           vendor: vendorId,
-          /* The customer's number when no CRM contact stands behind the
-             ticket — a walk-in who is not in the system. Null when a contact
-             IS chosen: their own record is the better copy, and storing it
-             twice invites the two to disagree. */
-          customer_phone: contactId ? null : typedPhone.trim() || null,
+          /*
+           * The customer's number AS IT STOOD when the ticket was raised.
+           *
+           * Deliberately kept even though a contact is always linked now
+           * (owner, 2026-09-16). The contact is the living record — corrected,
+           * merged, sometimes relinked — and this is the number the agent was
+           * actually given on the day. When the two disagree later, that
+           * difference is the useful thing, not a contradiction: every reader
+           * goes through `customerPhone()`, which prefers the contact, so this
+           * never competes for the display.
+           */
+          customer_phone: contact.data?.phone ?? null,
           conversation: conversationId ?? null,
           assigned_agent: user?.id ?? null,
           order_snapshot: includeOrder && latestOrder ? orderSnapshot(latestOrder) : null,
@@ -517,18 +515,18 @@ export function CreateTicketDialog({
 
   const hasChatContext = !!conversationId && (!!latestOrder || sessionFileIds.length > 0);
   /*
-   * A CUSTOMER, NOT NECESSARILY A CONTACT.
+   * EVERY TICKET HAS A CUSTOMER RECORD BEHIND IT.
    *
-   * This required a picked `contactId`, so a complaint from somebody who is
-   * not in the CRM could not be raised at all: the picker searched our own
-   * contacts, found nothing, and the button stayed dead. A walk-in is exactly
-   * the person least likely to have a row — and exactly the person standing
-   * in front of an agent (owner, 2026-09-15).
+   * This briefly accepted a bare typed number instead, because a walk-in with
+   * no contacts row could not raise a ticket at all — the picker searched, found
+   * nothing, and the button stayed dead (owner, 2026-09-15). The number on the
+   * ticket fixed the dead end but left identity in two places.
    *
-   * Either identifies the customer now: a chosen contact, or a number typed
-   * on the ticket.
+   * The picker now creates the customer when the number matches nobody
+   * (owner, 2026-09-16), so there is always a contact by the time we get here
+   * and the check is simply: do we know who this is?
    */
-  const hasCustomer = !!contactId || !!typedPhone.trim();
+  const hasCustomer = !!contactId;
   const canSubmit = hasCustomer && !!vendorId && !complaintHasErrors(complaint) && !!subject;
 
   // Identify the ticket by who and what it is about, not by restating the
@@ -545,8 +543,8 @@ export function CreateTicketDialog({
   ].filter((v): v is string => !!v);
 
   const blockedReason = !hasCustomer
-    ? t('tickets.pickContactOrPhone', {
-        defaultValue: 'Choose a customer, or type their phone number',
+    ? t('tickets.pickCustomer', {
+        defaultValue: 'Find the customer by phone number or name',
       })
     : !subject
       ? // Named, not vague: "check the highlighted fields" sends the agent

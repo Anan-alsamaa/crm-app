@@ -153,6 +153,23 @@ async function nextAgent(
   redis: Redis | Cluster,
   attempted: string[],
   eligible: string[],
+  /**
+   * An agent who should keep this chat if they are still online and eligible —
+   * the CURRENT OWNER, when the ladder is re-armed because the customer wrote
+   * again into a chat somebody already holds.
+   *
+   * Without this the owner is chosen by the same "least loaded" rule as
+   * everybody else, and they are the one agent guaranteed to be carrying THIS
+   * chat — so they sort BEHIND a colleague holding one fewer. Worse, replying
+   * is what pushes them down the idle queue, so the act of answering is what
+   * loses them the conversation: Shatha missed it, Nada took it and replied,
+   * and the next customer message handed it straight back to Shatha (owner,
+   * 2026-09-16).
+   *
+   * Preference, not a guarantee: they must still be online and eligible, and
+   * must not be in the skip-list. When they are not, the ladder moves on.
+   */
+  prefer?: string | null,
 ): Promise<string | null> {
   const skip = new Set(attempted);
   /**
@@ -188,6 +205,12 @@ async function nextAgent(
    * and keeping the first online candidate gives both properties at once:
    * present, and carrying the fewest open chats.
    */
+  // The owner keeps their own chat while they are still here. Checked against
+  // exactly the same conditions as anybody else — online, eligible, not skipped
+  // — so this can only ever change WHICH eligible agent is chosen, never widen
+  // who is eligible.
+  if (prefer && !skip.has(prefer) && allowed.has(prefer) && online.has(prefer)) return prefer;
+
   const onlineHit = eligible.find((id) => !skip.has(id) && allowed.has(id) && online.has(id));
   if (onlineHit) return onlineHit;
 
@@ -242,6 +265,46 @@ async function releaseToPoolAndAlert(
     );
   } catch {
     // Alerting is the secondary duty here; the release above already happened.
+  }
+}
+
+/**
+ * Hand the chat to an agent AND TELL THEM.
+ *
+ * `directus.assign` writes a column, nothing more. That is invisible: the
+ * agent portal's beep is wired to `inbox:activity`, which the gateway emits
+ * when a MESSAGE arrives — so a chat the ladder moved made no sound at all.
+ * The second agent inherited a waiting customer in silence, and the only reason
+ * it ever seemed to work is that a customer often writes again straight after,
+ * which rings the bell for a different reason (owner, 2026-09-16).
+ *
+ * A notification row is the right carrier rather than a socket emit: the
+ * workers hold no socket, and a row survives the agent not being connected at
+ * the instant the ladder ran — which is the whole point of a 60-second timer.
+ * The bell polls and refreshes on inbox activity, so it surfaces either way.
+ *
+ * Best-effort, and always AFTER the assignment: a notification failure must
+ * never cost the customer their place in the queue.
+ */
+async function assignAndNotify(
+  deps: RoutingDeps,
+  conversationId: string,
+  agentId: string,
+  body: string,
+): Promise<void> {
+  const { directus, notify, log } = deps;
+  await directus.assign(conversationId, agentId);
+  if (!notify) return;
+  try {
+    await notify({
+      recipientId: agentId,
+      conversationId,
+      title: 'A chat was assigned to you',
+      body,
+    });
+  } catch {
+    // The assignment above is what matters and has already happened.
+    log('routing: could not notify the new assignee', { id: conversationId, agent: agentId });
   }
 }
 
@@ -321,7 +384,15 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
       });
       return;
     }
-    await directus.assign(convo.id, agent);
+    // Inherited from somebody who went offline — the agent had no part in this
+    // and no message arrives to announce it, so it is the quietest handover of
+    // the three.
+    await assignAndNotify(
+      deps,
+      convo.id,
+      agent,
+      'A chat was moved to you because the agent handling it went offline.',
+    );
     /* Measured, per the owner's request: every handover leaves a row saying
        whose chat moved, to whom, and why. `routing_events` is what the reports
        already read. */
@@ -408,7 +479,7 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
       });
       return;
     }
-    await directus.assign(convo.id, agent);
+    await assignAndNotify(deps, convo.id, agent, 'A customer is waiting. Open the chat to reply.');
     const outbound = await directus.countOutboundMessages(convo.id);
     await schedule(
       {
@@ -454,14 +525,44 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
     });
   }
 
-  // A human reassigned it to someone outside our ladder — respect that and stop.
-  if (convo.assigned_agent && convo.assigned_agent !== offeredTo) {
+  /*
+   * A human reassigned it to somebody outside our ladder — respect that and stop.
+   *
+   * ONLY MEANINGFUL WHEN THE LADDER OFFERED IT TO SOMEBODY. `offeredTo` is the
+   * agent this timer was armed for, and it is undefined on the RE-ARM path,
+   * where the ladder is started by a customer writing into a chat an agent
+   * already owns. Comparing the owner against `undefined` there is always
+   * "different", so this guard stood the ladder down every single time and the
+   * re-arm never escalated at all — a chat held unanswered for three minutes
+   * stayed exactly where it was (owner, 2026-09-15).
+   *
+   * The owner on a re-arm is not an intervention to respect; they are the agent
+   * being timed. So the guard now asks its real question: was this chat moved
+   * away from whoever the ladder last handed it to?
+   */
+  if (offeredTo && convo.assigned_agent && convo.assigned_agent !== offeredTo) {
     log('routing: reassigned by a human, standing down', { id: convo.id });
     return;
   }
 
   if (job.stage === 'escalate') {
-    const agent = await nextAgent(redis, job.attemptedAgentIds, eligible);
+    /*
+     * THE OWNER GETS FIRST REFUSAL ON THEIR OWN CHAT.
+     *
+     * Only when they are still holding it AND the timer was armed for them:
+     * `offeredTo` is undefined exactly on the re-arm path, where the ladder was
+     * started by a customer writing into a chat that somebody already owns.
+     * Reaching here means nobody replied for the full 60 seconds, so the chat
+     * does move on if they have genuinely gone quiet — `nextAgent` only honours
+     * the preference while they are online and eligible.
+     *
+     * Without it the "least loaded" ordering sorts the owner behind a colleague
+     * carrying one fewer chat, which is always true of the agent holding THIS
+     * one. That is how a chat came back to Shatha seconds after Nada answered
+     * it (owner, 2026-09-16).
+     */
+    const owner = !offeredTo ? convo.assigned_agent : null;
+    const agent = await nextAgent(redis, job.attemptedAgentIds, eligible, owner);
     if (!agent) {
       /*
        * Nobody new to hand it to, so it stays where it is and the ladder stops.
@@ -513,7 +614,12 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
       );
       return;
     }
-    await directus.assign(convo.id, agent);
+    await assignAndNotify(
+      deps,
+      convo.id,
+      agent,
+      'A customer has been waiting and the chat was passed to you. Please reply.',
+    );
     await schedule(
       {
         conversationId: convo.id,

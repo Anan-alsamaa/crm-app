@@ -425,7 +425,7 @@
     "newTitle": "تذكرة جديدة",
     "newHint": "اختر العميل المعنيّ بهذه التذكرة، ثم صِف العمل المطلوب.",
     "contact": "جهة الاتصال",
-    "contactSearch": "ابحث في جهات الاتصال بالاسم أو البريد أو الهاتف…",
+    "contactSearch": "رقم الجوال أو الاسم…",
     "noContacts": "لا توجد جهات اتصال مطابقة.",
     "noVendor": "بلا مورّد",
     "addNote": "إضافة ملاحظة داخلية",
@@ -537,10 +537,11 @@
     "viewLatestOf": "يفتح أحدث تذكرة من {{n}} تذاكر: {{subject}}",
     "replaceFilter": "عرض هذه فقط",
     "resizeList": "تغيير عرض قائمة التذاكر",
-    "pickContactOrPhone": "اختر عميلاً، أو اكتب رقم جواله",
+    "pickCustomer": "ابحث عن العميل برقم الجوال أو الاسم",
     "customerPhone": "رقم جوال العميل",
-    "customerPhoneHint": "لعميل غير مسجّل في النظام. أي رقم مقبول — يُحفظ على التذكرة.",
-    "customerPhonePlaceholder": "مثال 0501234567"
+    "noContactsForNumber": "لا يوجد عميل بهذا الرقم في النظام.",
+    "addCustomerWithNumber": "إضافة {{phone}} كعميل جديد",
+    "addCustomerFailed": "تعذّرت إضافة العميل. حاول مرة أخرى."
   },
   "notifications": {
     "title": "التنبيهات",

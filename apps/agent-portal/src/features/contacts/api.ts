@@ -255,6 +255,55 @@ export function useUpdateContact() {
   });
 }
 
+/**
+ * Create a customer the CRM has never seen, from a phone number an agent was
+ * given — a complaint phoned in, or made at a counter.
+ *
+ * DELIBERATELY THE SAME ROW THE GATEWAY WRITES. A walk-in who scans a branch
+ * QR code already becomes a contact (`GatewayDirectus.upsertContact`), so this
+ * is not a new kind of record — only a different hand typing the number. It
+ * matches that shape on purpose:
+ *
+ *   - `external_customer_id: null` — unknown, and honestly so. Yiji's API is
+ *     keyed by customer id and order id with NO lookup by phone, so a number
+ *     alone cannot be resolved to an account. Writing anything invented here
+ *     would be sent to Yiji as `userId` by the coupon push.
+ *   - `acquisition_channel: 'phone'` — the one door a customer does not walk
+ *     through themselves. Folding it into `walk_in` would inflate the QR
+ *     numbers with people who never scanned anything.
+ *   - `name: null` — nobody has told us their name yet. A placeholder would
+ *     be worse than blank: every reader falls back to the phone number, which
+ *     is true, where "Unknown" pretends to be a name.
+ *
+ * The phone is normalised on the way in for the same reason as
+ * {@link useUpdateContact}: one stored shape, `05XXXXXXXX`, or the equality
+ * lookups that find this person again will miss them.
+ */
+export function useCreateContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ phone, vendor }: { phone: string; vendor: string }) => {
+      const normalized = normalizePhone(phone) || phone.trim();
+      const created = (await directus.request(
+        createItem('contacts', {
+          vendor,
+          phone: normalized,
+          name: null,
+          email: null,
+          external_customer_id: null,
+          acquisition_channel: 'phone',
+        } as never),
+      )) as ContactRow;
+      return created;
+    },
+    onSuccess: () => {
+      // The directory and every picker that searches it.
+      void qc.invalidateQueries({ queryKey: ['contacts'] });
+      void qc.invalidateQueries({ queryKey: ['contacts-search'] });
+    },
+  });
+}
+
 export function useDeleteContact() {
   const qc = useQueryClient();
   return useMutation({

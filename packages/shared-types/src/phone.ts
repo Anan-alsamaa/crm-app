@@ -169,3 +169,50 @@ export function formatPhone(raw: string | null | undefined): string {
 export function isPhoneDerivedCustomerId(id: string | null | undefined): boolean {
   return typeof id === 'string' && /^cust-\d+$/.test(id.trim());
 }
+
+/**
+ * Is this text a phone number somebody could be reached on?
+ *
+ * The question the Add-ticket page asks before offering to create a customer
+ * from what the agent typed. One field takes either a name or a number
+ * (owner, 2026-09-16), and the two need telling apart: "Ahmed" that matches
+ * nobody is a search that failed, while "0501234567" that matches nobody is a
+ * customer we have not met yet.
+ *
+ * Deliberately permissive about SHAPE and strict about SUBSTANCE. It accepts
+ * the spacing, dashes, brackets and `+` that people actually type, then judges
+ * the digits underneath:
+ *
+ *   - a local Saudi mobile, `05XXXXXXXX` (10 digits), or the bare `5XXXXXXXX`
+ *     that autofill sometimes produces;
+ *   - the same number carrying `966` / `+966` / `00966`;
+ *   - an international number, 8–15 digits, when it is written with a leading
+ *     `+` — the one signal that says "this is a full number from elsewhere"
+ *     rather than a fragment.
+ *
+ * It rejects anything with letters in it, and anything too short to be a real
+ * number — so a half-typed `05012` does not offer to become a customer while
+ * the agent is still typing.
+ */
+export function isDialablePhone(raw: string | null | undefined): boolean {
+  const input = (raw ?? '').trim();
+  if (!input) return false;
+  // A name is not a number. Letters anywhere disqualify it outright, which is
+  // what separates "Ahmed" from "0501234567" in the one field that takes both.
+  if (/[A-Za-z؀-ۿ]/.test(input)) return false;
+
+  const digits = input.replace(/\D/g, '');
+  if (!digits) return false;
+
+  // Normalising first means every spelling of one number is judged the same
+  // way, rather than each branch below re-deriving the country code.
+  const local = normalizePhone(input);
+  if (/^05\d{8}$/.test(local)) return true;
+
+  // From another country, and said so with a +. Without that marker a long
+  // digit string is more likely a mis-paste than a foreign number.
+  if (input.startsWith('+') || input.startsWith('00')) {
+    return digits.replace(/^0+/, '').length >= 8 && digits.length <= 15;
+  }
+  return false;
+}

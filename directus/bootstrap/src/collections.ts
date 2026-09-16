@@ -173,21 +173,28 @@ export const collections: CollectionSpec[] = [
          *
          * The fix is to stop making one field answer two questions. The door
          * they came through and whether they hold a Yiji account are
-         * independent, and the three combinations that can occur are:
+         * independent, and the doors that can occur are:
          *
          *   app          -> opened the chat inside the Yiji app
          *   walk_in_app  -> scanned the branch QR code AND has a Yiji account
          *   walk_in      -> scanned the branch QR code, no known account
+         *   phone        -> an AGENT created them while raising a ticket
          *
-         * (The fourth combination — in the app without an account — cannot
-         * happen, which is why there are three and not four.)
+         * `phone` is the one door a customer does not walk through themselves:
+         * somebody rang, or complained at a counter, and an agent typed their
+         * number into the Add-ticket page. Kept distinct because folding it
+         * into `walk_in` would inflate the QR numbers with people who never
+         * scanned anything (owner, 2026-09-16).
          *
-         * Existing rows stay valid: `app` and `walk_in` keep their meanings and
-         * nothing needs migrating. Only the middle case is newly expressible.
+         * (The combination "in the app without an account" cannot happen,
+         * which is why the self-service doors are three and not four.)
+         *
+         * Existing rows stay valid: every earlier value keeps its meaning and
+         * nothing needs migrating.
          */
-        choices: ['app', 'walk_in_app', 'walk_in'],
+        choices: ['app', 'walk_in_app', 'walk_in', 'phone'],
         index: true,
-        note: 'How the customer first reached us. app = opened from the Yiji app. walk_in_app = scanned the branch QR code and has a Yiji account. walk_in = scanned the QR code with no known Yiji account.',
+        note: 'How the customer first reached us. app = opened from the Yiji app. walk_in_app = scanned the branch QR code and has a Yiji account. walk_in = scanned the QR code with no known Yiji account. phone = created by an agent raising a ticket (phoned in, or at a counter).',
       },
       { field: 'name', type: 'string' },
       { field: 'phone', type: 'string', index: true },

@@ -360,7 +360,7 @@
     "newTitle": "New ticket",
     "newHint": "Pick the customer this ticket is for, then describe the work.",
     "contact": "Contact",
-    "contactSearch": "Search contacts by name, email, or phone…",
+    "contactSearch": "Phone number or name…",
     "noContacts": "No matching contacts.",
     "noVendor": "No vendor",
     "addNote": "Add internal note",
@@ -458,10 +458,11 @@
     "templateHint": "An .xlsx with today’s dropdown lists baked in — fill it and import it back.",
     "importCsv": "Import CSV / Excel",
     "exportTicket": "Export to Excel",
-    "pickContactOrPhone": "Choose a customer, or type their phone number",
+    "pickCustomer": "Find the customer by phone number or name",
     "customerPhone": "Customer phone number",
-    "customerPhoneHint": "For a customer who is not in the CRM. Any number is accepted — it is recorded on the ticket.",
-    "customerPhonePlaceholder": "e.g. 0501234567"
+    "noContactsForNumber": "Nobody in the CRM has this number.",
+    "addCustomerWithNumber": "Add {{phone}} as a new customer",
+    "addCustomerFailed": "Could not add the customer. Please try again."
   },
   "notifications": {
     "title": "Notifications",

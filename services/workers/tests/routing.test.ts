@@ -281,6 +281,159 @@ describe('auto-assignment ladder', () => {
     });
   });
 
+  /*
+   * "NADA REPLIED AND IT WENT STRAIGHT BACK TO SHATHA" (owner, 2026-09-16).
+   *
+   * The sequence that was reported, in full:
+   *
+   *   1. the chat is assigned to Shatha, who does not answer
+   *   2. 60s later the ladder escalates it to Nada
+   *   3. Nada answers immediately
+   *   4. the customer writes again — which RE-ARMS the ladder, correctly
+   *   5. 60s later it is handed BACK to Shatha
+   *
+   * Step 5 is the bug, and its cause is subtle: `eligible` is ordered
+   * least-loaded-first, and the owner is the one agent certain to be carrying
+   * THIS chat. So Nada sorts behind Shatha, who has one fewer. Replying also
+   * pushes an agent down the idle queue, so answering is precisely what costs
+   * them the conversation.
+   *
+   * The owner now gets first refusal on the re-arm. They still lose it if they
+   * really do go quiet: reaching the escalate rung at all means nobody replied
+   * for the full 60 seconds, and the next rung has them in the skip-list.
+   */
+  describe('the re-arm must not take a chat off the agent working it', () => {
+    it('leaves the chat with its owner when the ladder is re-armed', async () => {
+      const { assign, d } = deps({
+        // Shatha carries fewer chats, so she leads the least-loaded ordering —
+        // which is exactly what used to hand her Nada's conversation.
+        roster: ['shatha', 'nada'],
+        online: ['shatha', 'nada'],
+        convo: { id: 'c1', assigned_agent: 'nada', assigned_team: null, status: 'open' },
+      });
+
+      // The re-arm: armed for the OWNER, so nobody has been "offered" it yet.
+      await handleRouting(
+        job({ stage: 'escalate', attemptedAgentIds: [], outboundCountAtSchedule: 5 }),
+        d,
+      );
+
+      expect(assign).toHaveBeenCalledWith('c1', 'nada');
+      expect(assign).not.toHaveBeenCalledWith('c1', 'shatha');
+    });
+
+    it('still moves on when the owner has genuinely gone quiet and dropped offline', async () => {
+      const { assign, d } = deps({
+        roster: ['shatha', 'nada'],
+        online: ['shatha'], // Nada is gone
+        convo: { id: 'c1', assigned_agent: 'nada', assigned_team: null, status: 'open' },
+      });
+
+      await handleRouting(
+        job({ stage: 'escalate', attemptedAgentIds: [], outboundCountAtSchedule: 5 }),
+        d,
+      );
+
+      // The preference is not a guarantee — an absent owner keeps nothing.
+      expect(assign).toHaveBeenCalledWith('c1', 'shatha');
+    });
+
+    it('gives the owner ONE more turn, not a permanent hold', async () => {
+      const { schedule, d } = deps({
+        roster: ['shatha', 'nada'],
+        online: ['shatha', 'nada'],
+        convo: { id: 'c1', assigned_agent: 'nada', assigned_team: null, status: 'open' },
+      });
+
+      await handleRouting(
+        job({ stage: 'escalate', attemptedAgentIds: [], outboundCountAtSchedule: 5 }),
+        d,
+      );
+
+      // Named in the skip-list for the next rung: if Nada stays silent through
+      // the broadcast wait too, the chat does leave her.
+      expect(schedule).toHaveBeenCalledWith(
+        expect.objectContaining({ stage: 'broadcast', attemptedAgentIds: ['nada'] }),
+        expect.anything(),
+      );
+    });
+
+    it('does NOT re-offer to an agent who was already given their 60 seconds', async () => {
+      // The ordinary escalate path: Shatha was offered it and missed. The
+      // preference must not resurrect her — that is what the skip-list is for.
+      const { assign, d } = deps({
+        roster: ['shatha', 'nada'],
+        online: ['shatha', 'nada'],
+        convo: { id: 'c1', assigned_agent: 'shatha', assigned_team: null, status: 'open' },
+      });
+
+      await handleRouting(
+        job({ stage: 'escalate', attemptedAgentIds: ['shatha'], outboundCountAtSchedule: 0 }),
+        d,
+      );
+
+      expect(assign).toHaveBeenCalledWith('c1', 'nada');
+    });
+  });
+
+  /*
+   * "SOMETIMES NO SOUND WHEN THE 2ND AGENT GETS A CHAT" (owner, 2026-09-16).
+   *
+   * It was never sometimes — it was always. `directus.assign` writes a column
+   * and nothing else, while the portal's beep listens for `inbox:activity`,
+   * which the gateway emits when a MESSAGE arrives. A chat the ladder moved
+   * produced no message, so it made no sound. It seemed intermittent only
+   * because a waiting customer often writes again a moment later, which rings
+   * the bell for an entirely different reason.
+   *
+   * Every rung that hands a chat to a human now tells that human.
+   */
+  describe('the agent is told when the ladder hands them a chat', () => {
+    it('notifies the first agent it assigns to', async () => {
+      const { d, notify } = deps({ online: ['a1'] });
+      await handleRouting(job(), d);
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({ recipientId: 'a1', conversationId: 'c1' }),
+      );
+    });
+
+    it('notifies the SECOND agent — the case that was silent', async () => {
+      const { d, notify } = deps({
+        online: ['a1', 'a2'],
+        convo: { id: 'c1', assigned_agent: 'a1', assigned_team: null, status: 'open' },
+      });
+      await handleRouting(
+        job({ stage: 'escalate', attemptedAgentIds: ['a1'], outboundCountAtSchedule: 0 }),
+        d,
+      );
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({ recipientId: 'a2', conversationId: 'c1' }),
+      );
+    });
+
+    it('notifies whoever inherits a chat from an agent who went offline', async () => {
+      const { d, notify } = deps({
+        online: ['a2'],
+        roster: ['a2'],
+        convo: { id: 'c1', assigned_agent: 'a1', assigned_team: null, status: 'open' },
+      });
+      await handleRouting(
+        job({ stage: 'reclaim', previousAgentId: 'a1', attemptedAgentIds: [] }),
+        d,
+      );
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({ recipientId: 'a2', conversationId: 'c1' }),
+      );
+    });
+
+    it('still assigns when the notification fails — the customer comes first', async () => {
+      const { d, assign, notify } = deps({ online: ['a1'] });
+      notify.mockRejectedValue(new Error('notifications are down'));
+      await handleRouting(job(), d);
+      expect(assign).toHaveBeenCalledWith('c1', 'a1');
+    });
+  });
+
   describe('escalate', () => {
     it('cancels when the agent replied', async () => {
       // Outbound count moved past the value captured when the timer was set.

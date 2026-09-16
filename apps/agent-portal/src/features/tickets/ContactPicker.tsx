@@ -1,15 +1,30 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Avatar, Button, cn, FormField, Input, Spinner, Ltr } from '@yiji/ui';
-import { useContactSearch, type ContactRow } from '../contacts/api.js';
+import { formatPhone, isDialablePhone, normalizePhone } from '@yiji/shared-types';
+import { useContactSearch, useCreateContact, type ContactRow } from '../contacts/api.js';
 
 /**
- * Find the customer a ticket belongs to.
+ * WHO IS THIS TICKET ABOUT? One field, one answer.
  *
- * Used when there is no conversation to take them from — a complaint that
- * arrived by phone or social. The chosen contact also supplies the vendor id,
- * which is why the whole row is held rather than just an id: the search results
- * that produced it are gone as soon as the term changes.
+ * Used when there is no conversation to take the customer from — a complaint
+ * that arrived by phone, at a counter, or over social. The chosen contact also
+ * supplies the vendor id, which is why the whole row is held rather than just
+ * an id: the search results that produced it are gone as soon as the term
+ * changes.
+ *
+ * THE AGENT TYPES A PHONE NUMBER OR A NAME, and this resolves it:
+ *
+ *   matches a contact      -> pick them; the ticket links to their record
+ *   no match, a number     -> offer to record them, creating the contact
+ *   no match, a name       -> nothing to do; a person needs a number
+ *
+ * It used to be TWO fields — this picker, plus a separate "Customer phone
+ * number" box for walk-ins who had no contacts row. They were never both in
+ * play, and the agent had to work out which box was theirs before they could
+ * file anything (owner, 2026-09-16). One field asks one question, and the
+ * stranger stops being a dead end: the number is the thing an agent always
+ * has, whatever the service type.
  *
  * The directory is searched server-side and starts EMPTY. Listing every contact
  * would be unusable at thousands of rows, and phone is the primary lookup here
@@ -18,15 +33,48 @@ import { useContactSearch, type ContactRow } from '../contacts/api.js';
 export function ContactPicker({
   value,
   onChange,
+  vendorId,
 }: {
   value: ContactRow | null;
   onChange: (c: ContactRow | null) => void;
+  /**
+   * The vendor a newly created customer belongs to. A contact with no vendor
+   * cannot carry a ticket, so without this the create affordance stays hidden
+   * rather than making a row that would fail at save.
+   */
+  vendorId?: string | null;
 }) {
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const tooShort = search.trim().length < 2;
   const contactSearch = useContactSearch(search);
   const matches = contactSearch.data ?? [];
+  const createContact = useCreateContact();
+
+  /*
+   * THE CUSTOMER WE HAVE NOT MET.
+   *
+   * Offered only once the search has actually come back empty — never while it
+   * is still running, or the button flickers under the agent's cursor as they
+   * type and they create somebody by accident. `isDialablePhone` is what keeps
+   * a half-typed `05012`, or a name that found nobody, from becoming a row.
+   */
+  const typed = search.trim();
+  const canCreate =
+    !!vendorId &&
+    !tooShort &&
+    !contactSearch.isFetching &&
+    matches.length === 0 &&
+    isDialablePhone(typed);
+
+  const create = async () => {
+    if (!canCreate || !vendorId || createContact.isPending) return;
+    const created = await createContact.mutateAsync({ phone: typed, vendor: vendorId });
+    // Select them straight away: the agent asked for this customer, so making
+    // them search again for the row they just created would be theatre.
+    onChange(created);
+    setSearch('');
+  };
 
   return (
     <FormField
@@ -121,8 +169,46 @@ export function ContactPicker({
                     </li>
                   ))}
                 </ul>
+              ) : canCreate ? (
+                /*
+                 * The empty result that is not a dead end. This number belongs
+                 * to somebody the CRM has never seen, which is most walk-ins —
+                 * so say so, and let the agent record them in one action
+                 * instead of abandoning the ticket.
+                 */
+                <div className="space-y-2.5 px-3 py-4 text-center">
+                  <p className="text-xs text-muted-foreground">
+                    {t('tickets.noContactsForNumber', {
+                      defaultValue: 'Nobody in the CRM has this number.',
+                    })}
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void create()}
+                    disabled={createContact.isPending}
+                  >
+                    {createContact.isPending ? (
+                      <Spinner size={14} />
+                    ) : (
+                      t('tickets.addCustomerWithNumber', {
+                        defaultValue: 'Add {{phone}} as a new customer',
+                        phone: formatPhone(normalizePhone(typed) || typed),
+                      })
+                    )}
+                  </Button>
+                  {createContact.isError && (
+                    <p className="text-xs text-destructive">
+                      {t('tickets.addCustomerFailed', {
+                        defaultValue: 'Could not add the customer. Please try again.',
+                      })}
+                    </p>
+                  )}
+                </div>
               ) : (
                 <p className="px-3 py-5 text-center text-xs text-muted-foreground">
+                  {/* A name that found nobody, or a number still being typed.
+                      Neither can become a customer: a person needs a number. */}
                   {t('tickets.noContacts', { defaultValue: 'No matching contacts.' })}
                 </p>
               )}

@@ -351,6 +351,22 @@ export const roles: RoleSpec[] = [
       },
       { collection: 'contacts', action: 'read' },
       { collection: 'contacts', action: 'update' },
+      /*
+       * An agent CREATES a customer when raising a ticket for somebody the CRM
+       * has never seen — a complaint phoned in, or made at a counter.
+       *
+       * Granted 2026-09-16. Without it the Add-ticket page could offer to
+       * record the customer and then fail with a 403 at save: the exact shape
+       * of silent failure this codebase keeps producing, and the whole point of
+       * the single customer field is that a stranger is never a dead end.
+       *
+       * This is not a new class of trust. A walk-in scanning a branch QR code
+       * already creates a contacts row (the gateway does it on their behalf);
+       * the only thing that changes is which hand types the number. The row is
+       * the same shape either way, `external_customer_id` left null because we
+       * genuinely do not know their Yiji id.
+       */
+      { collection: 'contacts', action: 'create' },
       /* conversations: an agent READS AND WRITES only their own / their team's.
        *
        * THE HISTORY OF THIS LINE, because it has moved twice and each move had

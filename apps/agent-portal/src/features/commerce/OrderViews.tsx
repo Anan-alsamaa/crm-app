@@ -931,23 +931,26 @@ export function LatestOrder({
              speaks when there is nothing to show. */
       total > 0 ? (
         <ul className="space-y-2">
-          {fetched.map((o, i) => (
-            <li key={o.orderId}>
-              {/* Default-expand only the most recent (i === 0). */}
+          {/*
+           * KEPT ORDERS FIRST — above the customer's automatic ones.
+           *
+           * `addOrder` already prepends within the kept list, but the list
+           * itself rendered BELOW `fetched`, so an order the agent had just
+           * looked up by number and deliberately kept still landed under every
+           * automatic order (owner, 2026-09-16). Ordering the inner list was
+           * never going to be enough while the outer order was wrong.
+           *
+           * An agent types an order number precisely because that is the order
+           * being discussed. It is the most specific thing on the panel and the
+           * only part they chose, so it goes where they are looking.
+           */}
+          {kept.map((o, i) => (
+            <li key={o.orderId} className="space-y-1">
+              {/* The newest kept order is the one just looked up — open it. */}
               <ExpandableOrder
                 vendorId={vendorId}
                 summary={o}
                 defaultOpen={i === 0}
-                onCreateTicket={raiseTicket}
-              />
-            </li>
-          ))}
-          {kept.map((o) => (
-            <li key={o.orderId} className="space-y-1">
-              <ExpandableOrder
-                vendorId={vendorId}
-                summary={o}
-                defaultOpen={fetched.length === 0}
                 onCreateTicket={raiseTicket}
               />
               {/* Only orders the agent ADDED can be removed. The customer's
@@ -964,6 +967,19 @@ export function LatestOrder({
               >
                 {t('commerce.removeOrderShort', { defaultValue: 'Remove' })}
               </button>
+            </li>
+          ))}
+          {/* The customer's own recent orders, below anything the agent kept. */}
+          {fetched.map((o, i) => (
+            <li key={o.orderId}>
+              {/* Expand the most recent only when nothing kept is above it —
+                  two open cards push the rest of the panel off the screen. */}
+              <ExpandableOrder
+                vendorId={vendorId}
+                summary={o}
+                defaultOpen={i === 0 && kept.length === 0}
+                onCreateTicket={raiseTicket}
+              />
             </li>
           ))}
         </ul>

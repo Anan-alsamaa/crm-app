@@ -305,6 +305,34 @@ describe('LatestOrder — keeping orders the agent looked up', () => {
     expect(screen.getByText(/N-1/)).toBeInTheDocument();
   });
 
+  it('puts the kept order ABOVE the automatic ones, not below them', async () => {
+    /*
+     * "Keep This Order should move that order to the top" (owner, 2026-09-16).
+     *
+     * The previous test asserts the kept order is PRESENT, which it always was
+     * — at the bottom, under every automatic order. An agent types an order
+     * number because that is the order being discussed, so burying it under
+     * the ones they did not ask for is the whole complaint. Position is the
+     * assertion; presence was never in doubt.
+     */
+    client.getOrders.mockResolvedValue([
+      summary('N-1', '2026-07-01T10:00:00'),
+      summary('N-2', '2026-06-01T10:00:00'),
+    ]);
+    client.getOrder.mockResolvedValue(full('N-9'));
+    renderView(<LatestOrder vendorId="v1" customerId="c1" conversationId="conv-top" />);
+    await screen.findByText(/N-1/);
+    await lookup('N-9');
+    fireEvent.click(await screen.findByRole('button', { name: '+ Keep this order' }));
+    await waitFor(() => expect(screen.getAllByText(/N-9/).length).toBeGreaterThan(0));
+
+    const rows = Array.from(document.querySelectorAll('li'));
+    const rowIndex = (id: string) => rows.findIndex((li) => li.textContent?.includes(id));
+    expect(rowIndex('N-9')).toBeGreaterThanOrEqual(0);
+    expect(rowIndex('N-9')).toBeLessThan(rowIndex('N-1'));
+    expect(rowIndex('N-9')).toBeLessThan(rowIndex('N-2'));
+  });
+
   it("offers Remove on a kept order only — never on the customer's own", async () => {
     // A remove control on a fetched order would imply the panel had been
     // edited; those are fact, not a working note.

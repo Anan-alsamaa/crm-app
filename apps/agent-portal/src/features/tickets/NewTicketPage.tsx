@@ -7,7 +7,6 @@ import type { ContactRow } from '../contacts/api.js';
 import { ContactPicker } from './ContactPicker.js';
 import { CreateTicketDialog } from './CreateTicketDialog.js';
 import { useVendors } from './api.js';
-import { FormField, Input } from '@yiji/ui';
 
 /**
  * "Add ticket" — the one place a ticket is raised, in either of its two shapes.
@@ -32,8 +31,6 @@ export function NewTicketPage() {
 
   const conversation = useConversation(conversationId);
   const [picked, setPicked] = useState<ContactRow | null>(null);
-  /* A number for a customer with no CRM row — see the field below. */
-  const [typedPhone, setTypedPhone] = useState('');
   const vendors = useVendors();
 
   // From a chat the customer is settled; standalone, the agent picks one. A
@@ -88,42 +85,19 @@ export function NewTicketPage() {
         }
         // Standalone only: from a chat the customer is not a choice, and
         // offering to change it would invite filing against the wrong one.
-        typedPhone={typedPhone}
+        /*
+         * ONE FIELD, because there is one question: who is this ticket about?
+         *
+         * This used to be the picker PLUS a separate "Customer phone number"
+         * box for somebody with no contacts row. They were never both in play,
+         * and the agent had to work out which was theirs before they could file
+         * anything (owner, 2026-09-16). Now a number that matches nobody offers
+         * to become a customer, so the stranger is recorded rather than
+         * stranded — the same contacts row a QR walk-in already gets.
+         */
         contactField={
           fromChat ? undefined : (
-            <div className="space-y-3">
-              <ContactPicker value={picked} onChange={setPicked} />
-              {/*
-                THE CUSTOMER WHO IS NOT IN THE CRM.
-                A walk-in — phoned in, or Takeout/Dine-in at a counter — has no
-                contacts row, so the picker searches, finds nothing, and there
-                is nothing to select. The ticket that most needs raising was the
-                one that could not be (owner, 2026-09-15). Hidden once a contact
-                IS chosen: their own record is the better number, and offering
-                both invites the two to disagree.
-              */}
-              {!picked && (
-                <FormField
-                  label={t('tickets.customerPhone', { defaultValue: 'Customer phone number' })}
-                  htmlFor="ticket-customer-phone"
-                  hint={t('tickets.customerPhoneHint', {
-                    defaultValue:
-                      'For a customer who is not in the CRM. Any number is accepted — it is recorded on the ticket.',
-                  })}
-                >
-                  <Input
-                    id="ticket-customer-phone"
-                    value={typedPhone}
-                    onChange={(e) => setTypedPhone(e.target.value)}
-                    inputMode="tel"
-                    autoComplete="off"
-                    placeholder={t('tickets.customerPhonePlaceholder', {
-                      defaultValue: 'e.g. 0501234567',
-                    })}
-                  />
-                </FormField>
-              )}
-            </div>
+            <ContactPicker value={picked} onChange={setPicked} vendorId={soleVendorId} />
           )
         }
         // Land on the ticket just raised, not back where it was started.
