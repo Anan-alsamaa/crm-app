@@ -81,10 +81,16 @@ export function NotificationBell() {
       const refresh = () => qc.invalidateQueries({ queryKey: ['notifications'] });
       socket.on(SOCKET_EVENTS.notificationPushed, refresh);
       socket.on(SOCKET_EVENTS.inboxActivity, refresh);
+      /* A dropped socket misses every push while it is down. The 30s poll below
+         would catch up eventually; refreshing on reconnect makes it immediate,
+         which matters when the drop was a gateway deploy and an assignment
+         landed during it. See the fuller note in Inbox.tsx. */
+      socket.on('connect', refresh);
       const poll = setInterval(refresh, 30_000);
       cleanup = () => {
         socket.off(SOCKET_EVENTS.notificationPushed, refresh);
         socket.off(SOCKET_EVENTS.inboxActivity, refresh);
+        socket.off('connect', refresh);
         clearInterval(poll);
       };
     })();

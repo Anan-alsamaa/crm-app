@@ -22,7 +22,19 @@ function installAudioContextMock() {
   class MockAudioContext {
     state = 'suspended';
     currentTime = 0;
-    resume = vi.fn();
+    /*
+     * A REAL `resume()` RETURNS A PROMISE AND FLIPS THE STATE.
+     *
+     * The fake used to return undefined and stay suspended for ever, which let
+     * a broken implementation pass: the old code called resume() and scheduled
+     * the beep immediately against a clock that was not running, so nothing was
+     * audible and nothing failed. Modelling resume properly is what lets these
+     * tests tell the difference.
+     */
+    resume = vi.fn(() => {
+      this.state = 'running';
+      return Promise.resolve();
+    });
     constructor() {
       contexts.push(this as unknown as { resume: ReturnType<typeof vi.fn>; state: string });
     }
@@ -146,6 +158,10 @@ describe('playMessageBeep', () => {
     mod.noteSelfSend();
     vi.setSystemTime(new Date('2026-07-01T00:00:02Z')); // 2000ms later > 1500
     mod.playMessageBeep();
+    /* The beep now waits for resume() to resolve — a suspended context has a
+       clock that is not running, and scheduling against it was why nothing was
+       ever audible in a background tab. */
+    await vi.runAllTimersAsync();
     expect(contexts).toHaveLength(1);
     expect(oscillators).toHaveLength(1);
     expect(oscillators[0]!.start).toHaveBeenCalled();
@@ -157,6 +173,8 @@ describe('playMessageBeep', () => {
     vi.stubGlobal('AudioContext', MockAudioContext);
     const mod = await freshImport();
     mod.playMessageBeep();
+    await Promise.resolve(); // let resume() settle before the beep is scheduled
+    await Promise.resolve();
     expect(contexts).toHaveLength(1);
     expect(contexts[0]!.resume).toHaveBeenCalled();
     expect(oscillators[0]!.type).toBe('sine');

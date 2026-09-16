@@ -171,11 +171,40 @@ async function main(): Promise<void> {
   }, sweepMs);
   reportSyncTimer.unref();
 
+  /*
+   * TELL THE AGENT'S SCREEN, not just the database.
+   *
+   * A notification row is durable and invisible: the portal's bell polls every
+   * 30 seconds and the new-chat SOUND never fired at all, because it only
+   * listened for message activity. So a chat handed to an agent arrived
+   * silently, up to half a minute late (owner, 2026-09-16).
+   *
+   * Fire-and-forget on purpose. The row is already written and is the source of
+   * truth; this only makes it immediate. A gateway that is restarting, or
+   * config that is not set, must never fail a notification job — the bell's
+   * poll is the backstop, exactly as before.
+   */
+  const pushToScreen =
+    config.SOCKET_GATEWAY_URL && config.SVC_GATEWAY_TOKEN
+      ? (n: { id: string; recipient: string; type: string }) => {
+          void fetch(`${config.SOCKET_GATEWAY_URL}/jobs/notify-push`, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              authorization: `Bearer ${config.SVC_GATEWAY_TOKEN}`,
+            },
+            body: JSON.stringify({ recipientId: n.recipient, type: n.type }),
+            signal: AbortSignal.timeout(5_000),
+          }).catch(() => undefined);
+        }
+      : undefined;
+
   const deps: ProcessorDeps = {
     logger,
     directus,
     mail,
     queues,
+    onInAppNotification: pushToScreen,
     ai: config.SVC_AI_TOKEN
       ? {
           gatewayUrl: config.AI_GATEWAY_URL,

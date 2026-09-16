@@ -323,7 +323,31 @@ export function Inbox() {
         void qc.invalidateQueries({ queryKey: ['conversation-previews'] });
       };
       socket.on(SOCKET_EVENTS.inboxActivity, onActivity);
-      cleanup = () => socket.off(SOCKET_EVENTS.inboxActivity, onActivity);
+      /*
+       * A RECONNECT MEANS WE MISSED SOMETHING. REFETCH.
+       *
+       * `inbox:activity` is a live push: an agent whose socket was down when a
+       * customer wrote never receives it, and nothing ever tells them. The
+       * socket reconnects perfectly — token refreshed, rooms rejoined — and the
+       * inbox stays frozen on whatever it held before the drop. The chat is in
+       * the database, assigned, waiting, and invisible.
+       *
+       * That gap is opened by anything that breaks a websocket: a gateway
+       * deploy, a laptop sleeping, a lift, hotel wifi. It surfaced as a
+       * customer message that reached nobody for a full minute, until the
+       * 60-second routing ladder fired and re-assigned the chat (owner,
+       * 2026-09-16, during a deploy that was replacing the gateway).
+       *
+       * Socket.IO fires `connect` on the FIRST connection as well as every
+       * reconnection, so this also covers a portal opened while the gateway was
+       * briefly unreachable. Refetching an inbox that is already current costs
+       * one cached query and nothing else.
+       */
+      socket.on('connect', onActivity);
+      cleanup = () => {
+        socket.off(SOCKET_EVENTS.inboxActivity, onActivity);
+        socket.off('connect', onActivity);
+      };
     })();
     return () => {
       cancelled = true;

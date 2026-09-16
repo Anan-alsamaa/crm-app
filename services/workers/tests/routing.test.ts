@@ -593,7 +593,19 @@ describe('auto-assignment ladder', () => {
       });
       await handleRouting(job({ stage: 'broadcast', attemptedAgentIds: ['a1', 'a2'] }), t.d);
       expect(t.assign).toHaveBeenCalledWith('c1', null);
-      expect(t.notify).toHaveBeenCalledTimes(1);
+      /* One supervisor alert... */
+      expect(t.notify).toHaveBeenCalledWith(
+        expect.objectContaining({ recipientId: 'sup-1', kind: 'no_agent' }),
+      );
+      /* ...and EVERY eligible agent, because the chat is now theirs to take.
+         Telling only a supervisor left a customer in a queue that every agent
+         was entitled to answer and none of them knew existed (owner,
+         2026-09-16). */
+      for (const a of ['a1', 'a2', 'a3']) {
+        expect(t.notify).toHaveBeenCalledWith(
+          expect.objectContaining({ recipientId: a, kind: 'assigned' }),
+        );
+      }
     });
 
     it('alerts every supervisor on release, and still releases when there are none', async () => {
@@ -605,7 +617,11 @@ describe('auto-assignment ladder', () => {
         supervisors: ['sup-1', 'sup-2', 'sup-3'],
       });
       await handleRouting(job({ stage: 'broadcast', attemptedAgentIds: ['a1', 'a2'] }), many.d);
-      expect(many.notify).toHaveBeenCalledTimes(3);
+      // 3 supervisors + the 2 eligible agents who can now take it.
+      expect(many.notify).toHaveBeenCalledTimes(5);
+      for (const sup of ['sup-1', 'sup-2', 'sup-3']) {
+        expect(many.notify).toHaveBeenCalledWith(expect.objectContaining({ recipientId: sup }));
+      }
 
       // Production has ZERO `WeCare Supervisor` accounts, so the empty case is
       // the real one: the release is what the customer feels and must happen
@@ -619,7 +635,12 @@ describe('auto-assignment ladder', () => {
       });
       await handleRouting(job({ stage: 'broadcast', attemptedAgentIds: ['a1', 'a2'] }), none.d);
       expect(none.assign).toHaveBeenCalledWith('c1', null);
-      expect(none.notify).not.toHaveBeenCalled();
+      /* No supervisor to alert — but the AGENTS are still told, which is the
+         half that gets the customer answered. */
+      expect(none.notify).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'no_agent' }));
+      expect(none.notify).toHaveBeenCalledWith(
+        expect.objectContaining({ recipientId: 'a1', kind: 'assigned' }),
+      );
     });
 
     it('does nothing if the second agent replied in time', async () => {
@@ -881,7 +902,11 @@ describe('escalating with too few agents', () => {
     const t = deps({ convo: owned, online: ['only-one'], roster: ['only-one'] });
     await handleRouting(job(), t.d);
     expect(t.assign).toHaveBeenCalledWith('c1', null);
-    expect(t.notify).toHaveBeenCalledTimes(1);
+    // The supervisor, AND the one eligible agent who can now take it.
+    expect(t.notify).toHaveBeenCalledTimes(2);
+    expect(t.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ recipientId: 'only-one', kind: 'assigned' }),
+    );
   });
 
   it('alerts EVERY supervisor, not just the first', async () => {
@@ -892,7 +917,11 @@ describe('escalating with too few agents', () => {
       supervisors: ['sup-1', 'sup-2', 'sup-3'],
     });
     await handleRouting(job(), t.d);
-    expect(t.notify).toHaveBeenCalledTimes(3);
+    // 3 supervisors + the single eligible agent.
+    expect(t.notify).toHaveBeenCalledTimes(4);
+    for (const sup of ['sup-1', 'sup-2', 'sup-3']) {
+      expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ recipientId: sup }));
+    }
   });
 
   it('still releases the chat when there is nobody to alert', async () => {
@@ -906,7 +935,12 @@ describe('escalating with too few agents', () => {
     (t.d as { log: (m: string, x?: unknown) => void }).log = (m) => logged.push(m);
     await handleRouting(job(), t.d);
     expect(t.assign).toHaveBeenCalledWith('c1', null);
-    expect(t.notify).not.toHaveBeenCalled();
+    /* No supervisor exists to alert — but the agent is still told, which is the
+       half that actually gets the customer answered. */
+    expect(t.notify).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'no_agent' }));
+    expect(t.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ recipientId: 'only-one', kind: 'assigned' }),
+    );
     // Said out loud: an alert nobody receives must not look like one that was sent.
     expect(logged.join(' ')).toMatch(/nobody to alert/i);
   });

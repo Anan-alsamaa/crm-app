@@ -17,7 +17,22 @@ export function NewMessageSound() {
       if (cancelled) return;
       const onActivity = () => playMessageBeep();
       socket.on(SOCKET_EVENTS.inboxActivity, onActivity);
-      cleanup = () => socket.off(SOCKET_EVENTS.inboxActivity, onActivity);
+      /*
+       * A CHAT HANDED TO YOU MAKES A SOUND TOO.
+       *
+       * This listened only for `inbox:activity`, which the gateway emits when a
+       * MESSAGE arrives. An assignment is a database write and no message, so
+       * being given a waiting customer was completely silent — the agent found
+       * out by looking (owner, 2026-09-16).
+       *
+       * `notification:pushed` is per recipient, so this beeps for the agent the
+       * chat went to and nobody else.
+       */
+      socket.on(SOCKET_EVENTS.notificationPushed, onActivity);
+      cleanup = () => {
+        socket.off(SOCKET_EVENTS.inboxActivity, onActivity);
+        socket.off(SOCKET_EVENTS.notificationPushed, onActivity);
+      };
     })();
     return () => {
       cancelled = true;

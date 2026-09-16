@@ -12,6 +12,21 @@ const schema = z
     SVC_WORKERS_TOKEN: z.string().min(1, 'SVC_WORKERS_TOKEN is required'),
     SVC_AI_TOKEN: z.string().optional().default(''),
     AI_GATEWAY_URL: z.string().url().default('http://localhost:8081'),
+    /*
+     * THE SOCKET GATEWAY, so a notification can reach a screen.
+     *
+     * The workers write notification rows — a chat assigned, an SLA breach —
+     * and hold no socket, so nothing told the portal a row had appeared. The
+     * bell's 30-second poll eventually caught up; the SOUND never played at
+     * all, because it only ever fired on a message. An agent handed a waiting
+     * customer heard nothing (owner, 2026-09-16).
+     *
+     * Optional: with either value unset the push is skipped and the row is
+     * still written, so behaviour degrades to the old poll rather than failing
+     * a job. Both are already set for this service in production.
+     */
+    SOCKET_GATEWAY_URL: z.string().url().optional(),
+    SVC_GATEWAY_TOKEN: z.string().optional(),
     /** Identity the worker presents to the gateway for rate-limit scoping. */
     AI_WORKER_USER_ID: z.string().default('svc:workers'),
     HEALTH_PORT: numericEnv(8090),

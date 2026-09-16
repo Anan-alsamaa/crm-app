@@ -26,6 +26,8 @@ import {
   normalizePhone,
   phoneCustomerId,
   PublishedBuild,
+  rooms,
+  SOCKET_EVENTS,
   ReportJob,
   WALK_IN_CODE_ALPHABET,
   WALK_IN_CODE_LENGTH,
@@ -934,6 +936,37 @@ async function main(): Promise<void> {
    * the administrator will be offered, so an agent must not be able to invent a
    * pending release.
    */
+  /*
+   * A NOTIFICATION THAT ACTUALLY REACHES THE SCREEN.
+   *
+   * The workers write notification rows — a chat assigned, an SLA breach — and
+   * nothing told the portal. `notification:pushed` was LISTENED FOR by the bell
+   * and never emitted by anybody, so a new assignment was silent and invisible
+   * until the bell's 30-second poll happened to run. An agent handed a waiting
+   * customer learned about it up to half a minute later, with no sound at all
+   * (owner, 2026-09-16).
+   *
+   * The workers hold no socket, so they call this. Service-token only: it makes
+   * another user's browser beep, which is not something an agent may do to a
+   * colleague.
+   *
+   * Emitted to the RECIPIENT'S room alone. `notification:pushed` is per person
+   * — unlike `inbox:activity`, which is a broadcast to everybody.
+   */
+  app.post('/jobs/notify-push', async (req, reply) => {
+    const token = bearerToken(req);
+    if (!token || token !== config.SVC_GATEWAY_TOKEN)
+      return reply.code(403).send({ ok: false, error: 'service token required' });
+    const body = req.body as { recipientId?: unknown; type?: unknown; conversationId?: unknown };
+    const recipientId = typeof body?.recipientId === 'string' ? body.recipientId : '';
+    if (!recipientId) return reply.code(400).send({ ok: false, error: 'recipientId is required' });
+    io.to(rooms.agent(recipientId)).emit(SOCKET_EVENTS.notificationPushed, {
+      type: typeof body.type === 'string' ? body.type : 'notification',
+      conversationId: typeof body.conversationId === 'string' ? body.conversationId : null,
+    });
+    return reply.send({ ok: true });
+  });
+
   app.post('/jobs/releases/published', async (req, reply) => {
     const token = bearerToken(req);
     if (!token || token !== config.SVC_GATEWAY_TOKEN)

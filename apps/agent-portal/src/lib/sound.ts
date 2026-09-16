@@ -30,6 +30,46 @@ export function noteSelfSend(): void {
   lastSelfSend = Date.now();
 }
 
+/**
+ * UNLOCK THE AUDIO ON THE FIRST GESTURE, AND KEEP IT UNLOCKED.
+ *
+ * A browser starts an AudioContext SUSPENDED and only lets `resume()` succeed
+ * inside a user gesture. `playMessageBeep` called resume() and carried on — the
+ * oscillator was scheduled against a context that never started, so nothing was
+ * heard and nothing failed. That is why the beep was unreliable.
+ *
+ * Creating and resuming the context on the agent's first click or keypress
+ * means it is already running by the time a chat arrives. Browsers also suspend
+ * it again when a tab is hidden, so the beep re-resumes below — a resume on a
+ * context that has ALREADY been unlocked once is permitted even in the
+ * background, which is what makes a background tab audible.
+ */
+function unlock(): void {
+  try {
+    const Ctor =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return;
+    ctx = ctx ?? new Ctor();
+    if (ctx.state === 'suspended') void ctx.resume();
+  } catch {
+    /* audio unavailable — the beep will simply be silent */
+  }
+}
+
+if (typeof window !== 'undefined') {
+  // `once` per event: after the first gesture the context is live for the
+  // session, and re-running this on every click would be noise.
+  for (const ev of ['pointerdown', 'keydown', 'touchstart'] as const) {
+    window.addEventListener(ev, unlock, { once: true, passive: true });
+  }
+  /* Coming back to the tab is also a good moment to make sure the context did
+     not get suspended while it was hidden. */
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') unlock();
+  });
+}
+
 export function playMessageBeep(): void {
   if (muted) return;
   if (Date.now() - lastSelfSend < 1500) return;
@@ -39,9 +79,28 @@ export function playMessageBeep(): void {
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) return;
     ctx = ctx ?? new Ctor();
-    // Browsers start the context suspended until a user gesture; resume is a
-    // no-op once it's running.
-    if (ctx.state === 'suspended') void ctx.resume();
+    /*
+     * A HIDDEN TAB SUSPENDS THE CONTEXT. Resume, and SCHEDULE AFTER IT IS
+     * RUNNING — the old code called resume() and immediately read
+     * `currentTime`, which on a suspended context does not advance, so the
+     * beep was scheduled into a clock that was not moving. The agent heard
+     * nothing, with no error: exactly the complaint that the sound does not
+     * play when the CRM is in the background (owner, 2026-09-16).
+     */
+    if (ctx.state === 'suspended') {
+      void ctx.resume().then(() => beep());
+      return;
+    }
+    beep();
+  } catch {
+    /* audio blocked or unavailable — silently skip */
+  }
+}
+
+/** The chirp itself, on a context that is known to be running. */
+function beep(): void {
+  try {
+    if (!ctx || ctx.state !== 'running') return;
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();

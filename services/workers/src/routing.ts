@@ -252,12 +252,41 @@ async function releaseToPoolAndAlert(
   convo: { id: string },
   reason: string,
   extra: Record<string, unknown>,
+  /** Everyone who could take it now. They are the point of releasing it. */
+  eligible: string[] = [],
 ): Promise<void> {
   const { directus, notify, log } = deps;
   await directus.assign(convo.id, null);
   log(reason, { id: convo.id, ...extra });
 
-  if (!notify || !directus.supervisorIds) return;
+  if (!notify) return;
+
+  /*
+   * TELL THE AGENTS, NOT JUST A SUPERVISOR (owner, 2026-09-16).
+   *
+   * Releasing a chat to the pool makes it everyone's — and this told only
+   * supervisors, so the agents who could actually pick it up learned nothing.
+   * A customer sat in a queue that every agent was entitled to answer and none
+   * of them knew existed.
+   *
+   * Sent to every eligible agent, which is what makes their portal beep: the
+   * sound fires on a notification addressed to them. The supervisor alert
+   * below still goes out — it answers a different question ("why did nobody
+   * answer this?") and is the only warning that the ladder ran out of people.
+   */
+  await Promise.all(
+    eligible.map((recipientId) =>
+      notify({
+        recipientId,
+        conversationId: convo.id,
+        title: 'A chat is waiting for anyone',
+        body: 'Nobody has picked this up. It is open to every agent — take it if you can.',
+        kind: 'assigned',
+      }).catch(() => undefined),
+    ),
+  );
+
+  if (!directus.supervisorIds) return;
   try {
     const supervisors = await directus.supervisorIds();
     if (supervisors.length === 0) {
@@ -627,6 +656,7 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
           alreadyOffered: job.attemptedAgentIds.length,
           team: convo.assigned_team,
         },
+        eligible,
       );
       return;
     }
@@ -693,5 +723,6 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
       alreadyOffered: job.attemptedAgentIds.length,
       team: convo.assigned_team,
     },
+    eligible,
   );
 }
