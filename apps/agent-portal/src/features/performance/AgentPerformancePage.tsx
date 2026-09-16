@@ -161,15 +161,33 @@ export function AgentPerformancePage() {
   );
   const trend = useMemo(() => dailyTrend(chats), [chats]);
 
-  /** Slowest first, and the chats nobody answered lead — those are the ones to look at. */
+  /**
+   * NEWEST FIRST (owner, 2026-09-16).
+   *
+   * This used to lead with the SLOWEST chats, on the reasoning that the worst
+   * response times are what a reviewer should look at. That is a good argument
+   * for a report somebody reads once a month, and the wrong one for a table an
+   * agent opens to find the chat they just handled: ranking by a measure means
+   * a chat's position moves as its timings change, so the row you are looking
+   * for is wherever it happens to have landed. A date sort puts it where you
+   * expect it every time, and the slow ones are still visible — the response
+   * columns say so on every row.
+   *
+   * Chats with no start time sink rather than leading. They are missing data,
+   * not recent work, and giving them the top of a newest-first table would
+   * claim they are the latest thing that happened.
+   */
   const breakdown = useMemo(
     () =>
       chats
         .map((c) => ({ chat: c, first: firstResponseSec(c), solve: timeToSolveSec(c) }))
         .sort((a, b) => {
-          if (a.first == null && b.first != null) return -1;
-          if (b.first == null && a.first != null) return 1;
-          return (b.first ?? 0) - (a.first ?? 0);
+          const at = a.chat.startedAt ? Date.parse(a.chat.startedAt) : null;
+          const bt = b.chat.startedAt ? Date.parse(b.chat.startedAt) : null;
+          if (at == null && bt == null) return 0;
+          if (at == null) return 1;
+          if (bt == null) return -1;
+          return bt - at;
         }),
     [chats],
   );

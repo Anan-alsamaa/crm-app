@@ -63,11 +63,27 @@ const chat = (over: Partial<ChatTiming> & { startedAt?: string | null } = {}) =>
   ...over,
 });
 
-// One fast chat, one slow one, one nobody ever answered.
+/*
+ * One fast chat, one slow one, one nobody ever answered — each STARTED on a
+ * different day, and deliberately in an order that does not match their
+ * timings. The breakdown table sorts by date, so fixtures that all began at
+ * the same moment could not tell a working sort from a broken one.
+ *
+ * Oldest to newest: never (11th), fast (12th), slow (13th).
+ */
 const timings = [
-  chat({ conversationId: 'fast' }),
-  chat({ conversationId: 'slow', firstAgentAt: '2026-08-13T10:20:00.000Z' }),
-  chat({ conversationId: 'never', firstAgentAt: null, solvedAt: null }),
+  chat({ conversationId: 'fast', startedAt: '2026-08-12T10:00:00.000Z' }),
+  chat({
+    conversationId: 'slow',
+    startedAt: '2026-08-13T10:00:00.000Z',
+    firstAgentAt: '2026-08-13T10:20:00.000Z',
+  }),
+  chat({
+    conversationId: 'never',
+    startedAt: '2026-08-11T10:00:00.000Z',
+    firstAgentAt: null,
+    solvedAt: null,
+  }),
 ];
 
 /** The headline number under a given tile label, read from the named landmark. */
@@ -134,14 +150,26 @@ describe('AgentPerformancePage', () => {
     expect(within(speed).getByText(/nothing to plot/)).toBeInTheDocument();
   });
 
-  it('lists every chat behind the numbers, unanswered first', () => {
+  it('lists every chat behind the numbers, MOST RECENT FIRST', () => {
+    /*
+     * Newest at the top (owner, 2026-09-16). This table used to lead with the
+     * slowest chats and the unanswered ones above those — a ranking, which
+     * means a row MOVES as its timings change, so the chat you are looking for
+     * is wherever it happened to land. Sorting by date puts it where you
+     * expect it.
+     *
+     * The fixture's timings deliberately disagree with its dates, so a sort
+     * that fell back to "slowest first" would fail here rather than pass by
+     * coincidence.
+     */
     renderPage();
     const breakdown = screen.getByRole('table', { name: 'Chat by chat' });
     const rows = within(breakdown).getAllByRole('row').slice(1); // drop the header
     // All three, not a filtered half: the table is where a number is checked.
     expect(rows).toHaveLength(3);
-    expect(within(rows[0]!).getByText('No reply yet')).toBeInTheDocument();
-    expect(within(rows[1]!).getByText('20m 0s')).toBeInTheDocument();
+    // slow (13th), fast (12th), never (11th) — newest to oldest.
+    expect(within(rows[0]!).getByText('20m 0s')).toBeInTheDocument();
+    expect(within(rows[2]!).getByText('No reply yet')).toBeInTheDocument();
   });
 
   it('opens the exact chat that was clicked, not the agent’s first', async () => {

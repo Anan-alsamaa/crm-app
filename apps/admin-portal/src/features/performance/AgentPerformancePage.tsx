@@ -446,17 +446,39 @@ export function AgentPerformancePage() {
     return out;
   }, [chats, csat.data]);
 
-  /* Chat by chat — slowest first, and chats nobody answered at the very top,
-   * because "no reply" is the thing a supervisor must act on today. Same
-   * ordering rule as the agent portal's copy. */
+  /*
+   * Chat by chat — NEWEST FIRST (owner, 2026-09-16).
+   *
+   * This led with the slowest chats, and chats nobody answered above those,
+   * on the reasoning that "no reply" is what a supervisor must act on today.
+   * That reasoning still holds, and it is not what this table is for: ranking
+   * rows by a measure means a chat MOVES as its timings change, so the one you
+   * are looking for is wherever it happens to have landed. A date sort puts it
+   * where you expect it, every time.
+   *
+   * The unanswered chats have not been hidden — the response column says "No
+   * reply" on every one of them, and the charts above this table are where
+   * "who is slow" is actually answered. If leading with them turns out to
+   * matter more than finding a chat by when it happened, the honest fix is a
+   * sortable column header rather than a fixed order that serves one of the
+   * two jobs.
+   *
+   * Changed in BOTH portals together: the two copies of this table have always
+   * shared an ordering rule, and having them disagree would mean the same
+   * screen answers differently depending on who opened it.
+   */
   const breakdown = useMemo(
     () =>
       chats
         .map((c) => ({ chat: c, first: firstResponseSec(c), solve: timeToSolveSec(c) }))
         .sort((a, b) => {
-          if (a.first == null && b.first != null) return -1;
-          if (b.first == null && a.first != null) return 1;
-          return (b.first ?? 0) - (a.first ?? 0);
+          const at = a.chat.startedAt ? Date.parse(a.chat.startedAt) : null;
+          const bt = b.chat.startedAt ? Date.parse(b.chat.startedAt) : null;
+          if (at == null && bt == null) return 0;
+          // Missing dates sink: they are absent data, not recent work.
+          if (at == null) return 1;
+          if (bt == null) return -1;
+          return bt - at;
         }),
     [chats],
   );
