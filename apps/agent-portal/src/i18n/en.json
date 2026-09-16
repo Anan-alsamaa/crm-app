@@ -507,7 +507,12 @@
     "error": "Could not save preferences.",
     "group": {
       "sound": "Sound"
-    }
+    },
+    "scope": "Editing",
+    "scopeMine": "My notifications",
+    "scopeEveryone": "Everyone",
+    "agentDecides": "Agent decides",
+    "setByAdmin": "Set for everyone by an administrator"
   },
   "cmd": {
     "pages": "Pages",

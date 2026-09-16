@@ -20,7 +20,26 @@ import {
 } from '@yiji/ui';
 import type { JSX } from 'react';
 import { isSoundMuted, playMessageBeep, setSoundMuted } from '../../lib/sound.js';
-import { CHANNELS, useNotificationPreferences, useUpdateNotificationPreferences } from './api.js';
+import {
+  CHANNELS,
+  resolvePreferences,
+  useNotificationPreferences,
+  useOrgNotificationDefaults,
+  useUpdateNotificationPreferences,
+  useUpdateOrgNotificationDefaults,
+} from './api.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
+
+/**
+ * The administrator's "leave this to the agent" option.
+ *
+ * A policy is a map of the types the organisation dictates; a type simply
+ * ABSENT from it is one each agent still controls. The select needs a value to
+ * represent that absence, and it must not collide with a real channel — hence
+ * a sentinel rather than an empty string, which a SelectMenu treats as
+ * "nothing chosen" and would render blank.
+ */
+const ORG_UNSET = '__agent_decides__';
 
 interface RowMeta {
   icon: (props: { size?: number; className?: string }) => JSX.Element;
@@ -131,6 +150,27 @@ export function PreferencesPage() {
   const { t } = useTranslation();
   const prefs = useNotificationPreferences();
   const update = useUpdateNotificationPreferences();
+  const { user: me } = useAuth();
+  const org = useOrgNotificationDefaults();
+  const updateOrg = useUpdateOrgNotificationDefaults();
+
+  /*
+   * ONE PAGE, TWO THINGS IT CAN EDIT (owner, 2026-09-16).
+   *
+   * An administrator sets the organisation's notification policy here, on the
+   * same page and with the same controls everybody else uses to set their own.
+   * A separate admin screen would have meant two layouts to keep in step and
+   * would hide the policy from the page it governs.
+   *
+   * `admin_access` rather than a role name: this writes a setting that reaches
+   * every user, so it is fenced by the property Directus itself enforces. The
+   * Directus permission on `app_settings` is the real gate — this only decides
+   * whether the control is offered.
+   */
+  const isAdmin = me?.admin_access === true;
+  const [scope, setScope] = useState<'mine' | 'everyone'>('mine');
+  const editingOrg = isAdmin && scope === 'everyone';
+
   const [draft, setDraft] = useState<Record<string, string>>({});
   // New-message sound is a per-browser setting (localStorage), not a server
   // preference — so it applies instantly and doesn't ride the Save button.
@@ -141,15 +181,42 @@ export function PreferencesPage() {
     if (on) playMessageBeep();
   };
 
+  /*
+   * The draft follows whichever thing is being edited.
+   *
+   * "Mine" shows the EFFECTIVE setting — what this person will actually
+   * receive, policy applied — rather than the raw stored row. Showing the raw
+   * row would tell an agent they had chosen `none` for something the
+   * organisation has since made mandatory, which is a lie about what will
+   * happen to them.
+   */
   useEffect(() => {
-    if (prefs.data) setDraft(prefs.data);
-  }, [prefs.data]);
+    if (editingOrg) {
+      setDraft(org.data ?? {});
+      return;
+    }
+    if (prefs.data) setDraft(resolvePreferences(prefs.data, org.data));
+  }, [editingOrg, prefs.data, org.data]);
 
-  const loading = prefs.isLoading || !prefs.data;
+  const loading = prefs.isLoading || !prefs.data || (isAdmin && org.isLoading);
+  /** Is this type dictated by the organisation, and so not the agent's to set? */
+  const lockedByPolicy = (type: string) => org.data?.[type] != null;
 
   const save = async () => {
     try {
-      await update.mutateAsync(draft);
+      if (editingOrg) {
+        /* Only the types the administrator actually dictates are stored. A row
+           left on "Agent decides" is ABSENT from the policy, which is what
+           lets each agent's own choice govern that type — writing a value for
+           everything would seize the whole page from everybody at once. */
+        const policy: Record<string, string> = {};
+        for (const [type, value] of Object.entries(draft)) {
+          if (value && value !== ORG_UNSET) policy[type] = value;
+        }
+        await updateOrg.mutateAsync(policy);
+      } else {
+        await update.mutateAsync(draft);
+      }
       toast.success(t('preferences.saved'));
     } catch {
       toast.error(t('preferences.error'));
@@ -169,6 +236,39 @@ export function PreferencesPage() {
           <span className="opacity-50">·</span> {t('preferences.description')}
         </span>
         <ToolbarSpacer />
+        {/*
+          WHOSE SETTINGS AM I EDITING? Only an administrator sees this, and it
+          is deliberately explicit rather than a mode the page slips into: the
+          two halves look identical, so without a visible switch it would be
+          possible to change the whole organisation believing you had changed
+          your own notifications.
+        */}
+        {isAdmin && (
+          <div
+            role="group"
+            aria-label={t('preferences.scope', { defaultValue: 'Editing' })}
+            className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5 text-xs"
+          >
+            {(['mine', 'everyone'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                aria-pressed={scope === s}
+                onClick={() => setScope(s)}
+                className={cn(
+                  'rounded-md px-3 py-1.5 font-medium transition-colors duration-fast ease-out',
+                  scope === s
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {s === 'mine'
+                  ? t('preferences.scopeMine', { defaultValue: 'My notifications' })
+                  : t('preferences.scopeEveryone', { defaultValue: 'Everyone' })}
+              </button>
+            ))}
+          </div>
+        )}
         <Button
           type="button"
           size="sm"
@@ -311,6 +411,13 @@ export function PreferencesPage() {
                               defaultValue: meta?.fallbackDescription ?? '',
                             })}
                           </p>
+                          {!editingOrg && lockedByPolicy(type) && (
+                            <p className="mt-1.5 text-xs font-medium text-muted-foreground">
+                              {t('preferences.setByAdmin', {
+                                defaultValue: 'Set for everyone by an administrator',
+                              })}
+                            </p>
+                          )}
                         </div>
                         {/* Dropdown rather than a toggle: this is a four-way
                             choice (in-app / email / both / none), not on-off. */}
@@ -326,13 +433,34 @@ export function PreferencesPage() {
                             !muted &&
                               'border-primary/35 bg-primary/10 font-medium text-primary-strong hover:bg-primary/15',
                           )}
-                          value={draft[type] ?? 'both'}
+                          value={draft[type] ?? (editingOrg ? ORG_UNSET : 'both')}
                           onChange={(v: string) => setDraft((d) => ({ ...d, [type]: v }))}
                           aria-label={type}
-                          options={CHANNELS.map((c) => ({
-                            value: c,
-                            label: t(`preferences.channels.${c}`, { defaultValue: c }),
-                          }))}
+                          /* Set by the organisation: say so and lock it, rather
+                             than letting an agent pick something that would be
+                             overruled the moment it was saved. A control that
+                             accepts a choice and then ignores it is worse than
+                             one that is plainly not theirs to make. */
+                          disabled={!editingOrg && lockedByPolicy(type)}
+                          options={[
+                            /* Editing the POLICY gets one extra choice: leave
+                               this type to each agent. It is the default, and
+                               it is what absence from the policy means. */
+                            ...(editingOrg
+                              ? [
+                                  {
+                                    value: ORG_UNSET,
+                                    label: t('preferences.agentDecides', {
+                                      defaultValue: 'Agent decides',
+                                    }),
+                                  },
+                                ]
+                              : []),
+                            ...CHANNELS.map((c) => ({
+                              value: c,
+                              label: t(`preferences.channels.${c}`, { defaultValue: c }),
+                            })),
+                          ]}
                         />
                       </li>
                     );
