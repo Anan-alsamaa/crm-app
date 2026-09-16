@@ -146,3 +146,4 @@ Ayman/
 # Rendered task definitions from scripts/deploy-service.sh — they carry the
 # live environment values and must never be committed.
 .taskdef-*.json
+.release-work/

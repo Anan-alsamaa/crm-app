@@ -42,7 +42,12 @@ import jwt from 'jsonwebtoken';
 import { randomBytes } from 'node:crypto';
 import { createTokenBucket } from './rate-limit.js';
 import { validateAgentToken, tokenHasAdminAccess } from './auth/agent-jwt.js';
-import { parseReleaseTargets, releasePortal, taskRoleCredentials } from './releases.js';
+import {
+  parseReleaseTargets,
+  readParkedBuild,
+  releasePortal,
+  taskRoleCredentials,
+} from './releases.js';
 import { createProducer } from './queue.js';
 import { createPresenceStore, PRESENCE_TTL_MS } from './presence-store.js';
 import {
@@ -867,8 +872,46 @@ async function main(): Promise<void> {
   app.get('/releases', async (req, reply) => {
     const identity = await requireRole(req, reply, STAFF_ROLES, 'agent role required');
     if (!identity) return reply;
-    const [pending, live] = await Promise.all([directus.pendingReleases(), directus.liveRelease()]);
-    return reply.send({ ok: true, pending, live });
+    const [recorded, live] = await Promise.all([
+      directus.pendingReleases(),
+      directus.liveRelease(),
+    ]);
+    if (recorded.length > 0) return reply.send({ ok: true, pending: recorded, live });
+
+    /*
+     * NOTHING RECORDED — SO ASK THE BUCKET.
+     *
+     * CI records a published build over HTTP, best effort, so the recorded list
+     * and reality can disagree: a missing secret or an unreachable gateway
+     * leaves a build genuinely published and completely invisible — no banner,
+     * no way to release it, and no error anywhere. That is the silent-empty
+     * failure this codebase keeps producing, so the bucket is the tiebreaker.
+     *
+     * Consulted only when the list is empty, and it answers the one question
+     * the banner needs: is a parked build sitting there that is not what we are
+     * serving? The version is unknown on this path, and says so.
+     */
+    const targets = parseReleaseTargets(config.RELEASE_TARGETS, config.RELEASE_REGION);
+    if (targets.length === 0) return reply.send({ ok: true, pending: [], live });
+    const credentials = await taskRoleCredentials();
+    if (!credentials) return reply.send({ ok: true, pending: [], live });
+
+    const liveBundle = (live as { bundle?: string } | null)?.bundle ?? null;
+    const found: Array<Record<string, unknown>> = [];
+    for (const target of targets) {
+      const parked = await readParkedBuild(target, credentials);
+      /* The same bundle as what is live means the parked file is a leftover
+         from the last release, not something new waiting. */
+      if (!parked || parked.bundle === liveBundle) continue;
+      found.push({
+        version: 'unreleased build',
+        commit: '',
+        publishedAt: '',
+        app: target.bucket.includes('admin') ? 'admin' : 'agent',
+        bundle: parked.bundle,
+      });
+    }
+    return reply.send({ ok: true, pending: found, live });
   });
 
   /**

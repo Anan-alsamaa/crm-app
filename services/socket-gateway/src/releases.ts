@@ -188,6 +188,49 @@ export function parseReleaseTargets(raw: string, region: string): ReleaseTarget[
  * The copy is server-side (S3 CopyObject), so no bytes pass through this
  * service and a release is two small requests regardless of bundle size.
  */
+/**
+ * Is there a parked build, and which bundle does it name?
+ *
+ * The pending list is normally written by CI. This reads the BUCKET instead,
+ * and exists because those two facts can disagree: CI records the build over
+ * HTTP, best-effort, so a missing secret or an unreachable gateway leaves a
+ * build genuinely published and completely invisible — no banner, no way to
+ * release it, and no error anywhere. The truth is what is in the bucket.
+ *
+ * Used as a fallback when the recorded list is empty, so "published" always
+ * means the same thing: the file is there.
+ */
+export async function readParkedBuild(
+  target: ReleaseTarget,
+  credentials: AwsCredentials,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ bundle: string } | null> {
+  const host = `${target.bucket}.s3.${target.region}.amazonaws.com`;
+  const path = '/pending/index.html';
+  try {
+    const res = await fetchImpl(`https://${host}${path}`, {
+      method: 'GET',
+      headers: signRequest({
+        method: 'GET',
+        host,
+        path,
+        service: 's3',
+        region: target.region,
+        body: '',
+        credentials,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    // 404 is the ordinary state — nothing published since the last release.
+    if (!res.ok) return null;
+    const html = await res.text();
+    const bundle = /\/assets\/index-[A-Za-z0-9_-]+\.js/.exec(html)?.[0];
+    return bundle ? { bundle } : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function releasePortal(
   target: ReleaseTarget,
   credentials: AwsCredentials,
