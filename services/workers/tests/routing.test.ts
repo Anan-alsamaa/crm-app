@@ -426,6 +426,22 @@ describe('auto-assignment ladder', () => {
       );
     });
 
+    it('marks the handover as `assigned`, not as the supervisor alert', async () => {
+      /*
+       * The two notifications are keyed differently on purpose. The supervisor
+       * alert is once per conversation+recipient and uses a deterministic job
+       * id; a handover must not, because BullMQ IGNORES an add whose id already
+       * exists — so a chat passed back to the same agent later would be
+       * swallowed and arrive in exactly the silence this change removes.
+       *
+       * `kind` is what the queue wiring branches on, so it is the thing worth
+       * asserting here rather than the id format itself.
+       */
+      const { d, notify } = deps({ online: ['a1'] });
+      await handleRouting(job(), d);
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ kind: 'assigned' }));
+    });
+
     it('still assigns when the notification fails — the customer comes first', async () => {
       const { d, assign, notify } = deps({ online: ['a1'] });
       notify.mockRejectedValue(new Error('notifications are down'));

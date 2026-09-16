@@ -207,14 +207,25 @@ export const processors: Record<QueueName, Processor> = {
         });
       },
       /*
-       * Supervisor alert for a chat with nobody left to offer it to.
+       * Two notifications, two keyings — and the difference matters.
        *
-       * Goes through the existing notifications queue rather than writing a row
-       * directly, so it inherits the in-app + email delivery both channels
-       * already do. The jobId is deterministic per conversation+recipient, so a
-       * ladder that runs twice for the same chat cannot notify twice.
+       * Both go through the existing notifications queue rather than writing a
+       * row directly, so they inherit the in-app + email delivery both channels
+       * already do.
+       *
+       * `no_agent` (the supervisor alert) is once per conversation+recipient,
+       * so a deterministic job id is exactly right: a ladder that runs twice
+       * for the same chat must not alert twice.
+       *
+       * `assigned` (telling an agent a chat is now theirs) must NOT be keyed
+       * that way. BullMQ IGNORES an add whose job id already exists, completed
+       * or not, so a deterministic id would deliver the first handover to an
+       * agent and silently swallow every later one — including a chat passed
+       * back to them an hour later, which would arrive in precisely the
+       * silence this notification exists to end. Timestamped instead.
        */
-      notify: async ({ recipientId, conversationId, title, body }) => {
+      notify: async ({ recipientId, conversationId, title, body, kind }) => {
+        const assigned = kind === 'assigned';
         await deps.queues[QUEUES.notifications].add(
           'send',
           {
@@ -223,9 +234,16 @@ export const processors: Record<QueueName, Processor> = {
             title,
             body,
             link: `/inbox/${conversationId}`,
-            payload: { conversationId, reason: 'no_agent_available' },
+            payload: {
+              conversationId,
+              reason: assigned ? 'assigned_to_you' : 'no_agent_available',
+            },
           },
-          { jobId: `route-noagent-${conversationId}-${recipientId}` },
+          {
+            jobId: assigned
+              ? `route-assigned-${conversationId}-${recipientId}-${Date.now()}`
+              : `route-noagent-${conversationId}-${recipientId}`,
+          },
         );
       },
       log: (msg, extra) => deps.logger.info(extra ?? {}, msg),

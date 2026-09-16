@@ -105,6 +105,20 @@ export interface RoutingDeps {
     conversationId: string;
     title: string;
     body: string;
+    /**
+     * WHICH notification this is — and, crucially, how its job is keyed.
+     *
+     * `no_agent` is the supervisor alert: once per conversation, so its job id
+     * is deterministic and a ladder that runs twice cannot alert twice.
+     *
+     * `assigned` is the handover telling an agent the chat is theirs. It must
+     * NOT share that keying. BullMQ ignores an `add()` whose job id already
+     * exists, completed or not, so a deterministic id per conversation+agent
+     * would silently swallow the second and every later handover to the same
+     * agent on the same chat — a chat passed back to somebody an hour later
+     * would arrive in the same silence this whole change exists to end.
+     */
+    kind: 'assigned' | 'no_agent';
   }): Promise<void>;
   /** Enqueue the next stage after `delayMs`. */
   schedule(job: RoutingJob, delayMs: number): Promise<void>;
@@ -260,6 +274,7 @@ async function releaseToPoolAndAlert(
           conversationId: convo.id,
           title: 'Chat waiting with no agent',
           body: 'Nobody answered and there was no one else to offer it to. It is now unassigned and visible to every agent.',
+          kind: 'no_agent',
         }).catch(() => undefined),
       ),
     );
@@ -301,6 +316,7 @@ async function assignAndNotify(
       conversationId,
       title: 'A chat was assigned to you',
       body,
+      kind: 'assigned',
     });
   } catch {
     // The assignment above is what matters and has already happened.
