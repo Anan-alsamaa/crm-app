@@ -881,6 +881,27 @@ async function main(): Promise<void> {
    * the change — which is the whole point (owner, 2026-09-16).
    */
 
+  /**
+   * The bundle a given surface is currently serving, from `release.live`.
+   *
+   * `release.live` is keyed BY SURFACE — it used to hold one build, which meant
+   * releasing the widget erased the agent portal's record and the bucket
+   * fallback re-offered it immediately. Tolerates the old single-object shape
+   * so an environment written before this change still reads correctly.
+   */
+  const liveBundleFor = (live: unknown, app: string): string | null => {
+    if (!live || typeof live !== 'object') return null;
+    const rec = live as Record<string, unknown>;
+    if (typeof rec.bundle === 'string') {
+      // Legacy single-build shape: only meaningful for the surface it named.
+      return rec.app === app ? rec.bundle : null;
+    }
+    const entry = rec[app];
+    return entry && typeof entry === 'object'
+      ? ((entry as { bundle?: string }).bundle ?? null)
+      : null;
+  };
+
   /** Whoever is signed in asks: is there anything waiting, and what is live? */
   app.get('/jobs/releases', async (req, reply) => {
     const identity = await requireRole(req, reply, STAFF_ROLES, 'agent role required');
@@ -909,13 +930,13 @@ async function main(): Promise<void> {
     const credentials = await taskRoleCredentials();
     if (!credentials) return reply.send({ ok: true, pending: [], live });
 
-    const liveBundle = (live as { bundle?: string } | null)?.bundle ?? null;
     const found: Array<Record<string, unknown>> = [];
     for (const target of targets) {
       const parked = await readParkedBuild(target, credentials);
-      /* The same bundle as what is live means the parked file is a leftover
-         from the last release, not something new waiting. */
-      if (!parked || parked.bundle === liveBundle) continue;
+      const app = parked?.app ?? releaseSurfaceName(target.bucket);
+      /* The same bundle as what THIS surface is serving means the parked file
+         is a leftover from its last release, not something new waiting. */
+      if (!parked || parked.bundle === liveBundleFor(live, app)) continue;
       found.push({
         /* CI writes these beside the parked page when it can; the placeholder
            is what an older build, or one whose metadata upload failed, looks
@@ -1068,18 +1089,31 @@ async function main(): Promise<void> {
       return reply.code(502).send({ ok: false, error: failures.join('; ') });
     }
 
-    // Newest first, so the head of the list is what is now live.
-    const applied = pending[0]!;
-    await directus.markReleased(applied, {
-      ...applied,
-      releasedAt: new Date().toISOString(),
-      releasedBy: identity.id,
-    });
-    logger.info({ version: applied.version, by: identity.id, warnings }, 'release applied');
+    /*
+     * EVERY surface that was waiting is now live, so record them all.
+     *
+     * This recorded only `pending[0]`, while the loop above had already
+     * promoted every target. So the agent portal was released and the widget's
+     * record was never written — the fallback re-detected it from the bucket
+     * and the banner came straight back, looking exactly like a button that
+     * does nothing (owner, 2026-09-16).
+     */
+    const releasedAt = new Date().toISOString();
+    const applied = pending.map((b) => ({ ...b, releasedAt, releasedBy: identity.id }));
+    await directus.markReleased(pending, applied);
+    logger.info(
+      {
+        versions: pending.map((b) => b.version),
+        apps: pending.map((b) => b.app),
+        by: identity.id,
+        warnings,
+      },
+      'release applied',
+    );
     return reply.send({
       ok: true,
       released: true,
-      version: applied.version,
+      version: pending[0]?.version ?? '',
       ...(warnings.length > 0 ? { warning: warnings.join('; ') } : {}),
     });
   });

@@ -87,15 +87,26 @@ export function UpdateBanner(): JSX.Element | null {
   return (
     <div
       role="status"
-      className="flex flex-wrap items-center gap-3 rounded-2xl bg-primary/10 px-4 py-3 text-sm ring-1 ring-primary/25"
+      /*
+       * A DARK STRIP, because this is an action and not a reading.
+       *
+       * It was a pale primary tint, which on a board made of pale tinted cards
+       * read as one more panel to skim past (owner, 2026-09-16). `ink` is the
+       * console's existing dark surface — the same one the "a newer version is
+       * available" banner uses — so the page gains a deliberate accent rather
+       * than a new colour nobody chose.
+       */
+      className="flex flex-wrap items-center gap-3 rounded-2xl bg-ink px-4 py-3 text-sm text-ink-foreground shadow-float ring-1 ring-ink-foreground/15"
     >
-      <span className="font-medium text-foreground">
+      <span className="font-medium text-ink-foreground">
         {t('releases.pendingFor', {
           defaultValue: 'An update is waiting for the {{who}}.',
           who,
         })}
       </span>
-      <span className="text-xs text-muted-foreground">
+      {/* Muted ON THE DARK GROUND, not the page's muted token — that is tuned
+          for a light surface and would sit almost invisible here. */}
+      <span className="text-xs text-ink-foreground/70">
         {/* The version is secondary — useful for matching against a release
             note, not the thing that decides whether to press the button. It is
             omitted entirely when CI could not record it, rather than showing
@@ -112,7 +123,9 @@ export function UpdateBanner(): JSX.Element | null {
       <Button
         type="button"
         size="sm"
-        className="ms-auto"
+        /* Light on the dark strip: the default primary fill is tuned for a pale
+           surface and loses its edge here. */
+        className="ms-auto bg-ink-foreground text-ink hover:bg-ink-foreground/90"
         disabled={apply.isPending}
         onClick={() => apply.mutate()}
       >

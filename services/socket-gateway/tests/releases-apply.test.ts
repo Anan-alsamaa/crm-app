@@ -357,3 +357,60 @@ describe('readParkedBuild — the bucket is the fact', () => {
     expect(await readParkedBuild(target, creds, fetchImpl)).toBeNull();
   });
 });
+
+/*
+ * "I CLICKED UPDATE NOW BUT NOTHING HAPPENS" (owner, 2026-09-16).
+ *
+ * The release worked — the bundle really did change — and the banner came
+ * straight back offering the same update, for ever. Two faults behind one
+ * symptom:
+ *
+ *   1. the gateway's service role had NO permission on `app_settings`, so
+ *      `release.live` was never written at all and the bucket fallback
+ *      re-detected the parked build as pending. Fixed by granting it on both
+ *      environments — a schema change that a deploy does not carry.
+ *   2. `release.live` held ONE build while a release promotes several, so
+ *      recording the widget erased the agent portal's record and the fallback
+ *      re-offered it. Fixed here: live is keyed by surface.
+ *
+ * What is pinned is the SHAPE of that record, because the whole "is this
+ * pending?" decision reads it.
+ */
+describe('release.live must remember every surface', () => {
+  /** The comparison the read endpoint makes, mirrored. */
+  const liveBundleFor = (live: unknown, app: string): string | null => {
+    if (!live || typeof live !== 'object') return null;
+    const rec = live as Record<string, unknown>;
+    if (typeof rec.bundle === 'string') return rec.app === app ? rec.bundle : null;
+    const entry = rec[app];
+    return entry && typeof entry === 'object'
+      ? ((entry as { bundle?: string }).bundle ?? null)
+      : null;
+  };
+
+  it('answers per surface, so releasing one does not un-release the other', () => {
+    const live = {
+      agent: { app: 'agent', bundle: '/assets/index-A.js' },
+      'chat widget': { app: 'chat widget', bundle: '/assets/index-W.js' },
+    };
+    expect(liveBundleFor(live, 'agent')).toBe('/assets/index-A.js');
+    expect(liveBundleFor(live, 'chat widget')).toBe('/assets/index-W.js');
+  });
+
+  it('reports null for a surface nothing has released yet', () => {
+    // Which is what makes its parked build correctly show as pending.
+    expect(liveBundleFor({ agent: { app: 'agent', bundle: '/a.js' } }, 'chat widget')).toBeNull();
+  });
+
+  it('still reads the OLD single-build shape, for an environment written before this', () => {
+    const legacy = { app: 'agent', bundle: '/assets/index-A.js' };
+    expect(liveBundleFor(legacy, 'agent')).toBe('/assets/index-A.js');
+    // And does not claim it describes a surface it never named.
+    expect(liveBundleFor(legacy, 'chat widget')).toBeNull();
+  });
+
+  it('treats a missing record as "nothing is live"', () => {
+    expect(liveBundleFor(null, 'agent')).toBeNull();
+    expect(liveBundleFor(undefined, 'agent')).toBeNull();
+  });
+});

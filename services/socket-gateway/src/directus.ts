@@ -1102,15 +1102,38 @@ export class GatewayDirectus {
 
   /** Mark a build live and drop it — and anything older — from pending. */
   async markReleased(
-    build: { version: string; app: string },
-    applied: Record<string, unknown>,
+    builds: Array<{ version: string; app: string }>,
+    applied: Array<Record<string, unknown>>,
   ): Promise<void> {
+    /*
+     * LIVE IS A LIST, ONE ENTRY PER SURFACE.
+     *
+     * This stored a SINGLE build, and a release promotes several — the agent
+     * portal and the chat widget go together. Writing one overwrote the other's
+     * record, so the bucket fallback immediately re-detected the overwritten
+     * surface as pending: the banner came back seconds after a successful
+     * release, offering an update that was already live, for ever (owner,
+     * 2026-09-16, "I clicked update now but nothing happens").
+     *
+     * Keyed by surface, so each one remembers what it is serving and the
+     * fallback can tell a parked build from the one it just released.
+     */
+    const released = new Set(builds.map((b) => b.app));
     const current = (await this.pendingReleases()) as Array<{ version?: string; app?: string }>;
-    /* Releasing the newest build supersedes every earlier one for that portal:
-       they can never be released now, so leaving them listed would offer the
-       administrator updates that are already behind what is live. */
-    const remaining = current.filter((b) => b.app !== build.app);
+    const remaining = current.filter((b) => !released.has(b.app ?? ''));
     await this.putSetting('release.pending', JSON.stringify(remaining));
-    await this.putSetting('release.live', JSON.stringify(applied));
+
+    /* Merge rather than replace: a surface nobody released this time keeps the
+       record of what IT is serving. */
+    const live = (await this.liveRelease()) as Record<string, unknown> | null;
+    const byApp: Record<string, unknown> =
+      live && typeof live === 'object' && !Array.isArray(live) && !('bundle' in live)
+        ? { ...(live as Record<string, unknown>) }
+        : {};
+    for (const entry of applied) {
+      const app = String(entry.app ?? '');
+      if (app) byApp[app] = entry;
+    }
+    await this.putSetting('release.live', JSON.stringify(byApp));
   }
 }
