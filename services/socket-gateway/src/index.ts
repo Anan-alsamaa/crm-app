@@ -25,6 +25,7 @@ import {
   ImportJob,
   normalizePhone,
   phoneCustomerId,
+  PublishedBuild,
   ReportJob,
   WALK_IN_CODE_ALPHABET,
   WALK_IN_CODE_LENGTH,
@@ -40,7 +41,8 @@ import { createHs256Verifier, DEFAULT_VENDOR_ID } from './auth/customer-jwt.js';
 import jwt from 'jsonwebtoken';
 import { randomBytes } from 'node:crypto';
 import { createTokenBucket } from './rate-limit.js';
-import { validateAgentToken } from './auth/agent-jwt.js';
+import { validateAgentToken, tokenHasAdminAccess } from './auth/agent-jwt.js';
+import { parseReleaseTargets, releasePortal, taskRoleCredentials } from './releases.js';
 import { createProducer } from './queue.js';
 import { createPresenceStore, PRESENCE_TTL_MS } from './presence-store.js';
 import {
@@ -849,6 +851,113 @@ async function main(): Promise<void> {
          public host the widget is served from, and guessing would produce a
          link that works from our network and nowhere else. */
       path: `/walk-in.html?c=${code}`,
+    });
+  });
+
+  /*
+   * ── RELEASES ────────────────────────────────────────────────────────────
+   *
+   * A deploy PUBLISHES a build (new hashed assets uploaded, the new entry point
+   * parked at `pending/index.html`, the live `index.html` untouched). The
+   * administrator RELEASES it from the admin portal. Until they do, nobody sees
+   * the change — which is the whole point (owner, 2026-09-16).
+   */
+
+  /** Whoever is signed in asks: is there anything waiting, and what is live? */
+  app.get('/releases', async (req, reply) => {
+    const identity = await requireRole(req, reply, STAFF_ROLES, 'agent role required');
+    if (!identity) return reply;
+    const [pending, live] = await Promise.all([directus.pendingReleases(), directus.liveRelease()]);
+    return reply.send({ ok: true, pending, live });
+  });
+
+  /**
+   * CI says "this build is published". Service-token only — this writes what
+   * the administrator will be offered, so an agent must not be able to invent a
+   * pending release.
+   */
+  app.post('/releases/published', async (req, reply) => {
+    const token = bearerToken(req);
+    if (!token || token !== config.SVC_GATEWAY_TOKEN)
+      return reply.code(403).send({ ok: false, error: 'service token required' });
+    const parsed = PublishedBuild.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ ok: false, error: 'invalid build payload' });
+    await directus.addPendingRelease(parsed.data);
+    logger.info({ version: parsed.data.version, app: parsed.data.app }, 'release published');
+    return reply.send({ ok: true });
+  });
+
+  /**
+   * UPDATE NOW. Fenced by `admin_access` rather than a role name: this changes
+   * what every agent's browser loads, so it uses the property Directus itself
+   * enforces rather than a label anybody with the roles editor can mint.
+   */
+  app.post('/releases/apply', async (req, reply) => {
+    const token = bearerToken(req);
+    if (!token) return reply.code(401).send({ ok: false, error: 'missing bearer token' });
+    const identity = await tokenHasAdminAccess(config.DIRECTUS_INTERNAL_URL, token);
+    if (!identity)
+      return reply.code(403).send({ ok: false, error: 'administrator access required' });
+
+    const targets = parseReleaseTargets(config.RELEASE_TARGETS, config.RELEASE_REGION);
+    if (targets.length === 0)
+      return reply
+        .code(503)
+        .send({ ok: false, error: 'releases are not configured for this environment' });
+
+    const pending = (await directus.pendingReleases()) as Array<{
+      version: string;
+      commit: string;
+      publishedAt: string;
+      app: string;
+      bundle: string;
+    }>;
+    if (pending.length === 0) return reply.send({ ok: true, released: false });
+
+    const credentials = await taskRoleCredentials();
+    if (!credentials)
+      return reply.code(503).send({ ok: false, error: 'no AWS credentials available' });
+
+    /*
+     * Both portals move together, sequentially rather than in parallel.
+     *
+     * They are built from one commit and expect the same API, so releasing one
+     * and not the other is a state nobody asked for. Sequential because a
+     * failure then stops before touching the second — a half-release is easier
+     * to reason about when it is the FIRST half that succeeded.
+     */
+    const failures: string[] = [];
+    const warnings: string[] = [];
+    for (const target of targets) {
+      const res = await releasePortal(target, credentials);
+      if (!res.ok) {
+        failures.push(`${target.bucket}: ${res.error}`);
+        break;
+      }
+      /* The build IS live; only the CDN purge did not happen. Carried through
+         so the administrator knows why it is not instant, rather than being
+         told everything is fine and wondering. `index.html` is `no-cache`, so
+         this resolves itself as browsers revalidate. */
+      if (res.warning) warnings.push(`${target.bucket}: ${res.warning}`);
+    }
+    if (failures.length > 0) {
+      logger.error({ failures }, 'release failed');
+      return reply.code(502).send({ ok: false, error: failures.join('; ') });
+    }
+
+    // Newest first, so the head of the list is what is now live.
+    const applied = pending[0]!;
+    await directus.markReleased(applied, {
+      ...applied,
+      releasedAt: new Date().toISOString(),
+      releasedBy: identity.id,
+    });
+    logger.info({ version: applied.version, by: identity.id, warnings }, 'release applied');
+    return reply.send({
+      ok: true,
+      released: true,
+      version: applied.version,
+      ...(warnings.length > 0 ? { warning: warnings.join('; ') } : {}),
     });
   });
 

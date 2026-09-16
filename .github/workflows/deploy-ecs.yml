@@ -195,25 +195,73 @@ jobs:
           role-to-assume: arn:aws:iam::408568863712:role/crm-github-deploy
           aws-region: ${{ env.AWS_REGION }}
 
+      # PRODUCTION PUBLISHES; THE ADMINISTRATOR RELEASES (owner, 2026-09-16).
+      #
+      # A deploy used to BE the release: it overwrote `index.html`, and every
+      # portal already open noticed the new bundle and nagged its own user to
+      # reload. Production changed the moment CI went green, and the owner found
+      # out at the same time as everybody else.
+      #
+      # On prod the new entry point is now parked at `pending/index.html` while
+      # the live one is left alone, so nobody sees the change until Update now
+      # is pressed in the admin portal. STAGING KEEPS THE OLD BEHAVIOUR: it
+      # exists to be looked at immediately, and gating it would mean pressing a
+      # button before you could test what you just merged.
       - name: Upload to S3
         env:
           ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+          RELEASE_API: ${{ secrets.RELEASE_API_URL }}
+          SVC_GATEWAY_TOKEN: ${{ secrets.SVC_GATEWAY_TOKEN }}
+          RELEASE_VERSION: ${{ github.ref_name }}
         run: |
           for app in agent admin; do
             BUCKET="crm-${ENVIRONMENT}-${app}-portal"
             # Hashed assets first, cached hard. Vite content-hashes filenames,
             # so a year is safe and correct.
+            #
+            # `--delete` ONLY on staging. On prod it would prune the bucket to
+            # exactly the new build, deleting the assets the LIVE build is still
+            # serving — so production would go blank between deploy and release.
+            # A flag that was correct right up until releases stopped being
+            # immediate.
+            if [ "$ENVIRONMENT" = "prod" ]; then DELETE=""; else DELETE="--delete"; fi
             aws s3 sync "apps/${app}-portal/dist" "s3://${BUCKET}" \
-              --delete --cache-control "public,max-age=31536000,immutable" \
+              $DELETE --cache-control "public,max-age=31536000,immutable" \
               --exclude "index.html" --exclude "config.js"
             # index.html and config.js have STABLE names and must never be
             # cached: a cached config.js means the portal talks to the previous
             # environment's API until someone hard-refreshes — an outage with no
             # error message.
-            aws s3 cp "apps/${app}-portal/dist/index.html" "s3://${BUCKET}/index.html" \
-              --cache-control "no-cache"
+            #
+            # config.js is written on BOTH: it is environment config, identical
+            # across builds of the same environment, so it does not wait.
             aws s3 cp "apps/${app}-portal/dist/config.js" "s3://${BUCKET}/config.js" \
               --cache-control "no-cache"
+            if [ "$ENVIRONMENT" = "prod" ]; then
+              aws s3 cp "apps/${app}-portal/dist/index.html" "s3://${BUCKET}/pending/index.html" \
+                --cache-control "no-cache"
+              BUNDLE=$(grep -o "/assets/index-[A-Za-z0-9_-]*[.]js" "apps/${app}-portal/dist/index.html" | head -1)
+              echo "::notice::${app} portal published (${BUNDLE}) - waiting for Update now"
+              # Record it so the admin portal can offer it. BEST EFFORT: a
+              # failure here must not fail a deploy that has already uploaded
+              # everything. The build is published either way; the banner is how
+              # somebody learns about it, not where it lives.
+              if [ -n "$RELEASE_API" ] && [ -n "$SVC_GATEWAY_TOKEN" ]; then
+                PAYLOAD=$(printf '{"version":"%s","commit":"%s","publishedAt":"%s","app":"%s","bundle":"%s"}' \
+                  "$RELEASE_VERSION" "$(echo "$GITHUB_SHA" | cut -c1-7)" \
+                  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$app" "$BUNDLE")
+                curl -sS -X POST "${RELEASE_API}/releases/published" \
+                  -H "authorization: Bearer ${SVC_GATEWAY_TOKEN}" \
+                  -H "content-type: application/json" \
+                  -d "$PAYLOAD" \
+                  || echo "::warning::could not record the published build - it is uploaded, but the admin banner will not list it"
+              else
+                echo "::warning::RELEASE_API_URL or SVC_GATEWAY_TOKEN is unset - the build is published but the admin banner will not list it"
+              fi
+            else
+              aws s3 cp "apps/${app}-portal/dist/index.html" "s3://${BUCKET}/index.html" \
+                --cache-control "no-cache"
+            fi
           done
 
       # THE CUSTOMER-FACING BUNDLE, which CI did not ship until 2026-09-09.

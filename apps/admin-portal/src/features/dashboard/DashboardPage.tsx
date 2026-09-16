@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { cn, Toolbar } from '@yiji/ui';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { ComplaintDashboard } from './ComplaintDashboard.js';
+import { UpdateBanner } from '../releases/UpdateBanner.js';
 
 /**
  * Two dashboards, because there are two jobs.
@@ -80,6 +81,13 @@ export function DashboardPage() {
       )}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4 sm:p-6">
+        {/* A published build waiting to be released. Above the hero because it
+            is a decision to make, not a reading to take — and it renders
+            nothing at all when production is up to date, which is most of the
+            time. Outside the tab branches so it shows on either board. */}
+        <div className="mb-4 shrink-0 empty:mb-0">
+          <UpdateBanner />
+        </div>
         {active === 'agent' && (
           <>
             {/* The reference dashboard's hero band: a saturated violet→jade

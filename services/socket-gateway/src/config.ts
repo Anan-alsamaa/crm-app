@@ -76,6 +76,22 @@ const schema = z
           .filter(Boolean),
       )
       .pipe(z.array(z.enum(['polling', 'websocket'])).nonempty()),
+    /*
+     * WHAT "UPDATE NOW" RELEASES.
+     *
+     * A deploy publishes a build and stops; the administrator releases it. That
+     * release copies `pending/index.html` over the live one in these buckets
+     * and invalidates these distributions.
+     *
+     * Empty by default, and the endpoint answers 503 when they are unset — so
+     * an environment that has not been configured for gated releases says so
+     * plainly rather than half-releasing. Comma-separated `bucket:distribution`
+     * pairs, one per portal, because the two are always released together and
+     * keeping them in one value makes a mismatched pair impossible to express.
+     */
+    RELEASE_TARGETS: z.string().default(''),
+    /** Region of the portal buckets. CloudFront always signs against us-east-1. */
+    RELEASE_REGION: z.string().default('us-east-2'),
     // Inbound webhook HMAC secret. When empty, POST /webhooks/yiji returns 503
     // (not configured) so the endpoint is never an unauthenticated open door.
     YIJI_WEBHOOK_SECRET: z.string().default(''),

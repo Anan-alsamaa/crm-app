@@ -62,6 +62,31 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return payload as T;
 }
 
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${PRODUCER_URL}${path}`, { headers: await buildHeaders() });
+  let payload: (EnqueueResult & Record<string, unknown>) | null = null;
+  try {
+    payload = (await res.json()) as EnqueueResult & Record<string, unknown>;
+  } catch {
+    /* ignore */
+  }
+  if (!res.ok || !payload?.ok) {
+    throw Object.assign(new Error(payload?.error ?? `request failed (${res.status})`), {
+      status: res.status,
+      payload,
+    });
+  }
+  return payload as T;
+}
+
+export interface PendingBuild {
+  version: string;
+  commit: string;
+  publishedAt: string;
+  app: string;
+  bundle: string;
+}
+
 export const jobProducer = {
   /* No `enqueueImport`. The contact-CSV import it fed was removed from the
    * console: it bulk-loaded customers from a spreadsheet, in the one portal
@@ -85,5 +110,27 @@ export const jobProducer = {
    */
   enqueueCouponPush(couponApprovalId: string): Promise<EnqueueResult> {
     return post<EnqueueResult>('/jobs/coupon-push', { couponApprovalId });
+  },
+
+  /*
+   * RELEASES — a deploy publishes a build; the administrator releases it.
+   *
+   * Until "Update now" is pressed, a deployed build sits in the bucket
+   * unreferenced and nobody sees it. This is how the console asks what is
+   * waiting, and how it applies one (owner, 2026-09-16).
+   */
+
+  /** What is published and waiting, and what production is serving. */
+  listReleases(): Promise<{ ok: true; pending: PendingBuild[]; live: PendingBuild | null }> {
+    return get('/releases');
+  },
+
+  /**
+   * UPDATE NOW. Copies the newest published build over the live entry point and
+   * clears the CDN cache. The gateway re-checks `admin_access` — this client
+   * only decides whether to offer the button.
+   */
+  applyRelease(): Promise<EnqueueResult & { released?: boolean; version?: string }> {
+    return post('/releases/apply', {});
   },
 };

@@ -250,3 +250,77 @@ When a single host isn't enough (or policy requires it):
   rules for the gateway).
 - K8s/Helm manifests are **not** in this repo yet — generate them from the compose
   topology when you commit to that target.
+
+## Releasing to production: deploys publish, the administrator releases
+
+Since 2026-09-16, **a production deploy does not change what anybody sees.**
+
+A deploy to prod uploads the new hashed assets and parks the new entry point at
+`pending/index.html`, leaving the live `index.html` naming the previous bundle.
+The build is on the server and unreachable. It goes live when the administrator
+presses **Update now** in the admin portal's dashboard banner.
+
+This exists because a deploy used to _be_ the release: CI went green, every open
+portal noticed the new bundle and nagged its own user to reload, and the owner
+found out at the same moment as the floor.
+
+**Staging is unchanged** — it deploys straight to live, because it exists to be
+looked at immediately.
+
+### What makes it work
+
+| Piece        | Where                                        | Note                                           |
+| ------------ | -------------------------------------------- | ---------------------------------------------- |
+| Parked build | `s3://crm-prod-*-portal/pending/index.html`  | written by the deploy workflow                 |
+| Pending list | Directus `app_settings` → `release.pending`  | written by CI via `POST /releases/published`   |
+| Live record  | Directus `app_settings` → `release.live`     | written when a release is applied              |
+| The button   | admin portal dashboard                       | only for `admin_access`; the gateway re-checks |
+| The swap     | `POST /releases/apply` on the socket-gateway | S3 CopyObject, then a CloudFront invalidation  |
+
+### Configuration
+
+The gateway needs `RELEASE_TARGETS` — comma-separated `bucket:distribution`
+pairs, one per portal. Without it `/releases/apply` answers **503 "releases are
+not configured"** rather than half-releasing:
+
+```
+RELEASE_TARGETS=crm-prod-agent-portal:E3UK8T8DHFGMNW,crm-prod-admin-portal:E37XKA7D2IPZLC
+RELEASE_REGION=us-east-2
+```
+
+CI needs `RELEASE_API_URL` (the gateway's public origin) and `SVC_GATEWAY_TOKEN`
+as repository secrets. Both are best-effort: without them the build still
+publishes, but the banner will not list it — the workflow says so with a
+warning rather than failing a deploy that uploaded everything correctly.
+
+### Permissions, and the one that is missing
+
+The gateway's task role reaches the portal buckets through a **bucket policy**
+(`AllowGatewayRelease` on each), not an IAM role policy — the same mechanism CI
+already uses, and the only one available on this account, where every user has
+`IAMReadOnlyAccess`.
+
+**`cloudfront:CreateInvalidation` is NOT granted.** A release therefore succeeds
+and reports a warning that the CDN cache was not cleared. That is not a failure:
+`index.html` is served `no-cache`, so the new build reaches people as their
+browser revalidates — minutes, not instantly. To make it instant, somebody with
+IAM write access must add to `crm-task-role-prod`:
+
+```json
+{
+  "Sid": "ReleaseInvalidate",
+  "Effect": "Allow",
+  "Action": "cloudfront:CreateInvalidation",
+  "Resource": [
+    "arn:aws:cloudfront::408568863712:distribution/E3UK8T8DHFGMNW",
+    "arn:aws:cloudfront::408568863712:distribution/E37XKA7D2IPZLC"
+  ]
+}
+```
+
+### Why `--delete` is gone from the prod sync
+
+It pruned the bucket to exactly the new build. With a gated release that would
+delete the assets the **live** build is still serving, so production would go
+blank between deploy and release. Old assets accumulate instead; they are
+content-hashed, so they cost storage and nothing else.

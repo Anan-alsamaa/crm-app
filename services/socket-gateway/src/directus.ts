@@ -1014,4 +1014,103 @@ export class GatewayDirectus {
       filename: meta[0]?.filename_download ?? null,
     };
   }
+
+  /* ── Release state ────────────────────────────────────────────────────────
+   *
+   * Two `app_settings` rows describe what production is serving and what is
+   * waiting: `release.live` and `release.pending`. A deploy adds to pending;
+   * the administrator's Update now moves one to live.
+   *
+   * Stored as JSON in a text column rather than as rows of a new collection.
+   * It is a handful of values read together and written together, and a new
+   * collection would need its own permissions on two live environments to
+   * hold what amounts to one list.
+   */
+
+  /** Read one `app_settings` row, or null. */
+  private async setting(key: string): Promise<{ id: string; value: string | null } | null> {
+    const rows = (await this.client.request(
+      readItems(
+        'app_settings' as never,
+        {
+          filter: { key: { _eq: key } },
+          fields: ['id', 'value'],
+          limit: 1,
+        } as never,
+      ),
+    )) as Array<{ id: string; value: string | null }>;
+    return rows[0] ?? null;
+  }
+
+  /** Create or update one `app_settings` row. */
+  private async putSetting(key: string, value: string): Promise<void> {
+    const existing = await this.setting(key);
+    if (existing) {
+      await this.client.request(
+        updateItem('app_settings' as never, existing.id as never, { value } as never),
+      );
+      return;
+    }
+    await this.client.request(createItem('app_settings' as never, { key, value } as never));
+  }
+
+  /**
+   * Every build published and not yet released, newest first.
+   *
+   * Returns [] rather than throwing on anything unreadable — a missing row is
+   * the ordinary state of a fresh environment, and a malformed one must not
+   * take down the admin dashboard that reads it.
+   */
+  async pendingReleases(): Promise<unknown[]> {
+    try {
+      const row = await this.setting('release.pending');
+      const parsed: unknown = row?.value ? JSON.parse(row.value) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** The build production is serving, or null if nothing has been released yet. */
+  async liveRelease(): Promise<unknown | null> {
+    try {
+      const row = await this.setting('release.live');
+      return row?.value ? (JSON.parse(row.value) as unknown) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Record a newly published build.
+   *
+   * A build that is ALREADY in the list replaces its earlier entry rather than
+   * appearing twice: CI can re-run for the same version, and the administrator
+   * should see one pending update, not a growing pile of identical rows.
+   */
+  async addPendingRelease(build: {
+    version: string;
+    commit: string;
+    publishedAt: string;
+    app: string;
+    bundle: string;
+  }): Promise<void> {
+    const current = (await this.pendingReleases()) as Array<{ version?: string; app?: string }>;
+    const rest = current.filter((b) => !(b.version === build.version && b.app === build.app));
+    await this.putSetting('release.pending', JSON.stringify([build, ...rest]));
+  }
+
+  /** Mark a build live and drop it — and anything older — from pending. */
+  async markReleased(
+    build: { version: string; app: string },
+    applied: Record<string, unknown>,
+  ): Promise<void> {
+    const current = (await this.pendingReleases()) as Array<{ version?: string; app?: string }>;
+    /* Releasing the newest build supersedes every earlier one for that portal:
+       they can never be released now, so leaving them listed would offer the
+       administrator updates that are already behind what is live. */
+    const remaining = current.filter((b) => b.app !== build.app);
+    await this.putSetting('release.pending', JSON.stringify(remaining));
+    await this.putSetting('release.live', JSON.stringify(applied));
+  }
 }

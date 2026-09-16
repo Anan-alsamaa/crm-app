@@ -535,6 +535,22 @@ export const roles: RoleSpec[] = [
     adminAccess: false,
     serviceTokenEnv: 'SVC_GATEWAY_TOKEN',
     permissions: [
+      /*
+       * RELEASE STATE — which build is live, and which are waiting.
+       *
+       * The gateway owns these two rows because it is the only service that
+       * can both read them for the admin portal and act on them: releasing
+       * copies `pending/index.html` over the live one in S3. Directus itself
+       * cannot reach S3, and the portal must not hold AWS credentials.
+       *
+       * Two rows only (`release.live`, `release.pending`), but the permission
+       * is collection-wide because Directus scopes by collection, not by key.
+       * `app_settings` holds small operational settings the team already
+       * edits, so this is not a widening into customer data.
+       */
+      { collection: 'app_settings', action: 'read' },
+      { collection: 'app_settings', action: 'create' },
+      { collection: 'app_settings', action: 'update' },
       { collection: 'contacts', action: 'create' },
       { collection: 'contacts', action: 'read' },
       { collection: 'contacts', action: 'update' },

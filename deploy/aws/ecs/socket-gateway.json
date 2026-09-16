@@ -97,6 +97,14 @@
         {
           "name": "YIJI_WEBHOOK_SECRET",
           "value": "{{SECRET:YIJI_WEBHOOK_SECRET}}"
+        },
+        {
+          "name": "RELEASE_TARGETS",
+          "value": ""
+        },
+        {
+          "name": "RELEASE_REGION",
+          "value": "us-east-2"
         }
       ],
       "healthCheck": {
