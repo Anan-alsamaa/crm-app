@@ -111,7 +111,7 @@ function takeWalkInSession(): { token: string; closeUrl?: string; canRemint?: fa
     /*
      * EXPIRED IS AS GOOD AS ABSENT.
      *
-     * A walk-in token lasts two hours. Keeping it across reloads (below) means
+     * A walk-in token lasts twelve hours. Keeping it across reloads (below) means
      * a stale one is still sitting there the next morning — and the page then
      * hands it to the gateway, which refuses it, and the customer watches
      * "Reconnecting…" become "We could not start this chat. Please reopen it

@@ -807,7 +807,31 @@ async function main(): Promise<void> {
         entry_point: entryPoint,
       },
       config.YIJI_JWT_SECRET,
-      { algorithm: 'HS256', expiresIn: '2h' },
+      /*
+       * TWELVE HOURS, NOT TWO — long enough to outlive the visit.
+       *
+       * This token cannot be refreshed in place: the widget holds no signing
+       * secret, and for a QR walk-in there is nothing to re-mint it from
+       * either — it was minted once from a phone number typed into
+       * `/walk-in`, and it lives in that tab's `sessionStorage`. So when it
+       * expires mid-conversation the gateway refuses every reconnect and the
+       * customer is simply stuck, however well the widget handles it.
+       *
+       * Two hours was short enough to hit real people: a customer who writes
+       * in at lunch and gets an answer that afternoon is a perfectly ordinary
+       * support case, not an edge case. Twelve covers a full branch shift, so
+       * the token outlives the visit that created it rather than the other way
+       * round.
+       *
+       * The exposure this buys is small and bounded. A walk-in session is
+       * `walk_in: true`, which replays NO history — so the token cannot read
+       * past conversations even if it is kept — and it is scoped to one
+       * vendor and one phone number. What it permits is writing to that
+       * customer's own thread, which is what the customer is there to do.
+       * Longer than a day would start to be a credential rather than a visit,
+       * which is why this is not simply set to a week.
+       */
+      { algorithm: 'HS256', expiresIn: '12h' },
     );
 
     logger.info({ vendorId, walkIn: !yijiCustomerId }, 'walk-in session issued');
