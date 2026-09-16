@@ -250,7 +250,7 @@ jobs:
                 PAYLOAD=$(printf '{"version":"%s","commit":"%s","publishedAt":"%s","app":"%s","bundle":"%s"}' \
                   "$RELEASE_VERSION" "$(echo "$GITHUB_SHA" | cut -c1-7)" \
                   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$app" "$BUNDLE")
-                curl -sS -X POST "${RELEASE_API}/releases/published" \
+                curl -sS -X POST "${RELEASE_API}/jobs/releases/published" \
                   -H "authorization: Bearer ${SVC_GATEWAY_TOKEN}" \
                   -H "content-type: application/json" \
                   -d "$PAYLOAD" \

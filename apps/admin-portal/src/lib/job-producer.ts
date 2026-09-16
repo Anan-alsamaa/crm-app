@@ -122,7 +122,7 @@ export const jobProducer = {
 
   /** What is published and waiting, and what production is serving. */
   listReleases(): Promise<{ ok: true; pending: PendingBuild[]; live: PendingBuild | null }> {
-    return get('/releases');
+    return get('/jobs/releases');
   },
 
   /**
@@ -131,6 +131,6 @@ export const jobProducer = {
    * only decides whether to offer the button.
    */
   applyRelease(): Promise<EnqueueResult & { released?: boolean; version?: string }> {
-    return post('/releases/apply', {});
+    return post('/jobs/releases/apply', {});
   },
 };

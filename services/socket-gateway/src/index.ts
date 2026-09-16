@@ -862,6 +862,16 @@ async function main(): Promise<void> {
   /*
    * ── RELEASES ────────────────────────────────────────────────────────────
    *
+   * UNDER `/jobs/` BECAUSE THAT IS WHAT THE ALB ROUTES HERE. The load
+   * balancer sends `/webhooks/*`, `/jobs/*` and `/walk-in/*` to this service
+   * and EVERYTHING ELSE to Directus, so a route at `/releases` was answered by
+   * Directus with "Route /releases doesn't exist" — the endpoint existed, ran,
+   * and was unreachable. Verified against production before moving it.
+   *
+   * Adding an ALB rule would have worked too, and needs an infrastructure
+   * change on two environments to gain nothing: `/jobs/` already means "the
+   * gateway's HTTP side" to every caller here.
+   *
    * A deploy PUBLISHES a build (new hashed assets uploaded, the new entry point
    * parked at `pending/index.html`, the live `index.html` untouched). The
    * administrator RELEASES it from the admin portal. Until they do, nobody sees
@@ -869,7 +879,7 @@ async function main(): Promise<void> {
    */
 
   /** Whoever is signed in asks: is there anything waiting, and what is live? */
-  app.get('/releases', async (req, reply) => {
+  app.get('/jobs/releases', async (req, reply) => {
     const identity = await requireRole(req, reply, STAFF_ROLES, 'agent role required');
     if (!identity) return reply;
     const [recorded, live] = await Promise.all([
@@ -919,7 +929,7 @@ async function main(): Promise<void> {
    * the administrator will be offered, so an agent must not be able to invent a
    * pending release.
    */
-  app.post('/releases/published', async (req, reply) => {
+  app.post('/jobs/releases/published', async (req, reply) => {
     const token = bearerToken(req);
     if (!token || token !== config.SVC_GATEWAY_TOKEN)
       return reply.code(403).send({ ok: false, error: 'service token required' });
@@ -935,7 +945,7 @@ async function main(): Promise<void> {
    * what every agent's browser loads, so it uses the property Directus itself
    * enforces rather than a label anybody with the roles editor can mint.
    */
-  app.post('/releases/apply', async (req, reply) => {
+  app.post('/jobs/releases/apply', async (req, reply) => {
     const token = bearerToken(req);
     if (!token) return reply.code(401).send({ ok: false, error: 'missing bearer token' });
     const identity = await tokenHasAdminAccess(config.DIRECTUS_INTERNAL_URL, token);

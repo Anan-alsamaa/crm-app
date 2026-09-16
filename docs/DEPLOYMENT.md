@@ -269,18 +269,26 @@ looked at immediately.
 
 ### What makes it work
 
-| Piece        | Where                                        | Note                                           |
-| ------------ | -------------------------------------------- | ---------------------------------------------- |
-| Parked build | `s3://crm-prod-*-portal/pending/index.html`  | written by the deploy workflow                 |
-| Pending list | Directus `app_settings` → `release.pending`  | written by CI via `POST /releases/published`   |
-| Live record  | Directus `app_settings` → `release.live`     | written when a release is applied              |
-| The button   | admin portal dashboard                       | only for `admin_access`; the gateway re-checks |
-| The swap     | `POST /releases/apply` on the socket-gateway | S3 CopyObject, then a CloudFront invalidation  |
+| Piece        | Where                                             | Note                                              |
+| ------------ | ------------------------------------------------- | ------------------------------------------------- |
+| Parked build | `s3://crm-prod-*-portal/pending/index.html`       | written by the deploy workflow                    |
+| Pending list | Directus `app_settings` → `release.pending`       | written by CI via `POST /jobs/releases/published` |
+| Live record  | Directus `app_settings` → `release.live`          | written when a release is applied                 |
+| The button   | admin portal dashboard                            | only for `admin_access`; the gateway re-checks    |
+| The swap     | `POST /jobs/releases/apply` on the socket-gateway | S3 CopyObject, then a CloudFront invalidation     |
+
+### Why the routes live under `/jobs/`
+
+The ALB sends `/webhooks/*`, `/jobs/*` and `/walk-in/*` to the socket-gateway
+and **everything else to Directus**. A route at `/releases` was therefore
+answered by Directus with `Route /releases doesn't exist` — the endpoint
+existed, ran, and was unreachable. `/jobs/` already means "the gateway's HTTP
+side" to every caller here, so the routes moved rather than the infrastructure.
 
 ### Configuration
 
 The gateway needs `RELEASE_TARGETS` — comma-separated `bucket:distribution`
-pairs, one per portal. Without it `/releases/apply` answers **503 "releases are
+pairs, one per portal. Without it `/jobs/releases/apply` answers **503 "releases are
 not configured"** rather than half-releasing:
 
 ```
