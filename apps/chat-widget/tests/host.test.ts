@@ -45,9 +45,21 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** A still-valid walk-in token, in the shape the gateway really issues. The
+ *  old fixture was the bare string 'gateway-signed', which is not a JWT — and
+ *  the expiry check now (correctly) treats anything it cannot parse as dead. */
+const GOOD_TOKEN = jwtExpiringAt(Date.now() / 1000 + 3600);
+
+/** A JWT whose payload carries just an `exp`. Unsigned — nothing verifies it
+ *  on this side; the gateway is the authority. */
+function jwtExpiringAt(epochSeconds: number): string {
+  const payload = btoa(JSON.stringify({ exp: Math.floor(epochSeconds) })).replace(/=+$/, '');
+  return `header.${payload}.signature`;
+}
+
 describe('a walk-in handoff opens the chat', () => {
   it('uses the gateway-signed token and mints nothing', async () => {
-    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    sessionStorage.setItem('yiji.walkInToken', GOOD_TOKEN);
     sessionStorage.setItem('yiji.walkInCloseUrl', 'closeapp://');
     await loadHost();
 
@@ -55,7 +67,7 @@ describe('a walk-in handoff opens the chat', () => {
     const opts = initSpy.mock.calls[0][0] as Record<string, unknown>;
     expect(opts).toMatchObject({
       gatewayUrl: 'http://localhost:8080',
-      token: 'gateway-signed',
+      token: GOOD_TOKEN,
       autoOpen: true,
       closeUrl: 'closeapp://',
     });
@@ -81,17 +93,51 @@ describe('a walk-in handoff opens the chat', () => {
      * short-lived and lives in this TAB's sessionStorage, which the browser
      * discards when the tab closes. Pressing close clears it explicitly.
      */
-    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    sessionStorage.setItem('yiji.walkInToken', GOOD_TOKEN);
     sessionStorage.setItem('yiji.walkInCloseUrl', 'closeapp://');
     await loadHost();
-    expect(sessionStorage.getItem('yiji.walkInToken')).toBe('gateway-signed');
+    expect(sessionStorage.getItem('yiji.walkInToken')).toBe(GOOD_TOKEN);
     expect(sessionStorage.getItem('yiji.walkInCloseUrl')).toBe('closeapp://');
+  });
+
+  it('treats an EXPIRED token as no session at all', async () => {
+    /*
+     * A walk-in token lasts two hours. Now that the handoff is kept across
+     * reloads, a stale one is still sitting there the next morning — and
+     * handing it to the gateway produces "Reconnecting…" and then "We could
+     * not start this chat. Please reopen it from the app, or call us." to
+     * somebody who scanned a QR code in a branch with no app involved
+     * (owner, 2026-09-16, screenshots).
+     *
+     * Expired means gone: clear it and send them to the form for a fresh one.
+     */
+    vi.stubEnv('DEV', false);
+    sessionStorage.setItem('yiji.walkInToken', jwtExpiringAt(Date.now() / 1000 - 60));
+    await loadHost();
+    expect(initSpy).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('yiji.walkInToken')).toBeNull();
+    expect(location.replace).toHaveBeenCalledWith('/walk-in');
+  });
+
+  it('uses a token that is still good', async () => {
+    sessionStorage.setItem('yiji.walkInToken', jwtExpiringAt(Date.now() / 1000 + 3600));
+    await loadHost();
+    expect(initSpy).toHaveBeenCalledTimes(1);
+    expect(location.replace).not.toHaveBeenCalled();
+  });
+
+  it('defers to the gateway when a token carries no expiry', async () => {
+    // Not ours to judge — the gateway is the authority on validity.
+    const noExp = `x.${btoa(JSON.stringify({ sub: 'c' })).replace(/=+$/, '')}.y`;
+    sessionStorage.setItem('yiji.walkInToken', noExp);
+    await loadHost();
+    expect(initSpy).toHaveBeenCalledTimes(1);
   });
 
   it('ends the session when the customer closes the chat', async () => {
     // The deliberate exit is where the token SHOULD be cleared — at the moment
     // it means something, not on every page load.
-    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    sessionStorage.setItem('yiji.walkInToken', GOOD_TOKEN);
     await loadHost();
     const opts = initSpy.mock.calls[0][0] as { onClose?: () => void };
     expect(typeof opts.onClose).toBe('function');
@@ -100,7 +146,7 @@ describe('a walk-in handoff opens the chat', () => {
   });
 
   it('omits closeUrl when the QR page set none', async () => {
-    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    sessionStorage.setItem('yiji.walkInToken', GOOD_TOKEN);
     await loadHost();
     expect(initSpy.mock.calls[0][0]).not.toHaveProperty('closeUrl');
   });
@@ -129,33 +175,6 @@ describe('with nothing waiting', () => {
     expect(initSpy).not.toHaveBeenCalled();
   });
 
-  it('BOUNCES ONCE, never in a loop', async () => {
-    /*
-     * `/walk-in` hands off to this page and this page bounces back when it
-     * finds no token, so the two can chase each other — the customer watches
-     * the phone form and the chat alternate with nothing settling. One retry
-     * per tab, then stop and let the form ask for a number like a first visit.
-     */
-    vi.stubEnv('DEV', false);
-    await loadHost();
-    expect(location.replace).toHaveBeenCalledTimes(1);
-
-    // The page loads again with still no token — this is the second lap.
-    (location.replace as ReturnType<typeof vi.fn>).mockClear();
-    await loadHost();
-    expect(location.replace).not.toHaveBeenCalled();
-  });
-
-  it('restores the retry once a real session arrives', async () => {
-    // A customer who completes the form and reloads an hour later must not be
-    // stranded by a marker left over from a bounce.
-    vi.stubEnv('DEV', false);
-    await loadHost(); // bounces, sets the marker
-    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
-    await loadHost(); // good session — clears the marker
-    expect(sessionStorage.getItem('yiji.walkInBounced')).toBeNull();
-  });
-
   it('treats unreadable storage as nothing waiting', async () => {
     vi.stubEnv('DEV', false);
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
@@ -170,7 +189,7 @@ describe('where the widget connects', () => {
   it('falls back to the page\u2019s own origin on a published host with no URL baked in', async () => {
     vi.stubEnv('DEV', false);
     vi.stubEnv('VITE_SOCKET_URL', '');
-    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    sessionStorage.setItem('yiji.walkInToken', GOOD_TOKEN);
     await loadHost();
     expect(initSpy.mock.calls[0][0]).toMatchObject({ gatewayUrl: 'https://chat.example' });
   });
@@ -178,7 +197,7 @@ describe('where the widget connects', () => {
   it('falls back to the local gateway on the dev server', async () => {
     vi.stubEnv('DEV', true);
     vi.stubEnv('VITE_SOCKET_URL', '');
-    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    sessionStorage.setItem('yiji.walkInToken', GOOD_TOKEN);
     await loadHost();
     expect(initSpy.mock.calls[0][0]).toMatchObject({ gatewayUrl: 'http://localhost:8080' });
   });
@@ -192,7 +211,7 @@ describe('the chat page opens in the customer’s language', () => {
 
   it('hands the widget ARABIC when the phone asks for neither language', async () => {
     phoneSpeaks('fr-FR');
-    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    sessionStorage.setItem('yiji.walkInToken', GOOD_TOKEN);
     await loadHost();
     expect(initSpy.mock.calls[0][0]).toMatchObject({ locale: 'ar' });
     expect(document.documentElement.dir).toBe('rtl');
@@ -200,7 +219,7 @@ describe('the chat page opens in the customer’s language', () => {
 
   it('follows a phone set to English', async () => {
     phoneSpeaks('en-US');
-    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    sessionStorage.setItem('yiji.walkInToken', GOOD_TOKEN);
     await loadHost();
     expect(initSpy.mock.calls[0][0]).toMatchObject({ locale: 'en' });
     expect(document.documentElement.dir).toBe('ltr');
@@ -211,14 +230,14 @@ describe('the chat page opens in the customer’s language', () => {
     // then being asked to read Arabic in the chat is the same bug twice.
     phoneSpeaks('ar-SA');
     localStorage.setItem('yiji.locale', 'en');
-    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    sessionStorage.setItem('yiji.walkInToken', GOOD_TOKEN);
     await loadHost();
     expect(initSpy.mock.calls[0][0]).toMatchObject({ locale: 'en' });
   });
 
   it('stores a switch made inside the chat', async () => {
     phoneSpeaks('ar-SA');
-    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    sessionStorage.setItem('yiji.walkInToken', GOOD_TOKEN);
     await loadHost();
     const onLocaleChange = initSpy.mock.calls[0][0].onLocaleChange as (l: string) => void;
     onLocaleChange('en');
@@ -238,7 +257,7 @@ describe('the chat page opens in the customer’s language', () => {
      * `en`.
      */
     phoneSpeaks('en-US');
-    sessionStorage.setItem('yiji.walkInToken', 'gateway-signed');
+    sessionStorage.setItem('yiji.walkInToken', GOOD_TOKEN);
     await loadHost();
     expect(document.documentElement.lang).toBe('en');
 

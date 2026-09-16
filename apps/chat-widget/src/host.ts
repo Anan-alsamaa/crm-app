@@ -78,11 +78,56 @@ const CLOSE_URL = (import.meta.env.VITE_WALK_IN_CLOSE_URL as string | undefined)
 const WALK_IN_TOKEN_KEY = 'yiji.walkInToken';
 const WALK_IN_CLOSE_KEY = 'yiji.walkInCloseUrl';
 
+/**
+ * Is this JWT past its `exp`?
+ *
+ * Unverified on purpose — see the call site. A token we cannot parse is treated
+ * as expired: something is wrong with it, and sending the customer to the phone
+ * form is the recoverable answer.
+ *
+ * Thirty seconds of slack, because a token that expires while the page is
+ * loading should not open a chat that dies a moment later.
+ */
+export function isExpired(token: string, now = Date.now()): boolean {
+  try {
+    const part = token.split('.')[1];
+    if (!part) return true;
+    const base64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const { exp } = JSON.parse(atob(padded)) as { exp?: number };
+    // No `exp` at all: not ours to judge — let the gateway decide.
+    if (typeof exp !== 'number') return false;
+    return exp * 1000 <= now + 30_000;
+  } catch {
+    return true;
+  }
+}
+
 function takeWalkInSession(): { token: string; closeUrl?: string } | null {
   try {
     const token = sessionStorage.getItem(WALK_IN_TOKEN_KEY);
     if (!token) return null;
     const closeUrl = sessionStorage.getItem(WALK_IN_CLOSE_KEY) ?? undefined;
+    /*
+     * EXPIRED IS AS GOOD AS ABSENT.
+     *
+     * A walk-in token lasts two hours. Keeping it across reloads (below) means
+     * a stale one is still sitting there the next morning — and the page then
+     * hands it to the gateway, which refuses it, and the customer watches
+     * "Reconnecting…" become "We could not start this chat. Please reopen it
+     * from the app, or call us." on a page they reached by scanning a QR code
+     * with no app involved (owner, 2026-09-16, screenshots).
+     *
+     * Treated as no session at all, so the customer is sent back to the phone
+     * form and gets a fresh one. Read WITHOUT verifying the signature: this is
+     * a client deciding whether to bother trying, not an authority deciding
+     * whether to trust — the gateway still verifies properly, and a forged
+     * `exp` only buys somebody a rejection they would have got anyway.
+     */
+    if (isExpired(token)) {
+      clearWalkInSession();
+      return null;
+    }
     /*
      * KEPT, NOT CONSUMED.
      *
@@ -166,13 +211,6 @@ applyDocumentLocale(locale);
 // a stale walk-in handoff in sessionStorage must not win over a fresh one.
 const session = takeUrlSession() ?? takeWalkInSession();
 if (session) {
-  /* A good session means the loop guard below has nothing to protect against
-     any more. Cleared here so a later reload gets its one retry back. */
-  try {
-    sessionStorage.removeItem('yiji.walkInBounced');
-  } catch {
-    /* storage unavailable */
-  }
   // Signed by the gateway; nothing is minted here. autoOpen: this page IS the
   // chat, so no launcher click stands between the customer and it.
   YijiChat.init({
@@ -199,27 +237,19 @@ if (session) {
   void import('./demo.js');
 } else {
   /*
-   * NO SESSION — send them to the phone form, BUT ONLY ONCE.
+   * NO SESSION — the phone form is where this page belongs.
    *
-   * `/walk-in` hands off to this page and this page bounces back when it finds
-   * no token, so the two can chase each other: the customer watches the phone
-   * form and the chat alternate, with nothing ever settling. A marker in
-   * `sessionStorage` makes the bounce one-way — go back at most once per tab,
-   * and if we land here again, stop and let the walk-in page ask for a phone
-   * number like it is a first visit.
+   * This cannot loop, and I checked rather than assumed: `/walk-in` only
+   * submits on its own when it carries a `?c=` link code. Reached plainly it
+   * renders the form and WAITS, so it never hands back an empty session. The
+   * flicker came from the token being deleted on read (fixed above), not from
+   * the redirect.
    *
-   * Cleared on a successful session above, so a customer who completes the
-   * form and later reloads gets the same single retry rather than being
-   * stranded by a marker from an hour ago.
+   * A bounce counter briefly guarded this and made things worse: on its second
+   * lap it did nothing, leaving the customer on a chat page with no session
+   * that said "could not start this chat — reopen it from the app" to somebody
+   * who had scanned a QR code in a branch. A guard that strands people is
+   * worse than the loop it was written for.
    */
-  const BOUNCED = 'yiji.walkInBounced';
-  let bounced = false;
-  try {
-    bounced = sessionStorage.getItem(BOUNCED) === '1';
-    if (!bounced) sessionStorage.setItem(BOUNCED, '1');
-  } catch {
-    /* storage unavailable: fall through and bounce, which is the old
-       behaviour — one redirect is still better than a blank page. */
-  }
-  if (!bounced) window.location.replace(WALK_IN_URL);
+  window.location.replace(WALK_IN_URL);
 }
