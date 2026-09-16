@@ -103,7 +103,7 @@ export function isExpired(token: string, now = Date.now()): boolean {
   }
 }
 
-function takeWalkInSession(): { token: string; closeUrl?: string } | null {
+function takeWalkInSession(): { token: string; closeUrl?: string; canRemint?: false } | null {
   try {
     const token = sessionStorage.getItem(WALK_IN_TOKEN_KEY);
     if (!token) return null;
@@ -188,14 +188,15 @@ export function clearWalkInSession(): void {
  * flow; the same value serves here. A `?closeUrl=` is still honoured, so an
  * app whose scheme differs can override without waiting for a deploy.
  */
-function takeUrlSession(): { token: string; closeUrl?: string } | null {
+function takeUrlSession(): { token: string; closeUrl?: string; canRemint: true } | null {
   try {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
     if (!token) return null;
     const closeUrl = params.get('closeUrl')?.trim() || CLOSE_URL;
     history.replaceState(null, '', window.location.pathname);
-    return { token, ...(closeUrl ? { closeUrl } : {}) };
+    /* A reload re-reads this URL, so the app can hand us a fresh token. */
+    return { token, canRemint: true, ...(closeUrl ? { closeUrl } : {}) };
   } catch {
     return null;
   }
@@ -228,6 +229,8 @@ if (session) {
       applyDocumentLocale(next);
     },
     autoOpen: true,
+    /* Only the app-token path survives a reload — see ConnectOptions. */
+    canRemintToken: session.canRemint === true,
     /* The customer pressed close: end the walk-in session deliberately, which
        is what the old consume-on-read was reaching for. */
     onClose: clearWalkInSession,

@@ -77,6 +77,20 @@ export interface ConnectOptions {
    * thread is this contact's; a gateway that predates it ignores it.
    */
   resumeConversationId?: string;
+  /**
+   * Can this page mint itself a fresh token by reloading?
+   *
+   * True for the Yiji app, whose host page carries a session token and issues
+   * a new one on every load. FALSE for a QR walk-in: its token came from a
+   * phone number typed once into `/walk-in`, lives in this tab's
+   * `sessionStorage`, and there is nothing to re-mint it from — so a reload
+   * finds an expired token, clears it, and bounces the customer back to the
+   * phone form, losing the conversation they were in the middle of.
+   *
+   * Defaults to false: reloading the page out from under a customer is the
+   * exceptional act, and it should have to be asked for.
+   */
+  canRemintToken?: boolean;
 }
 
 export function connectWidget(
@@ -128,9 +142,33 @@ export function connectWidget(
   });
 
   const startedAt = Date.now();
+  /*
+   * HAS THIS SESSION EVER BEEN UP?
+   *
+   * The difference between "we cannot start this chat" and "we lost the chat
+   * and are getting it back" — and the widget had no way to tell them apart.
+   * A refusal at startup is terminal and worth saying out loud; a drop after a
+   * working connection is ordinary and recovers on its own.
+   */
+  let everConnected = false;
   cb.onStatus('connecting');
-  socket.on('connect', () => cb.onStatus('connected'));
+  socket.on('connect', () => {
+    everConnected = true;
+    cb.onStatus('connected');
+  });
   socket.io.on('reconnect_attempt', () => cb.onStatus('reconnecting'));
+  /*
+   * A DROP IS NOT A FAILURE, AND SOMETHING MUST SAY SO.
+   *
+   * There was no `disconnect` handler at all, so the only states reachable
+   * after a working connection were 'reconnecting' and the terminal 'error'.
+   * Socket.IO reconnects on its own (attempts are unlimited here), so this
+   * reports the truth — we are coming back — rather than leaving the last
+   * status standing.
+   */
+  socket.on('disconnect', () => {
+    if (everConnected) cb.onStatus('reconnecting');
+  });
   socket.on('connect_error', (err: Error) => {
     /*
      * ONLY an error if we are not actually connected.
@@ -152,6 +190,30 @@ export function connectWidget(
      * gateway down) leaves it false and still reports the error.
      */
     if (socket.connected) return;
+    /*
+     * A FAILED RETRY ON A SESSION THAT ONCE WORKED IS NOT TERMINAL.
+     *
+     * `socket.connected` alone was not enough. It answers "are we up right
+     * now", and during a reconnect the answer is legitimately no — so the
+     * FIRST retry to fail for any transient reason (a 502 while ECS swaps a
+     * task, the sticky instance being replaced, a phone moving from the
+     * branch wifi to cellular) set 'error'.
+     *
+     * Nothing ever set it back. 'error' was a one-way door: no handler
+     * downgrades it, so `canSend` stayed false and the composer stayed
+     * locked while socket.io went on retrying invisibly in the background.
+     * The customer saw "Reconnecting…" become "We could not start this
+     * chat" on a chat that had been working a second earlier, and no amount
+     * of waiting fixed it (owner, 2026-09-16, screenshots — a QR walk-in
+     * being told to reopen from an app they never used).
+     *
+     * `everConnected` is the missing distinction: this session HAS been up,
+     * so the session itself is fine and the retries are the right answer.
+     */
+    if (everConnected) {
+      cb.onStatus('reconnecting');
+      return;
+    }
     cb.onStatus('error');
     // The customer token is minted once by the host page and can't be refreshed
     // in-place (the widget has no signing secret). When it expires mid-session
@@ -160,7 +222,22 @@ export function connectWidget(
     // window distinguishes a genuine mid-session expiry (reload, self-heals) from
     // a token that's bad at startup, e.g. a secret mismatch (don't reload-loop).
     const authError = /token|jwt|unauthorized|inactive vendor/i.test(err.message);
-    if (authError && Date.now() - startedAt > 30_000 && typeof window !== 'undefined') {
+    /*
+     * ONLY RELOAD WHERE A RELOAD CAN HELP.
+     *
+     * This self-heals an expired token by re-minting it — which the Yiji app's
+     * host page does on load. A QR walk-in has no such source: reloading makes
+     * `takeWalkInSession` find the expired token, clear it, and redirect to
+     * the phone form, so the customer loses the thread they were typing in and
+     * is asked for their number again. For them a refusal must be reported,
+     * not "fixed" by throwing the page away.
+     */
+    if (
+      authError &&
+      options.canRemintToken === true &&
+      Date.now() - startedAt > 30_000 &&
+      typeof window !== 'undefined'
+    ) {
       window.location.reload();
     }
   });

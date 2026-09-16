@@ -7,6 +7,15 @@ import { t, isRtl, type WidgetLocale } from './i18n.js';
 export interface WidgetConfig {
   gatewayUrl: string;
   token: string;
+  /**
+   * Can this host page mint a fresh token by reloading itself?
+   *
+   * The Yiji app can: it navigates here with a token and issues a new one
+   * every time. A QR walk-in cannot — its token was minted once from a phone
+   * number and lives only in this tab — so reloading it loses the customer's
+   * conversation and sends them back to the phone form. Defaults to false.
+   */
+  canRemintToken?: boolean;
   /** The language to open in. The customer can switch from the header. */
   locale?: WidgetLocale;
   /**
@@ -612,7 +621,10 @@ export function Widget({ config }: { config: WidgetConfig }) {
           forgetConversation(config.token);
         },
       },
-      resume ? { resumeConversationId: resume } : {},
+      {
+        ...(resume ? { resumeConversationId: resume } : {}),
+        canRemintToken: config.canRemintToken === true,
+      },
     );
     socketRef.current = socket;
     return () => {

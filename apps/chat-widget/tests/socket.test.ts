@@ -167,6 +167,12 @@ describe('connectWidget — status transitions', () => {
   });
 });
 
+/*
+ * These drive the RE-MINT path, which is now opt-in: only a host page that can
+ * issue a fresh token on load may reload (`canRemintToken`). A QR walk-in must
+ * never reload — see "the reload that re-mints an expired token" below — so
+ * these pass the flag the Yiji app path sets.
+ */
 describe('connectWidget — connect_error reload heuristics', () => {
   const origLocation = window.location;
 
@@ -189,7 +195,7 @@ describe('connectWidget — connect_error reload heuristics', () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);
     const cb = makeCallbacks();
-    connectWidget('u', 't', cb);
+    connectWidget('u', 't', cb, { canRemintToken: true });
     // Advance past the 30s grace window so a mid-session token expiry self-heals.
     vi.setSystemTime(31_000);
     sock.fire('connect_error', new Error('jwt expired'));
@@ -221,7 +227,7 @@ describe('connectWidget — connect_error reload heuristics', () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);
     const cb = makeCallbacks();
-    connectWidget('u', 't', cb);
+    connectWidget('u', 't', cb, { canRemintToken: true });
     vi.setSystemTime(40_000);
     sock.fire('connect_error', new Error('Inactive vendor'));
     expect(window.location.reload).toHaveBeenCalledTimes(1);
@@ -450,5 +456,109 @@ describe('server refusals', () => {
     delete (cb as Record<string, unknown>).onServerError;
     connectWidget('u', 't', cb);
     expect(() => sock.fire('error', { code: 'forbidden' })).not.toThrow();
+  });
+});
+
+/*
+ * THE CHAT THAT DIED AFTER IT WAS WORKING.
+ *
+ * Reported four times as "same issue": a QR walk-in sends a message fine, the
+ * panel says "Reconnecting…", and then "We could not start this chat. Please
+ * reopen it from the app, or call us." — on a page reached by scanning a code,
+ * with no app involved, and no amount of waiting brought it back.
+ *
+ * Every test here drives the SECOND connection attempt. The first one always
+ * succeeded, which is why synthetic end-to-end probes passed 5/5 while real
+ * customers were stranded: the bug is unreachable until a working session
+ * drops.
+ */
+describe('a session that has already connected', () => {
+  it('reports a drop as reconnecting, not as a dead chat', () => {
+    const cb = makeCallbacks();
+    connectWidget('https://gw.example', 'tok', cb);
+
+    sock.connected = true;
+    sock.fire('connect');
+    expect(cb.onStatus).toHaveBeenLastCalledWith('connected');
+
+    // The task is replaced / the phone changes network.
+    sock.connected = false;
+    sock.fire('disconnect', 'transport close');
+    expect(cb.onStatus).toHaveBeenLastCalledWith('reconnecting');
+  });
+
+  it('does not turn a failed RETRY into a terminal error', () => {
+    const cb = makeCallbacks();
+    connectWidget('https://gw.example', 'tok', cb);
+
+    sock.connected = true;
+    sock.fire('connect');
+
+    sock.connected = false;
+    sock.fire('disconnect', 'transport close');
+    // A retry that fails — a 502 mid-deploy, the sticky instance going away.
+    sock.fire('connect_error', new Error('xhr poll error'));
+
+    // THE REGRESSION: this used to be 'error', which nothing ever cleared, so
+    // the composer stayed locked for ever while socket.io retried in silence.
+    expect(cb.onStatus).not.toHaveBeenCalledWith('error');
+    expect(cb.onStatus).toHaveBeenLastCalledWith('reconnecting');
+  });
+
+  it('still reports a refusal at STARTUP as an error', () => {
+    const cb = makeCallbacks();
+    connectWidget('https://gw.example', 'tok', cb);
+
+    // Never connected: a bad token or a gateway that is down is terminal, and
+    // the customer should be told rather than watching a spinner for ever.
+    sock.connected = false;
+    sock.fire('connect_error', new Error('token invalid: jwt malformed'));
+    expect(cb.onStatus).toHaveBeenLastCalledWith('error');
+  });
+});
+
+describe('the reload that re-mints an expired token', () => {
+  const realLocation = window.location;
+  let reload: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    reload = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...realLocation, reload },
+    });
+  });
+  afterEach(() => {
+    Object.defineProperty(window, 'location', { configurable: true, value: realLocation });
+  });
+
+  it('never reloads a walk-in, which cannot mint a new token', () => {
+    vi.useFakeTimers();
+    const cb = makeCallbacks();
+    // canRemintToken defaults to false — this is the QR walk-in.
+    connectWidget('https://gw.example', 'tok', cb);
+
+    // Past the startup grace window, then the token expires mid-session.
+    vi.advanceTimersByTime(60_000);
+    sock.connected = false;
+    sock.fire('connect_error', new Error('token invalid: jwt expired'));
+
+    // A reload would clear the expired token and bounce the customer back to
+    // the phone form, losing the conversation they were typing in.
+    expect(reload).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('still reloads the app, whose host page issues a fresh token on load', () => {
+    vi.useFakeTimers();
+    const cb = makeCallbacks();
+    connectWidget('https://gw.example', 'tok', cb, { canRemintToken: true });
+
+    vi.advanceTimersByTime(60_000);
+    sock.connected = false;
+    sock.fire('connect_error', new Error('token invalid: jwt expired'));
+
+    expect(reload).toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });

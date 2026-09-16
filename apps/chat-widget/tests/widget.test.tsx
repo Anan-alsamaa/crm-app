@@ -132,13 +132,16 @@ describe('Widget — launcher and panel', () => {
   it('calls connectWidget with the configured gateway url and token', async () => {
     const { connectWidget } = await import('../src/socket.js');
     renderWidget();
-    // The fourth argument is the resume offer (resume.ts): empty on a device
-    // that holds no thread, so the auth the gateway sees is unchanged.
+    /* The fourth argument is the connect offer: the resume id (resume.ts),
+       empty on a device that holds no thread, plus whether this host page can
+       re-mint its token by reloading — false unless it says otherwise, because
+       reloading a QR walk-in throws its session away. The auth the gateway
+       sees is unchanged either way. */
     expect(connectWidget).toHaveBeenCalledWith(
       'https://gw.test',
       'test-token',
       expect.any(Object),
-      {},
+      { canRemintToken: false },
     );
   });
 
