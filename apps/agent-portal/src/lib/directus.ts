@@ -48,10 +48,23 @@ export async function downloadAsset(fileId: string, filename?: string): Promise<
 export const auth = createAuthClient({
   url: DIRECTUS_URL,
   mode: 'json',
+  /*
+   * PER TAB, not per browser.
+   *
+   * This was `localStorage`, which every tab on the origin shares — so a second
+   * tab adopted whoever the first was signed in as, and signing in as somebody
+   * else there flipped the first tab too on its next refresh (owner,
+   * 2026-09-16). Two agents at one desk could not work side by side.
+   *
+   * `sessionStorage` scopes the session to the tab, which is what a signed-in
+   * identity actually is. A new tab starts at the login screen; closing the tab
+   * ends that session. Both are correct, and both are the price of two people
+   * being able to work on one machine.
+   */
   storage:
-    typeof localStorage === 'undefined'
+    typeof sessionStorage === 'undefined'
       ? undefined
-      : browserAuthStorage('yiji.agent.session', localStorage),
+      : browserAuthStorage('yiji.agent.session', sessionStorage),
 });
 
 /** Authenticated Directus client for reads (conversations, messages, ...). */

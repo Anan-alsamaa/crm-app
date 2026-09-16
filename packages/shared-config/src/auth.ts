@@ -250,7 +250,26 @@ export function createAuthClient({ url, storage, mode = 'cookie' }: AuthClientOp
 
 export type AuthClient = ReturnType<typeof createAuthClient>;
 
-/** localStorage-backed AuthenticationStorage factory (browser only). */
+/**
+ * Web Storage-backed AuthenticationStorage. PASS `sessionStorage`, not
+ * `localStorage`.
+ *
+ * `localStorage` is shared by every tab on an origin, which makes a session a
+ * property of the BROWSER rather than of the tab. Two agents on one machine
+ * then cannot work side by side: opening the portal in a second tab silently
+ * adopted the first tab's identity, and signing in as somebody else there
+ * overwrote the shared key, so the first tab became the second agent on its
+ * next refresh (owner, 2026-09-16). One desk, two people, one hijacked
+ * session each way.
+ *
+ * `sessionStorage` is per tab, which is exactly the scope a signed-in identity
+ * should have. The cost is deliberate and small: a new tab starts signed out,
+ * and closing the tab ends that session. Both are the correct answer to "who
+ * is this tab?" — and the alternative was two agents overwriting each other.
+ *
+ * Still keyed per portal, so the agent and admin portals stay independent
+ * within one tab as well.
+ */
 export function browserAuthStorage(
   storageKey: string,
   ls: { getItem(k: string): string | null; setItem(k: string, v: string): void },

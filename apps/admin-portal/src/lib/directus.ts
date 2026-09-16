@@ -15,10 +15,12 @@ const DIRECTUS_URL = resolveUrl(
 export const auth = createAuthClient({
   url: DIRECTUS_URL,
   mode: 'json',
+  /* PER TAB — see the matching note in the agent portal. `localStorage` is
+     shared across tabs, so two people on one machine overwrote each other. */
   storage:
-    typeof localStorage === 'undefined'
+    typeof sessionStorage === 'undefined'
       ? undefined
-      : browserAuthStorage('yiji.admin.session', localStorage),
+      : browserAuthStorage('yiji.admin.session', sessionStorage),
 });
 
 /** The authenticated Directus client, for CRUD (users, teams, ...). */

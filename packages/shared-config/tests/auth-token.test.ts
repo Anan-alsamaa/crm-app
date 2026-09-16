@@ -36,7 +36,7 @@ vi.mock('@directus/sdk', () => ({
   passwordReset: () => ({}),
 }));
 
-import { createAuthClient } from '../src/auth.js';
+import { browserAuthStorage, createAuthClient } from '../src/auth.js';
 
 beforeEach(() => {
   refresh.mockReset();
@@ -73,5 +73,58 @@ describe('getToken — the cold-load gap that logged agents out', () => {
     // The caller treats null as expiry and sends them to the login screen,
     // which is correct HERE and was wrong for the race above.
     expect(await auth.getToken()).toBeNull();
+  });
+});
+
+/*
+ * TWO AGENTS, ONE MACHINE.
+ *
+ * The session store must be scoped to the TAB. When it was `localStorage` —
+ * shared by every tab on the origin — opening the portal in a second tab
+ * adopted whoever the first tab was signed in as, and signing in as somebody
+ * else there overwrote the shared key so the first tab became the second agent
+ * on its next refresh (owner, 2026-09-16). One desk, two people, each
+ * hijacking the other.
+ *
+ * These pin the property that matters rather than the API used to get it: two
+ * stores that do not see each other keep two identities apart, and one shared
+ * store does not. The second case is the bug, written down so it cannot come
+ * back quietly.
+ */
+describe('a signed-in identity belongs to the tab, not the browser', () => {
+  /** A Web Storage stand-in. One instance per "tab". */
+  const makeStore = () => {
+    const data = new Map<string, string>();
+    return {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, v),
+    };
+  };
+
+  it('keeps two tabs on separate sessions when each has its own store', () => {
+    const tabA = browserAuthStorage('yiji.agent.session', makeStore());
+    const tabB = browserAuthStorage('yiji.agent.session', makeStore());
+
+    tabA.set({ access_token: 'nada', refresh_token: 'r-nada', expires_at: 1, expires: 1 });
+    // A fresh tab starts signed out rather than inheriting whoever is in tab A.
+    expect(tabB.get()).toBeNull();
+
+    tabB.set({ access_token: 'shatha', refresh_token: 'r-shatha', expires_at: 1, expires: 1 });
+    // And signing in as somebody else does not reach back into the first tab.
+    expect(tabA.get()?.access_token).toBe('nada');
+    expect(tabB.get()?.access_token).toBe('shatha');
+  });
+
+  it('DEMONSTRATES the bug: one shared store collapses both tabs into one user', () => {
+    // Exactly what `localStorage` does — the same backing store handed to both.
+    const shared = makeStore();
+    const tabA = browserAuthStorage('yiji.agent.session', shared);
+    const tabB = browserAuthStorage('yiji.agent.session', shared);
+
+    tabA.set({ access_token: 'nada', refresh_token: 'r-nada', expires_at: 1, expires: 1 });
+    expect(tabB.get()?.access_token).toBe('nada'); // tab B adopted tab A
+
+    tabB.set({ access_token: 'shatha', refresh_token: 'r-shatha', expires_at: 1, expires: 1 });
+    expect(tabA.get()?.access_token).toBe('shatha'); // ...and tab A flipped back
   });
 });
