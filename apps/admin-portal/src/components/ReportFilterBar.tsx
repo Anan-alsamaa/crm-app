@@ -253,9 +253,18 @@ export function ReportFilterBar({
 /**
  * Apply, Clear, and whatever the report puts beside them.
  *
- * Apply is always present rather than appearing only when something changed: a
- * button that comes and goes is one people stop looking for, and its disabled
- * state is what says "there is nothing waiting" — which is information.
+ * APPLY ONLY EXISTS WHEN SOMETHING IS WAITING.
+ *
+ * It used to be permanent-but-disabled, on the reasoning that a button which
+ * comes and goes is one people stop looking for, and that its disabled state
+ * said "there is nothing waiting". That was true while every control needed
+ * it. Now a dropdown applies itself and only typing holds a draft, so the
+ * disabled state is what you see almost always — a dead control sitting in the
+ * bar implying the filters have not taken effect, next to a table where they
+ * already have.
+ *
+ * Shown the moment something is genuinely pending and gone once it is not,
+ * which is the honest reading of the same fact.
  */
 function FilterActions({
   dirty,
@@ -279,11 +288,11 @@ function FilterActions({
           {String(t('inbox.clearFilters', { defaultValue: 'Clear filters' }))}
         </Button>
       )}
-      <Button type="submit" size="sm" onClick={apply} disabled={!dirty}>
-        {dirty
-          ? String(t('complaintReport.applyPending', { defaultValue: 'Apply changes' }))
-          : String(t('complaintReport.apply', { defaultValue: 'Apply' }))}
-      </Button>
+      {dirty && (
+        <Button type="submit" size="sm" onClick={apply}>
+          {String(t('complaintReport.applyPending', { defaultValue: 'Apply changes' }))}
+        </Button>
+      )}
       {actions}
     </div>
   );

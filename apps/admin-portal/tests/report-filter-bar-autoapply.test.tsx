@@ -99,6 +99,35 @@ describe('ReportFilterBar — a dropdown applies itself', () => {
     expect(screen.getByTestId('applied-search')).toHaveTextContent('pizza');
   });
 
+  /*
+   * The button is now a signal, not furniture. Permanently-disabled made sense
+   * while every control needed it; with dropdowns applying themselves it would
+   * be the normal state — a dead control implying the table has not caught up.
+   */
+  it('shows no Apply button when nothing is waiting', () => {
+    render(<Harness />);
+    expect(screen.queryByRole('button', { name: /Apply/i })).not.toBeInTheDocument();
+  });
+
+  it('shows Apply only once something is typed', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    expect(screen.queryByRole('button', { name: /Apply/i })).not.toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText('Search…'), 'x');
+    expect(screen.getByRole('button', { name: /Apply/i })).toBeInTheDocument();
+  });
+
+  it('hides Apply again once the draft is applied', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.type(screen.getByPlaceholderText('Search…'), 'pizza');
+    await user.click(screen.getByRole('button', { name: /Apply/i }));
+
+    expect(screen.getByTestId('applied-search')).toHaveTextContent('pizza');
+    expect(screen.queryByRole('button', { name: /Apply/i })).not.toBeInTheDocument();
+  });
+
   it('still waits for Apply on a typed value alone', async () => {
     const user = userEvent.setup();
     render(<Harness />);

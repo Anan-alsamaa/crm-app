@@ -1341,14 +1341,17 @@ function ComplaintsReport({
                 {t('complaintReport.clearFilters', { defaultValue: 'Clear filters' })}
               </Button>
             )}
-            {/* Always present, disabled when nothing is waiting: a button that
-                comes and goes is one people stop looking for, and its disabled
-                state is what says "the table already matches these". */}
-            <Button type="submit" size="sm" className="h-8" disabled={!filtersDirty}>
-              {filtersDirty
-                ? t('complaintReport.applyPending', { defaultValue: 'Apply changes' })
-                : t('complaintReport.apply', { defaultValue: 'Apply' })}
-            </Button>
+            {/* Only when something is genuinely waiting. It used to be
+                permanent-but-disabled, which was right while every control
+                needed it; now the dropdowns apply themselves and only typing
+                holds a draft, so a disabled Apply would be the normal state —
+                a dead control claiming the table has not caught up when it
+                already has. */}
+            {filtersDirty && (
+              <Button type="submit" size="sm" className="h-8">
+                {t('complaintReport.applyPending', { defaultValue: 'Apply changes' })}
+              </Button>
+            )}
           </div>
         </div>
       </form>

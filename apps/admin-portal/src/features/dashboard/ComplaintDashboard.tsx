@@ -1105,9 +1105,15 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             letting them wrap to a new line at the start. They read as what you
             do TO the filters, so they belong beside them, not under them. */}
         <div className="ms-auto flex items-center gap-2 pb-px">
-          <Button type="button" size="sm" disabled={!dirty} onClick={() => setApplied(draft)}>
-            {t('complaintDash.apply', { defaultValue: 'Apply' })}
-          </Button>
+          {/* Only when something is genuinely waiting — which, now that the
+              dropdowns apply themselves, means a half-typed date. A permanently
+              disabled Apply beside a table that already reflects the filters
+              reads as "this has not taken effect yet", and says so wrongly. */}
+          {dirty && (
+            <Button type="button" size="sm" onClick={() => setApplied(draft)}>
+              {t('complaintDash.apply', { defaultValue: 'Apply' })}
+            </Button>
+          )}
           <Button
             type="button"
             size="sm"
