@@ -37,6 +37,43 @@ export function lastMonth(): DateRange {
   return { from: isoDay(new Date(now.getTime() - 30 * DAY)), to: isoDay(now) };
 }
 
+/**
+ * A REMEMBERED RANGE MUST NOT SILENTLY STOP AT THE DAY IT WAS STORED.
+ *
+ * The stored value is a literal `to` date, so "the last month up to today",
+ * saved once, means "up to the 13th" for ever. Every ticket raised after that
+ * day then falls outside the report with nothing on screen saying so — the
+ * table simply shows one old row and the KPI agrees with it, which reads as
+ * lost data rather than a date filter (owner, 2026-09-17; reproduced exactly
+ * by seeding a range ending four days ago).
+ *
+ * So an end date in the PAST is carried forward to today, keeping the span the
+ * user chose.
+ *
+ * WHICH RANGES MOVE. Only ones that look like "up to now" — those whose stored
+ * end was the day they were saved, which is every default and every quick
+ * range. There is no timestamp to prove that, so the test is whether the range
+ * ENDS AT OR AFTER the span it covers: a rolling window always does, while a
+ * deliberately historical one (1–31 August, looked at in September) does not
+ * and is left exactly as it is. Somebody looking at August means August.
+ *
+ * A first attempt only rolled ranges ending yesterday or today, which failed
+ * the very case it was written for: the report that prompted this was FOUR
+ * days stale. A window is stale by however long you were away.
+ */
+function rollForward(r: DateRange): DateRange {
+  const today = isoDay(new Date());
+  if (r.to >= today) return r;
+  const span = Date.parse(r.to) - Date.parse(r.from);
+  if (!Number.isFinite(span) || span < 0) return r;
+  /* How far behind today the stored end sits. A rolling window is stale by at
+     most the time since it was last opened; a historical one is stale for ever
+     and sits further back than its own span. */
+  const behind = Date.parse(today) - Date.parse(r.to);
+  if (behind > span) return r;
+  return { from: isoDay(new Date(Date.parse(today) - span)), to: today };
+}
+
 function read(key: string): DateRange | null {
   try {
     const raw = window.localStorage.getItem(key);
@@ -60,7 +97,10 @@ export function useRememberedRange(key: string): {
   /** Back to the last month, and forget what was stored. */
   reset: () => void;
 } {
-  const [range, setRangeState] = useState<DateRange>(() => read(key) ?? lastMonth());
+  const [range, setRangeState] = useState<DateRange>(() => {
+    const stored = read(key);
+    return stored ? rollForward(stored) : lastMonth();
+  });
 
   useEffect(() => {
     try {
