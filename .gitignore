@@ -148,3 +148,7 @@ Ayman/
 .taskdef-*.json
 .release-work/
 .diag/
+
+# scratch auth token — never commit
+tk.txt
+perm-backup-*.json
