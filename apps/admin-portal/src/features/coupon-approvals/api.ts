@@ -266,6 +266,22 @@ export function useDecideCoupon() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['coupon-approvals'] });
+      /*
+       * THE DECISION CHANGED A TICKET, SO EVERY TICKET READER IS NOW STALE.
+       *
+       * Approving writes `compensation`, `coupon_code` and the amounts onto
+       * the ticket, and the reports read exactly those columns. Only the queue
+       * was invalidated, so a supervisor who approved a coupon and went to
+       * Ticket breakdown saw the row WITHOUT its compensation and reasonably
+       * concluded the approval had not worked (owner, 2026-09-17).
+       *
+       * `refetchOnWindowFocus` did not cover it: the report sets
+       * `staleTime: 60_000`, and focus does not refetch data still considered
+       * fresh — so the gap was up to a minute with nothing on screen saying so.
+       */
+      void qc.invalidateQueries({ queryKey: ['agent-reports'] });
+      void qc.invalidateQueries({ queryKey: ['complaint-metrics'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard-metrics'] });
     },
   });
 }
