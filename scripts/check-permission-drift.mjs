@@ -70,6 +70,16 @@ function envValue(file, key) {
  * NULL the only symptom was a coupon approval claiming a ticket had no order
  * number. Agents are deliberately excluded — their scope is correct.
  */
+/*
+ * Approving a coupon writes the coupon ONTO THE TICKET before it marks the
+ * request approved — so a role that may approve must be able to write those
+ * three ticket fields. None of them could (2026-09-17), and the only symptom
+ * was "Could not record that decision": Directus refused the first of the two
+ * writes and the decision was never recorded at all.
+ */
+const COUPON_APPROVER_ROLES = ['WeCare Admin', 'WeCare Supervisor', 'Department Manager'];
+const COUPON_TICKET_FIELDS = ['coupon_code', 'coupon_value', 'coupon_percent', 'compensation'];
+
 const UNSCOPED_TICKET_ROLES = [
   'WeCare Admin',
   'WeCare Supervisor',
@@ -187,6 +197,47 @@ async function checkEnvironment(name, base, email, password) {
           );
         }
       }
+    }
+  }
+
+  /*
+   * A role that may approve a coupon must be able to write it onto the ticket.
+   * Checked as a FIELD list rather than a grant: `update` exists on all of
+   * these, it simply excluded the coupon columns.
+   */
+  for (const roleName of COUPON_APPROVER_ROLES) {
+    const role = roles.find((r) => r.name === roleName);
+    if (!role) continue;
+    const { data: withPolicies } = await api(
+      base,
+      `/roles/${role.id}?fields=policies.policy.id`,
+      token,
+    );
+    const writable = new Set();
+    let unrestricted = false;
+    for (const p of withPolicies.policies ?? []) {
+      const pid = p.policy?.id;
+      if (!pid) continue;
+      const { data: perms } = await api(
+        base,
+        `/permissions?filter[policy][_eq]=${pid}&filter[collection][_eq]=tickets&filter[action][_eq]=update&fields=fields&limit=-1`,
+        token,
+      );
+      for (const perm of perms) {
+        const f = perm.fields;
+        if (!f || f.includes('*')) unrestricted = true;
+        else for (const name of f) writable.add(name);
+      }
+    }
+    if (unrestricted) continue;
+    const missing = COUPON_TICKET_FIELDS.filter((f) => !writable.has(f));
+    if (missing.length > 0) {
+      gaps += 1;
+      process.stdout.write(
+        `  [31m✗[0m ${roleName} may approve coupons but CANNOT write` +
+          ` tickets.${missing.join(', ')} — approving fails with "Could not record that decision"
+`,
+      );
     }
   }
 
