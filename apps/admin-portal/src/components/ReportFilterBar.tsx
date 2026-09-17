@@ -20,13 +20,18 @@ import { Button, DateField, Input, SelectMenu } from '@yiji/ui';
  * read past — and choosing an absent value returns an empty table that looks
  * like a fault rather than an answer.
  *
- * NOTHING APPLIES UNTIL YOU SAY SO. Every control used to write straight
+ * TYPING WAITS; CHOOSING DOES NOT. Every control used to write straight
  * through, so a report re-queried and re-sorted on each keystroke and each
  * half-typed date — the table moving under the hands of somebody still
- * deciding what to ask. The bar holds a DRAFT and pushes it up on Apply (or
- * Enter). The applied values still arrive as props, so a shortcut that writes
- * them from outside — the quick-range preset — shows up here immediately,
- * which is what a shortcut is for.
+ * deciding what to ask. Text and dates therefore hold a DRAFT and push up on
+ * Apply (or Enter).
+ *
+ * A DROPDOWN IS DIFFERENT and applies immediately (owner, 2026-09-17): it is
+ * one deliberate act with a settled value, never a half-typed one, so making
+ * somebody confirm it added a click and bought nothing. The applied values
+ * still arrive as props, so a shortcut that writes them from outside — the
+ * quick-range preset — shows up here immediately, which is what a shortcut is
+ * for.
  */
 
 export interface FilterSelect {
@@ -129,15 +134,23 @@ export function ReportFilterBar({
     draftTo !== to ||
     selects.some((s) => valueOf(s) !== s.value);
 
-  const apply = () => {
+  /**
+   * Push the draft up.
+   *
+   * `overrides` lets a control that has just changed apply its OWN value in
+   * the same pass — a `setState` is not visible to this closure, so a select
+   * applying itself would otherwise push the value it held a moment ago.
+   */
+  const applyWith = (overrides: Record<string, string> = {}) => {
     if (draftSearch !== search) onSearch(draftSearch);
     if (draftFrom !== from) onFrom(draftFrom);
     if (draftTo !== to) onTo(draftTo);
     for (const s of selects) {
-      const next = valueOf(s);
+      const next = overrides[s.key] ?? valueOf(s);
       if (next !== s.value) s.onChange(next);
     }
   };
+  const apply = () => applyWith();
 
   const clear = () => {
     setDraftSearch('');
@@ -206,7 +219,23 @@ export function ReportFilterBar({
                 className="w-[10rem]"
                 aria-label={s.label}
                 value={valueOf(s)}
-                onChange={(v) => setDraftSelects((prev) => ({ ...prev, [s.key]: v }))}
+                /*
+                 * A DROPDOWN APPLIES ITSELF. No Apply click (owner, 2026-09-17).
+                 *
+                 * Choosing from a menu is one deliberate act with a settled
+                 * value — unlike typing, where every keystroke is a half-typed
+                 * state and re-querying on each one made the table move under
+                 * the hands of somebody still deciding what to ask. That is the
+                 * problem the draft solves, and it is a problem the text and
+                 * date fields have and this one does not.
+                 *
+                 * Anything typed but not yet applied goes WITH it, so a select
+                 * never silently discards what is sitting in the search box.
+                 */
+                onChange={(v) => {
+                  setDraftSelects((prev) => ({ ...prev, [s.key]: v }));
+                  applyWith({ [s.key]: v });
+                }}
                 options={[
                   { value: '', label: t('complaintReport.any', { defaultValue: 'Any' }) },
                   ...s.options,

@@ -864,10 +864,37 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
   useEffect(() => {
     if (!draft.store) return;
     const stillListed = storeChoices.some((c) => c.value === draft.store);
-    if (!stillListed) setDraft((f) => ({ ...f, store: '' }));
+    if (!stillListed) {
+      setDraft((f) => ({ ...f, store: '' }));
+      /* ...and clear it from what is APPLIED too, now that choosing a brand
+         takes effect on its own. Clearing only the draft would leave the old
+         restaurant still narrowing the results while its dropdown showed
+         "All" — a filter that is on, invisible, and returns nothing. */
+      setApplied((f) => (f.store ? { ...f, store: '' } : f));
+    }
   }, [draft.brand, draft.store, storeChoices]);
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(applied);
+
+  /**
+   * Choose a value from a dropdown and have it TAKE EFFECT (owner, 2026-09-17).
+   *
+   * Picking from a menu is one deliberate act with a settled value, so making
+   * somebody then find Apply added a click and bought nothing. Typing is the
+   * case the draft exists for — a half-typed date re-querying on every
+   * keystroke moves the table under the hands of somebody still deciding — so
+   * the date fields still wait for Apply.
+   *
+   * Both states are written from the same object, so anything typed but not
+   * yet applied rides along instead of being silently dropped.
+   */
+  const pick = (patch: Partial<ComplaintFilters>) => {
+    setDraft((f) => {
+      const next = { ...f, ...patch };
+      setApplied(next);
+      return next;
+    });
+  };
   const anyFilter = Object.values(applied).some(Boolean);
 
   // The two footer-total memos that lived here went with the agent tables
@@ -958,7 +985,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             size="sm"
             searchable
             value={draft.brand}
-            onChange={(v) => setDraft((f) => ({ ...f, brand: v }))}
+            onChange={(v) => pick({ brand: v })}
             aria-label={t('complaintDash.brand', { defaultValue: 'Brand' })}
             options={[
               { value: '', label: t('complaintDash.allBrands', { defaultValue: 'All brands' }) },
@@ -974,7 +1001,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             size="sm"
             searchable
             value={draft.area}
-            onChange={(v) => setDraft((f) => ({ ...f, area: v }))}
+            onChange={(v) => pick({ area: v })}
             aria-label={t('complaintDash.area', { defaultValue: 'Area' })}
             options={[
               { value: '', label: t('complaintDash.allAreas', { defaultValue: 'All areas' }) },
@@ -993,7 +1020,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             size="sm"
             searchable
             value={draft.chain}
-            onChange={(v) => setDraft((f) => ({ ...f, chain: v }))}
+            onChange={(v) => pick({ chain: v })}
             aria-label={t('complaintDash.chain', { defaultValue: 'Chain' })}
             options={[
               {
@@ -1012,7 +1039,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             size="sm"
             searchable
             value={draft.city}
-            onChange={(v) => setDraft((f) => ({ ...f, city: v }))}
+            onChange={(v) => pick({ city: v })}
             aria-label={t('complaintDash.city', { defaultValue: 'City' })}
             options={[
               { value: '', label: t('complaintDash.allCities', { defaultValue: 'All cities' }) },
@@ -1034,7 +1061,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             // At the default width they all truncated to the store code.
             className="w-[16rem]"
             value={draft.store}
-            onChange={(v) => setDraft((f) => ({ ...f, store: v }))}
+            onChange={(v) => pick({ store: v })}
             aria-label={t('complaintDash.restaurant', { defaultValue: 'Restaurant' })}
             options={storeChoices}
           />
@@ -1062,7 +1089,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             searchable
             className="w-[13rem]"
             value={draft.agent}
-            onChange={(v) => setDraft((f) => ({ ...f, agent: v }))}
+            onChange={(v) => pick({ agent: v })}
             aria-label={t('complaintDash.agent', { defaultValue: 'Agent' })}
             options={[
               { value: '', label: t('complaintDash.allAgents', { defaultValue: 'All agents' }) },

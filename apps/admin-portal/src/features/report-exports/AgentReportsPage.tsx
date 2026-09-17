@@ -985,8 +985,30 @@ function ComplaintsReport({
     [joined],
   );
 
+  /**
+   * A dropdown APPLIES ITSELF (owner, 2026-09-17).
+   *
+   * Choosing from a menu is one deliberate act with a settled value, so making
+   * somebody then find Apply added a click and bought nothing. Typed fields
+   * still wait — a half-typed value re-querying on every keystroke moves the
+   * table under the hands of somebody still deciding what to ask.
+   *
+   * Draft and applied are written from the same object so anything typed but
+   * not yet applied rides along rather than being silently dropped, and the
+   * page resets exactly as Apply does: a filtered set is a different set, so
+   * page 7 of it means nothing.
+   */
+  /** Typed fields: hold the draft, wait for Apply (or Enter). */
   const setCriterion = (patch: Partial<TicketFilterCriteria>) =>
     setDraft((c) => ({ ...c, ...patch }));
+
+  const pickCriterion = (patch: Partial<TicketFilterCriteria>) =>
+    setDraft((c) => {
+      const next = { ...c, ...patch };
+      setCriteria(next);
+      setPage(1);
+      return next;
+    });
 
   /** Push the draft through. A filtered set is a different set, so page 7 of it
    *  means nothing — every apply lands on page 1. */
@@ -1140,7 +1162,7 @@ function ComplaintsReport({
           className="w-[10rem]"
           aria-label={label}
           value={value ?? ''}
-          onChange={(v) => setCriterion({ [field]: v } as Partial<TicketFilterCriteria>)}
+          onChange={(v) => pickCriterion({ [field]: v } as Partial<TicketFilterCriteria>)}
           options={[
             { value: '', label: t('complaintReport.any', { defaultValue: 'Any' }) },
             ...values.map((v) => ({ value: v, label: v })),
