@@ -63,6 +63,21 @@ function envValue(file, key) {
  * short hand-written list of the grants that MATTER is more honest, and adding
  * to it is the thing somebody does when they add a grant.
  */
+/*
+ * A role that holds `view_all_tickets` must NOT carry a rule scoping tickets to
+ * `$CURRENT_USER`. Six roles did (2026-09-17): the app granted the privilege
+ * and Directus refused it, and because an unreadable relation comes back as
+ * NULL the only symptom was a coupon approval claiming a ticket had no order
+ * number. Agents are deliberately excluded — their scope is correct.
+ */
+const UNSCOPED_TICKET_ROLES = [
+  'WeCare Admin',
+  'WeCare Supervisor',
+  'Department Manager',
+  'Chain Manager',
+  'Viewer',
+];
+
 const EXPECTED = [
   { role: 'svc-socket-gateway', collection: 'app_settings', actions: ['read', 'create', 'update'] },
   { role: 'svc-socket-gateway', collection: 'contacts', actions: ['create', 'read', 'update'] },
@@ -139,6 +154,42 @@ async function checkEnvironment(name, base, email, password) {
       );
     }
   }
+  /*
+   * A role that may see every ticket must not carry a self-scoping rule.
+   * Checked separately from EXPECTED because the fault is the PRESENCE of a
+   * rule, not the absence of a grant — and it reads as empty data, never as an
+   * error (see the comment on UNSCOPED_TICKET_ROLES).
+   */
+  for (const roleName of UNSCOPED_TICKET_ROLES) {
+    const role = roles.find((r) => r.name === roleName);
+    if (!role) continue;
+    const { data: withPolicies } = await api(
+      base,
+      `/roles/${role.id}?fields=policies.policy.id`,
+      token,
+    );
+    for (const p of withPolicies.policies ?? []) {
+      const pid = p.policy?.id;
+      if (!pid) continue;
+      const { data: perms } = await api(
+        base,
+        `/permissions?filter[policy][_eq]=${pid}&filter[collection][_eq]=tickets&fields=id,action,permissions&limit=-1`,
+        token,
+      );
+      for (const perm of perms) {
+        if (JSON.stringify(perm.permissions ?? {}).includes('$CURRENT_USER')) {
+          gaps += 1;
+          process.stdout.write(
+            `  [31m✗[0m ${roleName} · tickets.${perm.action} is SCOPED to` +
+              ` $CURRENT_USER (permission ${perm.id}) but the role may see every ticket —` +
+              ` an unreadable ticket returns null and renders as missing data
+`,
+          );
+        }
+      }
+    }
+  }
+
   return gaps;
 }
 
