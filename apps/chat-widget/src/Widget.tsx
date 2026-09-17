@@ -556,9 +556,30 @@ export function Widget({ config }: { config: WidgetConfig }) {
         },
         onAgentsPresence: (count) => {
           setAgentsOnline(count);
-          // Agents came back → allow the offline notice to show again if they
-          // later go offline within this same session.
-          if (count > 0) offlineNoticedRef.current = false;
+          if (count > 0) {
+            // Agents came back → allow the notice to show again if they later
+            // go offline within this same session.
+            offlineNoticedRef.current = false;
+            /*
+             * AND TAKE THE NOTICE BACK DOWN.
+             *
+             * "Our team is offline, we'll reply when we're back" stops being
+             * true the second somebody is there, and a promise about the
+             * future left sitting above a live conversation reads as an
+             * excuse for why nobody has answered yet (owner, 2026-09-17).
+             *
+             * Removed rather than rewritten: it said nothing the customer
+             * still needs, and the header pill already shows who is available
+             * now. Only OUR OWN bubble is touched — `localNotice` marks it —
+             * so nothing the agent or the customer actually said can be
+             * removed by this.
+             */
+            setMessages((prev) =>
+              prev.some((m) => m.localNotice === 'agents-offline')
+                ? prev.filter((m) => m.localNotice !== 'agents-offline')
+                : prev,
+            );
+          }
           broadcastPresenceToHost(count);
         },
         onMessage: (msg) => {
@@ -573,8 +594,21 @@ export function Widget({ config }: { config: WidgetConfig }) {
               );
             }
             if (prev.some((m) => m.id === msg.id)) return prev;
-            return [...prev, msg];
+            /*
+             * AN AGENT WRITING IS ITSELF PROOF THEY ARE THERE.
+             *
+             * The presence pulse is the usual trigger for clearing the offline
+             * notice, but it is not guaranteed to arrive first — an agent can
+             * pick up and reply before the count reaches this widget. Leaving
+             * "our team is offline" directly above their answer is the exact
+             * thing this is meant to prevent, so their message clears it too.
+             */
+            const next = prev.filter(
+              (m) => !(msg.senderType === 'agent' && m.localNotice === 'agents-offline'),
+            );
+            return [...next, msg];
           });
+          if (msg.senderType === 'agent') offlineNoticedRef.current = false;
           if (msg.senderType !== 'customer' && !openRef.current) setUnread((u) => u + 1);
         },
         onHistory: (history) => {
@@ -598,10 +632,16 @@ export function Widget({ config }: { config: WidgetConfig }) {
             const mine = new Set(
               history.filter((m) => m.senderType === 'customer').map((m) => m.content.trim()),
             );
+            /* An agent answered while this device was away: the offline notice
+               is already false by the time history lands, so it must not be
+               carried over alongside their reply. */
+            const answered = history.some((m) => m.senderType === 'agent');
+            if (answered) offlineNoticedRef.current = false;
             return [
               ...history,
               ...prev.filter((m) => {
                 if (seenIds.has(m.id)) return false;
+                if (answered && m.localNotice === 'agents-offline') return false;
                 const echoedBack =
                   m.senderType === 'customer' && !!m.clientMsgId && mine.has(m.content.trim());
                 return !echoedBack;
@@ -853,6 +893,8 @@ export function Widget({ config }: { config: WidgetConfig }) {
           content: tr.offlineAutoReply,
           attachments: [],
           createdAt: new Date().toISOString(),
+          // Marked so it can be taken back down the moment an agent arrives.
+          localNotice: 'agents-offline',
         },
       ]);
     }

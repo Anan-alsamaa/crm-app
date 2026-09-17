@@ -720,3 +720,89 @@ describe('the customer can change language inside the chat', () => {
     expect(screen.getByText('مرحبًا Sara، كيف يمكننا مساعدتك؟')).toBeInTheDocument();
   });
 });
+
+/*
+ * THE OFFLINE NOTICE MUST NOT OUTLIVE THE OFFLINE PERIOD.
+ *
+ * Writing in out of hours gets a local reassurance: "our team is offline, we'll
+ * reply as soon as we're back". It is written by the widget, never stored, and
+ * it stops being TRUE the moment somebody is there — a promise about the future
+ * left sitting above a live conversation reads as an excuse for why nobody has
+ * answered yet (owner, 2026-09-17).
+ *
+ * Four ways an agent can turn out to be present, and all four must take it down.
+ */
+describe('the agents-offline notice', () => {
+  const NOTICE = /our team is offline/i;
+
+  function sendWhileOffline(text = 'anybody there?') {
+    driveReady({ agentsOnline: 0 });
+    const textarea = screen.getByPlaceholderText('Type a message…');
+    fireEvent.input(textarea, { target: { value: text } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+  }
+
+  it('appears when the customer writes in with nobody online', () => {
+    renderWidget({ autoOpen: true });
+    sendWhileOffline();
+    expect(screen.getByText(NOTICE)).toBeInTheDocument();
+  });
+
+  it('disappears when an agent comes online', () => {
+    renderWidget({ autoOpen: true });
+    sendWhileOffline();
+    expect(screen.getByText(NOTICE)).toBeInTheDocument();
+
+    drive(() => lastCallbacks!.onAgentsPresence!(1));
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+  });
+
+  /* The presence pulse is not guaranteed to arrive first — an agent can pick
+     up and reply before the count reaches this widget. */
+  it('disappears when an agent replies, even with no presence update', () => {
+    renderWidget({ autoOpen: true });
+    sendWhileOffline();
+
+    drive(() => lastCallbacks!.onMessage(agentMessage({ content: 'I can help' })));
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+    // Their actual reply survives — only our own bubble was removed.
+    expect(screen.getByText('I can help')).toBeInTheDocument();
+  });
+
+  /* Answered while this device was away: history arrives already containing
+     the agent's reply, so the notice must not be carried over beside it. */
+  it('does not survive a reconnect where history shows a reply', () => {
+    renderWidget({ autoOpen: true });
+    sendWhileOffline();
+
+    drive(() =>
+      lastCallbacks!.onHistory!([agentMessage({ id: 'srv-1', content: 'sorry for the wait' })]),
+    );
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+    expect(screen.getByText('sorry for the wait')).toBeInTheDocument();
+  });
+
+  it('keeps the customer’s own message when the notice is removed', () => {
+    renderWidget({ autoOpen: true });
+    sendWhileOffline('please call me back');
+
+    drive(() => lastCallbacks!.onAgentsPresence!(2));
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+    expect(screen.getByText('please call me back')).toBeInTheDocument();
+  });
+
+  /* Shown once per offline period, and eligible again after agents leave —
+     otherwise a long session out of hours repeats it on every message. */
+  it('shows again if agents go offline once more', () => {
+    renderWidget({ autoOpen: true });
+    sendWhileOffline('first');
+    drive(() => lastCallbacks!.onAgentsPresence!(1));
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+
+    drive(() => lastCallbacks!.onAgentsPresence!(0));
+    const textarea = screen.getByPlaceholderText('Type a message…');
+    fireEvent.input(textarea, { target: { value: 'second' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+    expect(screen.getByText(NOTICE)).toBeInTheDocument();
+  });
+});

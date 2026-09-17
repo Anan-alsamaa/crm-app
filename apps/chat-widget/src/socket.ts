@@ -22,6 +22,15 @@ export interface WidgetMessage {
    * arrived, with nothing on screen saying so and no way to retry.
    */
   status?: 'sending' | 'sent' | 'failed';
+  /**
+   * This bubble is the widget's OWN offline notice, not a real message.
+   *
+   * It never existed on the server: it is written locally to reassure somebody
+   * who wrote in while nobody was there. Marking it is what lets it be taken
+   * back down when an agent arrives — matching on the text would break in the
+   * other language and the moment the wording is edited.
+   */
+  localNotice?: 'agents-offline';
 }
 
 export interface SocketCallbacks {
