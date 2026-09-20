@@ -30,7 +30,7 @@ a new prefix means an ALB rule FIRST, then the code.
 | `customerId`       | when known  | The customer's id **in your platform**. See below.            |
 | `yijiSessionToken` | optional    | Your own session token, if you would rather not assert an id. |
 | `name`, `email`    | optional    | Stored on the contact. Cosmetic.                              |
-| `entryPoint`       | optional    | `"app"` or `"store_qr"`. **Defaults to `app`** — omit it.     |
+| `entryPoint`       | **send it** | `"app"` or `"store_qr"`. Defaults to `app` if omitted.        |
 
 ### Response
 
@@ -44,14 +44,18 @@ not in advance.
 
 ### On `entryPoint`
 
-An integrator should not send it. A caller that omits it is a backend opening a
-chat for somebody in their own app, which is what the default now says.
+**Send it.** An app integrator sends `"app"`; our branch QR page sends
+`"store_qr"`. Both sides state what they are, and the request says what it
+means rather than relying on what our code assumes.
 
-It stays in the contract because nothing can infer the door: a customer
-standing in a branch may well hold an account, so `customerId` does not answer
-it. Our own QR page sends `store_qr` explicitly, which is what keeps
-`walk_in_app` — an account holder visiting a shop — distinguishable from an
-ordinary app session.
+There IS a default — omitting it gives `"app"` — but that is a safety net for a
+caller mid-update, not the contract. A default is a value nobody stated, and it
+is silently wrong for any future caller who forgets the field.
+
+It cannot be inferred, which is why it is asked for: a customer standing in a
+branch may well hold an account, so `customerId` does not answer where they
+are. Recording it is what keeps `walk_in_app` — an account holder visiting a
+shop — distinguishable from an ordinary app session.
 
 ## The two doors, and why they differ
 
