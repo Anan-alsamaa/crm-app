@@ -723,8 +723,15 @@ async function main(): Promise<void> {
       let yijiCustomerId: string | null = null;
       let displayName: string | null = null;
       let email: string | null = null;
-      /* The door, when the caller says. `store_qr` unless told otherwise — the
-         branch QR page sends no such field and must keep its behaviour. */
+      /*
+       * The door. Initialised to `store_qr` for the `code` branch below, which
+       * resolves a PERSONAL WALK-IN LINK — minted for one customer at a branch,
+       * so the door is known from the link itself and is never in the payload.
+       *
+       * The phone/customerId branch overrides this and defaults to `app`
+       * instead: a caller that omits the field is a backend opening a chat for
+       * somebody in their own app, not a person at a counter.
+       */
       let entryPoint: 'app' | 'store_qr' = 'store_qr';
       if (asCode.success) {
         const link = await directus.resolveWalkInLink(asCode.data.code).catch(() => null);
@@ -748,7 +755,27 @@ async function main(): Promise<void> {
         yijiCustomerId = parsed.data.customerId ?? null;
         displayName = parsed.data.name ?? null;
         email = parsed.data.email ?? null;
-        entryPoint = parsed.data.entryPoint ?? 'store_qr';
+        /*
+         * DEFAULTS TO `app`, AND THE STORE PAGE SAYS SO ITSELF.
+         *
+         * This defaulted to `store_qr` back when the QR page was the only
+         * caller. It is not any more, and the default fell on the wrong side:
+         * an integrator who omits the field is by definition NOT standing at a
+         * counter — they are a backend opening a chat for somebody in their
+         * app. The owner asked for a payload with nothing situational in it
+         * (2026-09-21), and this is what makes that safe rather than lossy.
+         *
+         * The field STAYS in the contract. It is the only way to tell an app
+         * customer sitting at home from one standing in a branch, nothing can
+         * infer that (a branch visitor may well hold an account, so
+         * `customerId` does not answer it), and it is kept so the question
+         * stays answerable later.
+         *
+         * Our own QR page now sends `store_qr` explicitly — see
+         * `apps/chat-widget/src/walk-in.ts`. Both halves ship together: flip
+         * this alone and every branch visitor is filed as `app`.
+         */
+        entryPoint = parsed.data.entryPoint ?? 'app';
 
         /*
          * THE CALLER IS THE YIJI BACKEND, AND `customerId` IS THEIR WORD FOR IT.

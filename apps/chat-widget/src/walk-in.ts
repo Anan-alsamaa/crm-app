@@ -151,7 +151,18 @@ async function start(input: { phone: string } | { code: string }): Promise<void>
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(
-        'code' in input ? { code: input.code } : { phone: input.phone, vendorId: VENDOR_ID },
+        /* `entryPoint` is stated, not left to the default: this page IS the
+           branch QR code, and the gateway now defaults to `app` for callers
+           that omit it (an integrator opening a chat for somebody in their
+           own app is not standing at a counter). Saying it here is what keeps
+           `walk_in_app` — an account holder visiting a shop — distinguishable
+           from an ordinary app session. */
+        'code' in input
+          ? /* A personal link carries its own door: the gateway resolves the
+               code and keeps `store_qr` without being told, so the payload
+               stays the code and nothing else. */
+            { code: input.code }
+          : { phone: input.phone, vendorId: VENDOR_ID, entryPoint: 'store_qr' },
       ),
     });
     const body = (await res.json().catch(() => ({}))) as { ok?: boolean; token?: string };

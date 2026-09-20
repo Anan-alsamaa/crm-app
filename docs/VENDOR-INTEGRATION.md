@@ -30,7 +30,7 @@ a new prefix means an ALB rule FIRST, then the code.
 | `customerId`       | when known  | The customer's id **in your platform**. See below.            |
 | `yijiSessionToken` | optional    | Your own session token, if you would rather not assert an id. |
 | `name`, `email`    | optional    | Stored on the contact. Cosmetic.                              |
-| `entryPoint`       | optional    | `"app"` or `"store_qr"`. Defaults to `store_qr`.              |
+| `entryPoint`       | optional    | `"app"` or `"store_qr"`. **Defaults to `app`** — omit it.     |
 
 ### Response
 
@@ -41,6 +41,17 @@ a new prefix means an ALB rule FIRST, then the code.
 Navigate the customer to the chat page with that token. It lasts **12 hours**
 and cannot be refreshed in place, so mint it when the customer opens the chat,
 not in advance.
+
+### On `entryPoint`
+
+An integrator should not send it. A caller that omits it is a backend opening a
+chat for somebody in their own app, which is what the default now says.
+
+It stays in the contract because nothing can infer the door: a customer
+standing in a branch may well hold an account, so `customerId` does not answer
+it. Our own QR page sends `store_qr` explicitly, which is what keeps
+`walk_in_app` — an account holder visiting a shop — distinguishable from an
+ordinary app session.
 
 ## The two doors, and why they differ
 
