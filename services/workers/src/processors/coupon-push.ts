@@ -51,6 +51,51 @@ import { describeError } from '../lib/errors.js';
  */
 export const YIJI_COUPON_PATH = '/api/CouponUserOrder/CreateCouponUserFromOrder';
 
+/**
+ * WHICH PLATFORM GRANTS THE COUPON, KEYED BY VENDOR.
+ *
+ * One entry today, and deliberately so: Yiji is the only platform that issues
+ * coupons, and its behaviour here is unchanged — same path, same payload, same
+ * rules, same tests. This exists so the SECOND platform is a row rather than a
+ * rewrite of the money path.
+ *
+ * The path and the payload belong together and are declared together. They are
+ * not separately configurable, because a deployment that pointed this path
+ * somewhere else would be sending a body the other endpoint never agreed to —
+ * the reason the constant above is a constant.
+ *
+ * `vendorId` is the id the CRM already carries on every vendor row and inside
+ * every customer token, so nothing new has to be threaded through to reach it.
+ * An unknown vendor resolves to `null` and the push is skipped rather than
+ * guessed: sending a coupon to the wrong platform is worse than not sending it.
+ */
+export interface CouponEndpoint {
+  /** The vendor's own path on their admin API. */
+  path: string;
+  /** Human name, for logs that somebody has to read at 2am. */
+  platform: string;
+}
+
+const COUPON_ENDPOINTS: Record<string, CouponEndpoint> = {
+  // Yiji / EG. `'1'` is DEFAULT_VENDOR_ID — the value the app sends and the
+  // value a token carries when none was supplied.
+  '1': { path: YIJI_COUPON_PATH, platform: 'yiji' },
+};
+
+/**
+ * The coupon endpoint for a vendor, or null when that vendor does not issue
+ * coupons through us.
+ *
+ * Falls back to vendor `'1'` when no vendor is recorded, which is every row
+ * written before vendors were distinguished. That fallback is correct only
+ * while Yiji is the sole platform — the day a second one exists it must be
+ * removed, or somebody else's coupons quietly become Yiji's.
+ */
+export function couponEndpointFor(vendorId: string | null | undefined): CouponEndpoint | null {
+  const key = (vendorId ?? '').trim() || '1';
+  return COUPON_ENDPOINTS[key] ?? null;
+}
+
 export interface CouponPushDeps {
   directus: YijiDirectusClient;
   logger: Logger;
@@ -798,9 +843,23 @@ export async function processCouponPushJob(
     return 'disabled';
   }
 
+  /*
+   * Which platform is this coupon for? One answer today (Yiji), looked up
+   * rather than assumed so a second platform is a row in COUPON_ENDPOINTS.
+   * An unknown vendor is skipped, not guessed — see `couponEndpointFor`.
+   */
+  const endpoint = couponEndpointFor(yijiTenantId);
+  if (!endpoint) {
+    logger.warn(
+      { id, code: row.coupon_code, vendorId: yijiTenantId },
+      'no coupon endpoint for this vendor — staying approved rather than sending it to the wrong platform',
+    );
+    return 'disabled';
+  }
+
   let body: YijiCouponResponse;
   try {
-    body = await postCoupon<YijiCouponResponse>(YIJI_COUPON_PATH, payload, {
+    body = await postCoupon<YijiCouponResponse>(endpoint.path, payload, {
       // Yiji's API is multi-tenant and routes on this.
       ...(yijiTenantId ? { tenantid: yijiTenantId } : {}),
       // Stable across retries of the same job, so a timeout that in fact

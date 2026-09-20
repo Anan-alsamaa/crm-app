@@ -660,210 +660,232 @@ async function main(): Promise<void> {
    * practice; without a limit this endpoint is an enumeration tool.
    */
   const walkInBuckets = new Map<string, ReturnType<typeof createTokenBucket>>();
-  app.post('/walk-in/session', async (req, reply) => {
-    const ip = req.ip || 'unknown';
-    let bucket = walkInBuckets.get(ip);
-    if (!bucket) {
-      // 5 immediately, then one every 30s. A real customer needs one.
-      bucket = createTokenBucket(5, 1 / 30);
-      walkInBuckets.set(ip, bucket);
-    }
-    if (!bucket.tryRemove()) {
-      return reply.code(429).send({ ok: false, error: 'too many attempts, try again shortly' });
-    }
-
-    /*
-     * TWO WAYS IN, one of which the customer did not type.
-     *
-     * A personal link carries a short CODE, and the number it stands for is
-     * looked up here. That is what stops the link being edited into somebody
-     * else's chat: `?phone=05…` would be guessable across a keyspace of eight
-     * digits, while a code is ten Crockford base32 characters and means
-     * nothing without the row behind it.
-     *
-     * The lookup also owns expiry and revocation, so a link can be killed by
-     * deleting a row — which a signed token could never offer.
-     */
-    const asCode = WalkInCodeRequest.safeParse(req.body);
-    let phone: string;
-    let vendorId: string;
-    /* The caller's own identifiers, when it HAS them. A QR walk-in does not:
-       nobody at a counter knows the Yiji id, so these stay null and the token
-       carries a phone-derived handle as before. */
-    let yijiCustomerId: string | null = null;
-    let displayName: string | null = null;
-    let email: string | null = null;
-    /* The door, when the caller says. `store_qr` unless told otherwise — the
-       branch QR page sends no such field and must keep its behaviour. */
-    let entryPoint: 'app' | 'store_qr' = 'store_qr';
-    if (asCode.success) {
-      const link = await directus.resolveWalkInLink(asCode.data.code).catch(() => null);
-      if (!link) {
-        // Unknown, expired or revoked — one message for all three, because
-        // telling a caller WHICH is telling them their guess had the right
-        // shape.
-        return reply.code(401).send({ ok: false, error: 'this link is no longer valid' });
+  /*
+   * TWO PATHS, ONE HANDLER — because the name stopped being true.
+   *
+   * This endpoint opens a chat session for BOTH doors: a visitor who scanned a
+   * branch QR code, and a customer arriving from the app. Only the first is a
+   * "walk-in", so `/walk-in/session` describes half of what it does and will
+   * read as a mistake to whoever integrates next.
+   *
+   * `/walk-in/chat-session` is the name to use from now on. The old path stays
+   * and is not deprecated on a timetable: the app calls it today, and an
+   * endpoint a third party depends on is not ours to retire unilaterally.
+   *
+   * BOTH LIVE UNDER `/walk-in/*` DELIBERATELY. That prefix is an explicit rule
+   * on the load balancer — it and `/webhooks/*` and `/jobs/*` are the only
+   * paths routed to this service, everything else goes to Directus. A prettier
+   * `/session` would need an ALB rule added first, and without it the endpoint
+   * would exist, run, and never be reached: Directus would answer
+   * ROUTE_NOT_FOUND. That has already happened once here, with the release
+   * endpoints. The prefix is routing, not description.
+   */
+  const SESSION_PATHS = ['/walk-in/session', '/walk-in/chat-session'] as const;
+  for (const path of SESSION_PATHS)
+    app.post(path, async (req, reply) => {
+      const ip = req.ip || 'unknown';
+      let bucket = walkInBuckets.get(ip);
+      if (!bucket) {
+        // 5 immediately, then one every 30s. A real customer needs one.
+        bucket = createTokenBucket(5, 1 / 30);
+        walkInBuckets.set(ip, bucket);
       }
-      phone = link.phone;
-      vendorId = link.vendorId;
-    } else {
-      const parsed = WalkInSessionRequest.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ ok: false, error: 'a valid phone number is required' });
+      if (!bucket.tryRemove()) {
+        return reply.code(429).send({ ok: false, error: 'too many attempts, try again shortly' });
       }
-      phone = parsed.data.phone;
-      /* Optional now: the Yiji app knows its customer but not our vendor id,
-         and requiring one only invited it to guess. */
-      vendorId = parsed.data.vendorId ?? DEFAULT_VENDOR_ID;
-      yijiCustomerId = parsed.data.customerId ?? null;
-      displayName = parsed.data.name ?? null;
-      email = parsed.data.email ?? null;
-      entryPoint = parsed.data.entryPoint ?? 'store_qr';
 
       /*
-       * THE CALLER IS THE YIJI BACKEND, AND `customerId` IS THEIR WORD FOR IT.
+       * TWO WAYS IN, one of which the customer did not type.
        *
-       * THE AGREED FLOW (owner + Yiji developer, 2026-09-15): their server
-       * calls this endpoint with phone, user id, name and email; we answer with
-       * a token; they open the chat web view with it. They do NOT send a Yiji
-       * session token, so nothing here may require one.
+       * A personal link carries a short CODE, and the number it stands for is
+       * looked up here. That is what stops the link being edited into somebody
+       * else's chat: `?phone=05…` would be guessable across a keyspace of eight
+       * digits, while a code is ten Crockford base32 characters and means
+       * nothing without the row behind it.
        *
-       * That makes `customerId` authoritative when it arrives — it decides
-       * `walk_in`, which in turn replays the customer's own history and writes
-       * their real `external_customer_id` for coupon delivery. The protection
-       * is no longer "prove it with a token" but WHO MAY CALL THIS AT ALL: the
-       * endpoint is rate-limited per IP and, in production, should be reachable
-       * only by Yiji's backend. A phone number alone still opens a walk-in
-       * session with no history, exactly as the in-store QR page does.
-       *
-       * The block below stays as OPTIONAL enrichment: if a session token ever
-       * is supplied it is resolved and its answer wins, because Yiji's own
-       * record of a customer beats anything typed alongside it.
-       *
-       * A YIJI SESSION TOKEN IS PROOF; `customerId` IN THE BODY IS NOT.
-       *
-       * This endpoint is how the app opens a chat now that a token no longer
-       * travels in the URL. That makes `customerId` dangerous in a way it was
-       * not before: it decides `walk_in`, and `walk_in: false` replays the
-       * customer's previous conversations and writes their real
-       * `external_customer_id`. Self-asserted, it would let anyone who guessed
-       * a phone number read somebody else's chat history by adding a plausible
-       * id — an attack that previously needed our signing secret.
-       *
-       * So when a session token is supplied it WINS, and it is resolved rather
-       * than believed: the signature is Yiji's and unverifiable here, so the
-       * gateway reads the `Id`, looks the customer up through Yiji's admin API
-       * with our own service credential, and takes the identity from the
-       * answer. Exactly what the socket path already does — same function, so
-       * an in-app customer is identified identically however they arrive.
-       *
-       * A token that resolves to nothing degrades to a walk-in instead of
-       * failing: the customer still reaches an agent, just without history.
-       * Losing a chat is worse than losing history.
+       * The lookup also owns expiry and revocation, so a link can be killed by
+       * deleting a row — which a signed token could never offer.
        */
-      if (parsed.data.yijiSessionToken) {
-        const resolved = await resolveCustomerClaims(
-          parsed.data.yijiSessionToken,
-          verifier,
-          yijiUsers,
-          logger,
-        ).catch(() => null);
-        if (resolved?.customer_id) {
-          yijiCustomerId = resolved.customer_id;
-          /* Yiji's record of the person beats anything typed alongside it, but
-             a field they leave blank must not erase what the caller supplied. */
-          displayName = resolved.name ?? displayName;
-          email = resolved.email ?? email;
-          /* Their number as Yiji holds it, when we got one: the phone is what
-             matches the contact, and the account's own number is better
-             evidence than a box on a form. */
-          if (resolved.phone) phone = resolved.phone;
-        } else {
-          logger.warn('walk-in: a Yiji session token did not resolve — continuing as a walk-in');
+      const asCode = WalkInCodeRequest.safeParse(req.body);
+      let phone: string;
+      let vendorId: string;
+      /* The caller's own identifiers, when it HAS them. A QR walk-in does not:
+         nobody at a counter knows the Yiji id, so these stay null and the token
+         carries a phone-derived handle as before. */
+      let yijiCustomerId: string | null = null;
+      let displayName: string | null = null;
+      let email: string | null = null;
+      /* The door, when the caller says. `store_qr` unless told otherwise — the
+         branch QR page sends no such field and must keep its behaviour. */
+      let entryPoint: 'app' | 'store_qr' = 'store_qr';
+      if (asCode.success) {
+        const link = await directus.resolveWalkInLink(asCode.data.code).catch(() => null);
+        if (!link) {
+          // Unknown, expired or revoked — one message for all three, because
+          // telling a caller WHICH is telling them their guess had the right
+          // shape.
+          return reply.code(401).send({ ok: false, error: 'this link is no longer valid' });
+        }
+        phone = link.phone;
+        vendorId = link.vendorId;
+      } else {
+        const parsed = WalkInSessionRequest.safeParse(req.body);
+        if (!parsed.success) {
+          return reply.code(400).send({ ok: false, error: 'a valid phone number is required' });
+        }
+        phone = parsed.data.phone;
+        /* Optional now: the Yiji app knows its customer but not our vendor id,
+           and requiring one only invited it to guess. */
+        vendorId = parsed.data.vendorId ?? DEFAULT_VENDOR_ID;
+        yijiCustomerId = parsed.data.customerId ?? null;
+        displayName = parsed.data.name ?? null;
+        email = parsed.data.email ?? null;
+        entryPoint = parsed.data.entryPoint ?? 'store_qr';
+
+        /*
+         * THE CALLER IS THE YIJI BACKEND, AND `customerId` IS THEIR WORD FOR IT.
+         *
+         * THE AGREED FLOW (owner + Yiji developer, 2026-09-15): their server
+         * calls this endpoint with phone, user id, name and email; we answer with
+         * a token; they open the chat web view with it. They do NOT send a Yiji
+         * session token, so nothing here may require one.
+         *
+         * That makes `customerId` authoritative when it arrives — it decides
+         * `walk_in`, which in turn replays the customer's own history and writes
+         * their real `external_customer_id` for coupon delivery. The protection
+         * is no longer "prove it with a token" but WHO MAY CALL THIS AT ALL: the
+         * endpoint is rate-limited per IP and, in production, should be reachable
+         * only by Yiji's backend. A phone number alone still opens a walk-in
+         * session with no history, exactly as the in-store QR page does.
+         *
+         * The block below stays as OPTIONAL enrichment: if a session token ever
+         * is supplied it is resolved and its answer wins, because Yiji's own
+         * record of a customer beats anything typed alongside it.
+         *
+         * A YIJI SESSION TOKEN IS PROOF; `customerId` IN THE BODY IS NOT.
+         *
+         * This endpoint is how the app opens a chat now that a token no longer
+         * travels in the URL. That makes `customerId` dangerous in a way it was
+         * not before: it decides `walk_in`, and `walk_in: false` replays the
+         * customer's previous conversations and writes their real
+         * `external_customer_id`. Self-asserted, it would let anyone who guessed
+         * a phone number read somebody else's chat history by adding a plausible
+         * id — an attack that previously needed our signing secret.
+         *
+         * So when a session token is supplied it WINS, and it is resolved rather
+         * than believed: the signature is Yiji's and unverifiable here, so the
+         * gateway reads the `Id`, looks the customer up through Yiji's admin API
+         * with our own service credential, and takes the identity from the
+         * answer. Exactly what the socket path already does — same function, so
+         * an in-app customer is identified identically however they arrive.
+         *
+         * A token that resolves to nothing degrades to a walk-in instead of
+         * failing: the customer still reaches an agent, just without history.
+         * Losing a chat is worse than losing history.
+         */
+        if (parsed.data.yijiSessionToken) {
+          const resolved = await resolveCustomerClaims(
+            parsed.data.yijiSessionToken,
+            verifier,
+            yijiUsers,
+            logger,
+          ).catch(() => null);
+          if (resolved?.customer_id) {
+            yijiCustomerId = resolved.customer_id;
+            /* Yiji's record of the person beats anything typed alongside it, but
+               a field they leave blank must not erase what the caller supplied. */
+            displayName = resolved.name ?? displayName;
+            email = resolved.email ?? email;
+            /* Their number as Yiji holds it, when we got one: the phone is what
+               matches the contact, and the account's own number is better
+               evidence than a box on a form. */
+            if (resolved.phone) phone = resolved.phone;
+          } else {
+            logger.warn('walk-in: a Yiji session token did not resolve — continuing as a walk-in');
+          }
         }
       }
-    }
 
-    const vendor = await directus.resolveVendor(vendorId).catch(() => null);
-    if (!vendor) return reply.code(404).send({ ok: false, error: 'unknown or inactive vendor' });
+      const vendor = await directus.resolveVendor(vendorId).catch(() => null);
+      if (!vendor) return reply.code(404).send({ ok: false, error: 'unknown or inactive vendor' });
 
-    /*
-     * NORMALISE before anything is derived from it.
-     *
-     * Contacts are matched by exact phone equality, and the Yiji app sends
-     * `+9665XXXXXXXX` while somebody at a counter types `05XXXXXXXX`. Signing
-     * the raw string produced a SECOND contact for a customer who already
-     * existed — so a registered customer arriving by QR code got no order
-     * history, which defeats the point of asking for the number. Caught by
-     * reading the contacts table after a walk-in, not from the code.
-     */
-    const normalized = normalizePhone(phone);
-    const token = jwt.sign(
-      {
-        vendor_id: vendorId,
-        /*
-         * The REAL Yiji id when the caller supplied one.
-         *
-         * `external_customer_id` is what the coupon push sends to Yiji as
-         * `userId`, so a phone-derived handle here means a coupon that cannot
-         * be delivered. The handle stays the fallback for a QR walk-in, where
-         * the id is genuinely unknown and inventing one would be worse.
-         */
-        customer_id: yijiCustomerId ?? phoneCustomerId(normalized),
-        phone: normalized,
-        ...(displayName ? { name: displayName } : {}),
-        ...(email ? { email } : {}),
-        /* Only a session with no proven identity is a walk-in. One opened by
-           the app carries the customer's own id, so it is not. */
-        walk_in: !yijiCustomerId,
-        /*
-         * THE DOOR, recorded separately from the account — and no longer
-         * assumed.
-         *
-         * This was hardcoded to `store_qr` back when the branch QR page was the
-         * only caller. Yiji's backend now calls the same endpoint for a
-         * customer inside their app, so the constant filed every one of them as
-         * `walk_in_app` — "in a branch, holds an account" — when they may be at
-         * home. Telling those two apart is the entire reason the door is
-         * recorded separately from the account, so it has to be said rather
-         * than guessed.
-         *
-         * Defaults to `store_qr` so the QR page, which sends no such field,
-         * behaves exactly as before.
-         */
-        entry_point: entryPoint,
-      },
-      config.YIJI_JWT_SECRET,
       /*
-       * TWELVE HOURS, NOT TWO — long enough to outlive the visit.
+       * NORMALISE before anything is derived from it.
        *
-       * This token cannot be refreshed in place: the widget holds no signing
-       * secret, and for a QR walk-in there is nothing to re-mint it from
-       * either — it was minted once from a phone number typed into
-       * `/walk-in`, and it lives in that tab's `sessionStorage`. So when it
-       * expires mid-conversation the gateway refuses every reconnect and the
-       * customer is simply stuck, however well the widget handles it.
-       *
-       * Two hours was short enough to hit real people: a customer who writes
-       * in at lunch and gets an answer that afternoon is a perfectly ordinary
-       * support case, not an edge case. Twelve covers a full branch shift, so
-       * the token outlives the visit that created it rather than the other way
-       * round.
-       *
-       * The exposure this buys is small and bounded. A walk-in session is
-       * `walk_in: true`, which replays NO history — so the token cannot read
-       * past conversations even if it is kept — and it is scoped to one
-       * vendor and one phone number. What it permits is writing to that
-       * customer's own thread, which is what the customer is there to do.
-       * Longer than a day would start to be a credential rather than a visit,
-       * which is why this is not simply set to a week.
+       * Contacts are matched by exact phone equality, and the Yiji app sends
+       * `+9665XXXXXXXX` while somebody at a counter types `05XXXXXXXX`. Signing
+       * the raw string produced a SECOND contact for a customer who already
+       * existed — so a registered customer arriving by QR code got no order
+       * history, which defeats the point of asking for the number. Caught by
+       * reading the contacts table after a walk-in, not from the code.
        */
-      { algorithm: 'HS256', expiresIn: '12h' },
-    );
+      const normalized = normalizePhone(phone);
+      const token = jwt.sign(
+        {
+          vendor_id: vendorId,
+          /*
+           * The REAL Yiji id when the caller supplied one.
+           *
+           * `external_customer_id` is what the coupon push sends to Yiji as
+           * `userId`, so a phone-derived handle here means a coupon that cannot
+           * be delivered. The handle stays the fallback for a QR walk-in, where
+           * the id is genuinely unknown and inventing one would be worse.
+           */
+          customer_id: yijiCustomerId ?? phoneCustomerId(normalized),
+          phone: normalized,
+          ...(displayName ? { name: displayName } : {}),
+          ...(email ? { email } : {}),
+          /* Only a session with no proven identity is a walk-in. One opened by
+             the app carries the customer's own id, so it is not. */
+          walk_in: !yijiCustomerId,
+          /*
+           * THE DOOR, recorded separately from the account — and no longer
+           * assumed.
+           *
+           * This was hardcoded to `store_qr` back when the branch QR page was the
+           * only caller. Yiji's backend now calls the same endpoint for a
+           * customer inside their app, so the constant filed every one of them as
+           * `walk_in_app` — "in a branch, holds an account" — when they may be at
+           * home. Telling those two apart is the entire reason the door is
+           * recorded separately from the account, so it has to be said rather
+           * than guessed.
+           *
+           * Defaults to `store_qr` so the QR page, which sends no such field,
+           * behaves exactly as before.
+           */
+          entry_point: entryPoint,
+        },
+        config.YIJI_JWT_SECRET,
+        /*
+         * TWELVE HOURS, NOT TWO — long enough to outlive the visit.
+         *
+         * This token cannot be refreshed in place: the widget holds no signing
+         * secret, and for a QR walk-in there is nothing to re-mint it from
+         * either — it was minted once from a phone number typed into
+         * `/walk-in`, and it lives in that tab's `sessionStorage`. So when it
+         * expires mid-conversation the gateway refuses every reconnect and the
+         * customer is simply stuck, however well the widget handles it.
+         *
+         * Two hours was short enough to hit real people: a customer who writes
+         * in at lunch and gets an answer that afternoon is a perfectly ordinary
+         * support case, not an edge case. Twelve covers a full branch shift, so
+         * the token outlives the visit that created it rather than the other way
+         * round.
+         *
+         * The exposure this buys is small and bounded. A walk-in session is
+         * `walk_in: true`, which replays NO history — so the token cannot read
+         * past conversations even if it is kept — and it is scoped to one
+         * vendor and one phone number. What it permits is writing to that
+         * customer's own thread, which is what the customer is there to do.
+         * Longer than a day would start to be a credential rather than a visit,
+         * which is why this is not simply set to a week.
+         */
+        { algorithm: 'HS256', expiresIn: '12h' },
+      );
 
-    logger.info({ vendorId, walkIn: !yijiCustomerId }, 'walk-in session issued');
-    return reply.send({ ok: true, token });
-  });
+      logger.info({ vendorId, walkIn: !yijiCustomerId }, 'walk-in session issued');
+      return reply.send({ ok: true, token });
+    });
 
   /**
    * Mint a personal walk-in link for one customer. ADMIN ONLY.
