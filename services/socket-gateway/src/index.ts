@@ -399,8 +399,13 @@ async function main(): Promise<void> {
     if (widgetCorsOrigin === '*') return '*';
     return origin && widgetCorsOrigin.includes(origin) ? origin : null;
   };
+  /* The customer-facing session endpoint answers on both prefixes — `/chat/*`
+     is the name integrators are given, `/walk-in/*` is what the app already
+     calls — so CORS must cover both or the new path is blocked in a browser
+     while working perfectly from curl. */
+  const isWidgetPath = (url: string) => url.startsWith('/walk-in/') || url.startsWith('/chat/');
   app.addHook('onRequest', async (req, reply) => {
-    if (!req.url.startsWith('/walk-in/')) return;
+    if (!isWidgetPath(req.url)) return;
     const allow = allowWidgetOrigin(req.headers.origin);
     if (allow) {
       reply.header('Access-Control-Allow-Origin', allow);
@@ -426,7 +431,7 @@ async function main(): Promise<void> {
   // The global security onSend sets CORP: same-origin; relax it to cross-origin
   // for /jobs/* so the cross-origin admin portal can read the JSON response.
   app.addHook('onSend', async (req, reply, payload) => {
-    if (req.url.startsWith('/jobs/') || req.url.startsWith('/walk-in/'))
+    if (req.url.startsWith('/jobs/') || isWidgetPath(req.url))
       reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
     return payload;
   });
@@ -661,26 +666,29 @@ async function main(): Promise<void> {
    */
   const walkInBuckets = new Map<string, ReturnType<typeof createTokenBucket>>();
   /*
-   * TWO PATHS, ONE HANDLER — because the name stopped being true.
+   * ONE HANDLER, THREE PATHS — because the name stopped being true.
    *
    * This endpoint opens a chat session for BOTH doors: a visitor who scanned a
    * branch QR code, and a customer arriving from the app. Only the first is a
-   * "walk-in", so `/walk-in/session` describes half of what it does and will
-   * read as a mistake to whoever integrates next.
+   * "walk-in", so `/walk-in/session` described half of what it does and read
+   * as a mistake to whoever integrates next.
    *
-   * `/walk-in/chat-session` is the name to use from now on. The old path stays
-   * and is not deprecated on a timetable: the app calls it today, and an
-   * endpoint a third party depends on is not ours to retire unilaterally.
+   * `/chat/session` IS THE NAME. It is what a new integrator is given, and it
+   * says what the endpoint does without naming one of its two doors.
    *
-   * BOTH LIVE UNDER `/walk-in/*` DELIBERATELY. That prefix is an explicit rule
-   * on the load balancer — it and `/webhooks/*` and `/jobs/*` are the only
-   * paths routed to this service, everything else goes to Directus. A prettier
-   * `/session` would need an ALB rule added first, and without it the endpoint
-   * would exist, run, and never be reached: Directus would answer
-   * ROUTE_NOT_FOUND. That has already happened once here, with the release
-   * endpoints. The prefix is routing, not description.
+   * The `/walk-in/*` spellings stay and are not deprecated on a timetable: the
+   * app calls one of them today, and an endpoint a third party depends on is
+   * not ours to retire unilaterally. They cost a line each.
+   *
+   * A PATH ONLY EXISTS IF THE LOAD BALANCER ROUTES IT. `/webhooks/*`,
+   * `/jobs/*`, `/walk-in/*`, `/teams/*`, `/debug/*` and now `/chat/*` are the
+   * only prefixes sent to this service; everything else goes to Directus,
+   * which answers ROUTE_NOT_FOUND — the endpoint would exist, run, and never
+   * be reached. That has already happened here once, with the release
+   * endpoints. `/chat/*` was added to the ALB (rules 12 and 112) BEFORE this
+   * shipped, which is the order that matters: rule first, then code.
    */
-  const SESSION_PATHS = ['/walk-in/session', '/walk-in/chat-session'] as const;
+  const SESSION_PATHS = ['/chat/session', '/walk-in/session', '/walk-in/chat-session'] as const;
   for (const path of SESSION_PATHS)
     app.post(path, async (req, reply) => {
       const ip = req.ip || 'unknown';

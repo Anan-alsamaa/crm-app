@@ -7,18 +7,19 @@ SECOND app would need. Written for whoever integrates next — today that is Yij
 ## The one endpoint
 
 ```
-POST https://<gateway>/walk-in/chat-session
+POST https://crm-api.anan.sa/chat/session
 content-type: application/json
 ```
 
-`/walk-in/session` is the same endpoint under its original name. It still
-works and is not going away — the app calls it today. New integrations should
-use `/walk-in/chat-session`, because this endpoint serves both doors and only
-one of them is a walk-in.
+That is the name to give an integrator. `/walk-in/session` and
+`/walk-in/chat-session` are the same endpoint under older spellings; they still
+work and are not going away, because the app calls one of them today.
 
-Both live under `/walk-in/*` because that prefix is what the load balancer
-routes to this service. A path outside it reaches Directus and is answered with
-`ROUTE_NOT_FOUND`, so the endpoint would exist, run, and never be reached.
+A PATH ONLY EXISTS IF THE LOAD BALANCER ROUTES IT. `/chat/*`, `/walk-in/*`,
+`/jobs/*`, `/webhooks/*`, `/teams/*` and `/debug/*` are the only prefixes sent
+to this service; anything else reaches Directus and is answered with
+`ROUTE_NOT_FOUND` — the endpoint would exist, run, and never be reached. Adding
+a new prefix means an ALB rule FIRST, then the code.
 
 ### Body
 

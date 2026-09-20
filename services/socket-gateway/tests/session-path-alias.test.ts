@@ -31,13 +31,33 @@ describe('the chat session endpoint', () => {
     expect(SOURCE).toContain("'/walk-in/session'");
   });
 
-  it('also serves the generic name', () => {
+  it('serves the generic name integrators are given', () => {
+    expect(SOURCE).toContain("'/chat/session'");
+  });
+
+  it('keeps the interim spelling too', () => {
     expect(SOURCE).toContain("'/walk-in/chat-session'");
   });
 
-  it('keeps both under the prefix the load balancer routes here', () => {
-    const paths = [...SOURCE.matchAll(/'(\/walk-in\/[a-z-]+)'/g)].map((m) => m[1]);
-    expect(paths.length).toBeGreaterThan(0);
-    for (const p of paths) expect(p.startsWith('/walk-in/')).toBe(true);
+  /*
+   * A PATH ONLY EXISTS IF THE LOAD BALANCER ROUTES IT. Registering one under a
+   * prefix the ALB does not forward gives an endpoint that compiles, runs and
+   * is never reached — Directus answers ROUTE_NOT_FOUND instead. That has
+   * happened here once already, with the release endpoints.
+   *
+   * `/chat/*` was added to ALB rules 12 and 112 before this shipped.
+   */
+  it('registers only prefixes the load balancer forwards here', () => {
+    const ROUTED = ['/chat/', '/walk-in/', '/jobs/', '/webhooks/', '/teams/', '/debug/'];
+    const paths = [...SOURCE.matchAll(/app\.post\(\s*'(\/[a-z0-9/-]+)'/g)].map((m) => m[1]);
+    for (const p of paths) {
+      expect(ROUTED.some((prefix) => p.startsWith(prefix))).toBe(true);
+    }
+  });
+
+  /* CORS must cover the new prefix, or the endpoint works from curl and is
+     blocked in every browser. */
+  it('applies the widget CORS hook to both prefixes', () => {
+    expect(SOURCE).toContain("url.startsWith('/walk-in/') || url.startsWith('/chat/')");
   });
 });
