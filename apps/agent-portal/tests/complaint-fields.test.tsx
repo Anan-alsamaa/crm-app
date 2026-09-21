@@ -52,6 +52,7 @@ const storeApi = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/tickets/useStoreMatch.js', () => storeApi);
 
+import { ComplaintSource } from '@yiji/shared-types';
 import {
   ComplaintClassification,
   complaintFromConversation,
@@ -94,7 +95,9 @@ describe('complaintPatch — what actually reaches Directus', () => {
       complaint_date: null,
       complaint_type: null,
       service_type: null,
-      complaint_source: null,
+      /* NOT null: a ticket raised in this portal came in through the CRM
+         unless the agent says otherwise (owner, 2026-09-21). */
+      complaint_source: 'CRM',
       /* NOT null: a ticket raised in this portal IS raised in the CRM, so the
          channel is known without asking. The field was removed from the form
          (owner, 2026-09-21) — it duplicated "Ticket source", whose options
@@ -222,6 +225,10 @@ describe('the option comboboxes are locked to the list', () => {
 
     const box = screen.getByLabelText('Ticket source');
     await user.click(box);
+    /* `clear` first: the field now STARTS on "CRM" (owner, 2026-09-21), so
+       typing into it appends rather than searches — exactly as it would for
+       an agent who did not select the text first. */
+    await user.clear(box);
     await user.type(box, 'whatsapp');
     await user.click(screen.getByRole('option', { name: 'WhatsApp' }));
 
@@ -394,5 +401,16 @@ describe('the duplicate channel field', () => {
   it('defaults to CRM whether or not a conversation sits behind the ticket', () => {
     expect(emptyComplaint.communication_method).toBe('CRM');
     expect(complaintFromConversation.communication_method).toBe('CRM');
+  });
+
+  /*
+   * The field that REMAINED on the form defaults to CRM too — and `CRM` was
+   * added to the live `complaint_source` option list in both environments, so
+   * the value the form starts on is one its own dropdown offers. A default
+   * the picker cannot show is one an agent cannot change back to.
+   */
+  it('starts Ticket source on CRM, a real option in its own list', () => {
+    expect(emptyComplaint.complaint_source).toBe('CRM');
+    expect(ComplaintSource.options).toContain('CRM');
   });
 });

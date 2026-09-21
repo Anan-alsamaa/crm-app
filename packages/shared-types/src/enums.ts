@@ -128,6 +128,13 @@ export type ServiceType = z.infer<typeof ServiceType>;
 
 /** Where the complaint came in from. */
 export const ComplaintSource = z.enum([
+  /* 'CRM' is OURS, not the operations team's. Their sheet predates this system
+     and has no entry for a complaint raised in the CRM itself, which is now
+     the ordinary case: an agent working a chat, or typing a ticket straight
+     in. It is the default for that reason (owner, 2026-09-21), and it was
+     added to the live `complaint_source` option list in both environments so
+     the value the form starts on is one its own dropdown offers. */
+  'CRM',
   'Comp. Phone Call',
   'Comp. Twiter',
   'Comp. WhatsApp',
@@ -135,6 +142,17 @@ export const ComplaintSource = z.enum([
   'WeCare Channels',
 ]);
 export type ComplaintSource = z.infer<typeof ComplaintSource>;
+
+/**
+ * What a ticket raised in this portal came in through, unless the agent says
+ * otherwise.
+ *
+ * WORTH KNOWING: this field still carries real variety in production — phone
+ * calls, Instagram, the app, the call centre — so a default is a starting
+ * point an agent is expected to CHANGE when the complaint arrived some other
+ * way, not a value to leave alone.
+ */
+export const DEFAULT_COMPLAINT_SOURCE: ComplaintSource = 'CRM';
 
 /**
  * How the agent talked to the customer about it. Overlaps ComplaintSource by

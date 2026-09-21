@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn, FormField, Input, Spinner, Textarea } from '@yiji/ui';
-import { DEFAULT_COMMUNICATION_METHOD } from '@yiji/shared-types';
+import { DEFAULT_COMMUNICATION_METHOD, DEFAULT_COMPLAINT_SOURCE } from '@yiji/shared-types';
 import { optionsFor, useOptionLists } from './option-lists.js';
 import type { TicketOrderSnapshot } from './OrderSnapshotCard.js';
 import { useStores, type StoreRow } from './useStoreMatch.js';
@@ -67,7 +67,11 @@ export const emptyComplaint: ComplaintValues = {
   complaint_type: '',
   complaint_type_other: '',
   service_type: '',
-  complaint_source: '',
+  /* `CRM` — a ticket raised in this portal came in through the CRM unless the
+     agent says otherwise (owner, 2026-09-21). A starting point to CHANGE when
+     the complaint arrived by phone, Instagram or the app, not a value to leave
+     alone: this field carries real variety in production. */
+  complaint_source: DEFAULT_COMPLAINT_SOURCE,
   /*
    * `CRM`, ALWAYS — it is no longer asked for (owner, 2026-09-21).
    *
