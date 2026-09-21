@@ -1,6 +1,7 @@
 import type {
   LateOrderQueue,
   YijiOrder,
+  YijiOrderCart,
   YijiOrderTimeline,
   YijiPaymentStatus,
   YijiPurchaseActivity,
@@ -97,6 +98,14 @@ export const commerce = {
    * It comes back on the response so the screen can state the real rule.
    */
   getLateOrders: () => get<LateOrderQueue>('/commerce/late-orders', {}),
+  /**
+   * The order's cart — every line and the choices behind it.
+   *
+   * No vendor argument: the cart lives on Yiji's admin API, keyed by order id
+   * alone. Returns null when no service credential is configured, which the
+   * panel renders as "unavailable" rather than as an empty cart.
+   */
+  getOrderCart: (orderId: string) => get<YijiOrderCart | null>('/commerce/cart', { orderId }),
 };
 
 export type CommerceClient = typeof commerce;

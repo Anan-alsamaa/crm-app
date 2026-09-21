@@ -269,6 +269,23 @@ export async function registerCommerceRoutes(
     });
   });
 
+  /**
+   * The order's CART: every line with the choices behind it.
+   *
+   * Cached for the order TTL — a placed order's contents do not change, so
+   * this is the cheapest thing here to hold. Takes no vendor: the cart lives
+   * on the admin API, which is keyed by order id alone.
+   */
+  app.get('/commerce/cart', async (req, reply) => {
+    if (!(await requireAgent(req, reply))) return;
+    const q = req.query as Record<string, string | undefined>;
+    const orderId = str(q.orderId);
+    if (!orderId) return reply.code(400).send({ error: 'missing_params' });
+    return answering(reply, { route: 'cart', orderId }, () =>
+      cached(['cart', orderId], COMMERCE_TTL.order, () => deps.yiji.getOrderCart(orderId)),
+    );
+  });
+
   app.get('/commerce/payment', async (req, reply) => {
     if (!(await requireAgent(req, reply))) return;
     const q = req.query as Record<string, string | undefined>;

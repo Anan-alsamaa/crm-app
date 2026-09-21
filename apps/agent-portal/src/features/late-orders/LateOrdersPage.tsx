@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createItem } from '@directus/sdk';
 import {
@@ -26,6 +26,7 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
 import { directus } from '../../lib/directus.js';
 import { useVendors } from '../tickets/api.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
+import { LateOrderDetail } from './OrderDetail.js';
 import {
   useHandledLateOrders,
   useLateOrders,
@@ -81,6 +82,9 @@ export function LateOrdersPage() {
   const [draft, setDraft] = useState<DecisionDraft | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  /** The row whose cart + tracking is open. One at a time: the panel is tall,
+      and two open rows push the queue itself off the screen. */
+  const [expanded, setExpanded] = useState<string | null>(null);
   /**
    * The coupon form's subject, held while it is open.
    *
@@ -246,58 +250,82 @@ export function LateOrdersPage() {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <Tr key={row.orderId}>
-                  <Td className="whitespace-nowrap font-medium tabular-nums">{row.orderId}</Td>
-                  <Td className="whitespace-nowrap">
-                    <Pill tone={tone(row.minutesElapsed, threshold)} size="sm">
-                      {elapsed(row.minutesElapsed)}
-                    </Pill>
-                  </Td>
-                  <Td className="max-w-[16rem] truncate">
-                    {[row.brandName, row.restaurantName].filter(Boolean).join(' - ') || '-'}
-                  </Td>
-                  <Td className="whitespace-nowrap">
-                    {row.customerName || row.customerPhone || '-'}
-                  </Td>
-                  <Td className="whitespace-nowrap text-muted-foreground">
-                    {t(`commerce.orderStatuses.${row.status}`, { defaultValue: row.status })}
-                  </Td>
-                  <Td>
-                    <Select
-                      value={kindOf(row)}
-                      aria-label={t('lateOrders.col.kind', { defaultValue: 'Cause' })}
-                      onChange={(e) =>
-                        setKinds((cur) => ({
-                          ...cur,
-                          [row.orderId]: e.target.value as LateOrderKind,
-                        }))
-                      }
-                    >
-                      <option value="late_delivery">
-                        {t('lateOrders.kind.late_delivery', { defaultValue: 'Late delivery' })}
-                      </option>
-                      <option value="late_preparation">
-                        {t('lateOrders.kind.late_preparation', {
-                          defaultValue: 'Late preparation',
-                        })}
-                      </option>
-                    </Select>
-                  </Td>
-                  <Td>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
-                        {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => openDecision(row, 'ignored')}
+                <Fragment key={row.orderId}>
+                  <Tr>
+                    <Td className="whitespace-nowrap font-medium tabular-nums">
+                      {/* The order NUMBER is the control: it is what an agent
+                        looks at first, and it needs no extra column. */}
+                      <button
+                        type="button"
+                        className="underline decoration-dotted underline-offset-4 hover:text-primary"
+                        aria-expanded={expanded === row.orderId}
+                        onClick={() =>
+                          setExpanded((cur) => (cur === row.orderId ? null : row.orderId))
+                        }
                       >
-                        {t('lateOrders.ignore', { defaultValue: 'Ignore' })}
-                      </Button>
-                    </div>
-                  </Td>
-                </Tr>
+                        {row.orderId}
+                      </button>
+                    </Td>
+                    <Td className="whitespace-nowrap">
+                      <Pill tone={tone(row.minutesElapsed, threshold)} size="sm">
+                        {elapsed(row.minutesElapsed)}
+                      </Pill>
+                    </Td>
+                    <Td className="max-w-[16rem] truncate">
+                      {[row.brandName, row.restaurantName].filter(Boolean).join(' - ') || '-'}
+                    </Td>
+                    <Td className="whitespace-nowrap">
+                      {row.customerName || row.customerPhone || '-'}
+                    </Td>
+                    <Td className="whitespace-nowrap text-muted-foreground">
+                      {t(`commerce.orderStatuses.${row.status}`, { defaultValue: row.status })}
+                    </Td>
+                    <Td>
+                      <Select
+                        value={kindOf(row)}
+                        aria-label={t('lateOrders.col.kind', { defaultValue: 'Cause' })}
+                        onChange={(e) =>
+                          setKinds((cur) => ({
+                            ...cur,
+                            [row.orderId]: e.target.value as LateOrderKind,
+                          }))
+                        }
+                      >
+                        <option value="late_delivery">
+                          {t('lateOrders.kind.late_delivery', { defaultValue: 'Late delivery' })}
+                        </option>
+                        <option value="late_preparation">
+                          {t('lateOrders.kind.late_preparation', {
+                            defaultValue: 'Late preparation',
+                          })}
+                        </option>
+                      </Select>
+                    </Td>
+                    <Td>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
+                          {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openDecision(row, 'ignored')}
+                        >
+                          {t('lateOrders.ignore', { defaultValue: 'Ignore' })}
+                        </Button>
+                      </div>
+                    </Td>
+                  </Tr>
+                  {expanded === row.orderId && (
+                    <Tr>
+                      {/* Mounted only when open, so the queue never pays for
+                        carts nobody asked to see. */}
+                      <Td colSpan={7} className="p-2">
+                        <LateOrderDetail orderId={row.orderId} vendorId={soleVendorId} />
+                      </Td>
+                    </Tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </Table>

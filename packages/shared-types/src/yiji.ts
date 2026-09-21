@@ -81,6 +81,46 @@ export interface YijiOrderTimeline {
   events: YijiOrderTimelineEvent[];
 }
 
+/**
+ * A line on the order, with the choices the customer actually made.
+ *
+ * `modifiers` is what the existing money-only Cart view could never show: the
+ * add-ons, drink and sauce behind "1x CasaPasta Box". When an agent is asked
+ * "what did I order?", that IS the answer.
+ */
+export interface YijiCartLine {
+  name: string;
+  qty: number;
+  price: number;
+  category?: string;
+  /** Modifier / element names, flattened for display. */
+  modifiers: string[];
+}
+
+/**
+ * The full cart behind an order — `GET /api/Order/GetOrderCart/{id}`.
+ *
+ * Distinct from `YijiOrder`, which carries the order's summary. This is what
+ * the customer chose and what it cost, for an agent answering a complaint
+ * about a specific order.
+ */
+export interface YijiOrderCart {
+  orderId: string;
+  lines: YijiCartLine[];
+  /** Money, as Yiji reports it. A 0 is a real answer; absent means unsaid. */
+  foodPrice?: number;
+  deliveryFee?: number;
+  discount?: number;
+  tax?: number;
+  total?: number;
+  couponCode?: string;
+  restaurantName?: string;
+  brandName?: string;
+  deliveryAddress?: string;
+  /** The delivery company's own tracking page, when there is one. */
+  trackingUrl?: string;
+}
+
 export interface YijiPaymentStatus {
   orderId: string;
   status: string; // pending | authorized | captured | failed | refunded
@@ -126,6 +166,8 @@ export interface YijiClient {
    * provides a history endpoint — see YijiOrderTimeline.derived.
    */
   getOrderTimeline(yijiVendorId: string, orderId: string): Promise<YijiOrderTimeline | null>;
+  /** The order's cart: every line, its modifiers, and the money. */
+  getOrderCart(orderId: string): Promise<YijiOrderCart | null>;
   getPaymentStatus(yijiVendorId: string, orderId: string): Promise<YijiPaymentStatus | null>;
   getShipmentTracking(yijiVendorId: string, orderId: string): Promise<YijiShipmentTracking | null>;
   getPurchaseActivity(

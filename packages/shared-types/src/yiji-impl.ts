@@ -5,6 +5,8 @@ import {
   type LateOrderRow,
 } from './late-delivery.js';
 import type {
+  YijiCartLine,
+  YijiOrderCart,
   YijiClient,
   YijiCustomer,
   YijiOrder,
@@ -232,6 +234,29 @@ export class MockYijiClient implements YijiClient {
     return this.fixtures.activityByCustomer.get(key(vendorId, externalCustomerId)) ?? null;
   }
 
+  /** The cart, synthesised from the fixture order so dev sees a populated panel. */
+  async getOrderCart(orderId: string): Promise<YijiOrderCart | null> {
+    for (const [, orders] of this.fixtures.ordersByCustomer) {
+      const found = orders.find((o) => o.orderId === orderId);
+      if (!found) continue;
+      return {
+        orderId: found.orderId,
+        lines: found.items.map((it) => ({
+          name: it.name,
+          qty: it.qty,
+          price: it.price,
+          category: it.category,
+          modifiers: [],
+        })),
+        total: found.total,
+        restaurantName: found.restaurantName,
+        brandName: found.brandName,
+        deliveryAddress: found.deliveryAddress,
+      };
+    }
+    return null;
+  }
+
   /**
    * A late-orders queue built from whatever orders the fixtures hold.
    *
@@ -398,6 +423,40 @@ interface RawLateOrderRow {
   firstName?: string | null;
   phoneNumber?: string | null;
   total?: number | null;
+}
+
+/** `GET /api/Order/GetOrderCart/{id}` — the order plus its delivery record. */
+interface RawYijiCartItem {
+  itemName?: string | null;
+  quantity?: number | null;
+  itemPrice?: number | null;
+  itemCategory?: string | null;
+  /* The customer's actual choices live TWO levels down: a modifier group
+     ("Add-ons") holding the elements they picked ("Without Broccoli"). */
+  extraModifiers?: Array<{
+    extraModifierName?: string | null;
+    elements?: Array<{ elementName?: string | null }> | null;
+  }> | null;
+}
+
+/* Declared standalone rather than intersected with `RawYijiOrder`: an
+   intersection keeps THAT type's narrower `orderItems`, so the modifiers below
+   would be invisible to the compiler. */
+interface RawYijiCart {
+  order?: {
+    id?: number | string | null;
+    orderItems?: RawYijiCartItem[] | null;
+    foodPrice?: number | null;
+    deliveryFee?: number | null;
+    discount?: number | null;
+    tax?: number | null;
+    total?: number | null;
+    couponCode?: string | null;
+    restaurantName?: string | null;
+    brandName?: string | null;
+    deliveryAddress?: { fullAddress?: string | null } | null;
+  } | null;
+  deliveryOrder?: { trackingUrl?: string | null } | null;
 }
 
 function mapYijiOrder(raw: RawYijiOrder): YijiOrder {
@@ -1048,6 +1107,63 @@ export class HttpYijiClient implements YijiClient {
     // Latest first: the most overdue order is the one to look at.
     out.sort((a, b) => b.minutesElapsed - a.minutesElapsed);
     return out;
+  }
+
+  /**
+   * The cart behind one order.
+   *
+   * Lives on the ADMIN api, so it degrades to null when no service credential
+   * is configured rather than throwing — the panel then says "unavailable"
+   * instead of the page failing.
+   *
+   * Two measured facts (2026-09-21):
+   *  - a line's choices arrive under `extraModifiers[].elements[]`, two levels
+   *    down, and the modifier GROUP name ("Add-ons") is far less useful to an
+   *    agent than the chosen ELEMENT ("Without Broccoli") — so elements win
+   *    and the group is only used when it has none.
+   *  - `total` is sometimes 0 on a live order while `foodPrice` is real, so
+   *    neither is trusted as "the price"; both are reported and the UI shows
+   *    what is there.
+   */
+  async getOrderCart(orderId: string): Promise<YijiOrderCart | null> {
+    if (!this.adminConfigured) return null;
+    const raw = await this.adminFetch<RawYijiCart>(
+      `/api/Order/GetOrderCart/${encodeURIComponent(orderId)}`,
+    );
+    const order = raw?.order;
+    if (!order) return null;
+    const lines: YijiCartLine[] = (order.orderItems ?? []).map((it) => {
+      const modifiers: string[] = [];
+      for (const mod of it.extraModifiers ?? []) {
+        const chosen = (mod.elements ?? [])
+          .map((e) => e.elementName?.trim())
+          .filter((n): n is string => !!n);
+        if (chosen.length) modifiers.push(...chosen);
+        else if (mod.extraModifierName?.trim()) modifiers.push(mod.extraModifierName.trim());
+      }
+      return {
+        name: it.itemName?.trim() || 'item',
+        qty: it.quantity ?? 1,
+        price: it.itemPrice ?? 0,
+        category: it.itemCategory?.trim() || undefined,
+        modifiers,
+      };
+    });
+    const num = (v: number | null | undefined) => (typeof v === 'number' ? v : undefined);
+    return {
+      orderId: String(order.id ?? orderId),
+      lines,
+      foodPrice: num(order.foodPrice),
+      deliveryFee: num(order.deliveryFee),
+      discount: num(order.discount),
+      tax: num(order.tax),
+      total: num(order.total),
+      couponCode: order.couponCode?.trim() || undefined,
+      restaurantName: order.restaurantName?.trim() || undefined,
+      brandName: order.brandName?.trim() || undefined,
+      deliveryAddress: order.deliveryAddress?.fullAddress?.trim() || undefined,
+      trackingUrl: raw?.deliveryOrder?.trackingUrl?.trim() || undefined,
+    };
   }
 
   async getCustomer(_vendorId: string, externalCustomerId: string): Promise<YijiCustomer | null> {
