@@ -6,6 +6,7 @@ import {
   Card,
   EmptyState,
   ErrorState,
+  Input,
   PageHeader,
   Pill,
   Select,
@@ -72,8 +73,23 @@ interface DecisionDraft {
 export function LateOrdersPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  /*
+   * THE FILTERS (owner, 2026-09-21): order id, then a date range, then brand
+   * or branch.
+   *
+   * `range` is applied on APPLY, not on each keystroke: a range change refetches
+   * up to three upstream pages, so typing "2026-09-01" one character at a time
+   * would fire a query per character. Order id and brand/branch narrow what is
+   * already loaded and so are instant.
+   */
+  const [orderQuery, setOrderQuery] = useState('');
+  const [brandQuery, setBrandQuery] = useState('');
+  const [draftFrom, setDraftFrom] = useState('');
+  const [draftTo, setDraftTo] = useState('');
+  const [range, setRange] = useState<{ from: string; to: string } | null>(null);
   const vendors = useVendors();
-  const queue = useLateOrders();
+  // The queue follows the range: no range = today's live orders.
+  const queue = useLateOrders(range ?? undefined);
   const handled = useHandledLateOrders();
   const record = useRecordLateDecision();
 
@@ -85,6 +101,7 @@ export function LateOrdersPage() {
   /** The row whose cart + tracking is open. One at a time: the panel is tall,
       and two open rows push the queue itself off the screen. */
   const [expanded, setExpanded] = useState<string | null>(null);
+
   /**
    * The coupon form's subject, held while it is open.
    *
@@ -100,6 +117,10 @@ export function LateOrdersPage() {
   } | null>(null);
 
   const threshold = queue.data?.thresholdMinutes ?? FALLBACK_THRESHOLD;
+  // Local, not UTC: the date pickers are the agent's own calendar.
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 10);
   const soleVendorId = vendors.data?.length === 1 ? vendors.data[0]!.id : null;
 
   /*
@@ -112,8 +133,22 @@ export function LateOrdersPage() {
    */
   const rows = useMemo(() => {
     const done = handled.data ?? new Set<string>();
-    return (queue.data?.rows ?? []).filter((r) => !done.has(r.orderId));
-  }, [queue.data, handled.data]);
+    const order = orderQuery.trim();
+    const brand = brandQuery.trim().toLowerCase();
+    return (queue.data?.rows ?? []).filter((r) => {
+      /*
+       * A handled order is hidden from the LIVE queue only.
+       *
+       * In a historical window the decision is part of what you are looking
+       * at — hiding those rows would quietly under-report the month.
+       */
+      if (!range && done.has(r.orderId)) return false;
+      if (order && !r.orderId.includes(order)) return false;
+      if (brand && !`${r.brandName ?? ''} ${r.restaurantName ?? ''}`.toLowerCase().includes(brand))
+        return false;
+      return true;
+    });
+  }, [queue.data, handled.data, orderQuery, brandQuery, range]);
 
   const kindOf = (row: LateOrderRow): LateOrderKind => kinds[row.orderId] ?? 'late_delivery';
 
@@ -204,6 +239,96 @@ export function LateOrdersPage() {
           defaultValue: 'Delivery orders running longer than {{minutes}} minutes.',
         })}
       />
+
+      {/*
+        Order id, then dates, then brand/branch — the owner's order (2026-09-21),
+        which is also the order an agent narrows in: they usually have a number.
+      */}
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t('lateOrders.filter.order', { defaultValue: 'Order number' })}
+          </span>
+          <Input
+            value={orderQuery}
+            onChange={(e) => setOrderQuery(e.target.value)}
+            placeholder={t('lateOrders.filter.orderPlaceholder', { defaultValue: 'e.g. 1314302' })}
+            inputMode="numeric"
+            className="w-40"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t('lateOrders.filter.from', { defaultValue: 'From' })}
+          </span>
+          <Input
+            type="date"
+            value={draftFrom}
+            max={today}
+            onChange={(e) => setDraftFrom(e.target.value)}
+            className="w-40"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t('lateOrders.filter.to', { defaultValue: 'To' })}
+          </span>
+          <Input
+            type="date"
+            value={draftTo}
+            max={today}
+            onChange={(e) => setDraftTo(e.target.value)}
+            className="w-40"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t('lateOrders.filter.brand', { defaultValue: 'Brand or branch' })}
+          </span>
+          <Input
+            value={brandQuery}
+            onChange={(e) => setBrandQuery(e.target.value)}
+            placeholder={t('lateOrders.filter.brandPlaceholder', {
+              defaultValue: 'e.g. Okashi, Narjis',
+            })}
+            className="w-52"
+          />
+        </label>
+        {/* Applied on click, not per keystroke: a range walks up to three
+            upstream pages, so typing a date would fire a query per character. */}
+        <Button
+          variant="secondary"
+          disabled={!draftFrom || !draftTo || draftFrom > draftTo}
+          onClick={() => setRange({ from: draftFrom, to: draftTo })}
+        >
+          {t('lateOrders.filter.apply', { defaultValue: 'Load range' })}
+        </Button>
+        {(range || orderQuery || brandQuery) && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setRange(null);
+              setOrderQuery('');
+              setBrandQuery('');
+              setDraftFrom('');
+              setDraftTo('');
+            }}
+          >
+            {t('lateOrders.filter.clear', { defaultValue: 'Back to live' })}
+          </Button>
+        )}
+        {/* A historical window is NOT the live queue, and must never be mistaken
+            for it — the rows are finished orders. */}
+        {range && (
+          <Pill tone="blue" size="sm">
+            {t('lateOrders.filter.historyNote', {
+              from: range.from,
+              to: range.to,
+              defaultValue: 'History {{from}} to {{to}} — finished orders included',
+            })}
+          </Pill>
+        )}
+      </div>
 
       {queue.isError ? (
         /*
@@ -302,18 +427,29 @@ export function LateOrdersPage() {
                       </Select>
                     </Td>
                     <Td>
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
-                          {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openDecision(row, 'ignored')}
-                        >
-                          {t('lateOrders.ignore', { defaultValue: 'Ignore' })}
-                        </Button>
-                      </div>
+                      {/*
+                        A HANDLED historical order shows its decision instead of
+                        the buttons: offering "Ignore" on something already
+                        ignored invites a second, contradictory record.
+                      */}
+                      {range && handled.data?.has(row.orderId) ? (
+                        <Pill tone="success" size="sm">
+                          {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
+                        </Pill>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
+                            {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openDecision(row, 'ignored')}
+                          >
+                            {t('lateOrders.ignore', { defaultValue: 'Ignore' })}
+                          </Button>
+                        </div>
+                      )}
                     </Td>
                   </Tr>
                   {expanded === row.orderId && (

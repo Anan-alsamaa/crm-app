@@ -169,3 +169,25 @@ describe('minutesSince', () => {
     expect(minutesSince(null, now)).toBeNull();
   });
 });
+
+describe('minutesSince — a finished order stops the clock', () => {
+  /*
+   * A closed order kept counting from creation to NOW: one measured 43,651
+   * minutes (30 days), which is how long ago it happened, not how late it was.
+   * The span a customer actually waited is creation -> orderStatusDate.
+   */
+  it('measures the SPAN when an end time is given', () => {
+    const placed = '2026-09-21T13:00:00';
+    const ended = parseYijiTimestamp('2026-09-21T14:15:00');
+    expect(minutesSince(placed, ended)).toBe(75);
+  });
+
+  it('a month-old order reports its span, not its age', () => {
+    const placed = '2026-08-22T13:22:00';
+    const ended = parseYijiTimestamp('2026-08-22T14:30:00');
+    const monthLater = parseYijiTimestamp('2026-09-21T13:22:00');
+    expect(minutesSince(placed, ended)).toBe(68);
+    // What the bug produced, for contrast — 30 days of minutes.
+    expect(minutesSince(placed, monthLater)).toBe(43200);
+  });
+});

@@ -1,7 +1,9 @@
 import {
   isLiveOrderStatus,
   minutesSince,
+  parseYijiTimestamp,
   YIJI_DELIVERY_TYPE_DELIVERY,
+  type LateOrderQueryOptions,
   type LateOrderRow,
 } from './late-delivery.js';
 import type {
@@ -265,7 +267,10 @@ export class MockYijiClient implements YijiClient {
    * a bug. The elapsed time is derived from the fixture's own `placedAt`, so a
    * mock order is late for the same reason a real one is.
    */
-  async getLateDeliveryOrders(thresholdMinutes: number): Promise<LateOrderRow[]> {
+  async getLateDeliveryOrders(
+    thresholdMinutes: number,
+    _opts: LateOrderQueryOptions = {},
+  ): Promise<LateOrderRow[]> {
     const now = Date.now();
     const out: LateOrderRow[] = [];
     for (const [k, orders] of this.fixtures.ordersByCustomer) {
@@ -1045,29 +1050,64 @@ export class HttpYijiClient implements YijiClient {
    * empty queue is the honest answer for "we cannot ask", and the caller
    * already distinguishes an upstream failure by the error it never gets.
    */
-  async getLateDeliveryOrders(thresholdMinutes: number): Promise<LateOrderRow[]> {
+  async getLateDeliveryOrders(
+    thresholdMinutes: number,
+    opts: LateOrderQueryOptions = {},
+  ): Promise<LateOrderRow[]> {
     if (!this.adminConfigured) return [];
     const day = 24 * 60 * 60 * 1000;
     const iso = (d: Date) => d.toISOString().slice(0, 10);
     const now = new Date();
-    const params = new URLSearchParams({
-      DeliveryTypeIds: String(YIJI_DELIVERY_TYPE_DELIVERY),
-      WithTotalServicesTimeFilterActive: String(thresholdMinutes),
-      OrderFromDateFilter: iso(now),
-      // Exclusive — see (2). Today's date here returns nothing at all.
-      OrderToDateFilter: iso(new Date(now.getTime() + day)),
-      PageSize: '200',
-      PageNumber: '1',
-    });
-    const rows = await this.adminFetch<RawLateOrderRow[]>(
-      `/api/Order/GetFilteredOrders?${params.toString()}`,
-    );
-    if (!Array.isArray(rows)) return [];
+    /*
+     * The window. Defaults to TODAY, which is the live queue.
+     *
+     * A history window is a different question from "what is late right now",
+     * and the data says so: of 631 late orders in the last month, ZERO were
+     * still running (measured 2026-09-21). So `includeCompleted` is not a
+     * convenience — without it a history view renders empty, which would read
+     * as "nothing was ever late".
+     */
+    const from = opts.from?.trim() || iso(now);
+    // Exclusive — see (2). The caller passes the last day they WANT; one day
+    // is added here so that day is included, which is the only sane contract.
+    const toExclusive = iso(new Date(Date.parse(opts.to?.trim() || iso(now)) + day));
+
     const out: LateOrderRow[] = [];
+    const pageSize = 500;
+    const maxPages = opts.maxPages ?? 1;
+    for (let page = 1; page <= maxPages; page++) {
+      const params = new URLSearchParams({
+        DeliveryTypeIds: String(YIJI_DELIVERY_TYPE_DELIVERY),
+        WithTotalServicesTimeFilterActive: String(thresholdMinutes),
+        OrderFromDateFilter: from,
+        OrderToDateFilter: toExclusive,
+        PageSize: String(pageSize),
+        PageNumber: String(page),
+      });
+      const rows = await this.adminFetch<RawLateOrderRow[]>(
+        `/api/Order/GetFilteredOrders?${params.toString()}`,
+      );
+      if (!Array.isArray(rows) || rows.length === 0) break;
+      this.collectLateOrders(rows, now, out, opts.includeCompleted === true);
+      // A short page is the last page: the API has no total count, so the only
+      // honest stop condition is "it gave us fewer than we asked for".
+      if (rows.length < pageSize) break;
+    }
+    out.sort((a, b) => b.minutesElapsed - a.minutesElapsed);
+    return out;
+  }
+
+  /** Map + filter one page into `out`. Extracted so paging stays readable. */
+  private collectLateOrders(
+    rows: RawLateOrderRow[],
+    now: Date,
+    out: LateOrderRow[],
+    includeCompleted: boolean,
+  ): void {
     for (const row of rows) {
       const order = row?.order;
       if (!order?.id) continue;
-      if (!isLiveOrderStatus(order.orderStatus)) continue;
+      if (!includeCompleted && !isLiveOrderStatus(order.orderStatus)) continue;
       const placedAt = order.creationTime ?? '';
       /*
        * Computed HERE, on the server, and sent as a number.
@@ -1081,12 +1121,27 @@ export class HttpYijiClient implements YijiClient {
        * the HOST's zone — right on a Riyadh dev machine, three hours out in the
        * UTC container. See the note on `parseYijiTimestamp`.
        */
-      const minutesElapsed = minutesSince(placedAt, now.getTime());
+      /*
+       * A FINISHED order stops the clock.
+       *
+       * "Minutes since placed" is the right question only while the order is
+       * still running. On a closed order it keeps counting for ever — a real
+       * one measured 43,651 minutes (30 days), which is not how late it was,
+       * it is how long ago it happened. For those the span is
+       * creation -> orderStatusDate, which IS how long the customer waited.
+       */
+      const live = isLiveOrderStatus(order.orderStatus);
+      const endedAt = live ? now.getTime() : parseYijiTimestamp(order.orderStatusDate);
+      const minutesElapsed = minutesSince(
+        placedAt,
+        Number.isFinite(endedAt) ? endedAt : now.getTime(),
+      );
       if (minutesElapsed === null) continue;
       out.push({
         orderId: String(order.id),
         status: YIJI_ORDER_STATUS[order.orderStatus as number] ?? `status_${order.orderStatus}`,
         minutesElapsed,
+        live,
         placedAt,
         brandName: row.brandName?.trim() || order.brandName?.trim() || undefined,
         restaurantName: row.restaurantName?.trim() || order.restaurantName?.trim() || undefined,
@@ -1104,9 +1159,6 @@ export class HttpYijiClient implements YijiClient {
         externalCustomerId: order.userId?.trim() || undefined,
       });
     }
-    // Latest first: the most overdue order is the one to look at.
-    out.sort((a, b) => b.minutesElapsed - a.minutesElapsed);
-    return out;
   }
 
   /**

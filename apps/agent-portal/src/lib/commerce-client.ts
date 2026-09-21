@@ -97,7 +97,12 @@ export const commerce = {
    * from `app_settings` server-side, not something a browser gets to choose.
    * It comes back on the response so the screen can state the real rule.
    */
-  getLateOrders: () => get<LateOrderQueue>('/commerce/late-orders', {}),
+  /**
+   * Late orders. No dates = today's LIVE queue; a range = the register,
+   * which includes orders that have since finished.
+   */
+  getLateOrders: (range?: { from: string; to: string }) =>
+    get<LateOrderQueue>('/commerce/late-orders', range ? { from: range.from, to: range.to } : {}),
   /**
    * The order's cart — every line and the choices behind it.
    *

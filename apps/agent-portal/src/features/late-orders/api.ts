@@ -27,15 +27,22 @@ export const LATE_ORDERS_KEY = ['late-orders'] as const;
  * so the screen can never state a rule different from the one the rows were
  * selected by.
  */
-export function useLateOrders(enabled = true) {
+export function useLateOrders(range?: { from: string; to: string }, enabled = true) {
+  /*
+   * A RANGE stops the polling.
+   *
+   * The live queue is about right-now and refreshes every 30s. A historical
+   * window is a fixed set of finished orders — re-fetching it on a timer would
+   * be three upstream pages bought for an answer that cannot change, and it
+   * would yank the table under someone reading it.
+   */
+  const history = !!range;
   return useQuery<LateOrderQueue>({
-    queryKey: LATE_ORDERS_KEY,
-    queryFn: () => commerce.getLateOrders(),
+    queryKey: [...LATE_ORDERS_KEY, range?.from ?? 'today', range?.to ?? 'today'],
+    queryFn: () => commerce.getLateOrders(range),
     enabled,
-    // The global default is 30s; this is the one screen that is ABOUT elapsed
-    // time, so it refreshes on the same beat the numbers move on.
-    refetchInterval: 30_000,
-    staleTime: 15_000,
+    refetchInterval: history ? false : 30_000,
+    staleTime: history ? 5 * 60_000 : 15_000,
     retry: false,
   });
 }

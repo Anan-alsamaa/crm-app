@@ -150,7 +150,7 @@ export interface YijiPurchaseActivity {
   recent: YijiOrder[];
 }
 
-import type { LateOrderRow } from './late-delivery.js';
+import type { LateOrderQueryOptions, LateOrderRow } from './late-delivery.js';
 
 export interface YijiClient {
   getCustomer(yijiVendorId: string, externalCustomerId: string): Promise<YijiCustomer | null>;
@@ -179,5 +179,8 @@ export interface YijiClient {
    * queue. Returns the LIVE ones only; see the impl for why the upstream
    * answer cannot be used as it arrives.
    */
-  getLateDeliveryOrders(thresholdMinutes: number): Promise<LateOrderRow[]>;
+  getLateDeliveryOrders(
+    thresholdMinutes: number,
+    opts?: LateOrderQueryOptions,
+  ): Promise<LateOrderRow[]>;
 }

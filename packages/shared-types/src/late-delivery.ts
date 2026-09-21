@@ -150,8 +150,17 @@ export type LateOrderAction = z.infer<typeof LateOrderAction>;
 export interface LateOrderRow {
   orderId: string;
   status: string;
-  /** Minutes since the order was created, at the moment the queue was built. */
+  /**
+   * How long the order ran, in whole minutes.
+   *
+   * For a LIVE order this is minutes-so-far, and it keeps growing. For a
+   * finished one the clock stops at `orderStatusDate` — otherwise a closed
+   * order from three weeks ago reports 43,651 minutes, which is how long ago
+   * it happened rather than how late it was.
+   */
   minutesElapsed: number;
+  /** False once the order finished, so the UI can stop implying it is running. */
+  live?: boolean;
   placedAt: string;
   brandName?: string;
   restaurantName?: string;
@@ -170,6 +179,33 @@ export interface LateOrderQueue {
   /** When the gateway built it — the basis for every `minutesElapsed`. */
   builtAt: string;
 }
+
+/**
+ * Which late orders to fetch.
+ *
+ * Empty = the LIVE queue for today, which is the screen's default and the
+ * thing the feature is for.
+ */
+export interface LateOrderQueryOptions {
+  /** `YYYY-MM-DD`, inclusive. Defaults to today. */
+  from?: string;
+  /** `YYYY-MM-DD`, INCLUSIVE — the impl adds the exclusive day itself. */
+  to?: string;
+  /**
+   * Include orders that have already finished.
+   *
+   * Required for any historical view. Of 631 late orders in the last month,
+   * ZERO were still running (measured 2026-09-21) — so history without this
+   * renders empty, which reads as "nothing was ever late" rather than "these
+   * all finished".
+   */
+  includeCompleted?: boolean;
+  /** Pages of 500 to walk. 1 (the default) is the live queue; a month needs 3. */
+  maxPages?: number;
+}
+
+/** The widest window the UI offers, in days. A month is what operations review. */
+export const LATE_ORDER_MAX_WINDOW_DAYS = 31;
 
 /**
  * A decision recorded against a late order.

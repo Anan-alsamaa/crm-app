@@ -258,12 +258,36 @@ export async function registerCommerceRoutes(
    */
   app.get('/commerce/late-orders', async (req, reply) => {
     if (!(await requireAgent(req, reply))) return;
+    const q = req.query as Record<string, string | undefined>;
     const thresholdMinutes = await deps.directus.lateDeliveryThreshold();
-    return answering(reply, { route: 'late-orders', thresholdMinutes }, async () => {
+    /*
+     * A DATE RANGE turns the queue into a register.
+     *
+     * Without `from`/`to` this answers today's live queue, unchanged. With
+     * them it walks pages and includes finished orders — which it must: of 631
+     * late orders in the last month, none were still running, so a history
+     * view that kept the live filter would render empty and read as "nothing
+     * was ever late".
+     */
+    const from = str(q.from);
+    const to = str(q.to);
+    const history = !!from || !!to;
+    const opts = history
+      ? {
+          from: from || to,
+          to: to || from,
+          includeCompleted: true,
+          // 500 per page; a month measured 631 rows, so three pages covers the
+          // widest window the UI offers with room to spare.
+          maxPages: 3,
+        }
+      : {};
+    const ttl = history ? COMMERCE_TTL.order : COMMERCE_TTL.lateOrders;
+    return answering(reply, { route: 'late-orders', thresholdMinutes, from, to }, async () => {
       const rows = await cached(
-        ['late-orders', String(thresholdMinutes)],
-        COMMERCE_TTL.lateOrders,
-        () => deps.yiji.getLateDeliveryOrders(thresholdMinutes),
+        ['late-orders', String(thresholdMinutes), from || 'today', to || 'today'],
+        ttl,
+        () => deps.yiji.getLateDeliveryOrders(thresholdMinutes, opts),
       );
       return { rows, thresholdMinutes, builtAt: new Date().toISOString() };
     });
