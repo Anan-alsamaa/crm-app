@@ -287,6 +287,10 @@ export const roles: RoleSpec[] = [
       // the reader a zero instead of a number. A missing measure that renders
       // as "0" is worse than an error, because nobody goes looking.
       ...readOnly('routing_events'),
+      // Late-order decisions. The Agent KPI report and the late-orders queue
+      // both read these; without the grant the report renders a plausible zero
+      // rather than an error, which is the shape nobody goes looking at.
+      ...readOnly('late_order_decisions'),
       // Junction tables. An Admin is a superset of an Agent for reading, but
       // these were only ever granted to the Agent role — so an admin opening a
       // tagged conversation, a ticket with an attachment, or a message with a
@@ -438,6 +442,17 @@ export const roles: RoleSpec[] = [
        * already on the page.
        */
       { collection: 'routing_events', action: 'read' },
+      /*
+       * Late-order decisions: the agent WRITES these from the queue.
+       *
+       * Read is unscoped on purpose. The queue hides what has already been
+       * handled, so an agent who could only see their OWN decisions would be
+       * offered orders a colleague dealt with a minute ago — two agents
+       * compensating the same customer for the same order is exactly the
+       * failure this record exists to prevent.
+       */
+      { collection: 'late_order_decisions', action: 'create' },
+      { collection: 'late_order_decisions', action: 'read' },
       // Dropdown values + the WhatsApp template: the form reads these live.
       ...readOnly('option_lists'),
       ...readOnly('app_settings'),

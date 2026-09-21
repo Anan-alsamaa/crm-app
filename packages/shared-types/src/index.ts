@@ -17,6 +17,7 @@ export * from './socket.js';
 export * from './ai.js';
 export * from './queues.js';
 export * from './sla.js';
+export * from './late-delivery.js';
 export * from './privileges.js';
 export * from './releases.js';
 

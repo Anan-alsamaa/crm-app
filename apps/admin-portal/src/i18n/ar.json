@@ -625,7 +625,8 @@
     "retryDelivery": "إعادة المحاولة",
     "noOrder": "لا يوجد رقم طلب في هذه التذكرة، لذا لا يستطيع يجي إرفاق قسيمة — فالقسيمة تُنشأ من الطلب. الموافقة تُسجَّل على أي حال، لكن العميل لن يستلمها في التطبيق. أضف رقم الطلب إلى التذكرة إن كان لديه واحد.",
     "deliveryExcluded": "لم يُرسل إلى يجي — {{why}}",
-    "deliveryExcludedDefault": "محدَّد بعدم الإرسال"
+    "deliveryExcludedDefault": "محدَّد بعدم الإرسال",
+    "approveNoOrder": "لا يوجد رقم طلب في هذا الطلب، لذا لا يمكن تسليم القسيمة. اسأل الموظف عن الطلب المقصود."
   },
   "couponReport": {
     "noDecisions": "لم يُحسم شيء بعد",
@@ -911,7 +912,8 @@
     "automationGroup": "الأتمتة",
     "ticketsGroup": "التذاكر",
     "aiConfigGroup": "الذكاء",
-    "aiConfigShort": "إعدادات الذكاء الاصطناعي"
+    "aiConfigShort": "إعدادات الذكاء الاصطناعي",
+    "lateOrdersReport": "الطلبات المتأخرة"
   },
   "pagination": {
     "prev": "السابق",
@@ -1576,5 +1578,45 @@
     "failed": "تعذّر التحديث.",
     "pendingFor": "يوجد تحديث بانتظار {{who}}.",
     "hintVersion": "{{version}} · لن يراه أحد حتى تقوم بتطبيقه."
+  },
+  "lateOrdersReport": {
+    "handled": "طلبات متأخرة تمت معالجتها",
+    "compensated": "تم التعويض",
+    "ignored": "تم التجاهل",
+    "avgMinutes": "المتوسط عند اتخاذ القرار",
+    "minutes": "{{count}} دقيقة",
+    "preparationShare": "{{count}} تأخر في التحضير",
+    "byAgent": "حسب الموظف",
+    "register": "كل القرارات",
+    "unknownAgent": "غير مُسند",
+    "noneTitle": "لا توجد طلبات متأخرة في هذه الفترة",
+    "noneBody": "لم يُتخذ أي قرار في التواريخ المحددة. وسّع الفترة لعرض عمل أقدم.",
+    "errorTitle": "تعذّر تحميل الطلبات المتأخرة",
+    "errorBody": "لم يستجب السجل. هذا لا يعني عدم وجود طلبات متأخرة.",
+    "action": {
+      "compensated": "تعويض",
+      "ignored": "تجاهل"
+    },
+    "col": {
+      "agent": "الموظف",
+      "handled": "تمت معالجتها",
+      "compensated": "تم التعويض",
+      "ignored": "تم التجاهل",
+      "preparation": "التحضير",
+      "delivery": "التوصيل",
+      "avg": "متوسط الدقائق",
+      "when": "التاريخ",
+      "order": "الطلب",
+      "brand": "العلامة / الفرع",
+      "cause": "السبب",
+      "decision": "القرار",
+      "reason": "التفسير"
+    }
+  },
+  "lateOrders": {
+    "kind": {
+      "late_delivery": "تأخر في التوصيل",
+      "late_preparation": "تأخر في التحضير"
+    }
   }
 }

@@ -1,4 +1,5 @@
 import type {
+  LateOrderQueue,
   YijiOrder,
   YijiOrderTimeline,
   YijiPaymentStatus,
@@ -78,11 +79,24 @@ export const commerce = {
     get<YijiOrder | null>('/commerce/order', { vendorId, orderId }),
   getPaymentStatus: (vendorId: string, orderId: string) =>
     get<YijiPaymentStatus | null>('/commerce/payment', { vendorId, orderId }),
-  /** The order's status timeline (derived until Yiji ships a history API). */
+  /**
+   * The order's status timeline — Yiji's REAL status history when the admin
+   * API is configured, falling back to a derived placed→payment→current shape
+   * when it is not. The response says which (`derived`), and the panel labels
+   * it, so a three-step guess is never shown as the whole story.
+   */
   getOrderTimeline: (vendorId: string, orderId: string) =>
     get<YijiOrderTimeline | null>('/commerce/tracking', { vendorId, orderId }),
   getShipmentTracking: (vendorId: string, orderId: string) =>
     get<YijiShipmentTracking | null>('/commerce/shipment', { vendorId, orderId }),
+  /**
+   * Live delivery orders past the late threshold, newest-late first.
+   *
+   * Takes no arguments on purpose: the threshold is the business's rule, read
+   * from `app_settings` server-side, not something a browser gets to choose.
+   * It comes back on the response so the screen can state the real rule.
+   */
+  getLateOrders: () => get<LateOrderQueue>('/commerce/late-orders', {}),
 };
 
 export type CommerceClient = typeof commerce;

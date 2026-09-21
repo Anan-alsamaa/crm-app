@@ -87,4 +87,13 @@ export const COMMERCE_TTL = {
   orders: 45,
   order: 300,
   activity: 60,
+  /**
+   * The late-orders queue, polled by every agent watching it every 30s.
+   *
+   * Short, because this is the one answer that is ABOUT elapsed time — a
+   * minute-old queue misreports how late every row in it is. Twenty seconds
+   * keeps the figure honest while still collapsing a room full of agents onto
+   * one upstream call per poll.
+   */
+  lateOrders: 20,
 } as const;

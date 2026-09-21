@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, updateItem } from '@directus/sdk';
 import {
   approvedCouponPatch,
+  couponOrderId,
   COUPON_APPROVED_STATUSES,
   type CouponApprovalStatus,
 } from '@yiji/shared-types';
@@ -64,6 +65,11 @@ export interface CouponApprovalRow {
   decided_at: string | null;
   decision_note: string | null;
   date_created: string | null;
+  /**
+   * The order, when this coupon was raised without a ticket (the late-orders
+   * queue). `couponOrderId` prefers the ticket's when both exist.
+   */
+  order_id: string | null;
   ticket: {
     id: string;
     subject: string | null;
@@ -127,6 +133,7 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
               'yiji_push_error',
               'delivery_excluded',
               'delivery_excluded_reason',
+              'order_id',
               {
                 ticket: [
                   'id',
@@ -210,24 +217,36 @@ export function useDecideCoupon() {
       const amended = edits && Object.keys(edits).length > 0 ? { ...row, ...edits } : row;
       if (approve) {
         /**
-         * Approving with no ticket used to skip the write and mark the request
-         * approved anyway, and the page then said "the coupon is on the
-         * ticket". It was not on anything. The supervisor believed they had
-         * issued it, the agent told the customer it was done, and nothing
-         * existed. Refusing is the only honest outcome: there is nowhere to put
-         * the coupon, so the decision cannot be carried out.
+         * APPROVING SOMETHING THAT CANNOT BE DELIVERED IS THE FAILURE TO STOP.
          *
-         * A rejection is still allowed without a ticket — turning something
-         * down needs no destination.
+         * This used to demand a TICKET. Approving without one skipped the write
+         * and marked the request approved anyway, and the page then said "the
+         * coupon is on the ticket" when it was not on anything: the supervisor
+         * believed they had issued it, the agent told the customer it was done,
+         * and nothing existed.
+         *
+         * The real precondition was never the ticket — it is the ORDER, which
+         * is the only thing Yiji needs to deliver a coupon. A coupon given
+         * straight from the late-orders queue has an order and no complaint
+         * behind it, and refusing that would block the compensation the queue
+         * exists to give (owner, 2026-09-21). So the guard now asks the
+         * question that decides whether the decision can be carried out.
+         *
+         * A rejection is still allowed without either — turning something down
+         * needs no destination.
          */
-        if (!row.ticket?.id) {
-          throw new Error('COUPON_APPROVAL_NO_TICKET');
+        if (!couponOrderId(row)) {
+          throw new Error('COUPON_APPROVAL_NO_ORDER');
         }
         // The coupon reaches the ticket FIRST — see the note at the top — and
         // carries the AMENDED terms, not what the agent originally asked for.
-        await directus.request(
-          updateItem('tickets' as never, row.ticket.id, approvedCouponPatch(amended) as never),
-        );
+        // A ticket-less coupon has nothing to stamp; the request itself is the
+        // record, and the worker delivers it from `order_id`.
+        if (row.ticket?.id) {
+          await directus.request(
+            updateItem('tickets' as never, row.ticket.id, approvedCouponPatch(amended) as never),
+          );
+        }
       }
       const decided = await directus.request(
         updateItem('coupon_approvals' as never, row.id, {

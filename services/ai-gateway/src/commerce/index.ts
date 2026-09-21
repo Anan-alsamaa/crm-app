@@ -18,7 +18,14 @@ import { COMMERCE_TTL, type CommerceCache } from './cache.js';
 type Yiji = ReturnType<typeof createYijiClient>;
 
 export interface CommerceDeps {
-  directus: CallerVerifierDeps;
+  /**
+   * Verifies the caller AND reads the late-order threshold.
+   *
+   * Widened from `CallerVerifierDeps` for the threshold read. Still the
+   * narrowest thing that works: the routes get two named capabilities, not a
+   * Directus client they could write through.
+   */
+  directus: CallerVerifierDeps & { lateDeliveryThreshold(): Promise<number> };
   yiji: Yiji;
   /** Read-through cache. Optional so existing tests construct deps unchanged. */
   cache?: CommerceCache;
@@ -233,6 +240,33 @@ export async function registerCommerceRoutes(
         deps.yiji.getOrderTimeline(vendorId, orderId),
       ),
     );
+  });
+
+  /**
+   * THE LATE-ORDERS QUEUE: live delivery orders past the threshold.
+   *
+   * Cached for 20s and coalesced in flight, which is what makes this cheap
+   * enough to poll. Every agent watching the queue refetches every 30s; without
+   * the cache that is one upstream call per agent per poll, against an external
+   * API we do not control. With it, ten agents cost one call — and the answer
+   * is never more than a third of a minute behind.
+   *
+   * Not `answering(...)`'s 504-on-unavailable by accident: an empty queue and a
+   * queue we could not fetch look identical on screen and mean opposite things
+   * ("nothing is late" vs "we cannot see what is late"). The 504 is what lets
+   * the panel say which.
+   */
+  app.get('/commerce/late-orders', async (req, reply) => {
+    if (!(await requireAgent(req, reply))) return;
+    const thresholdMinutes = await deps.directus.lateDeliveryThreshold();
+    return answering(reply, { route: 'late-orders', thresholdMinutes }, async () => {
+      const rows = await cached(
+        ['late-orders', String(thresholdMinutes)],
+        COMMERCE_TTL.lateOrders,
+        () => deps.yiji.getLateDeliveryOrders(thresholdMinutes),
+      );
+      return { rows, thresholdMinutes, builtAt: new Date().toISOString() };
+    });
   });
 
   app.get('/commerce/payment', async (req, reply) => {

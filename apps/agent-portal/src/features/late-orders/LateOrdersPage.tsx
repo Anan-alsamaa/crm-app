@@ -1,0 +1,354 @@
+import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { createItem } from '@directus/sdk';
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  Pill,
+  Select,
+  Skeleton,
+  Table,
+  Td,
+  Th,
+  Textarea,
+  Tr,
+  toast,
+} from '@yiji/ui';
+import {
+  LATE_ORDER_COMPLAINT_TYPE,
+  type LateOrderKind,
+  type LateOrderRow,
+} from '@yiji/shared-types';
+import { useAuth } from '../../lib/auth/AuthContext.js';
+import { directus } from '../../lib/directus.js';
+import { useVendors } from '../tickets/api.js';
+import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
+import {
+  useHandledLateOrders,
+  useLateOrders,
+  useRecordLateDecision,
+  lateOrderTicket,
+  FALLBACK_THRESHOLD,
+} from './api.js';
+
+/**
+ * Late Delivery Handling - the agent's queue.
+ *
+ * Delivery orders still running past the threshold, with the two decisions the
+ * owner specified: Ignore, and Assign coupon. Both demand a reason; both record
+ * what was decided so the queue does not offer the same order again a minute
+ * later.
+ *
+ * See docs/LATE-DELIVERY.md for the measured behaviour of the Yiji endpoint
+ * behind this - several of its properties are counter-intuitive and load-bearing.
+ */
+
+/** How the elapsed time reads: "1h 12m" rather than "72". */
+function elapsed(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+/**
+ * How overdue reads at a glance. An order twenty minutes past the line and one
+ * three hours past need different urgency from across a room, and these rows
+ * are scanned far more often than they are read.
+ */
+function tone(minutes: number, threshold: number): 'warning' | 'destructive' {
+  return minutes >= threshold * 1.5 ? 'destructive' : 'warning';
+}
+
+interface DecisionDraft {
+  row: LateOrderRow;
+  action: 'ignored' | 'compensated';
+}
+
+export function LateOrdersPage() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const vendors = useVendors();
+  const queue = useLateOrders();
+  const handled = useHandledLateOrders();
+  const record = useRecordLateDecision();
+
+  /** The classification per row, defaulted to late delivery. */
+  const [kinds, setKinds] = useState<Record<string, LateOrderKind>>({});
+  const [draft, setDraft] = useState<DecisionDraft | null>(null);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [coupon, setCoupon] = useState<{ row: LateOrderRow; reason: string } | null>(null);
+
+  const threshold = queue.data?.thresholdMinutes ?? FALLBACK_THRESHOLD;
+  const soleVendorId = vendors.data?.length === 1 ? vendors.data[0]!.id : null;
+
+  /*
+   * What is still OPEN.
+   *
+   * Yiji has no idea we have handled anything, so a decided order keeps coming
+   * back from `GetFilteredOrders` until it completes. Filtering here - rather
+   * than trusting the upstream list - is what stops an agent facing the same
+   * three rows every thirty seconds.
+   */
+  const rows = useMemo(() => {
+    const done = handled.data ?? new Set<string>();
+    return (queue.data?.rows ?? []).filter((r) => !done.has(r.orderId));
+  }, [queue.data, handled.data]);
+
+  const kindOf = (row: LateOrderRow): LateOrderKind => kinds[row.orderId] ?? 'late_delivery';
+
+  const openDecision = (row: LateOrderRow, action: 'ignored' | 'compensated') => {
+    setDraft({ row, action });
+    setReason('');
+  };
+
+  /**
+   * Commit the decision.
+   *
+   * For a late PREPARATION the owner asked for a ticket as well, prefilled from
+   * the order. The ticket is raised FIRST and its id recorded with the decision,
+   * so a failure leaves nothing half-done: no decision row means the order is
+   * still in the queue, which is the honest state.
+   */
+  const commit = async () => {
+    if (!draft) return;
+    const text = reason.trim();
+    if (!text) return;
+    const kind = kindOf(draft.row);
+    setBusy(true);
+    try {
+      let ticketId: string | null = null;
+      if (kind === 'late_preparation') {
+        const created = (await directus.request(
+          createItem(
+            'tickets' as never,
+            lateOrderTicket({
+              row: draft.row,
+              kind,
+              reason: text,
+              contactId: null,
+              vendorId: soleVendorId,
+              agentId: user?.id ?? null,
+            }) as never,
+          ),
+        )) as { id: string };
+        ticketId = created?.id ?? null;
+      }
+      await record.mutateAsync({
+        row: draft.row,
+        kind,
+        action: draft.action,
+        reason: text,
+        agentId: user?.id ?? null,
+        ticketId,
+      });
+      if (draft.action === 'compensated') {
+        // The coupon form opens on TOP of the recorded decision, so an agent
+        // who abandons it has still taken the order out of the queue with a
+        // reason - rather than leaving it to be picked up twice.
+        setCoupon({ row: draft.row, reason: text });
+      } else {
+        toast.success(
+          t('lateOrders.ignored', { defaultValue: 'Ignored, and the reason recorded.' }),
+        );
+      }
+      setDraft(null);
+      setReason('');
+    } catch {
+      toast.error(
+        t('lateOrders.decisionFailed', { defaultValue: 'Could not record that decision.' }),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <PageHeader
+        title={t('lateOrders.title', { defaultValue: 'Late orders' })}
+        subtitle={t('lateOrders.subtitle', {
+          minutes: threshold,
+          defaultValue: 'Delivery orders running longer than {{minutes}} minutes.',
+        })}
+      />
+
+      {queue.isError ? (
+        /*
+         * A failed fetch must NOT look like an empty queue.
+         *
+         * "Nothing is late" and "we cannot see what is late" are opposite
+         * facts, and the second is the one an agent has to act on.
+         */
+        <ErrorState
+          title={t('lateOrders.errorTitle', { defaultValue: 'Could not load late orders' })}
+          message={t('lateOrders.errorBody', {
+            defaultValue:
+              'The order system did not answer. That is not the same as there being none - try again in a moment.',
+          })}
+          onRetry={() => void queue.refetch()}
+        />
+      ) : queue.isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </div>
+      ) : rows.length === 0 ? (
+        <EmptyState
+          title={t('lateOrders.noneTitle', { defaultValue: 'Nothing is running late' })}
+          description={t('lateOrders.noneBody', {
+            minutes: threshold,
+            defaultValue: 'No delivery order has passed {{minutes}} minutes. This updates itself.',
+          })}
+        />
+      ) : (
+        <Card className="min-h-0 flex-1 overflow-auto p-0">
+          <Table>
+            <thead>
+              <Tr>
+                <Th>{t('lateOrders.col.order', { defaultValue: 'Order' })}</Th>
+                <Th>{t('lateOrders.col.elapsed', { defaultValue: 'Running' })}</Th>
+                <Th>{t('lateOrders.col.brand', { defaultValue: 'Brand / branch' })}</Th>
+                <Th>{t('lateOrders.col.customer', { defaultValue: 'Customer' })}</Th>
+                <Th>{t('lateOrders.col.status', { defaultValue: 'Status' })}</Th>
+                <Th>{t('lateOrders.col.kind', { defaultValue: 'Cause' })}</Th>
+                <Th>{t('lateOrders.col.actions', { defaultValue: 'Decision' })}</Th>
+              </Tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <Tr key={row.orderId}>
+                  <Td className="whitespace-nowrap font-medium tabular-nums">{row.orderId}</Td>
+                  <Td className="whitespace-nowrap">
+                    <Pill tone={tone(row.minutesElapsed, threshold)} size="sm">
+                      {elapsed(row.minutesElapsed)}
+                    </Pill>
+                  </Td>
+                  <Td className="max-w-[16rem] truncate">
+                    {[row.brandName, row.restaurantName].filter(Boolean).join(' - ') || '-'}
+                  </Td>
+                  <Td className="whitespace-nowrap">
+                    {row.customerName || row.customerPhone || '-'}
+                  </Td>
+                  <Td className="whitespace-nowrap text-muted-foreground">
+                    {t(`commerce.orderStatuses.${row.status}`, { defaultValue: row.status })}
+                  </Td>
+                  <Td>
+                    <Select
+                      value={kindOf(row)}
+                      aria-label={t('lateOrders.col.kind', { defaultValue: 'Cause' })}
+                      onChange={(e) =>
+                        setKinds((cur) => ({
+                          ...cur,
+                          [row.orderId]: e.target.value as LateOrderKind,
+                        }))
+                      }
+                    >
+                      <option value="late_delivery">
+                        {t('lateOrders.kind.late_delivery', { defaultValue: 'Late delivery' })}
+                      </option>
+                      <option value="late_preparation">
+                        {t('lateOrders.kind.late_preparation', {
+                          defaultValue: 'Late preparation',
+                        })}
+                      </option>
+                    </Select>
+                  </Td>
+                  <Td>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
+                        {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => openDecision(row, 'ignored')}
+                      >
+                        {t('lateOrders.ignore', { defaultValue: 'Ignore' })}
+                      </Button>
+                    </div>
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+        </Card>
+      )}
+
+      {/* The reason, demanded for BOTH actions. */}
+      {draft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <Card className="w-full max-w-lg space-y-3 p-5">
+            <h2 className="text-base font-semibold">
+              {draft.action === 'ignored'
+                ? t('lateOrders.ignoreTitle', { defaultValue: 'Ignore this order?' })
+                : t('lateOrders.couponTitle', { defaultValue: 'Compensate this order' })}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {t('lateOrders.reasonPrompt', {
+                order: draft.row.orderId,
+                minutes: elapsed(draft.row.minutesElapsed),
+                defaultValue: 'Order {{order}} has been running {{minutes}}. Why?',
+              })}
+            </p>
+            <Textarea
+              autoFocus
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={t('lateOrders.reasonPlaceholder', {
+                defaultValue: 'The reason - recorded against this order.',
+              })}
+            />
+            {kindOf(draft.row) === 'late_preparation' && (
+              <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                {t('lateOrders.willRaiseTicket', {
+                  type: LATE_ORDER_COMPLAINT_TYPE.late_preparation,
+                  defaultValue: 'A "{{type}}" ticket will be raised for this order.',
+                })}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="ghost" onClick={() => setDraft(null)} disabled={busy}>
+                {t('common.cancel', { defaultValue: 'Cancel' })}
+              </Button>
+              <Button onClick={() => void commit()} disabled={!reason.trim() || busy}>
+                {draft.action === 'ignored'
+                  ? t('lateOrders.confirmIgnore', { defaultValue: 'Ignore' })
+                  : t('lateOrders.confirmCoupon', { defaultValue: 'Continue to coupon' })}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/*
+        The same coupon form the Add-ticket page uses, and the same approval
+        flow behind it. No ticket: a late order has an order and no complaint
+        behind it, and `order_id` is what delivery actually needs.
+      */}
+      {coupon && (
+        <CouponRequestDialog
+          open
+          onClose={() => setCoupon(null)}
+          ticketId={null}
+          orderId={coupon.row.orderId}
+          contactId={null}
+          customerPhone={coupon.row.customerPhone ?? null}
+          description={coupon.reason}
+          brandId={null}
+          restaurantId={coupon.row.restaurantId ?? null}
+          brandName={coupon.row.brandName ?? null}
+          branchName={coupon.row.restaurantName ?? null}
+          requestedBy={user?.id ?? null}
+          onCreated={() => setCoupon(null)}
+        />
+      )}
+    </div>
+  );
+}

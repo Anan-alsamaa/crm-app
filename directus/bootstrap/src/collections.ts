@@ -578,6 +578,24 @@ export const collections: CollectionSpec[] = [
       { field: 'reason', type: 'text', note: 'Why the agent is asking. Read by the supervisor.' },
       {
         /*
+         * THE ORDER, HELD DIRECTLY — so a coupon does not need a ticket.
+         *
+         * Delivery to Yiji needs an order id and nothing else; it used to read
+         * one only through `ticket.order_id`, which quietly made a ticket a
+         * precondition for compensating anybody. A late order is compensated
+         * straight from the queue with no complaint behind it, so the id is
+         * carried here and the ticket stays optional (owner, 2026-09-21).
+         *
+         * The ticket's own order still wins when there is one — see
+         * `couponOrderId`. This is a fallback, not a second source of truth.
+         */
+        field: 'order_id',
+        type: 'string',
+        index: true,
+        note: 'The Yiji order this coupon is attached to, when it was raised without a ticket.',
+      },
+      {
+        /*
          * Generated from the shared vocabulary, never retyped. The column used
          * to list three states while the worker wrote a fourth (`assigned`, the
          * moment Yiji accepts a coupon) and treated a fifth (`edited`) as
@@ -750,6 +768,52 @@ export const collections: CollectionSpec[] = [
        * will change, and a historical row must keep the answer that was true
        * when it happened. */
       { field: 'seconds_held', type: 'integer' },
+    ],
+  },
+  {
+    collection: 'late_order_decisions',
+    note: 'APPEND-ONLY record of what an agent decided about a delivery order that ran past the late threshold. Written for BOTH outcomes: ignoring is a decision somebody has to stay answerable for, and a queue that forgets what it was told to ignore asks again tomorrow.',
+    fields: [
+      {
+        /* The Yiji order id — the ONLY identifier the CRM and Yiji share for
+         * one of these. Indexed because the queue reads this collection on
+         * every poll to hide what has already been handled. */
+        field: 'order_id',
+        type: 'string',
+        required: true,
+        index: true,
+      },
+      {
+        field: 'kind',
+        type: 'string',
+        choices: ['late_delivery', 'late_preparation'],
+        required: true,
+        note: 'Which leg ran long, as the agent classified it.',
+      },
+      {
+        field: 'action',
+        type: 'string',
+        choices: ['ignored', 'compensated'],
+        required: true,
+      },
+      {
+        field: 'reason',
+        type: 'text',
+        required: true,
+        note: 'Required for BOTH actions (owner, 2026-09-21) — an ignored order without a reason is an unanswerable decision.',
+      },
+      {
+        /* Stored, not derived: this is how late it was WHEN THE DECISION WAS
+         * MADE. The order keeps running afterwards, so re-deriving it later
+         * would rewrite the fact the agent actually acted on. */
+        field: 'minutes_elapsed',
+        type: 'integer',
+        note: 'How far past the threshold the order was at the moment it was decided.',
+      },
+      /* Denormalised for the report, which must keep reporting the same brand
+       * and branch however the upstream order or the store master later change. */
+      { field: 'brand_name', type: 'string' },
+      { field: 'restaurant_name', type: 'string' },
     ],
   },
   {
@@ -1020,6 +1084,21 @@ export const relations: RelationSpec[] = [
     field: 'conversation',
     related: 'conversations',
     onDelete: 'CASCADE',
+  },
+  {
+    collection: 'late_order_decisions',
+    field: 'decided_by',
+    related: 'directus_users',
+    onDelete: 'SET NULL',
+  },
+  {
+    /* SET NULL, not CASCADE: deleting the ticket raised alongside must not
+       erase the record that this order was handled, or the queue would offer
+       it again as though nobody had ever looked at it. */
+    collection: 'late_order_decisions',
+    field: 'ticket',
+    related: 'tickets',
+    onDelete: 'SET NULL',
   },
   /* SET NULL, not CASCADE: a deleted agent must not erase the history of how
    * conversations were routed while they worked here. */

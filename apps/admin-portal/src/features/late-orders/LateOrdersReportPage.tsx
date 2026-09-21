@@ -1,0 +1,204 @@
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  Card,
+  EmptyState,
+  ErrorState,
+  Pill,
+  ReportKpi,
+  Skeleton,
+  Table,
+  Td,
+  Th,
+  Tr,
+} from '@yiji/ui';
+import { useRememberedRange } from '../../lib/date-range.js';
+import { agentLateStats, agentName, useLateOrderDecisions } from './api.js';
+
+/**
+ * Late orders - the agent measure.
+ *
+ * What agents DID with the orders that ran past the threshold: how many they
+ * handled, how they classified them, and how they resolved them.
+ *
+ * Counts only, deliberately. There is no "compensation rate" and no league
+ * table: the right number of coupons to give depends on what actually went
+ * wrong, and a rate on a dashboard becomes a target that rewards either giving
+ * money away or refusing to.
+ */
+export function LateOrdersReportPage() {
+  const { t } = useTranslation();
+  const { from, to } = useRememberedRange('late-orders-report-range');
+  const unknown = t('lateOrdersReport.unknownAgent', { defaultValue: 'Unassigned' });
+
+  // The whole day at each end: a date alone would drop everything decided
+  // after midnight on the closing day.
+  const q = useLateOrderDecisions(`${from}T00:00:00`, `${to}T23:59:59`);
+  const rows = useMemo(() => q.data ?? [], [q.data]);
+  const stats = useMemo(() => agentLateStats(rows, unknown), [rows, unknown]);
+
+  const totals = useMemo(() => {
+    const compensated = rows.filter((r) => r.action === 'compensated').length;
+    const mins = rows
+      .map((r) => r.minutes_elapsed)
+      .filter((m): m is number => typeof m === 'number');
+    return {
+      handled: rows.length,
+      compensated,
+      ignored: rows.filter((r) => r.action === 'ignored').length,
+      preparation: rows.filter((r) => r.kind === 'late_preparation').length,
+      avgMinutes: mins.length ? Math.round(mins.reduce((a, b) => a + b, 0) / mins.length) : null,
+    };
+  }, [rows]);
+
+  if (q.isError) {
+    return (
+      <ErrorState
+        title={t('lateOrdersReport.errorTitle', { defaultValue: 'Could not load late orders' })}
+        message={t('lateOrdersReport.errorBody', {
+          defaultValue: 'The register did not answer. This is not the same as there being none.',
+        })}
+        onRetry={() => void q.refetch()}
+      />
+    );
+  }
+
+  if (q.isLoading) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <ReportKpi
+          label={t('lateOrdersReport.handled', { defaultValue: 'Late orders handled' })}
+          value={String(totals.handled)}
+          tone="blue"
+        />
+        <ReportKpi
+          label={t('lateOrdersReport.compensated', { defaultValue: 'Compensated' })}
+          value={String(totals.compensated)}
+          tone="green"
+        />
+        <ReportKpi
+          label={t('lateOrdersReport.ignored', { defaultValue: 'Ignored' })}
+          value={String(totals.ignored)}
+          tone="amber"
+        />
+        <ReportKpi
+          label={t('lateOrdersReport.avgMinutes', { defaultValue: 'Average when decided' })}
+          value={
+            totals.avgMinutes == null
+              ? '-'
+              : t('lateOrdersReport.minutes', {
+                  count: totals.avgMinutes,
+                  defaultValue: '{{count}} min',
+                })
+          }
+          tone="violet"
+          hint={t('lateOrdersReport.preparationShare', {
+            count: totals.preparation,
+            defaultValue: '{{count}} late in preparation',
+          })}
+        />
+      </div>
+
+      {rows.length === 0 ? (
+        <EmptyState
+          title={t('lateOrdersReport.noneTitle', { defaultValue: 'No late orders in this window' })}
+          description={t('lateOrdersReport.noneBody', {
+            defaultValue:
+              'Nothing was decided in the dates chosen. Widen the range to see earlier work.',
+          })}
+        />
+      ) : (
+        <>
+          <Card className="p-0">
+            <h3 className="px-4 pt-4 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {t('lateOrdersReport.byAgent', { defaultValue: 'By agent' })}
+            </h3>
+            <Table>
+              <thead>
+                <Tr>
+                  <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
+                  <Th>{t('lateOrdersReport.col.handled', { defaultValue: 'Handled' })}</Th>
+                  <Th>{t('lateOrdersReport.col.compensated', { defaultValue: 'Compensated' })}</Th>
+                  <Th>{t('lateOrdersReport.col.ignored', { defaultValue: 'Ignored' })}</Th>
+                  <Th>{t('lateOrdersReport.col.preparation', { defaultValue: 'Preparation' })}</Th>
+                  <Th>{t('lateOrdersReport.col.delivery', { defaultValue: 'Delivery' })}</Th>
+                  <Th>{t('lateOrdersReport.col.avg', { defaultValue: 'Avg. minutes' })}</Th>
+                </Tr>
+              </thead>
+              <tbody>
+                {stats.map((s) => (
+                  <Tr key={s.agent}>
+                    <Td className="whitespace-nowrap font-medium">{s.agent}</Td>
+                    <Td className="tabular-nums">{s.handled}</Td>
+                    <Td className="tabular-nums">{s.compensated}</Td>
+                    <Td className="tabular-nums">{s.ignored}</Td>
+                    <Td className="tabular-nums">{s.latePreparation}</Td>
+                    <Td className="tabular-nums">{s.lateDelivery}</Td>
+                    <Td className="tabular-nums">{s.avgMinutes ?? '-'}</Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </Card>
+
+          <Card className="p-0">
+            <h3 className="px-4 pt-4 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {t('lateOrdersReport.register', { defaultValue: 'Every decision' })}
+            </h3>
+            <Table>
+              <thead>
+                <Tr>
+                  <Th>{t('lateOrdersReport.col.when', { defaultValue: 'When' })}</Th>
+                  <Th>{t('lateOrdersReport.col.order', { defaultValue: 'Order' })}</Th>
+                  <Th>{t('lateOrdersReport.col.brand', { defaultValue: 'Brand / branch' })}</Th>
+                  <Th>{t('lateOrdersReport.col.cause', { defaultValue: 'Cause' })}</Th>
+                  <Th>{t('lateOrdersReport.col.decision', { defaultValue: 'Decision' })}</Th>
+                  <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
+                  <Th>{t('lateOrdersReport.col.reason', { defaultValue: 'Reason' })}</Th>
+                </Tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <Tr key={r.id}>
+                    <Td className="whitespace-nowrap text-muted-foreground">
+                      {r.date_created ? new Date(r.date_created).toLocaleString() : '-'}
+                    </Td>
+                    <Td className="whitespace-nowrap tabular-nums">{r.order_id ?? '-'}</Td>
+                    <Td className="max-w-[14rem] truncate">
+                      {[r.brand_name, r.restaurant_name].filter(Boolean).join(' - ') || '-'}
+                    </Td>
+                    <Td className="whitespace-nowrap">
+                      {r.kind ? t(`lateOrders.kind.${r.kind}`, { defaultValue: r.kind }) : '-'}
+                    </Td>
+                    <Td>
+                      <Pill tone={r.action === 'compensated' ? 'success' : 'neutral'} size="sm">
+                        {r.action
+                          ? t(`lateOrdersReport.action.${r.action}`, { defaultValue: r.action })
+                          : '-'}
+                      </Pill>
+                    </Td>
+                    <Td className="whitespace-nowrap">{agentName(r, unknown)}</Td>
+                    <Td className="max-w-[22rem]">
+                      <span className="line-clamp-2 block leading-snug" title={r.reason ?? ''}>
+                        {r.reason ?? '-'}
+                      </span>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}

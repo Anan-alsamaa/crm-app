@@ -96,7 +96,17 @@ export function useMyCouponRequests() {
 }
 
 export interface CreateCouponRequestInput extends CouponFields {
-  ticket: string;
+  /**
+   * The ticket this compensates, when there is one.
+   *
+   * OPTIONAL since 2026-09-21. A coupon given straight from the late-orders
+   * queue has an order and no complaint behind it; `order_id` below carries
+   * the only thing delivery actually needs. A coupon raised from a ticket
+   * still sets this, and the ticket's order still wins — see `couponOrderId`.
+   */
+  ticket?: string | null;
+  /** The Yiji order, for a coupon raised without a ticket. */
+  order_id?: string | null;
   contact: string | null;
   requested_by: string | null;
   reason?: string | null;

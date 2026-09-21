@@ -1,5 +1,10 @@
 import { readItems, readItem } from '@directus/sdk';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
+import {
+  DEFAULT_LATE_DELIVERY_MINUTES,
+  LATE_DELIVERY_MINUTES_KEY,
+  lateDeliveryMinutes,
+} from '@yiji/shared-types';
 
 /**
  * Typed Directus client for the gateway. Gateway only READS — never writes
@@ -82,6 +87,7 @@ export class GatewayDirectus {
   private readonly token: string;
   // Small caches so we don't hit Directus on every AI request.
   private adminRoleCache: { ids: Set<string>; at: number } | null = null;
+  private lateThresholdCache: { minutes: number; at: number } | null = null;
   private readonly whoCache = new Map<
     string,
     { who: { id: string; role: string | null }; at: number }
@@ -146,6 +152,46 @@ export class GatewayDirectus {
       // On failure, fall back to the last known set (or empty → no admin access),
       // which fails CLOSED for admin-gated endpoints.
       return this.adminRoleCache?.ids ?? new Set<string>();
+    }
+  }
+
+  /**
+   * The late-order threshold in minutes, from `app_settings`.
+   *
+   * A SETTING rather than an env var so operations can change the rule without
+   * a deploy and a task restart. The owner's rule is 60 for every brand
+   * (2026-09-21) and this is not expected to move — but if it ever does, it
+   * should not need us.
+   *
+   * Cached for a minute: the queue is polled every 30s by every agent watching
+   * it, and re-reading a one-row setting on each poll would be a round trip
+   * bought for nothing. `lateDeliveryMinutes` makes every bad value — blank,
+   * typo, negative, absurd — resolve to the documented default, so a setting
+   * nobody can break is one operations can be trusted with.
+   */
+  async lateDeliveryThreshold(): Promise<number> {
+    const now = Date.now();
+    if (this.lateThresholdCache && now - this.lateThresholdCache.at < 60_000) {
+      return this.lateThresholdCache.minutes;
+    }
+    try {
+      const rows = (await this.client.request(
+        readItems(
+          'app_settings' as never,
+          {
+            filter: { key: { _eq: LATE_DELIVERY_MINUTES_KEY } },
+            fields: ['value'],
+            limit: 1,
+          } as never,
+        ),
+      )) as unknown as Array<{ value: string | null }>;
+      const minutes = lateDeliveryMinutes(rows[0]?.value);
+      this.lateThresholdCache = { minutes, at: now };
+      return minutes;
+    } catch {
+      // The threshold is not worth failing a queue over: fall back to the last
+      // known value, or the documented default on a cold start.
+      return this.lateThresholdCache?.minutes ?? DEFAULT_LATE_DELIVERY_MINUTES;
     }
   }
 

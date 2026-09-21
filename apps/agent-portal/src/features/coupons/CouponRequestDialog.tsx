@@ -45,7 +45,21 @@ import { useCouponCodeTaken, useRequestCouponApproval } from './api.js';
 export interface CouponRequestDialogProps {
   open: boolean;
   onClose: () => void;
-  ticketId: string;
+  /**
+   * The ticket this compensates, when there is one.
+   *
+   * Optional since 2026-09-21: a coupon given from the late-orders queue has
+   * an order and no complaint behind it. Pass `orderId` instead — delivery
+   * needs the order, never the ticket.
+   */
+  ticketId?: string | null;
+  /**
+   * The Yiji order, for a coupon raised WITHOUT a ticket.
+   *
+   * Ignored when `ticketId` is given: that ticket's own order is the one the
+   * coupon is about, and a second source would be one to disagree with it.
+   */
+  orderId?: string | null;
   contactId: string | null;
   /** Seeds the title — what operations search by. */
   customerPhone: string | null;
@@ -198,6 +212,7 @@ export function CouponRequestDialog({
   open,
   onClose,
   ticketId,
+  orderId,
   contactId,
   customerPhone,
   description,
@@ -345,7 +360,10 @@ export function CouponRequestDialog({
     }
     create
       .mutateAsync({
-        ticket: ticketId,
+        ticket: ticketId ?? null,
+        // Only when there is no ticket: `couponOrderId` prefers the ticket's
+        // order, and writing both would create a second thing to disagree.
+        order_id: ticketId ? null : (orderId ?? null),
         contact: contactId,
         requested_by: requestedBy,
         // The supervisor reads this, so it is the agent's own words.

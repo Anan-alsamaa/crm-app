@@ -1,3 +1,8 @@
+import {
+  isLiveOrderStatus,
+  YIJI_DELIVERY_TYPE_DELIVERY,
+  type LateOrderRow,
+} from './late-delivery.js';
 import type {
   YijiClient,
   YijiCustomer,
@@ -225,6 +230,43 @@ export class MockYijiClient implements YijiClient {
   ): Promise<YijiPurchaseActivity | null> {
     return this.fixtures.activityByCustomer.get(key(vendorId, externalCustomerId)) ?? null;
   }
+
+  /**
+   * A late-orders queue built from whatever orders the fixtures hold.
+   *
+   * Synthesised rather than fixtured, so a developer running against the mock
+   * sees the screen populated instead of an empty state they cannot tell from
+   * a bug. The elapsed time is derived from the fixture's own `placedAt`, so a
+   * mock order is late for the same reason a real one is.
+   */
+  async getLateDeliveryOrders(thresholdMinutes: number): Promise<LateOrderRow[]> {
+    const now = Date.now();
+    const out: LateOrderRow[] = [];
+    for (const [k, orders] of this.fixtures.ordersByCustomer) {
+      const externalCustomerId = k.slice(k.indexOf('::') + 2);
+      for (const o of orders) {
+        const started = o.placedAt ? Date.parse(o.placedAt) : Number.NaN;
+        if (!Number.isFinite(started)) continue;
+        const minutesElapsed = Math.floor((now - started) / 60_000);
+        if (minutesElapsed < thresholdMinutes) continue;
+        if (o.deliveryType && o.deliveryType !== 'delivery') continue;
+        out.push({
+          orderId: o.orderId,
+          status: o.status,
+          minutesElapsed,
+          placedAt: o.placedAt,
+          brandName: o.brandName,
+          restaurantName: o.restaurantName,
+          restaurantId: o.restaurantId,
+          customerPhone: o.customerPhone,
+          total: o.total,
+          externalCustomerId,
+        });
+      }
+    }
+    out.sort((a, b) => b.minutesElapsed - a.minutesElapsed);
+    return out;
+  }
 }
 
 /* ── HTTP ────────────────────────────────────────────────────────── */
@@ -337,6 +379,24 @@ interface RawYijiOrder {
     itemPrice?: number;
     itemCategory?: string | null;
   }> | null;
+}
+
+/**
+ * One row of `GetFilteredOrders`.
+ *
+ * The response is a bare ARRAY (not `{ items: [] }`), and the real order is
+ * nested under `order` while the customer and branch names sit beside it at
+ * the top level — so both levels are read, preferring the outer one where it
+ * is populated.
+ */
+interface RawLateOrderRow {
+  order?: (RawYijiOrder & { userId?: string | null }) | null;
+  restaurantName?: string | null;
+  brandName?: string | null;
+  userName?: string | null;
+  firstName?: string | null;
+  phoneNumber?: string | null;
+  total?: number | null;
 }
 
 function mapYijiOrder(raw: RawYijiOrder): YijiOrder {
@@ -899,6 +959,91 @@ export class HttpYijiClient implements YijiClient {
       lastOrderAt: mapped[0]?.placedAt,
       recent: mapped.slice(0, 3),
     };
+  }
+
+  /**
+   * Delivery orders still running past `thresholdMinutes`.
+   *
+   * Every line here is a measured fact about this endpoint (2026-09-21); the
+   * obvious implementation is wrong in three separate ways.
+   *
+   * 1. `WithTotalServicesTimeFilterActive` is the SAME filter Yiji's own
+   *    dashboard uses (`MonitorVM.withTotalServicesTime60FilterActive`), and it
+   *    measures elapsed-so-far on a live order — which is the whole feature.
+   *    Proven by sweeping it: at 30 the fastest live order was 29.6 min, at 45
+   *    it was 61.6 min.
+   *
+   * 2. `OrderToDateFilter` is EXCLUSIVE. Passing today returns ZERO rows, so
+   *    the natural reading ships a queue that is silently always empty and
+   *    looks like it is working. Tomorrow is passed to include today.
+   *
+   * 3. It returns FINISHED and CANCELLED orders too — a `force_cancel` at
+   *    3.1 minutes came back under a 60-minute filter — because their spans
+   *    also passed the threshold. Only live statuses are a late order.
+   *
+   * Returns [] rather than throwing when the admin API is not configured: an
+   * empty queue is the honest answer for "we cannot ask", and the caller
+   * already distinguishes an upstream failure by the error it never gets.
+   */
+  async getLateDeliveryOrders(thresholdMinutes: number): Promise<LateOrderRow[]> {
+    if (!this.adminConfigured) return [];
+    const day = 24 * 60 * 60 * 1000;
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    const now = new Date();
+    const params = new URLSearchParams({
+      DeliveryTypeIds: String(YIJI_DELIVERY_TYPE_DELIVERY),
+      WithTotalServicesTimeFilterActive: String(thresholdMinutes),
+      OrderFromDateFilter: iso(now),
+      // Exclusive — see (2). Today's date here returns nothing at all.
+      OrderToDateFilter: iso(new Date(now.getTime() + day)),
+      PageSize: '200',
+      PageNumber: '1',
+    });
+    const rows = await this.adminFetch<RawLateOrderRow[]>(
+      `/api/Order/GetFilteredOrders?${params.toString()}`,
+    );
+    if (!Array.isArray(rows)) return [];
+    const out: LateOrderRow[] = [];
+    for (const row of rows) {
+      const order = row?.order;
+      if (!order?.id) continue;
+      if (!isLiveOrderStatus(order.orderStatus)) continue;
+      const placedAt = order.creationTime ?? '';
+      const started = placedAt ? Date.parse(placedAt) : Number.NaN;
+      if (!Number.isFinite(started)) continue;
+      /*
+       * Computed here, against the SERVER's clock, and sent as a number.
+       *
+       * "How late is this" is the one figure the whole screen is about, and a
+       * browser with a skewed clock would disagree with the queue it is
+       * reading. Yiji's timestamps carry no zone, so they are read as local —
+       * the gateway and Yiji both run on Riyadh time.
+       */
+      const minutesElapsed = Math.floor((now.getTime() - started) / 60_000);
+      out.push({
+        orderId: String(order.id),
+        status: YIJI_ORDER_STATUS[order.orderStatus as number] ?? `status_${order.orderStatus}`,
+        minutesElapsed,
+        placedAt,
+        brandName: row.brandName?.trim() || order.brandName?.trim() || undefined,
+        restaurantName: row.restaurantName?.trim() || order.restaurantName?.trim() || undefined,
+        restaurantId: order.restaurantId != null ? String(order.restaurantId) : undefined,
+        customerName: row.firstName?.trim() || row.userName?.trim() || undefined,
+        customerPhone: row.phoneNumber?.trim() || order.customerPhoneNumber?.trim() || undefined,
+        /*
+         * The NESTED order's total, not the outer one.
+         *
+         * The row carries a top-level `total` that is 0 on every order measured
+         * (2026-09-21) while `order.total` holds the real figure. Preferring the
+         * outer one showed every late order as costing nothing.
+         */
+        total: order.total ?? (typeof row.total === 'number' ? row.total : undefined),
+        externalCustomerId: order.userId?.trim() || undefined,
+      });
+    }
+    // Latest first: the most overdue order is the one to look at.
+    out.sort((a, b) => b.minutesElapsed - a.minutesElapsed);
+    return out;
   }
 
   async getCustomer(_vendorId: string, externalCustomerId: string): Promise<YijiCustomer | null> {

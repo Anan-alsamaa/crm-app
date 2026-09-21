@@ -46,6 +46,11 @@ const UsersPage = lazy(() =>
 const TeamsPage = lazy(() =>
   import('./features/teams/TeamsPage.js').then((m) => ({ default: m.TeamsPage })),
 );
+const LateOrdersReportPage = lazy(() =>
+  import('./features/late-orders/LateOrdersReportPage.js').then((m) => ({
+    default: m.LateOrdersReportPage,
+  })),
+);
 const SlaPoliciesPage = lazy(() =>
   import('./features/sla/SlaPoliciesPage.js').then((m) => ({ default: m.SlaPoliciesPage })),
 );
@@ -639,6 +644,14 @@ function reportTabs(t: TFunction) {
         requires: 'view_all_chats' as const,
       },
       {
+        /* An agent measure: what agents DID with the orders that ran late.
+           Follows the ticket privilege — the work it reports on is raising
+           tickets and asking for coupons, not chat. */
+        to: 'late-orders',
+        label: t('nav.lateOrdersReport', { defaultValue: 'Late orders' }),
+        requires: 'view_all_tickets' as const,
+      },
+      {
         // Compensation is a money screen, so it follows the coupon privilege
         // rather than the chat one it happens to sit beside.
         to: 'compensation',
@@ -792,6 +805,14 @@ export function App() {
               element={
                 <ProtectedRoute requires="view_all_chats">
                   <ReportExportsPage report="conversations" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="late-orders"
+              element={
+                <ProtectedRoute requires="view_all_tickets">
+                  <LateOrdersReportPage />
                 </ProtectedRoute>
               }
             />

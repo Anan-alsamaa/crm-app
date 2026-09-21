@@ -43,6 +43,9 @@ const TicketsPage = lazy(() =>
 const NewTicketPage = lazy(() =>
   import('./features/tickets/NewTicketPage.js').then((m) => ({ default: m.NewTicketPage })),
 );
+const LateOrdersPage = lazy(() =>
+  import('./features/late-orders/LateOrdersPage.js').then((m) => ({ default: m.LateOrdersPage })),
+);
 const MyCouponsPage = lazy(() =>
   import('./features/coupons/MyCouponsPage.js').then((m) => ({ default: m.MyCouponsPage })),
 );
@@ -337,6 +340,18 @@ function Shell({ children }: { children: React.ReactNode }) {
           icon: AddTicketIcon,
           requires: 'create_tickets',
         },
+        {
+          /*
+           * Late orders sits with the work that ARRIVES rather than the work an
+           * agent goes looking for, which is why it is above Tickets: the queue
+           * is time-critical and empties itself, and a section nobody passes is
+           * a section nobody watches.
+           */
+          to: '/late-orders',
+          label: t('nav.lateOrders', { defaultValue: 'Late orders' }),
+          icon: ClockIcon,
+          requires: 'create_tickets',
+        },
         { to: '/tickets', label: t('nav.tickets'), icon: TicketIcon, requires: 'view_tickets' },
         {
           // The customer directory the inbox links into — it goes with chat.
@@ -486,6 +501,18 @@ export function App() {
               <ProtectedRoute requires="view_tickets">
                 <Shell>
                   <TicketsPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/late-orders"
+            element={
+              /* Raising a ticket and asking for a coupon is what this page DOES,
+                 so it follows the privilege that allows both. */
+              <ProtectedRoute requires="create_tickets">
+                <Shell>
+                  <LateOrdersPage />
                 </Shell>
               </ProtectedRoute>
             }

@@ -21,6 +21,7 @@ import {
   YIJI_COUPON_CATEGORY,
   YIJI_COUPON_TYPE,
 } from '@yiji/shared-types';
+import { couponOrderId } from '@yiji/shared-types';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import { describeError } from '../lib/errors.js';
 
@@ -169,8 +170,14 @@ export interface CouponApprovalRow {
    * `CreateCouponUserFromOrder` attaches a coupon to one order — which is
    * exactly the shape this business wants: a coupon is granted because a
    * specific order went wrong. No order, no call.
+   *
+   * OPTIONAL since 2026-09-21. A coupon given from the late-orders queue has
+   * no complaint behind it, so it carries `order_id` itself; `couponOrderId`
+   * reads whichever is present, preferring the ticket's.
    */
   ticket: { order_id: string | null } | null;
+  /** The order, when this coupon was raised without a ticket. */
+  order_id?: string | null;
   yiji_coupon_user_id: string | null;
   /** Why the last delivery attempt did not land. Null once it does. */
   yiji_push_error?: string | null;
@@ -227,7 +234,7 @@ export function yijiCouponPayload(
    */
   order?: CouponOrderContext | null,
 ): Record<string, unknown> {
-  const orderId = num(row.ticket?.order_id ?? null);
+  const orderId = num(couponOrderId(row));
   const window = row.valid_from && row.valid_to ? couponWindow(row.valid_from, row.valid_to) : null;
   const amount = num(row.coupon_value);
   const percent = num(row.coupon_percent);
@@ -713,6 +720,8 @@ export async function processCouponPushJob(
         // The order is the whole point of the endpoint, and the receipt tells
         // us whether a previous attempt already succeeded.
         { ticket: ['order_id'] },
+        // The standalone order, for a coupon raised with no ticket at all.
+        'order_id',
         'yiji_coupon_user_id',
         'yiji_push_error',
         'delivery_excluded',
@@ -764,7 +773,7 @@ export async function processCouponPushJob(
    * Reported as its own outcome and left `approved`, so the coupon is still
    * visibly owed to the customer and a supervisor can see why it has not gone.
    */
-  const orderId = row.ticket?.order_id?.trim();
+  const orderId = couponOrderId(row);
   if (!orderId) {
     logger.warn(
       { id, code: row.coupon_code },

@@ -108,7 +108,8 @@
     "addTicket": "إضافة تذكرة",
     "complaints": "شكاواي",
     "performance": "أداء الموظفين",
-    "coupons": "قسائمي"
+    "coupons": "قسائمي",
+    "lateOrders": "الطلبات المتأخرة"
   },
   "contacts": {
     "title": "جهات الاتصال",
@@ -961,5 +962,40 @@
   "couponApprovals": {
     "decidedBy": "اعتمدها",
     "requestedAt": "تاريخ الطلب"
+  },
+  "common": {
+    "cancel": "إلغاء"
+  },
+  "lateOrders": {
+    "title": "الطلبات المتأخرة",
+    "subtitle": "طلبات التوصيل التي تجاوزت {{minutes}} دقيقة.",
+    "assignCoupon": "منح قسيمة",
+    "ignore": "تجاهل",
+    "ignoreTitle": "تجاهل هذا الطلب؟",
+    "couponTitle": "تعويض هذا الطلب",
+    "confirmIgnore": "تجاهل",
+    "confirmCoupon": "المتابعة إلى القسيمة",
+    "ignored": "تم التجاهل، وسُجِّل السبب.",
+    "decisionFailed": "تعذّر تسجيل هذا القرار.",
+    "reasonPrompt": "الطلب {{order}} مستمر منذ {{minutes}}. ما السبب؟",
+    "reasonPlaceholder": "السبب — يُسجَّل مع هذا الطلب.",
+    "willRaiseTicket": "سيتم فتح تذكرة \"{{type}}\" لهذا الطلب.",
+    "noneTitle": "لا يوجد طلب متأخر",
+    "noneBody": "لم يتجاوز أي طلب توصيل {{minutes}} دقيقة. تتحدّث هذه الصفحة تلقائيًا.",
+    "errorTitle": "تعذّر تحميل الطلبات المتأخرة",
+    "errorBody": "لم يستجب نظام الطلبات. هذا لا يعني عدم وجود طلبات متأخرة — حاول بعد قليل.",
+    "kind": {
+      "late_delivery": "تأخر في التوصيل",
+      "late_preparation": "تأخر في التحضير"
+    },
+    "col": {
+      "order": "الطلب",
+      "elapsed": "مدة الانتظار",
+      "brand": "العلامة / الفرع",
+      "customer": "العميل",
+      "status": "الحالة",
+      "kind": "السبب",
+      "actions": "القرار"
+    }
   }
 }

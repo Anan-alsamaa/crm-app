@@ -17,6 +17,7 @@ import {
 } from '@yiji/ui';
 import {
   COUPON_APPROVAL_STATUSES,
+  couponOrderId,
   couponTermsProblems,
   isPercentageCategory,
   type CouponApprovalStatus,
@@ -301,7 +302,9 @@ function Row({
    * branch), but the customer will not receive it in the app, and telling them
    * otherwise is the failure this warning exists to prevent.
    */
-  const canBeDelivered = Boolean(row.ticket?.order_id?.trim());
+  // The ORDER decides, from wherever it lives — a coupon given from the
+  // late-orders queue carries its own and has no ticket at all.
+  const canBeDelivered = Boolean(couponOrderId(row));
 
   /**
    * What is wrong with the numbers as they now stand — the amended terms while
@@ -649,7 +652,7 @@ function Row({
             <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
               {t('couponApprovals.noOrder', {
                 defaultValue:
-                  'No order number on this ticket, so Yiji cannot attach a coupon — their coupon is created FROM an order. Approving still records the decision, but the customer will not receive it in the app. Add the order number to the ticket if they have one.',
+                  'No order number on this request, so Yiji cannot attach a coupon — their coupon is created FROM an order. This cannot be approved until the order is known. Add the order number to the ticket if they have one.',
               })}
             </p>
           )}
@@ -1104,7 +1107,10 @@ export function CouponApprovalsPage() {
                     defaultValue: 'Approved with changes — the amended coupon is on the ticket',
                   })
                 : t('couponApprovals.approved', {
-                    defaultValue: 'Approved — the coupon is on the ticket',
+                    // Not "on the ticket": a coupon given from the late-orders
+                    // queue has no ticket, and the delivery is what the
+                    // supervisor is actually being told about either way.
+                    defaultValue: 'Approved — the coupon is on its way to the customer',
                   })
               : t('couponApprovals.rejected', { defaultValue: 'Rejected' }),
           ),
@@ -1112,10 +1118,10 @@ export function CouponApprovalsPage() {
           toast.error(
             // Named, because "could not record that decision" would leave a
             // supervisor retrying a click that can never work.
-            err instanceof Error && err.message === 'COUPON_APPROVAL_NO_TICKET'
-              ? t('couponApprovals.noTicket', {
+            err instanceof Error && err.message === 'COUPON_APPROVAL_NO_ORDER'
+              ? t('couponApprovals.approveNoOrder', {
                   defaultValue:
-                    'This request has no ticket, so there is nowhere to put the coupon. Ask the agent to raise it from the ticket.',
+                    'This request has no order, so the coupon cannot be delivered. Ask the agent which order it is for.',
                 })
               : t('couponApprovals.decideError', {
                   defaultValue: 'Could not record that decision',

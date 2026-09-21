@@ -127,6 +127,29 @@ export function splitCouponForApproval(v: CouponInput): {
   };
 }
 
+/**
+ * The Yiji order a coupon is attached to, from either place it can live.
+ *
+ * Delivery needs an order id and nothing else. Until 2026-09-21 the only
+ * source was `ticket.order_id`, which made a ticket a silent precondition for
+ * compensating anyone — fine while every coupon came off a complaint, wrong
+ * the moment one is given straight from the late-orders queue.
+ *
+ * The TICKET WINS when there is one: a coupon raised against a complaint is
+ * about that complaint's order, and a stale id copied onto the request must
+ * never quietly outrank it. The request's own id is the fallback for a coupon
+ * that has no ticket at all.
+ *
+ * Blank strings collapse to null so a column that was written as `''` cannot
+ * pass for an order id downstream.
+ */
+export function couponOrderId(request: {
+  order_id?: string | null;
+  ticket?: { order_id?: string | null } | null;
+}): string | null {
+  return request.ticket?.order_id?.trim() || request.order_id?.trim() || null;
+}
+
 /** The patch that puts an approved coupon onto its ticket. */
 export function approvedCouponPatch(request: CouponFields): CouponFields {
   return {
