@@ -79,19 +79,21 @@ export function LateOrdersReportPage() {
 
   if (q.isError) {
     return (
-      <ErrorState
-        title={t('lateOrdersReport.errorTitle', { defaultValue: 'Could not load late orders' })}
-        message={t('lateOrdersReport.errorBody', {
-          defaultValue: 'The register did not answer. This is not the same as there being none.',
-        })}
-        onRetry={() => void q.refetch()}
-      />
+      <div className="p-4">
+        <ErrorState
+          title={t('lateOrdersReport.errorTitle', { defaultValue: 'Could not load late orders' })}
+          message={t('lateOrdersReport.errorBody', {
+            defaultValue: 'The register did not answer. This is not the same as there being none.',
+          })}
+          onRetry={() => void q.refetch()}
+        />
+      </div>
     );
   }
 
   if (q.isLoading) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-3 p-4">
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -99,7 +101,11 @@ export function LateOrdersReportPage() {
   }
 
   return (
-    <div className="space-y-4">
+    /* The tab strip's Outlet supplies NO padding, so this page owns it — and
+       owns its own scroll, which is why `h-full overflow-auto` rather than a
+       plain block: without it a long register scrolls the page and takes the
+       tab strip off screen. */
+    <div className="h-full space-y-4 overflow-auto p-4">
       <ReportFilterBar
         searchLabel={t('lateOrdersReport.filter.search', { defaultValue: 'Order or branch' })}
         searchPlaceholder={t('lateOrdersReport.filter.searchPlaceholder', {

@@ -4,6 +4,7 @@ import { createItem } from '@directus/sdk';
 import {
   Button,
   Card,
+  ConfirmDialog,
   EmptyState,
   ErrorState,
   Input,
@@ -231,7 +232,11 @@ export function LateOrdersPage() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
+    /* Every page in this portal supplies its OWN padding — the shell gives
+       none — and this one had none, so its text sat flush against the left
+       edge of the window (owner, 2026-09-22). `p-4` matches the inbox and
+       contacts; `min-h-0` keeps the table's own scroll working. */
+    <div className="flex h-full min-h-0 flex-col gap-4 p-4">
       <PageHeader
         title={t('lateOrders.title', { defaultValue: 'Late orders' })}
         subtitle={t('lateOrders.subtitle', {
@@ -468,51 +473,64 @@ export function LateOrdersPage() {
         </Card>
       )}
 
-      {/* The reason, demanded for BOTH actions. */}
+      {/*
+        The reason, demanded for BOTH actions.
+
+        `ConfirmDialog` rather than a hand-rolled overlay: it brings the focus
+        trap, Escape and backdrop-click that a bare `fixed inset-0` div does
+        not, and every other confirm in these portals already looks like this.
+        The textarea rides in `description`, which takes a ReactNode.
+      */}
       {draft && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <Card className="w-full max-w-lg space-y-3 p-5">
-            <h2 className="text-base font-semibold">
-              {draft.action === 'ignored'
-                ? t('lateOrders.ignoreTitle', { defaultValue: 'Ignore this order?' })
-                : t('lateOrders.couponTitle', { defaultValue: 'Compensate this order' })}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {t('lateOrders.reasonPrompt', {
-                order: draft.row.orderId,
-                minutes: elapsed(draft.row.minutesElapsed),
-                defaultValue: 'Order {{order}} has been running {{minutes}}. Why?',
-              })}
-            </p>
-            <Textarea
-              autoFocus
-              rows={3}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder={t('lateOrders.reasonPlaceholder', {
-                defaultValue: 'The reason - recorded against this order.',
-              })}
-            />
-            {kindOf(draft.row) === 'late_preparation' && (
-              <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-                {t('lateOrders.willRaiseTicket', {
-                  type: LATE_ORDER_COMPLAINT_TYPE.late_preparation,
-                  defaultValue: 'A "{{type}}" ticket will be raised for this order.',
+        <ConfirmDialog
+          open
+          title={
+            draft.action === 'ignored'
+              ? t('lateOrders.ignoreTitle', { defaultValue: 'Ignore this order?' })
+              : t('lateOrders.couponTitle', { defaultValue: 'Compensate this order' })
+          }
+          description={
+            <div className="space-y-3">
+              <p>
+                {t('lateOrders.reasonPrompt', {
+                  order: draft.row.orderId,
+                  minutes: elapsed(draft.row.minutesElapsed),
+                  defaultValue: 'Order {{order}} has been running {{minutes}}. Why?',
                 })}
               </p>
-            )}
-            <div className="flex justify-end gap-2 pt-1">
-              <Button variant="ghost" onClick={() => setDraft(null)} disabled={busy}>
-                {t('common.cancel', { defaultValue: 'Cancel' })}
-              </Button>
-              <Button onClick={() => void commit()} disabled={!reason.trim() || busy}>
-                {draft.action === 'ignored'
-                  ? t('lateOrders.confirmIgnore', { defaultValue: 'Ignore' })
-                  : t('lateOrders.confirmCoupon', { defaultValue: 'Continue to coupon' })}
-              </Button>
+              <Textarea
+                autoFocus
+                rows={3}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder={t('lateOrders.reasonPlaceholder', {
+                  defaultValue: 'The reason - recorded against this order.',
+                })}
+              />
+              {kindOf(draft.row) === 'late_preparation' && (
+                <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs leading-relaxed">
+                  {t('lateOrders.willRaiseTicket', {
+                    type: LATE_ORDER_COMPLAINT_TYPE.late_preparation,
+                    defaultValue: 'A "{{type}}" ticket will be raised for this order.',
+                  })}
+                </p>
+              )}
             </div>
-          </Card>
-        </div>
+          }
+          confirmLabel={
+            draft.action === 'ignored'
+              ? t('lateOrders.confirmIgnore', { defaultValue: 'Ignore' })
+              : t('lateOrders.confirmCoupon', { defaultValue: 'Continue to coupon' })
+          }
+          cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+          loading={busy}
+          onConfirm={() => {
+            // The reason is required; the dialog's own button cannot express
+            // that, so an empty one is simply refused rather than committed.
+            if (reason.trim()) void commit();
+          }}
+          onCancel={() => setDraft(null)}
+        />
       )}
 
       {/*
