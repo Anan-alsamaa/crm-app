@@ -86,6 +86,17 @@ const UNSCOPED_TICKET_ROLES = [
   'Department Manager',
   'Chain Manager',
   'Viewer',
+  /*
+   * Area Manager was MISSING from this list until 2026-09-22, and carried the
+   * identical fault on staging unreported for five days.
+   *
+   * It is the awkward one: its rule is an `_and` of the agent scope AND a
+   * brand `_in`, so the fix is not "clear the rule" — the brand scope is
+   * deliberate and must survive. The check below looks for `$CURRENT_USER`
+   * ANYWHERE in the rule, which catches it nested, and the repair drops only
+   * that clause.
+   */
+  'Area Manager',
 ];
 
 const EXPECTED = [
