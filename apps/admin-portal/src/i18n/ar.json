@@ -1611,6 +1611,10 @@
       "cause": "السبب",
       "decision": "القرار",
       "reason": "التفسير"
+    },
+    "filter": {
+      "search": "الطلب أو الفرع",
+      "searchPlaceholder": "مثال: 1314302، أوكاشي، النرجس"
     }
   },
   "lateOrders": {

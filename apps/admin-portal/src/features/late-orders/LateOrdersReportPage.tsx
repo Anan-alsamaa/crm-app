@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Card,
@@ -13,6 +13,7 @@ import {
   Tr,
 } from '@yiji/ui';
 import { useRememberedRange } from '../../lib/date-range.js';
+import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { agentLateStats, agentName, useLateOrderDecisions } from './api.js';
 
 /**
@@ -28,13 +29,38 @@ import { agentLateStats, agentName, useLateOrderDecisions } from './api.js';
  */
 export function LateOrdersReportPage() {
   const { t } = useTranslation();
-  const { from, to } = useRememberedRange('late-orders-report-range');
+  /*
+   * The range was REMEMBERED but unchangeable — the page read it and rendered
+   * no control, so it sat on its default month for ever. `ReportFilterBar` is
+   * what every other report uses, and it already holds the rule this screen
+   * needs: typing waits for Apply, a dropdown applies at once.
+   */
+  const { from, to, setFrom, setTo, reset } = useRememberedRange('late-orders-report-range');
   const unknown = t('lateOrdersReport.unknownAgent', { defaultValue: 'Unassigned' });
+  const [search, setSearch] = useState('');
+  const [kind, setKind] = useState('');
+  const [action, setAction] = useState('');
 
   // The whole day at each end: a date alone would drop everything decided
   // after midnight on the closing day.
   const q = useLateOrderDecisions(`${from}T00:00:00`, `${to}T23:59:59`);
-  const rows = useMemo(() => q.data ?? [], [q.data]);
+  const all = useMemo(() => q.data ?? [], [q.data]);
+
+  /*
+   * Narrowing happens HERE, not upstream: the window is already fetched, so an
+   * order-number search or a cause filter is instant and costs nothing.
+   */
+  const rows = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return all.filter((r) => {
+      if (kind && r.kind !== kind) return false;
+      if (action && r.action !== action) return false;
+      if (!term) return true;
+      return `${r.order_id ?? ''} ${r.brand_name ?? ''} ${r.restaurant_name ?? ''}`
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [all, search, kind, action]);
   const stats = useMemo(() => agentLateStats(rows, unknown), [rows, unknown]);
 
   const totals = useMemo(() => {
@@ -74,6 +100,60 @@ export function LateOrdersReportPage() {
 
   return (
     <div className="space-y-4">
+      <ReportFilterBar
+        searchLabel={t('lateOrdersReport.filter.search', { defaultValue: 'Order or branch' })}
+        searchPlaceholder={t('lateOrdersReport.filter.searchPlaceholder', {
+          defaultValue: 'e.g. 1314302, Okashi, Narjis',
+        })}
+        search={search}
+        onSearch={setSearch}
+        from={from}
+        to={to}
+        onFrom={setFrom}
+        onTo={setTo}
+        selects={[
+          {
+            key: 'kind',
+            label: t('lateOrdersReport.col.cause', { defaultValue: 'Cause' }),
+            value: kind,
+            onChange: setKind,
+            options: [
+              {
+                value: 'late_delivery',
+                label: t('lateOrders.kind.late_delivery', { defaultValue: 'Late delivery' }),
+              },
+              {
+                value: 'late_preparation',
+                label: t('lateOrders.kind.late_preparation', { defaultValue: 'Late preparation' }),
+              },
+            ],
+          },
+          {
+            key: 'action',
+            label: t('lateOrdersReport.col.decision', { defaultValue: 'Decision' }),
+            value: action,
+            onChange: setAction,
+            options: [
+              {
+                value: 'compensated',
+                label: t('lateOrdersReport.action.compensated', { defaultValue: 'Compensated' }),
+              },
+              {
+                value: 'ignored',
+                label: t('lateOrdersReport.action.ignored', { defaultValue: 'Ignored' }),
+              },
+            ],
+          },
+        ]}
+        filtering={!!search || !!kind || !!action}
+        onClear={() => {
+          setSearch('');
+          setKind('');
+          setAction('');
+          reset();
+        }}
+      />
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <ReportKpi
           label={t('lateOrdersReport.handled', { defaultValue: 'Late orders handled' })}
