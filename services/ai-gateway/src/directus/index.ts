@@ -188,10 +188,24 @@ export class GatewayDirectus {
       const minutes = lateDeliveryMinutes(rows[0]?.value);
       this.lateThresholdCache = { minutes, at: now };
       return minutes;
-    } catch {
-      // The threshold is not worth failing a queue over: fall back to the last
-      // known value, or the documented default on a cold start.
-      return this.lateThresholdCache?.minutes ?? DEFAULT_LATE_DELIVERY_MINUTES;
+    } catch (err) {
+      /*
+       * SAY SO. The fallback is right — the threshold is not worth failing a
+       * queue over — but a silent one hides a real fault: `svc-ai-gateway` had
+       * no permission on `app_settings`, so this read 403'd, returned 60, and
+       * the queue reported a threshold operations had not set. The setting said
+       * 20 for several minutes while every response said 60 and nothing
+       * anywhere mentioned it.
+       *
+       * Logged at WARN with the value being used, so the next time this falls
+       * back there is a line to find rather than a plausible number.
+       */
+      const minutes = this.lateThresholdCache?.minutes ?? DEFAULT_LATE_DELIVERY_MINUTES;
+      console.warn(
+        `[late-orders] could not read ${LATE_DELIVERY_MINUTES_KEY}; using ${minutes} min`,
+        err instanceof Error ? err.message : err,
+      );
+      return minutes;
     }
   }
 

@@ -94,6 +94,19 @@ const EXPECTED = [
   { role: 'Agent', collection: 'contacts', actions: ['create', 'read', 'update'] },
   { role: 'Agent', collection: 'tickets', actions: ['create', 'read', 'update'] },
   { role: 'Agent', collection: 'app_settings', actions: ['read'] },
+  /*
+   * The late-order threshold (2026-09-21). `svc-ai-gateway` reads
+   * `app_settings` for `late_delivery_minutes`, and WITHOUT this grant the
+   * read 403s, the reader falls back to 60, and the queue reports a threshold
+   * operations did not set — staging said 60 for several minutes while the
+   * setting said 20, with nothing anywhere reporting a fault.
+   */
+  { role: 'svc-ai-gateway', collection: 'app_settings', actions: ['read'] },
+  /* The late-orders queue and its report both read this; the agent also
+     writes a row per decision. A missing read renders as an empty register,
+     which reads as "nobody has handled anything". */
+  { role: 'Agent', collection: 'late_order_decisions', actions: ['create', 'read'] },
+  { role: 'Admin', collection: 'late_order_decisions', actions: ['read'] },
 ];
 
 async function api(base, path, token) {

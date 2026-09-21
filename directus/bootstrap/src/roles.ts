@@ -689,6 +689,19 @@ export const roles: RoleSpec[] = [
       // admin endpoints from the caller's VERIFIED Directus role). Needs read on
       // directus_roles via the service token.
       { collection: 'directus_roles', action: 'read' },
+      /*
+       * The late-order threshold lives in `app_settings`.
+       *
+       * Missing this grant does NOT fail loudly: the read 403s, the reader's
+       * catch falls back to the documented 60, and the queue answers 200 with
+       * a threshold operations did not set. Staging showed exactly that —
+       * the setting said 20 for several minutes while every response said 60,
+       * and nothing anywhere reported a problem.
+       *
+       * Read-only. A service account that can write settings is one that can
+       * change the business rule unattended.
+       */
+      ...readOnly('app_settings'),
     ],
   },
 ];
