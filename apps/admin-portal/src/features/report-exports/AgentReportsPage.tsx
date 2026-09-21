@@ -847,7 +847,24 @@ function ComplaintsReport({
   const canSeeHistory = can('edit_all_tickets');
   const canDelete = can('delete_tickets');
   const canImport = can('import_data');
-  const [cols, setCols] = useState<Set<ComplaintColumnKey>>(() => new Set(COMPLAINT_COLUMN_KEYS));
+  /*
+   * WHAT THIS REPORT OFFERS, which is not every column the row can carry.
+   *
+   * `couponCode` is dropped (owner, 2026-09-21): the code is an internal
+   * identifier and the value beside it is what a reader of this report is
+   * actually asking about. Removed HERE rather than from
+   * `COMPLAINT_COLUMN_KEYS`, because that list is also the CSV import's
+   * vocabulary — deleting the key there would stop the historical import
+   * recognising a column it has always accepted.
+   *
+   * Filtered out of the picker as well as the default selection: a column
+   * nobody should see is not one to leave switchable.
+   */
+  const REPORT_COLUMN_KEYS = useMemo(
+    () => COMPLAINT_COLUMN_KEYS.filter((k) => k !== 'couponCode'),
+    [],
+  );
+  const [cols, setCols] = useState<Set<ComplaintColumnKey>>(() => new Set(REPORT_COLUMN_KEYS));
   const [showCols, setShowCols] = useState(false);
   const [colQuery, setColQuery] = useState('');
   /**
@@ -917,7 +934,7 @@ function ComplaintsReport({
   // the current column list on load so a saved preference survives a column
   // being added or removed instead of silently dropping it.
   const [order, setOrder] = useState<ComplaintColumnKey[]>(() =>
-    reconcileColumnOrder(loadColumnOrder(TICKET_REPORT_ORDER_KEY), COMPLAINT_COLUMN_KEYS),
+    reconcileColumnOrder(loadColumnOrder(TICKET_REPORT_ORDER_KEY), REPORT_COLUMN_KEYS),
   );
   const { index: storeIndex } = useStoreIndex();
 
@@ -1105,7 +1122,7 @@ function ComplaintsReport({
    */
   const sortAccessors = useMemo(() => {
     const acc: Record<string, (r: ComplaintReportRow) => string | number | null> = {};
-    for (const k of COMPLAINT_COLUMN_KEYS) {
+    for (const k of REPORT_COLUMN_KEYS) {
       acc[k] = (r) => {
         if (k === 'date') return r.date; // ISO, so it sorts chronologically
         const raw = complaintCell(r, k, tr);
@@ -1378,7 +1395,7 @@ function ComplaintsReport({
           >
             {t('agentReports.columns', { defaultValue: 'Columns' })}
             <span className="tabular-nums opacity-70">
-              {cols.size}/{COMPLAINT_COLUMN_KEYS.length}
+              {cols.size}/{REPORT_COLUMN_KEYS.length}
             </span>
           </button>
           {/* A real dialog, not a dropdown: arranging 29 columns is a task, and
@@ -1407,7 +1424,7 @@ function ComplaintsReport({
                     {t('complaintReport.shownCount', {
                       defaultValue: '{{n}} of {{m}} shown',
                       n: cols.size,
-                      m: COMPLAINT_COLUMN_KEYS.length,
+                      m: REPORT_COLUMN_KEYS.length,
                     })}
                   </span>
                   <div className="flex items-center gap-2">

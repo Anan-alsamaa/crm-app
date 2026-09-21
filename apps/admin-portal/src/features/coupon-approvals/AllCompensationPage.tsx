@@ -87,7 +87,14 @@ interface Row {
   brand_id: string | null;
   restaurant_id: string | null;
   item_name: string | null;
-  ticket: { order_id: string | null } | null;
+  ticket: {
+    order_id: string | null;
+    store: {
+      code: string | null;
+      name: string | null;
+      brand: { name: string | null } | null;
+    } | null;
+  } | null;
   requested_by: { id: string; first_name: string | null; email: string | null } | null;
   decided_by: { id: string; first_name: string | null; email: string | null } | null;
   contact: { name: string | null; phone: string | null } | null;
@@ -130,7 +137,10 @@ function useAllCoupons() {
               'brand_id',
               'restaurant_id',
               'item_name',
-              { ticket: ['order_id'] },
+              /* The BRANCH, not just its id: this report shows the store by
+                 name, and `restaurant_id` is Yiji's numeric identifier that
+                 nobody reading a compensation report can interpret. */
+              { ticket: ['order_id', { store: ['code', 'name', { brand: ['name'] }] }] },
               { requested_by: ['id', 'first_name', 'email'] },
               { decided_by: ['id', 'first_name', 'email'] },
               { contact: ['name', 'phone'] },
@@ -413,12 +423,24 @@ export function AllCompensationPage() {
     {
       key: 'brand',
       label: t('stores.colBrand', { defaultValue: 'Brand' }),
-      get: (r) => r.brand_id ?? '',
+      /* The BRANCH's brand, not the coupon's `brand_id` — that is Yiji's own
+         numeric identifier, right for the push and unreadable in a report.
+         Falls back to the id so a row whose ticket has no store still says
+         something rather than going blank. */
+      get: (r) => r.ticket?.store?.brand?.name ?? r.brand_id ?? '',
     },
     {
       key: 'store',
       label: t('compensationAll.store', { defaultValue: 'Store' }),
-      get: (r) => r.restaurant_id ?? '',
+      /* The branch NAME (owner, 2026-09-21). This showed `restaurant_id`,
+         which is Yiji's id for the branch: nobody reading a compensation
+         report knows which restaurant "41" is. The code is kept alongside it
+         because that is how the operations team refers to branches. */
+      get: (r) => {
+        const st = r.ticket?.store;
+        if (!st) return r.restaurant_id ?? '';
+        return [st.code, st.name].filter(Boolean).join(' · ') || (r.restaurant_id ?? '');
+      },
     },
     {
       key: 'order',
@@ -452,7 +474,7 @@ export function AllCompensationPage() {
     },
     {
       key: 'worth',
-      label: t('compensationAll.worth', { defaultValue: 'Worth' }),
+      label: t('compensationAll.worth', { defaultValue: 'Coupon value' }),
       end: true,
       get: worth,
     },

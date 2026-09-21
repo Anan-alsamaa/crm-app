@@ -1035,10 +1035,13 @@ describe('AgentReportsPage — ticket breakdown', () => {
     dl.restore();
   });
 
-  it('offers all 29 of her columns in the picker', async () => {
+  it('offers all 28 of her columns in the picker', async () => {
     api.useAgentReportData.mockReturnValue(ok);
     renderPage('complaints');
-    expect(screen.getByText('29/29')).toBeInTheDocument();
+    // 28, not 29: the coupon CODE was dropped (owner, 2026-09-21) — an
+    // internal identifier, where the value beside it is the thing a reader
+    // of this report is asking about.
+    expect(screen.getByText('28/28')).toBeInTheDocument();
     await userEvent.click(screen.getByText('Columns'));
     expect(screen.getByLabelText('Customer mobile')).toBeInTheDocument();
     expect(screen.getByLabelText('Restaurant manager')).toBeInTheDocument();
@@ -1239,7 +1242,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
       .map((c) => c.closest('label')?.textContent)
       .filter((l): l is string => l != null);
     expect(labels.every((l) => /coupon/i.test(l))).toBe(true);
-    expect(labels.length).toBe(3); // code, value, %
+    expect(labels.length).toBe(2); // value and %, the code having been dropped
   });
 
   it('says the schema is missing rather than rendering 24 blank columns', () => {
