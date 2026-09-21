@@ -32,6 +32,7 @@ describe('yijiCrmNotifyPayload', () => {
   it('sends the agent’s own words as the body', () => {
     const p = yijiCrmNotifyPayload(job(), {
       tenantId: 1,
+      brandId: 1,
       title: 'Yiji Support',
       chatUrl: 'https://crm.anan.sa/?conversation=conv-123',
     });
@@ -60,16 +61,17 @@ describe('yijiCrmNotifyPayload', () => {
   });
 
   it('addresses the customer by their Yiji id and phone, on tenant 1', () => {
-    const p = yijiCrmNotifyPayload(job(), { tenantId: 1, title: 'T', chatUrl: 'u' });
+    const p = yijiCrmNotifyPayload(job(), { tenantId: 1, brandId: 1, title: 'T', chatUrl: 'u' });
     expect(p.userId).toBe('yiji-user-9');
-    expect(p.phoneNumber).toBe('0512345678');
+    // Converted to the only form Yiji resolves — see 'what Yiji actually requires'.
+    expect(p.phoneNumber).toBe('+966512345678');
     expect(p.tenantId).toBe(1);
   });
 
   /* Optional per Yiji, and most support chats have no order. Omitted rather
      than sent empty: a blank id is a value, and absence is the truth. */
   it('omits orderId entirely', () => {
-    const p = yijiCrmNotifyPayload(job(), { tenantId: 1, title: 'T', chatUrl: 'u' });
+    const p = yijiCrmNotifyPayload(job(), { tenantId: 1, brandId: 1, title: 'T', chatUrl: 'u' });
     expect('orderId' in p).toBe(false);
   });
 
@@ -78,6 +80,7 @@ describe('yijiCrmNotifyPayload', () => {
   it('carries the chat link so the tap opens THAT conversation', () => {
     const p = yijiCrmNotifyPayload(job(), {
       tenantId: 1,
+      brandId: 1,
       title: 'T',
       chatUrl: 'https://crm.anan.sa/?conversation=conv-123',
     });
@@ -109,10 +112,28 @@ describe('crmChatLink', () => {
 describe('who can be notified', () => {
   /* A push is delivered through the Yiji app, so it can only reach somebody
      who has an account. A QR walk-in has a phone and nothing else. */
-  it('skips a walk-in with no Yiji account, without retrying', async () => {
-    const fetchImpl = vi.fn();
+  /*
+   * YIJI DECIDES WHO HAS THE APP, NOT US. Their endpoint resolves the customer
+   * from the phone and answers "Customer not found." when there is no account
+   * (measured, 2026-09-21) — so a walk-in who happens to have the app
+   * installed is worth trying, and refusing would deny them a notification
+   * they could perfectly well receive.
+   */
+  it('still tries for a walk-in who has only a phone', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200 }) as never);
     const out = await processCustomerPushJob(
       { data: job({ externalCustomerId: null }) } as Job<CustomerPushJob>,
+      { logger, yijiNotifyUrl: CRM_URL, yijiApiKey: 'k', fetchImpl: fetchImpl as never },
+    );
+    expect(out).toBe('delivered');
+    expect(fetchImpl).toHaveBeenCalled();
+  });
+
+  /* Neither identifier is hopeless, and no backoff conjures a phone number. */
+  it('stops cleanly when there is nothing to address it to', async () => {
+    const fetchImpl = vi.fn();
+    const out = await processCustomerPushJob(
+      { data: job({ externalCustomerId: null, phone: null }) } as Job<CustomerPushJob>,
       { logger, yijiNotifyUrl: CRM_URL, yijiApiKey: 'k', fetchImpl: fetchImpl as never },
     );
     expect(out).toBe('unaddressable');
@@ -178,5 +199,38 @@ describe('how it authenticates', () => {
         postNotification: postNotification as never,
       }),
     ).rejects.toThrow('yiji said no');
+  });
+});
+
+/*
+ * MEASURED AGAINST YIJI'S LIVE ENDPOINT (2026-09-21), not assumed. Each of
+ * these was a distinct refusal until the request was shaped this way.
+ */
+describe('what Yiji actually requires', () => {
+  it('sends the phone as +9665…, which is the only form they resolve', () => {
+    const p = yijiCrmNotifyPayload(job({ phone: '0565266122' }), {
+      tenantId: 1,
+      brandId: 1,
+      title: 'T',
+      chatUrl: 'u',
+    });
+    // `05…` is answered with "Customer not found."
+    expect(p.phoneNumber).toBe('+966565266122');
+  });
+
+  it('always sends brandId — the Firebase credential is resolved from it', () => {
+    const p = yijiCrmNotifyPayload(job(), { tenantId: 1, brandId: 3, title: 'T', chatUrl: 'u' });
+    // Omitting it: "BrandId is required to resolve the Firebase credential."
+    expect(p.brandId).toBe(3);
+  });
+
+  it('passes a non-Saudi number through rather than dropping it', () => {
+    const p = yijiCrmNotifyPayload(job({ phone: '+441234567890' }), {
+      tenantId: 1,
+      brandId: 1,
+      title: 'T',
+      chatUrl: 'u',
+    });
+    expect(p.phoneNumber).toBe('+441234567890');
   });
 });

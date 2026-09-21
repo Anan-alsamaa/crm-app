@@ -1,6 +1,7 @@
 import type { Job } from 'bullmq';
 import type { Logger } from 'pino';
 import type { CustomerPushJob } from '@yiji/shared-types';
+import { internationalPhone } from '@yiji/shared-types';
 
 /**
  * Tell a customer's PHONE that an agent replied while they were away.
@@ -47,6 +48,17 @@ export interface CustomerPushDeps {
    * Configurable rather than hardcoded so a second platform is a setting.
    */
   yijiTenantId?: number;
+  /**
+   * Which BRAND the push is sent as — Yiji picks the Firebase credential from
+   * it, so their API refuses the request without one.
+   *
+   * A single default rather than per-ticket for now: a chat has no brand until
+   * a ticket exists, and most support replies happen before one is raised.
+   * Casa Pasta is 1, Okashi 3, Chick n Dip 81, Poshak 1004 (owner,
+   * 2026-09-21) — so resolving it from the ticket's brand is the improvement
+   * to make once the basic path is proven.
+   */
+  yijiBrandId?: number;
   /**
    * The notification's HEADING, as the CUSTOMER reads it.
    *
@@ -181,13 +193,27 @@ export function crmChatLink(origin: string | undefined, conversationId: string):
 
 export function yijiCrmNotifyPayload(
   job: CustomerPushJob,
-  opts: { tenantId: number; brandId?: number | null; title: string; chatUrl: string },
+  opts: { tenantId: number; brandId: number; title: string; chatUrl: string },
 ): Record<string, unknown> {
   return {
     userId: job.externalCustomerId,
-    phoneNumber: job.phone,
+    /*
+     * `+9665XXXXXXXX`, NOT the `05…` we store.
+     *
+     * Yiji resolves the customer from this number and answers "Customer not
+     * found." for the local form — measured against their live endpoint, not
+     * assumed. The CRM stores one canonical shape and converts at the single
+     * point of use, which is here.
+     */
+    phoneNumber: internationalPhone(job.phone) ?? job.phone,
     tenantId: opts.tenantId,
-    ...(typeof opts.brandId === 'number' ? { brandId: opts.brandId } : {}),
+    /*
+     * REQUIRED, not optional. Without it their API answers "BrandId is
+     * required to resolve the Firebase credential" — the brand chooses which
+     * push credential sends the message, so there is no sensible default that
+     * is merely cosmetic.
+     */
+    brandId: opts.brandId,
     title: opts.title,
     /* The agent's own words. Trimmed by the producer to a preview length; sent
        as-is here so the customer reads a real sentence rather than a template. */
@@ -268,17 +294,22 @@ export async function processCustomerPushJob(
   const topic = deps.yijiNotifyTopic;
 
   /*
-   * A PUSH CAN ONLY REACH SOMEBODY WHO HAS THE APP.
+   * A PUSH CAN ONLY REACH SOMEBODY WHO HAS THE APP — and YIJI decides who that
+   * is, not us.
    *
-   * The notification is delivered through Yiji, so an `externalCustomerId` is
-   * the proof that there is an account to deliver to. A QR walk-in has a phone
-   * and no account: unreachable by this channel, and not a failure to retry
-   * (owner, 2026-09-21 — "notification is only for yiji users").
+   * Their endpoint resolves the customer from the PHONE NUMBER and answers
+   * "Customer not found." when no account exists (measured, 2026-09-21). So a
+   * phone alone is worth trying: a visitor who scanned a branch QR code may
+   * well have the app installed, and refusing to try would deny them a
+   * notification they could perfectly well receive.
+   *
+   * Only a contact with NEITHER identifier is hopeless, and that is a clean
+   * stop rather than a retry — no amount of backoff conjures a phone number.
    */
-  if (isYijiCrmEndpoint && !data.externalCustomerId) {
+  if (isYijiCrmEndpoint && !data.externalCustomerId && !data.phone) {
     logger.info(
       { conversationId: data.conversationId },
-      'customer push skipped - no Yiji account to notify (walk-in)',
+      'customer push skipped - neither a Yiji id nor a phone to address it to',
     );
     return 'unaddressable';
   }
@@ -300,6 +331,7 @@ export async function processCustomerPushJob(
   const body = isYijiCrmEndpoint
     ? yijiCrmNotifyPayload(data, {
         tenantId: deps.yijiTenantId ?? 1,
+        brandId: deps.yijiBrandId ?? 1,
         title: deps.yijiNotifyTitle ?? 'Yiji Support',
         chatUrl: crmChatLink(deps.crmChatUrl, data.conversationId),
       })

@@ -286,6 +286,8 @@ export const processors: Record<QueueName, Processor> = {
       // Yiji's tenant. 1 for Yiji; configurable so a second platform is a
       // setting rather than an edit.
       yijiTenantId: process.env.YIJI_TENANT_ID ? Number(process.env.YIJI_TENANT_ID) : 1,
+      // Yiji resolves the Firebase credential from the brand, so it is required.
+      yijiBrandId: process.env.YIJI_BRAND_ID ? Number(process.env.YIJI_BRAND_ID) : 1,
       // The notification's heading. The agent's words are the body, so this
       // names who is speaking rather than repeating the message.
       yijiNotifyTitle: process.env.YIJI_NOTIFY_TITLE || 'Yiji Support',
