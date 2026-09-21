@@ -68,7 +68,17 @@ export const emptyComplaint: ComplaintValues = {
   complaint_type_other: '',
   service_type: '',
   complaint_source: '',
-  communication_method: '',
+  /*
+   * `CRM`, ALWAYS — it is no longer asked for (owner, 2026-09-21).
+   *
+   * A ticket raised in this portal IS raised in the CRM, whether or not a
+   * conversation sits behind it, so there is nothing to guess. It used to
+   * default only for conversation-backed tickets on the reasoning that a
+   * standalone one had an unknown channel; in practice every ticket in
+   * production carried `CRM` anyway, and a blank was not "unknown" so much as
+   * a field nobody filled.
+   */
+  communication_method: DEFAULT_COMMUNICATION_METHOD,
   response_desc: '',
   compensation: '',
   coupon_code: '',
@@ -79,16 +89,12 @@ export const emptyComplaint: ComplaintValues = {
 /**
  * Starting values for a ticket raised FROM A CONVERSATION.
  *
- * The agent is answering inside the CRM, so the communication method is not a
- * guess — it is the only thing it can be, and making the agent pick it from a
- * list would just invite a wrong answer. A ticket created standalone keeps
- * `emptyComplaint`: with no conversation behind it the channel really is
- * unknown, and defaulting it there would file phone-backs as CRM replies.
+ * Identical to `emptyComplaint` now that the communication method defaults to
+ * `CRM` for every ticket raised here. Kept as a named export because callers
+ * say which case they are in, and a future difference between the two belongs
+ * here rather than in a new branch at each call site.
  */
-export const complaintFromConversation: ComplaintValues = {
-  ...emptyComplaint,
-  communication_method: DEFAULT_COMMUNICATION_METHOD,
-};
+export const complaintFromConversation: ComplaintValues = { ...emptyComplaint };
 
 /**
  * Turn the form's strings into the payload Directus stores: blanks become
@@ -749,17 +755,18 @@ export function ComplaintClassification({
           placeholder={t('complaint.search', { defaultValue: 'Type to search…' })}
         />
       </FormField>
-      <FormField
-        label={t('complaint.communication', { defaultValue: 'Communication method' })}
-        hint={t('complaint.communicationHint', { defaultValue: 'How you replied' })}
-      >
-        <Combobox
-          value={values.communication_method}
-          onChange={(v) => onChange({ communication_method: v })}
-          options={optionsFor(lists.data, 'communication_method', values.communication_method)}
-          placeholder={t('complaint.search', { defaultValue: 'Type to search…' })}
-        />
-      </FormField>
+      {/*
+        "Communication method" USED TO BE HERE, and was a second name for the
+        field above it (owner, 2026-09-21). Its four options were all present
+        in "Ticket source" — a strict subset — and across every ticket in
+        production it held exactly one value, `CRM`, while the source varied
+        meaningfully. Two controls, one fact, and one of them was answering a
+        question nobody asked.
+
+        The COLUMN is kept and still written: it is `CRM` for a ticket raised
+        here, which is the truth and is what the reports already read. What is
+        gone is asking an agent to restate it.
+      */}
     </div>
   );
 }

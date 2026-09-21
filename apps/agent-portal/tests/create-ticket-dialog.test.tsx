@@ -90,9 +90,11 @@ describe('CreateTicketForm', () => {
     renderDialog();
     expect(screen.queryByText('Ticket')).not.toBeInTheDocument();
     const whatHappened = screen.getByText('What happened').closest('section')!;
-    // Communication method is the last classification field; description and
-    // priority follow it in the same section rather than across the page.
-    expect(whatHappened).toHaveTextContent('Communication method');
+    // Ticket source is the last classification field; description and priority
+    // follow it in the same section rather than across the page. It used to be
+    // "Communication method", removed as a duplicate of this very field
+    // (owner, 2026-09-21).
+    expect(whatHappened).toHaveTextContent('Ticket source');
     expect(whatHappened).toHaveTextContent('tickets.description');
     expect(whatHappened).toHaveTextContent('conversation.priority');
     expect(whatHappened).toHaveTextContent('Restaurant / branch');

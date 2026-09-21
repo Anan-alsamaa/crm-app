@@ -54,6 +54,7 @@ vi.mock('../src/features/tickets/useStoreMatch.js', () => storeApi);
 
 import {
   ComplaintClassification,
+  complaintFromConversation,
   ComplaintResolution,
   StorePicker,
   complaintHasErrors,
@@ -94,7 +95,11 @@ describe('complaintPatch — what actually reaches Directus', () => {
       complaint_type: null,
       service_type: null,
       complaint_source: null,
-      communication_method: null,
+      /* NOT null: a ticket raised in this portal IS raised in the CRM, so the
+         channel is known without asking. The field was removed from the form
+         (owner, 2026-09-21) — it duplicated "Ticket source", whose options
+         were a superset of its own. */
+      communication_method: 'CRM',
       response_desc: null,
       compensation: null,
       coupon_code: null,
@@ -362,5 +367,32 @@ describe('a ticket typed as "Other" has to say what it is about', () => {
         complaint_type_other: 'Typed',
       }),
     ).toBe('Typed');
+  });
+});
+
+/*
+ * "COMMUNICATION METHOD" WAS A SECOND NAME FOR "TICKET SOURCE".
+ *
+ * Its four options were all present in the source list — a strict subset —
+ * and across every ticket in production it held exactly one value, `CRM`,
+ * while the source varied meaningfully. Two controls, one fact.
+ *
+ * The COLUMN survives and is still written; what is gone is asking an agent
+ * to restate something the system already knows.
+ */
+describe('the duplicate channel field', () => {
+  it('is no longer on the form', () => {
+    render(<ComplaintClassification values={emptyComplaint} onChange={() => {}} />);
+    expect(screen.queryByText('Communication method')).not.toBeInTheDocument();
+  });
+
+  it('still leaves "Ticket source" — the one that carries real information', () => {
+    render(<ComplaintClassification values={emptyComplaint} onChange={() => {}} />);
+    expect(screen.getByText('Ticket source')).toBeInTheDocument();
+  });
+
+  it('defaults to CRM whether or not a conversation sits behind the ticket', () => {
+    expect(emptyComplaint.communication_method).toBe('CRM');
+    expect(complaintFromConversation.communication_method).toBe('CRM');
   });
 });
