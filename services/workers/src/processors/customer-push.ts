@@ -48,9 +48,16 @@ export interface CustomerPushDeps {
    */
   yijiTenantId?: number;
   /**
-   * The notification's HEADING. Their CRM endpoint takes free text for both
-   * halves and the agent's words go in the body, so this names who is speaking
-   * rather than repeating the message.
+   * The notification's HEADING, as the CUSTOMER reads it.
+   *
+   * `Yiji Support`, not `Sara Support`: Sara is what WE call this CRM, and the
+   * customer has never heard of it (owner, 2026-09-21). The notification
+   * arrives in the Yiji app, from the company they complained to — a name they
+   * do not recognise on their lock screen reads as a stranger, or as a
+   * phishing attempt.
+   *
+   * The agent's own words go in the body, so this only has to say who is
+   * speaking.
    */
   yijiNotifyTitle?: string;
   /**
@@ -60,6 +67,22 @@ export interface CustomerPushDeps {
    * were already having rather than the app's home screen.
    */
   crmChatUrl?: string;
+  /**
+   * Sends the notification signed in as the CRM service user.
+   *
+   * THE SAME POSTER THE COUPON PUSH USES (owner, 2026-09-21). It signs in
+   * with the service credential, caches the token in memory and re-signs when
+   * it expires — so there is no long-lived bearer token in an env file to
+   * rotate, and nothing goes silent when one lapses.
+   *
+   * Absent means delivery is not configured: the payload is logged and the
+   * job reports `disabled` rather than pretending it was sent.
+   */
+  postNotification?: (
+    url: string,
+    body: unknown,
+    headers?: Record<string, string>,
+  ) => Promise<unknown>;
   /** Injectable for tests. */
   fetchImpl?: typeof fetch;
 }
@@ -277,21 +300,41 @@ export async function processCustomerPushJob(
   const body = isYijiCrmEndpoint
     ? yijiCrmNotifyPayload(data, {
         tenantId: deps.yijiTenantId ?? 1,
-        title: deps.yijiNotifyTitle ?? 'Sara Support',
+        title: deps.yijiNotifyTitle ?? 'Yiji Support',
         chatUrl: crmChatLink(deps.crmChatUrl, data.conversationId),
       })
     : isYijiEndpoint
       ? yijiNotifyPayload(data, topic as number)
       : payload;
 
+  /* Same key across retries of one send, so a timeout that in fact succeeded
+     cannot buzz the customer's phone twice. */
+  const idempotencyKey = `${data.conversationId}:${data.sentAt}`;
+
+  /*
+   * SIGNED IN AS THE SERVICE, NOT CARRYING A PASTED TOKEN.
+   *
+   * Yiji's notification host accepts the same credential as their admin API,
+   * so this reuses the poster the coupon push already uses: it signs in,
+   * caches the token in memory and re-signs when it expires. A bearer token in
+   * an env file has no rotation and no owner, and when it lapses the failure
+   * is silence (owner, 2026-09-21).
+   *
+   * `postNotification` throws on refusal, which is what BullMQ needs to retry
+   * — the same contract as the direct fetch below.
+   */
+  if (isYijiCrmEndpoint && deps.postNotification) {
+    await deps.postNotification(yijiNotifyUrl, body, { 'idempotency-key': idempotencyKey });
+    logger.info({ conversationId: data.conversationId }, 'customer push delivered to Yiji');
+    return 'delivered';
+  }
+
   const res = await doFetch(yijiNotifyUrl, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       ...(yijiApiKey ? { authorization: `Bearer ${yijiApiKey}` } : {}),
-      // Same key across retries of one send, so a timeout that actually
-      // succeeded cannot buzz the customer's phone twice.
-      'idempotency-key': `${data.conversationId}:${data.sentAt}`,
+      'idempotency-key': idempotencyKey,
     },
     body: JSON.stringify(body),
   });

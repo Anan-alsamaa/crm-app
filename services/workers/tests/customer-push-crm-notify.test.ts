@@ -32,11 +32,31 @@ describe('yijiCrmNotifyPayload', () => {
   it('sends the agent’s own words as the body', () => {
     const p = yijiCrmNotifyPayload(job(), {
       tenantId: 1,
-      title: 'Sara Support',
+      title: 'Yiji Support',
       chatUrl: 'https://crm.anan.sa/?conversation=conv-123',
     });
     expect(p.body).toBe('Sorry about that — we have refunded your order.');
-    expect(p.title).toBe('Sara Support');
+    expect(p.title).toBe('Yiji Support');
+  });
+
+  /*
+   * THE CUSTOMER HAS NEVER HEARD OF SARA. It is what we call this CRM
+   * internally; the notification arrives in the Yiji app, from the company
+   * they complained to. A name they do not recognise on a lock screen reads
+   * as a stranger, or as phishing (owner, 2026-09-21).
+   */
+  it('defaults the heading to the name the customer knows', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200 }) as never);
+    await processCustomerPushJob({ data: job() } as Job<CustomerPushJob>, {
+      logger,
+      yijiNotifyUrl: CRM_URL,
+      yijiApiKey: 'k',
+      fetchImpl: fetchImpl as never,
+    });
+    const [, init] = fetchImpl.mock.calls[0] as [string, { body: string }];
+    const sent = JSON.parse(init.body) as Record<string, unknown>;
+    expect(sent.title).toBe('Yiji Support');
+    expect(String(sent.title)).not.toMatch(/sara/i);
   });
 
   it('addresses the customer by their Yiji id and phone, on tenant 1', () => {
@@ -113,5 +133,50 @@ describe('who can be notified', () => {
     const sent = JSON.parse(init.body) as Record<string, unknown>;
     expect(sent.tenantId).toBe(1);
     expect(sent.body).toContain('refunded');
+  });
+});
+
+describe('how it authenticates', () => {
+  /*
+   * THE SAME CREDENTIAL AS THE COUPON PUSH. Yiji's notification host accepts
+   * the admin API's login, so this reuses the poster that signs in, caches the
+   * token in memory and re-signs when it expires. A bearer token pasted into
+   * an env file has no rotation and no owner, and when it lapses the failure
+   * is silence (owner, 2026-09-21).
+   */
+  it('sends through the signed poster rather than a pasted token', async () => {
+    const postNotification = vi.fn(async () => ({}) as never);
+    const fetchImpl = vi.fn();
+    const out = await processCustomerPushJob({ data: job() } as Job<CustomerPushJob>, {
+      logger,
+      yijiNotifyUrl: CRM_URL,
+      yijiApiKey: '',
+      postNotification,
+      fetchImpl: fetchImpl as never,
+    });
+    expect(out).toBe('delivered');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    const [url, body] = postNotification.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(url).toBe(CRM_URL);
+    expect(body.tenantId).toBe(1);
+  });
+
+  /* A refusal must reach BullMQ so it retries with backoff — a reply the
+     customer never hears about is the failure this job exists to prevent. */
+  it('lets a refusal propagate so the job is retried', async () => {
+    const postNotification = vi.fn(async () => {
+      throw new Error('yiji said no');
+    });
+    await expect(
+      processCustomerPushJob({ data: job() } as Job<CustomerPushJob>, {
+        logger,
+        yijiNotifyUrl: CRM_URL,
+        yijiApiKey: '',
+        postNotification: postNotification as never,
+      }),
+    ).rejects.toThrow('yiji said no');
   });
 });

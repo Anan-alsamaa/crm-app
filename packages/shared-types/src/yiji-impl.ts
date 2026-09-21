@@ -505,6 +505,9 @@ export function isYijiUnavailable(err: unknown): boolean {
   );
 }
 
+/** A caller may pass a full URL when the service lives on another host. */
+const ABSOLUTE_URL = /^https?:\/\//i;
+
 export class HttpYijiClient implements YijiClient {
   private readonly baseUrl: string;
   private readonly token?: string;
@@ -571,7 +574,17 @@ export class HttpYijiClient implements YijiClient {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       try {
-        const res = await fetch(`${this.adminUrl}${path}`, {
+        /*
+         * An ABSOLUTE url is used as given; a path hangs off the admin host.
+         *
+         * Yiji's notification service lives on its own host
+         * (`notificationsystems.yiji-app.com`) while accepting the SAME
+         * credential as the admin API. Without this, reaching it would have
+         * meant a second poster with its own login and its own cached token —
+         * two things to rotate instead of one, for no benefit.
+         */
+        const url = /^https?:\/\//i.test(path) ? path : `${this.adminUrl}${path}`;
+        const res = await fetch(url, {
           headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
           signal: controller.signal,
         });
@@ -661,7 +674,17 @@ export class HttpYijiClient implements YijiClient {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       try {
-        const res = await fetch(`${this.adminUrl}${path}`, {
+        /*
+         * An ABSOLUTE url is used as given; a path hangs off the admin host.
+         *
+         * Yiji's notification service lives on its own host
+         * (`notificationsystems.yiji-app.com`) while accepting the SAME
+         * credential as the admin API. Without this, reaching it would have
+         * meant a second poster with its own login and its own cached token —
+         * two things to rotate instead of one, for no benefit.
+         */
+        const url = ABSOLUTE_URL.test(path) ? path : `${this.adminUrl}${path}`;
+        const res = await fetch(url, {
           method: 'POST',
           headers: {
             ...extraHeaders,

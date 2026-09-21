@@ -288,11 +288,14 @@ export const processors: Record<QueueName, Processor> = {
       yijiTenantId: process.env.YIJI_TENANT_ID ? Number(process.env.YIJI_TENANT_ID) : 1,
       // The notification's heading. The agent's words are the body, so this
       // names who is speaking rather than repeating the message.
-      yijiNotifyTitle: process.env.YIJI_NOTIFY_TITLE || 'Sara Support',
+      yijiNotifyTitle: process.env.YIJI_NOTIFY_TITLE || 'Yiji Support',
       /* Where the tap lands: the CRM chat, opened from inside the Yiji app.
          Falls back to the production chat host so a missing setting does not
          send a notification nobody can act on. */
       crmChatUrl: process.env.CRM_CHAT_URL || 'https://crm.anan.sa',
+      /* Signed in as the service, the same way the coupon push is — no pasted
+         bearer token to rotate, and nothing goes silent when one lapses. */
+      postNotification: yijiAdminPoster ?? undefined,
     });
   },
 };
