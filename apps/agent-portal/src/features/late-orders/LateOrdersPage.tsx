@@ -81,7 +81,19 @@ export function LateOrdersPage() {
   const [draft, setDraft] = useState<DecisionDraft | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
-  const [coupon, setCoupon] = useState<{ row: LateOrderRow; reason: string } | null>(null);
+  /**
+   * The coupon form's subject, held while it is open.
+   *
+   * Carries `kind` and `ticketId` because the DECISION is written when the
+   * request is created, not before — so everything it needs has to survive the
+   * form being open.
+   */
+  const [coupon, setCoupon] = useState<{
+    row: LateOrderRow;
+    reason: string;
+    kind: LateOrderKind;
+    ticketId: string | null;
+  } | null>(null);
 
   const threshold = queue.data?.thresholdMinutes ?? FALLBACK_THRESHOLD;
   const soleVendorId = vendors.data?.length === 1 ? vendors.data[0]!.id : null;
@@ -109,10 +121,23 @@ export function LateOrdersPage() {
   /**
    * Commit the decision.
    *
-   * For a late PREPARATION the owner asked for a ticket as well, prefilled from
-   * the order. The ticket is raised FIRST and its id recorded with the decision,
-   * so a failure leaves nothing half-done: no decision row means the order is
-   * still in the queue, which is the honest state.
+   * ORDER MATTERS, and it differs by action.
+   *
+   * **Ignore** records immediately: the decision IS the whole act.
+   *
+   * **Assign coupon** records NOTHING yet — it opens the coupon form and the
+   * decision is written only once a request actually exists. Recording first
+   * looked safer (the order leaves the queue, so two agents cannot both work
+   * it) and was wrong: an agent who opens the form and closes it leaves a
+   * permanent row claiming the customer was compensated when nothing was ever
+   * sent. Staging produced exactly that row within minutes of the feature
+   * going up. A ticket-less order sitting in the queue is a visible, fixable
+   * state; a false "compensated" is a quiet lie in the register operations
+   * read. See [[silent-empty-failures]] for this shape.
+   *
+   * For a late PREPARATION the owner asked for a ticket as well, prefilled
+   * from the order. It is raised FIRST and its id recorded with the decision,
+   * so a failure leaves nothing half-done.
    */
   const commit = async () => {
     if (!draft) return;
@@ -138,20 +163,19 @@ export function LateOrdersPage() {
         )) as { id: string };
         ticketId = created?.id ?? null;
       }
-      await record.mutateAsync({
-        row: draft.row,
-        kind,
-        action: draft.action,
-        reason: text,
-        agentId: user?.id ?? null,
-        ticketId,
-      });
       if (draft.action === 'compensated') {
-        // The coupon form opens on TOP of the recorded decision, so an agent
-        // who abandons it has still taken the order out of the queue with a
-        // reason - rather than leaving it to be picked up twice.
-        setCoupon({ row: draft.row, reason: text });
+        // Nothing is recorded yet — see the note above. The coupon form writes
+        // the decision itself, once a request actually exists.
+        setCoupon({ row: draft.row, reason: text, kind, ticketId });
       } else {
+        await record.mutateAsync({
+          row: draft.row,
+          kind,
+          action: 'ignored',
+          reason: text,
+          agentId: user?.id ?? null,
+          ticketId,
+        });
         toast.success(
           t('lateOrders.ignored', { defaultValue: 'Ignored, and the reason recorded.' }),
         );
@@ -346,7 +370,32 @@ export function LateOrdersPage() {
           brandName={coupon.row.brandName ?? null}
           branchName={coupon.row.restaurantName ?? null}
           requestedBy={user?.id ?? null}
-          onCreated={() => setCoupon(null)}
+          onCreated={() => {
+            /*
+             * The coupon EXISTS now, so the decision is true and can be
+             * written. If this fails the order stays in the queue with a
+             * coupon already requested — visible and fixable, unlike a
+             * register that claims a compensation nobody sent.
+             */
+            void record
+              .mutateAsync({
+                row: coupon.row,
+                kind: coupon.kind,
+                action: 'compensated',
+                reason: coupon.reason,
+                agentId: user?.id ?? null,
+                ticketId: coupon.ticketId,
+              })
+              .catch(() =>
+                toast.error(
+                  t('lateOrders.recordFailed', {
+                    defaultValue:
+                      'The coupon was requested, but this order could not be marked handled.',
+                  }),
+                ),
+              );
+            setCoupon(null);
+          }}
         />
       )}
     </div>
