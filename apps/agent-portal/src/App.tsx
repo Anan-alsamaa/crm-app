@@ -340,19 +340,16 @@ function Shell({ children }: { children: React.ReactNode }) {
           icon: AddTicketIcon,
           requires: 'create_tickets',
         },
+        { to: '/tickets', label: t('nav.tickets'), icon: TicketIcon, requires: 'view_tickets' },
         {
-          /*
-           * Late orders sits with the work that ARRIVES rather than the work an
-           * agent goes looking for, which is why it is above Tickets: the queue
-           * is time-critical and empties itself, and a section nobody passes is
-           * a section nobody watches.
-           */
+          /* Directly after Tickets (owner, 2026-09-21): a late order becomes a
+             ticket or a coupon, so it reads as the queue that feeds the work
+             beside it rather than as a second inbox. */
           to: '/late-orders',
           label: t('nav.lateOrders', { defaultValue: 'Late orders' }),
           icon: ClockIcon,
           requires: 'create_tickets',
         },
-        { to: '/tickets', label: t('nav.tickets'), icon: TicketIcon, requires: 'view_tickets' },
         {
           // The customer directory the inbox links into — it goes with chat.
           to: '/contacts',
