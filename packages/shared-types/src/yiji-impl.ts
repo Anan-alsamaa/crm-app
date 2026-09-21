@@ -1,5 +1,6 @@
 import {
   isLiveOrderStatus,
+  minutesSince,
   YIJI_DELIVERY_TYPE_DELIVERY,
   type LateOrderRow,
 } from './late-delivery.js';
@@ -1009,17 +1010,20 @@ export class HttpYijiClient implements YijiClient {
       if (!order?.id) continue;
       if (!isLiveOrderStatus(order.orderStatus)) continue;
       const placedAt = order.creationTime ?? '';
-      const started = placedAt ? Date.parse(placedAt) : Number.NaN;
-      if (!Number.isFinite(started)) continue;
       /*
-       * Computed here, against the SERVER's clock, and sent as a number.
+       * Computed HERE, on the server, and sent as a number.
        *
-       * "How late is this" is the one figure the whole screen is about, and a
-       * browser with a skewed clock would disagree with the queue it is
-       * reading. Yiji's timestamps carry no zone, so they are read as local —
-       * the gateway and Yiji both run on Riyadh time.
+       * "How late is this" is the one figure the whole screen is about, so a
+       * browser with a skewed clock must not get to disagree with the queue it
+       * is reading.
+       *
+       * `minutesSince` applies Riyadh's offset EXPLICITLY. Yiji's timestamps
+       * carry no zone and are Riyadh local, so `Date.parse` would read them in
+       * the HOST's zone — right on a Riyadh dev machine, three hours out in the
+       * UTC container. See the note on `parseYijiTimestamp`.
        */
-      const minutesElapsed = Math.floor((now.getTime() - started) / 60_000);
+      const minutesElapsed = minutesSince(placedAt, now.getTime());
+      if (minutesElapsed === null) continue;
       out.push({
         orderId: String(order.id),
         status: YIJI_ORDER_STATUS[order.orderStatus as number] ?? `status_${order.orderStatus}`,

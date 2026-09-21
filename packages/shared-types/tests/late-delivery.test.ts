@@ -5,6 +5,8 @@ import {
   LATE_ORDER_COMPLAINT_TYPE,
   lateDeliveryMinutes,
   LateOrderDecision,
+  minutesSince,
+  parseYijiTimestamp,
 } from '../src/late-delivery.js';
 import { couponOrderId } from '../src/coupon-approvals.js';
 
@@ -111,5 +113,59 @@ describe('couponOrderId', () => {
   it('treats a blank column as no order at all', () => {
     expect(couponOrderId({ order_id: '   ', ticket: { order_id: '  ' } })).toBeNull();
     expect(couponOrderId({})).toBeNull();
+  });
+});
+
+describe('parseYijiTimestamp', () => {
+  /*
+   * THE BUG THIS EXISTS FOR (staging, 2026-09-21).
+   *
+   * Yiji sends `2026-09-21T15:15:53.811204` with no zone, meaning Riyadh.
+   * `Date.parse` reads an unmarked timestamp in the HOST's zone, so the same
+   * string meant different instants on the Riyadh dev machine and in the UTC
+   * container — and the container reported `minutesElapsed: -141`.
+   *
+   * Asserted as an absolute instant so the test says the same thing wherever
+   * it runs: 15:15:53 Riyadh IS 12:15:53Z.
+   */
+  it('reads a naked timestamp as Riyadh, not as the host zone', () => {
+    expect(parseYijiTimestamp('2026-09-21T15:15:53.811204')).toBe(
+      Date.parse('2026-09-21T12:15:53.811Z'),
+    );
+  });
+
+  it('respects an explicit zone when one is given', () => {
+    expect(parseYijiTimestamp('2026-09-21T12:15:53Z')).toBe(Date.parse('2026-09-21T12:15:53Z'));
+    expect(parseYijiTimestamp('2026-09-21T15:15:53+03:00')).toBe(
+      Date.parse('2026-09-21T12:15:53Z'),
+    );
+  });
+
+  it('refuses nonsense rather than inventing an instant', () => {
+    for (const bad of [null, undefined, '', '   ', 'not a date'])
+      expect(Number.isNaN(parseYijiTimestamp(bad))).toBe(true);
+  });
+});
+
+describe('minutesSince', () => {
+  const now = Date.parse('2026-09-21T13:00:00Z'); // 16:00 Riyadh
+
+  it('measures a naked Riyadh timestamp correctly', () => {
+    // Placed 15:15 Riyadh, read at 16:00 Riyadh = 45 minutes.
+    expect(minutesSince('2026-09-21T15:15:00', now)).toBe(45);
+  });
+
+  /*
+   * A clock disagreement must never produce a negative age: it is nonsense on
+   * screen AND it sorts to the bottom of a list ordered by lateness, so the
+   * most alarming-looking row would hide at the end.
+   */
+  it('never reports a negative age', () => {
+    expect(minutesSince('2026-09-21T17:00:00', now)).toBe(0);
+  });
+
+  it('answers null for a timestamp it cannot read', () => {
+    expect(minutesSince('', now)).toBeNull();
+    expect(minutesSince(null, now)).toBeNull();
   });
 });

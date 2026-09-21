@@ -39,6 +39,56 @@ export function lateDeliveryMinutes(raw: string | number | null | undefined): nu
 }
 
 /**
+ * Saudi Arabia is UTC+3 all year — no daylight saving, ever.
+ *
+ * A fixed offset is therefore correct here in a way it would not be for most
+ * timezones, and it avoids depending on the host having tz data.
+ */
+const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Yiji's naked timestamps, as an instant.
+ *
+ * `creationTime` arrives as `2026-09-21T15:15:53.811204` with NO zone marker,
+ * and it is RIYADH local time. `Date.parse` reads an unmarked timestamp as the
+ * HOST's local time, so the answer depends on where the code runs:
+ *
+ *   - on this dev machine (Riyadh) it is right, which is how the bug survived
+ *   - in the ECS container (UTC) the same string is read three hours early,
+ *     making every order appear to be placed in the FUTURE
+ *
+ * Measured on staging 2026-09-21: an order placed 15:15 Riyadh reported
+ * `minutesElapsed: -141`. A negative age is at least visibly absurd; the real
+ * danger is the silent half of it — an order genuinely 3 hours late reads as
+ * 3 minutes old and never enters the queue at all.
+ *
+ * So the offset is applied EXPLICITLY rather than trusting `TZ`. Returns NaN
+ * for anything unparseable, which callers skip.
+ */
+export function parseYijiTimestamp(raw: string | null | undefined): number {
+  const text = String(raw ?? '').trim();
+  if (!text) return Number.NaN;
+  // Already zoned (`Z` or `+03:00`)? Then it means what it says.
+  if (/(?:Z|[+-]\d{2}:?\d{2})$/i.test(text)) return Date.parse(text);
+  // Naked: parse the wall clock as UTC, then subtract Riyadh's offset.
+  const asUtc = Date.parse(`${text}Z`);
+  return Number.isFinite(asUtc) ? asUtc - RIYADH_OFFSET_MS : Number.NaN;
+}
+
+/**
+ * How long an order has been running, in whole minutes.
+ *
+ * Never negative: a clock disagreement between Yiji and us must not produce an
+ * order that is "-141 minutes late", which is both nonsense on screen and
+ * sorts to the bottom of a list ordered by lateness.
+ */
+export function minutesSince(placedAt: string | null | undefined, now: number): number | null {
+  const started = parseYijiTimestamp(placedAt);
+  if (!Number.isFinite(started)) return null;
+  return Math.max(0, Math.floor((now - started) / 60_000));
+}
+
+/**
  * Yiji order statuses that mean the order is STILL RUNNING.
  *
  * `GetFilteredOrders` answers with finished and cancelled orders too — a
