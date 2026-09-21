@@ -107,7 +107,9 @@ delivery is `in_delivery`(8) until `delivered`(9). Measured:
 1313738   kitchen->ready 19.4 min, delivery->delivered 25.4 min
 ```
 
-The owner's call (2026-09-21) was to keep it manual: the predefined values make
+The owner's call (2026-09-21) was to keep it manual. The timeline is shown to
+the AGENT instead, in the expanded row — `in_kitchen 13:36 -> in_delivery
+14:14` says "preparation" without anyone guessing. The reasoning: the predefined values make
 the choice trivial for an agent, and a wrong auto-answer is worse than no
 answer. The endpoint is already wired (`getOrderTimeline`), so prefilling the
 dropdown later is a small change, not a redesign.
@@ -147,3 +149,52 @@ The queue is one cached call per poll, not one per order.
 - **Agent KPI** gains a late-orders measure: how many an agent handled, and how
   they were resolved.
 - Operations see the operational KPI only.
+
+---
+
+## What shipped
+
+Live on staging and production 2026-09-21 (`c3e615f` … `c09ca70`).
+
+### The agent's queue
+
+`/late-orders`, in the top bar to the right of Tickets. Click the order number
+to open its **cart** (every line with the choices behind it — "Without
+Broccoli, Without Olives") and its **tracking** (the real status timeline).
+The panel mounts only when opened and both calls are cached server-side, so an
+unopened row costs nothing.
+
+### Three bugs found only by running it on staging
+
+Each rendered as a plausible number rather than an error:
+
+1. **The threshold was never read.** `svc-ai-gateway` had no grant on
+   `app_settings`; the read 403'd, fell back to 60, and the queue reported a
+   threshold nobody set. Found by CHANGING the setting and watching nothing
+   happen.
+2. **Every order read three hours in the future.** Yiji's timestamps are
+   Riyadh-local with no zone marker; the UTC container read them wrong. The
+   silent half is worse than the `-141`: an order genuinely three hours late
+   reads as minutes old and never enters the queue at all.
+3. **A compensation claimed before its coupon existed.** Opening the coupon
+   form and closing it left a permanent row saying the customer was
+   compensated. The decision is now written from the form's `onCreated`.
+
+### Deploying this anywhere else
+
+Schema and permissions do NOT ride a deploy:
+
+```
+DIRECTUS_INTERNAL_URL=<env>  pnpm --filter @yiji/directus-bootstrap run apply
+```
+
+`DIRECTUS_INTERNAL_URL` is the variable that matters — `DIRECTUS_URL` is
+silently ignored. Afterwards confirm by reading back, not by trusting the run:
+the `late_order_decisions` grants, `svc-ai-gateway`'s `app_settings` read, and
+`coupon_approvals.order_id`. Then create `late_delivery_minutes` in
+`app_settings` (absent = 60, so the feature works either way; the row exists so
+operations can see and change it).
+
+**A COMPLETED ECS rollout is not proof the new code is running** — compare the
+ECR digest against the task's `containers[0].imageDigest`. A push to the
+mutable `:main` tag after a rollout restarts nothing.
