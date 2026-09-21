@@ -60,6 +60,17 @@ export interface CustomerPushDeps {
    */
   yijiBrandId?: number;
   /**
+   * The brand name on the customer's most recent order, for choosing which
+   * brand's credential sends the push.
+   *
+   * Absent (or returning null) falls back to `yijiBrandId` — a notification
+   * under the wrong brand still arrives, while refusing to send guarantees
+   * silence.
+   */
+  latestBrandName?: (vendorId: string, externalCustomerId: string) => Promise<string | null>;
+  /** The vendor to ask for that order. Defaults to Yiji's own id. */
+  yijiVendorId?: string;
+  /**
    * The notification's HEADING, as the CUSTOMER reads it.
    *
    * `Yiji Support`, not `Sara Support`: Sara is what WE call this CRM, and the
@@ -186,6 +197,55 @@ export function customerPushPayload(job: CustomerPushJob): Record<string, unknow
  * `https://crm.anan.sa//?conversation=…` is a different URL to some routers
  * and a broken-looking one to everybody.
  */
+/**
+ * Yiji's numeric brand ids, keyed by the brand NAME their order data carries.
+ *
+ * Their notification API resolves the Firebase credential from `brandId`, and
+ * their ORDER data carries only `brandName` as text — so the two are joined
+ * here. The ids are the owner's (2026-09-21); the spellings are Yiji's own,
+ * including "La Casa Pasta" for the brand the CRM calls "Casa Pasta".
+ *
+ * Matched case- and space-insensitively because a name is typed by people: a
+ * stray double space or a lowercase article must not silently fall back and
+ * send an Okashi customer the Casa Pasta credential.
+ */
+export const YIJI_BRAND_IDS: ReadonlyArray<{ id: number; names: readonly string[] }> = [
+  { id: 1, names: ['La Casa Pasta', 'Casa Pasta'] },
+  { id: 3, names: ['Okashi'] },
+  { id: 81, names: ['Chick n Dip', 'Chick N Dip', 'CND Casual'] },
+  { id: 1004, names: ['Poshak'] },
+];
+
+/** `  La  Casa Pasta ` and `la casa pasta` are the same brand. */
+const brandKey = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+
+const BRAND_BY_NAME = new Map<string, number>(
+  YIJI_BRAND_IDS.flatMap((b) => b.names.map((n) => [brandKey(n), b.id] as const)),
+);
+
+/**
+ * Which brand's credential should send this push.
+ *
+ * From the customer's LATEST ORDER, because that is the brand they last dealt
+ * with and so the one the notification is most plausibly about (owner,
+ * 2026-09-21). Falls back to 1 when there is no order, no brand on it, or a
+ * brand nobody has mapped — a notification sent under the wrong brand still
+ * arrives, while refusing to send one guarantees silence.
+ *
+ * An unmapped name is worth knowing about, so the caller logs it rather than
+ * letting a new brand disappear into the default for ever.
+ */
+export function brandIdForOrder(
+  brandName: string | null | undefined,
+  fallback = 1,
+): { brandId: number; matched: boolean } {
+  if (!brandName?.trim()) return { brandId: fallback, matched: false };
+  const hit = BRAND_BY_NAME.get(brandKey(brandName));
+  return hit === undefined
+    ? { brandId: fallback, matched: false }
+    : { brandId: hit, matched: true };
+}
+
 export function crmChatLink(origin: string | undefined, conversationId: string): string {
   const base = (origin ?? 'https://crm.anan.sa').replace(/\/+$/, '');
   return `${base}/?conversation=${encodeURIComponent(conversationId)}`;
@@ -242,6 +302,35 @@ export function yijiNotifyPayload(job: CustomerPushJob, topic: number, tenantId 
     userId: job.externalCustomerId,
     tenantId,
   };
+}
+
+/**
+ * Which brand's credential sends this push.
+ *
+ * The customer's LATEST ORDER decides it (owner, 2026-09-21): that is the
+ * brand they last dealt with, so a support notification is most plausibly
+ * about it. Everything that can go wrong here falls back to the default
+ * rather than failing the job — an order lookup that times out must not cost
+ * the customer their notification.
+ *
+ * A brand name nobody has mapped is logged rather than swallowed: a new brand
+ * would otherwise vanish into the default for ever, and nobody would know to
+ * add it.
+ */
+async function resolveBrandId(data: CustomerPushJob, deps: CustomerPushDeps): Promise<number> {
+  const fallback = deps.yijiBrandId ?? 1;
+  if (!deps.latestBrandName || !data.externalCustomerId) return fallback;
+  const name = await deps
+    .latestBrandName(deps.yijiVendorId ?? '1', data.externalCustomerId)
+    .catch(() => null);
+  const { brandId, matched } = brandIdForOrder(name, fallback);
+  if (name && !matched) {
+    deps.logger.warn(
+      { conversationId: data.conversationId, brandName: name, using: brandId },
+      'unmapped Yiji brand name - add it to YIJI_BRAND_IDS',
+    );
+  }
+  return brandId;
 }
 
 export async function processCustomerPushJob(
@@ -331,7 +420,7 @@ export async function processCustomerPushJob(
   const body = isYijiCrmEndpoint
     ? yijiCrmNotifyPayload(data, {
         tenantId: deps.yijiTenantId ?? 1,
-        brandId: deps.yijiBrandId ?? 1,
+        brandId: await resolveBrandId(data, deps),
         title: deps.yijiNotifyTitle ?? 'Yiji Support',
         chatUrl: crmChatLink(deps.crmChatUrl, data.conversationId),
       })

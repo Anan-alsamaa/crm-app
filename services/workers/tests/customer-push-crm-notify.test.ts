@@ -4,6 +4,7 @@ import type { CustomerPushJob } from '@yiji/shared-types';
 import {
   yijiCrmNotifyPayload,
   crmChatLink,
+  brandIdForOrder,
   processCustomerPushJob,
 } from '../src/processors/customer-push.js';
 
@@ -232,5 +233,75 @@ describe('what Yiji actually requires', () => {
       chatUrl: 'u',
     });
     expect(p.phoneNumber).toBe('+441234567890');
+  });
+});
+
+/*
+ * THE BRAND COMES FROM THE CUSTOMER'S LATEST ORDER (owner, 2026-09-21).
+ *
+ * Yiji resolves the Firebase credential from `brandId`, and their order data
+ * carries the brand only as TEXT — so the name is mapped to an id here. Sent
+ * under the wrong brand a notification still arrives; not sent at all, the
+ * customer hears nothing. Everything therefore falls back rather than fails.
+ */
+describe('brandIdForOrder', () => {
+  it.each([
+    ['La Casa Pasta', 1],
+    ['Okashi', 3],
+    ['Chick n Dip', 81],
+    ['Poshak', 1004],
+  ])('maps %s to %i', (name, id) => {
+    expect(brandIdForOrder(name).brandId).toBe(id);
+  });
+
+  /* A brand name is typed by people: a stray space or a lowercase article
+     must not silently send an Okashi customer the Casa Pasta credential. */
+  it.each(['  la  casa pasta ', 'LA CASA PASTA', 'Casa Pasta'])(
+    'matches %p despite spacing and case',
+    (name) => {
+      expect(brandIdForOrder(name).brandId).toBe(1);
+    },
+  );
+
+  it('falls back when there is no order to read a brand from', () => {
+    expect(brandIdForOrder(null)).toEqual({ brandId: 1, matched: false });
+    expect(brandIdForOrder('')).toEqual({ brandId: 1, matched: false });
+  });
+
+  /* An unmapped brand is reported, not swallowed — otherwise a new brand
+     disappears into the default for ever and nobody knows to add it. */
+  it('reports an unmapped brand rather than pretending it matched', () => {
+    expect(brandIdForOrder('Some New Brand')).toEqual({ brandId: 1, matched: false });
+  });
+});
+
+describe('choosing the brand at send time', () => {
+  it('uses the brand of the latest order', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200 }) as never);
+    await processCustomerPushJob({ data: job() } as Job<CustomerPushJob>, {
+      logger,
+      yijiNotifyUrl: CRM_URL,
+      yijiApiKey: 'k',
+      latestBrandName: async () => 'Okashi',
+      fetchImpl: fetchImpl as never,
+    });
+    const [, init] = fetchImpl.mock.calls[0] as [string, { body: string }];
+    expect((JSON.parse(init.body) as Record<string, unknown>).brandId).toBe(3);
+  });
+
+  /* An order lookup that fails must not cost the customer their notification. */
+  it('falls back to 1 when the order lookup throws', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200 }) as never);
+    await processCustomerPushJob({ data: job() } as Job<CustomerPushJob>, {
+      logger,
+      yijiNotifyUrl: CRM_URL,
+      yijiApiKey: 'k',
+      latestBrandName: async () => {
+        throw new Error('yiji down');
+      },
+      fetchImpl: fetchImpl as never,
+    });
+    const [, init] = fetchImpl.mock.calls[0] as [string, { body: string }];
+    expect((JSON.parse(init.body) as Record<string, unknown>).brandId).toBe(1);
   });
 });

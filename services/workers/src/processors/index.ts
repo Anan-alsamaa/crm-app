@@ -4,6 +4,7 @@ import {
   QUEUES,
   createYijiAdminPoster,
   createYijiOrderReader,
+  createYijiLatestBrandReader,
   type QueueName,
   type NotificationJob,
   type SlaJob,
@@ -94,6 +95,13 @@ const couponDeliveryEnabled =
  * failure here as "less corroboration", never as a reason not to deliver.
  */
 const yijiOrderReader = createYijiOrderReader({
+  apiUrl: process.env.YIJI_API_URL ?? '',
+  adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
+  adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
+  adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
+});
+
+const yijiLatestBrandReader = createYijiLatestBrandReader({
   apiUrl: process.env.YIJI_API_URL ?? '',
   adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
   adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
@@ -288,6 +296,10 @@ export const processors: Record<QueueName, Processor> = {
       yijiTenantId: process.env.YIJI_TENANT_ID ? Number(process.env.YIJI_TENANT_ID) : 1,
       // Yiji resolves the Firebase credential from the brand, so it is required.
       yijiBrandId: process.env.YIJI_BRAND_ID ? Number(process.env.YIJI_BRAND_ID) : 1,
+      /* The brand of the customer's LATEST ORDER picks the credential; the
+         default above is only for a customer with no order history. */
+      latestBrandName: yijiLatestBrandReader ?? undefined,
+      yijiVendorId: process.env.YIJI_VENDOR_ID || '1',
       // The notification's heading. The agent's words are the body, so this
       // names who is speaking rather than repeating the message.
       yijiNotifyTitle: process.env.YIJI_NOTIFY_TITLE || 'Yiji Support',

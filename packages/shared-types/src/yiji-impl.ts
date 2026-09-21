@@ -1005,6 +1005,39 @@ export type YijiAdminPoster = <T>(
   headers?: Record<string, string>,
 ) => Promise<T>;
 
+/**
+ * The brand name on a customer's MOST RECENT order, or null.
+ *
+ * Yiji's notification API resolves its Firebase credential from a numeric
+ * brand id, and the brand a customer last ordered from is the one a support
+ * notification is most plausibly about. Their order data carries the brand as
+ * TEXT, so the caller maps the name to an id.
+ *
+ * Returns null — never throws — when there is no order, no brand on it, or
+ * Yiji is unreachable. A notification under a fallback brand still arrives;
+ * failing the job would mean the customer hears nothing at all.
+ */
+export function createYijiLatestBrandReader(
+  env: YijiClientEnv = {},
+): ((vendorId: string, externalCustomerId: string) => Promise<string | null>) | null {
+  if (!env.apiUrl?.trim()) return null;
+  const client = new HttpYijiClient({
+    baseUrl: env.apiUrl,
+    token: env.token,
+    adminUrl: env.adminApiUrl,
+    adminEmail: env.adminEmail,
+    adminPassword: env.adminPassword,
+  });
+  return async (vendorId, externalCustomerId) => {
+    try {
+      const orders = await client.getOrders(vendorId, externalCustomerId, { limit: 1 });
+      return orders[0]?.brandName ?? null;
+    } catch {
+      return null;
+    }
+  };
+}
+
 export function createYijiAdminPoster(env: YijiClientEnv = {}): YijiAdminPoster | null {
   if (!env.adminApiUrl?.trim() || !env.adminEmail?.trim() || !env.adminPassword?.trim()) {
     return null;
