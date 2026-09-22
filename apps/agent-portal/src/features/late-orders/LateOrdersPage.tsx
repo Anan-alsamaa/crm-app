@@ -10,7 +10,7 @@ import {
   Input,
   PageHeader,
   Pill,
-  Select,
+  SelectMenu,
   Skeleton,
   Table,
   Td,
@@ -400,7 +400,7 @@ export function LateOrdersPage() {
                 <Th>{t('lateOrders.col.brand', { defaultValue: 'Brand / branch' })}</Th>
                 <Th>{t('lateOrders.col.customer', { defaultValue: 'Customer' })}</Th>
                 <Th>{t('lateOrders.col.status', { defaultValue: 'Status' })}</Th>
-                <Th>{t('lateOrders.col.kind', { defaultValue: 'Cause' })}</Th>
+                <Th>{t('lateOrders.col.kind', { defaultValue: 'Source of delay' })}</Th>
                 <Th>{t('lateOrders.col.actions', { defaultValue: 'Decision' })}</Th>
               </Tr>
             </thead>
@@ -408,20 +408,7 @@ export function LateOrdersPage() {
               {rows.map((row) => (
                 <Fragment key={row.orderId}>
                   <Tr>
-                    <Td className="whitespace-nowrap font-medium tabular-nums">
-                      {/* The order NUMBER is the control: it is what an agent
-                        looks at first, and it needs no extra column. */}
-                      <button
-                        type="button"
-                        className="underline decoration-dotted underline-offset-4 hover:text-primary"
-                        aria-expanded={expanded === row.orderId}
-                        onClick={() =>
-                          setExpanded((cur) => (cur === row.orderId ? null : row.orderId))
-                        }
-                      >
-                        {row.orderId}
-                      </button>
-                    </Td>
+                    <Td className="whitespace-nowrap font-medium tabular-nums">{row.orderId}</Td>
                     <Td className="whitespace-nowrap">
                       <Pill tone={tone(row.minutesElapsed, threshold)} size="sm">
                         {elapsed(row.minutesElapsed)}
@@ -437,25 +424,44 @@ export function LateOrdersPage() {
                       {t(`commerce.orderStatuses.${row.status}`, { defaultValue: row.status })}
                     </Td>
                     <Td>
-                      <Select
+                      {/*
+                        `SelectMenu`, not a native `<select>`: the OS styles the
+                        native menu itself, so it arrived as a boxed grey
+                        control that matched nothing else on the page (owner,
+                        2026-09-22). This is the same listbox the rest of the
+                        portal uses — keyboard, type-ahead and ARIA included —
+                        and it renders in a portal so it is never clipped by the
+                        table's own scroll.
+
+                        The dots carry the meaning at a glance: amber for a
+                        kitchen that ran long, blue for a delivery that did.
+                      */}
+                      <SelectMenu
                         value={kindOf(row)}
-                        aria-label={t('lateOrders.col.kind', { defaultValue: 'Cause' })}
-                        onChange={(e) =>
-                          setKinds((cur) => ({
-                            ...cur,
-                            [row.orderId]: e.target.value as LateOrderKind,
-                          }))
+                        size="sm"
+                        aria-label={t('lateOrders.col.kind', {
+                          defaultValue: 'Source of delay',
+                        })}
+                        onChange={(v) =>
+                          setKinds((cur) => ({ ...cur, [row.orderId]: v as LateOrderKind }))
                         }
-                      >
-                        <option value="late_delivery">
-                          {t('lateOrders.kind.late_delivery', { defaultValue: 'Late delivery' })}
-                        </option>
-                        <option value="late_preparation">
-                          {t('lateOrders.kind.late_preparation', {
-                            defaultValue: 'Late preparation',
-                          })}
-                        </option>
-                      </Select>
+                        options={[
+                          {
+                            value: 'late_delivery',
+                            label: t('lateOrders.kind.late_delivery', {
+                              defaultValue: 'Late delivery',
+                            }),
+                            dot: 'oklch(var(--sky))',
+                          },
+                          {
+                            value: 'late_preparation',
+                            label: t('lateOrders.kind.late_preparation', {
+                              defaultValue: 'Late preparation',
+                            }),
+                            dot: 'oklch(var(--warning))',
+                          },
+                        ]}
+                      />
                     </Td>
                     <Td>
                       {/*
@@ -464,11 +470,51 @@ export function LateOrdersPage() {
                         ignored invites a second, contradictory record.
                       */}
                       {range && handled.data?.has(row.orderId) ? (
-                        <Pill tone="success" size="sm">
-                          {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
-                        </Pill>
+                        /* The DECISION replaces the two actions, but not the
+                           detail: looking at what was ordered is exactly what
+                           somebody reviewing a handled order came to do. */
+                        <div className="flex items-center gap-2">
+                          <Pill tone="success" size="sm">
+                            {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
+                          </Pill>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            aria-expanded={expanded === row.orderId}
+                            onClick={() =>
+                              setExpanded((cur) => (cur === row.orderId ? null : row.orderId))
+                            }
+                          >
+                            {expanded === row.orderId
+                              ? t('lateOrders.hideDetail', { defaultValue: 'Hide details' })
+                              : t('lateOrders.showDetail', { defaultValue: 'Cart & tracking' })}
+                          </Button>
+                        </div>
                       ) : (
                         <div className="flex items-center gap-2">
+                          {/*
+                            A NAMED control, not the order number.
+
+                            Cart and tracking used to hang off clicking the id —
+                            an affordance nothing announced, which an agent had
+                            to be told about (owner, 2026-09-22). A button that
+                            says what it opens needs no telling, and the row
+                            says whether it is open.
+                          */}
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            aria-expanded={expanded === row.orderId}
+                            onClick={() =>
+                              setExpanded((cur) => (cur === row.orderId ? null : row.orderId))
+                            }
+                          >
+                            {expanded === row.orderId
+                              ? t('lateOrders.hideDetail', { defaultValue: 'Hide details' })
+                              : t('lateOrders.showDetail', {
+                                  defaultValue: 'Cart & tracking',
+                                })}
+                          </Button>
                           <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
                             {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
                           </Button>

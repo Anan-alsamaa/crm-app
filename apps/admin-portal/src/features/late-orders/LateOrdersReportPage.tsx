@@ -120,7 +120,7 @@ export function LateOrdersReportPage() {
         selects={[
           {
             key: 'kind',
-            label: t('lateOrdersReport.col.cause', { defaultValue: 'Cause' }),
+            label: t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' }),
             value: kind,
             onChange: setKind,
             options: [
@@ -246,7 +246,7 @@ export function LateOrdersReportPage() {
                   <Th>{t('lateOrdersReport.col.when', { defaultValue: 'When' })}</Th>
                   <Th>{t('lateOrdersReport.col.order', { defaultValue: 'Order' })}</Th>
                   <Th>{t('lateOrdersReport.col.brand', { defaultValue: 'Brand / branch' })}</Th>
-                  <Th>{t('lateOrdersReport.col.cause', { defaultValue: 'Cause' })}</Th>
+                  <Th>{t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' })}</Th>
                   <Th>{t('lateOrdersReport.col.decision', { defaultValue: 'Decision' })}</Th>
                   <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
                   <Th>{t('lateOrdersReport.col.reason', { defaultValue: 'Reason' })}</Th>
