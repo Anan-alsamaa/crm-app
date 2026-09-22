@@ -101,14 +101,22 @@ const couponDeliveryEnabled =
  * healthy doing it — every push would report `delivered`. So this throws at
  * startup rather than logging a warning nobody reads: a worker that cannot
  * start is a visible failure, and a silently misdirected coupon is not.
+ *
+ * NOT keyed on `NODE_ENV`. Both environments run `NODE_ENV=production` —
+ * verified on the live task definitions, 2026-09-22 — so that test would have
+ * refused to start the STAGING worker, which is the one that needs this. The
+ * honest discriminator is the Directus each worker talks to: production's own
+ * host is the thing that must never carry a redirect.
  */
 const redirectCouponsTo = (() => {
   const to = (process.env.COUPON_REDIRECT_PHONE ?? '').trim();
   if (!to) return undefined;
-  if ((process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production') {
+  const directus = (process.env.DIRECTUS_INTERNAL_URL ?? '').toLowerCase();
+  if (directus.includes('prod-directus') || directus.includes('crm-api.anan.sa')) {
     throw new Error(
-      'COUPON_REDIRECT_PHONE is set in a PRODUCTION worker. That would send every ' +
-        'customer coupon to one test handset while reporting success. Unset it.',
+      'COUPON_REDIRECT_PHONE is set on a worker pointed at PRODUCTION Directus ' +
+        `(${process.env.DIRECTUS_INTERNAL_URL}). That would send every customer ` +
+        'coupon to one test handset while reporting success. Unset it.',
     );
   }
   return to;
