@@ -504,18 +504,35 @@ jobs:
           fi
           echo "no placeholders"
 
-      - name: Guard — staging must never deliver coupons
+      - name: Guard — staging may deliver ONLY to a redirect handset
         # Real money, real customers, and delivery works from a BACKLOG: the
         # first sweep after it goes live sends every approved-undelivered coupon
         # at once. A bad substitution here must stop the deploy, not ship.
+        #
+        # Staging was flatly forbidden from delivering until 2026-09-22, when
+        # the owner asked for it so the flow could be tested end to end. It is
+        # allowed now on ONE condition, enforced here: every coupon and push
+        # must be redirected to a test handset. Staging shares Yiji's
+        # PRODUCTION APIs, so an unredirected send reaches a real stranger and
+        # cannot be revoked from our side.
+        #
+        # Checked in the TASK DEFINITION rather than trusting the worker's own
+        # startup guard: a deploy that never starts is a broken environment,
+        # and this stops it at the door instead.
         if: matrix.service == 'workers' && needs.plan.outputs.environment != 'prod'
         run: |
           grep -q '"YIJI_COUPON_DELIVERY"' /tmp/taskdef.json || { echo "::error::coupon flag missing"; exit 1; }
           if grep -A1 '"YIJI_COUPON_DELIVERY"' /tmp/taskdef.json | grep -q '"on"'; then
-            echo "::error::YIJI_COUPON_DELIVERY=on on a non-production deploy — refusing"
-            exit 1
+            for v in COUPON_REDIRECT_PHONE PUSH_REDIRECT_PHONE; do
+              if ! grep -A1 "\"$v\"" /tmp/taskdef.json | grep -qE '"[0-9+][0-9]{6,}"'; then
+                echo "::error::YIJI_COUPON_DELIVERY=on but $v is missing or empty — a staging send would reach a REAL customer. Refusing."
+                exit 1
+              fi
+            done
+            echo "coupon delivery on, and both redirects are set — allowed"
+          else
+            echo "coupon delivery off"
           fi
-          echo "coupon delivery correctly off"
 
       # A TAG IS A PROMOTION, so make the promotion actually happen.
       #
