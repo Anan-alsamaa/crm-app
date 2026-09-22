@@ -30,6 +30,7 @@ import { useVendors } from '../tickets/api.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { LateOrderDetail } from './OrderDetail.js';
 import {
+  resolveLateOrderContact,
   useHandledLateOrders,
   useLateOrders,
   useRecordLateDecision,
@@ -143,6 +144,9 @@ export function LateOrdersPage() {
     reason: string;
     kind: LateOrderKind;
     ticketId: string | null;
+    /* Resolved before the form opens, so the request names the customer it is
+       for rather than an anonymous row. */
+    contactId: string | null;
   } | null>(null);
 
   const threshold = queue.data?.thresholdMinutes ?? FALLBACK_THRESHOLD;
@@ -215,6 +219,11 @@ export function LateOrdersPage() {
     setBusy(true);
     try {
       let ticketId: string | null = null;
+      /* The CONTACT, per the owner's spec. Without it the branch gets a
+         complaint with nobody attached, the ticket cannot be found by
+         searching the number that raised it, and the coupon request names
+         nobody. Resolved ONCE here and reused by both paths. */
+      const contactId = await resolveLateOrderContact(draft.row, soleVendorId);
       if (kind === 'late_preparation') {
         const created = (await directus.request(
           createItem(
@@ -223,7 +232,7 @@ export function LateOrdersPage() {
               row: draft.row,
               kind,
               reason: text,
-              contactId: null,
+              contactId,
               vendorId: soleVendorId,
               agentId: user?.id ?? null,
             }) as never,
@@ -234,7 +243,13 @@ export function LateOrdersPage() {
       if (draft.action === 'compensated') {
         // Nothing is recorded yet — see the note above. The coupon form writes
         // the decision itself, once a request actually exists.
-        setCoupon({ row: draft.row, reason: text, kind, ticketId });
+        setCoupon({
+          row: draft.row,
+          reason: text,
+          kind,
+          ticketId,
+          contactId,
+        });
       } else {
         await record.mutateAsync({
           row: draft.row,
@@ -616,7 +631,7 @@ export function LateOrdersPage() {
           onClose={() => setCoupon(null)}
           ticketId={null}
           orderId={coupon.row.orderId}
-          contactId={null}
+          contactId={coupon.contactId}
           customerPhone={coupon.row.customerPhone ?? null}
           description={coupon.reason}
           brandId={null}
