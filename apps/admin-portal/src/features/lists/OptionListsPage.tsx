@@ -35,8 +35,10 @@ import { QuickRepliesSection } from './QuickRepliesSection.js';
  *      occurrence keeps displaying. Hard delete is offered only as the small
  *      secondary action, for typos caught immediately.
  *   2. The stored spellings are the operations team's own — "Comp. Twiter",
- *      "Dinning" — and this page must never "fix" them. Reports group by the
- *      exact string; a corrected spelling is a NEW value that splits history.
+ *      "Dinning" — and renaming one already in use SPLITS its history, because
+ *      reports group by the exact string. Edit exists (a typo caught before
+ *      anyone picks it is just a typo) and says so in its prompt; for a value
+ *      tickets already carry, add a new one instead.
  */
 const LIST_KEYS = [
   'complaint_type',
@@ -274,7 +276,7 @@ export function OptionListsPage() {
                       })
                     : t('lists.help', {
                         defaultValue:
-                          'These values feed the ticket form live — no deploy needed. Retire a value to stop offering it; tickets that already carry it keep displaying it. The exact spellings are what reports group by, so a corrected spelling is a new value, not an edit.',
+                          'These values feed the ticket form live — no deploy needed. Retire a value to stop offering it; tickets that already carry it keep displaying it. The exact spellings are what reports group by, so renaming one already in use splits its history — add a new value instead.',
                       })
                 }
               >
@@ -376,6 +378,41 @@ export function OptionListsPage() {
                         {/* Hairline divider groups the reorder pair apart from the
                         lifecycle actions, so the cluster reads as two verbs. */}
                         <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-foreground/[0.08]" />
+                        {/*
+                          EDIT, with the split-history warning attached.
+
+                          It was left out on purpose: reports group by the exact
+                          stored string, so renaming a value that tickets already
+                          carry splits one category into two and neither half is
+                          the whole truth. But that reasoning only covers a value
+                          in USE — a typo caught before anyone picks it is just a
+                          typo, and retyping it as a new row then deleting the old
+                          one is the same edit with more steps (owner,
+                          2026-09-22).
+
+                          So the action exists and says what it costs, rather than
+                          being withheld.
+                        */}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            const next = window.prompt(
+                              t('lists.editPrompt', {
+                                defaultValue:
+                                  'Rename this value. Reports group by the EXACT text, so renaming one that tickets already use splits its history in two — add a new value instead if it is already in use.',
+                              }),
+                              row.value,
+                            );
+                            const trimmed = next?.trim();
+                            /* No change, or cleared to nothing: a blank value would
+                               render as an empty row in every dropdown. */
+                            if (!trimmed || trimmed === row.value) return;
+                            patch.mutate({ id: row.id, body: { value: trimmed } });
+                          }}
+                        >
+                          {t('lists.edit', { defaultValue: 'Edit' })}
+                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"

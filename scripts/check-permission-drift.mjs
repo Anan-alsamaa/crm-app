@@ -135,6 +135,22 @@ const EXPECTED = [
     collection: 'option_lists',
     actions: ['create', 'read', 'update', 'delete'],
   },
+  /*
+   * The inbox's ready replies, on the SAME page as the dropdown lists and
+   * managed by the same people. Every app role had READ only — so "Add"
+   * failed with "Couldn't save your change" for a WeCare Admin who could
+   * already manage the lists directly above it (owner, 2026-09-22).
+   */
+  {
+    role: 'WeCare Admin',
+    collection: 'quick_replies',
+    actions: ['create', 'read', 'update', 'delete'],
+  },
+  {
+    role: 'WeCare Supervisor',
+    collection: 'quick_replies',
+    actions: ['create', 'read', 'update', 'delete'],
+  },
 ];
 
 async function api(base, path, token) {
