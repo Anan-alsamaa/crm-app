@@ -925,3 +925,56 @@ describe("the payload carries YIJI's own values for the order", () => {
     expect(readOrder).toHaveBeenCalledWith('1187929');
   });
 });
+
+describe('yijiCouponPayload — the STAGING coupon redirect', () => {
+  /*
+   * Staging shares Yiji's PRODUCTION coupon API. Without this, a coupon raised
+   * while testing lands on a real stranger's account and cannot be revoked
+   * from our side (owner, 2026-09-22).
+   */
+  const user = (row: CouponApprovalRow, to?: string) =>
+    (
+      yijiCouponPayload(row, null, to ? { redirectCouponsTo: to } : undefined) as {
+        couponUser: Record<string, unknown>;
+      }
+    ).couponUser;
+
+  it('sends to the real customer when no redirect is configured', () => {
+    const u = user(ROW);
+    expect(u.customerPhone).toBe('+966500000000');
+    expect(u.userId).toBe('yiji-77');
+  });
+
+  it('sends to the test handset when one is configured', () => {
+    const u = user(ROW, '0537301009');
+    expect(u.customerPhone).toBe('+966537301009');
+  });
+
+  /*
+   * THE WHOLE POINT. Yiji resolves the customer from whichever identifier it
+   * trusts, so a payload naming the test phone AND the real user id is a coin
+   * toss that can still reach the stranger. The id goes with the phone.
+   */
+  it('drops the real Yiji user id, so the pair cannot name two people', () => {
+    expect(user(ROW, '0537301009').userId).toBeUndefined();
+  });
+
+  it('ignores a blank or whitespace redirect rather than sending nowhere', () => {
+    expect(user(ROW, '   ').customerPhone).toBe('+966500000000');
+    expect(user(ROW, '   ').userId).toBe('yiji-77');
+  });
+
+  it('redirects even when Yiji\u2019s own order record names someone else', () => {
+    // The order context normally WINS over our contact — it is Yiji's own
+    // record. A redirect must outrank it, or the test coupon follows the real
+    // order to the real customer.
+    const order = { userId: 'yiji-999', customerPhone: '+966511111111' } as never;
+    const u = (
+      yijiCouponPayload(ROW, order, { redirectCouponsTo: '0537301009' }) as {
+        couponUser: Record<string, unknown>;
+      }
+    ).couponUser;
+    expect(u.customerPhone).toBe('+966537301009');
+    expect(u.userId).toBeUndefined();
+  });
+});

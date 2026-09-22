@@ -195,11 +195,24 @@ export function LateOrdersReportPage() {
       </div>
 
       {rows.length === 0 ? (
+        /*
+          SAYS WHAT THIS REPORT COUNTS, which is not what the agent's queue
+          shows.
+
+          The old title read "No late orders in this window" — and an admin who
+          had just seen hundreds of late orders in the agent portal reasonably
+          read that as broken (owner, 2026-09-22). It is not: that screen lists
+          YIJI'S ORDERS, this one lists DECISIONS AGENTS RECORDED. Zero
+          decisions is the honest answer until somebody uses the queue, and the
+          empty state now says so rather than implying the orders are missing.
+        */
         <EmptyState
-          title={t('lateOrdersReport.noneTitle', { defaultValue: 'No late orders in this window' })}
+          title={t('lateOrdersReport.noneTitle', {
+            defaultValue: 'No decisions recorded in this window',
+          })}
           description={t('lateOrdersReport.noneBody', {
             defaultValue:
-              'Nothing was decided in the dates chosen. Widen the range to see earlier work.',
+              'This report counts what agents did with late orders — compensated or ignored. The late orders themselves are in the agent portal; a row appears here once an agent acts on one.',
           })}
         />
       ) : (

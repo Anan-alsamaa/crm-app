@@ -89,6 +89,32 @@ const couponDeliveryEnabled =
   (process.env.YIJI_COUPON_DELIVERY ?? '').trim().toLowerCase() === 'on';
 
 /**
+ * STAGING ONLY: send every coupon to one test handset instead of the customer.
+ *
+ * Staging shares Yiji's PRODUCTION coupon API — there is no sandbox — so a
+ * coupon raised while testing reaches a real stranger and CANNOT be revoked
+ * from our side. Redirecting them all to the owner's own number makes staging
+ * safe to exercise end to end (owner, 2026-09-22).
+ *
+ * REFUSED IN PRODUCTION, loudly. A redirect that survived into production
+ * would divert real customers' compensation to a test phone and look entirely
+ * healthy doing it — every push would report `delivered`. So this throws at
+ * startup rather than logging a warning nobody reads: a worker that cannot
+ * start is a visible failure, and a silently misdirected coupon is not.
+ */
+const redirectCouponsTo = (() => {
+  const to = (process.env.COUPON_REDIRECT_PHONE ?? '').trim();
+  if (!to) return undefined;
+  if ((process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production') {
+    throw new Error(
+      'COUPON_REDIRECT_PHONE is set in a PRODUCTION worker. That would send every ' +
+        'customer coupon to one test handset while reporting success. Unset it.',
+    );
+  }
+  return to;
+})();
+
+/**
  * Reads Yiji's own record of an order, for the coupon payload.
  *
  * Built once alongside the poster. Read-only, and the coupon push treats a
@@ -279,6 +305,8 @@ export const processors: Record<QueueName, Processor> = {
       // tenant is a refusal Yiji reports as a 200, which is the hardest kind
       // of failure to read.
       yijiTenantId: process.env.YIJI_TENANT_ID ?? '1',
+      // Staging only; refused outright in production — see above.
+      ...(redirectCouponsTo ? { redirectCouponsTo } : {}),
     });
   },
   [QUEUES.customerPush]: async (job, deps) => {

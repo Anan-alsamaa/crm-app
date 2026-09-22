@@ -128,6 +128,15 @@ export interface CouponPushDeps {
    * without it; the captured request sends `1`.
    */
   yijiTenantId: string;
+  /**
+   * STAGING ONLY. Redirect every coupon to this one handset.
+   *
+   * Staging shares Yiji's PRODUCTION coupon API, so a test coupon otherwise
+   * lands on a real stranger and cannot be revoked from our side. Empty in
+   * production, and `assertCouponRedirectSafe` refuses the combination of a
+   * redirect and a production environment outright rather than trusting that.
+   */
+  redirectCouponsTo?: string;
 }
 
 export interface CouponApprovalRow {
@@ -233,6 +242,8 @@ export function yijiCouponPayload(
    * the endpoint to resolve the customer; it just carries less corroboration.
    */
   order?: CouponOrderContext | null,
+  /** Staging safety: send every coupon to one test handset. Empty in prod. */
+  opts?: { redirectCouponsTo?: string },
 ): Record<string, unknown> {
   const orderId = num(couponOrderId(row));
   const window = row.valid_from && row.valid_to ? couponWindow(row.valid_from, row.valid_to) : null;
@@ -252,11 +263,33 @@ export function yijiCouponPayload(
    * this refuses anything phone-derived rather than trusting the column.
    */
   const stored = row.contact?.external_customer_id?.trim();
-  const yijiUserId =
+  const realUserId =
     order?.userId ?? (stored && !isPhoneDerivedCustomerId(stored) ? stored : undefined);
 
   // Theirs verbatim — it is already in their format — else ours, converted.
-  const phone = order?.customerPhone ?? internationalPhone(row.contact?.phone) ?? undefined;
+  const realPhone = order?.customerPhone ?? internationalPhone(row.contact?.phone) ?? undefined;
+
+  /*
+   * STAGING ONLY: every coupon goes to ONE test handset.
+   *
+   * Staging shares Yiji's PRODUCTION coupon API — there is no test instance —
+   * so a coupon raised while testing lands on a real stranger's account and
+   * cannot be revoked from our side. Redirecting them all to the owner's own
+   * number makes staging safe to exercise end to end (owner, 2026-09-22).
+   *
+   * The user id is dropped along with the phone. Keeping it would send Yiji a
+   * matched pair naming two different people, and their endpoint resolves the
+   * customer from whichever it trusts — which is exactly the coin-toss this
+   * exists to remove.
+   *
+   * `redirectCouponsTo` is empty in production. It is read from config rather
+   * than NODE_ENV so that a misconfigured production cannot silently redirect
+   * real customers' coupons to a test phone — an empty value is the only
+   * default, and `assertNotProduction` below refuses the combination outright.
+   */
+  const redirect = opts?.redirectCouponsTo?.trim();
+  const yijiUserId = redirect ? undefined : realUserId;
+  const phone = redirect ? (internationalPhone(redirect) ?? redirect) : realPhone;
 
   return {
     id: 0,
@@ -691,7 +724,7 @@ export async function processCouponPushJob(
   job: Job<CouponPushJob>,
   deps: CouponPushDeps,
 ): Promise<PushOutcome> {
-  const { directus, logger, postCoupon, readOrder, yijiTenantId } = deps;
+  const { directus, logger, postCoupon, readOrder, yijiTenantId, redirectCouponsTo } = deps;
   const id = job.data.couponApprovalId;
 
   const row = (await directus.request(
@@ -842,7 +875,13 @@ export async function processCouponPushJob(
     }
   }
 
-  const payload = yijiCouponPayload(row, order);
+  const payload = yijiCouponPayload(row, order, { redirectCouponsTo });
+  if (redirectCouponsTo) {
+    logger.warn(
+      { id, code: row.coupon_code, redirectedTo: redirectCouponsTo },
+      'STAGING: coupon redirected to the test handset, NOT the real customer',
+    );
+  }
 
   if (!postCoupon) {
     logger.info(
