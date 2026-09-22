@@ -118,6 +118,23 @@ const EXPECTED = [
      which reads as "nobody has handled anything". */
   { role: 'Agent', collection: 'late_order_decisions', actions: ['create', 'read'] },
   { role: 'Admin', collection: 'late_order_decisions', actions: ['read'] },
+  /*
+   * The dropdown lists the ops team edits (complaint types, service types,
+   * sources...). Both roles are told they may manage these — the admin portal
+   * offers Add/Edit/Delete to each — and until 2026-09-22 WeCare Supervisor
+   * had READ only, so every attempt failed with "unable to modify". The
+   * buttons were there; the database said no.
+   */
+  {
+    role: 'WeCare Admin',
+    collection: 'option_lists',
+    actions: ['create', 'read', 'update', 'delete'],
+  },
+  {
+    role: 'WeCare Supervisor',
+    collection: 'option_lists',
+    actions: ['create', 'read', 'update', 'delete'],
+  },
 ];
 
 async function api(base, path, token) {
