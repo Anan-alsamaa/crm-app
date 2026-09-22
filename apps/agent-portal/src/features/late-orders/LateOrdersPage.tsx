@@ -66,6 +66,19 @@ function tone(minutes: number, threshold: number): 'warning' | 'destructive' {
   return minutes >= threshold * 1.5 ? 'destructive' : 'warning';
 }
 
+/**
+ * How far back the page opens. Thirty days is what operations review, and it
+ * is comfortably inside the upstream page budget (two months measured 1,062
+ * rows against a 500-per-page walk).
+ */
+const DEFAULT_WINDOW_DAYS = 30;
+
+/** `YYYY-MM-DD`, n days ago, in the AGENT's own timezone rather than UTC. */
+function isoDaysAgo(n: number): string {
+  const d = new Date(Date.now() - n * 86_400_000);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+}
+
 interface DecisionDraft {
   row: LateOrderRow;
   action: 'ignored' | 'compensated';
@@ -85,9 +98,24 @@ export function LateOrdersPage() {
    */
   const [orderQuery, setOrderQuery] = useState('');
   const [brandQuery, setBrandQuery] = useState('');
-  const [draftFrom, setDraftFrom] = useState('');
-  const [draftTo, setDraftTo] = useState('');
-  const [range, setRange] = useState<{ from: string; to: string } | null>(null);
+  /*
+   * OPENS ON A REAL WINDOW, not on nothing.
+   *
+   * It used to open on the live queue alone, which is legitimately empty most
+   * of the time — nothing is past the threshold right this second — so the
+   * page looked broken and read as "no data loaded" (owner, 2026-09-22). It
+   * was not: the same request with dates returns 1,062 orders over two months.
+   *
+   * So it starts on the last 30 days. The live queue is still one click away
+   * via "Live only", and the rows say which is which — a finished order is
+   * toned neutral and offers no actions.
+   */
+  const [draftFrom, setDraftFrom] = useState(() => isoDaysAgo(DEFAULT_WINDOW_DAYS));
+  const [draftTo, setDraftTo] = useState(() => isoDaysAgo(0));
+  const [range, setRange] = useState<{ from: string; to: string } | null>(() => ({
+    from: isoDaysAgo(DEFAULT_WINDOW_DAYS),
+    to: isoDaysAgo(0),
+  }));
   const vendors = useVendors();
   // The queue follows the range: no range = today's live orders.
   const queue = useLateOrders(range ?? undefined);
@@ -308,20 +336,18 @@ export function LateOrdersPage() {
         >
           {t('lateOrders.filter.apply', { defaultValue: 'Load range' })}
         </Button>
-        {(range || orderQuery || brandQuery) && (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setRange(null);
-              setOrderQuery('');
-              setBrandQuery('');
-              setDraftFrom('');
-              setDraftTo('');
-            }}
-          >
-            {t('lateOrders.filter.clear', { defaultValue: 'Back to live' })}
-          </Button>
-        )}
+        {/* Always offered, because the page no longer STARTS live — this is how
+            an agent gets to "what is late right now". */}
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setRange(null);
+            setOrderQuery('');
+            setBrandQuery('');
+          }}
+        >
+          {t('lateOrders.filter.clear', { defaultValue: 'Live only' })}
+        </Button>
         {/* A historical window is NOT the live queue, and must never be mistaken
             for it — the rows are finished orders. */}
         {range && (

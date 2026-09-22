@@ -277,9 +277,14 @@ export async function registerCommerceRoutes(
           from: from || to,
           to: to || from,
           includeCompleted: true,
-          // 500 per page; a month measured 631 rows, so three pages covers the
-          // widest window the UI offers with room to spare.
-          maxPages: 3,
+          /*
+           * 500 per page. A month measured 631 rows and TWO months 1,062, so
+           * three pages would have silently truncated a two-month window —
+           * the worst shape, because a short answer looks like a complete one.
+           * Six pages covers 3,000 orders; the walk stops early on a short
+           * page, so the extra ceiling costs nothing on smaller ranges.
+           */
+          maxPages: 6,
         }
       : {};
     const ttl = history ? COMMERCE_TTL.order : COMMERCE_TTL.lateOrders;
