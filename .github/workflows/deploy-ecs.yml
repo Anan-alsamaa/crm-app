@@ -521,18 +521,36 @@ jobs:
         # and this stops it at the door instead.
         if: matrix.service == 'workers' && needs.plan.outputs.environment != 'prod'
         run: |
-          grep -q '"YIJI_COUPON_DELIVERY"' /tmp/taskdef.json || { echo "::error::coupon flag missing"; exit 1; }
-          if grep -A1 '"YIJI_COUPON_DELIVERY"' /tmp/taskdef.json | grep -q '"on"'; then
-            for v in COUPON_REDIRECT_PHONE PUSH_REDIRECT_PHONE; do
-              if ! grep -A1 "\"$v\"" /tmp/taskdef.json | grep -qE '"[0-9+][0-9]{6,}"'; then
-                echo "::error::YIJI_COUPON_DELIVERY=on but $v is missing or empty — a staging send would reach a REAL customer. Refusing."
-                exit 1
-              fi
-            done
-            echo "coupon delivery on, and both redirects are set — allowed"
-          else
-            echo "coupon delivery off"
-          fi
+          # PARSED, not grepped. The first version of this used
+          # `grep -A1 '"NAME"'` to find each value, which only works while the
+          # renderer happens to put "name" and "value" on separate lines. That
+          # is a property of JSON.stringify's indent, not of the data, and a
+          # guard that protects real money must not rest on whitespace.
+          node -e '
+            const td = JSON.parse(require("fs").readFileSync("/tmp/taskdef.json", "utf8"));
+            const env = Object.fromEntries(
+              (td.containerDefinitions?.[0]?.environment ?? []).map((e) => [e.name, e.value]),
+            );
+            if (!("YIJI_COUPON_DELIVERY" in env)) {
+              console.log("::error::coupon flag missing from the task definition");
+              process.exit(1);
+            }
+            if (env.YIJI_COUPON_DELIVERY !== "on") {
+              console.log("coupon delivery off");
+              process.exit(0);
+            }
+            // Staging shares Yijis PRODUCTION APIs: an unredirected send
+            // reaches a real stranger and cannot be revoked from our side.
+            for (const v of ["COUPON_REDIRECT_PHONE", "PUSH_REDIRECT_PHONE"]) {
+              if (!/^[0-9+][0-9]{6,}$/.test((env[v] ?? "").trim())) {
+                console.log(
+                  `::error::YIJI_COUPON_DELIVERY=on but ${v} is missing or empty — a staging send would reach a REAL customer. Refusing.`,
+                );
+                process.exit(1);
+              }
+            }
+            console.log("coupon delivery on, and both redirects are set — allowed");
+          '
 
       # A TAG IS A PROMOTION, so make the promotion actually happen.
       #
