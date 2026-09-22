@@ -194,7 +194,19 @@ export function lateOrderTicket(opts: {
     contact: opts.contactId,
     vendor: opts.vendorId,
     assigned_agent: opts.agentId,
-    customer_phone: opts.row.customerPhone ?? null,
+    /*
+     * THE CUSTOMER, in this CRM's own shape.
+     *
+     * Yiji sends `+9665XXXXXXXX`; every phone stored here is `05XXXXXXXX`.
+     * Writing Yiji's form onto the ticket would make it the one record an
+     * agent cannot find by typing the number the way they always type it, and
+     * would put a fourth shape back into a column that was deliberately
+     * collapsed to one.
+     *
+     * This is how the customer reaches the ticket when they are NOT already a
+     * contact — the lookup returns null then, and the phone is all there is.
+     */
+    customer_phone: normalizePhone(opts.row.customerPhone) || null,
     complaint_date: new Date().toISOString(),
     complaint_type: complaintType,
     // Fixed by the owner's spec: these orders are delivery, by definition —
