@@ -81,24 +81,27 @@ export function useHandledLateOrders() {
 }
 
 /**
- * The contact behind a late order — found, or created.
+ * The contact behind a late order, when the CRM already knows them.
  *
- * The owner's spec says the ticket carries the CONTACT and the order number
- * from the order. We were passing `null`, so a late-preparation ticket named
- * no customer at all: the branch got a complaint with nobody attached, and the
- * ticket could not be found by searching the number that raised it.
+ * The owner's spec says the ticket carries the CONTACT from the order. We were
+ * passing `null`, so a late-preparation ticket named nobody: the branch got a
+ * complaint with no customer attached, and it could not be found by searching
+ * the number that raised it.
  *
- * The queue row already carries everything needed — Yiji gives a phone on
- * every row (121/121 measured) and usually its own customer id too.
+ * LOOKUP ONLY — it never creates a contact (owner, 2026-09-22). A late order
+ * is an operational event, not a reason to put somebody in the customer
+ * directory: most of these orders end fine, and minting a contact for every
+ * one would fill the directory with people who never contacted us. When the
+ * customer is already known the ticket links to them; when they are not, the
+ * ticket carries the order and the phone and that is enough.
  *
  * MATCHED ON THE STORED FORM. Yiji sends `+9665XXXXXXXX`; this CRM stores
- * `05XXXXXXXX` and nothing else. Searching with Yiji's shape would miss every
- * existing customer and create a duplicate for someone already known, which is
- * how one human becomes two records.
+ * `05XXXXXXXX` and nothing else. Searching with Yiji's shape would match
+ * nothing and silently report every customer as unknown.
  *
  * Returns null rather than throwing: a ticket with no contact is worse than
- * before but still a ticket, and losing the whole decision over a contact
- * lookup would be the wrong trade.
+ * one with, but losing the whole decision over a lookup would be the wrong
+ * trade.
  */
 export async function resolveLateOrderContact(
   row: LateOrderRow,
@@ -117,25 +120,7 @@ export async function resolveLateOrderContact(
         } as never,
       ),
     )) as unknown as Array<{ id: string }>;
-    if (existing[0]?.id) return existing[0].id;
-
-    /* Yiji's own display name is often the number again, or a synthetic
-       `…@yiji.com` — neither is a name a human would read, so the phone is
-       the honest fallback. */
-    const raw = row.customerName?.trim();
-    const looksSynthetic = !raw || /@yiji\.com$/i.test(raw) || /^\d+$/.test(raw);
-    const created = (await directus.request(
-      createItem(
-        'contacts' as never,
-        {
-          name: looksSynthetic ? phone : raw,
-          phone,
-          vendor: vendorId,
-          ...(row.externalCustomerId ? { external_customer_id: row.externalCustomerId } : {}),
-        } as never,
-      ),
-    )) as unknown as { id: string };
-    return created?.id ?? null;
+    return existing[0]?.id ?? null;
   } catch {
     return null;
   }
