@@ -334,6 +334,12 @@ export const processors: Record<QueueName, Processor> = {
       // Blank disables delivery and logs the payload — the concrete thing to
       // hand the mobile developer when agreeing the contract.
       yijiNotifyUrl: process.env.YIJI_NOTIFY_URL ?? '',
+      /* The `prop1` action the app matches on to open CRM chat. Defaults to
+         the agreed `crm.openchat`; an env var so a change on their side costs
+         a config edit, not a release. */
+      ...(process.env.YIJI_OPEN_CHAT_ACTION?.trim()
+        ? { openChatAction: process.env.YIJI_OPEN_CHAT_ACTION.trim() }
+        : {}),
       // Staging only; refused outright against production Directus.
       ...(redirectPushTo ? { redirectPushTo } : {}),
       yijiApiKey: process.env.YIJI_API_KEY ?? '',

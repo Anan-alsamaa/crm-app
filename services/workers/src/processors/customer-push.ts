@@ -37,6 +37,13 @@ export interface CustomerPushDeps {
    */
   redirectPushTo?: string;
   /**
+   * The `prop1` action the Yiji app matches on to open CRM chat.
+   *
+   * Configurable so that a change on their side is an env edit rather than a
+   * release — the value is theirs to define, not ours.
+   */
+  openChatAction?: string;
+  /**
    * Yiji's `NotifTopic` for "a support agent replied".
    *
    * THIS IS THE ONE THING WE DO NOT KNOW. Yiji's real endpoint is
@@ -255,6 +262,20 @@ export function brandIdForOrder(
     : { brandId: hit, matched: true };
 }
 
+/**
+ * The agreed `prop1` value (2026-09-22). An ACTION the app matches on, not a
+ * URL: it opens the app's own CRM chat screen and mints the token there.
+ */
+export const DEFAULT_OPEN_CHAT_ACTION = 'crm.openchat';
+
+/**
+ * A web link to one conversation.
+ *
+ * NO LONGER IN THE PUSH — a tap on a web URL opened a browser instead of the
+ * app, which was the reported bug. Kept because it is still the honest way to
+ * point a human at a chat (a message to an agent, a log line), and removing a
+ * working helper to prove a point is not a fix.
+ */
 export function crmChatLink(origin: string | undefined, conversationId: string): string {
   const base = (origin ?? 'https://crm.anan.sa').replace(/\/+$/, '');
   return `${base}/?conversation=${encodeURIComponent(conversationId)}`;
@@ -266,9 +287,13 @@ export function yijiCrmNotifyPayload(
     tenantId: number;
     brandId: number;
     title: string;
-    chatUrl: string;
     /** Staging safety: every push to one handset. `+9665…`, already converted. */
     phoneOverride?: string;
+    /**
+     * The action the app matches on to open CRM chat. `crm.openchat` today;
+     * configurable so a change on their side is an env edit, not a release.
+     */
+    openChatAction: string;
   },
 ): Record<string, unknown> {
   return {
@@ -297,13 +322,27 @@ export function yijiCrmNotifyPayload(
     /* The agent's own words. Trimmed by the producer to a preview length; sent
        as-is here so the customer reads a real sentence rather than a template. */
     body: job.preview,
-    /* Where the tap should land. `url` and `deepLink` carry the same value
-       because the key their app reads is not yet confirmed — one of the two
-       will be the one it honours, and a duplicated string costs nothing. */
+    /*
+     * WHERE THE TAP LANDS.
+     *
+     * `prop1` is the ONE key Yiji's notification service carries through to
+     * the app, and `crm.openchat` is the agreed value (2026-09-22). It is an
+     * ACTION NAME, not a URL: the app matches on it and opens its own CRM chat
+     * screen, minting the session token itself exactly as it does when a
+     * customer taps chat inside the app.
+     *
+     * That is why no conversation id travels. `conversationId` is OUR internal
+     * id — the app has never seen it and cannot resolve it — and the chat is
+     * found from WHO THE CUSTOMER IS, which the app already knows. It stays in
+     * the payload for our own log correlation and nothing should key on it.
+     *
+     * `url`/`deepLink` are gone. They carried a WEB address, so a tap opened a
+     * browser rather than the app — the reported bug — and they were duplicated
+     * only because nobody had confirmed which key was read. Now one is.
+     */
     data: {
+      prop1: opts.openChatAction,
       conversationId: job.conversationId,
-      url: opts.chatUrl,
-      deepLink: opts.chatUrl,
       source: 'sara-crm',
     },
   };
@@ -452,7 +491,7 @@ export async function processCustomerPushJob(
         tenantId: deps.yijiTenantId ?? 1,
         brandId: await resolveBrandId(data, deps),
         title: deps.yijiNotifyTitle ?? 'Yiji Support',
-        chatUrl: crmChatLink(deps.crmChatUrl, data.conversationId),
+        openChatAction: deps.openChatAction ?? DEFAULT_OPEN_CHAT_ACTION,
         ...(phoneOverride ? { phoneOverride } : {}),
       })
     : isYijiEndpoint

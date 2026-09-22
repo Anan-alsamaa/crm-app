@@ -35,7 +35,7 @@ describe('yijiCrmNotifyPayload', () => {
       tenantId: 1,
       brandId: 1,
       title: 'Yiji Support',
-      chatUrl: 'https://crm.anan.sa/?conversation=conv-123',
+      openChatAction: 'crm.openchat',
     });
     expect(p.body).toBe('Sorry about that — we have refunded your order.');
     expect(p.title).toBe('Yiji Support');
@@ -62,7 +62,12 @@ describe('yijiCrmNotifyPayload', () => {
   });
 
   it('addresses the customer by their Yiji id and phone, on tenant 1', () => {
-    const p = yijiCrmNotifyPayload(job(), { tenantId: 1, brandId: 1, title: 'T', chatUrl: 'u' });
+    const p = yijiCrmNotifyPayload(job(), {
+      tenantId: 1,
+      brandId: 1,
+      title: 'T',
+      openChatAction: 'crm.openchat',
+    });
     expect(p.userId).toBe('yiji-user-9');
     // Converted to the only form Yiji resolves — see 'what Yiji actually requires'.
     expect(p.phoneNumber).toBe('+966512345678');
@@ -72,22 +77,45 @@ describe('yijiCrmNotifyPayload', () => {
   /* Optional per Yiji, and most support chats have no order. Omitted rather
      than sent empty: a blank id is a value, and absence is the truth. */
   it('omits orderId entirely', () => {
-    const p = yijiCrmNotifyPayload(job(), { tenantId: 1, brandId: 1, title: 'T', chatUrl: 'u' });
+    const p = yijiCrmNotifyPayload(job(), {
+      tenantId: 1,
+      brandId: 1,
+      title: 'T',
+      openChatAction: 'crm.openchat',
+    });
     expect('orderId' in p).toBe(false);
   });
 
   /* The tap has to land in the CRM chat the agent replied in — opened from
      inside the Yiji app, not on Yiji's home screen. */
-  it('carries the chat link so the tap opens THAT conversation', () => {
+  it('sends the prop1 ACTION, not a web link', () => {
     const p = yijiCrmNotifyPayload(job(), {
       tenantId: 1,
       brandId: 1,
       title: 'T',
-      chatUrl: 'https://crm.anan.sa/?conversation=conv-123',
+      openChatAction: 'crm.openchat',
     });
     const data = p.data as Record<string, unknown>;
-    expect(data.url).toBe('https://crm.anan.sa/?conversation=conv-123');
-    expect(data.conversationId).toBe('conv-123');
+    expect(data.prop1).toBe('crm.openchat');
+    /*
+     * The web keys are GONE. They carried `https://crm.anan.sa/?…`, so a tap
+     * opened a browser instead of the app — the reported bug. `prop1` is the
+     * one key Yiji carries through, and it names an action the app matches on.
+     */
+    expect(data.url).toBeUndefined();
+    expect(data.deepLink).toBeUndefined();
+  });
+
+  /* Carried for OUR log correlation only. The app has never seen this id and
+     cannot resolve it; it finds the chat from who the customer is. */
+  it('still carries our conversation id, for correlation', () => {
+    const p = yijiCrmNotifyPayload(job(), {
+      tenantId: 1,
+      brandId: 1,
+      title: 'T',
+      openChatAction: 'crm.openchat',
+    });
+    expect((p.data as Record<string, unknown>).conversationId).toBe('conv-123');
   });
 });
 
@@ -213,14 +241,19 @@ describe('what Yiji actually requires', () => {
       tenantId: 1,
       brandId: 1,
       title: 'T',
-      chatUrl: 'u',
+      openChatAction: 'crm.openchat',
     });
     // `05…` is answered with "Customer not found."
     expect(p.phoneNumber).toBe('+966565266122');
   });
 
   it('always sends brandId — the Firebase credential is resolved from it', () => {
-    const p = yijiCrmNotifyPayload(job(), { tenantId: 1, brandId: 3, title: 'T', chatUrl: 'u' });
+    const p = yijiCrmNotifyPayload(job(), {
+      tenantId: 1,
+      brandId: 3,
+      title: 'T',
+      openChatAction: 'crm.openchat',
+    });
     // Omitting it: "BrandId is required to resolve the Firebase credential."
     expect(p.brandId).toBe(3);
   });
@@ -230,7 +263,7 @@ describe('what Yiji actually requires', () => {
       tenantId: 1,
       brandId: 1,
       title: 'T',
-      chatUrl: 'u',
+      openChatAction: 'crm.openchat',
     });
     expect(p.phoneNumber).toBe('+441234567890');
   });
@@ -315,7 +348,7 @@ describe('yijiCrmNotifyPayload — the STAGING push redirect', () => {
     tenantId: 1,
     brandId: 1,
     title: 'Yiji Support',
-    chatUrl: 'https://crm.anan.sa/?conversation=conv-123',
+    openChatAction: 'crm.openchat',
   };
 
   it('rings the real customer when no redirect is configured', () => {
