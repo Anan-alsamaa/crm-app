@@ -28,6 +28,15 @@ export interface CustomerPushDeps {
   yijiNotifyUrl: string;
   yijiApiKey: string;
   /**
+   * STAGING ONLY: send every push to this one handset.
+   *
+   * Staging shares Yiji's PRODUCTION notification service, exactly as the
+   * coupon push does — so without this, testing rings a real stranger's phone
+   * with an agent's words. Empty in production, and the worker refuses to
+   * start if it is ever set against production Directus.
+   */
+  redirectPushTo?: string;
+  /**
    * Yiji's `NotifTopic` for "a support agent replied".
    *
    * THIS IS THE ONE THING WE DO NOT KNOW. Yiji's real endpoint is
@@ -253,10 +262,20 @@ export function crmChatLink(origin: string | undefined, conversationId: string):
 
 export function yijiCrmNotifyPayload(
   job: CustomerPushJob,
-  opts: { tenantId: number; brandId: number; title: string; chatUrl: string },
+  opts: {
+    tenantId: number;
+    brandId: number;
+    title: string;
+    chatUrl: string;
+    /** Staging safety: every push to one handset. `+9665…`, already converted. */
+    phoneOverride?: string;
+  },
 ): Record<string, unknown> {
   return {
-    userId: job.externalCustomerId,
+    /* Dropped when redirecting: a payload naming the test PHONE and the real
+       customer's id tells Yiji two different people, and it resolves from
+       whichever it trusts. Same reasoning as the coupon redirect. */
+    userId: opts.phoneOverride ? undefined : job.externalCustomerId,
     /*
      * `+9665XXXXXXXX`, NOT the `05…` we store.
      *
@@ -265,7 +284,7 @@ export function yijiCrmNotifyPayload(
      * assumed. The CRM stores one canonical shape and converts at the single
      * point of use, which is here.
      */
-    phoneNumber: internationalPhone(job.phone) ?? job.phone,
+    phoneNumber: opts.phoneOverride ?? internationalPhone(job.phone) ?? job.phone,
     tenantId: opts.tenantId,
     /*
      * REQUIRED, not optional. Without it their API answers "BrandId is
@@ -417,12 +436,24 @@ export async function processCustomerPushJob(
     return 'disabled';
   }
 
+  /* Staging only. `+9665…` here so the override and the real value are the
+     same shape by the time the payload chooses between them. */
+  const redirectTo = deps.redirectPushTo?.trim();
+  const phoneOverride = redirectTo ? (internationalPhone(redirectTo) ?? redirectTo) : undefined;
+  if (phoneOverride) {
+    logger.warn(
+      { conversationId: data.conversationId, redirectedTo: phoneOverride },
+      'STAGING: push redirected to the test handset, NOT the real customer',
+    );
+  }
+
   const body = isYijiCrmEndpoint
     ? yijiCrmNotifyPayload(data, {
         tenantId: deps.yijiTenantId ?? 1,
         brandId: await resolveBrandId(data, deps),
         title: deps.yijiNotifyTitle ?? 'Yiji Support',
         chatUrl: crmChatLink(deps.crmChatUrl, data.conversationId),
+        ...(phoneOverride ? { phoneOverride } : {}),
       })
     : isYijiEndpoint
       ? yijiNotifyPayload(data, topic as number)

@@ -305,3 +305,37 @@ describe('choosing the brand at send time', () => {
     expect((JSON.parse(init.body) as Record<string, unknown>).brandId).toBe(1);
   });
 });
+
+describe('yijiCrmNotifyPayload — the STAGING push redirect', () => {
+  /*
+   * Staging shares Yiji's PRODUCTION notification service. Without this,
+   * testing rings a real stranger's phone with an agent's words.
+   */
+  const base = {
+    tenantId: 1,
+    brandId: 1,
+    title: 'Yiji Support',
+    chatUrl: 'https://crm.anan.sa/?conversation=conv-123',
+  };
+
+  it('rings the real customer when no redirect is configured', () => {
+    const p = yijiCrmNotifyPayload(job(), base);
+    expect(p.phoneNumber).toBe('+966512345678');
+    expect(p.userId).toBe('yiji-user-9');
+  });
+
+  it('rings the test handset when one is configured', () => {
+    const p = yijiCrmNotifyPayload(job(), { ...base, phoneOverride: '+966565266122' });
+    expect(p.phoneNumber).toBe('+966565266122');
+  });
+
+  /*
+   * Yiji resolves the recipient from whichever identifier it trusts, so a
+   * payload naming the test PHONE and the real customer's id is a coin toss
+   * that can still reach the stranger. The id goes with the phone.
+   */
+  it('drops the real Yiji user id, so the pair cannot name two people', () => {
+    const p = yijiCrmNotifyPayload(job(), { ...base, phoneOverride: '+966565266122' });
+    expect(p.userId).toBeUndefined();
+  });
+});

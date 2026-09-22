@@ -108,19 +108,30 @@ const couponDeliveryEnabled =
  * honest discriminator is the Directus each worker talks to: production's own
  * host is the thing that must never carry a redirect.
  */
-const redirectCouponsTo = (() => {
-  const to = (process.env.COUPON_REDIRECT_PHONE ?? '').trim();
+function stagingOnlyPhone(varName: string): string | undefined {
+  const to = (process.env[varName] ?? '').trim();
   if (!to) return undefined;
   const directus = (process.env.DIRECTUS_INTERNAL_URL ?? '').toLowerCase();
   if (directus.includes('prod-directus') || directus.includes('crm-api.anan.sa')) {
     throw new Error(
-      'COUPON_REDIRECT_PHONE is set on a worker pointed at PRODUCTION Directus ' +
-        `(${process.env.DIRECTUS_INTERNAL_URL}). That would send every customer ` +
-        'coupon to one test handset while reporting success. Unset it.',
+      `${varName} is set on a worker pointed at PRODUCTION Directus ` +
+        `(${process.env.DIRECTUS_INTERNAL_URL}). That would divert every customer's ` +
+        'message to one test handset while reporting success. Unset it.',
     );
   }
   return to;
-})();
+}
+
+const redirectCouponsTo = stagingOnlyPhone('COUPON_REDIRECT_PHONE');
+
+/**
+ * STAGING ONLY: every customer PUSH to one handset.
+ *
+ * Same reasoning as the coupon redirect and the same guard: staging shares
+ * Yiji's production notification service, so testing otherwise rings a real
+ * stranger's phone with an agent's words.
+ */
+const redirectPushTo = stagingOnlyPhone('PUSH_REDIRECT_PHONE');
 
 /**
  * Reads Yiji's own record of an order, for the coupon payload.
@@ -323,6 +334,8 @@ export const processors: Record<QueueName, Processor> = {
       // Blank disables delivery and logs the payload — the concrete thing to
       // hand the mobile developer when agreeing the contract.
       yijiNotifyUrl: process.env.YIJI_NOTIFY_URL ?? '',
+      // Staging only; refused outright against production Directus.
+      ...(redirectPushTo ? { redirectPushTo } : {}),
       yijiApiKey: process.env.YIJI_API_KEY ?? '',
       // Which of Yiji's notification templates means "a support agent replied".
       // Unset until they name it; see the note on CustomerPushDeps.
