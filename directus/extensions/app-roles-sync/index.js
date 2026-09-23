@@ -485,7 +485,40 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     };
   }
 
-  async function materialize(rowId) {
+  /*
+   * ONE MATERIALIZE AT A TIME, PER ROLE.
+   *
+   * The sync below is delete-then-recreate. That is only correct if it never
+   * overlaps with itself: two saves of the same role in quick succession each
+   * read the "stale" set BEFORE the other has finished creating, so each
+   * deletes an old batch and appends a new one. The role ends up holding the
+   * rule several times over.
+   *
+   * Observed on production 2026-09-22: four rapid saves of Area Manager left
+   * 116 permission rows where 29 were correct, including EIGHT `tickets.read`
+   * rules. Directus permissions are additive, so the widest of the duplicates
+   * wins and a role can quietly end up seeing more than its rule allows —
+   * which is the dangerous half, worse than the clutter.
+   *
+   * Chained per rowId rather than globally, so saving two different roles at
+   * once is still parallel. The entry is dropped once it settles, so the map
+   * cannot grow without bound.
+   */
+  const inFlight = new Map();
+
+  function materialize(rowId) {
+    const prior = inFlight.get(rowId) ?? Promise.resolve();
+    /* `.catch` so one failed save does not poison every later save of the same
+       role — the chain continues, and the error still reaches the caller. */
+    const next = prior.catch(() => {}).then(() => materializeNow(rowId));
+    inFlight.set(rowId, next);
+    void next.finally(() => {
+      if (inFlight.get(rowId) === next) inFlight.delete(rowId);
+    });
+    return next;
+  }
+
+  async function materializeNow(rowId) {
     const row = await loadRow(rowId);
     if (!row) return;
     if (row.builtin) {
@@ -570,13 +603,25 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       });
     }
 
-    // Full replace, via the service so Directus's permission cache is flushed.
+    /*
+     * Full replace, via the service so Directus's permission cache is flushed.
+     *
+     * This is also the SELF-HEAL for duplicates: every row on the policy goes,
+     * whatever put it there, so a role that somehow accumulated the same rule
+     * several times is back to one set after any save. Paired with the
+     * per-role serialization above, which stops them accumulating at all.
+     */
     const stale = await permissionsService.readByQuery({
       filter: { policy: { _eq: policyId } },
       limit: -1,
       fields: ['id'],
     });
-    if (stale.length) await permissionsService.deleteMany(stale.map((p) => p.id));
+    if (stale.length) {
+      await permissionsService.deleteMany(stale.map((p) => p.id));
+      if (stale.length > 80) {
+        log(`WARNING: '${row.name}' held ${stale.length} permission rows — duplicates cleared`);
+      }
+    }
 
     const grants = buildGrants(row.privileges, row.brands, row.stores, await protectedRoleIds());
     await permissionsService.createMany(
