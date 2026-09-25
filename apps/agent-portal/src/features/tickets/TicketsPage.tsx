@@ -981,9 +981,63 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 </Pill>
               )}
             </div>
-            <h2 className="text-2xl font-bold text-display tracking-[-0.02em] text-balance">
-              {tk.subject}
-            </h2>
+            {/*
+              Title, and the ticket's ONE decision beside it.
+
+              Mark as solved used to live inside the Properties card down the
+              right rail, under a "Resolution" heading, below assignee and team.
+              That put the action an agent comes to this page to take below the
+              settings they rarely change, and on a narrow window it fell below
+              the fold entirely. It belongs next to the subject it acts on
+              (owner, 2026-09-25).
+
+              `items-start`, not `items-center`: a long subject wraps to two or
+              three lines, and centring would drift the button down the block.
+            */}
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="min-w-0 flex-1 text-2xl font-bold text-display tracking-[-0.02em] text-balance">
+                {tk.subject}
+              </h2>
+              {/* `normaliseTicketStatus`, not `!== 'solved'`: 1,671 historical
+                  rows still store `closed` and would otherwise be offered a
+                  Solve button on a ticket that is already finished. */}
+              <div className="shrink-0">
+                {normaliseTicketStatus(tk.status) !== 'solved' ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    title={t('tickets.markSolvedHint', {
+                      defaultValue:
+                        'Closes the work: sets the ticket to resolved and stops both SLA timers.',
+                    })}
+                    onClick={() => {
+                      const now = new Date().toISOString();
+                      // A solved ticket that never recorded a first response
+                      // makes the SLA report claim the agent never replied, and
+                      // nothing else stamps that field. Backfilling it here is a
+                      // floor, not a measurement: it says "no later than this",
+                      // which beats a null that reads as "never".
+                      patch({
+                        status: 'solved',
+                        resolved_at: now,
+                        ...(tk.first_responded_at ? {} : { first_responded_at: now }),
+                      });
+                    }}
+                  >
+                    {t('tickets.markSolved', { defaultValue: 'Mark as solved' })}
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => patch({ status: 'open', resolved_at: undefined })}
+                  >
+                    {t('tickets.reopen', { defaultValue: 'Reopen' })}
+                  </Button>
+                )}
+              </div>
+            </div>
             {/* Meta row in the board idiom: micro-labelled groups rather than a
                 run-on sentence, with the two actions kept at the end. */}
             <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
@@ -1149,59 +1203,24 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 />
               </label>
             </div>
-            {/* `normaliseTicketStatus`, not `!== 'solved'`: 1,671 historical rows
-                still store `closed` and would otherwise offer a Solve button on
-                a ticket that is already finished. */}
+            {/*
+              Solve and Reopen moved UP beside the subject — see the header.
+              What stays here is what belongs to the properties rail: the
+              WhatsApp reply, and the stamp saying when it was solved. The
+              button that CHANGES the state is one thing; the record of that
+              state is another, and only the first was in the wrong place.
+            */}
             {normaliseTicketStatus(tk.status) !== 'solved' ? (
-              <div className="mt-3 space-y-1.5 rounded-xl bg-secondary/40 p-3">
-                <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  {t('tickets.solve', { defaultValue: 'Resolution' })}
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  fullWidth
-                  onClick={() => {
-                    const now = new Date().toISOString();
-                    // A solved ticket that never recorded a first response
-                    // makes the SLA report claim the agent never replied, and
-                    // nothing else stamps that field. Backfilling it here is a
-                    // floor, not a measurement: it says "no later than this",
-                    // which beats a null that reads as "never".
-                    patch({
-                      status: 'solved',
-                      resolved_at: now,
-                      ...(tk.first_responded_at ? {} : { first_responded_at: now }),
-                    });
-                  }}
-                >
-                  {t('tickets.markSolved', { defaultValue: 'Mark as solved' })}
-                </Button>
-                <p className="text-2xs leading-relaxed text-muted-foreground">
-                  {t('tickets.markSolvedHint', {
-                    defaultValue:
-                      'Closes the work: sets the ticket to resolved and stops both SLA timers.',
-                  })}
-                </p>
+              <div className="mt-3">
                 <WhatsAppReply ticket={tk} />
               </div>
             ) : (
-              <div className="mt-3 flex items-center justify-between gap-2">
-                <span className="flex items-center gap-1.5 text-2xs font-medium text-success">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
-                  {t('tickets.solvedAt', {
-                    defaultValue: 'Solved · {{when}}',
-                    when: formatRelative(tk.resolved_at ?? tk.first_responded_at),
-                  })}
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => patch({ status: 'open', resolved_at: undefined })}
-                >
-                  {t('tickets.reopen', { defaultValue: 'Reopen' })}
-                </Button>
+              <div className="mt-3 flex items-center gap-1.5 text-2xs font-medium text-success">
+                <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
+                {t('tickets.solvedAt', {
+                  defaultValue: 'Solved · {{when}}',
+                  when: formatRelative(tk.resolved_at ?? tk.first_responded_at),
+                })}
               </div>
             )}
           </SectionCard>
