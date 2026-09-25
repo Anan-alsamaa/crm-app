@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { cn, Pill, Skeleton } from '@yiji/ui';
+import { cn, formatDateTime, Pill, Skeleton } from '@yiji/ui';
 import type { YijiOrder } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
 import { inboxOrdersKey, useStampConversationOrder } from '../inbox/api.js';
@@ -73,16 +73,16 @@ function titleize(s: string): string {
   return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/*
+ * The product's one date format, dd/mm/yyyy HH:mm.
+ *
+ * This used to be `toLocaleString(undefined, { month: 'short', ... })`, which
+ * renders in the BROWSER's locale: `Aug 21, 2026, 02:30 PM` on an en-US
+ * machine, and a different shape again in Arabic. Every other date in the app
+ * goes through `formatDateTime`, so an order's date was the odd one out.
+ */
 function fmtDateTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatDateTime(iso) || iso;
 }
 
 function Chevron({ open }: { open: boolean }) {

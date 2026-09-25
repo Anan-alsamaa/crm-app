@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Button, cn, FormField, Pill, SelectMenu, Textarea, toast } from '@yiji/ui';
+import { Button, cn, formatDate, FormField, Pill, SelectMenu, Textarea, toast } from '@yiji/ui';
 import {
   compensationFlag,
   isCouponRequested,
@@ -94,13 +94,16 @@ function titleize(s: string): string {
   return s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 }
 
-/** Short, locale-aware order date (falls back to the raw ISO string). */
-function formatOrderDate(iso: string, locale: string): string {
-  try {
-    return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
+/*
+ * The order date as dd/mm/yyyy (falls back to the raw ISO string).
+ *
+ * Was `dateStyle: 'medium'` in the UI locale, which renders `Aug 21, 2026` in
+ * English and a different form in Arabic. The product writes dates one way
+ * everywhere, so this now defers to the shared formatter; `locale` is kept in
+ * the signature only so callers do not all have to change.
+ */
+function formatOrderDate(iso: string, _locale: string): string {
+  return formatDate(iso) || iso;
 }
 
 /**

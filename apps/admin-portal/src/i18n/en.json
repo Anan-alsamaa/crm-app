@@ -1145,7 +1145,7 @@
     "moveUp": "Move {{value}} up",
     "moveDown": "Move {{value}} down",
     "delete": "Delete {{value}}",
-    "deleteConfirm": "Delete “{{value}}” outright? Retiring is safer — tickets already carrying it keep displaying it either way.",
+    "deleteConfirm": "Retiring is safer — it stops the value being offered while tickets that already carry it keep displaying it. Deleting removes the row outright.",
     "duplicate": "That value is already on this list.",
     "empty": "This list has no values yet.",
     "saveError": "Could not save that change",
@@ -1153,7 +1153,13 @@
     "serviceType": "Service type",
     "complaintSource": "Ticket source",
     "communicationMethod": "Communication method",
-    "compensation": "Compensation"
+    "compensation": "Compensation",
+    "deleteShort": "Delete",
+    "deleteTitle": "Delete “{{value}}”?",
+    "edit": "Edit",
+    "editTitle": "Rename this value?",
+    "editPrompt": "Reports group by the EXACT text, so renaming one that tickets already use splits its history in two — add a new value instead if it is already in use.",
+    "editLabel": "Value"
   },
   "roles": {
     "title": "Roles & privileges",
@@ -1308,5 +1314,10 @@
     "failed": "Update failed.",
     "pendingFor": "An update is waiting for the {{who}}.",
     "hintVersion": "{{version}} · nobody sees it until you apply it."
+  },
+  "replies": {
+    "editTitle": "Edit this ready reply",
+    "deleteTitle": "Delete “{{label}}”?",
+    "deleteConfirm": "Retiring stops offering it without losing the wording."
   }
 }

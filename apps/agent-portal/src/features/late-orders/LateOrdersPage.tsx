@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  DateField,
   EmptyState,
   ErrorState,
   Input,
@@ -17,10 +18,12 @@ import {
   Th,
   Textarea,
   Tr,
+  formatDate,
   toast,
 } from '@yiji/ui';
 import {
   LATE_ORDER_COMPLAINT_TYPE,
+  parseYijiTimestamp,
   type LateOrderKind,
   type LateOrderRow,
 } from '@yiji/shared-types';
@@ -117,6 +120,21 @@ export function LateOrdersPage() {
     from: isoDaysAgo(DEFAULT_WINDOW_DAYS),
     to: isoDaysAgo(0),
   }));
+  /**
+   * TODAY — live orders, narrowed to orders PLACED today (owner, 2026-09-24).
+   *
+   * Deliberately not a date range of today..today. Passing dates to the gateway
+   * switches it into register mode: it walks pages and sets
+   * `includeCompleted: true`, so "today" would fill with orders that already
+   * finished. The ask was the opposite — what is late right now, today only —
+   * so this stays on the LIVE queue (no range, live statuses only) and filters
+   * the rows it returns by their own `placedAt`.
+   *
+   * It matters because the live queue is not implicitly today: an order placed
+   * before midnight that is still running is genuinely live, and shows in the
+   * unfiltered queue. This button is how an agent excludes exactly those.
+   */
+  const [todayOnly, setTodayOnly] = useState(false);
   const vendors = useVendors();
   // The queue follows the range: no range = today's live orders.
   const queue = useLateOrders(range ?? undefined);
@@ -176,12 +194,29 @@ export function LateOrdersPage() {
        * at — hiding those rows would quietly under-report the month.
        */
       if (!range && done.has(r.orderId)) return false;
+      /*
+       * Placed TODAY, in the agent's own calendar.
+       *
+       * `placedAt` is Riyadh-local with no zone marker, so it is parsed by
+       * `parseYijiTimestamp` rather than `Date.parse` — reading it raw in a UTC
+       * container puts every order three hours in the future, which is the bug
+       * that once showed `minutesElapsed: -141`.
+       */
+      if (todayOnly) {
+        const ms = parseYijiTimestamp(r.placedAt);
+        if (!Number.isFinite(ms)) return false;
+        const d = new Date(ms);
+        const key = new Date(d.getTime() - d.getTimezoneOffset() * 60_000)
+          .toISOString()
+          .slice(0, 10);
+        if (key !== today) return false;
+      }
       if (order && !r.orderId.includes(order)) return false;
       if (brand && !`${r.brandName ?? ''} ${r.restaurantName ?? ''}`.toLowerCase().includes(brand))
         return false;
       return true;
     });
-  }, [queue.data, handled.data, orderQuery, brandQuery, range]);
+  }, [queue.data, handled.data, orderQuery, brandQuery, range, todayOnly, today]);
 
   const kindOf = (row: LateOrderRow): LateOrderKind => kinds[row.orderId] ?? 'late_delivery';
 
@@ -309,11 +344,15 @@ export function LateOrdersPage() {
           <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             {t('lateOrders.filter.from', { defaultValue: 'From' })}
           </span>
-          <Input
-            type="date"
+          {/* `DateField`, not `<Input type="date">`: a native date input renders
+              in the BROWSER's locale, so an en-US machine showed mm/dd/yyyy on a
+              page every other date in this app writes as dd/mm/yyyy. DateField
+              takes and emits the same ISO `yyyy-mm-dd` string, so the state, the
+              `max` bound and the query are unchanged. */}
+          <DateField
             value={draftFrom}
             max={today}
-            onChange={(e) => setDraftFrom(e.target.value)}
+            onChange={(v) => setDraftFrom(v)}
             className="w-40"
           />
         </label>
@@ -321,13 +360,7 @@ export function LateOrdersPage() {
           <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             {t('lateOrders.filter.to', { defaultValue: 'To' })}
           </span>
-          <Input
-            type="date"
-            value={draftTo}
-            max={today}
-            onChange={(e) => setDraftTo(e.target.value)}
-            className="w-40"
-          />
+          <DateField value={draftTo} max={today} onChange={(v) => setDraftTo(v)} className="w-40" />
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -347,9 +380,32 @@ export function LateOrdersPage() {
         <Button
           variant="secondary"
           disabled={!draftFrom || !draftTo || draftFrom > draftTo}
-          onClick={() => setRange({ from: draftFrom, to: draftTo })}
+          onClick={() => {
+            setTodayOnly(false);
+            setRange({ from: draftFrom, to: draftTo });
+          }}
         >
           {t('lateOrders.filter.apply', { defaultValue: 'Load range' })}
+        </Button>
+        {/*
+          TODAY — the live queue, narrowed to orders placed today.
+
+          It drops the range rather than setting one to today..today, because
+          dates put the gateway into register mode and pull in finished orders.
+          Live statuses only, so every row it shows is still running and still
+          actionable.
+        */}
+        <Button
+          variant={todayOnly ? 'brand' : 'ghost'}
+          aria-pressed={todayOnly}
+          onClick={() => {
+            const next = !todayOnly;
+            setTodayOnly(next);
+            // Today is a LIVE view: a loaded range would contradict it.
+            if (next) setRange(null);
+          }}
+        >
+          {t('lateOrders.filter.today', { defaultValue: 'Today' })}
         </Button>
         {/* Always offered, because the page no longer STARTS live — this is how
             an agent gets to "what is late right now". */}
@@ -359,17 +415,29 @@ export function LateOrdersPage() {
             setRange(null);
             setOrderQuery('');
             setBrandQuery('');
+            setTodayOnly(false);
           }}
         >
           {t('lateOrders.filter.clear', { defaultValue: 'Live only' })}
         </Button>
+        {/* Says which live view is on, so "Today" and "Live only" are never
+            ambiguous — an empty Today queue is good news, not a broken page. */}
+        {todayOnly && !range && (
+          <Pill tone="success" size="sm">
+            {t('lateOrders.filter.todayNote', {
+              defaultValue: 'Today only — live orders still running',
+            })}
+          </Pill>
+        )}
         {/* A historical window is NOT the live queue, and must never be mistaken
             for it — the rows are finished orders. */}
         {range && (
           <Pill tone="blue" size="sm">
             {t('lateOrders.filter.historyNote', {
-              from: range.from,
-              to: range.to,
+              // dd/mm/yyyy, like every other date on screen — the pill used to
+              // print the raw ISO the query carries.
+              from: formatDate(range.from),
+              to: formatDate(range.to),
               defaultValue: 'History {{from}} to {{to}} — finished orders included',
             })}
           </Pill>

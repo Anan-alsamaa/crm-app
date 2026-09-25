@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { readRevisions } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
-import { Drawer, Skeleton, cn } from '@yiji/ui';
+import { Drawer, Skeleton, cn, formatDateTime } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -169,7 +169,7 @@ export function TicketHistoryDrawer({
                       : t('complaintReport.historyEdited', { defaultValue: 'edited' })}
                   </span>
                   {e.timestamp && (
-                    <span className="tabular-nums">{new Date(e.timestamp).toLocaleString()}</span>
+                    <span className="tabular-nums">{formatDateTime(e.timestamp)}</span>
                   )}
                 </div>
                 {e.action === 'update' && (

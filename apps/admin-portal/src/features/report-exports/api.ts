@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { readItems, readUsers } from '@directus/sdk';
+import { readItems, readRevisions, readUsers } from '@directus/sdk';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
 import type { StoreSnapshot } from '@yiji/shared-types';
@@ -619,23 +619,37 @@ async function loadAgentReport(
       const lastEditBy = new Map<string, { name: string; at: string }>();
       if (tickets.length > 0) {
         try {
-          const revs = await readByIdsChunked<{
+          /*
+           * `readRevisions`, NOT `readItems('directus_revisions')`.
+           *
+           * A Directus SYSTEM collection is not served from `/items/...`:
+           * `readItems('directus_revisions')` builds `/items/directus_revisions`,
+           * which answers 403 FORBIDDEN however complete the role's permissions
+           * are — and this role HAS `directus_revisions.read`. The 403 landed in
+           * the catch below, `lastEditBy` stayed empty, and both columns rendered
+           * blank for every ticket, on a report whose whole job is to say who
+           * touched it last. The agent portal's own history panel was right all
+           * along because it used `readRevisions` (owner, 2026-09-24).
+           */
+          const revs = (await readChunked(
+            tickets.map((t) => t.id),
+            (ids) =>
+              directus.request(
+                readRevisions({
+                  limit: -1,
+                  filter: {
+                    collection: { _eq: 'tickets' },
+                    item: { _in: ids },
+                  },
+                  fields: ['item', 'activity.action', 'activity.timestamp', 'activity.user'],
+                  // Newest first, so the first row seen for a ticket wins.
+                  sort: ['-id'],
+                } as never),
+              ) as Promise<unknown[]>,
+          )) as Array<{
             item: string;
             activity: { action: string; timestamp: string; user: string | null } | null;
-          }>(
-            'directus_revisions',
-            tickets.map((t) => t.id),
-            (ids) => ({
-              limit: -1,
-              filter: {
-                collection: { _eq: 'tickets' },
-                item: { _in: ids },
-              },
-              fields: ['item', 'activity.action', 'activity.timestamp', 'activity.user'],
-              // Newest first, so the first row seen for a ticket wins.
-              sort: ['-id'],
-            }),
-          );
+          }>;
           for (const r of revs) {
             if (!r.activity?.user || r.activity.action !== 'update') continue;
             if (lastEditBy.has(r.item)) continue;
@@ -643,8 +657,15 @@ async function loadAgentReport(
             if (!name) continue; // service accounts are not people
             lastEditBy.set(r.item, { name, at: fmtStamp(r.activity.timestamp) });
           }
-        } catch {
-          /* no revision read access — the column falls back to blank */
+        } catch (err) {
+          /*
+           * Still best-effort — no audit read may empty the whole report — but
+           * NOT silent any more. This catch swallowed a 403 for weeks and the
+           * only symptom was two permanently blank columns, which reads as
+           * "nobody edited these tickets" rather than as a failure. If it fires
+           * again, the reason is in the console instead of nowhere.
+           */
+          console.warn('[report] last-modified lookup failed; columns will be blank:', err);
         }
       }
 

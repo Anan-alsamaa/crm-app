@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createItem, deleteItem, readItems, updateItem } from '@directus/sdk';
-import { Button, Input, Pill, SavedTick, cn, toast } from '@yiji/ui';
+import { Button, ConfirmDialog, Input, Pill, SavedTick, cn, toast } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -52,6 +52,46 @@ export function QuickRepliesSection() {
   const [text, setText] = useState('');
   const [lang, setLang] = useState('en');
   const [dragId, setDragId] = useState<string | null>(null);
+  /**
+   * EDIT and DELETE, both in an in-app dialog.
+   *
+   * There was no edit at all: changing a wording meant deleting the reply and
+   * retyping it, which loses its place in the order and its language. And a
+   * reply is two fields — the button an agent scans for and the text that gets
+   * inserted — so a one-line `window.prompt` could never have served it
+   * (owner, 2026-09-24).
+   */
+  const [editing, setEditing] = useState<ReplyRow | null>(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [editText, setEditText] = useState('');
+  const [editLang, setEditLang] = useState('en');
+  const [deleting, setDeleting] = useState<ReplyRow | null>(null);
+
+  const openEdit = (r: ReplyRow) => {
+    setEditing(r);
+    setEditLabel(r.label);
+    setEditText(r.text);
+    setEditLang(r.lang ?? 'en');
+  };
+  const closeEdit = () => setEditing(null);
+  const commitEdit = () => {
+    if (!editing) return;
+    const l = editLabel.trim();
+    const x = editText.trim();
+    /* Either field blank would render as an empty button, or a button that
+       inserts nothing — both look broken in the inbox. */
+    if (!l || !x) return;
+    // Renaming onto ANOTHER reply's button is the same collision the add form
+    // refuses; renaming to your own current label is just leaving it alone.
+    if (list.some((r) => r.id !== editing.id && r.label.toLowerCase() === l.toLowerCase())) {
+      toast.error(
+        t('replies.duplicate', { defaultValue: 'A reply with that button already exists.' }),
+      );
+      return;
+    }
+    patch.mutate({ id: editing.id, body: { label: l, text: x, lang: editLang } });
+    closeEdit();
+  };
 
   const done = () => void qc.invalidateQueries({ queryKey: ['quick-replies-admin'] });
   const fail = () => toast.error(t('errors.updateFailed', { ns: 'common' }));
@@ -210,6 +250,11 @@ export function QuickRepliesSection() {
                 <Pill tone="neutral" size="sm">
                   {(r.lang ?? 'en').toUpperCase()}
                 </Pill>
+                {/* The same three verbs as the option lists, in the same order,
+                    so the two halves of this page behave alike. */}
+                <Button size="sm" variant="ghost" onClick={() => openEdit(r)}>
+                  {t('lists.edit', { defaultValue: 'Edit' })}
+                </Button>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -222,18 +267,8 @@ export function QuickRepliesSection() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        t('replies.deleteConfirm', {
-                          label: r.label,
-                          defaultValue:
-                            'Delete "{{label}}"? Retiring stops offering it without losing the wording.',
-                        }),
-                      )
-                    )
-                      remove.mutate(r.id);
-                  }}
+                  className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setDeleting(r)}
                 >
                   {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
                 </Button>
@@ -242,6 +277,83 @@ export function QuickRepliesSection() {
           </ul>
         </div>
       )}
+
+      {/* EDIT — both fields, plus the language, in the order they are read. */}
+      <ConfirmDialog
+        open={!!editing}
+        title={t('replies.editTitle', { defaultValue: 'Edit this ready reply' })}
+        description={
+          <div className="space-y-3">
+            <label className="block space-y-1">
+              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('replies.label', { defaultValue: 'Button' })}
+              </span>
+              <Input
+                autoFocus
+                value={editLabel}
+                onChange={(e) => setEditLabel(e.target.value)}
+                placeholder={t('replies.labelPlaceholder', {
+                  defaultValue: 'Button, e.g. Opening',
+                })}
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('replies.text', { defaultValue: 'Reply text' })}
+              </span>
+              {/* A textarea, not an Input: these are sentences an agent sends to
+                  a customer, and the add row's single line hid the end of them. */}
+              <textarea
+                dir="auto"
+                rows={4}
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                placeholder={t('replies.textPlaceholder', {
+                  defaultValue: 'What gets inserted into the reply box...',
+                })}
+                className="w-full resize-y rounded-xl bg-secondary/40 px-3 py-2 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.06] focus:bg-card focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('replies.lang', { defaultValue: 'Language' })}
+              </span>
+              <select
+                value={editLang}
+                onChange={(e) => setEditLang(e.target.value)}
+                className="h-10 w-full rounded-xl bg-secondary/40 px-3 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.06] focus:bg-card focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                <option value="en">EN</option>
+                <option value="ar">AR</option>
+              </select>
+            </label>
+          </div>
+        }
+        confirmLabel={t('actions.save', { ns: 'common', defaultValue: 'Save' })}
+        loading={patch.isPending}
+        onConfirm={commitEdit}
+        onCancel={closeEdit}
+      />
+
+      {/* DELETE — destructive, and it names retiring as the softer option. */}
+      <ConfirmDialog
+        open={!!deleting}
+        destructive
+        title={t('replies.deleteTitle', {
+          label: deleting?.label ?? '',
+          defaultValue: 'Delete “{{label}}”?',
+        })}
+        description={t('replies.deleteConfirm', {
+          defaultValue: 'Retiring stops offering it without losing the wording.',
+        })}
+        confirmLabel={t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+        loading={remove.isPending}
+        onConfirm={() => {
+          if (deleting) remove.mutate(deleting.id);
+          setDeleting(null);
+        }}
+        onCancel={() => setDeleting(null)}
+      />
     </section>
   );
 }

@@ -261,7 +261,25 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       g('contacts', 'read'),
       g('contacts', 'update'),
     ],
-    manage_lists: [...crud('option_lists'), ...crud('app_settings')],
+    /*
+     * The dropdown lists, the app settings — and the inbox's ready replies.
+     *
+     * `quick_replies` was in BASELINE as readOnly and NOWHERE else, so no
+     * privilege could ever grant a write to it: every role could see the ready
+     * replies and none could change one. The admin portal offered the editor
+     * anyway, so the page rendered its buttons and every save came back
+     * "Couldn't save your change".
+     *
+     * It was granted by hand twice, and both times the next save of any role
+     * re-materialized that role's policy from this CATALOG and reset the
+     * collection to read-only — the grant looked applied and then quietly
+     * vanished. A permission the product needs has to be declared HERE or it
+     * does not survive (owner, 2026-09-24).
+     *
+     * Same privilege as the dropdown values because it is the same job, done
+     * from the same page, by the same person.
+     */
+    manage_lists: [...crud('option_lists'), ...crud('app_settings'), ...crud('quick_replies')],
     manage_restaurants: [
       ...crud('brands'),
       g('stores', 'read'),

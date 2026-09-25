@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Button,
   ChevronDownIcon,
-  CloseIcon,
+  ConfirmDialog,
   EmptyState,
   IconButton,
   Input,
@@ -112,6 +112,32 @@ export function OptionListsPage() {
   const [draft, setDraft] = useState('');
   /** The value currently being dragged, so the row it left can dim. */
   const [dragId, setDragId] = useState<string | null>(null);
+  /**
+   * The row an in-app dialog is open for — one for rename, one for delete.
+   *
+   * Both were `window.prompt` / `window.confirm`: unstyled, untranslated,
+   * un-trappable, and on a delete the browser's own alert gave no room for the
+   * "retiring is safer" sentence that is the whole point of asking.
+   */
+  const [renaming, setRenaming] = useState<OptionRow | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [deleting, setDeleting] = useState<OptionRow | null>(null);
+
+  const closeRename = () => {
+    setRenaming(null);
+    setRenameDraft('');
+  };
+  const commitRename = () => {
+    const trimmed = renameDraft.trim();
+    /* No change, or cleared to nothing: a blank value would render as an empty
+       row in every dropdown that offers this list. */
+    if (!renaming || !trimmed || trimmed === renaming.value) {
+      closeRename();
+      return;
+    }
+    patch.mutate({ id: renaming.id, body: { value: trimmed } });
+    closeRename();
+  };
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['option-lists-admin'] });
@@ -376,39 +402,31 @@ export function OptionListsPage() {
                           <ChevronDownIcon size={14} />
                         </IconButton>
                         {/* Hairline divider groups the reorder pair apart from the
-                        lifecycle actions, so the cluster reads as two verbs. */}
+                        lifecycle actions, so the cluster reads as three verbs. */}
                         <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-foreground/[0.08]" />
                         {/*
-                          EDIT, with the split-history warning attached.
+                          THREE NAMED BUTTONS: Edit, Retire, Delete.
 
-                          It was left out on purpose: reports group by the exact
-                          stored string, so renaming a value that tickets already
-                          carry splits one category into two and neither half is
-                          the whole truth. But that reasoning only covers a value
-                          in USE — a typo caught before anyone picks it is just a
-                          typo, and retyping it as a new row then deleting the old
-                          one is the same edit with more steps (owner,
-                          2026-09-22).
+                          Delete used to be an unlabelled ✕ next to two worded
+                          buttons, which is how the owner came to report "there
+                          is no edit" on a page that had one — an icon among
+                          words does not read as a peer of them, and the eye
+                          counted two actions. All three now say what they do
+                          (owner, 2026-09-24).
 
-                          So the action exists and says what it costs, rather than
+                          Edit carries the split-history warning. Reports group
+                          by the exact stored string, so renaming a value that
+                          tickets already carry splits one category in two — but
+                          a typo caught before anyone picks it is just a typo,
+                          so the action exists and states its cost rather than
                           being withheld.
                         */}
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => {
-                            const next = window.prompt(
-                              t('lists.editPrompt', {
-                                defaultValue:
-                                  'Rename this value. Reports group by the EXACT text, so renaming one that tickets already use splits its history in two — add a new value instead if it is already in use.',
-                              }),
-                              row.value,
-                            );
-                            const trimmed = next?.trim();
-                            /* No change, or cleared to nothing: a blank value would
-                               render as an empty row in every dropdown. */
-                            if (!trimmed || trimmed === row.value) return;
-                            patch.mutate({ id: row.id, body: { value: trimmed } });
+                            setRenaming(row);
+                            setRenameDraft(row.value);
                           }}
                         >
                           {t('lists.edit', { defaultValue: 'Edit' })}
@@ -424,30 +442,18 @@ export function OptionListsPage() {
                             ? t('lists.retire', { defaultValue: 'Retire' })
                             : t('lists.restore', { defaultValue: 'Restore' })}
                         </Button>
-                        {/* Hard delete is for typos caught immediately — quiet on
-                        purpose, since Retire is almost always the right call. */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                t('lists.deleteConfirm', {
-                                  value: row.value,
-                                  defaultValue:
-                                    'Delete “{{value}}” outright? Retiring is safer — tickets already carrying it keep displaying it either way.',
-                                }),
-                              )
-                            )
-                              remove.mutate(row.id);
-                          }}
-                          aria-label={t('lists.delete', {
-                            value: row.value,
-                            defaultValue: 'Delete {{value}}',
-                          })}
-                          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                        {/* Hard delete is for typos caught immediately — styled
+                        destructive, and confirmed in the app's own dialog rather
+                        than a browser alert, since Retire is usually the right
+                        call and the difference has to be readable. */}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setDeleting(row)}
                         >
-                          <CloseIcon size={14} />
-                        </button>
+                          {t('lists.deleteShort', { defaultValue: 'Delete' })}
+                        </Button>
                       </li>
                     ))}
                   </ul>
@@ -478,6 +484,64 @@ export function OptionListsPage() {
           )}
         </div>
       </div>
+
+      {/*
+        RENAME. A dialog rather than `window.prompt`, which cannot be
+        translated, cannot be styled, and on some browsers cannot be typed into
+        in Arabic. The split-history warning is the description, where there is
+        room to read it, instead of being crammed into the prompt's one line.
+      */}
+      <ConfirmDialog
+        open={!!renaming}
+        title={t('lists.editTitle', { defaultValue: 'Rename this value?' })}
+        description={
+          <div className="space-y-3">
+            <p>
+              {t('lists.editPrompt', {
+                defaultValue:
+                  'Reports group by the EXACT text, so renaming one that tickets already use splits its history in two — add a new value instead if it is already in use.',
+              })}
+            </p>
+            <Input
+              autoFocus
+              value={renameDraft}
+              onChange={(e) => setRenameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitRename();
+                }
+              }}
+              aria-label={t('lists.editLabel', { defaultValue: 'Value' })}
+            />
+          </div>
+        }
+        confirmLabel={t('actions.save', { ns: 'common', defaultValue: 'Save' })}
+        loading={patch.isPending}
+        onConfirm={commitRename}
+        onCancel={closeRename}
+      />
+
+      {/* DELETE. Destructive, and it says what retiring would do instead. */}
+      <ConfirmDialog
+        open={!!deleting}
+        destructive
+        title={t('lists.deleteTitle', {
+          value: deleting?.value ?? '',
+          defaultValue: 'Delete “{{value}}”?',
+        })}
+        description={t('lists.deleteConfirm', {
+          defaultValue:
+            'Retiring is safer — it stops the value being offered while tickets that already carry it keep displaying it. Deleting removes the row outright.',
+        })}
+        confirmLabel={t('lists.deleteShort', { defaultValue: 'Delete' })}
+        loading={remove.isPending}
+        onConfirm={() => {
+          if (deleting) remove.mutate(deleting.id);
+          setDeleting(null);
+        }}
+        onCancel={() => setDeleting(null)}
+      />
     </div>
   );
 }

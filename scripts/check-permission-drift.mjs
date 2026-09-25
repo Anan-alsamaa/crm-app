@@ -140,6 +140,18 @@ const EXPECTED = [
    * managed by the same people. Every app role had READ only — so "Add"
    * failed with "Couldn't save your change" for a WeCare Admin who could
    * already manage the lists directly above it (owner, 2026-09-22).
+   *
+   * GRANTING THESE BY HAND DOES NOT HOLD. `quick_replies` was declared in the
+   * app-roles-sync CATALOG as readOnly and NOWHERE else, so re-materializing
+   * any role — which happens on every save of that role — rebuilt its policy
+   * from the catalog and reset the collection to read-only. It was granted by
+   * hand twice and vanished twice, each time looking like a fresh bug. The
+   * durable fix was adding `crud('quick_replies')` to the `manage_lists`
+   * block; this guard exists to catch it if that is ever undone (2026-09-24).
+   *
+   * Same trap for WeCare Supervisor and `option_lists`: the rows only survive
+   * because the role now HOLDS `manage_lists`. A permission is durable when a
+   * privilege produces it, never when it is inserted beside one.
    */
   {
     role: 'WeCare Admin',

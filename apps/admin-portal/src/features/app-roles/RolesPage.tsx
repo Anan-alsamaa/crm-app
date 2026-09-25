@@ -627,8 +627,40 @@ export function RolesPage() {
                                   rows of the reference console. The thumb
                                   moves via the logical inset so RTL slides the
                                   right way. */}
-                              <label className="flex min-h-9 cursor-pointer items-center justify-between gap-2.5 rounded-md px-1.5 py-1.5 text-sm text-foreground transition-colors duration-fast hover:bg-foreground/[0.03]">
-                                <span className="min-w-0 flex-1">{PRIV_LABELS[p.key]}</span>
+                              {/*
+                                A privilege you cannot grant is DISABLED, and a
+                                disabled switch is silent: clicking it does
+                                nothing and says nothing, which reads as a bug
+                                rather than a rule. Only `Operations` held
+                                `view_ops_dashboard`, so every role editor in
+                                the system found that one switch inert and had
+                                no way to learn why (owner, 2026-09-24).
+
+                                The ceiling stays exactly as it was — this only
+                                makes it legible: the row dims, the reason is
+                                printed beside the label instead of hidden in a
+                                hover title, and the cursor stops promising a
+                                click.
+                              */}
+                              <label
+                                className={cn(
+                                  'flex min-h-9 items-center justify-between gap-2.5 rounded-md px-1.5 py-1.5 text-sm text-foreground transition-colors duration-fast',
+                                  locked || !grantable(p.key)
+                                    ? 'cursor-not-allowed opacity-60'
+                                    : 'cursor-pointer hover:bg-foreground/[0.03]',
+                                )}
+                              >
+                                <span className="min-w-0 flex-1">
+                                  {PRIV_LABELS[p.key]}
+                                  {!locked && !grantable(p.key) && (
+                                    <span className="mt-0.5 block text-2xs leading-snug text-muted-foreground">
+                                      {t('roles.ceilingHint', {
+                                        defaultValue:
+                                          'You cannot grant a privilege your own role does not hold.',
+                                      })}
+                                    </span>
+                                  )}
+                                </span>
                                 <span className="relative inline-flex shrink-0">
                                   <input
                                     type="checkbox"

@@ -80,7 +80,13 @@ export function useRoles() {
 export interface CreateUserInput {
   /** Minted from `login_name` — see `loginIdentity`. Never typed by hand. */
   email: string;
-  login_name: string;
+  /**
+   * The employee id, or NULL for somebody who signs in with their email.
+   *
+   * Nullable and not `''`: the column is UNIQUE, so one empty string is all
+   * the database will hold — see the create path in `UsersPage`.
+   */
+  login_name: string | null;
   contact_email?: string | null;
   password: string;
   first_name?: string;

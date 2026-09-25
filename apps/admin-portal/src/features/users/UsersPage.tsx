@@ -232,7 +232,17 @@ export function UsersPage() {
           // Minted, never typed: nobody has to invent an address for a person
           // who does not have one.
           email: signInIdentity ?? '',
-          login_name: signInName ? normalizeLoginName(signInName) : '',
+          /*
+           * NULL when there is no employee id, never `''`.
+           *
+           * `login_name` is UNIQUE, and an empty string is a VALUE: the first
+           * person saved without an employee id took the one `''` slot, and
+           * every one after them was refused with "could not be saved" — a
+           * message that pointed at nothing the administrator had typed. NULL
+           * is exempt from a unique constraint, so any number of people may
+           * sign in with their email instead (owner, 2026-09-24).
+           */
+          login_name: signInName ? normalizeLoginName(signInName) : null,
           contact_email: values.contact_email || null,
           password: values.password,
           first_name: values.first_name,

@@ -11,6 +11,7 @@ import {
   Td,
   Th,
   Tr,
+  formatDateTime,
 } from '@yiji/ui';
 import { useRememberedRange } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
@@ -269,7 +270,7 @@ export function LateOrdersReportPage() {
                 {rows.map((r) => (
                   <Tr key={r.id}>
                     <Td className="whitespace-nowrap text-muted-foreground">
-                      {r.date_created ? new Date(r.date_created).toLocaleString() : '-'}
+                      {r.date_created ? formatDateTime(r.date_created) : '-'}
                     </Td>
                     <Td className="whitespace-nowrap tabular-nums">{r.order_id ?? '-'}</Td>
                     <Td className="max-w-[14rem] truncate">
