@@ -62,6 +62,8 @@ export type { IconButtonProps } from './IconButton.js';
 export { Input, Textarea, Select } from './Input.js';
 export { DateField } from './DateField.js';
 export type { DateFieldProps } from './DateField.js';
+export { DateTimeField } from './DateTimeField.js';
+export type { DateTimeFieldProps } from './DateTimeField.js';
 export { isoToDisplay, displayToIso, maskDateInput } from './dateValue.js';
 export type { InputProps, TextareaProps, SelectProps } from './Input.js';
 export { GhostSelect } from './GhostSelect.js';

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { displayToIso, isoToDisplay, maskDateInput } from '../src/dateValue.js';
+import {
+  displayToIso,
+  isoToDisplay,
+  joinDateTime,
+  maskDateInput,
+  splitDateTime,
+} from '../src/dateValue.js';
 
 /*
  * These rules are the reason the product can show dd/mm/yyyy at all — Chrome
@@ -99,5 +105,51 @@ describe('maskDateInput', () => {
 
   it('clears to empty', () => {
     expect(maskDateInput('')).toBe('');
+  });
+});
+
+/*
+ * The datetime halves behind `DateTimeField`. A native `datetime-local` has the
+ * same locale problem as a native date input, so the date half is ours and the
+ * time half is not — these rules are what keep the value crossing the boundary
+ * identical to what the native control emitted.
+ */
+describe('splitDateTime', () => {
+  it('splits a datetime into its halves', () => {
+    expect(splitDateTime('2026-08-21T14:30')).toEqual({ date: '2026-08-21', time: '14:30' });
+  });
+
+  it('drops seconds, so the field never re-emits precision it cannot show', () => {
+    expect(splitDateTime('2026-08-21T14:30:59')).toEqual({ date: '2026-08-21', time: '14:30' });
+  });
+
+  it('reads a bare date as having no time yet', () => {
+    expect(splitDateTime('2026-08-21')).toEqual({ date: '2026-08-21', time: '' });
+  });
+
+  it('treats empty and nullish alike', () => {
+    expect(splitDateTime('')).toEqual({ date: '', time: '' });
+    expect(splitDateTime(null)).toEqual({ date: '', time: '' });
+    expect(splitDateTime(undefined)).toEqual({ date: '', time: '' });
+  });
+});
+
+describe('joinDateTime', () => {
+  it('joins both halves', () => {
+    expect(joinDateTime('2026-08-21', '14:30')).toBe('2026-08-21T14:30');
+  });
+
+  it('completes a date with no time to midnight', () => {
+    expect(joinDateTime('2026-08-21', '')).toBe('2026-08-21T00:00');
+  });
+
+  it('clears when both halves are empty', () => {
+    expect(joinDateTime('', '')).toBe('');
+  });
+
+  it('holds a time with no date rather than emitting half a value', () => {
+    // null means "not an answer yet" — the caller keeps it on screen and does
+    // not push it upstream, where it would store or query against nonsense.
+    expect(joinDateTime('', '14:30')).toBeNull();
   });
 });

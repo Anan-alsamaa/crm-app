@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cn, FormField, Input, Spinner, Textarea } from '@yiji/ui';
+import { cn, DateTimeField, FormField, Input, Spinner, Textarea } from '@yiji/ui';
 import { DEFAULT_COMMUNICATION_METHOD, DEFAULT_COMPLAINT_SOURCE } from '@yiji/shared-types';
 import { optionsFor, useOptionLists } from './option-lists.js';
 import type { TicketOrderSnapshot } from './OrderSnapshotCard.js';
@@ -696,11 +696,15 @@ export function ComplaintClassification({
         label={t('complaint.date', { defaultValue: 'Ticket date' })}
         hint={t('complaint.dateHint', { defaultValue: 'When it happened' })}
       >
-        <Input
-          type="datetime-local"
+        {/* `DateTimeField`, not `<input type="datetime-local">`: a native one
+            paints its DATE half in the browser's locale, so a US machine showed
+            mm/dd/yyyy on the one remaining date input in the app. Same
+            `yyyy-mm-ddTHH:mm` value in and out, so the stored shape is
+            unchanged. */}
+        <DateTimeField
           value={values.complaint_date}
           max={nowLocalInput()}
-          onChange={(e) => onChange({ complaint_date: e.target.value })}
+          onChange={(v) => onChange({ complaint_date: v })}
         />
       </FormField>
       <FormField

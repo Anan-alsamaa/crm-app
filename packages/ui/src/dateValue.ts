@@ -62,3 +62,31 @@ export function maskDateInput(raw: string): string {
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
+
+/**
+ * Split `2026-08-21T14:30` into its halves, for `DateTimeField`.
+ *
+ * Seconds are accepted on the way IN — a stored value may carry them — and
+ * dropped, so the field never re-emits precision it cannot show. A bare date
+ * yields an empty time rather than failing: half a value on screen is normal
+ * while somebody is still filling it in.
+ */
+export function splitDateTime(value: string | null | undefined): { date: string; time: string } {
+  const text = String(value ?? '').trim();
+  if (!text) return { date: '', time: '' };
+  const [date = '', rest = ''] = text.split('T');
+  return { date, time: rest.slice(0, 5) };
+}
+
+/**
+ * Join a date and time back into `yyyy-mm-ddTHH:mm`, or `''`.
+ *
+ * Returns `null` for "not an answer yet, hold it on screen" — a time with no
+ * date, which has no sensible completion. A date with no time completes to
+ * midnight, which is what picking only a day means.
+ */
+export function joinDateTime(date: string, time: string): string | null {
+  if (!date && !time) return '';
+  if (!date) return null;
+  return `${date}T${time || '00:00'}`;
+}
