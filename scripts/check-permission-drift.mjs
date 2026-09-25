@@ -255,16 +255,44 @@ async function checkEnvironment(name, base, email, password) {
         `/permissions?filter[policy][_eq]=${pid}&filter[collection][_eq]=tickets&fields=id,action,permissions&limit=-1`,
         token,
       );
+      /*
+       * A scoped rule only NARROWS when it is the only rule for that action.
+       *
+       * Directus permissions are ADDITIVE - the widest duplicate wins - so a
+       * `$CURRENT_USER` row sitting beside an unscoped `{}` row for the same
+       * action restricts nothing. Every one of these roles had exactly that
+       * pair, so the old check (fault = a scoped row EXISTS) reported six
+       * failures on three healthy roles across both environments, on a guard
+       * whose whole job is to be trusted when it goes red.
+       *
+       * The fault is a scoped rule with NO unscoped twin. A redundant scoped
+       * row is still worth removing - it is confusing, and one deleted `{}`
+       * row away from being a real restriction - but that is untidiness, not a
+       * gap, so it prints as a note and does not fail the check.
+       */
+      const unscoped = new Set(
+        perms
+          .filter((p) => !JSON.stringify(p.permissions ?? {}).includes('$CURRENT_USER'))
+          .map((p) => p.action),
+      );
       for (const perm of perms) {
-        if (JSON.stringify(perm.permissions ?? {}).includes('$CURRENT_USER')) {
-          gaps += 1;
+        if (!JSON.stringify(perm.permissions ?? {}).includes('$CURRENT_USER')) continue;
+        if (unscoped.has(perm.action)) {
           process.stdout.write(
-            `  [31m✗[0m ${roleName} · tickets.${perm.action} is SCOPED to` +
-              ` $CURRENT_USER (permission ${perm.id}) but the role may see every ticket —` +
-              ` an unreadable ticket returns null and renders as missing data
+            `  [33m•[39m ${roleName} · tickets.${perm.action} has a redundant` +
+              ` $CURRENT_USER rule (permission ${perm.id}) beside an unscoped one —` +
+              ` access is unrestricted; the extra row is only noise
 `,
           );
+          continue;
         }
+        gaps += 1;
+        process.stdout.write(
+          `  [31m✗[39m ${roleName} · tickets.${perm.action} is SCOPED to` +
+            ` $CURRENT_USER (permission ${perm.id}) with NO unscoped rule, but the role may` +
+            ` see every ticket — an unreadable ticket returns null and renders as missing data
+`,
+        );
       }
     }
   }
