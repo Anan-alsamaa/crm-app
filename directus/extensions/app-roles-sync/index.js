@@ -629,29 +629,73 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
      * several times is back to one set after any save. Paired with the
      * per-role serialization above, which stops them accumulating at all.
      */
-    const stale = await permissionsService.readByQuery({
+    /*
+     * CREATE FIRST, DELETE LAST — and never both when nothing changed.
+     *
+     * This used to delete every row on the policy and then re-create the full
+     * set. It emptied a live role on both environments: the delete of ~90 rows
+     * logged its warning, the PATCH answered 200, and `createMany` never ran —
+     * so the policy sat at ZERO permissions and no amount of re-saving
+     * recovered it, because each retry deleted the (already empty) set and died
+     * in the same place. Nothing was logged, because nothing threw: the request
+     * had already returned and the work was torn down mid-function.
+     *
+     * A role with no permissions is the worst possible failure here — everyone
+     * holding it loses the whole portal — so the write order now makes the
+     * dangerous half last and skips it entirely when the policy already
+     * matches. Inserting a duplicate is survivable (Directus permissions are
+     * additive, and the sweep below removes it next time); deleting everything
+     * is not (owner, 2026-09-24).
+     */
+    const grants = buildGrants(row.privileges, row.brands, row.stores, await protectedRoleIds());
+    const desired = grants.map((grant) => ({
+      policy: policyId,
+      collection: grant.collection,
+      action: grant.action,
+      permissions: grant.filter && Object.keys(grant.filter).length ? grant.filter : {},
+      validation: grant.validation ?? {},
+      fields: grant.fields ?? ['*'],
+    }));
+    /** What identifies a rule, so an unchanged one is left exactly where it is. */
+    const sigOf = (p) =>
+      JSON.stringify([
+        p.collection,
+        p.action,
+        p.permissions ?? {},
+        p.validation ?? {},
+        p.fields ?? ['*'],
+      ]);
+
+    const existing = await permissionsService.readByQuery({
       filter: { policy: { _eq: policyId } },
       limit: -1,
-      fields: ['id'],
+      fields: ['id', 'collection', 'action', 'permissions', 'validation', 'fields'],
     });
-    if (stale.length) {
-      await permissionsService.deleteMany(stale.map((p) => p.id));
-      if (stale.length > 80) {
-        log(`WARNING: '${row.name}' held ${stale.length} permission rows — duplicates cleared`);
-      }
+    const keep = new Map();
+    const surplus = [];
+    // `perm`, not `row`: `row` is the app_roles row this whole function is
+    // about, and shadowing it here would put the wrong name in the log below.
+    for (const perm of existing) {
+      const sig = sigOf(perm);
+      // The first occurrence of a rule is kept; any repeat is a duplicate from
+      // an older concurrent save and is swept away below.
+      if (keep.has(sig)) surplus.push(perm.id);
+      else keep.set(sig, perm.id);
     }
 
-    const grants = buildGrants(row.privileges, row.brands, row.stores, await protectedRoleIds());
-    await permissionsService.createMany(
-      grants.map((grant) => ({
-        policy: policyId,
-        collection: grant.collection,
-        action: grant.action,
-        permissions: grant.filter && Object.keys(grant.filter).length ? grant.filter : {},
-        validation: grant.validation ?? {},
-        fields: grant.fields ?? ['*'],
-      })),
-    );
+    const missing = desired.filter((d) => !keep.has(sigOf(d)));
+    if (missing.length) await permissionsService.createMany(missing);
+
+    // Anything the catalog no longer asks for, plus the duplicates. Deleted
+    // only AFTER the additions are safely in.
+    const wanted = new Set(desired.map(sigOf));
+    for (const [sig, id] of keep) if (!wanted.has(sig)) surplus.push(id);
+    if (surplus.length) {
+      await permissionsService.deleteMany(surplus);
+      if (surplus.length > 80) {
+        log(`WARNING: '${row.name}' held ${surplus.length} surplus permission rows — cleared`);
+      }
+    }
 
     // Write-back with knex, NOT ItemsService: a service update would re-fire
     // this very hook and loop.
