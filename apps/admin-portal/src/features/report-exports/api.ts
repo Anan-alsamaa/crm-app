@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems, readRevisions, readUsers } from '@directus/sdk';
+import { formatDateTime } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
 import type { StoreSnapshot } from '@yiji/shared-types';
@@ -36,13 +37,16 @@ export type { ComplaintReportRow };
 
 /* ── Shared raw shapes ────────────────────────────────────────────────── */
 
-/** `2026-08-13T19:11:04Z` → `2026-08-13 19:11`, local time — a report stamp, not an ISO blob. */
-const fmtStamp = (iso: string): string => {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-};
+/**
+ * `2026-08-13T19:11:04Z` → `13/08/2026 19:11`, local time.
+ *
+ * dd/mm/yyyy, because this reaches the SCREEN — it is what the "Last modified
+ * at" column shows. It used to emit `2026-08-13 19:11`: defensible for a file
+ * that gets sorted, wrong for a report column sitting beside a dozen dates the
+ * rest of the app writes as dd/mm/yyyy (owner, 2026-09-24). The export's own
+ * `fmtDateTime` in export.ts keeps ISO on purpose, for sorting in a spreadsheet.
+ */
+const fmtStamp = (iso: string): string => formatDateTime(iso);
 
 interface RawTicket {
   user_updated?: string | null;
