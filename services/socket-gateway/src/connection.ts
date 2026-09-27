@@ -66,6 +66,8 @@ interface SocketData {
    * person continuing the same conversation.
    */
   contactExternalId?: string | null;
+  /** Yiji's order id, when the chat was opened from that order's tracking screen. */
+  orderId?: string | null;
   /**
    * Set once the conversation EXISTS. Undefined until the customer actually
    * sends something — see `ensureConversation`.
@@ -417,6 +419,9 @@ export function registerConnection(deps: ConnectionDeps): void {
       data.contactPhone = contact.phone;
       data.contactIsNew = contact.isNew;
       data.contactExternalId = contact.externalCustomerId;
+      /* Carried from the token so a conversation created later in the handshake
+         still records which order the customer is asking about. */
+      data.orderId = claims.order_id ?? null;
       if (contact.promoted) {
         // Worth a line in the log: this is the moment an anonymous walk-in
         // became a named customer, and it is otherwise invisible.
@@ -492,8 +497,9 @@ export function registerConnection(deps: ConnectionDeps): void {
               contact.id,
               claims.phone ?? '',
               !!contact.externalCustomerId,
+              claims.order_id ?? null,
             )
-          : await directus.findOrCreateConversation(vendor.id, contact.id);
+          : await directus.findOrCreateConversation(vendor.id, contact.id, claims.order_id ?? null);
         data.conversationId = conv.id;
         data.conversationCreated = conv.created;
       }
@@ -669,8 +675,9 @@ async function ensureConversation(socket: Socket, deps: ConnectionDeps): Promise
           contactId,
           data.contactPhone ?? '',
           !!data.contactExternalId,
+          data.orderId ?? null,
         )
-      : await directus.findOrCreateConversation(vendorId, contactId);
+      : await directus.findOrCreateConversation(vendorId, contactId, data.orderId ?? null);
 
     data.conversationId = conv.id;
     data.conversationCreated = conv.created;

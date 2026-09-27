@@ -733,6 +733,7 @@ async function main(): Promise<void> {
        * somebody in their own app, not a person at a counter.
        */
       let entryPoint: 'app' | 'store_qr' = 'store_qr';
+      let orderId: string | null = null;
       if (asCode.success) {
         const link = await directus.resolveWalkInLink(asCode.data.code).catch(() => null);
         if (!link) {
@@ -776,6 +777,10 @@ async function main(): Promise<void> {
          * this alone and every branch visitor is filed as `app`.
          */
         entryPoint = parsed.data.entryPoint ?? 'app';
+        /* The order the customer is writing about, when Yiji opened the chat
+           from that order's tracking screen. Rides in the token so it survives
+           to conversation creation without a second round trip. */
+        orderId = parsed.data.orderId ?? null;
 
         /*
          * THE CALLER IS THE YIJI BACKEND, AND `customerId` IS THEIR WORD FOR IT.
@@ -889,6 +894,11 @@ async function main(): Promise<void> {
            * behaves exactly as before.
            */
           entry_point: entryPoint,
+          /* Pinned to the session so the conversation it opens records WHICH
+             order the customer is asking about. Omitted entirely when absent —
+             an empty string in the column would be indistinguishable from a
+             real id downstream. */
+          ...(orderId ? { order_id: orderId } : {}),
         },
         config.YIJI_JWT_SECRET,
         /*

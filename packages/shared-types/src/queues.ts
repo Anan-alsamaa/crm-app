@@ -257,6 +257,21 @@ export const WalkInSessionRequest = z.object({
    * and its behaviour must not change because a new field exists.
    */
   entryPoint: z.enum(['app', 'store_qr']).optional(),
+  /**
+   * WHICH ORDER the customer is writing about, when they came from one.
+   *
+   * Yiji has two entry points into this chat: a general "contact us", and the
+   * ORDER TRACKING screen for one specific order. From tracking, the customer
+   * is unambiguously asking about that order — and without this the agent got
+   * a chat with no subject and had to guess from the customer's order list,
+   * which is wrong as soon as they have two open (owner, 2026-09-27).
+   *
+   * Optional, because the general entry point genuinely has no order. Never
+   * invented: a caller that does not know it omits it. It is pinned to the
+   * conversation, so the agent's panel opens on the right order instead of a
+   * list.
+   */
+  orderId: z.string().trim().min(1).max(64).optional(),
 });
 export type WalkInSessionRequest = z.infer<typeof WalkInSessionRequest>;
 

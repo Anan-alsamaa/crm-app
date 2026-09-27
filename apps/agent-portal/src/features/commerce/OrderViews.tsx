@@ -785,11 +785,22 @@ export function LatestOrder({
   customerId,
   conversationId,
   stamped,
+  pinnedOrderId,
   onCreateTicket,
 }: {
   vendorId: string;
   customerId?: string;
   conversationId?: string;
+  /**
+   * THE order this chat is about, when Yiji opened it from that order's
+   * tracking screen.
+   *
+   * Shown FIRST and always, even when it is not among the customer's two most
+   * recent: the customer is writing about this one, and a panel that lists
+   * their newest orders instead makes the agent guess — wrong the moment they
+   * have two open (owner, 2026-09-27).
+   */
+  pinnedOrderId?: string | null;
   /**
    * The order recorded on this conversation the last time it was worked.
    * Rendered immediately so the panel is never blank while the live copy is
@@ -817,6 +828,21 @@ export function LatestOrder({
     // leave a loading skeleton sitting there for a minute with no way to tell
     // "still loading" from "never coming". Saying "unavailable" and showing the
     // manual box is the useful answer — the agent has the order number anyway.
+    retry: false,
+  });
+
+  /*
+   * The pinned order, fetched by id.
+   *
+   * Only when there IS one, and only when it is not already in the recent
+   * list — a chat opened from tracking usually names the customer's newest
+   * order anyway, and paying for a second call to learn that would be waste.
+   */
+  const pinnedOrder = useQuery({
+    queryKey: ['yiji-order', vendorId, pinnedOrderId],
+    enabled: !!vendorId && !!pinnedOrderId,
+    queryFn: () => commerce.getOrder(vendorId, pinnedOrderId as string),
+    staleTime: 60_000,
     retry: false,
   });
 
@@ -875,7 +901,21 @@ export function LatestOrder({
    */
   const liveOrders = orders.data?.orders;
   const live = liveOrders && liveOrders.length > 0 ? liveOrders : null;
-  const fetched = (live ?? (stamped ? [stamped] : [])).slice(0, 2);
+  const recent = (live ?? (stamped ? [stamped] : [])).slice(0, 2);
+  /*
+   * The pinned order leads, and is never dropped by the slice.
+   *
+   * When it is already among the recent ones it simply moves to the front
+   * rather than appearing twice; when it is older than both, it is shown
+   * anyway — being older is not the same as being irrelevant when it is the
+   * order the customer opened the chat from.
+   */
+  const pinned = pinnedOrderId
+    ? (pinnedOrder.data ?? recent.find((o) => String(o.orderId) === pinnedOrderId) ?? null)
+    : null;
+  const fetched = pinned
+    ? [pinned, ...recent.filter((o) => String(o.orderId) !== String(pinned.orderId))].slice(0, 3)
+    : recent;
 
   // A DISABLED query never resolves, so `isLoading` stays true forever and the
   // skeleton sits there pretending to load an order that will never arrive.

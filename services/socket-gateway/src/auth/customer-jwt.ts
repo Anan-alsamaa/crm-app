@@ -77,6 +77,9 @@ export const CustomerClaims = z.object({
    * door is implied.
    */
   entry_point: z.enum(['app', 'store_qr']).optional(),
+  /* The order this chat is about, when Yiji opened it from order tracking.
+     Carried on the token so the conversation records it at creation. */
+  order_id: z.string().min(1).max(64).optional(),
   iat: z.number().optional(),
   exp: z.number().optional(),
 });

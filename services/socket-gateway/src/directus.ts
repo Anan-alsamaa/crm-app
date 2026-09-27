@@ -319,6 +319,8 @@ export class GatewayDirectus {
   async findOrCreateConversation(
     vendorUuid: string,
     contactId: string,
+    /** Yiji's order id, when the chat was opened from order tracking. */
+    orderId: string | null = null,
   ): Promise<{ id: string; created: boolean }> {
     const live = (await this.client.request(
       readItems('conversations', {
@@ -342,6 +344,11 @@ export class GatewayDirectus {
         priority: 'medium',
         unread_count_agent: 0,
         last_message_at: new Date().toISOString(),
+        /* Only when the customer came from an order's tracking screen. Omitted
+           otherwise — a blank here would be indistinguishable from a real id.
+           `last_order_id` is the column the inbox already searches and the
+           order panel already reads, so this needs no new field. */
+        ...(orderId ? { last_order_id: orderId, last_order_at: new Date().toISOString() } : {}),
       } as never),
     )) as { id: string };
     return { id: created.id, created: true };
@@ -380,6 +387,8 @@ export class GatewayDirectus {
      * thread is what made one customer appear twice in the inbox.
      */
     known = false,
+    /** Yiji's order id, when the chat was opened from order tracking. */
+    orderId: string | null = null,
   ): Promise<{ id: string; created: boolean }> {
     if (known) {
       const live = await this.findLiveConversation(vendorUuid, contactId);
@@ -393,6 +402,7 @@ export class GatewayDirectus {
         priority: 'medium',
         unread_count_agent: 0,
         last_message_at: new Date().toISOString(),
+        ...(orderId ? { last_order_id: orderId, last_order_at: new Date().toISOString() } : {}),
       } as never),
     )) as { id: string };
 

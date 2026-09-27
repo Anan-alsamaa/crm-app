@@ -288,7 +288,19 @@ export const collections: CollectionSpec[] = [
        *
        * Indexed: the inbox search box hits it on every keystroke.
        */
-      { field: 'last_order_id', type: 'string', index: true },
+      {
+        /* The order this chat is about.
+         *
+         * Stamped by the agent portal when an order is opened in the panel —
+         * and now also set AT CREATION when Yiji's app opens the chat from an
+         * order's tracking screen, which is the only moment the subject is
+         * known for certain (owner, 2026-09-27). Deliberately the same column
+         * rather than a second one: the inbox already searches it, the panel
+         * already reads it, and two columns meaning "the order" would drift. */
+        field: 'last_order_id',
+        type: 'string',
+        index: true,
+      },
       {
         field: 'last_order_snapshot',
         type: 'json',
