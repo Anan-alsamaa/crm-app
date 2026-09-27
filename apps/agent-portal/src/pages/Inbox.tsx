@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Avatar,
   Button,
+  ConfirmDialog,
   cn,
   ConversationPlaceholderArt,
   ErrorState,
@@ -32,6 +33,7 @@ import {
 import {
   conversationIdsForOrder,
   useConversations,
+  useDeleteConversation,
   useInboxCounts,
   useConversationPreviews,
   useUpdateConversation,
@@ -188,7 +190,7 @@ export function Inbox() {
     min: 288,
     max: 480,
   });
-  const { user, can } = useAuth();
+  const { user, can, isOwner } = useAuth();
 
   /*
    * THE QUEUE IS NOT A FILTER — it is what this screen IS.
@@ -301,6 +303,8 @@ export function Inbox() {
   const prefetchOrders = usePrefetchInboxOrders();
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  /** The bulk-delete confirmation. Deleting chats is irreversible. */
+  const [confirmDelete, setConfirmDelete] = useState(false);
   // Deep-link support: /?conv=<id> opens that conversation (used by the
   // command palette and AI semantic-search results).
   const [searchParams] = useSearchParams();
@@ -309,6 +313,7 @@ export function Inbox() {
     if (convParam) setSelected(convParam);
   }, [convParam]);
   const update = useUpdateConversation();
+  const removeConversation = useDeleteConversation();
   const addTag = useAddTagToConversation();
 
   useEffect(() => {
@@ -384,6 +389,47 @@ export function Inbox() {
       toast.error(t('errors.updateFailed', { ns: 'common' }));
     }
   };
+  /**
+   * DELETE the selected chats — Administrator only, and irreversible.
+   *
+   * Sequential, not `Promise.all`: a partial failure halfway through a
+   * parallel batch leaves nobody able to say which chats survived. One at a
+   * time means the count reported is the count actually deleted.
+   *
+   * Directus is the boundary — no app role holds `conversations.delete`, so
+   * this answers 403 for everyone but the owner however the button is reached.
+   */
+  const bulkDelete = async () => {
+    const ids = [...checked];
+    let done = 0;
+    try {
+      for (const id of ids) {
+        await removeConversation.mutateAsync(id);
+        done += 1;
+      }
+      setChecked(new Set());
+      // The open chat may be one of the deleted ones; clearing it avoids a
+      // detail pane pointing at a row that no longer exists.
+      if (selected && ids.includes(selected)) setSelected(null);
+      toast.success(
+        t('inbox.bulkDeleteDone', { count: done, defaultValue: '{{count}} chats deleted.' }),
+      );
+    } catch {
+      // Say how far it got. "Failed" alone would leave an administrator unsure
+      // whether anything was removed.
+      toast.error(
+        done > 0
+          ? t('inbox.bulkDeletePartial', {
+              count: done,
+              defaultValue: 'Deleted {{count}}, then stopped — the rest are untouched.',
+            })
+          : t('errors.updateFailed', { ns: 'common' }),
+      );
+      void conversations.refetch();
+    }
+    setConfirmDelete(false);
+  };
+
   const bulkAddTag = async (tagId: string) => {
     const ids = [...checked];
     try {
@@ -629,6 +675,26 @@ export function Inbox() {
                 }}
                 options={(tags.data ?? []).map((tg) => ({ value: tg.id, label: tg.name }))}
               />
+              {/*
+                DELETE — the Administrator's control, and nobody else's.
+
+                Gated on `isOwner` (Directus `admin_access`), not on a
+                privilege: there is no grantable key for this and there must
+                not be, so no role edit can hand it out. Hiding it is only a
+                courtesy — no app role holds `conversations.delete`, so the
+                API refuses everyone else however the button is reached
+                (owner, 2026-09-27).
+              */}
+              {isOwner && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  {t('inbox.bulkDelete', { defaultValue: 'Delete' })}
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -1088,6 +1154,29 @@ export function Inbox() {
           )}
         </section>
       )}
+
+      {/*
+        DELETING A CHAT IS IRREVERSIBLE, and it takes the thread with it —
+        `messages`, their files and the tag links all cascade. So the dialog
+        says the count and says what goes, rather than asking "are you sure".
+      */}
+      <ConfirmDialog
+        open={confirmDelete}
+        destructive
+        title={t('inbox.bulkDeleteTitle', {
+          count: checked.size,
+          defaultValue: 'Delete {{count}} chats?',
+        })}
+        description={t('inbox.bulkDeleteBody', {
+          defaultValue:
+            'This cannot be undone. Every message in them is deleted too. Tickets raised from these chats are kept.',
+        })}
+        confirmLabel={t('inbox.bulkDelete', { defaultValue: 'Delete' })}
+        cancelLabel={t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+        loading={removeConversation.isPending}
+        onConfirm={() => void bulkDelete()}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

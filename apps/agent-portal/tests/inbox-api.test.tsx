@@ -21,6 +21,7 @@ import {
   useTags,
   useAddTagToConversation,
   useCreateTag,
+  useDeleteConversation,
   conversationIdsForOrder,
 } from '../src/features/inbox/api.js';
 
@@ -147,5 +148,31 @@ describe('conversationIdsForOrder', () => {
   it('ignores surrounding whitespace', async () => {
     request.mockResolvedValueOnce([{ conversation: 'c9' }]);
     await expect(conversationIdsForOrder('  946641  ')).resolves.toEqual(['c9']);
+  });
+});
+
+/*
+ * DELETING A CHAT is the Administrator's control and nobody else's. The hook
+ * itself is deliberately ungated — Directus is the boundary, since no app role
+ * holds `conversations.delete` — so what is pinned here is that it issues a
+ * real delete, refreshes the list, and surfaces a refusal instead of
+ * pretending to have worked.
+ */
+describe('useDeleteConversation', () => {
+  it('deletes the conversation and refreshes the list', async () => {
+    request.mockResolvedValueOnce(undefined);
+    const { result } = renderHook(() => useDeleteConversation(), { wrapper: wrapper() });
+    await result.current.mutateAsync('c1');
+    expect(request).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  });
+
+  it('surfaces a refusal rather than reporting success', async () => {
+    // What every non-Administrator gets: Directus answers 403 because no app
+    // role carries the delete grant. The caller must be able to tell.
+    request.mockRejectedValueOnce(new Error('FORBIDDEN'));
+    const { result } = renderHook(() => useDeleteConversation(), { wrapper: wrapper() });
+    await expect(result.current.mutateAsync('c1')).rejects.toThrow('FORBIDDEN');
+    await waitFor(() => expect(result.current.isError).toBe(true));
   });
 });

@@ -638,6 +638,33 @@ export function useUpdateConversation() {
   });
 }
 
+/**
+ * DELETE a conversation outright — the Administrator only.
+ *
+ * Not gated here, because a hook cannot be a boundary: DIRECTUS is. No app
+ * role holds `conversations.delete` (checked on both environments), so this
+ * call answers 403 for every agent, supervisor and WeCare Admin. The
+ * Administrator gets through because `admin_access` bypasses permissions
+ * altogether — which is exactly the line the owner drew (2026-09-27).
+ *
+ * The portal hides the control from everyone else as a courtesy, so nobody is
+ * offered an action that will fail. The courtesy is not the protection.
+ *
+ * CASCADES. `messages`, `messages_files` and `conversations_tags` are all
+ * declared `onDelete: CASCADE` against this row, so the thread goes with it.
+ * That is the point — a chat deleted with its messages left behind would be
+ * worse than not deleting it at all.
+ */
+export function useDeleteConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => directus.request(deleteItem('conversations', id)),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
+}
+
 /** Linked tickets for the conversation sidebar. */
 export interface LinkedTicket {
   id: string;

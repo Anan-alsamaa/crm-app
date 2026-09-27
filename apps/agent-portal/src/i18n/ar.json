@@ -309,7 +309,12 @@
     "addFilter": "يُضاف إلى عوامل التصفية المطبَّقة",
     "replaceFilter": "عرض هذه فقط",
     "clearAll": "مسح",
-    "noneToFilter": "لا توجد محادثات {{label}} للتصفية"
+    "noneToFilter": "لا توجد محادثات {{label}} للتصفية",
+    "bulkDelete": "حذف",
+    "bulkDeleteTitle": "حذف {{count}} محادثة؟",
+    "bulkDeleteBody": "لا يمكن التراجع عن هذا. سيتم حذف كل الرسائل بداخلها أيضًا. التذاكر المنشأة من هذه المحادثات تبقى كما هي.",
+    "bulkDeleteDone": "تم حذف {{count}} محادثة.",
+    "bulkDeletePartial": "تم حذف {{count}} ثم توقفت العملية — الباقي لم يُمس."
   },
   "conversation": {
     "replyPlaceholder": "اكتب ردًا…",
