@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createItem, readItems } from '@directus/sdk';
+import { createItem, readItems, updateItem } from '@directus/sdk';
 import {
   normalizePhone,
   DEFAULT_LATE_DELIVERY_MINUTES,
@@ -81,6 +81,74 @@ export function useHandledLateOrders() {
 }
 
 /**
+ * The decision already recorded for each order, so Comments can show and edit
+ * it rather than starting blank.
+ *
+ * Keyed by order id — the only identifier the CRM and Yiji share. Returns the
+ * NEWEST row per order: the decision is append-only for its type, but the two
+ * free-text fields are editable, and an older row would show stale wording.
+ */
+export function useLateOrderDecisions() {
+  return useQuery({
+    queryKey: ['late-orders', 'decisions'],
+    staleTime: 15_000,
+    queryFn: async (): Promise<Map<string, LateOrderDecisionRow>> => {
+      const rows = (await directus.request(
+        readItems(
+          'late_order_decisions' as never,
+          {
+            filter: {
+              date_created: { _gte: new Date(Date.now() - 30 * 86_400_000).toISOString() },
+            },
+            fields: ['id', 'order_id', 'action', 'kind', 'reason', 'action_taken'],
+            sort: ['-date_created'],
+            limit: -1,
+          } as never,
+        ),
+      )) as unknown as LateOrderDecisionRow[];
+      const byOrder = new Map<string, LateOrderDecisionRow>();
+      // Newest first, so the first one seen for an order wins.
+      for (const r of rows) {
+        const key = r.order_id?.trim();
+        if (key && !byOrder.has(key)) byOrder.set(key, r);
+      }
+      return byOrder;
+    },
+  });
+}
+
+export interface LateOrderDecisionRow {
+  id: string;
+  order_id: string | null;
+  action: string | null;
+  kind: string | null;
+  reason: string | null;
+  action_taken: string | null;
+}
+
+/**
+ * Correct the wording on a decision already recorded.
+ *
+ * Only the two free-text fields: the decision TYPE stays as it was taken. An
+ * agent fixing a typo must not be able to turn an ignore into a compensation.
+ */
+export function useUpdateLateDecision() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; reason: string; actionTaken: string }) =>
+      directus.request(
+        updateItem('late_order_decisions' as never, input.id, {
+          reason: input.reason.trim(),
+          action_taken: input.actionTaken.trim() || null,
+        } as never),
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['late-orders'] });
+    },
+  });
+}
+
+/**
  * SERVICE TIME for the rows on screen: driver-accept → close, or → now.
  *
  * Only the visible order ids, because the driver-accept moment is not in the
@@ -156,6 +224,8 @@ export interface RecordLateDecisionInput {
   kind: LateOrderKind;
   action: 'ignored' | 'compensated';
   reason: string;
+  /** What the agent DID about it, free text. Optional. */
+  actionTaken?: string;
   agentId: string | null;
   /** The ticket raised alongside, when one was. */
   ticketId?: string | null;
@@ -181,6 +251,7 @@ export function useRecordLateDecision() {
             kind: input.kind,
             action: input.action,
             reason: input.reason.trim(),
+            action_taken: input.actionTaken?.trim() || null,
             decided_by: input.agentId,
             ticket: input.ticketId ?? null,
             minutes_elapsed: input.row.minutesElapsed,

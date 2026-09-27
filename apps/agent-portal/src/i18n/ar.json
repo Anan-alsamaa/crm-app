@@ -1026,6 +1026,12 @@
       "todayNote": "اليوم فقط — طلبات مباشرة قيد التنفيذ"
     },
     "showDetail": "السلة والتتبّع",
-    "hideDetail": "إخفاء التفاصيل"
+    "hideDetail": "إخفاء التفاصيل",
+    "reasonLabel": "السبب",
+    "actionLabel": "الإجراء المتخذ",
+    "actionPlaceholder": "ما الذي قمت به — مثل: تم الاتصال بالفرع.",
+    "comments": "الملاحظات",
+    "commentsTitle": "الملاحظات",
+    "commentsSaved": "تم الحفظ."
   }
 }

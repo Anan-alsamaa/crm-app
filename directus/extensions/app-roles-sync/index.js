@@ -233,8 +233,10 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     ],
     create_tickets: [
       g('tickets', 'create'),
-      // Deciding a late order is the same act as raising the ticket beside it.
+      // Deciding a late order is the same act as raising the ticket beside it,
+      // and the Comments button lets an agent correct what they wrote.
       g('late_order_decisions', 'create'),
+      g('late_order_decisions', 'update'),
       g('ticket_events', 'create'),
       g('tickets_files', 'create'),
       g('tickets_files', 'read'),

@@ -772,7 +772,7 @@ export const collections: CollectionSpec[] = [
   },
   {
     collection: 'late_order_decisions',
-    note: 'APPEND-ONLY record of what an agent decided about a delivery order that ran past the late threshold. Written for BOTH outcomes: ignoring is a decision somebody has to stay answerable for, and a queue that forgets what it was told to ignore asks again tomorrow.',
+    note: 'What an agent decided about a delivery order that ran past the late threshold. The DECISION is append-only; `reason` and `action_taken` may be edited afterwards via the Comments button, because wording gets corrected and a wrong note helps nobody. Written for BOTH outcomes: ignoring is a decision somebody has to stay answerable for, and a queue that forgets what it was told to ignore asks again tomorrow.',
     fields: [
       {
         /* The Yiji order id — the ONLY identifier the CRM and Yiji share for
@@ -801,6 +801,23 @@ export const collections: CollectionSpec[] = [
         type: 'text',
         required: true,
         note: 'Required for BOTH actions (owner, 2026-09-21) — an ignored order without a reason is an unanswerable decision.',
+      },
+      {
+        /* WHAT THE AGENT DID about it, in their own words — "called the
+         * branch", "issued a 20 SAR coupon", "driver reassigned".
+         *
+         * Separate from `action`, which is the decision TYPE (ignored /
+         * compensated) and is a fixed vocabulary. The two were nearly merged;
+         * they answer different questions, and a free-text value in `action`
+         * would have broken every filter and report that groups by it
+         * (owner, 2026-09-27).
+         *
+         * Optional: the reason is what makes a decision answerable, and
+         * requiring a second paragraph before an agent may clear a row is how
+         * a queue stops being worked. */
+        field: 'action_taken',
+        type: 'text',
+        note: 'What the agent did about it, free text. Distinct from `action`, which is the decision type.',
       },
       {
         /* Stored, not derived: this is how late it was WHEN THE DECISION WAS

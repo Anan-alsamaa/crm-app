@@ -264,6 +264,7 @@ export function LateOrdersReportPage() {
                   <Th>{t('lateOrdersReport.col.decision', { defaultValue: 'Decision' })}</Th>
                   <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
                   <Th>{t('lateOrdersReport.col.reason', { defaultValue: 'Reason' })}</Th>
+                  <Th>{t('lateOrdersReport.col.action', { defaultValue: 'Action taken' })}</Th>
                 </Tr>
               </thead>
               <tbody>
@@ -290,6 +291,16 @@ export function LateOrdersReportPage() {
                     <Td className="max-w-[22rem]">
                       <span className="line-clamp-2 block leading-snug" title={r.reason ?? ''}>
                         {r.reason ?? '-'}
+                      </span>
+                    </Td>
+                    {/* What the agent DID about it, beside why it happened.
+                        `title` carries the full text, since the cell clamps. */}
+                    <Td className="max-w-[22rem]">
+                      <span
+                        className="line-clamp-2 block leading-snug"
+                        title={r.action_taken ?? ''}
+                      >
+                        {r.action_taken ?? '-'}
                       </span>
                     </Td>
                   </Tr>

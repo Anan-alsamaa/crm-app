@@ -133,17 +133,17 @@ const EXPECTED = [
   {
     role: 'WeCare Agent',
     collection: 'late_order_decisions',
-    actions: ['create', 'read'],
+    actions: ['create', 'read', 'update'],
   },
   {
     role: 'WeCare Supervisor',
     collection: 'late_order_decisions',
-    actions: ['create', 'read'],
+    actions: ['create', 'read', 'update'],
   },
   {
     role: 'WeCare Admin',
     collection: 'late_order_decisions',
-    actions: ['create', 'read'],
+    actions: ['create', 'read', 'update'],
   },
   /*
    * The dropdown lists the ops team edits (complaint types, service types,

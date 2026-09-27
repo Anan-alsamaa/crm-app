@@ -17,6 +17,14 @@ export interface LateOrderDecisionRow {
   kind: LateOrderKind | null;
   action: 'ignored' | 'compensated' | null;
   reason: string | null;
+  /**
+   * What the agent DID about it — the Comments box's second field.
+   *
+   * OPTIONAL, because every decision recorded before 2026-09-27 predates the
+   * field and genuinely has nothing to show. A required type here would be a
+   * claim the data does not support.
+   */
+  action_taken?: string | null;
   minutes_elapsed: number | null;
   brand_name: string | null;
   restaurant_name: string | null;
@@ -40,6 +48,7 @@ export function useLateOrderDecisions(fromIso: string, toIso: string) {
               'kind',
               'action',
               'reason',
+              'action_taken',
               'minutes_elapsed',
               'brand_name',
               'restaurant_name',

@@ -37,8 +37,10 @@ import {
   resolveLateOrderContact,
   useHandledLateOrders,
   useLateOrders,
+  useLateOrderDecisions,
   useRecordLateDecision,
   useServiceTimes,
+  useUpdateLateDecision,
   lateOrderTicket,
   FALLBACK_THRESHOLD,
 } from './api.js';
@@ -147,6 +149,10 @@ export function LateOrdersPage() {
   const [kinds, setKinds] = useState<Record<string, LateOrderKind>>({});
   const [draft, setDraft] = useState<DecisionDraft | null>(null);
   const [reason, setReason] = useState('');
+  /** What the agent DID about it — the second field, and editable later. */
+  const [actionTaken, setActionTaken] = useState('');
+  /** The decision being EDITED via Comments, when the row already has one. */
+  const [editingDecisionId, setEditingDecisionId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /** The row whose cart + tracking is open. One at a time: the panel is tall,
       and two open rows push the queue itself off the screen. */
@@ -162,6 +168,8 @@ export function LateOrdersPage() {
   const [coupon, setCoupon] = useState<{
     row: LateOrderRow;
     reason: string;
+    /** Carried through the coupon form so the decision records it too. */
+    actionTaken: string;
     kind: LateOrderKind;
     ticketId: string | null;
     /* Resolved before the form opens, so the request names the customer it is
@@ -230,13 +238,26 @@ export function LateOrdersPage() {
    * service time advances with everything else rather than freezing at mount.
    */
   const serviceTimes = useServiceTimes(rows.map((r) => r.orderId));
+  /* What has already been decided, so Comments opens populated. */
+  const decisions = useLateOrderDecisions();
+  const updateDecision = useUpdateLateDecision();
   const nowMs = queue.dataUpdatedAt || Date.now();
 
   const kindOf = (row: LateOrderRow): LateOrderKind => kinds[row.orderId] ?? 'late_delivery';
 
   const openDecision = (row: LateOrderRow, action: 'ignored' | 'compensated') => {
+    /*
+     * Seeded from the decision already recorded, when there is one.
+     *
+     * The Comments button reopens this same box on a row that has been
+     * decided, so it must show what was written rather than a blank form an
+     * agent would have to retype.
+     */
+    const existing = decisions.data?.get(row.orderId);
     setDraft({ row, action });
-    setReason('');
+    setReason(existing?.reason ?? '');
+    setActionTaken(existing?.action_taken ?? '');
+    setEditingDecisionId(existing?.id ?? null);
   };
 
   /**
@@ -295,16 +316,28 @@ export function LateOrdersPage() {
         setCoupon({
           row: draft.row,
           reason: text,
+          actionTaken,
           kind,
           ticketId,
           contactId,
         });
+      } else if (editingDecisionId) {
+        /* Editing an existing decision: only the wording changes. The decision
+           TYPE stays as it was taken — fixing a typo must not turn an ignore
+           into a compensation. */
+        await updateDecision.mutateAsync({
+          id: editingDecisionId,
+          reason: text,
+          actionTaken,
+        });
+        toast.success(t('lateOrders.commentsSaved', { defaultValue: 'Saved.' }));
       } else {
         await record.mutateAsync({
           row: draft.row,
           kind,
           action: 'ignored',
           reason: text,
+          actionTaken,
           agentId: user?.id ?? null,
           ticketId,
         });
@@ -314,6 +347,8 @@ export function LateOrdersPage() {
       }
       setDraft(null);
       setReason('');
+      setActionTaken('');
+      setEditingDecisionId(null);
     } catch {
       toast.error(
         t('lateOrders.decisionFailed', { defaultValue: 'Could not record that decision.' }),
@@ -605,6 +640,20 @@ export function LateOrdersPage() {
                               ? t('lateOrders.hideDetail', { defaultValue: 'Hide details' })
                               : t('lateOrders.showDetail', { defaultValue: 'Cart & tracking' })}
                           </Button>
+                          {/*
+                            COMMENTS — on EVERY row, handled or not (owner,
+                            2026-09-27). Opens the same box; on a row that has
+                            already been decided it arrives populated and saves
+                            as an edit, so the reason and the action can be
+                            corrected without re-deciding anything.
+                          */}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openDecision(row, 'ignored')}
+                          >
+                            {t('lateOrders.comments', { defaultValue: 'Comments' })}
+                          </Button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
@@ -641,6 +690,20 @@ export function LateOrdersPage() {
                           >
                             {t('lateOrders.ignore', { defaultValue: 'Ignore' })}
                           </Button>
+                          {/*
+                            COMMENTS — on EVERY row, handled or not (owner,
+                            2026-09-27). Opens the same box; on a row that has
+                            already been decided it arrives populated and saves
+                            as an edit, so the reason and the action can be
+                            corrected without re-deciding anything.
+                          */}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openDecision(row, 'ignored')}
+                          >
+                            {t('lateOrders.comments', { defaultValue: 'Comments' })}
+                          </Button>
                         </div>
                       )}
                     </Td>
@@ -673,9 +736,11 @@ export function LateOrdersPage() {
         <ConfirmDialog
           open
           title={
-            draft.action === 'ignored'
-              ? t('lateOrders.ignoreTitle', { defaultValue: 'Ignore this order?' })
-              : t('lateOrders.couponTitle', { defaultValue: 'Compensate this order' })
+            editingDecisionId
+              ? t('lateOrders.commentsTitle', { defaultValue: 'Comments' })
+              : draft.action === 'ignored'
+                ? t('lateOrders.ignoreTitle', { defaultValue: 'Ignore this order?' })
+                : t('lateOrders.couponTitle', { defaultValue: 'Compensate this order' })
           }
           description={
             <div className="space-y-3">
@@ -686,15 +751,36 @@ export function LateOrdersPage() {
                   defaultValue: 'Order {{order}} has been running {{minutes}}. Why?',
                 })}
               </p>
-              <Textarea
-                autoFocus
-                rows={3}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder={t('lateOrders.reasonPlaceholder', {
-                  defaultValue: 'The reason - recorded against this order.',
-                })}
-              />
+              {/* TWO fields, labelled: why it happened, and what was done
+                  about it. They answer different questions and were one box
+                  (owner, 2026-09-27). */}
+              <label className="block space-y-1">
+                <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {t('lateOrders.reasonLabel', { defaultValue: 'Reason' })}
+                </span>
+                <Textarea
+                  autoFocus
+                  rows={3}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder={t('lateOrders.reasonPlaceholder', {
+                    defaultValue: 'The reason - recorded against this order.',
+                  })}
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {t('lateOrders.actionLabel', { defaultValue: 'Action taken' })}
+                </span>
+                <Textarea
+                  rows={2}
+                  value={actionTaken}
+                  onChange={(e) => setActionTaken(e.target.value)}
+                  placeholder={t('lateOrders.actionPlaceholder', {
+                    defaultValue: 'What you did about it - e.g. called the branch.',
+                  })}
+                />
+              </label>
               {kindOf(draft.row) === 'late_preparation' && (
                 <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs leading-relaxed">
                   {t('lateOrders.willRaiseTicket', {
@@ -706,9 +792,11 @@ export function LateOrdersPage() {
             </div>
           }
           confirmLabel={
-            draft.action === 'ignored'
-              ? t('lateOrders.confirmIgnore', { defaultValue: 'Ignore' })
-              : t('lateOrders.confirmCoupon', { defaultValue: 'Continue to coupon' })
+            editingDecisionId
+              ? t('actions.save', { ns: 'common', defaultValue: 'Save' })
+              : draft.action === 'ignored'
+                ? t('lateOrders.confirmIgnore', { defaultValue: 'Ignore' })
+                : t('lateOrders.confirmCoupon', { defaultValue: 'Continue to coupon' })
           }
           cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
           loading={busy}
@@ -717,7 +805,11 @@ export function LateOrdersPage() {
             // that, so an empty one is simply refused rather than committed.
             if (reason.trim()) void commit();
           }}
-          onCancel={() => setDraft(null)}
+          onCancel={() => {
+            setDraft(null);
+            setEditingDecisionId(null);
+            setActionTaken('');
+          }}
         />
       )}
 
@@ -753,6 +845,7 @@ export function LateOrdersPage() {
                 kind: coupon.kind,
                 action: 'compensated',
                 reason: coupon.reason,
+                actionTaken: coupon.actionTaken,
                 agentId: user?.id ?? null,
                 ticketId: coupon.ticketId,
               })

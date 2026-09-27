@@ -453,6 +453,10 @@ export const roles: RoleSpec[] = [
        */
       { collection: 'late_order_decisions', action: 'create' },
       { collection: 'late_order_decisions', action: 'read' },
+      /* UPDATE, for the Comments button: an agent may correct the reason and
+         the action they recorded. The DECISION itself is still append-only —
+         only the two free-text fields are editable (owner, 2026-09-27). */
+      { collection: 'late_order_decisions', action: 'update' },
       // Dropdown values + the WhatsApp template: the form reads these live.
       ...readOnly('option_lists'),
       ...readOnly('app_settings'),
