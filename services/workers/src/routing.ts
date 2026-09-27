@@ -373,8 +373,35 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
     return;
   }
 
-  // The pool this chat may be offered to: its team's roster, or everyone.
-  const eligible = await directus.agentsByLoad(convo.assigned_team);
+  /*
+   * The pool this chat may be offered to: its team's roster, or everyone.
+   *
+   * AN EMPTY TEAM FALLS BACK TO EVERYONE (owner, 2026-09-27).
+   *
+   * Scoping to a team is a routing preference; leaving a customer unowned is a
+   * failure. When the team has nobody eligible the ladder used to find an empty
+   * roster, log "NO ELIGIBLE AGENTS" and stop — so the chat stayed unassigned,
+   * which every agent can see, and it read as "the chat was sent to all agents
+   * with no assignment". Measured in production: conversation 70391d73 is
+   * scoped to the "Support" team, that team has ZERO members (all eight agents
+   * carry no team at all), and every customer message into it since 2026-09-15
+   * hit that dead end. The chat at 08:13 the same morning, with no team, routed
+   * perfectly through all three rungs.
+   *
+   * Preferring the team still holds — the fallback only runs when the team
+   * yields nobody, and it says so loudly, because an empty team is a roster
+   * problem somebody has to fix. Routing slightly outside the intended team is
+   * strictly better than a customer nobody is answering.
+   */
+  let eligible = await directus.agentsByLoad(convo.assigned_team);
+  if (convo.assigned_team && eligible.length === 0) {
+    eligible = await directus.agentsByLoad(null);
+    log('routing: TEAM HAS NO ELIGIBLE AGENTS — falling back to the whole roster', {
+      id: convo.id,
+      team: convo.assigned_team,
+      fallbackAgents: eligible.length,
+    });
+  }
 
   /*
    * RECLAIM — the owner's connection dropped mid-conversation.

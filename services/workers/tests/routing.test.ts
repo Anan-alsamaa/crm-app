@@ -279,6 +279,46 @@ describe('auto-assignment ladder', () => {
       await handleRouting(job(), d);
       expect(agentsByLoad).toHaveBeenCalledWith(null);
     });
+
+    /*
+     * AN EMPTY TEAM MUST NOT STRAND THE CUSTOMER (owner, 2026-09-27).
+     *
+     * Production had a chat scoped to a "Support" team with ZERO members while
+     * all eight agents carried no team at all. The ladder asked for that team's
+     * roster, got nothing, logged "NO ELIGIBLE AGENTS" and stopped — so the
+     * chat stayed unassigned, which every agent can see, and the owner reported
+     * it as "sent to all agents without proper assignment".
+     */
+    it('falls back to the whole roster when the team has nobody', async () => {
+      const { d, assign, agentsByLoad } = deps({
+        online: ['a1', 'a2'],
+        convo: { id: 'c1', assigned_agent: null, assigned_team: 'ghost-team', status: 'open' },
+      });
+      // The team yields nobody; the company-wide call yields the real roster.
+      agentsByLoad.mockImplementation(async (team: string | null) =>
+        team === null ? ['a1', 'a2'] : [],
+      );
+      await handleRouting(job(), d);
+      expect(agentsByLoad).toHaveBeenCalledWith('ghost-team');
+      expect(agentsByLoad).toHaveBeenCalledWith(null);
+      // Assigned to somebody rather than left for nobody.
+      expect(assign).toHaveBeenCalledWith('c1', 'a1');
+    });
+
+    it('does NOT fall back when the team has members', async () => {
+      // The fallback must never widen a team chat that is routing correctly.
+      const { d, assign, agentsByLoad } = deps({
+        online: ['day-1', 'night-1'],
+        convo: { id: 'c1', assigned_agent: null, assigned_team: 'day-shift', status: 'open' },
+      });
+      agentsByLoad.mockImplementation(async (team: string | null) =>
+        team === 'day-shift' ? ['day-1'] : ['day-1', 'night-1'],
+      );
+      await handleRouting(job(), d);
+      expect(agentsByLoad).toHaveBeenCalledWith('day-shift');
+      expect(agentsByLoad).not.toHaveBeenCalledWith(null);
+      expect(assign).toHaveBeenCalledWith('c1', 'day-1');
+    });
   });
 
   /*
