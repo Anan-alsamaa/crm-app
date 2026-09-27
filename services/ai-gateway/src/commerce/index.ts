@@ -315,6 +315,52 @@ export async function registerCommerceRoutes(
     );
   });
 
+  /**
+   * DRIVER-ACCEPT TIMES for a batch of orders — the basis of SERVICE TIME.
+   *
+   * Service time is driver-accept → close (or → now while running), and the
+   * late-orders LIST does not carry the driver-accept moment: it lives only in
+   * the per-order status history. Fetching that for a 600-row queue would be
+   * 600 calls into Yiji's production API on every page load, so the portal asks
+   * only for the rows a human is actually looking at and this answers them in
+   * one request.
+   *
+   * Capped at 50 ids. A cap rather than paging because the caller is a viewport
+   * — nobody reads 600 rows at once — and an uncapped batch is how a screen
+   * quietly becomes a load test against somebody else's API.
+   *
+   * Each order is cached on the ORDER ttl and resolved in parallel; a failure
+   * for one id yields null for that id rather than failing the batch, so one
+   * unreachable order cannot blank the whole column.
+   */
+  app.get('/commerce/service-times', async (req, reply) => {
+    if (!(await requireAgent(req, reply))) return;
+    const q = req.query as Record<string, string | undefined>;
+    const ids = str(q.orderIds)
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .slice(0, 50);
+    if (ids.length === 0) return reply.code(400).send({ error: 'missing_params' });
+    return answering(reply, { route: 'service-times', count: ids.length }, async () => {
+      const entries = await Promise.all(
+        ids.map(async (orderId) => {
+          try {
+            const timeline = await cached(['timeline', orderId], COMMERCE_TTL.order, () =>
+              deps.yiji.getOrderTimeline('', orderId),
+            );
+            const at = timeline?.events?.find((e) => e.status === 'driver_accepted')?.at ?? null;
+            return [orderId, at] as const;
+          } catch {
+            /* One unreachable order must not blank the column for the rest. */
+            return [orderId, null] as const;
+          }
+        }),
+      );
+      return Object.fromEntries(entries);
+    });
+  });
+
   app.get('/commerce/payment', async (req, reply) => {
     if (!(await requireAgent(req, reply))) return;
     const q = req.query as Record<string, string | undefined>;

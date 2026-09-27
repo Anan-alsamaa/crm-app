@@ -204,18 +204,37 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       g('conversations', 'read'),
       g('messages', 'read'),
     ],
+    /*
+     * `late_order_decisions` rides with the ticket privileges.
+     *
+     * It was in NO catalog block at all, so no app role could ever reach it —
+     * only the legacy `Agent policy` / `Admin policy` carried grants, and every
+     * real person is on a WeCare role. So the agent portal's Ignore button
+     * answered 403 ("could not save") and the admin portal's Late orders report
+     * showed an error, while the drift guard stayed green because it only
+     * asserted the two legacy roles (owner, 2026-09-27).
+     *
+     * Recording a decision is queue work, so it follows the ticket privileges
+     * rather than earning one of its own: whoever may work tickets may say what
+     * happened to a late order, and whoever may see every ticket may read the
+     * report built from those decisions.
+     */
     view_tickets: [
       g('tickets', 'read', OWN_TICKET),
       g('ticket_events', 'read'),
       g('tickets_files', 'read'),
+      ...readOnly('late_order_decisions'),
     ],
     view_all_tickets: [
       g('tickets', 'read'),
       g('ticket_events', 'read'),
       g('tickets_files', 'read'),
+      ...readOnly('late_order_decisions'),
     ],
     create_tickets: [
       g('tickets', 'create'),
+      // Deciding a late order is the same act as raising the ticket beside it.
+      g('late_order_decisions', 'create'),
       g('ticket_events', 'create'),
       g('tickets_files', 'create'),
       g('tickets_files', 'read'),

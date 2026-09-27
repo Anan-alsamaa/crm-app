@@ -24,6 +24,7 @@ import {
 import {
   LATE_ORDER_COMPLAINT_TYPE,
   parseYijiTimestamp,
+  serviceMinutes,
   type LateOrderKind,
   type LateOrderRow,
 } from '@yiji/shared-types';
@@ -37,6 +38,7 @@ import {
   useHandledLateOrders,
   useLateOrders,
   useRecordLateDecision,
+  useServiceTimes,
   lateOrderTicket,
   FALLBACK_THRESHOLD,
 } from './api.js';
@@ -217,6 +219,18 @@ export function LateOrdersPage() {
       return true;
     });
   }, [queue.data, handled.data, orderQuery, brandQuery, range, todayOnly, today]);
+
+  /*
+   * SERVICE TIME for the rows actually on screen.
+   *
+   * Driver-accept is not in the late-orders list; it is one status-history call
+   * per order. Asking for the whole queue would be hundreds of calls into
+   * Yiji's production API per page load, so this asks only for what is
+   * rendered. `nowMs` ticks with the queue's own refresh so a live order's
+   * service time advances with everything else rather than freezing at mount.
+   */
+  const serviceTimes = useServiceTimes(rows.map((r) => r.orderId));
+  const nowMs = queue.dataUpdatedAt || Date.now();
 
   const kindOf = (row: LateOrderRow): LateOrderKind => kinds[row.orderId] ?? 'late_delivery';
 
@@ -480,6 +494,7 @@ export function LateOrdersPage() {
               <Tr>
                 <Th>{t('lateOrders.col.order', { defaultValue: 'Order' })}</Th>
                 <Th>{t('lateOrders.col.elapsed', { defaultValue: 'Running' })}</Th>
+                <Th>{t('lateOrders.col.service', { defaultValue: 'Service time' })}</Th>
                 <Th>{t('lateOrders.col.brand', { defaultValue: 'Brand / branch' })}</Th>
                 <Th>{t('lateOrders.col.customer', { defaultValue: 'Customer' })}</Th>
                 <Th>{t('lateOrders.col.status', { defaultValue: 'Status' })}</Th>
@@ -496,6 +511,24 @@ export function LateOrdersPage() {
                       <Pill tone={tone(row.minutesElapsed, threshold)} size="sm">
                         {elapsed(row.minutesElapsed)}
                       </Pill>
+                    </Td>
+                    {/*
+                      SERVICE TIME — the DRIVER leg, not the whole order.
+                      Closed: close − driver-accept. Live: now − driver-accept.
+                      Blank while the batch is still loading, and "-" once we
+                      know the driver has not accepted: an empty cell and a
+                      confirmed "no driver yet" are different facts.
+                    */}
+                    <Td className="whitespace-nowrap tabular-nums">
+                      {(() => {
+                        if (serviceTimes.isLoading) return '';
+                        const mins = serviceMinutes(
+                          serviceTimes.data?.[row.orderId] ?? null,
+                          row.closedAt ?? null,
+                          nowMs,
+                        );
+                        return mins === null ? '-' : elapsed(mins);
+                      })()}
                     </Td>
                     <Td className="max-w-[16rem] truncate">
                       {[row.brandName, row.restaurantName].filter(Boolean).join(' - ') || '-'}
@@ -616,7 +649,7 @@ export function LateOrdersPage() {
                     <Tr>
                       {/* Mounted only when open, so the queue never pays for
                         carts nobody asked to see. */}
-                      <Td colSpan={7} className="p-2">
+                      <Td colSpan={8} className="p-2">
                         <LateOrderDetail orderId={row.orderId} vendorId={soleVendorId} />
                       </Td>
                     </Tr>

@@ -170,7 +170,42 @@ export interface LateOrderRow {
   total?: number;
   /** Yiji's own customer id, when the row carried one — for the coupon push. */
   externalCustomerId?: string;
+  /**
+   * When a FINISHED order reached its final status (`orderStatusDate`).
+   *
+   * Carried so the client can measure SERVICE TIME — driver-accept to close —
+   * without a second call for the half of the sum it already has. Absent on a
+   * live order, which has not closed yet and is measured against now instead.
+   */
+  closedAt?: string;
 }
+
+/**
+ * SERVICE TIME: how long the DRIVER leg took.
+ *
+ * Deliberately not `minutesElapsed`, which runs from when the order was PLACED
+ * and therefore includes kitchen preparation. The owner's rule (2026-09-27):
+ *
+ *   closed order  →  closed time − driver-accept time
+ *   live order    →  now − driver-accept time
+ *
+ * `null` when the driver has not accepted yet — there is no service to time, and
+ * a zero there would read as "instant" rather than "not started".
+ */
+export function serviceMinutes(
+  driverAcceptedAt: string | null | undefined,
+  closedAt: string | null | undefined,
+  now: number,
+): number | null {
+  const started = parseYijiTimestamp(driverAcceptedAt);
+  if (!Number.isFinite(started)) return null;
+  const ended = closedAt ? parseYijiTimestamp(closedAt) : now;
+  const end = Number.isFinite(ended) ? ended : now;
+  return Math.max(0, Math.floor((end - started) / 60_000));
+}
+
+/** The Yiji status whose timestamp is the driver-accept moment. */
+export const YIJI_STATUS_DRIVER_ACCEPTED = 4;
 
 export interface LateOrderQueue {
   rows: LateOrderRow[];

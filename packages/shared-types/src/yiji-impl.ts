@@ -1130,6 +1130,20 @@ export class HttpYijiClient implements YijiClient {
        * it is how long ago it happened. For those the span is
        * creation -> orderStatusDate, which IS how long the customer waited.
        */
+      /*
+       * DELIVERY ONLY — the whole feature is about a driver being late.
+       *
+       * The query already asks Yiji for `DeliveryTypeIds=1`, and this re-checks
+       * the ANSWER. A filter you send is a request; a filter you apply is a
+       * guarantee, and the rest of this file exists because upstream filters
+       * did not always mean what they looked like. Rows arriving with no
+       * `deliveryType` at all are kept: the list endpoint does not always carry
+       * the field, and dropping them would empty the queue (owner, 2026-09-27).
+       */
+      if (order.deliveryType != null && order.deliveryType !== YIJI_DELIVERY_TYPE_DELIVERY) {
+        continue;
+      }
+
       const live = isLiveOrderStatus(order.orderStatus);
       const endedAt = live ? now.getTime() : parseYijiTimestamp(order.orderStatusDate);
       const minutesElapsed = minutesSince(
@@ -1143,6 +1157,8 @@ export class HttpYijiClient implements YijiClient {
         minutesElapsed,
         live,
         placedAt,
+        // Only meaningful once the order stopped; a live one is measured to now.
+        closedAt: live ? undefined : (order.orderStatusDate ?? undefined),
         brandName: row.brandName?.trim() || order.brandName?.trim() || undefined,
         restaurantName: row.restaurantName?.trim() || order.restaurantName?.trim() || undefined,
         restaurantId: order.restaurantId != null ? String(order.restaurantId) : undefined,

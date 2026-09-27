@@ -7,6 +7,7 @@ import {
   LateOrderDecision,
   minutesSince,
   parseYijiTimestamp,
+  serviceMinutes,
 } from '../src/late-delivery.js';
 import { couponOrderId } from '../src/coupon-approvals.js';
 
@@ -189,5 +190,41 @@ describe('minutesSince — a finished order stops the clock', () => {
     expect(minutesSince(placed, ended)).toBe(68);
     // What the bug produced, for contrast — 30 days of minutes.
     expect(minutesSince(placed, monthLater)).toBe(43200);
+  });
+});
+
+/*
+ * SERVICE TIME is the DRIVER leg, deliberately not `minutesElapsed`, which runs
+ * from when the order was placed and so includes kitchen preparation. The
+ * owner's rule (2026-09-27): closed => close - accept, live => now - accept.
+ */
+describe('serviceMinutes', () => {
+  // Yiji stamps carry no zone and are Riyadh local, so both ends go through
+  // parseYijiTimestamp and the offset cancels out.
+  const accept = '2026-09-17T13:17:22.08078';
+
+  it('measures a closed order from accept to close', () => {
+    expect(serviceMinutes(accept, '2026-09-17T14:00:00', 0)).toBe(42);
+  });
+
+  it('measures a live order from accept to now', () => {
+    const now = Date.parse('2026-09-17T14:30:00Z') - 3 * 60 * 60 * 1000;
+    expect(serviceMinutes(accept, null, now)).toBe(72);
+  });
+
+  it('is null when no driver has accepted yet', () => {
+    // Not 0: "instant" and "not started" are different facts, and a zero here
+    // would read as a driver who delivered the moment they accepted.
+    expect(serviceMinutes(null, '2026-09-17T14:00:00', 0)).toBeNull();
+    expect(serviceMinutes('', '2026-09-17T14:00:00', 0)).toBeNull();
+  });
+
+  it('never goes negative when the clocks disagree', () => {
+    expect(serviceMinutes(accept, '2026-09-17T13:00:00', 0)).toBe(0);
+  });
+
+  it('falls back to now when the close stamp is unparseable', () => {
+    const now = Date.parse('2026-09-17T14:30:00Z') - 3 * 60 * 60 * 1000;
+    expect(serviceMinutes(accept, 'not-a-date', now)).toBe(72);
   });
 });

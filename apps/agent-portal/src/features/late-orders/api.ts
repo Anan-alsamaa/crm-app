@@ -81,6 +81,31 @@ export function useHandledLateOrders() {
 }
 
 /**
+ * SERVICE TIME for the rows on screen: driver-accept → close, or → now.
+ *
+ * Only the visible order ids, because the driver-accept moment is not in the
+ * late-orders list — it lives in each order's status history, one call each.
+ * Asking for a 600-row queue would be 600 calls into Yiji's production API per
+ * page load; asking for the ~25 a human can see is one batched call.
+ *
+ * Returns a map of order id → driver-accept timestamp (or null when the driver
+ * has not accepted yet). The minutes are computed at render against the same
+ * clock the rest of the row uses.
+ */
+export function useServiceTimes(orderIds: string[]) {
+  // Sorted + joined so the key is stable: the same ids in a different order
+  // must not look like a different query and refetch.
+  const key = [...orderIds].sort().join(',');
+  return useQuery<Record<string, string | null>>({
+    queryKey: ['late-orders', 'service-times', key],
+    enabled: orderIds.length > 0,
+    staleTime: 60_000,
+    retry: false,
+    queryFn: () => commerce.getServiceTimes(orderIds),
+  });
+}
+
+/**
  * The contact behind a late order, when the CRM already knows them.
  *
  * The owner's spec says the ticket carries the CONTACT from the order. We were
@@ -165,7 +190,18 @@ export function useRecordLateDecision() {
         ),
       ),
     onSuccess: () => {
+      /*
+       * BOTH queries, or the row does not go away.
+       *
+       * The queue hides a decided order by checking it against the HANDLED set
+       * (`useHandledLateOrders`), which is a separate query. Invalidating only
+       * the queue refetched the same rows from Yiji — who has no idea we
+       * decided anything — and compared them against a stale handled set, so
+       * an ignored order sat there until the 15s staleTime lapsed and looked
+       * like the button had done nothing (owner, 2026-09-27).
+       */
       void qc.invalidateQueries({ queryKey: ['late-orders'] });
+      void qc.invalidateQueries({ queryKey: ['late-orders', 'handled'] });
     },
   });
 }

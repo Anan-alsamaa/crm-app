@@ -111,6 +111,18 @@ export const commerce = {
    * panel renders as "unavailable" rather than as an empty cart.
    */
   getOrderCart: (orderId: string) => get<YijiOrderCart | null>('/commerce/cart', { orderId }),
+  /**
+   * Driver-accept times for a batch of orders — one call, not one per row.
+   *
+   * Service time is measured from the driver accepting, and that moment is not
+   * in the late-orders list; it lives in each order's status history. Asked for
+   * only the rows on screen, so a long queue never turns into hundreds of calls
+   * against Yiji's production API. The gateway caps the batch at 50.
+   */
+  getServiceTimes: (orderIds: string[]) =>
+    get<Record<string, string | null>>('/commerce/service-times', {
+      orderIds: orderIds.join(','),
+    }),
 };
 
 export type CommerceClient = typeof commerce;

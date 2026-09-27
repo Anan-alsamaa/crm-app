@@ -119,6 +119,33 @@ const EXPECTED = [
   { role: 'Agent', collection: 'late_order_decisions', actions: ['create', 'read'] },
   { role: 'Admin', collection: 'late_order_decisions', actions: ['read'] },
   /*
+   * THE APP ROLES TOO, not just the legacy two.
+   *
+   * This guard asserted only `Agent` and `Admin` — the code-defined roles
+   * nobody is actually on. `late_order_decisions` was missing from the
+   * app-roles-sync CATALOG entirely, so every WeCare role had NO grant on it:
+   * the agent portal's Ignore button answered 403 and the admin portal's Late
+   * orders report failed outright, while this file reported everything green
+   * (owner, 2026-09-27).
+   *
+   * A guard that checks the roles nobody uses is a guard that cannot fail.
+   */
+  {
+    role: 'WeCare Agent',
+    collection: 'late_order_decisions',
+    actions: ['create', 'read'],
+  },
+  {
+    role: 'WeCare Supervisor',
+    collection: 'late_order_decisions',
+    actions: ['create', 'read'],
+  },
+  {
+    role: 'WeCare Admin',
+    collection: 'late_order_decisions',
+    actions: ['create', 'read'],
+  },
+  /*
    * The dropdown lists the ops team edits (complaint types, service types,
    * sources...). Both roles are told they may manage these — the admin portal
    * offers Add/Edit/Delete to each — and until 2026-09-22 WeCare Supervisor
