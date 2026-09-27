@@ -913,8 +913,10 @@ export function LatestOrder({
   const pinned = pinnedOrderId
     ? (pinnedOrder.data ?? recent.find((o) => String(o.orderId) === pinnedOrderId) ?? null)
     : null;
+  /* Rendered SEPARATELY above, so it is removed from the recent list here —
+     otherwise the same order appears twice on the panel. */
   const fetched = pinned
-    ? [pinned, ...recent.filter((o) => String(o.orderId) !== String(pinned.orderId))].slice(0, 3)
+    ? recent.filter((o) => String(o.orderId) !== String(pinned.orderId))
     : recent;
 
   // A DISABLED query never resolves, so `isLoading` stays true forever and the
@@ -942,7 +944,7 @@ export function LatestOrder({
         }
       : undefined;
 
-  const total = fetched.length + kept.length;
+  const total = fetched.length + kept.length + (pinned ? 1 : 0);
 
   return (
     <div className="space-y-2">
@@ -984,13 +986,39 @@ export function LatestOrder({
            * being discussed. It is the most specific thing on the panel and the
            * only part they chose, so it goes where they are looking.
            */}
+          {/*
+            THE ORDER THE CUSTOMER CAME FROM — first, and said out loud.
+            
+            Above even the kept orders: an agent may type an order number for
+            their own reasons, but this one is the customer's own subject, set
+            when Yiji opened the chat from that order's tracking screen. It is
+            also LABELLED, because an order card that is merely first looks
+            like the newest one and the agent has no way to know the customer
+            named it (owner, 2026-09-27).
+          */}
+          {pinned && (
+            <li className="space-y-1">
+              <p className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-primary">
+                <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
+                {t('commerce.orderFromChat', {
+                  defaultValue: 'The order this chat is about',
+                })}
+              </p>
+              <ExpandableOrder
+                vendorId={vendorId}
+                summary={pinned}
+                defaultOpen
+                onCreateTicket={raiseTicket}
+              />
+            </li>
+          )}
           {kept.map((o, i) => (
             <li key={o.orderId} className="space-y-1">
               {/* The newest kept order is the one just looked up — open it. */}
               <ExpandableOrder
                 vendorId={vendorId}
                 summary={o}
-                defaultOpen={i === 0}
+                defaultOpen={i === 0 && !pinned}
                 onCreateTicket={raiseTicket}
               />
               {/* Only orders the agent ADDED can be removed. The customer's
@@ -1017,7 +1045,7 @@ export function LatestOrder({
               <ExpandableOrder
                 vendorId={vendorId}
                 summary={o}
-                defaultOpen={i === 0 && kept.length === 0}
+                defaultOpen={i === 0 && kept.length === 0 && !pinned}
                 onCreateTicket={raiseTicket}
               />
             </li>
