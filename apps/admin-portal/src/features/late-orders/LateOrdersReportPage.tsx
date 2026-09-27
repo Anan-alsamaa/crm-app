@@ -11,8 +11,10 @@ import {
   Td,
   Th,
   Tr,
+  formatDate,
   formatDateTime,
 } from '@yiji/ui';
+import { businessDay } from '@yiji/shared-types';
 import { useRememberedRange } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { agentLateStats, agentName, useLateOrderDecisions } from './api.js';
@@ -258,6 +260,7 @@ export function LateOrdersReportPage() {
               <thead>
                 <Tr>
                   <Th>{t('lateOrdersReport.col.when', { defaultValue: 'When' })}</Th>
+                  <Th>{t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' })}</Th>
                   <Th>{t('lateOrdersReport.col.order', { defaultValue: 'Order' })}</Th>
                   <Th>{t('lateOrdersReport.col.brand', { defaultValue: 'Brand / branch' })}</Th>
                   <Th>{t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' })}</Th>
@@ -272,6 +275,20 @@ export function LateOrdersReportPage() {
                   <Tr key={r.id}>
                     <Td className="whitespace-nowrap text-muted-foreground">
                       {r.date_created ? formatDateTime(r.date_created) : '-'}
+                    </Td>
+                    {/*
+                      THE BUSINESS DAY, 10:00 to 04:00, named after the day it
+                      started. Trading runs past midnight, so the calendar date
+                      splits one night's work across two rows: 23:50 and 00:10
+                      are the same shift and belong on the same line.
+                      Derived, never stored — the rule is one function and the
+                      report must not hold a second, older copy of it.
+                    */}
+                    <Td className="whitespace-nowrap tabular-nums">
+                      {(() => {
+                        const day = businessDay(r.date_created);
+                        return day ? formatDate(day) : '-';
+                      })()}
                     </Td>
                     <Td className="whitespace-nowrap tabular-nums">{r.order_id ?? '-'}</Td>
                     <Td className="max-w-[14rem] truncate">

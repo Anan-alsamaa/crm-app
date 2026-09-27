@@ -8,6 +8,7 @@ import {
   minutesSince,
   parseYijiTimestamp,
   serviceMinutes,
+  businessDay,
 } from '../src/late-delivery.js';
 import { couponOrderId } from '../src/coupon-approvals.js';
 
@@ -226,5 +227,49 @@ describe('serviceMinutes', () => {
   it('falls back to now when the close stamp is unparseable', () => {
     const now = Date.parse('2026-09-17T14:30:00Z') - 3 * 60 * 60 * 1000;
     expect(serviceMinutes(accept, 'not-a-date', now)).toBe(72);
+  });
+});
+
+/*
+ * THE BUSINESS DAY — 08:00 to 04:00, named after the day it started.
+ *
+ * The boundaries are the whole point: trading runs past midnight, so a
+ * calendar cut splits one night's work across two reporting rows. These cases
+ * are the exact instants either side of each edge.
+ *
+ * Timestamps are Riyadh-local and unmarked, exactly as Yiji sends them.
+ */
+describe('businessDay', () => {
+  it('opens a new day at 08:00', () => {
+    expect(businessDay('2026-09-22T07:59:59')).toBe('2026-09-21');
+    expect(businessDay('2026-09-22T08:00:00')).toBe('2026-09-22');
+  });
+
+  it('keeps the night after midnight on the day it started', () => {
+    // 23:50 and 00:10 are the same shift and must not split.
+    expect(businessDay('2026-09-22T23:50:00')).toBe('2026-09-22');
+    expect(businessDay('2026-09-23T00:10:00')).toBe('2026-09-22');
+    expect(businessDay('2026-09-23T03:59:59')).toBe('2026-09-22');
+  });
+
+  it('files the 04:00-08:00 gap on the day that just ended', () => {
+    // The owner's rule: those hours belong to the previous business day, so
+    // every order lands in exactly one and the totals reconcile.
+    expect(businessDay('2026-09-23T04:00:00')).toBe('2026-09-22');
+    expect(businessDay('2026-09-23T06:30:00')).toBe('2026-09-22');
+    expect(businessDay('2026-09-23T07:59:59')).toBe('2026-09-22');
+  });
+
+  it('is null for a timestamp it cannot read', () => {
+    // Inventing a day would file the order under a date nobody can trace.
+    expect(businessDay(null)).toBeNull();
+    expect(businessDay('')).toBeNull();
+    expect(businessDay('not-a-date')).toBeNull();
+  });
+
+  it('reads an explicitly-zoned stamp in Riyadh terms', () => {
+    // 05:00 UTC is 08:00 in Riyadh — the moment the day turns.
+    expect(businessDay('2026-09-22T04:59:00Z')).toBe('2026-09-21');
+    expect(businessDay('2026-09-22T05:00:00Z')).toBe('2026-09-22');
   });
 });

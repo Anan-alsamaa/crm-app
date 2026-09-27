@@ -255,3 +255,48 @@ export const LateOrderDecision = z.object({
   reason: z.string().trim().min(1, 'A reason is required.'),
 });
 export type LateOrderDecision = z.infer<typeof LateOrderDecision>;
+
+/**
+ * THE BUSINESS DAY: 08:00 → 04:00 the next morning, named after the day it
+ * STARTED (owner, 2026-09-27).
+ *
+ * Trading runs past midnight, so the calendar date splits one night's work in
+ * two: orders at 23:50 and 00:10 belong to the same shift and the same
+ * reporting row, and a `date_created` cut files them a day apart.
+ *
+ * GAPLESS, BY DECISION. The stated window leaves 04:00–08:00 unclaimed, and
+ * the owner's rule is that those hours belong to the day that just ENDED
+ * (2026-09-27). So the boundary is a single instant — 08:00 — and every order
+ * lands in exactly one business day:
+ *
+ *   Tue 07:59  →  Monday    (the tail of Monday's night)
+ *   Tue 08:00  →  Tuesday   (Tuesday opens)
+ *   Wed 03:59  →  Tuesday   (still Tuesday's night)
+ *   Wed 06:00  →  Tuesday   (the 04:00–08:00 tail)
+ *
+ * Without that, "how many late orders on Tuesday" and "how many late orders
+ * in total" stop reconciling, which is the failure the whole report exists to
+ * avoid.
+ *
+ * RIYADH LOCAL, like every other Yiji timestamp — see `parseYijiTimestamp`.
+ * The boundary is a wall-clock hour in the branch's own day, so it has to be
+ * evaluated in Riyadh's zone, never the container's.
+ */
+export const BUSINESS_DAY_START_HOUR = 8;
+
+/**
+ * The business day an instant belongs to, as `YYYY-MM-DD`.
+ *
+ * `null` when the timestamp cannot be read — an unparseable stamp has no day,
+ * and inventing one would file the order under a date nobody can trace.
+ */
+export function businessDay(raw: string | null | undefined): string | null {
+  const ms = parseYijiTimestamp(raw);
+  if (!Number.isFinite(ms)) return null;
+  // Shift into Riyadh wall-clock, then roll back so the day turns at 08:00
+  // rather than midnight. Both offsets are applied to the same value, so the
+  // arithmetic never depends on the host's zone.
+  const riyadh = ms + RIYADH_OFFSET_MS;
+  const shifted = riyadh - BUSINESS_DAY_START_HOUR * 60 * 60 * 1000;
+  return new Date(shifted).toISOString().slice(0, 10);
+}
