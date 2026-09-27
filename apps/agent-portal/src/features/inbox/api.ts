@@ -36,6 +36,12 @@ export interface InboxConversation {
    * a column rather than a cache — to make the inbox searchable by order id.
    */
   last_order_id?: string | null;
+  /**
+   * The order the customer opened the chat FROM (Yiji's order-tracking
+   * screen). Distinct from `last_order_id`, which this portal stamps with
+   * whatever order was last viewed.
+   */
+  entry_order_id?: string | null;
   last_order_snapshot?: YijiOrder | null;
   last_order_at?: string | null;
 }
@@ -589,6 +595,7 @@ export function useConversation(conversationId: string | null) {
               'assigned_team',
               // Paints the order panel before the commerce call has started.
               'last_order_id',
+              'entry_order_id',
               'last_order_snapshot',
               'last_order_at',
               { contact: ['id', 'name', 'email', 'phone'] },

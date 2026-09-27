@@ -1033,6 +1033,7 @@
     "actionPlaceholder": "ما الذي قمت به — مثل: تم الاتصال بالفرع.",
     "comments": "الملاحظات",
     "commentsTitle": "الملاحظات",
-    "commentsSaved": "تم الحفظ."
+    "commentsSaved": "تم الحفظ.",
+    "detailTitle": "الطلب {{order}} — السلة والتتبع"
   }
 }

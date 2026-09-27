@@ -387,10 +387,12 @@ export function ConversationSidebar({
             // Already on screen with the conversation, so the panel has an
             // order to show from the first frame instead of a skeleton.
             stamped={c.last_order_snapshot ?? null}
-            /* Set at creation when Yiji opened this chat from an order's
-               tracking screen, so the panel leads with the order the customer
-               is actually writing about. */
-            pinnedOrderId={c.last_order_id ?? null}
+            /* `entry_order_id`, NOT `last_order_id`: the latter is also
+               stamped by this very panel with whatever order was last viewed,
+               so using it made every chat claim to be "about" the newest
+               order. This column is written once, at creation, only when Yiji
+               opened the chat from an order's tracking screen. */
+            pinnedOrderId={c.entry_order_id ?? null}
             onCreateTicket={onCreateTicketForOrder}
           />
         </section>

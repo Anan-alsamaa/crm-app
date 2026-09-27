@@ -344,11 +344,17 @@ export class GatewayDirectus {
         priority: 'medium',
         unread_count_agent: 0,
         last_message_at: new Date().toISOString(),
-        /* Only when the customer came from an order's tracking screen. Omitted
-           otherwise — a blank here would be indistinguishable from a real id.
-           `last_order_id` is the column the inbox already searches and the
-           order panel already reads, so this needs no new field. */
-        ...(orderId ? { last_order_id: orderId, last_order_at: new Date().toISOString() } : {}),
+        /* Only when the customer came from an order's tracking screen.
+           BOTH columns: `entry_order_id` is the durable fact (never stamped
+           over by the portal) and `last_order_id` seeds the inbox's order
+           search so the chat is findable by that number straight away. */
+        ...(orderId
+          ? {
+              entry_order_id: orderId,
+              last_order_id: orderId,
+              last_order_at: new Date().toISOString(),
+            }
+          : {}),
       } as never),
     )) as { id: string };
     return { id: created.id, created: true };
@@ -402,7 +408,13 @@ export class GatewayDirectus {
         priority: 'medium',
         unread_count_agent: 0,
         last_message_at: new Date().toISOString(),
-        ...(orderId ? { last_order_id: orderId, last_order_at: new Date().toISOString() } : {}),
+        ...(orderId
+          ? {
+              entry_order_id: orderId,
+              last_order_id: orderId,
+              last_order_at: new Date().toISOString(),
+            }
+          : {}),
       } as never),
     )) as { id: string };
 

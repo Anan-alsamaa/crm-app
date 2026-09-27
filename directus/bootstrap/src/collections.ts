@@ -288,18 +288,27 @@ export const collections: CollectionSpec[] = [
        *
        * Indexed: the inbox search box hits it on every keystroke.
        */
+      { field: 'last_order_id', type: 'string', index: true },
       {
-        /* The order this chat is about.
+        /* THE ORDER THE CUSTOMER CAME FROM — set once, at creation, and never
+         * by the portal.
          *
-         * Stamped by the agent portal when an order is opened in the panel —
-         * and now also set AT CREATION when Yiji's app opens the chat from an
-         * order's tracking screen, which is the only moment the subject is
-         * known for certain (owner, 2026-09-27). Deliberately the same column
-         * rather than a second one: the inbox already searches it, the panel
-         * already reads it, and two columns meaning "the order" would drift. */
-        field: 'last_order_id',
+         * This was first folded into `last_order_id` on the reasoning that two
+         * columns meaning "the order" would drift. That was wrong, and wrong in
+         * a way only the running system showed: `last_order_id` has a SECOND
+         * writer — the agent portal stamps whatever the order panel resolved —
+         * so the tracked order was overwritten by the customer's newest one
+         * minutes later, and every chat then claimed to be "about" whatever
+         * order was last viewed.
+         *
+         * They are different facts. `last_order_id` is the order most recently
+         * LOOKED AT, which is why the inbox searches it. This is the order the
+         * customer OPENED THE CHAT FROM, which only Yiji knows and only at the
+         * moment the session is minted (owner, 2026-09-27). */
+        field: 'entry_order_id',
         type: 'string',
         index: true,
+        note: "Yiji's order id when the chat was opened from that order's tracking screen. Written once at creation; never stamped by the portal.",
       },
       {
         field: 'last_order_snapshot',

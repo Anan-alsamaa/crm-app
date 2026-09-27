@@ -859,9 +859,25 @@ export function LatestOrder({
   // and "find the chat about order 946641" becomes answerable at all.
   useEffect(() => {
     if (!conversationId) return;
+    /*
+     * NEVER OVERWRITE A PINNED ORDER.
+     *
+     * `last_order_id` is one column serving two writers: this effect stamps
+     * whatever the panel resolved, and the gateway sets it at creation when
+     * Yiji opened the chat from an order's tracking screen. This effect ran
+     * anyway and stamped the customer's NEWEST order over the pinned one — so
+     * the panel correctly showed "the order this chat is about" and then, a
+     * moment later, showed the wrong order under that heading. Measured in
+     * production: conversation 65cf4304 was created at 10:55 carrying the
+     * tracked order and re-stamped at 11:46 with 1232382 (owner, 2026-09-27).
+     *
+     * The customer's own subject outranks anything this panel infers, so when
+     * a pinned id is present the stamp stands down entirely.
+     */
+    if (pinnedOrderId) return;
     const resolved = detail ?? orders.data?.orders[0] ?? null;
     if (resolved) stampOrder(conversationId, resolved);
-  }, [conversationId, detail, orders.data, stampOrder]);
+  }, [conversationId, detail, orders.data, stampOrder, pinnedOrderId]);
 
   // Orders the agent looked up and kept, alongside the automatic ones.
   const added = useSyncExternalStore(

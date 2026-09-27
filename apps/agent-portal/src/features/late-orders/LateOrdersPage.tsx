@@ -6,6 +6,7 @@ import {
   Card,
   ConfirmDialog,
   DateField,
+  Drawer,
   EmptyState,
   ErrorState,
   Input,
@@ -649,7 +650,12 @@ export function LateOrdersPage() {
                           */}
                           <Button
                             size="sm"
-                            variant="ghost"
+                            /* `secondary`, not `ghost`: a transparent button
+                               reads as a link, and this is an action on the
+                               row like the ones beside it. The light grey fill
+                               is the same one "Cart & tracking" carries, so
+                               the two sit as peers (owner, 2026-09-27). */
+                            variant="secondary"
                             onClick={() => openDecision(row, 'ignored')}
                           >
                             {t('lateOrders.comments', { defaultValue: 'Comments' })}
@@ -699,7 +705,12 @@ export function LateOrdersPage() {
                           */}
                           <Button
                             size="sm"
-                            variant="ghost"
+                            /* `secondary`, not `ghost`: a transparent button
+                               reads as a link, and this is an action on the
+                               row like the ones beside it. The light grey fill
+                               is the same one "Cart & tracking" carries, so
+                               the two sit as peers (owner, 2026-09-27). */
+                            variant="secondary"
                             onClick={() => openDecision(row, 'ignored')}
                           >
                             {t('lateOrders.comments', { defaultValue: 'Comments' })}
@@ -708,21 +719,36 @@ export function LateOrdersPage() {
                       )}
                     </Td>
                   </Tr>
-                  {expanded === row.orderId && (
-                    <Tr>
-                      {/* Mounted only when open, so the queue never pays for
-                        carts nobody asked to see. */}
-                      <Td colSpan={8} className="p-2">
-                        <LateOrderDetail orderId={row.orderId} vendorId={soleVendorId} />
-                      </Td>
-                    </Tr>
-                  )}
                 </Fragment>
               ))}
             </tbody>
           </Table>
         </Card>
       )}
+
+      {/*
+        CART & TRACKING IN A PANEL, not inline under the row.
+
+        It used to expand a full-width row inside the table, which pushed
+        every other late order off the screen — on a queue the whole point of
+        which is scanning rows, the detail was displacing the thing being
+        scanned (owner, 2026-09-27). A drawer overlays instead: the queue stays
+        where it was, and Esc or the backdrop returns to it.
+
+        Mounted only while open, so the queue never pays for carts nobody
+        asked to see — the same reason the inline version was conditional.
+      */}
+      <Drawer
+        open={!!expanded}
+        onClose={() => setExpanded(null)}
+        width="lg"
+        title={t('lateOrders.detailTitle', {
+          order: expanded ?? '',
+          defaultValue: 'Order {{order}} — cart & tracking',
+        })}
+      >
+        {expanded && <LateOrderDetail orderId={expanded} vendorId={soleVendorId} />}
+      </Drawer>
 
       {/*
         The reason, demanded for BOTH actions.
