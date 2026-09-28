@@ -97,6 +97,52 @@ function isoDaysAgo(n: number): string {
 interface DecisionDraft {
   row: LateOrderRow;
   action: 'ignored' | 'compensated';
+  /**
+   * Opened by VIEW rather than by a decision button.
+   *
+   * View and Ignore both carry `action: 'ignored'` — viewing writes the same
+   * shape of record — so the action alone cannot tell them apart, and the
+   * dialog was offering "Ignore" as its confirm button to somebody who had only
+   * asked to look at the notes (owner, 2026-09-28).
+   *
+   * `editingDecisionId` is not enough either: it is null on a row that has no
+   * decision yet, which is exactly the case that showed the wrong button.
+   */
+  viewing?: boolean;
+}
+
+/**
+ * Which branch `commit()` must take, and what the confirm button must say.
+ *
+ * EXPORTED, and used by the component below, so the tests exercise the real
+ * thing. Re-stating this table in a test file would produce tests that pass
+ * whatever the page does, which is worse than having none.
+ *
+ * VIEW IS NOT A DECISION. View and Ignore both open the same box carrying
+ * `action: 'ignored'`, and this used to key on `editingDecisionId` alone —
+ * which is null on a row with no decision yet. So View on an undecided row
+ * offered an "Ignore" button that would have RECORDED an ignore and dropped
+ * the order off the live queue (owner, 2026-09-28).
+ */
+export type DecisionOutcome = 'coupon' | 'update' | 'noop' | 'record-ignore';
+
+export function decisionOutcome(
+  draft: { action: 'ignored' | 'compensated'; viewing?: boolean },
+  editingDecisionId: string | null,
+): DecisionOutcome {
+  if (draft.action === 'compensated') return 'coupon';
+  if (editingDecisionId) return 'update';
+  // Nothing to update and nothing decided: saying so beats deciding for them.
+  if (draft.viewing) return 'noop';
+  return 'record-ignore';
+}
+
+/** True when the box was opened to READ or EDIT notes rather than to decide. */
+export function isNotesView(
+  draft: { viewing?: boolean },
+  editingDecisionId: string | null,
+): boolean {
+  return !!editingDecisionId || !!draft.viewing;
 }
 
 export function LateOrdersPage() {
@@ -315,7 +361,7 @@ export function LateOrdersPage() {
 
   const kindOf = (row: LateOrderRow): LateOrderKind => kinds[row.orderId] ?? 'late_delivery';
 
-  const openDecision = (row: LateOrderRow, action: 'ignored' | 'compensated') => {
+  const openDecision = (row: LateOrderRow, action: 'ignored' | 'compensated', viewing = false) => {
     /*
      * Seeded from the decision already recorded, when there is one.
      *
@@ -324,7 +370,7 @@ export function LateOrdersPage() {
      * agent would have to retype.
      */
     const existing = decisions.data?.get(row.orderId);
-    setDraft({ row, action });
+    setDraft({ row, action, viewing });
     setReason(existing?.reason ?? '');
     setActionTaken(existing?.action_taken ?? '');
     setEditingDecisionId(existing?.id ?? null);
@@ -413,7 +459,10 @@ export function LateOrdersPage() {
         )) as { id: string };
         ticketId = created?.id ?? null;
       }
-      if (draft.action === 'compensated') {
+      /* ONE source for which branch this takes — `decisionOutcome` is exported
+         and tested, so the four cases cannot drift apart. */
+      const outcome = decisionOutcome(draft, editingDecisionId);
+      if (outcome === 'coupon') {
         // Nothing is recorded yet — see the note above. The coupon form writes
         // the decision itself, once a request actually exists.
         setCoupon({
@@ -424,16 +473,36 @@ export function LateOrdersPage() {
           ticketId,
           contactId,
         });
-      } else if (editingDecisionId) {
+      } else if (outcome === 'update') {
         /* Editing an existing decision: only the wording changes. The decision
            TYPE stays as it was taken — fixing a typo must not turn an ignore
            into a compensation. */
         await updateDecision.mutateAsync({
-          id: editingDecisionId,
+          id: editingDecisionId!,
           reason: text,
           actionTaken,
         });
         toast.success(t('lateOrders.commentsSaved', { defaultValue: 'Saved.' }));
+      } else if (outcome === 'noop') {
+        /*
+         * VIEW MUST NOT DECIDE ANYTHING.
+         *
+         * Opened by View on a row with no decision yet, there is nothing to
+         * update — and falling through to the branch below would have RECORDED
+         * AN IGNORE: the button said Save, and the order would have dropped off
+         * the live queue as ignored. A note is not a decision, and the two must
+         * never be the same click.
+         *
+         * So it says so and changes nothing. Writing a note against an
+         * undecided order would need its own column; the decision row is the
+         * only place these fields live today, and it does not exist yet.
+         */
+        // `warning`, not `info` — this toast API has success/error/warning only.
+        toast.warning(
+          t('lateOrders.nothingToSave', {
+            defaultValue: 'Nothing to save yet — assign a coupon or ignore the order first.',
+          }),
+        );
       } else {
         await record.mutateAsync({
           row: draft.row,
@@ -891,9 +960,9 @@ export function LateOrdersPage() {
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => openDecision(row, 'ignored')}
+                        onClick={() => openDecision(row, 'ignored', true)}
                       >
-                        {t('lateOrders.comments', { defaultValue: 'Comments' })}
+                        {t('lateOrders.comments', { defaultValue: 'View' })}
                       </Button>
                     </Td>
                   </Tr>
@@ -942,8 +1011,11 @@ export function LateOrdersPage() {
         <ConfirmDialog
           open
           title={
-            editingDecisionId
-              ? t('lateOrders.commentsTitle', { defaultValue: 'Comments' })
+            /* Same condition as the confirm button, and for the same reason:
+               pressing View on a row with no decision yet would otherwise ask
+               "Ignore this order?" — a question the agent never asked. */
+            isNotesView(draft, editingDecisionId)
+              ? t('lateOrders.commentsTitle', { defaultValue: 'Notes' })
               : draft.action === 'ignored'
                 ? t('lateOrders.ignoreTitle', { defaultValue: 'Ignore this order?' })
                 : t('lateOrders.couponTitle', { defaultValue: 'Compensate this order' })
@@ -984,7 +1056,7 @@ export function LateOrdersPage() {
                 via Comments — otherwise a note already written could never be
                 corrected, and `editingDecisionId` is set for an ignored row too.
               */}
-              {(draft.action === 'compensated' || editingDecisionId) && (
+              {(draft.action === 'compensated' || isNotesView(draft, editingDecisionId)) && (
                 <label className="block space-y-1">
                   <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     {t('lateOrders.actionLabel', { defaultValue: 'Action taken' })}
@@ -1010,7 +1082,11 @@ export function LateOrdersPage() {
             </div>
           }
           confirmLabel={
-            editingDecisionId
+            /* SAVE, not Ignore, whenever this was opened to read or edit the
+               notes — whether or not a decision exists yet. Offering "Ignore"
+               to someone who pressed View invites them to record a decision
+               they never chose. */
+            isNotesView(draft, editingDecisionId)
               ? t('actions.save', { ns: 'common', defaultValue: 'Save' })
               : draft.action === 'ignored'
                 ? t('lateOrders.confirmIgnore', { defaultValue: 'Ignore' })
@@ -1019,9 +1095,11 @@ export function LateOrdersPage() {
           cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
           loading={busy}
           onConfirm={() => {
-            // The reason is required; the dialog's own button cannot express
-            // that, so an empty one is simply refused rather than committed.
-            if (reason.trim()) void commit();
+            /* The reason is required for a DECISION; the dialog's own button
+               cannot express that, so an empty one is simply refused rather
+               than committed. Viewing is exempt — there is nothing being
+               decided, and `commit` handles that case by saying so. */
+            if (reason.trim() || draft.viewing) void commit();
           }}
           onCancel={() => {
             setDraft(null);

@@ -49,6 +49,19 @@ export function LateOrdersReportPage() {
   const [action, setAction] = useState('');
   /** One business day, as `YYYY-MM-DD`. Empty means every day in the window. */
   const [bizDay, setBizDay] = useState('');
+  /*
+   * TWO SUB-PAGES, decisions first (owner, 2026-09-28).
+   *
+   * They answer different questions — what was decided, and how each agent is
+   * doing — and stacking both made a long register push the agent table off the
+   * screen entirely. `Order decisions` opens by default: it is the record of
+   * what actually happened, and the agent table is a summary OF it.
+   *
+   * An in-page tab rather than a nested route, deliberately: five filters and
+   * one query feed both views, so a route change would remount the filter bar
+   * and refetch for a switch that costs nothing.
+   */
+  const [tab, setTab] = useState<'decisions' | 'agents'>('decisions');
 
   /*
    * The window is widened at BOTH ends to cover whole BUSINESS days.
@@ -364,96 +377,138 @@ export function LateOrdersReportPage() {
       ) : (
         <>
           {/*
+            THE TWO SUB-PAGES. Pills, matching the report tab strip one level
+            up, so the second level of navigation looks like the first rather
+            than introducing a third idea of what a tab is.
+          */}
+          <nav
+            aria-label={t('lateOrdersReport.views', { defaultValue: 'View' })}
+            className="flex items-center gap-1"
+          >
+            {(
+              [
+                ['decisions', t('lateOrdersReport.register', { defaultValue: 'Order decisions' })],
+                ['agents', t('lateOrdersReport.byAgent', { defaultValue: 'Agent statistics' })],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                aria-current={tab === key ? 'page' : undefined}
+                onClick={() => setTab(key)}
+                className={
+                  tab === key
+                    ? 'shrink-0 rounded-full bg-primary/15 px-3.5 py-1.5 text-sm font-semibold text-primary ring-1 ring-inset ring-primary/25'
+                    : 'shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground'
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+
+          {/*
             A HEADER ROW, not a bare heading (owner, 2026-09-28: "positioned
             properly with enough space and padding"). The title and its own
             export sit on one line with real padding, and the table starts
             below it rather than immediately under the words.
           */}
-          <Card className="p-0">
-            <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
-              <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                {t('lateOrdersReport.byAgent', { defaultValue: 'By agent' })}
-              </h3>
-              {canExport && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="ms-auto"
-                  onClick={exportByAgent}
-                  disabled={stats.length === 0}
-                >
-                  {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
-                </Button>
-              )}
-            </div>
-            <Table>
-              <thead>
-                <Tr>
-                  <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
-                  <Th>{t('lateOrdersReport.col.handled', { defaultValue: 'Handled' })}</Th>
-                  <Th>{t('lateOrdersReport.col.compensated', { defaultValue: 'Compensated' })}</Th>
-                  <Th>{t('lateOrdersReport.col.ignored', { defaultValue: 'Ignored' })}</Th>
-                  <Th>{t('lateOrdersReport.col.preparation', { defaultValue: 'Preparation' })}</Th>
-                  <Th>{t('lateOrdersReport.col.delivery', { defaultValue: 'Delivery' })}</Th>
-                  <Th>{t('lateOrdersReport.col.avg', { defaultValue: 'Avg. minutes' })}</Th>
-                </Tr>
-              </thead>
-              <tbody>
-                {stats.map((s) => (
-                  <Tr key={s.agent}>
-                    <Td className="whitespace-nowrap font-medium">{s.agent}</Td>
-                    <Td className="tabular-nums">{s.handled}</Td>
-                    <Td className="tabular-nums">{s.compensated}</Td>
-                    <Td className="tabular-nums">{s.ignored}</Td>
-                    <Td className="tabular-nums">{s.latePreparation}</Td>
-                    <Td className="tabular-nums">{s.lateDelivery}</Td>
-                    <Td className="tabular-nums">{s.avgMinutes ?? '-'}</Td>
+          {/* RENDERED, not hidden: a `hidden` card still builds every row, and
+              the register runs to hundreds. Only the open sub-page pays. */}
+          {tab === 'agents' && (
+            <Card className="p-0">
+              <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
+                <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {t('lateOrdersReport.byAgent', { defaultValue: 'Agent statistics' })}
+                </h3>
+                {canExport && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="ms-auto"
+                    onClick={exportByAgent}
+                    disabled={stats.length === 0}
+                  >
+                    {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
+                  </Button>
+                )}
+              </div>
+              <Table>
+                <thead>
+                  <Tr>
+                    <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
+                    <Th>{t('lateOrdersReport.col.handled', { defaultValue: 'Handled' })}</Th>
+                    <Th>
+                      {t('lateOrdersReport.col.compensated', { defaultValue: 'Compensated' })}
+                    </Th>
+                    <Th>{t('lateOrdersReport.col.ignored', { defaultValue: 'Ignored' })}</Th>
+                    <Th>
+                      {t('lateOrdersReport.col.preparation', { defaultValue: 'Preparation' })}
+                    </Th>
+                    <Th>{t('lateOrdersReport.col.delivery', { defaultValue: 'Delivery' })}</Th>
+                    <Th>{t('lateOrdersReport.col.avg', { defaultValue: 'Avg. minutes' })}</Th>
                   </Tr>
-                ))}
-              </tbody>
-            </Table>
-          </Card>
+                </thead>
+                <tbody>
+                  {stats.map((s) => (
+                    <Tr key={s.agent}>
+                      <Td className="whitespace-nowrap font-medium">{s.agent}</Td>
+                      <Td className="tabular-nums">{s.handled}</Td>
+                      <Td className="tabular-nums">{s.compensated}</Td>
+                      <Td className="tabular-nums">{s.ignored}</Td>
+                      <Td className="tabular-nums">{s.latePreparation}</Td>
+                      <Td className="tabular-nums">{s.lateDelivery}</Td>
+                      <Td className="tabular-nums">{s.avgMinutes ?? '-'}</Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+            </Card>
+          )}
 
-          <Card className="p-0">
-            <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
-              <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                {t('lateOrdersReport.register', { defaultValue: 'Every decision' })}
-              </h3>
-              {canExport && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="ms-auto"
-                  onClick={exportDecisions}
-                  disabled={rows.length === 0}
-                >
-                  {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
-                </Button>
-              )}
-            </div>
-            <Table>
-              <thead>
-                <Tr>
-                  <Th>{t('lateOrdersReport.col.when', { defaultValue: 'When' })}</Th>
-                  <Th>{t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' })}</Th>
-                  <Th>{t('lateOrdersReport.col.order', { defaultValue: 'Order' })}</Th>
-                  <Th>{t('lateOrdersReport.col.brand', { defaultValue: 'Brand / branch' })}</Th>
-                  <Th>{t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' })}</Th>
-                  <Th>{t('lateOrdersReport.col.decision', { defaultValue: 'Decision' })}</Th>
-                  <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
-                  <Th>{t('lateOrdersReport.col.reason', { defaultValue: 'Reason' })}</Th>
-                  <Th>{t('lateOrdersReport.col.action', { defaultValue: 'Action taken' })}</Th>
-                </Tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <Tr key={r.id}>
-                    <Td className="whitespace-nowrap text-muted-foreground">
-                      {r.date_created ? formatDateTime(r.date_created) : '-'}
-                    </Td>
-                    {/*
+          {tab === 'decisions' && (
+            <Card className="p-0">
+              <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
+                <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {t('lateOrdersReport.register', { defaultValue: 'Order decisions' })}
+                </h3>
+                {canExport && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="ms-auto"
+                    onClick={exportDecisions}
+                    disabled={rows.length === 0}
+                  >
+                    {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
+                  </Button>
+                )}
+              </div>
+              <Table>
+                <thead>
+                  <Tr>
+                    <Th>{t('lateOrdersReport.col.when', { defaultValue: 'When' })}</Th>
+                    <Th>
+                      {t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' })}
+                    </Th>
+                    <Th>{t('lateOrdersReport.col.order', { defaultValue: 'Order' })}</Th>
+                    <Th>{t('lateOrdersReport.col.brand', { defaultValue: 'Brand / branch' })}</Th>
+                    <Th>{t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' })}</Th>
+                    <Th>{t('lateOrdersReport.col.decision', { defaultValue: 'Decision' })}</Th>
+                    <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
+                    <Th>{t('lateOrdersReport.col.reason', { defaultValue: 'Reason' })}</Th>
+                    <Th>{t('lateOrdersReport.col.action', { defaultValue: 'Action taken' })}</Th>
+                  </Tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <Tr key={r.id}>
+                      <Td className="whitespace-nowrap text-muted-foreground">
+                        {r.date_created ? formatDateTime(r.date_created) : '-'}
+                      </Td>
+                      {/*
                       THE BUSINESS DAY, 10:00 to 04:00, named after the day it
                       started. Trading runs past midnight, so the calendar date
                       splits one night's work across two rows: 23:50 and 00:10
@@ -461,47 +516,48 @@ export function LateOrdersReportPage() {
                       Derived, never stored — the rule is one function and the
                       report must not hold a second, older copy of it.
                     */}
-                    <Td className="whitespace-nowrap tabular-nums">
-                      {(() => {
-                        const day = businessDay(r.date_created);
-                        return day ? formatDate(day) : '-';
-                      })()}
-                    </Td>
-                    <Td className="whitespace-nowrap tabular-nums">{r.order_id ?? '-'}</Td>
-                    <Td className="max-w-[14rem] truncate">
-                      {[r.brand_name, r.restaurant_name].filter(Boolean).join(' - ') || '-'}
-                    </Td>
-                    <Td className="whitespace-nowrap">
-                      {r.kind ? t(`lateOrders.kind.${r.kind}`, { defaultValue: r.kind }) : '-'}
-                    </Td>
-                    <Td>
-                      <Pill tone={r.action === 'compensated' ? 'success' : 'neutral'} size="sm">
-                        {r.action
-                          ? t(`lateOrdersReport.action.${r.action}`, { defaultValue: r.action })
-                          : '-'}
-                      </Pill>
-                    </Td>
-                    <Td className="whitespace-nowrap">{agentName(r, unknown)}</Td>
-                    <Td className="max-w-[22rem]">
-                      <span className="line-clamp-2 block leading-snug" title={r.reason ?? ''}>
-                        {r.reason ?? '-'}
-                      </span>
-                    </Td>
-                    {/* What the agent DID about it, beside why it happened.
+                      <Td className="whitespace-nowrap tabular-nums">
+                        {(() => {
+                          const day = businessDay(r.date_created);
+                          return day ? formatDate(day) : '-';
+                        })()}
+                      </Td>
+                      <Td className="whitespace-nowrap tabular-nums">{r.order_id ?? '-'}</Td>
+                      <Td className="max-w-[14rem] truncate">
+                        {[r.brand_name, r.restaurant_name].filter(Boolean).join(' - ') || '-'}
+                      </Td>
+                      <Td className="whitespace-nowrap">
+                        {r.kind ? t(`lateOrders.kind.${r.kind}`, { defaultValue: r.kind }) : '-'}
+                      </Td>
+                      <Td>
+                        <Pill tone={r.action === 'compensated' ? 'success' : 'neutral'} size="sm">
+                          {r.action
+                            ? t(`lateOrdersReport.action.${r.action}`, { defaultValue: r.action })
+                            : '-'}
+                        </Pill>
+                      </Td>
+                      <Td className="whitespace-nowrap">{agentName(r, unknown)}</Td>
+                      <Td className="max-w-[22rem]">
+                        <span className="line-clamp-2 block leading-snug" title={r.reason ?? ''}>
+                          {r.reason ?? '-'}
+                        </span>
+                      </Td>
+                      {/* What the agent DID about it, beside why it happened.
                         `title` carries the full text, since the cell clamps. */}
-                    <Td className="max-w-[22rem]">
-                      <span
-                        className="line-clamp-2 block leading-snug"
-                        title={r.action_taken ?? ''}
-                      >
-                        {r.action_taken ?? '-'}
-                      </span>
-                    </Td>
-                  </Tr>
-                ))}
-              </tbody>
-            </Table>
-          </Card>
+                      <Td className="max-w-[22rem]">
+                        <span
+                          className="line-clamp-2 block leading-snug"
+                          title={r.action_taken ?? ''}
+                        >
+                          {r.action_taken ?? '-'}
+                        </span>
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+            </Card>
+          )}
         </>
       )}
     </div>
