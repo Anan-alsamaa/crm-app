@@ -94,6 +94,26 @@ export interface CouponRequestDialogProps {
    * means a failed coupon can never leave a half-created ticket behind.
    */
   onCollect?: (draft: CouponRequestDraft) => void;
+  /**
+   * EDIT AN EXISTING REQUEST instead of raising a new one.
+   *
+   * An agent who mistyped a value had no way to correct it — the request went
+   * to a supervisor as entered (owner, 2026-09-28). Rather than a second form
+   * that would drift from this one, the SAME dialog seeds itself from the
+   * saved values and hands them back through `onSave`.
+   *
+   * Only ever passed for a PENDING request: once a supervisor has decided, the
+   * terms are what they decided on, and the caller enforces that.
+   */
+  initial?: Partial<CouponRequestDraft> | null;
+  /** Save the edited draft. Present only in edit mode. */
+  onSave?: (draft: CouponRequestDraft) => Promise<void> | void;
+  /**
+   * The request being edited, so the duplicate-code check does not flag the
+   * row against ITSELF — which would leave Save permanently disabled on a
+   * request whose code was never changed.
+   */
+  editingId?: string | null;
 }
 
 /** How a list of item names/ids is stored in the single text column. */
@@ -225,6 +245,9 @@ export function CouponRequestDialog({
   requestedBy,
   onCreated,
   onCollect,
+  initial,
+  onSave,
+  editingId,
 }: CouponRequestDialogProps) {
   const { t } = useTranslation();
   const lists = useOptionLists();
@@ -256,6 +279,10 @@ export function CouponRequestDialog({
     item_name: null,
     item_sku: null,
     no_other_discounts: false,
+    /* EDIT MODE seeds from the saved request. Spread LAST so every stored value
+       wins over the new-request defaults, and a field the row does not carry
+       still gets a sensible one rather than undefined. */
+    ...(initial ?? {}),
   }));
   /**
    * Whether the agent has typed into the reason themselves. Until they do, the
@@ -282,7 +309,7 @@ export function CouponRequestDialog({
    * `idempotency-key`, so a second request carrying an existing code reads as a
    * RETRY of the first and silently delivers nothing.
    */
-  const { data: codeTaken = false } = useCouponCodeTaken(draft.code);
+  const { data: codeTaken = false } = useCouponCodeTaken(draft.code, editingId ?? undefined);
 
   // Same function the Directus hook mirrors, so the notice and the alert agree
   // on what "high value" means — see COUPON_ALERT_THRESHOLD_SAR.
@@ -322,6 +349,10 @@ export function CouponRequestDialog({
    */
   useEffect(() => {
     if (!open) return;
+    /* NOT IN EDIT MODE. This seeds a NEW request from the screen behind it;
+       running it over a saved request would overwrite the very values the
+       agent opened the form to correct. */
+    if (initial) return;
     setDraft((d) => ({
       ...d,
       title: d.title || (customerPhone ?? ''),
@@ -338,7 +369,8 @@ export function CouponRequestDialog({
    * edits the reason here, their words win and the following stops.
    */
   useEffect(() => {
-    if (!open || reasonTouched) return;
+    // Same reason as above: an edited request follows nothing but the agent.
+    if (!open || reasonTouched || initial) return;
     setDraft((d) =>
       d.compensation_reason === (description ?? '')
         ? d
@@ -353,6 +385,12 @@ export function CouponRequestDialog({
   const submit = () => {
     if (!parsed.success) return;
     const d = parsed.data;
+    if (onSave) {
+      /* EDIT MODE. The same validation as a new request — a correction must not
+         be a way to save terms that could never have been raised. */
+      void onSave(d);
+      return;
+    }
     if (onCollect) {
       // No ticket to attach to yet — hand it back and let the caller raise it.
       onCollect(d);
@@ -461,11 +499,22 @@ export function CouponRequestDialog({
       open={open}
       onClose={onClose}
       width="md"
-      title={t('coupons.requestTitle', { defaultValue: 'Request a coupon' })}
-      description={t('coupons.requestHint', {
-        defaultValue:
-          'A supervisor approves this before anything reaches the customer. The branch comes from the order on this ticket.',
-      })}
+      title={
+        onSave
+          ? t('coupons.editTitle', { defaultValue: 'Correct this request' })
+          : t('coupons.requestTitle', { defaultValue: 'Request a coupon' })
+      }
+      description={
+        onSave
+          ? t('coupons.editHint', {
+              defaultValue:
+                'Still waiting on a supervisor, so it can still be corrected. Once it is decided these terms are fixed.',
+            })
+          : t('coupons.requestHint', {
+              defaultValue:
+                'A supervisor approves this before anything reaches the customer. The branch comes from the order on this ticket.',
+            })
+      }
       footer={
         <div className="flex w-full items-center justify-end gap-2">
           {blockedReason && (
@@ -482,9 +531,11 @@ export function CouponRequestDialog({
             disabled={!parsed.success || codeTaken}
             onClick={submit}
           >
-            {onCollect
-              ? t('coupons.attach', { defaultValue: 'Attach to this ticket' })
-              : t('coupons.send', { defaultValue: 'Send for approval' })}
+            {onSave
+              ? t('actions.save', { ns: 'common', defaultValue: 'Save changes' })
+              : onCollect
+                ? t('coupons.attach', { defaultValue: 'Attach to this ticket' })
+                : t('coupons.send', { defaultValue: 'Send for approval' })}
           </Button>
         </div>
       }

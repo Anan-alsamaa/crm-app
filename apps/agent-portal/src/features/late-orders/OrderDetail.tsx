@@ -2,6 +2,8 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Pill, Skeleton } from '@yiji/ui';
 import { commerce } from '../../lib/commerce-client.js';
+/* The inbox's own order view — see `LateOrderDetail`. */
+import { OrderDetails, OrderHeader } from '../commerce/OrderViews.js';
 
 /**
  * What was actually ordered, and where it got to.
@@ -182,6 +184,20 @@ function Timeline({ vendorId, orderId }: { vendorId: string; orderId: string }) 
 }
 
 /** Cart and tracking, side by side under an expanded late order. */
+/**
+ * THE WHOLE ORDER, the way the inbox shows it (owner, 2026-09-28).
+ *
+ * This used to render its own narrow view — cart lines and a status timeline —
+ * so an order opened from the late-orders queue showed strictly less than the
+ * SAME order opened from a chat: no order status, no payment status, no
+ * totals, no brand or restaurant id. It now fetches the order and hands it to
+ * `OrderDetails`, the component the inbox already uses, so there is one idea of
+ * what an order is rather than two that drift.
+ *
+ * FALLS BACK to the cart-and-timeline pair when the order cannot be read —
+ * without a vendor there is no order endpoint to call, and half a view beats a
+ * blank panel.
+ */
 export function LateOrderDetail({
   orderId,
   vendorId,
@@ -190,19 +206,28 @@ export function LateOrderDetail({
   vendorId: string | null;
 }) {
   const { t } = useTranslation();
+  const order = useQuery({
+    queryKey: ['yiji-order', vendorId, orderId],
+    enabled: !!vendorId,
+    queryFn: () => commerce.getOrder(vendorId as string, orderId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  if (vendorId && order.isLoading) return <Skeleton className="h-40 w-full" />;
+
+  if (vendorId && order.data) {
+    return (
+      <div className="space-y-4">
+        <OrderHeader order={order.data} />
+        <OrderDetails order={order.data} vendorId={vendorId} />
+      </div>
+    );
+  }
+
+  /* No vendor, or the order could not be read: the cart is keyed by order id
+     alone and needs neither, so it still answers "what did they buy". */
   return (
-    /*
-     * TWO COLUMNS, NO BOXES.
-     *
-     * This was a grey panel with a rounded outline sitting inside whatever
-     * contained it — which read as a box inside a box once it moved into a
-     * dialog of its own (owner, 2026-09-28: "modern, not boxy... there are
-     * boxed lines, modernize it"). The dialog is already a surface, so the
-     * sections just sit on it and the GAP does the separating.
-     *
-     * `md:` for the split: at a phone width two columns of cart lines are two
-     * columns of wrapped text, so they stack.
-     */
     <div className="grid gap-x-10 gap-y-6 md:grid-cols-2">
       <section className="min-w-0">
         <h4 className="mb-3 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -214,16 +239,12 @@ export function LateOrderDetail({
         <h4 className="mb-3 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {t('lateOrders.trackingHeading', { defaultValue: 'Tracking' })}
         </h4>
-        {/* The timeline endpoint is vendor-scoped; without one there is nothing
-            honest to show, so it says so rather than rendering an empty rail. */}
         {vendorId ? (
           <Timeline vendorId={vendorId} orderId={orderId} />
         ) : (
-          <p className="text-2xs text-muted-foreground">
-            <Pill tone="neutral" size="sm">
-              {t('commerce.trackingUnavailable', { defaultValue: 'Order tracking unavailable.' })}
-            </Pill>
-          </p>
+          <Pill tone="neutral" size="sm">
+            {t('commerce.trackingUnavailable', { defaultValue: 'Order tracking unavailable.' })}
+          </Pill>
         )}
       </section>
     </div>

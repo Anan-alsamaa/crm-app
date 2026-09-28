@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import {
   cn,
   EmptyState,
+  toast,
   formatRelative,
   Pill,
   Skeleton,
@@ -16,7 +17,12 @@ import {
   couponDecision,
   type CouponApprovalStatus,
 } from '@yiji/shared-types';
-import { useMyCouponRequests, type CouponRequestRow } from './api.js';
+import {
+  useMyCouponRequests,
+  useUpdatePendingCouponRequest,
+  type CouponRequestRow,
+} from './api.js';
+import { CouponRequestDialog } from './CouponRequestDialog.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
 /**
@@ -74,6 +80,9 @@ export function MyCouponsPage() {
    */
   const { user } = useAuth();
   const [mineOnly, setMineOnly] = useState(true);
+  /** The pending request being corrected, if any. */
+  const [editing, setEditing] = useState<CouponRequestRow | null>(null);
+  const updateRequest = useUpdatePendingCouponRequest();
 
   // "approved" is every APPROVED decision — 'edited' and 'assigned' included.
   // Naming only 'assigned' here left an amended approval in no tab at all.
@@ -255,6 +264,39 @@ export function MyCouponsPage() {
                         {formatRelative(r.decided_at ?? r.date_created)}
                       </div>
                     </div>
+                    {/*
+                      CORRECT IT, while it is still pending (owner, 2026-09-28).
+                      
+                      A `<span role="button">`, NOT a nested `<button>`: the card
+                      itself is a button, and a button inside a button is invalid
+                      HTML that browsers resolve by dropping one of them. The
+                      click is stopped from reaching the card, or correcting a
+                      request would also navigate away from it.
+                      
+                      Offered only on a PENDING request, and only to the agent
+                      who RAISED it — correcting a colleague's wording is not a
+                      typo fix. The mutation re-checks both server-side.
+                    */}
+                    {r.status === 'pending' && r.requested_by?.id === user?.id && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditing(r);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setEditing(r);
+                          }
+                        }}
+                        className="col-span-full mt-1 inline-flex w-fit cursor-pointer items-center rounded-full bg-secondary px-3 py-1 text-2xs font-medium text-muted-foreground transition-colors duration-fast hover:bg-secondary/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      >
+                        {t('coupons.correct', { defaultValue: 'Correct this request' })}
+                      </span>
+                    )}
                     {r.status === 'rejected' && (
                       // On the row, not behind a click: this is what the agent
                       // has to tell the customer.
@@ -270,6 +312,89 @@ export function MyCouponsPage() {
           )}
         </div>
       </div>
+
+      {/*
+        THE SAME FORM THAT RAISED IT, seeded from the saved values.
+        
+        Not a second editor: a parallel form would drift from this one's
+        validation, and a correction that could save terms the original could
+        never have been raised with is not a correction.
+        
+        Mounted only while editing, so the row's values are read fresh each time
+        rather than captured once at page load.
+      */}
+      {editing && (
+        <CouponRequestDialog
+          open
+          onClose={() => setEditing(null)}
+          editingId={editing.id}
+          /* The customer and the order are NOT passed as editable: they are what
+             the request is about, and changing them would make it a different
+             request wearing the same id. */
+          contactId={editing.contact?.id ?? null}
+          customerPhone={editing.contact?.phone ?? null}
+          description={editing.reason ?? null}
+          brandId={null}
+          restaurantId={null}
+          requestedBy={editing.requested_by?.id ?? null}
+          initial={{
+            title: editing.title ?? '',
+            code: editing.coupon_code ?? '',
+            issuing_side: editing.issuing_side ?? '',
+            delivery_type: editing.delivery_type ?? 'All',
+            coupon_type: editing.coupon_type ?? 'Private',
+            discount_category: editing.discount_category ?? 'Amount',
+            valid_from: editing.valid_from ?? '',
+            valid_to: editing.valid_to ?? '',
+            coupon_value: editing.coupon_value,
+            coupon_percent: editing.coupon_percent,
+            max_discount: editing.max_discount ?? 0,
+            usage_limit: editing.usage_limit ?? 1,
+            compensation_reason: editing.reason ?? '',
+            item_name: editing.item_name,
+            item_sku: editing.item_sku,
+            no_other_discounts: editing.no_other_discounts ?? false,
+          }}
+          onSave={async (d) => {
+            try {
+              await updateRequest.mutateAsync({
+                id: editing.id,
+                patch: {
+                  title: d.title,
+                  coupon_code: d.code,
+                  issuing_side: d.issuing_side,
+                  delivery_type: d.delivery_type,
+                  coupon_type: d.coupon_type,
+                  discount_category: d.discount_category,
+                  valid_from: d.valid_from,
+                  valid_to: d.valid_to,
+                  /* Only ONE of the two money fields is ever set, and which one
+                     depends on the category — writing both would leave a second
+                     value to disagree with the first. */
+                  coupon_value: d.discount_category === 'Percentage' ? null : d.coupon_value,
+                  coupon_percent: d.discount_category === 'Percentage' ? d.coupon_percent : null,
+                  max_discount: d.max_discount,
+                  usage_limit: d.usage_limit,
+                  reason: d.compensation_reason,
+                  item_name: d.item_name,
+                  item_sku: d.item_sku,
+                  no_other_discounts: d.no_other_discounts,
+                },
+              });
+              toast.success(t('coupons.corrected', { defaultValue: 'Request updated.' }));
+              setEditing(null);
+            } catch (err) {
+              /* Named, because the one real failure is specific: a supervisor
+                 decided it while the form was open. */
+              toast.error(
+                err instanceof Error
+                  ? err.message
+                  : t('coupons.correctFailed', { defaultValue: 'Could not update the request.' }),
+              );
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

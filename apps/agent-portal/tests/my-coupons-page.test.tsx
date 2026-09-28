@@ -24,7 +24,12 @@ vi.mock('react-i18next', () => ({
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
 
-const api = vi.hoisted(() => ({ useMyCouponRequests: vi.fn() }));
+const api = vi.hoisted(() => ({
+  useMyCouponRequests: vi.fn(),
+  /* The page can correct a pending request; the mock must offer every
+     export the module has or the whole module resolves as missing. */
+  useUpdatePendingCouponRequest: vi.fn(() => ({ mutateAsync: vi.fn() })),
+}));
 vi.mock('../src/features/coupons/api.js', () => api);
 
 /*

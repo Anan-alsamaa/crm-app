@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createItem, readItems } from '@directus/sdk';
+import { createItem, readItems, updateItems } from '@directus/sdk';
 import type { CouponApprovalStatus, CouponFields } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 
@@ -154,6 +154,76 @@ export function useRequestCouponApproval() {
       directus.request(createItem('coupon_approvals' as never, input as never)),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['my-coupon-requests'] });
+    },
+  });
+}
+
+/**
+ * CORRECT A REQUEST THAT IS STILL PENDING (owner, 2026-09-28).
+ *
+ * An agent who mistyped a value had no way to fix it — the request went to a
+ * supervisor exactly as entered, and the only remedies were to have it rejected
+ * or to let a wrong coupon through.
+ *
+ * ONLY WHILE PENDING, and the filter enforces it SERVER-SIDE rather than
+ * trusting the button to be hidden: `status: pending` is part of the update's
+ * own filter, so a request decided between the dialog opening and Save being
+ * pressed matches nothing and changes nothing. Hiding a control is not a lock —
+ * the decision is what the supervisor approved, and it must not move under them.
+ *
+ * The CUSTOMER and the ORDER are deliberately not updatable here: those are
+ * what the request IS ABOUT, and changing them would make it a different
+ * request wearing the same id (owner's choice, 2026-09-28).
+ */
+/**
+ * What a correction may change.
+ *
+ * Named explicitly rather than `Partial<CouponRequestRow>`: the customer, the
+ * order, the status and the decision are all things a correction must NOT be
+ * able to touch, and a wide type would make omitting them a matter of
+ * remembering rather than of the compiler.
+ */
+export interface PendingCouponPatch {
+  title?: string | null;
+  coupon_code?: string | null;
+  issuing_side?: string | null;
+  delivery_type?: string | null;
+  coupon_type?: string | null;
+  discount_category?: string | null;
+  valid_from?: string | null;
+  valid_to?: string | null;
+  coupon_value?: number | null;
+  coupon_percent?: number | null;
+  max_discount?: number | null;
+  usage_limit?: number | null;
+  reason?: string | null;
+  item_name?: string | null;
+  item_sku?: string | null;
+  no_other_discounts?: boolean | null;
+}
+
+export function useUpdatePendingCouponRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: PendingCouponPatch }) => {
+      const updated = (await directus.request(
+        updateItems(
+          'coupon_approvals' as never,
+          { id: { _eq: id }, status: { _eq: 'pending' } } as never,
+          patch as never,
+        ),
+      )) as unknown as unknown[];
+      /* An empty result means the filter matched nothing — the row was decided
+         while the form was open. Saying so is the whole point: a silent no-op
+         would read as a saved edit. */
+      if (!Array.isArray(updated) || updated.length === 0) {
+        throw new Error('This request has already been decided, so it can no longer be changed.');
+      }
+      return updated;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['my-coupon-requests'] });
+      void qc.invalidateQueries({ queryKey: ['all-compensation'] });
     },
   });
 }

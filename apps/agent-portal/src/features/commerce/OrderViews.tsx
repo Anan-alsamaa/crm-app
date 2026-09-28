@@ -106,7 +106,14 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 /** Collapsed header — everything the summary already carries. */
-function OrderHeader({ order, onCreateTicket }: { order: YijiOrder; onCreateTicket?: () => void }) {
+/** Exported alongside `OrderDetails` — the id, status and total that head it. */
+export function OrderHeader({
+  order,
+  onCreateTicket,
+}: {
+  order: YijiOrder;
+  onCreateTicket?: () => void;
+}) {
   const { t } = useTranslation();
   return (
     <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
@@ -332,7 +339,17 @@ function TrackingPanel({ vendorId, orderId }: { vendorId: string; orderId: strin
 }
 
 /** Full order details — the expanded body. Given a COMPLETE order (with items). */
-function OrderDetails({ order, vendorId }: { order: YijiOrder; vendorId: string }) {
+/**
+ * EXPORTED so the late-orders queue shows the SAME order detail the inbox does
+ * (owner, 2026-09-28: "all what we fetch from the inbox when customer send a
+ * chat. includes the order status, payment type and everything").
+ *
+ * The late-orders drawer had grown its own narrower view — cart lines and a
+ * status timeline, and nothing else — so the same order looked like two
+ * different orders depending on which screen an agent opened it from. This is
+ * one component with one idea of what an order is.
+ */
+export function OrderDetails({ order, vendorId }: { order: YijiOrder; vendorId: string }) {
   const { t } = useTranslation();
   // Cart and Tracking, requested additions to every inbox order card. A view
   // toggle rather than more rows: the card is already the tallest thing in the
