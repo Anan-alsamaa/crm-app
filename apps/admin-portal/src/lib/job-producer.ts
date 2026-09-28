@@ -85,6 +85,14 @@ export interface PendingBuild {
   publishedAt: string;
   app: string;
   bundle: string;
+  /**
+   * One line saying what this release changes — the release tag's own subject.
+   *
+   * Optional: a staging build is published from a branch, which has no tag
+   * annotation to read, and builds published before this existed carry none.
+   * The banner names the surfaces instead.
+   */
+  summary?: string;
 }
 
 export const jobProducer = {

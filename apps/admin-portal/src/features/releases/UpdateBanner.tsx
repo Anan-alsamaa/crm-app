@@ -83,6 +83,20 @@ export function UpdateBanner(): JSX.Element | null {
   const versions = [...new Set(pending.map((p) => p.version))];
   const newest = versions[0] ?? '';
   const who = surfaces.join(' + ');
+  /*
+   * WHAT CHANGES, in half a line (owner, 2026-09-28).
+   *
+   * "An update is waiting for the agents" says WHO is affected but not WHAT
+   * moves, and that is the thing that decides whether now is a good moment to
+   * press it. This is the release tag's own subject, written once when the
+   * release is cut, so it cannot drift from the build it describes.
+   *
+   * Every gated surface ships from one commit, so the entries all carry the
+   * same summary — the first non-empty one is it. Absent on staging and on
+   * anything published before this existed, and the strip then reads exactly
+   * as it did before rather than showing an empty gap.
+   */
+  const summary = pending.find((p) => p.summary?.trim())?.summary?.trim() ?? '';
 
   return (
     <div
@@ -104,6 +118,15 @@ export function UpdateBanner(): JSX.Element | null {
           who,
         })}
       </span>
+      {/* The change itself, on one line. `line-clamp-1` rather than a wrap:
+          the strip is a single band and a two-line summary would push the
+          button out of reach on a narrow screen. `title` carries the whole
+          sentence for anyone who wants it. */}
+      {summary && (
+        <span className="line-clamp-1 max-w-[42ch] text-xs text-ink-foreground/85" title={summary}>
+          {summary}
+        </span>
+      )}
       {/* Muted ON THE DARK GROUND, not the page's muted token — that is tuned
           for a light surface and would sit almost invisible here. */}
       <span className="text-xs text-ink-foreground/70">

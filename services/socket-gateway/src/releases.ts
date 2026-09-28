@@ -240,6 +240,8 @@ interface PublishedMeta {
   publishedAt: string;
   app: string;
   bundle: string;
+  /** One line saying what this release changes — the tag's own subject. */
+  summary?: string;
 }
 
 export async function readParkedBuild(
@@ -252,6 +254,7 @@ export async function readParkedBuild(
   commit?: string;
   publishedAt?: string;
   app?: string;
+  summary?: string;
 } | null> {
   const host = `${target.bucket}.s3.${target.region}.amazonaws.com`;
   const path = '/pending/index.html';
@@ -311,6 +314,9 @@ export async function readParkedBuild(
             ...(meta.commit ? { commit: meta.commit } : {}),
             ...(meta.publishedAt ? { publishedAt: meta.publishedAt } : {}),
             ...(meta.app ? { app: meta.app } : {}),
+            /* Absent on a staging build, where the ref is a branch and there
+               is no tag annotation to read. The banner falls back. */
+            ...(meta.summary ? { summary: meta.summary } : {}),
           };
         }
       }

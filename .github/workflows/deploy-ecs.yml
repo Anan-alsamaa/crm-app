@@ -268,9 +268,35 @@ jobs:
               # written with the S3 access the deploy already has. The gateway
               # reads it when it reads the parked build: same trip, no secret,
               # and it cannot drift out of step with the page it describes.
-              printf '{"version":"%s","commit":"%s","publishedAt":"%s","app":"%s","bundle":"%s"}' \
-                "$RELEASE_VERSION" "$(echo "$GITHUB_SHA" | cut -c1-7)" \
-                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$app" "$BUNDLE" > /tmp/release.json
+              # WHAT THIS RELEASE CHANGES, in one line, for the Update now strip.
+              #
+              # Taken from the TAG'S OWN ANNOTATION -- its first line -- because
+              # that is already written for every production release and cannot
+              # drift from the build it describes. No new process and no second
+              # place to remember.
+              #
+              # The leading "vX.Y.Z - " is stripped (the strip shows the version
+              # separately) and it is capped, so a long subject cannot push the
+              # button off a narrow screen. EMPTY on staging, where the ref is a
+              # branch with no annotation; the strip then names the surfaces
+              # exactly as it did before.
+              SUMMARY=$(git tag -l --format='%(contents:subject)' "$RELEASE_VERSION" 2>/dev/null \
+                | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+//' | sed -E 's/^[^[:alnum:]]+//' | cut -c1-90)
+              # BUILT WITH jq, not printf.
+              #
+              # A hand-rolled printf has to escape the summary itself, and the
+              # sed that did it broke on its own backslashes -- silently, which
+              # is the worst way: the file was still written, with an EMPTY
+              # summary, so the strip would have quietly lost the one line this
+              # change exists to add. jq emits correct JSON for any input, which
+              # is what it is for. Already used elsewhere in CI, so it is
+              # present on the runner.
+              jq -n --arg version "$RELEASE_VERSION" \
+                    --arg commit "$(echo "$GITHUB_SHA" | cut -c1-7)" \
+                    --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                    --arg app "$app" --arg bundle "$BUNDLE" --arg summary "$SUMMARY" \
+                    '{version:$version,commit:$commit,publishedAt:$publishedAt,app:$app,bundle:$bundle,summary:$summary}' \
+                > /tmp/release.json
               aws s3 cp /tmp/release.json "s3://${BUCKET}/pending/release.json" \
                 --cache-control "no-cache" --content-type "application/json"
             else
@@ -366,9 +392,16 @@ jobs:
             # The version, beside the parked pages — see the note on the portal
             # loop. No secret, no HTTP callback, and it cannot drift out of step
             # with the build it describes.
-            printf '{"version":"%s","commit":"%s","publishedAt":"%s","app":"%s","bundle":"%s"}' \
-              "$RELEASE_VERSION" "$(echo "$GITHUB_SHA" | cut -c1-7)" \
-              "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "chat widget" "$WBUNDLE" > /tmp/widget-release.json
+            # Same one-line summary as the portals -- see the note there.
+            WSUMMARY=$(git tag -l --format='%(contents:subject)' "$RELEASE_VERSION" 2>/dev/null \
+              | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+//' | sed -E 's/^[^[:alnum:]]+//' | cut -c1-90)
+            # jq, for the same reason as the portals above.
+            jq -n --arg version "$RELEASE_VERSION" \
+                  --arg commit "$(echo "$GITHUB_SHA" | cut -c1-7)" \
+                  --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                  --arg app "chat widget" --arg bundle "$WBUNDLE" --arg summary "$WSUMMARY" \
+                  '{version:$version,commit:$commit,publishedAt:$publishedAt,app:$app,bundle:$bundle,summary:$summary}' \
+              > /tmp/widget-release.json
             aws s3 cp /tmp/widget-release.json "s3://${BUCKET}/pending/release.json" \
               --cache-control "no-cache" --content-type "application/json" >/dev/null
           else

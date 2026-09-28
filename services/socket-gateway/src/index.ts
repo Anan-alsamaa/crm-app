@@ -1065,6 +1065,10 @@ async function main(): Promise<void> {
         publishedAt: parked.publishedAt ?? '',
         app: parked.app ?? releaseSurfaceName(target.bucket),
         bundle: parked.bundle,
+        /* One line naming what changes. Absent on a staging build (no tag, so
+           no annotation to read) and on anything published before this
+           existed — the banner falls back to naming the surfaces. */
+        ...(parked.summary ? { summary: parked.summary } : {}),
       });
     }
     return reply.send({ ok: true, pending: found, live });
