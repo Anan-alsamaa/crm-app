@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createItem, readItems, updateItem } from '@directus/sdk';
 import {
   normalizePhone,
+  toStoreSnapshot,
+  type StoreMatch,
   DEFAULT_LATE_DELIVERY_MINUTES,
   LATE_ORDER_COMPLAINT_TYPE,
   DEFAULT_COMPLAINT_SOURCE,
@@ -292,6 +294,20 @@ export function lateOrderTicket(opts: {
   contactId: string | null;
   vendorId: string | null;
   agentId: string | null;
+  /**
+   * The branch this order belongs to, resolved from the store master.
+   *
+   * WITHOUT IT THE TICKET IS INVISIBLE. The operations report shows COMPLETE
+   * rows only, and `restaurantName` is one of the fields it requires — so a
+   * ticket with no branch is filtered out silently and reads as "the ticket
+   * was never created". Measured: order 1280043 raised ticket bc7dac2d on
+   * 2026-09-28, which existed in the database and never appeared in the
+   * breakdown (owner, 2026-09-28).
+   *
+   * The late-order row carries the branch (`restaurantId`, `restaurantName`,
+   * `brandName`), so there was never a reason not to resolve it.
+   */
+  storeMatch?: StoreMatch | null;
 }): Record<string, unknown> {
   const complaintType = LATE_ORDER_COMPLAINT_TYPE[opts.kind];
   return {
@@ -322,6 +338,13 @@ export function lateOrderTicket(opts: {
     complaint_source: DEFAULT_COMPLAINT_SOURCE,
     communication_method: DEFAULT_COMPLAINT_SOURCE,
     order_id: opts.row.orderId,
+    // The branch, live — what reports group by — and the frozen copy, so a
+    // later edit to the store master cannot rewrite this ticket's history.
+    // Both from the SAME match, so they can never name different branches.
+    store: opts.storeMatch?.store?.id ?? null,
+    store_snapshot: opts.storeMatch
+      ? toStoreSnapshot(opts.storeMatch, new Date().toISOString())
+      : null,
     status: 'open',
   };
 }

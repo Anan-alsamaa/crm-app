@@ -26,6 +26,7 @@ import {
 import {
   LATE_ORDER_COMPLAINT_TYPE,
   businessDay,
+  matchStore,
   normalizePhone,
   serviceMinutes,
   type LateOrderKind,
@@ -34,6 +35,7 @@ import {
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
+import { useStoreIndex } from '../tickets/useStoreMatch.js';
 import { useVendors } from '../tickets/api.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { LateOrderDetail } from './OrderDetail.js';
@@ -196,6 +198,9 @@ export function LateOrdersPage() {
    */
   const currentBusinessDay = businessDay(queue.data?.builtAt ?? new Date().toISOString());
   const soleVendorId = vendors.data?.length === 1 ? vendors.data[0]!.id : null;
+  /* The store master, for attributing a raised ticket to its branch. Shares
+     the tickets page's query key, so it is one cached copy. */
+  const { index: storeIndex } = useStoreIndex();
 
   /*
    * The ORDER'S LINES, for the coupon form's Item field.
@@ -332,6 +337,14 @@ export function LateOrdersPage() {
               contactId,
               vendorId: soleVendorId,
               agentId: user?.id ?? null,
+              /* The branch, resolved from the store master. Without it the
+                 ticket has no `restaurantName` and the operations report —
+                 which shows COMPLETE rows only — hides it silently. */
+              storeMatch: matchStore(storeIndex, {
+                restaurantId: draft.row.restaurantId,
+                restaurantName: draft.row.restaurantName,
+                brandName: draft.row.brandName,
+              }),
             }) as never,
           ),
         )) as { id: string };

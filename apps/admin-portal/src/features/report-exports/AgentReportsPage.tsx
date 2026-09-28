@@ -979,6 +979,21 @@ function ComplaintsReport({
     );
 
   const complete = useMemo(() => joined.filter(isComplete), [joined]);
+  /*
+   * HOW MANY THIS FILTER IS HIDING.
+   *
+   * The comment above predicted exactly this: "a ticket that arrives
+   * half-filled from now on is hidden with nothing on screen to say so." It
+   * then happened — a late-preparation ticket was raised with no branch (the
+   * store master was empty), existed in the database, and never appeared
+   * here. The owner reasonably read that as the ticket never being created
+   * (2026-09-28).
+   *
+   * So the count comes back, as one quiet line rather than the old banner and
+   * its control: on a clean database it says nothing at all, and the moment it
+   * says something it names the reason instead of leaving a silent gap.
+   */
+  const hidden = joined.length - complete.length;
   const visible = useMemo(() => filterTickets(complete, criteria), [complete, criteria]);
 
   /**
@@ -1383,6 +1398,18 @@ function ComplaintsReport({
             {t('complaintReport.unmappedStores', {
               count: unmapped,
               defaultValue: '{{count}} rows with an unmapped store',
+            })}
+          </Pill>
+        )}
+        {/* Tickets this report is HIDING because they are half-filled — most
+            often a missing branch. Silent filtering is the failure this
+            codebase keeps repeating, and it repeated here (owner, 2026-09-28):
+            a ticket that existed never appeared and read as never created. */}
+        {hidden > 0 && (
+          <Pill tone="warning" size="sm">
+            {t('complaintReport.hiddenIncomplete', {
+              count: hidden,
+              defaultValue: '{{count}} tickets hidden — no branch on them yet',
             })}
           </Pill>
         )}

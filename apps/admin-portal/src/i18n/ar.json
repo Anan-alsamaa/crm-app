@@ -573,7 +573,8 @@
     "title": "تفصيل التذاكر",
     "unknownUser": "مستخدم غير معروف",
     "unmappedStores": "{{count}} صفوف بمتجر غير مرتبط",
-    "kpiUnmappedRows": "صفوف غير مرتبطة"
+    "kpiUnmappedRows": "صفوف غير مرتبطة",
+    "hiddenIncomplete": "{{count}} تذكرة مخفية — لا يوجد فرع عليها بعد"
   },
   "couponApprovals": {
     "agent": "طلبها",
