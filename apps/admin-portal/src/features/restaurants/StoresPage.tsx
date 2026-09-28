@@ -834,6 +834,17 @@ export function StoresPage() {
         open={!!confirmDelete}
         onCancel={() => setConfirmDelete(null)}
         onConfirm={() => void onDelete()}
+        /*
+         * SAY IT IS WORKING.
+         *
+         * The delete cascades across the tickets that reference this branch,
+         * so it is not instant — and with no `loading` the dialog just sat
+         * there with a live-looking button, which reads as a frozen screen and
+         * invites a second click on a destructive action (owner, 2026-09-28).
+         * `ConfirmDialog` already disables the button and shows a spinner for
+         * exactly this; it was simply never passed.
+         */
+        loading={deleteStore.isPending}
         destructive
         title={t('stores.deleteTitle', { defaultValue: 'Delete this store?' })}
         description={t('stores.deleteHint', {

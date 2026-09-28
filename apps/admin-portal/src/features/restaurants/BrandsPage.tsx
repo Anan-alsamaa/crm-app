@@ -395,6 +395,10 @@ export function BrandsPage() {
         open={!!confirmDelete}
         onCancel={() => setConfirmDelete(null)}
         onConfirm={() => void onDelete()}
+        /* Same gap as the stores page had: without `loading` the dialog looks
+           frozen while the delete runs, and a destructive action invites a
+           second click. */
+        loading={deleteBrand.isPending}
         destructive
         title={t('brands.deleteTitle', { defaultValue: 'Delete this brand?' })}
         description={t('brands.deleteHint', {
