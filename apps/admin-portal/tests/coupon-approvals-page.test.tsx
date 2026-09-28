@@ -358,6 +358,32 @@ describe('CouponApprovalsPage — a coupon with no order can never be delivered'
     }
   });
 
+  /*
+   * THE LATE-ORDER COUPON: no ticket, but a real order.
+   *
+   * Approval used to be gated on `row.ticket?.id`, which was right when every
+   * coupon came from a complaint. A coupon raised from the late-orders queue
+   * has no complaint behind it by design — it carries `order_id` itself — so
+   * that guard refused a perfectly deliverable coupon and the supervisor was
+   * told "there is nowhere to put the coupon" about one Yiji could deliver
+   * (owner, 2026-09-27).
+   */
+  it('approves a coupon that has an order but NO ticket', async () => {
+    const lateOrder = { ...pending, ticket: null, order_id: '1311494' };
+    api.useCouponApprovals.mockReturnValue({ data: [lateOrder], isLoading: false });
+    const user = userEvent.setup();
+    renderPage();
+    // With no ticket the summary line falls back to "No ticket", so the shared
+    // `expandFirst` helper (which clicks the ticket subject) cannot find it.
+    await user.click(screen.getByRole('button', { name: /No ticket/ }));
+    for (const b of screen.getAllByRole('button', { name: /^approve/i })) {
+      expect(b).toBeEnabled();
+    }
+    // And it says where the coupon is actually going, rather than claiming
+    // there is nowhere to put it.
+    expect(screen.getByText(/goes to order 1311494 directly/i)).toBeInTheDocument();
+  });
+
   it('does not promise delivery for one it cannot deliver', async () => {
     api.useCouponApprovals.mockReturnValue({
       data: [{ ...noOrder, status: 'approved' as const, decided_at: '2026-08-24T10:00:00Z' }],

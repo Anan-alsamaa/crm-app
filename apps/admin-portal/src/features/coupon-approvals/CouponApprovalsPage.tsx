@@ -972,10 +972,33 @@ function Row({
                     </>
                   ) : (
                     <>
-                      {/* No ticket, nowhere to put the coupon. Approving used to
-                      succeed silently and write nothing, so the supervisor believed
-                      they had issued money that did not exist. Rejecting stays
-                      available — turning something down needs no destination. */}
+                      {/*
+                        APPROVAL IS NOT GATED ON A TICKET — OR ON AN ORDER.
+                        
+                        This refused approval whenever there was no ticket, which
+                        was right when every coupon came from a complaint: with
+                        nothing to stamp, approving wrote nothing and the
+                        supervisor believed they had issued money that did not
+                        exist.
+                        
+                        A LATE-ORDER coupon has no complaint behind it by design.
+                        It carries `order_id` itself, Yiji's
+                        `CreateCouponUserFromOrder` attaches the coupon to the
+                        ORDER, the worker has read whichever id is present since
+                        2026-09-21 (`couponOrderId`), and the approval mutation
+                        already skips the ticket patch when there is none. Only
+                        this button never learned, so a perfectly deliverable
+                        late-order coupon could not be approved at all (owner,
+                        2026-09-27).
+                        
+                        And no order is STILL not a block: a walk-in who scanned
+                        a branch QR code may have no Yiji account and no order,
+                        and approving still means something — the decision is
+                        recorded and the branch honours it in person. Only the
+                        in-app delivery is impossible, which the warning above
+                        already says. Blocking here would take away a decision a
+                        supervisor is entitled to make.
+                      */}
                       {/* A supervisor approving is the last gate before a customer is
                       promised money, so the same rules the agent's form enforces
                       are checked again HERE against the terms as they now stand.
@@ -984,7 +1007,7 @@ function Row({
                         <Button
                           type="button"
                           size="sm"
-                          disabled={busy || !row.ticket?.id || termsProblems.length > 0}
+                          disabled={busy || termsProblems.length > 0}
                           title={termsProblems[0]?.message}
                           onClick={() => {
                             // Terms amended earlier in this session are already
@@ -1028,10 +1051,16 @@ function Row({
                           ? t('couponApprovals.approveHint', {
                               defaultValue: 'Approving puts the coupon on the ticket.',
                             })
-                          : t('couponApprovals.noTicketHint', {
-                              defaultValue:
-                                'No ticket on this request — there is nowhere to put the coupon.',
-                            })}
+                          : canBeDelivered
+                            ? t('couponApprovals.approveOrderHint', {
+                                order: couponOrderId(row),
+                                defaultValue:
+                                  'No ticket — the coupon goes to order {{order}} directly.',
+                              })
+                            : t('couponApprovals.noTicketHint', {
+                                defaultValue:
+                                  'No ticket and no order on this request — there is nowhere to put the coupon.',
+                              })}
                       </span>
                     </>
                   )}
