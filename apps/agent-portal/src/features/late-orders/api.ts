@@ -55,8 +55,16 @@ export function useLateOrders(
    */
   const history = !!range && !live;
   return useQuery<LateOrderQueue>({
-    queryKey: [...LATE_ORDERS_KEY, range?.from ?? 'today', range?.to ?? 'today'],
-    queryFn: () => commerce.getLateOrders(range),
+    queryKey: [
+      ...LATE_ORDERS_KEY,
+      range?.from ?? 'today',
+      range?.to ?? 'today',
+      /* Part of the key: Today and a hand-picked range covering the same dates
+         are different questions with different freshness, and a React Query key
+         must contain everything its data resolved against. */
+      live ? 'live' : 'hist',
+    ],
+    queryFn: () => commerce.getLateOrders(range, live),
     enabled,
     refetchInterval: history ? false : 30_000,
     staleTime: history ? 5 * 60_000 : 15_000,

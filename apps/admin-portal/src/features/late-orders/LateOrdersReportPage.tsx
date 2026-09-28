@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Button,
   Card,
   EmptyState,
   ErrorState,
@@ -15,6 +16,9 @@ import {
   formatDateTime,
 } from '@yiji/ui';
 import { businessDay } from '@yiji/shared-types';
+import { useAuth } from '../../lib/auth/AuthContext.js';
+import { downloadCsv, toCsv } from '../restaurants/csv.js';
+import { exportFileName } from '@yiji/shared-config';
 import { useRememberedRange } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { agentLateStats, agentName, useLateOrderDecisions } from './api.js';
@@ -106,6 +110,89 @@ export function LateOrdersReportPage() {
 
   const stats = useMemo(() => agentLateStats(rows, unknown), [rows, unknown]);
 
+  /*
+   * EXPORT, ONE BUTTON PER TABLE (owner, 2026-09-28).
+   *
+   * Two tables answer two questions — who handled what, and every individual
+   * decision — so one combined file would be two different shapes stacked in
+   * one CSV, which is not openable as a spreadsheet. Each exports itself.
+   *
+   * WECARE ADMIN, WECARE SUPERVISOR AND THE OWNER (owner, 2026-09-28).
+   *
+   * NOT gated on `export_data`: I checked the live roles, and EVERY app role
+   * holds that privilege — WeCare Agent, Viewer and all five Area Managers
+   * included — so keying on it would have shown the button to everyone and
+   * silently ignored the instruction. It is the kind of gate that looks right
+   * in the diff and does nothing.
+   *
+   * So it names the two roles, plus `isOwner` (Directus `admin_access`), which
+   * is how Administrator is identified everywhere in this portal — the owner is
+   * never a role name.
+   *
+   * Hiding is not securing, and it is not pretending to be: the rows are
+   * already on screen for anyone who can open this page. This decides who is
+   * OFFERED the file, which is what was asked for.
+   */
+  const { user, isOwner } = useAuth();
+  const EXPORT_ROLES = ['WeCare Admin', 'WeCare Supervisor'];
+  const canExport = isOwner || EXPORT_ROLES.includes(user?.role?.name ?? '');
+
+  const exportByAgent = () => {
+    const header = [
+      t('lateOrdersReport.col.agent', { defaultValue: 'Agent' }),
+      t('lateOrdersReport.col.handled', { defaultValue: 'Handled' }),
+      t('lateOrdersReport.col.compensated', { defaultValue: 'Compensated' }),
+      t('lateOrdersReport.col.ignored', { defaultValue: 'Ignored' }),
+      t('lateOrdersReport.col.preparation', { defaultValue: 'Preparation' }),
+      t('lateOrdersReport.col.delivery', { defaultValue: 'Delivery' }),
+      t('lateOrdersReport.col.avg', { defaultValue: 'Avg. minutes' }),
+    ];
+    const body = stats.map((r) => [
+      r.agent,
+      r.handled,
+      r.compensated,
+      r.ignored,
+      r.latePreparation,
+      r.lateDelivery,
+      // Blank, not 0: no measurable orders is not an average of zero minutes.
+      r.avgMinutes ?? '',
+    ]);
+    downloadCsv(exportFileName('Late orders by agent', {}), toCsv(header, body));
+  };
+
+  const exportDecisions = () => {
+    const header = [
+      t('lateOrdersReport.col.when', { defaultValue: 'When' }),
+      t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' }),
+      t('lateOrdersReport.col.order', { defaultValue: 'Order' }),
+      t('lateOrdersReport.col.brand', { defaultValue: 'Brand / branch' }),
+      t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' }),
+      t('lateOrdersReport.col.decision', { defaultValue: 'Decision' }),
+      t('lateOrdersReport.col.agent', { defaultValue: 'Agent' }),
+      t('lateOrdersReport.col.reason', { defaultValue: 'Reason' }),
+      t('lateOrdersReport.col.action', { defaultValue: 'Action taken' }),
+    ];
+    const body = rows.map((r) => {
+      const day = businessDay(r.date_created);
+      return [
+        // ISO, not the dd/mm/yyyy on screen: a spreadsheet sorts and filters an
+        // ISO stamp correctly and re-formats it for the reader either way.
+        r.date_created ?? '',
+        day ?? '',
+        r.order_id ?? '',
+        [r.brand_name, r.restaurant_name].filter(Boolean).join(' - '),
+        r.kind ? t(`lateOrders.kind.${r.kind}`, { defaultValue: r.kind }) : '',
+        r.action ? t(`lateOrdersReport.action.${r.action}`, { defaultValue: r.action }) : '',
+        agentName(r, unknown),
+        // The WHOLE text, not the two clamped lines the table shows: the export
+        // exists precisely to get at what does not fit on screen.
+        r.reason ?? '',
+        r.action_taken ?? '',
+      ];
+    });
+    downloadCsv(exportFileName('Late order decisions', {}), toCsv(header, body));
+  };
+
   const totals = useMemo(() => {
     const compensated = rows.filter((r) => r.action === 'compensated').length;
     const mins = rows
@@ -148,7 +235,10 @@ export function LateOrdersReportPage() {
        owns its own scroll, which is why `h-full overflow-auto` rather than a
        plain block: without it a long register scrolls the page and takes the
        tab strip off screen. */
-    <div className="h-full space-y-4 overflow-auto p-4">
+    /* `space-y-6` and `p-5`: the two tables sat almost touching, so on a long
+       register it read as one continuous grid with a stray heading in the
+       middle (owner, 2026-09-28). */
+    <div className="h-full space-y-6 overflow-auto p-5">
       <ReportFilterBar
         searchLabel={t('lateOrdersReport.filter.search', { defaultValue: 'Order or branch' })}
         searchPlaceholder={t('lateOrdersReport.filter.searchPlaceholder', {
@@ -273,10 +363,30 @@ export function LateOrdersReportPage() {
         />
       ) : (
         <>
+          {/*
+            A HEADER ROW, not a bare heading (owner, 2026-09-28: "positioned
+            properly with enough space and padding"). The title and its own
+            export sit on one line with real padding, and the table starts
+            below it rather than immediately under the words.
+          */}
           <Card className="p-0">
-            <h3 className="px-4 pt-4 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {t('lateOrdersReport.byAgent', { defaultValue: 'By agent' })}
-            </h3>
+            <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
+              <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {t('lateOrdersReport.byAgent', { defaultValue: 'By agent' })}
+              </h3>
+              {canExport && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="ms-auto"
+                  onClick={exportByAgent}
+                  disabled={stats.length === 0}
+                >
+                  {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
+                </Button>
+              )}
+            </div>
             <Table>
               <thead>
                 <Tr>
@@ -306,9 +416,23 @@ export function LateOrdersReportPage() {
           </Card>
 
           <Card className="p-0">
-            <h3 className="px-4 pt-4 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {t('lateOrdersReport.register', { defaultValue: 'Every decision' })}
-            </h3>
+            <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
+              <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {t('lateOrdersReport.register', { defaultValue: 'Every decision' })}
+              </h3>
+              {canExport && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="ms-auto"
+                  onClick={exportDecisions}
+                  disabled={rows.length === 0}
+                >
+                  {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
+                </Button>
+              )}
+            </div>
             <Table>
               <thead>
                 <Tr>

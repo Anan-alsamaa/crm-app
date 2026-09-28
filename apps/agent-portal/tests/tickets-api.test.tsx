@@ -78,8 +78,51 @@ describe('tickets api — mutation hooks', () => {
       priority: 'high',
       contact: 'k1',
       vendor: 'v1',
+      // Required since 2026-09-28 — see the refusal test below.
+      store: 's1',
     });
     expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  /*
+   * NO BRANCH, NO TICKET (owner, 2026-09-28: "not be allowed to create a ticket
+   * without the branch").
+   *
+   * A branchless ticket did not fail — it was filtered out of the ticket
+   * breakdown as incomplete and simply never appeared, which cost a real hunt
+   * for a "missing" late_preparation ticket that had existed all along with
+   * `store: null`. The guard sits at the MUTATION, not only on the form,
+   * because the form is not the boundary: two hooks insert tickets and more
+   * callers may follow.
+   */
+  it('useCreateTicket REFUSES a ticket with no branch', async () => {
+    const { result } = renderHook(() => useCreateTicket(), { wrapper: wrapper() });
+    await expect(
+      result.current.mutateAsync({
+        subject: 'Broken',
+        priority: 'high',
+        contact: 'k1',
+        vendor: 'v1',
+        store: null,
+      }),
+    ).rejects.toThrow(/needs a branch/i);
+    // Nothing reached Directus: the row is prevented, not written and hidden.
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('useCreateTicket REFUSES when the branch is missing entirely', async () => {
+    const { result } = renderHook(() => useCreateTicket(), { wrapper: wrapper() });
+    // No `store` key at all, not merely null — an omitted field is how a new
+    // caller would get this wrong.
+    await expect(
+      result.current.mutateAsync({
+        subject: 'Broken',
+        priority: 'high',
+        contact: 'k1',
+        vendor: 'v1',
+      }),
+    ).rejects.toThrow(/needs a branch/i);
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('useUpdateTicket patches a ticket and resolves', async () => {

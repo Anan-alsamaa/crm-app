@@ -1633,7 +1633,8 @@
     "filter": {
       "search": "الطلب أو الفرع",
       "searchPlaceholder": "مثال: 1314302، أوكاشي، النرجس"
-    }
+    },
+    "exportCsv": "تصدير CSV"
   },
   "lateOrders": {
     "kind": {

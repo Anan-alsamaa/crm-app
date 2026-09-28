@@ -365,6 +365,38 @@ export function LateOrdersPage() {
          nobody. Resolved ONCE here and reused by both paths. */
       const contactId = await resolveLateOrderContact(draft.row, soleVendorId);
       if (kind === 'late_preparation') {
+        /* The branch, resolved from the store master. Without it the ticket has
+           no `restaurantName` and the operations report — which shows COMPLETE
+           rows only — hides it silently. */
+        const storeMatch = matchStore(storeIndex, {
+          restaurantId: draft.row.restaurantId,
+          restaurantName: draft.row.restaurantName,
+          brandName: draft.row.brandName,
+        });
+        /*
+         * NO BRANCH, NO TICKET (owner, 2026-09-28).
+         *
+         * This is the exact path that produced the complaint: order 1280043
+         * raised ticket bc7dac2d with `store: null`, which existed in the
+         * database and never appeared in the breakdown. Creating it anyway is
+         * worse than refusing — the agent believes it is filed and nobody can
+         * find it. Failing here also leaves NOTHING half-done, because the
+         * ticket is deliberately raised before the decision is recorded.
+         *
+         * The message names the branch the order came from, so whoever sees it
+         * can fix the store master rather than guess what is missing.
+         */
+        if (!storeMatch?.store?.id) {
+          toast.error(
+            t('lateOrders.noBranchForTicket', {
+              branch: draft.row.restaurantName || draft.row.restaurantId || '?',
+              defaultValue:
+                'No branch in the store master matches "{{branch}}", so this ticket would be hidden from reports. Add it first.',
+            }),
+          );
+          setBusy(false);
+          return;
+        }
         const created = (await directus.request(
           createItem(
             'tickets' as never,
@@ -375,14 +407,7 @@ export function LateOrdersPage() {
               contactId,
               vendorId: soleVendorId,
               agentId: user?.id ?? null,
-              /* The branch, resolved from the store master. Without it the
-                 ticket has no `restaurantName` and the operations report —
-                 which shows COMPLETE rows only — hides it silently. */
-              storeMatch: matchStore(storeIndex, {
-                restaurantId: draft.row.restaurantId,
-                restaurantName: draft.row.restaurantName,
-                brandName: draft.row.brandName,
-              }),
+              storeMatch,
             }) as never,
           ),
         )) as { id: string };
@@ -661,10 +686,35 @@ export function LateOrdersPage() {
                 <Fragment key={row.orderId}>
                   <Tr>
                     <Td className="whitespace-nowrap font-medium tabular-nums">{row.orderId}</Td>
+                    {/*
+                      A NUMBER, NOT A FILLED PILL (owner, 2026-09-28: "has some
+                      orange color which hides the number").
+
+                      The amber pill put amber text on an amber ground, so the
+                      figure this whole screen exists to communicate was the
+                      least readable thing on the row. Now it is plain type at
+                      the size it deserves, and the COLOUR carries the urgency:
+                      amber past the threshold, red at 1.5x. A dot restates it
+                      so the meaning does not rest on colour alone.
+                    */}
                     <Td className="whitespace-nowrap">
-                      <Pill tone={tone(row.minutesElapsed, threshold)} size="sm">
+                      <span
+                        className={`inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums ${
+                          tone(row.minutesElapsed, threshold) === 'destructive'
+                            ? 'text-destructive'
+                            : 'text-warning-foreground'
+                        }`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
+                            tone(row.minutesElapsed, threshold) === 'destructive'
+                              ? 'bg-destructive'
+                              : 'bg-warning'
+                          }`}
+                        />
                         {elapsed(row.minutesElapsed)}
-                      </Pill>
+                      </span>
                     </Td>
                     {/*
                       SERVICE TIME — the DRIVER leg, not the whole order.
@@ -708,7 +758,10 @@ export function LateOrdersPage() {
                          */
                         const live = !row.closedAt;
                         return live ? (
-                          <span className="inline-flex items-center gap-1.5 font-medium text-brand">
+                          /* Same weight and size as Total time beside it, so
+                             the two read as a pair to compare rather than a
+                             headline and a footnote. */
+                          <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-brand">
                             <span
                               className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-brand"
                               aria-hidden="true"
@@ -719,7 +772,15 @@ export function LateOrdersPage() {
                             </span>
                           </span>
                         ) : (
-                          <span className="text-muted-foreground">{elapsed(mins)}</span>
+                          /* Settled: a filled dot rather than a pulsing one, and
+                             muted — the figure is final, not climbing. */
+                          <span className="inline-flex items-center gap-1.5 text-sm font-medium tabular-nums text-muted-foreground">
+                            <span
+                              aria-hidden="true"
+                              className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/40"
+                            />
+                            {elapsed(mins)}
+                          </span>
                         );
                       })()}
                     </Td>
@@ -913,19 +974,31 @@ export function LateOrdersPage() {
                   })}
                 />
               </label>
-              <label className="block space-y-1">
-                <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  {t('lateOrders.actionLabel', { defaultValue: 'Action taken' })}
-                </span>
-                <Textarea
-                  rows={2}
-                  value={actionTaken}
-                  onChange={(e) => setActionTaken(e.target.value)}
-                  placeholder={t('lateOrders.actionPlaceholder', {
-                    defaultValue: 'What you did about it - e.g. called the branch.',
-                  })}
-                />
-              </label>
+              {/*
+                IGNORE NEEDS ONLY A REASON (owner, 2026-09-28: "on ignore, no
+                need action. just reason is enough").
+                
+                Ignoring IS the action, so asking what was done about it invites
+                an empty box or a restatement. Still shown when COMPENSATING,
+                where something was actually done, and still shown when editing
+                via Comments — otherwise a note already written could never be
+                corrected, and `editingDecisionId` is set for an ignored row too.
+              */}
+              {(draft.action === 'compensated' || editingDecisionId) && (
+                <label className="block space-y-1">
+                  <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {t('lateOrders.actionLabel', { defaultValue: 'Action taken' })}
+                  </span>
+                  <Textarea
+                    rows={2}
+                    value={actionTaken}
+                    onChange={(e) => setActionTaken(e.target.value)}
+                    placeholder={t('lateOrders.actionPlaceholder', {
+                      defaultValue: 'What you did about it - e.g. called the branch.',
+                    })}
+                  />
+                </label>
+              )}
               {kindOf(draft.row) === 'late_preparation' && (
                 <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs leading-relaxed">
                   {t('lateOrders.willRaiseTicket', {

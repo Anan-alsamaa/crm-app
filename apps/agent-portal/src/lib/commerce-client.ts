@@ -101,8 +101,14 @@ export const commerce = {
    * Late orders. No dates = today's LIVE queue; a range = the register,
    * which includes orders that have since finished.
    */
-  getLateOrders: (range?: { from: string; to: string }) =>
-    get<LateOrderQueue>('/commerce/late-orders', range ? { from: range.from, to: range.to } : {}),
+  getLateOrders: (range?: { from: string; to: string }, live = false) =>
+    get<LateOrderQueue>(
+      '/commerce/late-orders',
+      /* `live` marks a range that is the CURRENT business day rather than a past
+         window, so the gateway caches it for 20s instead of 300 — see the note
+         there. Omitted entirely when false, so existing callers are unchanged. */
+      range ? { from: range.from, to: range.to, ...(live ? { live: '1' } : {}) } : {},
+    ),
   /**
    * The order's cart — every line and the choices behind it.
    *

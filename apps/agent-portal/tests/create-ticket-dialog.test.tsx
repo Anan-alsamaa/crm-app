@@ -31,6 +31,44 @@ const coupons = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/coupons/api.js', () => coupons);
 
+/*
+ * THE BRANCH IS NOW REQUIRED (owner, 2026-09-28), so the form cannot submit
+ * until one is chosen — every test that saves a ticket has to pick one.
+ *
+ * `useStoreMatch` is stubbed rather than the SDK because the real hook builds
+ * an index and matches against it; what these tests are about is the FORM, and
+ * the matching has its own tests in `packages/shared-types`.
+ */
+const storeHooks = vi.hoisted(() => ({
+  store: {
+    id: 's1',
+    code: 'LCP-001',
+    name: 'Test Branch',
+    city: 'Riyadh',
+    areaManager: 'AM',
+    chainManager: 'CM',
+    brandName: 'Casa Pasta',
+    brandYijiName: null,
+    yijiRestaurantId: '9',
+  },
+}));
+vi.mock('../src/features/tickets/useStoreMatch.js', () => ({
+  useStores: () => ({ data: [storeHooks.store], isLoading: false }),
+  useStoreIndex: () => ({ index: {}, isLoading: false, count: 1 }),
+  toStoreRecord: (s: unknown) => s,
+  /* Resolved from the order, which is the ordinary case: the picker shows it as
+     inferred and the form is submittable without the agent touching it. */
+  useOrderStore: () => ({
+    store: storeHooks.store,
+    via: 'yiji_id',
+    restaurantName: 'Test Branch',
+    brandName: 'Casa Pasta',
+    city: 'Riyadh',
+    areaManager: 'AM',
+    chainManager: 'CM',
+  }),
+}));
+
 import { CreateTicketDialog } from '../src/features/tickets/CreateTicketDialog.js';
 
 function renderDialog(onClose = vi.fn()) {
@@ -207,5 +245,42 @@ describe('CreateTicketForm', () => {
     // The header is the only place the agent can read it back now that the
     // subject box is gone.
     expect(screen.getAllByText('Missing item').length).toBeGreaterThan(0);
+  });
+
+  /*
+   * NO BRANCH, NO SAVE (owner, 2026-09-28: "not be allowed to create a ticket
+   * without the branch").
+   *
+   * A ticket saved without one is dropped from the ticket breakdown as
+   * incomplete and never appears — so the form has to refuse it, and say WHY
+   * rather than leaving a dead button an agent has to guess at.
+   *
+   * This overrides the module mock for one test so no branch resolves, which is
+   * a walk-in with no order behind it.
+   */
+  it('will not save without a branch, and says why', async () => {
+    const mod = await import('../src/features/tickets/useStoreMatch.js');
+    /* `StoreMatch`'s display fields are plain strings, not nullable — an
+       unmatched order carries empty ones, not nulls. */
+    const spy = vi.spyOn(mod, 'useOrderStore').mockReturnValue({
+      store: null,
+      via: 'none',
+      brandName: '',
+      city: '',
+      areaManager: '',
+      chainManager: '',
+      restaurantName: '',
+    });
+    try {
+      renderDialog();
+      await chooseComplaintType('Missing item');
+      expect(screen.getByText(/Choose the branch/i)).toBeTruthy();
+      /* By type, not by name: "create" also matches the coupon button, and the
+         i18n mock renders this one's label as its bare key. */
+      const save = document.querySelector('button[type="submit"]');
+      expect(save?.hasAttribute('disabled')).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

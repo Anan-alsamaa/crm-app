@@ -287,10 +287,34 @@ export async function registerCommerceRoutes(
           maxPages: 6,
         }
       : {};
-    const ttl = history ? COMMERCE_TTL.order : COMMERCE_TTL.lateOrders;
+    /*
+     * TODAY IS A RANGE THAT IS STILL MOVING.
+     *
+     * A past window is a fixed set of finished orders and deserves the long
+     * order TTL. But the portal's "Today" button now asks for the CURRENT
+     * business day as a range — so that a delivered order stays on the list —
+     * and that answer changes every minute: new orders cross the threshold and
+     * live rows' elapsed time is the whole point.
+     *
+     * Cached for 300s it would have sat frozen for five minutes behind a screen
+     * that polls every 30, which is exactly the shape of bug that reads as "the
+     * page is stuck". `live=1` says which it is; the client sends it with the
+     * day it is asking about, and nothing else changes.
+     */
+    const live = str(q.live) === '1';
+    const ttl = history && !live ? COMMERCE_TTL.order : COMMERCE_TTL.lateOrders;
     return answering(reply, { route: 'late-orders', thresholdMinutes, from, to }, async () => {
       const rows = await cached(
-        ['late-orders', String(thresholdMinutes), from || 'today', to || 'today'],
+        /* `live` is part of the KEY: the same dates asked for both ways are two
+           different cache entries, so a long-lived historical answer can never
+           be served to the live view or vice versa. */
+        [
+          'late-orders',
+          String(thresholdMinutes),
+          from || 'today',
+          to || 'today',
+          live ? 'live' : 'hist',
+        ],
         ttl,
         () => deps.yiji.getLateDeliveryOrders(thresholdMinutes, opts),
       );

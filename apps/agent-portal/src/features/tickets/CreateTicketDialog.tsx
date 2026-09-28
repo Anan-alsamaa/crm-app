@@ -530,7 +530,24 @@ export function CreateTicketDialog({
    * and the check is simply: do we know who this is?
    */
   const hasCustomer = !!contactId;
-  const canSubmit = hasCustomer && !!vendorId && !complaintHasErrors(complaint) && !!subject;
+  /*
+   * EVERY TICKET NAMES A BRANCH (owner, 2026-09-28: "not be allowed to create a
+   * ticket without the branch").
+   *
+   * It was optional, and a ticket saved without one DISAPPEARED: the ticket
+   * breakdown report filters on completeness, so a branchless ticket was
+   * dropped from the report with no error and no row — it simply did not exist
+   * as far as operations could see. That is this codebase's recurring failure
+   * shape, and it already cost a real investigation into a "missing"
+   * late_preparation ticket that had been created all along with `store: null`.
+   *
+   * Safe to demand because the picker is ALWAYS rendered and lists every
+   * branch, so there is no dead end for a walk-in with no order to infer one
+   * from — unlike the customer check, which once blocked exactly that.
+   */
+  const hasStore = !!chosenMatch?.store?.id;
+  const canSubmit =
+    hasCustomer && !!vendorId && !complaintHasErrors(complaint) && !!subject && hasStore;
 
   // Identify the ticket by who and what it is about, not by restating the
   // page's purpose. Empty on a blank standalone form, where the generic hint
@@ -555,9 +572,16 @@ export function CreateTicketDialog({
         t('tickets.pickComplaintType', {
           defaultValue: 'Choose a ticket type — it names the ticket',
         })
-      : complaintHasErrors(complaint)
-        ? t('tickets.fixFieldsFirst', { defaultValue: 'Check the highlighted fields' })
-        : '';
+      : !hasStore
+        ? /* Named like the others, and it says WHY: an agent told only "pick a
+             branch" has no reason to believe it matters, and this one decides
+             whether the ticket is ever counted. */
+          t('tickets.pickStore', {
+            defaultValue: 'Choose the branch — reports are grouped by it',
+          })
+        : complaintHasErrors(complaint)
+          ? t('tickets.fixFieldsFirst', { defaultValue: 'Check the highlighted fields' })
+          : '';
 
   return (
     <form

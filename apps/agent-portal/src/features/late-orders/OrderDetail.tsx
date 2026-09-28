@@ -40,26 +40,41 @@ function CartLines({ orderId }: { orderId: string }) {
 
   return (
     <div className="space-y-2">
-      {/* The QUANTITY leads, in its own soft chip: "2×" scanned as part of the
-          name when it was inline, and how many is the first thing asked. */}
-      <ul className="space-y-2.5">
+      {/*
+        THREE THINGS, EACH IN ITS OWN LANE (owner, 2026-09-28: "clearly, the
+        item name, quantity price. with proper positioning spacing, empty
+        space, clear visibility").
+        
+        A grid, not a flex row: the quantities align under each other in a fixed
+        first column and the prices in a fixed last one, so the eye runs straight
+        down each. With flex, every line started at a different x depending on
+        how wide its quantity was.
+        
+        `items-baseline` so a two-line item name keeps its quantity and price on
+        the FIRST line rather than floating to the middle of the block.
+      */}
+      <ul className="space-y-3.5">
         {cart.lines.map((l, i) => (
-          <li key={`${l.name}-${i}`} className="text-sm leading-snug">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="flex min-w-0 items-baseline gap-2">
-                <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-2xs font-semibold tabular-nums text-muted-foreground">
-                  {l.qty}&times;
-                </span>
-                <span className="font-medium text-foreground">{l.name}</span>
-              </span>
-              <span className="shrink-0 tabular-nums text-muted-foreground">{l.price}</span>
-            </div>
+          <li
+            key={`${l.name}-${i}`}
+            className="grid grid-cols-[2.25rem_1fr_auto] items-baseline gap-x-3 text-sm leading-relaxed"
+          >
+            {/* How many, in its own chip. "2×" scanned as part of the name when
+                it was inline, and how many is the first thing asked. */}
+            <span className="justify-self-start rounded-md bg-secondary px-1.5 py-0.5 text-center text-2xs font-semibold tabular-nums text-muted-foreground">
+              {l.qty}&times;
+            </span>
+            <span className="min-w-0 font-medium text-foreground">{l.name}</span>
+            {/* The price, right-aligned and full-strength: it is a figure the
+                agent reads off, not a caption. */}
+            <span className="shrink-0 tabular-nums font-medium text-foreground">{l.price}</span>
             {/* The choices are the point: "Without Broccoli" is what answers an
-                accuracy complaint, and the money view alone never showed it. */}
+                accuracy complaint, and the money view alone never showed it.
+                Sits under the NAME, in the name's own column. */}
             {l.modifiers.length > 0 && (
-              <div className="ps-8 pt-0.5 text-xs text-muted-foreground">
+              <span className="col-start-2 col-end-4 text-xs leading-relaxed text-muted-foreground">
                 {l.modifiers.join(' · ')}
-              </div>
+              </span>
             )}
           </li>
         ))}
@@ -71,7 +86,7 @@ function CartLines({ orderId }: { orderId: string }) {
       </ul>
       {/* The totals sit on a tinted strip instead of under a rule — a hairline
           border across a dialog is exactly the boxed look being removed. */}
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 rounded-xl bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">
+      <div className="mt-5 flex flex-wrap gap-x-5 gap-y-1.5 rounded-2xl bg-secondary/50 px-4 py-3 text-xs text-muted-foreground">
         {money
           .filter(([, v]) => typeof v === 'number')
           .map(([label, v]) => (

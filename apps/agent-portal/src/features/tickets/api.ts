@@ -313,11 +313,35 @@ export interface CreateTicketInput extends Partial<TicketComplaintFields> {
   store_snapshot?: StoreSnapshot | null;
 }
 
+/**
+ * A TICKET WITHOUT A BRANCH MUST NOT REACH THE DATABASE (owner, 2026-09-28).
+ *
+ * The form blocks it, but the form is not the boundary: two hooks insert
+ * tickets, more callers may follow, and a branchless ticket does not fail
+ * loudly — it is filtered out of the ticket breakdown as incomplete and simply
+ * never appears. Silent, and already the cause of one real hunt for a
+ * "missing" late_preparation ticket that had existed all along with
+ * `store: null`.
+ *
+ * So it throws HERE, where every insert passes. A thrown error surfaces through
+ * the mutation's own error handling as a visible message, which is the whole
+ * point: the failure has to be louder than the row it prevents.
+ */
+function assertStore(input: { store?: string | null }): void {
+  if (!input.store) {
+    throw new Error(
+      'A ticket needs a branch: reports group by it, and one saved without it is hidden from them.',
+    );
+  }
+}
+
 export function useCreateTicket() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateTicketInput) =>
-      directus.request(createItem('tickets', { ...input, status: 'open' } as never)),
+    mutationFn: (input: CreateTicketInput) => {
+      assertStore(input);
+      return directus.request(createItem('tickets', { ...input, status: 'open' } as never));
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['tickets'] });
       // The conversation sidebar's linked-tickets list keys on
@@ -436,6 +460,7 @@ export function useCreateTicketFromConversation() {
       attachmentFileIds,
       storeNotifyTypes,
     }: CreateTicketFromConversationInput) => {
+      assertStore(ticket);
       const created = (await directus.request(
         createItem('tickets', { ...ticket, status: 'open' } as never),
       )) as { id: string };

@@ -549,7 +549,8 @@
     "customerPhone": "رقم جوال العميل",
     "noContactsForNumber": "لا يوجد عميل بهذا الرقم في النظام.",
     "addCustomerWithNumber": "إضافة {{phone}} كعميل جديد",
-    "addCustomerFailed": "تعذّرت إضافة العميل. حاول مرة أخرى."
+    "addCustomerFailed": "تعذّرت إضافة العميل. حاول مرة أخرى.",
+    "pickStore": "اختر الفرع — التقارير مجمّعة حسبه"
   },
   "notifications": {
     "title": "التنبيهات",
@@ -1044,6 +1045,7 @@
     "commentsTitle": "الملاحظات",
     "commentsSaved": "تم الحفظ.",
     "detailTitle": "الطلب {{order}} — السلة والتتبع",
-    "serviceLive": "لا يزال العدّ جاريًا"
+    "serviceLive": "لا يزال العدّ جاريًا",
+    "noBranchForTicket": "لا يوجد فرع في قائمة الفروع يطابق \"{{branch}}\"، لذلك لن تطهر هذه التذكرة في التقارير. أضفه أولاً."
   }
 }
