@@ -282,4 +282,48 @@ export default async function globalSetup(): Promise<void> {
   } catch (err) {
     console.warn('[e2e-setup] conversation seed failed (specs may fall back):', err);
   }
+
+  /*
+   * 3. AT LEAST ONE BRANCH, because a ticket cannot be created without one.
+   *
+   * The branch became mandatory on 2026-09-28 (owner: "not be allowed to create
+   * a ticket without the branch") — a ticket saved without one is filtered out
+   * of the breakdown report as incomplete and silently never appears.
+   *
+   * Nothing seeded stores before, so the picker was empty and the ticket spec
+   * could not satisfy the new requirement at all: it would hang for 30s on a
+   * disabled Create button, which is exactly how this surfaced.
+   *
+   * Idempotent by code: re-running must not stack duplicates across CI runs.
+   */
+  try {
+    const existing = await json<{ data: Array<{ id: string }> }>(
+      await fetchT(`${DIRECTUS}/items/stores?filter[code][_eq]=E2E-001&fields=id&limit=1`, {
+        headers,
+      }),
+    );
+    if (existing.data[0]?.id) {
+      console.log('[e2e-setup] branch E2E-001 already present');
+    } else {
+      await fetchT(`${DIRECTUS}/items/stores`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          code: 'E2E-001',
+          name: 'E2E Test Branch',
+          city: 'Riyadh',
+          /* Both managers, because the breakdown report needs them to count a
+             ticket as complete — a branch that cannot produce a countable
+             ticket would not actually prove the flow works. */
+          area_manager: 'E2E Area Manager',
+          chain_manager: 'E2E Chain Manager',
+        }),
+      });
+      console.log('[e2e-setup] seeded branch E2E-001');
+    }
+  } catch (err) {
+    // Warn, never throw: a store that cannot be seeded must not take down the
+    // specs that have nothing to do with tickets.
+    console.warn('[e2e-setup] branch seed failed (ticket spec may fail):', err);
+  }
 }

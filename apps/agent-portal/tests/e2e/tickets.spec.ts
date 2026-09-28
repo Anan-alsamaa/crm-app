@@ -54,7 +54,35 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   const ticketName = (await typeOption.innerText()).trim();
   await typeOption.click();
   await agent.getByLabel(/^description$/i).fill('Auto-created via E2E.');
-  await agent.getByRole('button', { name: /^create$/i }).click();
+  /*
+   * PICK THE BRANCH — required since 2026-09-28.
+   *
+   * A ticket saved without one is filtered out of the ticket breakdown as
+   * incomplete and never appears, so the form now refuses to submit until a
+   * branch is chosen (owner: "not be allowed to create a ticket without the
+   * branch"). This test used to submit without one, which is exactly the hole
+   * the guard closes — so it now does what a real agent has to do.
+   *
+   * TYPED, so the option matched is unambiguous. Clicking the picker open and
+   * taking "the first option" would race whatever else on the form renders
+   * options, and the seeded branch is the one this needs — `global-setup` puts
+   * `E2E-001 / E2E Test Branch` there precisely so the required field can be
+   * satisfied deterministically.
+   */
+  const branch = agent.getByRole('combobox', { name: /restaurant \/ branch/i });
+  await branch.waitFor({ timeout: 15_000 });
+  await branch.click();
+  await branch.fill('E2E');
+  const branchOption = agent.getByRole('option', { name: /E2E Test Branch|E2E-001/i }).first();
+  await branchOption.waitFor({ timeout: 15_000 });
+  await branchOption.click();
+
+  const create = agent.getByRole('button', { name: /^create$/i });
+  // Asserted, not just clicked: a disabled button would otherwise fail 30s
+  // later as an unhelpful "locator.click: Test ended" timeout, which is how
+  // this surfaced in the first place.
+  await expect(create).toBeEnabled({ timeout: 10_000 });
+  await create.click();
 
   // 4. Creating lands on the new ticket's own page.
   expect(ticketName.length).toBeGreaterThan(0);
