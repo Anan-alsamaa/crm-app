@@ -310,6 +310,25 @@ export function LateOrdersPage() {
    * when the order cannot be read, so the dropdown is never emptier than it
    * was before.
    */
+  /*
+   * The BRANCH the coupon is for, matched against the store master.
+   *
+   * Same match the ticket path uses, so a coupon raised from a late order names
+   * its brand and branch exactly as one raised from a complaint does. Cheap:
+   * the index is already loaded for the queue's own rows.
+   */
+  const couponStore = useMemo(
+    () =>
+      coupon
+        ? matchStore(storeIndex, {
+            restaurantId: coupon.row.restaurantId,
+            restaurantName: coupon.row.restaurantName,
+            brandName: coupon.row.brandName,
+          })
+        : null,
+    [coupon, storeIndex],
+  );
+
   const couponOrder = useQuery({
     queryKey: ['yiji-order', soleVendorId, coupon?.row.orderId],
     enabled: !!coupon?.row.orderId && !!soleVendorId,
@@ -1139,14 +1158,25 @@ export function LateOrdersPage() {
 
       {/*
         The same coupon form the Add-ticket page uses, and the same approval
-        flow behind it. No ticket: a late order has an order and no complaint
-        behind it, and `order_id` is what delivery actually needs.
+        flow behind it.
+
+        THE TICKET, WHEN THERE IS ONE (owner, 2026-09-28). This was hardcoded
+        `null` on the reasoning that "a late order has an order and no complaint
+        behind it" — true when it was written, and stale since late_preparation
+        began raising a ticket of its own. So a coupon raised from a late
+        PREPARATION had a ticket sitting right beside it and stored no link to
+        it: the row appeared in Compensation and in neither ticket report, and
+        nothing tied the money to the complaint it answered.
+
+        Still null for a late DELIVERY, which genuinely has no ticket — see the
+        note where the ticket is raised. `couponOrderId` prefers the ticket's
+        order anyway, so the two can never name different orders.
       */}
       {coupon && (
         <CouponRequestDialog
           open
           onClose={() => setCoupon(null)}
-          ticketId={null}
+          ticketId={coupon.ticketId}
           orderId={coupon.row.orderId}
           contactId={coupon.contactId}
           /* NORMALISED, not Yiji's wire format. Yiji sends `+9665XXXXXXXX`;
@@ -1174,10 +1204,25 @@ export function LateOrdersPage() {
                 }))
           }
           description={coupon.reason}
-          brandId={null}
-          restaurantId={coupon.row.restaurantId ?? null}
-          brandName={coupon.row.brandName ?? null}
-          branchName={coupon.row.restaurantName ?? null}
+          /*
+           * THE BRAND, in YIJI'S OWN NAME — the same thing the tickets page
+           * passes (owner, 2026-09-28: a late order must carry every piece of
+           * information a chat does).
+           *
+           * This was hardcoded `null`, so a late-order coupon reached the
+           * approvals queue with no brand at all while one raised from a ticket
+           * carried it. Yiji cannot resolve our internal ids, and for one brand
+           * the names differ — we say "Casa Pasta" where they say "La Casa
+           * Pasta" — so the store master's `brandYijiName` is what travels,
+           * falling back to our display name, which is at least something a
+           * human can act on.
+           */
+          brandId={couponStore?.store?.brandYijiName?.trim() || coupon.row.brandName || null}
+          /* Yiji's restaurant id from the STORE MASTER when the branch is
+             matched, else the one the order carried. */
+          restaurantId={couponStore?.store?.yijiRestaurantId || coupon.row.restaurantId || null}
+          brandName={couponStore?.brandName ?? coupon.row.brandName ?? null}
+          branchName={couponStore?.restaurantName ?? coupon.row.restaurantName ?? null}
           requestedBy={user?.id ?? null}
           onCreated={() => {
             /*

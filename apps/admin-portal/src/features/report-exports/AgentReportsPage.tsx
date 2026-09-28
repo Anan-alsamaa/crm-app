@@ -980,7 +980,24 @@ function ComplaintsReport({
       r.date,
     );
 
-  const complete = useMemo(() => joined.filter(isComplete), [joined]);
+  /*
+   * NOTHING IS HIDDEN ANY MORE (owner, 2026-09-28).
+   *
+   * This used to be `joined.filter(isComplete)`, and that filter is why the two
+   * ticket reports disagreed: "Ticket deadlines" has no such rule, so the same
+   * ticket appeared there and vanished here. The owner's requirement is that
+   * they be "two views of the same data".
+   *
+   * The filter was added for 68 malformed rows seeded by the E2E suite against
+   * this same database. Those rows are long gone, and it has been hiding real
+   * tickets ever since — which is the failure this codebase keeps repeating:
+   * something matches nothing and renders as a plausible absence.
+   *
+   * `isComplete` is KEPT, and now marks a row instead of removing it. A reader
+   * can see the gap and go and fix the ticket; they could never see a row that
+   * was not drawn.
+   */
+  const complete = joined;
   /*
    * HOW MANY THIS FILTER IS HIDING.
    *
@@ -995,7 +1012,9 @@ function ComplaintsReport({
    * its control: on a clean database it says nothing at all, and the moment it
    * says something it names the reason instead of leaving a silent gap.
    */
-  const hidden = joined.length - complete.length;
+  /* How many rows are INCOMPLETE — shown, but missing something. No longer a
+     count of what was removed, because nothing is. */
+  const hidden = joined.filter((r) => !isComplete(r)).length;
   const visible = useMemo(() => filterTickets(complete, criteria), [complete, criteria]);
 
   /**
@@ -1403,15 +1422,14 @@ function ComplaintsReport({
             })}
           </Pill>
         )}
-        {/* Tickets this report is HIDING because they are half-filled — most
-            often a missing branch. Silent filtering is the failure this
-            codebase keeps repeating, and it repeated here (owner, 2026-09-28):
-            a ticket that existed never appeared and read as never created. */}
+        {/* Tickets that are HALF-FILLED — most often a missing branch. They are
+            SHOWN, and this says how many need attention. It used to say how many
+            were hidden, which was the problem rather than a warning about it. */}
         {hidden > 0 && (
           <Pill tone="warning" size="sm">
             {t('complaintReport.hiddenIncomplete', {
               count: hidden,
-              defaultValue: '{{count}} tickets hidden — no branch on them yet',
+              defaultValue: '{{count}} tickets are missing details',
             })}
           </Pill>
         )}

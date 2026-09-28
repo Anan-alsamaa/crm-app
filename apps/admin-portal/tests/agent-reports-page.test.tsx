@@ -887,42 +887,37 @@ describe('AgentReportsPage — ticket breakdown', () => {
   });
 
   /*
-   * ONLY FULLY-POPULATED ROWS, AND THE HIDING SAID OUT LOUD.
+   * NOTHING IS HIDDEN — THE TWO TICKET REPORTS MUST AGREE.
    *
-   * Rows arrive from the widget before an agent has classified the complaint —
-   * no branch, no service type, no channel, no order. Left in the table they
-   * read as real reports of nothing and are counted in every total beside rows
-   * that were actually worked. Hidden SILENTLY they would be the failure this
-   * codebase keeps repeating: something matches nothing and the shortfall
-   * reads as a plausible answer. So they are hidden, counted, and one click
-   * away.
+   * This report used to drop any ticket missing branch / type / service /
+   * source / order. "Ticket deadlines" has no such rule, so the SAME ticket
+   * appeared there and vanished here, and the owner reasonably read that as the
+   * ticket never being created (2026-09-28). The requirement is that the two be
+   * "two views of the same data".
+   *
+   * The filter existed for 68 malformed rows the E2E suite seeded against this
+   * database. Those are long gone; it had been hiding real tickets since.
+   *
+   * So an incomplete row is now SHOWN and COUNTED as needing attention. A
+   * reader can see the gap and go and fix the ticket; they could never see a
+   * row that was not drawn.
    */
-  it('shows only tickets with every field populated', () => {
+  it('shows every ticket, including a half-filled one', () => {
     api.useAgentReportData.mockReturnValue(ok);
     const { container } = renderPage('complaints');
     const rows = container.querySelectorAll('tbody tr');
-    expect(rows).toHaveLength(2);
-    expect(screen.queryByText('Half-filled row')).not.toBeInTheDocument();
+    // Three, not two: the half-filled row is part of the data now.
+    expect(rows).toHaveLength(3);
+    expect(screen.getByText('Half-filled row')).toBeInTheDocument();
   });
 
-  it('hides a half-filled row without a banner, which is a deliberate trade', async () => {
-    /*
-     * There WAS a banner stating the count with a Show them control — the usual
-     * defence against silent filtering. The owner removed it once the
-     * half-filled rows had been deleted: on a clean database it is furniture
-     * that never says anything.
-     *
-     * Pinned so the trade stays visible in code: an incomplete row is now
-     * hidden with NOTHING on screen to say so. The place it shows up is the
-     * count — this report's tile against the dashboard's, which counts
-     * everything.
-     */
+  it('says how many rows are missing details, rather than hiding them', () => {
     api.useAgentReportData.mockReturnValue(ok);
-    const { container } = renderPage('complaints');
-    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
-    expect(screen.queryByText('Half-filled row')).not.toBeInTheDocument();
-    expect(screen.queryByText(/are hidden because fields are missing/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /show them/i })).not.toBeInTheDocument();
+    renderPage('complaints');
+    // Named as incomplete, NOT as hidden — the wording is the difference
+    // between a warning and the bug it used to describe.
+    expect(screen.getByText(/missing details/i)).toBeInTheDocument();
+    expect(screen.queryByText(/hidden/i)).not.toBeInTheDocument();
   });
 
   it('resolves a branch whose name drifted, via its store code', () => {
@@ -1018,7 +1013,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
 
     // The button carries the COUNT, so the promise it makes is visible before
     // it is clicked rather than checked by hand afterwards.
-    await userEvent.click(screen.getByText('Export CSV (2)'));
+    await userEvent.click(screen.getByText('Export CSV (3)'));
     expect(dl.blobs).toHaveLength(1);
     expect(dl.names[0]).toMatch(/^Sara CRM - Tickets \(last 30 days\) - \d{4}-\d{2}-\d{2}\.csv$/);
 
@@ -1031,7 +1026,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
       .slice(1)
       .map((th) => th.textContent?.trim() ?? '');
     expect(lines[0]!.split(',').slice(0, 3)).toEqual(onScreen.slice(0, 3));
-    expect(lines).toHaveLength(3); // header + 2 rows
+    expect(lines).toHaveLength(4); // header + 3 rows
     dl.restore();
   });
 
@@ -1060,8 +1055,11 @@ describe('AgentReportsPage — ticket breakdown', () => {
 
     await user.type(screen.getByLabelText(/Search by phone/), 'Panorama');
     await apply(user);
-    expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
-    expect(screen.getByText('1 of 2')).toBeInTheDocument();
+    /* TWO now, not one: the half-filled row carries the same branch name and is
+       no longer hidden, so a search for that branch finds both. That is the
+       point of the change — the table shows what is there. */
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(screen.getByText('2 of 3')).toBeInTheDocument();
   });
 
   it('finds a row by customer phone however it was typed', async () => {
@@ -1083,7 +1081,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
     await user.type(screen.getByLabelText(/Search by phone/), 'zzzznothing');
     await apply(user);
     expect(container.querySelectorAll('tbody tr')).toHaveLength(0);
-    expect(screen.getByText('0 of 2')).toBeInTheDocument();
+    expect(screen.getByText('0 of 3')).toBeInTheDocument();
   });
 
   it('exports only what the search left on screen', async () => {
@@ -1100,13 +1098,14 @@ describe('AgentReportsPage — ticket breakdown', () => {
     // reader knows it will not quietly export all 2. The moment a filter hides
     // rows the control splits in two, so BOTH answers are reachable and each
     // one carries its own count rather than relying on the wording.
-    expect(screen.getByText('Export all 2')).toBeTruthy();
-    await user.click(screen.getByText('Export 1 shown'));
+    expect(screen.getByText('Export all 3')).toBeTruthy();
+    await user.click(screen.getByText('Export 2 shown'));
     expect(dl.blobs).toHaveLength(1);
-    // One row in the file, not two — the filter is part of the question, and a
-    // file quietly holding the rows somebody filtered out is how a "your report
-    // is wrong" argument starts.
-    expect(await csvText(dl.blobs[0]!)).toHaveLength(2); // header + 1 row
+    // Only the rows the search left on screen — the filter is part of the
+    // question, and a file quietly holding the rows somebody filtered out is
+    // how a "your report is wrong" argument starts. Two now, because the
+    // half-filled row shares this branch name and is no longer hidden.
+    expect(await csvText(dl.blobs[0]!)).toHaveLength(3); // header + 2 rows
     dl.restore();
   });
 
@@ -1118,7 +1117,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
 
     await user.type(screen.getByLabelText(/Search by phone/), 'Panorama');
     await apply(user);
-    await user.click(screen.getByText('Export all 2'));
+    await user.click(screen.getByText('Export all 3'));
     expect(dl.blobs).toHaveLength(1);
     dl.restore();
   });
@@ -1175,7 +1174,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
   it('says which rows are on screen out of how many', () => {
     api.useAgentReportData.mockReturnValue(ok);
     renderPage('complaints');
-    expect(screen.getByText('Showing 1–2 of 2')).toBeInTheDocument();
+    expect(screen.getByText('Showing 1–3 of 3')).toBeInTheDocument();
   });
 
   it('filters by ticket type exactly, from the values actually present', async () => {
@@ -1193,7 +1192,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
     await user.click(screen.getByRole('option', { name: options[1]! }));
     const shown = container.querySelectorAll('tbody tr').length;
     expect(shown).toBeGreaterThan(0);
-    expect(shown).toBeLessThanOrEqual(2);
+    expect(shown).toBeLessThanOrEqual(3);
   });
 
   it('clears every filter at once', async () => {
@@ -1206,7 +1205,8 @@ describe('AgentReportsPage — ticket breakdown', () => {
     expect(container.querySelectorAll('tbody tr')).toHaveLength(0);
 
     await user.click(screen.getByText('Clear filters'));
-    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+    // Back to every row, which is now three — nothing is hidden.
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(3);
   });
 
   it('hides the clear button when nothing is filtered', () => {
