@@ -147,7 +147,21 @@ jobs:
     needs: plan
     runs-on: ubuntu-latest
     steps:
+      # TAGS, because the Update now summary is read from the TAG ANNOTATION.
+      #
+      # `actions/checkout` fetches depth 1 and NO TAGS by default, so
+      # `git tag -l --format='%(contents:subject)'` found nothing on the runner
+      # and the summary silently fell back to the last commit subject. v1.21.1
+      # shipped with "fix(ui): the dark highlight sits on the same hue as the
+      # light one" on the strip instead of what the release actually changes.
+      #
+      # Exactly the gap the feature's own note warned about: staging never runs
+      # this block (it is inside the GATED branch), so nothing could catch it
+      # before a real production release did.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - uses: pnpm/action-setup@v4.2.0
         with: { version: 9.15.0 }
       - uses: actions/setup-node@v5
@@ -280,8 +294,21 @@ jobs:
               # button off a narrow screen. EMPTY on staging, where the ref is a
               # branch with no annotation; the strip then names the surfaces
               # exactly as it did before.
-              SUMMARY=$(git tag -l --format='%(contents:subject)' "$RELEASE_VERSION" 2>/dev/null \
-                | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+//' | sed -E 's/^[^[:alnum:]]+//' | cut -c1-90)
+              # ONLY AN ANNOTATED TAG, never a commit subject.
+              #
+              # `%(contents:subject)` falls back to the TAGGED COMMIT's subject when the
+              # object is a lightweight ref -- which is what a shallow fetch leaves
+              # behind. v1.21.1 shipped a CSS commit message on the strip because of it.
+              #
+              # `git cat-file -t` is `tag` only for a real annotation, so this is EMPTY
+              # rather than WRONG when there is none. Empty is handled (the strip names
+              # the surfaces); wrong is not, because it looks like it worked.
+              if [ "$(git cat-file -t "$RELEASE_VERSION" 2>/dev/null)" = "tag" ]; then
+                SUMMARY=$(git tag -l --format='%(contents:subject)' "$RELEASE_VERSION" 2>/dev/null \
+                  | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+//' | sed -E 's/^[^[:alnum:]]+//' | cut -c1-90)
+              else
+                SUMMARY=""
+              fi
               # BUILT WITH jq, not printf.
               #
               # A hand-rolled printf has to escape the summary itself, and the
@@ -393,8 +420,13 @@ jobs:
             # loop. No secret, no HTTP callback, and it cannot drift out of step
             # with the build it describes.
             # Same one-line summary as the portals -- see the note there.
-            WSUMMARY=$(git tag -l --format='%(contents:subject)' "$RELEASE_VERSION" 2>/dev/null \
-              | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+//' | sed -E 's/^[^[:alnum:]]+//' | cut -c1-90)
+            # Annotated tags only -- see the note in the portals job.
+            if [ "$(git cat-file -t "$RELEASE_VERSION" 2>/dev/null)" = "tag" ]; then
+              WSUMMARY=$(git tag -l --format='%(contents:subject)' "$RELEASE_VERSION" 2>/dev/null \
+                | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+//' | sed -E 's/^[^[:alnum:]]+//' | cut -c1-90)
+            else
+              WSUMMARY=""
+            fi
             # jq, for the same reason as the portals above.
             jq -n --arg version "$RELEASE_VERSION" \
                   --arg commit "$(echo "$GITHUB_SHA" | cut -c1-7)" \
