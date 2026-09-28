@@ -43,10 +43,29 @@ export function LateOrdersReportPage() {
   const [search, setSearch] = useState('');
   const [kind, setKind] = useState('');
   const [action, setAction] = useState('');
+  /** One business day, as `YYYY-MM-DD`. Empty means every day in the window. */
+  const [bizDay, setBizDay] = useState('');
 
-  // The whole day at each end: a date alone would drop everything decided
-  // after midnight on the closing day.
-  const q = useLateOrderDecisions(`${from}T00:00:00`, `${to}T23:59:59`);
+  /*
+   * The window is widened at BOTH ends to cover whole BUSINESS days.
+   *
+   * A business day runs 08:00 to 04:00 the next morning, so a calendar window
+   * cuts the nights at each edge: everything decided between midnight and
+   * 04:00 on the closing day's night fell outside `to T23:59:59` and vanished
+   * from a report that claimed to cover that day. The opening edge has the
+   * mirror problem — 00:00-08:00 on `from` belongs to the PREVIOUS business
+   * day and should not be counted as this window's.
+   *
+   * So: fetch from `from T00:00` (the extra early hours are filtered out by
+   * business day below when one is picked) through `to +1 day T04:00`, which
+   * is exactly where the closing night ends.
+   */
+  const toNight = new Date(`${to}T00:00:00Z`);
+  toNight.setUTCDate(toNight.getUTCDate() + 1);
+  const q = useLateOrderDecisions(
+    `${from}T00:00:00`,
+    `${toNight.toISOString().slice(0, 10)}T04:00:00`,
+  );
   const all = useMemo(() => q.data ?? [], [q.data]);
 
   /*
@@ -58,12 +77,33 @@ export function LateOrdersReportPage() {
     return all.filter((r) => {
       if (kind && r.kind !== kind) return false;
       if (action && r.action !== action) return false;
+      // The BUSINESS day (08:00-04:00), not the calendar date — a decision at
+      // 01:00 belongs to the night before, and filtering by date would put it
+      // on the wrong day.
+      if (bizDay && businessDay(r.date_created) !== bizDay) return false;
       if (!term) return true;
       return `${r.order_id ?? ''} ${r.brand_name ?? ''} ${r.restaurant_name ?? ''}`
         .toLowerCase()
         .includes(term);
     });
-  }, [all, search, kind, action]);
+  }, [all, search, kind, action, bizDay]);
+  /*
+   * The business days actually PRESENT in the fetched window, newest first.
+   *
+   * Derived from the rows rather than enumerated from the date range: a range
+   * of a month would otherwise offer thirty options, twenty-eight of which
+   * return nothing. A picker whose entries mostly lead to an empty table is a
+   * picker that has stopped helping.
+   */
+  const businessDays = useMemo(() => {
+    const seen = new Set<string>();
+    for (const r of all) {
+      const d = businessDay(r.date_created);
+      if (d) seen.add(d);
+    }
+    return [...seen].sort().reverse();
+  }, [all]);
+
   const stats = useMemo(() => agentLateStats(rows, unknown), [rows, unknown]);
 
   const totals = useMemo(() => {
@@ -122,6 +162,18 @@ export function LateOrdersReportPage() {
         onTo={setTo}
         selects={[
           {
+            /*
+             * BUSINESS DAY, 08:00 to 04:00 — the day operations actually work
+             * to. Offered only for the days present in the fetched window, so
+             * every option returns rows.
+             */
+            key: 'businessDay',
+            label: t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' }),
+            value: bizDay,
+            onChange: setBizDay,
+            options: businessDays.map((d) => ({ value: d, label: formatDate(d) })),
+          },
+          {
             key: 'kind',
             label: t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' }),
             value: kind,
@@ -154,11 +206,12 @@ export function LateOrdersReportPage() {
             ],
           },
         ]}
-        filtering={!!search || !!kind || !!action}
+        filtering={!!search || !!kind || !!action || !!bizDay}
         onClear={() => {
           setSearch('');
           setKind('');
           setAction('');
+          setBizDay('');
           reset();
         }}
       />

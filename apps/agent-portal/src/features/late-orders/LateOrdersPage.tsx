@@ -24,7 +24,7 @@ import {
 } from '@yiji/ui';
 import {
   LATE_ORDER_COMPLAINT_TYPE,
-  parseYijiTimestamp,
+  businessDay,
   serviceMinutes,
   type LateOrderKind,
   type LateOrderRow,
@@ -183,6 +183,15 @@ export function LateOrdersPage() {
   const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
     .toISOString()
     .slice(0, 10);
+  /*
+   * The business day we are CURRENTLY IN — what the Today button means.
+   *
+   * Recomputed from the queue's own build time rather than held in state, so
+   * it rolls over at 08:00 while the page is open instead of pinning whatever
+   * day it was mounted on. A night shift does not reload the page at 08:00 to
+   * get the right answer.
+   */
+  const currentBusinessDay = businessDay(queue.data?.builtAt ?? new Date().toISOString());
   const soleVendorId = vendors.data?.length === 1 ? vendors.data[0]!.id : null;
 
   /*
@@ -206,28 +215,24 @@ export function LateOrdersPage() {
        */
       if (!range && done.has(r.orderId)) return false;
       /*
-       * Placed TODAY, in the agent's own calendar.
+       * TODAY means TODAY'S BUSINESS DAY, not the calendar date.
        *
-       * `placedAt` is Riyadh-local with no zone marker, so it is parsed by
-       * `parseYijiTimestamp` rather than `Date.parse` — reading it raw in a UTC
-       * container puts every order three hours in the future, which is the bug
-       * that once showed `minutesElapsed: -141`.
+       * Trading runs 08:00 to 04:00 the next morning, so a calendar cut splits
+       * one night's work in two: an order at 01:00 is still tonight's trading
+       * and was being EXCLUDED, while one at 06:00 belongs to the night that
+       * just ended and was being INCLUDED. Both wrong, and both invisible
+       * unless you were working at those hours (owner, 2026-09-28).
+       *
+       * `businessDay` applies Riyadh's offset itself — the boundary is a
+       * wall-clock hour in the branch's own day, never the browser's.
        */
-      if (todayOnly) {
-        const ms = parseYijiTimestamp(r.placedAt);
-        if (!Number.isFinite(ms)) return false;
-        const d = new Date(ms);
-        const key = new Date(d.getTime() - d.getTimezoneOffset() * 60_000)
-          .toISOString()
-          .slice(0, 10);
-        if (key !== today) return false;
-      }
+      if (todayOnly && businessDay(r.placedAt) !== currentBusinessDay) return false;
       if (order && !r.orderId.includes(order)) return false;
       if (brand && !`${r.brandName ?? ''} ${r.restaurantName ?? ''}`.toLowerCase().includes(brand))
         return false;
       return true;
     });
-  }, [queue.data, handled.data, orderQuery, brandQuery, range, todayOnly, today]);
+  }, [queue.data, handled.data, orderQuery, brandQuery, range, todayOnly, currentBusinessDay]);
 
   /*
    * SERVICE TIME for the rows actually on screen.
@@ -474,8 +479,13 @@ export function LateOrdersPage() {
             ambiguous — an empty Today queue is good news, not a broken page. */}
         {todayOnly && !range && (
           <Pill tone="success" size="sm">
+            {/* Names the business day, because "today" is not the calendar
+                date here: trading runs 08:00 to 04:00, so at 01:00 the answer
+                is still yesterday's date and an agent has to be able to see
+                which day they are looking at. */}
             {t('lateOrders.filter.todayNote', {
-              defaultValue: 'Today only — live orders still running',
+              day: currentBusinessDay ? formatDate(currentBusinessDay) : '',
+              defaultValue: 'Business day {{day}} — live orders still running',
             })}
           </Pill>
         )}
