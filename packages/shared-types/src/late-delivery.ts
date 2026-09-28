@@ -300,3 +300,23 @@ export function businessDay(raw: string | null | undefined): string | null {
   const shifted = riyadh - BUSINESS_DAY_START_HOUR * 60 * 60 * 1000;
   return new Date(shifted).toISOString().slice(0, 10);
 }
+
+/**
+ * The CALENDAR dates a business day touches, as `{ from, to }`.
+ *
+ * Yiji's `GetFilteredOrders` filters on calendar dates only — there is no way
+ * to ask it for "08:00 Saturday to 04:00 Sunday". A business day therefore
+ * spans TWO calendar dates, and asking for one of them loses half the night:
+ * request only Saturday and every order after midnight is missing.
+ *
+ * So the caller asks for both and narrows per row with `businessDay()`, which
+ * is the only thing that knows where the boundary actually falls. Widening the
+ * upstream window is cheap; getting the boundary wrong is silent.
+ *
+ * `2026-09-28` → `{ from: '2026-09-28', to: '2026-09-29' }`.
+ */
+export function businessDayRange(day: string): { from: string; to: string } {
+  const start = Date.parse(`${day}T00:00:00Z`);
+  if (!Number.isFinite(start)) return { from: day, to: day };
+  return { from: day, to: new Date(start + 24 * 60 * 60 * 1000).toISOString().slice(0, 10) };
+}

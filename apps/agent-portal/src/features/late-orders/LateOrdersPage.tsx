@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { createItem } from '@directus/sdk';
@@ -7,10 +7,10 @@ import {
   Card,
   ConfirmDialog,
   DateField,
-  Drawer,
   EmptyState,
   ErrorState,
   Input,
+  Modal,
   PageHeader,
   Pill,
   SelectMenu,
@@ -26,6 +26,7 @@ import {
 import {
   LATE_ORDER_COMPLAINT_TYPE,
   businessDay,
+  businessDayRange,
   matchStore,
   normalizePhone,
   serviceMinutes,
@@ -131,23 +132,57 @@ export function LateOrdersPage() {
     to: isoDaysAgo(0),
   }));
   /**
-   * TODAY — live orders, narrowed to orders PLACED today (owner, 2026-09-24).
+   * TODAY — every late order of the current business day, finished or not.
    *
-   * Deliberately not a date range of today..today. Passing dates to the gateway
-   * switches it into register mode: it walks pages and sets
-   * `includeCompleted: true`, so "today" would fill with orders that already
-   * finished. The ask was the opposite — what is late right now, today only —
-   * so this stays on the LIVE queue (no range, live statuses only) and filters
-   * the rows it returns by their own `placedAt`.
+   * IT USED TO FILTER THE LIVE QUEUE, AND THAT LOST RECORDS (owner,
+   * 2026-09-28: "today had 1 record and suddenly became empty... on searching
+   * from and to in date range the data is there").
    *
-   * It matters because the live queue is not implicitly today: an order placed
-   * before midnight that is still running is genuinely live, and shows in the
-   * unfiltered queue. This button is how an agent excludes exactly those.
+   * The live queue holds only orders still running, which is right for "Live
+   * only" — an order that completes has correctly left it. But an order that
+   * was an hour late at 14:00 and got delivered at 14:40 is still one of
+   * TODAY'S late orders. Filtering the live queue inherited its status
+   * restriction, so every row deleted itself the moment the order finished and
+   * the day's count drained towards zero as the day went on.
+   *
+   * So Today now LOADS the business day, which puts the gateway into register
+   * mode (`includeCompleted: true`) and keeps completed rows. It is still not
+   * the same thing as a history range: it tracks the business day as it rolls
+   * over, and it is labelled as today rather than as a window.
    */
   const [todayOnly, setTodayOnly] = useState(false);
   const vendors = useVendors();
-  // The queue follows the range: no range = today's live orders.
-  const queue = useLateOrders(range ?? undefined);
+  /*
+   * The window Today asks for — DERIVED FROM THE CLOCK, never stored.
+   *
+   * Two calendar dates, because a business day crosses midnight and Yiji's
+   * filter only understands dates. Derived rather than written into `range` on
+   * click so it ROLLS OVER: at 08:00 the business day changes, this changes
+   * with it, and a night shift that leaves the page open is not still looking
+   * at yesterday. It cannot key off the queue's own `builtAt` — that is the
+   * answer to this query, so reading it here would be circular.
+   */
+  const [dayTick, setDayTick] = useState(() => businessDay(new Date().toISOString()));
+  useEffect(() => {
+    /* One cheap check a minute, so 08:00 rolls the view over on its own. A
+       minute is plenty for an hour-scale boundary and costs nothing; the state
+       only changes on the one tick a day where the answer differs, so this is
+       not a re-render every minute. */
+    const id = setInterval(() => {
+      const day = businessDay(new Date().toISOString());
+      setDayTick((prev) => (prev === day ? prev : day));
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const todayRange = useMemo(() => (dayTick ? businessDayRange(dayTick) : null), [dayTick]);
+
+  /* The queue follows the range. Today is a range too — so finished orders
+     stay on the list — but it is still live, so it keeps polling. */
+  const queue = useLateOrders(
+    todayOnly ? (todayRange ?? undefined) : (range ?? undefined),
+    true,
+    todayOnly,
+  );
   const handled = useHandledLateOrders();
   const record = useRecordLateDecision();
 
@@ -196,7 +231,10 @@ export function LateOrdersPage() {
    * day it was mounted on. A night shift does not reload the page at 08:00 to
    * get the right answer.
    */
-  const currentBusinessDay = businessDay(queue.data?.builtAt ?? new Date().toISOString());
+  /* The same tick the range is derived from, so the pill, the per-row filter
+     and the window actually requested can never disagree — reading `builtAt`
+     here once meant the filter could name a different day than the query. */
+  const currentBusinessDay = dayTick;
   const soleVendorId = vendors.data?.length === 1 ? vendors.data[0]!.id : null;
   /* The store master, for attributing a raised ticket to its branch. Shares
      the tickets page's query key, so it is one cached copy. */
@@ -239,7 +277,7 @@ export function LateOrdersPage() {
        * In a historical window the decision is part of what you are looking
        * at — hiding those rows would quietly under-report the month.
        */
-      if (!range && done.has(r.orderId)) return false;
+      if (!range && !todayOnly && done.has(r.orderId)) return false;
       /*
        * TODAY means TODAY'S BUSINESS DAY, not the calendar date.
        *
@@ -477,12 +515,13 @@ export function LateOrdersPage() {
           {t('lateOrders.filter.apply', { defaultValue: 'Load range' })}
         </Button>
         {/*
-          TODAY — the live queue, narrowed to orders placed today.
+          TODAY — the whole business day, finished orders included.
 
-          It drops the range rather than setting one to today..today, because
-          dates put the gateway into register mode and pull in finished orders.
-          Live statuses only, so every row it shows is still running and still
-          actionable.
+          It LOADS the business day's calendar span rather than filtering the
+          live queue: the live queue drops an order the moment it completes, so
+          filtering it made today's rows vanish one by one (owner, 2026-09-28).
+          The span is two calendar dates because trading crosses midnight; each
+          row is then narrowed to the exact business day below.
         */}
         <Button
           variant={todayOnly ? 'brand' : 'ghost'}
@@ -490,8 +529,9 @@ export function LateOrdersPage() {
           onClick={() => {
             const next = !todayOnly;
             setTodayOnly(next);
-            // Today is a LIVE view: a loaded range would contradict it.
-            if (next) setRange(null);
+            /* The range is DERIVED from the business day, not stored — see
+               `todayRange`. Clearing the stored one is all that is needed. */
+            setRange(null);
           }}
         >
           {t('lateOrders.filter.today', { defaultValue: 'Today' })}
@@ -509,23 +549,27 @@ export function LateOrdersPage() {
         >
           {t('lateOrders.filter.clear', { defaultValue: 'Live only' })}
         </Button>
-        {/* Says which live view is on, so "Today" and "Live only" are never
-            ambiguous — an empty Today queue is good news, not a broken page. */}
-        {todayOnly && !range && (
+        {/* Says which view is on, so "Today" and "Live only" are never
+            ambiguous — an empty live queue is good news, not a broken page. */}
+        {todayOnly && (
           <Pill tone="success" size="sm">
             {/* Names the business day, because "today" is not the calendar
                 date here: trading runs 08:00 to 04:00, so at 01:00 the answer
                 is still yesterday's date and an agent has to be able to see
-                which day they are looking at. */}
+                which day they are looking at.
+
+                It says EVERY, not "still running": the whole point of the fix
+                is that a delivered order stays on today's list. */}
             {t('lateOrders.filter.todayNote', {
               day: currentBusinessDay ? formatDate(currentBusinessDay) : '',
-              defaultValue: 'Business day {{day}} — live orders still running',
+              defaultValue: 'Business day {{day}} — every late order, finished or running',
             })}
           </Pill>
         )}
         {/* A historical window is NOT the live queue, and must never be mistaken
-            for it — the rows are finished orders. */}
-        {range && (
+            for it — the rows are finished orders. Today loads a range too, and
+            labels itself above, so this only speaks for a chosen window. */}
+        {range && !todayOnly && (
           <Pill tone="blue" size="sm">
             {t('lateOrders.filter.historyNote', {
               // dd/mm/yyyy, like every other date on screen — the pill used to
@@ -573,13 +617,43 @@ export function LateOrdersPage() {
             <thead>
               <Tr>
                 <Th>{t('lateOrders.col.order', { defaultValue: 'Order' })}</Th>
-                <Th>{t('lateOrders.col.elapsed', { defaultValue: 'Running' })}</Th>
-                <Th>{t('lateOrders.col.service', { defaultValue: 'Service time' })}</Th>
+                {/*
+                  "Running" said nothing (owner, 2026-09-28) — running for how
+                  long, measured from what? This is the WHOLE age of the order,
+                  from the moment it was placed, and it is the number the
+                  threshold is applied to. Named for what it measures, and the
+                  sub-label says from when, so it cannot be confused with the
+                  driver leg beside it.
+                */}
+                <Th>
+                  {t('lateOrders.col.elapsed', { defaultValue: 'Total time' })}
+                  <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+                    {t('lateOrders.col.elapsedHint', { defaultValue: 'since order placed' })}
+                  </span>
+                </Th>
+                <Th>
+                  {t('lateOrders.col.service', { defaultValue: 'Service time' })}
+                  <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+                    {t('lateOrders.col.serviceHint', { defaultValue: 'since driver accepted' })}
+                  </span>
+                </Th>
                 <Th>{t('lateOrders.col.brand', { defaultValue: 'Brand / branch' })}</Th>
                 <Th>{t('lateOrders.col.customer', { defaultValue: 'Customer' })}</Th>
                 <Th>{t('lateOrders.col.status', { defaultValue: 'Status' })}</Th>
                 <Th>{t('lateOrders.col.kind', { defaultValue: 'Source of delay' })}</Th>
+                {/*
+                  THE ACTIONS, SPLIT INTO THREE (owner, 2026-09-28).
+
+                  Four controls sat in one "Decision" cell and read as a wall of
+                  buttons — the decision itself, the thing you look at first,
+                  and the notes all competing at the same weight. Now: what you
+                  LOOK AT, what you DECIDE, and the note. Each column is titled,
+                  so the buttons no longer have to carry the grouping on their
+                  own.
+                */}
+                <Th>{t('lateOrders.col.detail', { defaultValue: 'Order' })}</Th>
                 <Th>{t('lateOrders.col.actions', { defaultValue: 'Decision' })}</Th>
+                <Th>{t('lateOrders.col.notes', { defaultValue: 'Notes' })}</Th>
               </Tr>
             </thead>
             <tbody>
@@ -601,13 +675,52 @@ export function LateOrdersPage() {
                     */}
                     <Td className="whitespace-nowrap tabular-nums">
                       {(() => {
-                        if (serviceTimes.isLoading) return '';
+                        if (serviceTimes.isLoading)
+                          return (
+                            /* A skeleton, not a spinner: one spinner per row
+                               reads as a page that is broken, and the width is
+                               known so nothing reflows when the value lands. */
+                            <span className="inline-block h-4 w-12 animate-pulse rounded bg-muted/60 align-middle" />
+                          );
                         const mins = serviceMinutes(
                           serviceTimes.data?.[row.orderId] ?? null,
                           row.closedAt ?? null,
                           nowMs,
                         );
-                        return mins === null ? '-' : elapsed(mins);
+                        if (mins === null)
+                          return <span className="text-muted-foreground/60">&mdash;</span>;
+                        /*
+                         * A LIVE COUNT LOOKS LIVE; A FINISHED ONE LOOKS FINAL
+                         * (owner, 2026-09-28).
+                         *
+                         * The same "1h 12m" meant two different things — still
+                         * climbing, or settled — and nothing on screen said
+                         * which. A closed order carries `closedAt`, so the
+                         * difference is known per row, not guessed.
+                         *
+                         * The live one gets a soft pulsing dot and the brand
+                         * colour; the closed one is plain and muted. CSS only —
+                         * no timer, no per-row state. The number itself
+                         * advances with the queue's own 30s refresh, which is
+                         * the resolution the data actually has: a per-second
+                         * ticker would re-render every row for a figure that
+                         * cannot change more often than its source.
+                         */
+                        const live = !row.closedAt;
+                        return live ? (
+                          <span className="inline-flex items-center gap-1.5 font-medium text-brand">
+                            <span
+                              className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-brand"
+                              aria-hidden="true"
+                            />
+                            {elapsed(mins)}
+                            <span className="sr-only">
+                              {t('lateOrders.serviceLive', { defaultValue: 'still counting' })}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">{elapsed(mins)}</span>
+                        );
                       })()}
                     </Td>
                     <Td className="max-w-[16rem] truncate">
@@ -659,6 +772,22 @@ export function LateOrdersPage() {
                         ]}
                       />
                     </Td>
+                    {/*
+                      COLUMN 1 — WHAT YOU LOOK AT. Always offered, decided or
+                      not: reviewing what was ordered is exactly why somebody
+                      opens a handled row.
+                    */}
+                    <Td>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        aria-haspopup="dialog"
+                        onClick={() => setExpanded(row.orderId)}
+                      >
+                        {t('lateOrders.showDetail', { defaultValue: 'Cart & tracking' })}
+                      </Button>
+                    </Td>
+                    {/* COLUMN 2 — WHAT YOU DECIDE. */}
                     <Td>
                       {/*
                         A HANDLED historical order shows its decision instead of
@@ -666,101 +795,45 @@ export function LateOrdersPage() {
                         ignored invites a second, contradictory record.
                       */}
                       {range && handled.data?.has(row.orderId) ? (
-                        /* The DECISION replaces the two actions, but not the
-                           detail: looking at what was ordered is exactly what
-                           somebody reviewing a handled order came to do. */
-                        <div className="flex items-center gap-2">
-                          <Pill tone="success" size="sm">
-                            {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
-                          </Pill>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            aria-expanded={expanded === row.orderId}
-                            onClick={() =>
-                              setExpanded((cur) => (cur === row.orderId ? null : row.orderId))
-                            }
-                          >
-                            {expanded === row.orderId
-                              ? t('lateOrders.hideDetail', { defaultValue: 'Hide details' })
-                              : t('lateOrders.showDetail', { defaultValue: 'Cart & tracking' })}
-                          </Button>
-                          {/*
-                            COMMENTS — on EVERY row, handled or not (owner,
-                            2026-09-27). Opens the same box; on a row that has
-                            already been decided it arrives populated and saves
-                            as an edit, so the reason and the action can be
-                            corrected without re-deciding anything.
-                          */}
-                          <Button
-                            size="sm"
-                            /* `secondary`, not `ghost`: a transparent button
-                               reads as a link, and this is an action on the
-                               row like the ones beside it. The light grey fill
-                               is the same one "Cart & tracking" carries, so
-                               the two sit as peers (owner, 2026-09-27). */
-                            variant="secondary"
-                            onClick={() => openDecision(row, 'ignored')}
-                          >
-                            {t('lateOrders.comments', { defaultValue: 'Comments' })}
-                          </Button>
-                        </div>
+                        <Pill tone="success" size="sm">
+                          {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
+                        </Pill>
                       ) : (
-                        <div className="flex items-center gap-2">
-                          {/*
-                            A NAMED control, not the order number.
-
-                            Cart and tracking used to hang off clicking the id —
-                            an affordance nothing announced, which an agent had
-                            to be told about (owner, 2026-09-22). A button that
-                            says what it opens needs no telling, and the row
-                            says whether it is open.
-                          */}
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            aria-expanded={expanded === row.orderId}
-                            onClick={() =>
-                              setExpanded((cur) => (cur === row.orderId ? null : row.orderId))
-                            }
-                          >
-                            {expanded === row.orderId
-                              ? t('lateOrders.hideDetail', { defaultValue: 'Hide details' })
-                              : t('lateOrders.showDetail', {
-                                  defaultValue: 'Cart & tracking',
-                                })}
-                          </Button>
+                        /* The two outcomes, and only those. `whitespace-nowrap`
+                           so the pair never wraps into a two-line cell on a
+                           narrow screen. */
+                        <div className="flex items-center gap-2 whitespace-nowrap">
                           <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
                             {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
                           </Button>
+                          {/* `secondary`, not `ghost`: Ignore is a recorded
+                              decision, not a dismissal, and a transparent
+                              control read as a link next to a filled one. */}
                           <Button
                             size="sm"
-                            variant="ghost"
+                            variant="secondary"
                             onClick={() => openDecision(row, 'ignored')}
                           >
                             {t('lateOrders.ignore', { defaultValue: 'Ignore' })}
                           </Button>
-                          {/*
-                            COMMENTS — on EVERY row, handled or not (owner,
-                            2026-09-27). Opens the same box; on a row that has
-                            already been decided it arrives populated and saves
-                            as an edit, so the reason and the action can be
-                            corrected without re-deciding anything.
-                          */}
-                          <Button
-                            size="sm"
-                            /* `secondary`, not `ghost`: a transparent button
-                               reads as a link, and this is an action on the
-                               row like the ones beside it. The light grey fill
-                               is the same one "Cart & tracking" carries, so
-                               the two sit as peers (owner, 2026-09-27). */
-                            variant="secondary"
-                            onClick={() => openDecision(row, 'ignored')}
-                          >
-                            {t('lateOrders.comments', { defaultValue: 'Comments' })}
-                          </Button>
                         </div>
                       )}
+                    </Td>
+                    {/*
+                      COLUMN 3 — THE NOTE. On EVERY row, handled or not (owner,
+                      2026-09-27). Opens the same box; on a row already decided
+                      it arrives populated and saves as an edit, so the reason
+                      and the action can be corrected without re-deciding
+                      anything.
+                    */}
+                    <Td>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openDecision(row, 'ignored')}
+                      >
+                        {t('lateOrders.comments', { defaultValue: 'Comments' })}
+                      </Button>
                     </Td>
                   </Tr>
                 </Fragment>
@@ -771,28 +844,30 @@ export function LateOrdersPage() {
       )}
 
       {/*
-        CART & TRACKING IN A PANEL, not inline under the row.
+        CART & TRACKING IN A CENTRED DIALOG.
 
-        It used to expand a full-width row inside the table, which pushed
-        every other late order off the screen — on a queue the whole point of
-        which is scanning rows, the detail was displacing the thing being
-        scanned (owner, 2026-09-27). A drawer overlays instead: the queue stays
-        where it was, and Esc or the backdrop returns to it.
+        First it was a full-width row inside the table, which pushed every other
+        late order off the screen — on a queue whose whole point is scanning
+        rows, the detail displaced the thing being scanned (owner, 2026-09-27).
+        Then a side drawer, which fixed that but put the thing you opened to
+        READ in the corner of the eye (owner, 2026-09-28). Centred is the honest
+        shape for it: nothing else competes while it is open, and Esc or the
+        backdrop returns to the queue exactly where it was.
 
-        Mounted only while open, so the queue never pays for carts nobody
-        asked to see — the same reason the inline version was conditional.
+        Mounted only while open, so the queue never pays for carts nobody asked
+        to see — the same reason the inline version was conditional.
       */}
-      <Drawer
+      <Modal
         open={!!expanded}
         onClose={() => setExpanded(null)}
-        width="lg"
+        size="lg"
         title={t('lateOrders.detailTitle', {
           order: expanded ?? '',
           defaultValue: 'Order {{order}} — cart & tracking',
         })}
       >
         {expanded && <LateOrderDetail orderId={expanded} vendorId={soleVendorId} />}
-      </Drawer>
+      </Modal>
 
       {/*
         The reason, demanded for BOTH actions.

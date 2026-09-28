@@ -9,6 +9,7 @@ import {
   parseYijiTimestamp,
   serviceMinutes,
   businessDay,
+  businessDayRange,
 } from '../src/late-delivery.js';
 import { couponOrderId } from '../src/coupon-approvals.js';
 
@@ -271,5 +272,56 @@ describe('businessDay', () => {
     // 05:00 UTC is 08:00 in Riyadh — the moment the day turns.
     expect(businessDay('2026-09-22T04:59:00Z')).toBe('2026-09-21');
     expect(businessDay('2026-09-22T05:00:00Z')).toBe('2026-09-22');
+  });
+});
+
+/*
+ * THE CALENDAR SPAN OF A BUSINESS DAY.
+ *
+ * Yiji's order filter understands dates, not hours, so "today" has to be asked
+ * for as TWO calendar dates and narrowed per row. Getting this wrong loses
+ * every order after midnight — silently, because the earlier half is still
+ * there and the list just looks quiet.
+ */
+describe('businessDayRange', () => {
+  it('spans the two calendar dates a business day touches', () => {
+    expect(businessDayRange('2026-09-28')).toEqual({ from: '2026-09-28', to: '2026-09-29' });
+  });
+
+  it('crosses a month boundary', () => {
+    expect(businessDayRange('2026-09-30')).toEqual({ from: '2026-09-30', to: '2026-10-01' });
+  });
+
+  it('crosses a year boundary', () => {
+    expect(businessDayRange('2026-12-31')).toEqual({ from: '2026-12-31', to: '2027-01-01' });
+  });
+
+  it('covers a leap day', () => {
+    expect(businessDayRange('2028-02-28')).toEqual({ from: '2028-02-28', to: '2028-02-29' });
+  });
+
+  /*
+   * THE POINT OF THE WHOLE THING: every hour of a business day must fall inside
+   * the span asked for. An order at 01:00 belongs to the previous day's trading
+   * and would be missed by a single-date request.
+   */
+  it('contains every hour of the business day it describes', () => {
+    const span = businessDayRange('2026-09-28');
+    for (const stamp of [
+      '2026-09-28T08:00:00', // the day opens
+      '2026-09-28T13:30:00',
+      '2026-09-28T23:59:00', // last minute before midnight
+      '2026-09-29T00:10:00', // past midnight, same trading day
+      '2026-09-29T03:59:00', // the last of the night
+      '2026-09-29T06:00:00', // the 04:00-08:00 tail
+    ]) {
+      expect(businessDay(stamp)).toBe('2026-09-28');
+      const date = stamp.slice(0, 10);
+      expect(date >= span.from && date <= span.to).toBe(true);
+    }
+  });
+
+  it('gives back the day itself rather than throwing on nonsense', () => {
+    expect(businessDayRange('not-a-date')).toEqual({ from: 'not-a-date', to: 'not-a-date' });
   });
 });

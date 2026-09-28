@@ -103,6 +103,8 @@ export type { ShortcutsOverlayProps, ShortcutGroup, ShortcutRow } from './Shortc
 export { useKeyboardShortcuts } from './useKeyboardShortcuts.js';
 export { Toaster, toast } from './Toast.js';
 export type { ToastInput, ToastTone } from './Toast.js';
+export { Modal } from './Modal.js';
+export type { ModalProps } from './Modal.js';
 export { Drawer } from './Drawer.js';
 export type { DrawerProps } from './Drawer.js';
 export { DrawerSection } from './DrawerSection.js';
