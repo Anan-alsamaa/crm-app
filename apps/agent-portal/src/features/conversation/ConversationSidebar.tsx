@@ -112,9 +112,12 @@ function PencilIcon() {
   );
 }
 
-const TICKET_TONE: Record<string, 'success' | 'warning' | 'muted' | 'primary' | 'neutral'> = {
+const TICKET_TONE: Record<
+  string,
+  'success' | 'warning' | 'highlight' | 'muted' | 'primary' | 'neutral'
+> = {
   open: 'success',
-  pending: 'warning',
+  pending: 'highlight',
   resolved: 'primary',
   closed: 'muted',
   reopened: 'neutral',

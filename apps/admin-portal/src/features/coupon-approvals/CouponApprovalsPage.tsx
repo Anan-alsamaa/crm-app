@@ -51,8 +51,8 @@ import {
 /* Every state in COUPON_APPROVAL_STATUSES, so none falls through to a default
  * that would paint a rejection like an approval. `edited` is an approval on
  * amended terms; `assigned` is an approval Yiji has taken. */
-const TONE: Record<string, 'warning' | 'success' | 'destructive'> = {
-  pending: 'warning',
+const TONE: Record<string, 'warning' | 'success' | 'destructive' | 'highlight'> = {
+  pending: 'highlight',
   approved: 'success',
   edited: 'success',
   assigned: 'success',

@@ -108,6 +108,17 @@ export interface CreateCouponRequestInput extends CouponFields {
   /** The Yiji order, for a coupon raised without a ticket. */
   order_id?: string | null;
   contact: string | null;
+  /**
+   * The customer's number when NO contact row stands behind the request.
+   *
+   * A late-order coupon has neither a ticket nor a contact — a late order is
+   * deliberately not a reason to put somebody in the customer directory — so
+   * the compensation report had no number to show for any of them.
+   *
+   * DISPLAY ONLY. The push worker reads the real number from Yiji's own order
+   * record (`order.customerPhone`), so delivery never depends on this.
+   */
+  customer_phone?: string | null;
   requested_by: string | null;
   reason?: string | null;
   /* The coupon's own terms, validated by CouponRequestDraft before we get here. */

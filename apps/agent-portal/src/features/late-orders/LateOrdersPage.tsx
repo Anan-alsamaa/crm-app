@@ -73,15 +73,6 @@ function elapsed(minutes: number): string {
 }
 
 /**
- * How overdue reads at a glance. An order twenty minutes past the line and one
- * three hours past need different urgency from across a room, and these rows
- * are scanned far more often than they are read.
- */
-function tone(minutes: number, threshold: number): 'warning' | 'destructive' {
-  return minutes >= threshold * 1.5 ? 'destructive' : 'warning';
-}
-
-/**
  * How far back the page opens. Thirty days is what operations review, and it
  * is comfortably inside the upstream page budget (two months measured 1,062
  * rows against a 500-per-page walk).
@@ -300,6 +291,29 @@ export function LateOrdersPage() {
     queryKey: ['order-cart', coupon?.row.orderId],
     enabled: !!coupon?.row.orderId,
     queryFn: () => commerce.getOrderCart(coupon!.row.orderId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  /*
+   * THE ORDER ITSELF, for the Item field — the SAME source the tickets page
+   * uses (owner, 2026-09-28: "it should be as similar to the regular assign
+   * coupon from tickets page").
+   *
+   * The cart above is a DISPLAY shape: name, qty, price and modifiers, with no
+   * item id. The order payload carries Yiji's `sku`, which is what `item_sku`
+   * records — so a coupon raised from a late order was naming its item by a
+   * spelling while one raised from a ticket named it by a key.
+   *
+   * The cart is still fetched: it is what Cart & tracking shows, and it has
+   * the modifiers the order payload does not. Falls back to the cart's lines
+   * when the order cannot be read, so the dropdown is never emptier than it
+   * was before.
+   */
+  const couponOrder = useQuery({
+    queryKey: ['yiji-order', soleVendorId, coupon?.row.orderId],
+    enabled: !!coupon?.row.orderId && !!soleVendorId,
+    queryFn: () => commerce.getOrder(soleVendorId!, coupon!.row.orderId),
     staleTime: 5 * 60_000,
     retry: false,
   });
@@ -761,26 +775,20 @@ export function LateOrdersPage() {
 
                       The amber pill put amber text on an amber ground, so the
                       figure this whole screen exists to communicate was the
-                      least readable thing on the row. Now it is plain type at
-                      the size it deserves, and the COLOUR carries the urgency:
-                      amber past the threshold, red at 1.5x. A dot restates it
-                      so the meaning does not rest on colour alone.
+                      least readable thing on the row.
+
+                      ALWAYS RED, not amber-then-red (owner, 2026-09-28). Every
+                      row in this queue is ALREADY past the threshold — that is
+                      what put it here — so a two-tone scale was drawing a
+                      distinction between "late" and "later" that nobody asked
+                      for, and it made half the column the washed-out amber the
+                      change set out to remove.
                     */}
                     <Td className="whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums ${
-                          tone(row.minutesElapsed, threshold) === 'destructive'
-                            ? 'text-destructive'
-                            : 'text-warning-foreground'
-                        }`}
-                      >
+                      <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-destructive">
                         <span
                           aria-hidden="true"
-                          className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
-                            tone(row.minutesElapsed, threshold) === 'destructive'
-                              ? 'bg-destructive'
-                              : 'bg-warning'
-                          }`}
+                          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-destructive"
                         />
                         {elapsed(row.minutesElapsed)}
                       </span>
@@ -830,9 +838,15 @@ export function LateOrdersPage() {
                           /* Same weight and size as Total time beside it, so
                              the two read as a pair to compare rather than a
                              headline and a footnote. */
-                          <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-brand">
+                          /* AMBER, and deliberately NOT the red beside it
+                             (owner, 2026-09-28: "service time should be in a
+                             color"). Two different measures in the same row
+                             must not wear the same colour, or the eye reads
+                             them as one number split in two. Amber also carries
+                             "still running" on its own. */
+                          <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-warning-foreground">
                             <span
-                              className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-brand"
+                              className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning"
                               aria-hidden="true"
                             />
                             {elapsed(mins)}
@@ -857,7 +871,11 @@ export function LateOrdersPage() {
                       {[row.brandName, row.restaurantName].filter(Boolean).join(' - ') || '-'}
                     </Td>
                     <Td className="whitespace-nowrap">
-                      {row.customerName || row.customerPhone || '-'}
+                      {/* NORMALISED FOR DISPLAY, not just for storage. Yiji
+                          sends `+9665XXXXXXXX`; every number in this CRM reads
+                          `05XXXXXXXX`, and this cell was the one place showing
+                          Yiji's shape to an agent (owner, 2026-09-28). */}
+                      {row.customerName || normalizePhone(row.customerPhone) || '-'}
                     </Td>
                     <Td className="whitespace-nowrap text-muted-foreground">
                       {t(`commerce.orderStatuses.${row.status}`, { defaultValue: row.status })}
@@ -924,7 +942,17 @@ export function LateOrdersPage() {
                         the buttons: offering "Ignore" on something already
                         ignored invites a second, contradictory record.
                       */}
-                      {range && handled.data?.has(row.orderId) ? (
+                      {/*
+                        A DECIDED ORDER SHOWS ITS DECISION, IN EVERY VIEW
+                        (owner, 2026-09-28).
+
+                        This was gated on `range`, so on the live queue a row
+                        that had just been decided still offered Assign coupon
+                        and Ignore — inviting a second, contradictory record for
+                        the same order. What decides this is whether a decision
+                        EXISTS, not which view happens to be open.
+                      */}
+                      {handled.data?.has(row.orderId) ? (
                         <Pill tone="success" size="sm">
                           {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
                         </Pill>
@@ -1128,19 +1156,23 @@ export function LateOrdersPage() {
              a late-order coupon reached the approvals queue titled
              `+966545808075` (owner, 2026-09-28). */
           customerPhone={normalizePhone(coupon.row.customerPhone) || null}
-          /* Price rides along so picking an item can fill the coupon with what
-             that item actually cost.
-             
-             NO SKU: `GetOrderCart` returns a display shape (name, qty, price,
-             modifiers) and carries no item id at all. The ticket path gets one
-             from the ORDER payload, which this queue does not fetch. Passing
-             null is the honest answer — inventing a key from the name is
-             exactly what `item_sku` exists to avoid. */
-          orderItems={(couponCart.data?.lines ?? []).map((l) => ({
-            name: l.name,
-            price: l.price ?? null,
-            sku: null,
-          }))}
+          /* THE ORDER'S OWN LINES, sku included — the same shape the tickets
+             page passes. Falls back to the cart (no sku, `item_sku` then stays
+             null rather than being invented from a name) when the order cannot
+             be read, so the dropdown never ends up emptier than before. */
+          orderItems={
+            couponOrder.data?.items?.length
+              ? couponOrder.data.items.map((it) => ({
+                  name: it.name,
+                  price: it.price ?? null,
+                  sku: it.sku ?? null,
+                }))
+              : (couponCart.data?.lines ?? []).map((l) => ({
+                  name: l.name,
+                  price: l.price ?? null,
+                  sku: null,
+                }))
+          }
           description={coupon.reason}
           brandId={null}
           restaurantId={coupon.row.restaurantId ?? null}

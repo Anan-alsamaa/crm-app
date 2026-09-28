@@ -17,6 +17,7 @@ import {
   type CouponApprovalStatus,
 } from '@yiji/shared-types';
 import { useMyCouponRequests, type CouponRequestRow } from './api.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 
 /**
  * Every compensation/coupon request from EVERY agent, and what became of each —
@@ -32,8 +33,8 @@ import { useMyCouponRequests, type CouponRequestRow } from './api.js';
  */
 // Wider than CouponApprovalStatus on purpose: the push worker moves a row to
 // `assigned` once Yiji actually has the coupon, and that state still renders.
-const TONE: Record<string, 'warning' | 'success' | 'destructive'> = {
-  pending: 'warning',
+const TONE: Record<string, 'warning' | 'highlight' | 'success' | 'destructive'> = {
+  pending: 'highlight',
   approved: 'success',
   assigned: 'success',
   rejected: 'destructive',
@@ -60,6 +61,19 @@ export function MyCouponsPage() {
   const requests = useMyCouponRequests();
   const [view, setView] = useState<CouponApprovalStatus | 'all'>('pending');
   const [search, setSearch] = useState('');
+  /*
+   * WHOSE REQUESTS — MINE BY DEFAULT (owner, 2026-09-28).
+   *
+   * This queue has always shown EVERY agent's requests, which is right for a
+   * supervisor and wrong for the agent who just raised one: their own ask was
+   * buried among everyone else's, across every status.
+   *
+   * It defaults to the signed-in agent and can be widened to everyone, rather
+   * than being hidden from them — seeing what colleagues have asked for is
+   * useful, it just should not be the first thing on the screen.
+   */
+  const { user } = useAuth();
+  const [mineOnly, setMineOnly] = useState(true);
 
   // "approved" is every APPROVED decision — 'edited' and 'assigned' included.
   // Naming only 'assigned' here left an amended approval in no tab at all.
@@ -68,7 +82,8 @@ export function MyCouponsPage() {
 
   const rows = useMemo(() => {
     const all = requests.data ?? [];
-    const byStatus = all.filter((r) => inView(r.status, view));
+    const mine = mineOnly && user?.id ? all.filter((r) => r.requested_by?.id === user.id) : all;
+    const byStatus = mine.filter((r) => inView(r.status, view));
     const q = search.trim().toLowerCase();
     if (!q) return byStatus;
     // One box over the facts an agent actually holds when a customer calls:
@@ -86,10 +101,14 @@ export function MyCouponsPage() {
         r.requested_by?.email,
       ].some((v) => (v ?? '').toLowerCase().includes(q)),
     );
-  }, [requests.data, view, search]);
+  }, [requests.data, view, search, mineOnly, user?.id]);
 
+  /* Counted over the SAME scope as the list: a "3 pending" tab above an empty
+     list because the other two belong to somebody else is a bug report. */
   const count = (s: CouponApprovalStatus | 'all') =>
-    (requests.data ?? []).filter((r) => inView(r.status, s)).length;
+    (requests.data ?? [])
+      .filter((r) => !mineOnly || !user?.id || r.requested_by?.id === user.id)
+      .filter((r) => inView(r.status, s)).length;
 
   return (
     <div className="flex h-full flex-col">
@@ -120,6 +139,31 @@ export function MyCouponsPage() {
             aria-label={t('coupons.search', { defaultValue: 'Search compensation requests' })}
             className="h-9 w-full rounded-xl bg-secondary/60 px-3 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.06] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
+        </div>
+        {/* WHOSE, then WHICH STATUS. Two questions, so two rows rather than one
+            long strip in which "Mine" would read as another status. */}
+        <div className="mx-auto mb-2 flex w-full max-w-3xl flex-wrap gap-1.5">
+          {(
+            [
+              [true, t('coupons.mine', { defaultValue: 'My requests' })],
+              [false, t('coupons.everyone', { defaultValue: 'Everyone' })],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={String(v)}
+              type="button"
+              onClick={() => setMineOnly(v)}
+              aria-pressed={mineOnly === v}
+              className={cn(
+                'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast ease-out',
+                mineOnly === v
+                  ? 'bg-foreground text-background'
+                  : 'bg-secondary text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         <div className="mx-auto flex w-full max-w-3xl flex-wrap gap-1.5">
           {(

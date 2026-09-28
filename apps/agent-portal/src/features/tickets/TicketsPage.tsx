@@ -937,9 +937,9 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
 
   // Board pill hues: live work jade, waiting warning-treated, finished success
   // — one ladder shared with the list dots.
-  const statusTone: Record<TicketStatus, 'primary' | 'warning' | 'success'> = {
+  const statusTone: Record<TicketStatus, 'primary' | 'warning' | 'highlight' | 'success'> = {
     open: 'primary',
-    pending: 'warning',
+    pending: 'highlight',
     solved: 'success',
   };
 
@@ -1819,11 +1819,11 @@ function TicketCoupons({ ticketId }: { ticketId: string }) {
   const rows = coupons.data ?? [];
   if (rows.length === 0) return null;
 
-  const TONE: Record<string, 'success' | 'destructive' | 'warning' | 'neutral'> = {
+  const TONE: Record<string, 'success' | 'destructive' | 'warning' | 'highlight' | 'neutral'> = {
     approved: 'success',
     assigned: 'success',
     rejected: 'destructive',
-    pending: 'warning',
+    pending: 'highlight',
   };
 
   return (

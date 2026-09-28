@@ -27,6 +27,17 @@ vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
 const api = vi.hoisted(() => ({ useMyCouponRequests: vi.fn() }));
 vi.mock('../src/features/coupons/api.js', () => api);
 
+/*
+ * The page scopes to the signed-in agent by default (owner, 2026-09-28).
+ *
+ * `auth.user` is null here on purpose: with no id to compare against, the
+ * scope is a no-op and these tests keep asserting what they were written for —
+ * the status tabs, the counts and the rejection note. The scoping itself is
+ * covered separately in `my-coupons-scope.test.ts`.
+ */
+const auth = vi.hoisted(() => ({ user: null as { id: string } | null }));
+vi.mock('../src/lib/auth/AuthContext.js', () => ({ useAuth: () => auth }));
+
 import { MyCouponsPage } from '../src/features/coupons/MyCouponsPage.js';
 
 function renderPage() {

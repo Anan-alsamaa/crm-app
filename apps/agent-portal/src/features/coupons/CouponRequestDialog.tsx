@@ -23,6 +23,7 @@ import {
   parseDeliveryTypes,
   toggleDeliveryType,
   type CouponRequestDraft,
+  normalizePhone,
 } from '@yiji/shared-types';
 import { optionsFor, useOptionLists } from '../tickets/option-lists.js';
 import { useCouponCodeTaken, useRequestCouponApproval } from './api.js';
@@ -365,6 +366,19 @@ export function CouponRequestDialog({
         // order, and writing both would create a second thing to disagree.
         order_id: ticketId ? null : (orderId ?? null),
         contact: contactId,
+        /*
+         * THE NUMBER, when no contact row carries it.
+         *
+         * A late-order coupon has neither a ticket nor a contact — the customer
+         * is not in the directory and deliberately is not put there — so the
+         * compensation report had no phone to show for any of them (owner,
+         * 2026-09-28).
+         *
+         * Display only: the push worker reads the real number from YIJI's own
+         * order record, so nothing about delivery depends on this. Canonical
+         * `05XXXXXXXX`, like every number stored here.
+         */
+        customer_phone: contactId ? null : normalizePhone(customerPhone ?? '') || null,
         requested_by: requestedBy,
         // The supervisor reads this, so it is the agent's own words.
         reason: d.compensation_reason,

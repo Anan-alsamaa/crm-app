@@ -5,6 +5,8 @@ type Tone =
   | 'neutral'
   | 'primary'
   | 'success'
+  /** Excel-yellow: WAITING on somebody. Not a severity — see `tones` below. */
+  | 'highlight'
   | 'warning'
   | 'destructive'
   | 'muted'
@@ -34,6 +36,14 @@ const tones: Record<Tone, string> = {
   // Warning is a light token — `text-warning` on a tint fails contrast on the
   // light theme, so warning pills use the darkened warning-foreground.
   warning: 'bg-warning/20 text-warning-foreground',
+  /* SOLID, not a 20% tint, and dark text on it.
+     
+     "Pending" is not a severity — nothing is wrong, somebody has not acted yet
+     — so it sits outside the warning/error red ramp entirely. A full-strength
+     `#FBF719` reads as the spreadsheet highlight it is meant to echo, and the
+     tint it replaced rendered white text on pale peach, which could not be
+     read at all (owner, 2026-09-28). */
+  highlight: 'bg-highlight text-highlight-foreground',
   destructive: 'bg-destructive/15 text-destructive',
   muted: 'bg-muted text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]',
   // Vivid category fills — token tint + saturated hue label per tone.
@@ -49,6 +59,7 @@ const dotColors: Record<Tone, string> = {
   primary: 'bg-primary',
   success: 'bg-success',
   warning: 'bg-warning',
+  highlight: 'bg-highlight-foreground',
   destructive: 'bg-destructive',
   muted: 'bg-muted-foreground',
   pink: 'bg-magenta',
@@ -68,6 +79,8 @@ const dotByDefault: Record<Tone, boolean> = {
   primary: false,
   success: false,
   warning: true,
+  // No dot: the fill is already the signal, and a dot on solid yellow is noise.
+  highlight: false,
   destructive: true,
   muted: false,
   pink: false,

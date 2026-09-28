@@ -33,22 +33,23 @@ import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 
 const RANGE_DAYS = [7, 30, 90] as const;
 
-const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructive'> = {
-  low: 'muted',
-  medium: 'neutral',
-  high: 'warning',
-  urgent: 'destructive',
-};
+const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructive' | 'highlight'> =
+  {
+    low: 'muted',
+    medium: 'neutral',
+    high: 'warning',
+    urgent: 'destructive',
+  };
 /* Board mapping, same as the export reports: open reads sky, resolved jade,
  * closed neutral. 'warning' keeps the darkened-treatment pill (warning is a
  * light token on its own). */
 const STATUS_TONE: Record<
   string,
-  'primary' | 'success' | 'warning' | 'muted' | 'neutral' | 'blue'
+  'primary' | 'success' | 'warning' | 'highlight' | 'muted' | 'neutral' | 'blue'
 > = {
   new: 'primary',
   open: 'blue',
-  pending: 'warning',
+  pending: 'highlight',
   resolved: 'success',
   closed: 'neutral',
 };

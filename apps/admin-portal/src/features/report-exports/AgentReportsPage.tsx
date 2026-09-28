@@ -230,21 +230,22 @@ function OutsideWindowNotice({
   );
 }
 
-const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructive'> = {
-  low: 'muted',
-  medium: 'neutral',
-  high: 'warning',
-  urgent: 'destructive',
-};
+const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructive' | 'highlight'> =
+  {
+    low: 'muted',
+    medium: 'neutral',
+    high: 'warning',
+    urgent: 'destructive',
+  };
 /* Board mapping: open reads sky, resolved jade, closed neutral. 'warning'
  * keeps the darkened-treatment pill (warning is a light token on its own). */
 const STATUS_TONE: Record<
   string,
-  'primary' | 'success' | 'warning' | 'muted' | 'neutral' | 'blue'
+  'primary' | 'success' | 'warning' | 'highlight' | 'muted' | 'neutral' | 'blue'
 > = {
   new: 'primary',
   open: 'blue',
-  pending: 'warning',
+  pending: 'highlight',
   /*
    * `solved` IS THE LIVE VALUE — the other two are history.
    *
@@ -263,12 +264,13 @@ const STATUS_TONE: Record<
   resolved: 'success',
   closed: 'neutral',
 };
-const SLA_TONE: Record<SlaOutcome, 'success' | 'destructive' | 'warning' | 'muted'> = {
-  met: 'success',
-  breached: 'destructive',
-  pending: 'warning',
-  na: 'muted',
-};
+const SLA_TONE: Record<SlaOutcome, 'success' | 'destructive' | 'warning' | 'muted' | 'highlight'> =
+  {
+    met: 'success',
+    breached: 'destructive',
+    pending: 'highlight',
+    na: 'muted',
+  };
 /* Meter accents for the breakdown cards. MetricTone deliberately has no
  * warning/amber (a light token), so mid tones fall back to jade/sky. */
 const STATUS_METER: Record<string, MetricTone> = { open: 'sky', resolved: 'success' };

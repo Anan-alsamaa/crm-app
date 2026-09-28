@@ -81,6 +81,13 @@ module.exports = {
           foreground: 'oklch(var(--success-foreground) / <alpha-value>)',
         },
         'warning-tint': 'oklch(var(--warning-tint) / <alpha-value>)',
+        // The Excel-yellow highlight for a status that is WAITING on somebody.
+        // Its own token, not part of the warning/error red ramp — see the note
+        // in the portals' index.css.
+        highlight: {
+          DEFAULT: 'oklch(var(--highlight) / <alpha-value>)',
+          foreground: 'oklch(var(--highlight-foreground) / <alpha-value>)',
+        },
         warning: {
           DEFAULT: 'oklch(var(--warning) / <alpha-value>)',
           foreground: 'oklch(var(--warning-foreground) / <alpha-value>)',
@@ -121,7 +128,13 @@ module.exports = {
       },
       fontFamily: {
         // Geometric display face for headings/heroes; body stays Inter.
-        display: ['"Outfit Variable"', '"Inter Variable"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: [
+          '"Outfit Variable"',
+          '"Inter Variable"',
+          'ui-sans-serif',
+          'system-ui',
+          'sans-serif',
+        ],
         // Inter (self-hosted variable, bundled in each portal entry) as the
         // designed UI face, falling back to the system stack.
         sans: [

@@ -26,6 +26,7 @@ import {
 import { exportFileName } from '@yiji/shared-config';
 import { couponDecision } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { normalizePhone } from '@yiji/shared-types';
 import { usePinnedWidth } from '../../lib/pinned-width.js';
 import { ColumnScroller } from '../../components/ColumnScroller.js';
 import {
@@ -87,6 +88,17 @@ interface Row {
   brand_id: string | null;
   restaurant_id: string | null;
   item_name: string | null;
+  /**
+   * The order this coupon is FOR, when no ticket carries it.
+   *
+   * A late-order coupon has NO ticket — the order is the whole subject — so
+   * `ticket.order_id` is null and the Order column was blank for every one of
+   * them (owner, 2026-09-28). The column now falls back to this, which the
+   * coupon form has been writing all along.
+   */
+  order_id: string | null;
+  /** The number when no contact row carries it — see the Phone column. */
+  customer_phone: string | null;
   ticket: {
     order_id: string | null;
     store: {
@@ -137,6 +149,10 @@ function useAllCoupons() {
               'brand_id',
               'restaurant_id',
               'item_name',
+              // See the note on `order_id` above: without this the Order column
+              // is empty for every coupon raised from a late order.
+              'order_id',
+              'customer_phone',
               /* The BRANCH, not just its id: this report shows the store by
                  name, and `restaurant_id` is Yiji's numeric identifier that
                  nobody reading a compensation report can interpret. */
@@ -151,12 +167,12 @@ function useAllCoupons() {
   });
 }
 
-const TONE: Record<string, 'success' | 'destructive' | 'warning' | 'neutral'> = {
+const TONE: Record<string, 'success' | 'destructive' | 'warning' | 'highlight' | 'neutral'> = {
   approved: 'success',
   assigned: 'success',
   edited: 'success',
   rejected: 'destructive',
-  pending: 'warning',
+  pending: 'highlight',
 };
 
 const PAGE_SIZE = 25;
@@ -332,10 +348,13 @@ export function AllCompensationPage() {
           r.title,
           r.contact?.name,
           r.contact?.phone,
+          normalizePhone(r.contact?.phone ?? r.customer_phone ?? ''),
+          r.customer_phone,
           r.brand_id,
           r.restaurant_id,
           r.item_name,
           r.ticket?.order_id,
+          r.order_id,
           r.coupon_type,
           who(r.requested_by),
         ]
@@ -418,7 +437,13 @@ export function AllCompensationPage() {
     {
       key: 'phone',
       label: t('compensationAll.phone', { defaultValue: 'Phone' }),
-      get: (r) => r.contact?.phone ?? '',
+      /* `05XXXXXXXX`, like every number in this CRM. Stored rows are already
+         canonical, but a number that arrived another way must not be the one
+         place showing a different shape (owner, 2026-09-28). */
+      /* The contact's number first, then the one stored on the request itself:
+         a late-order coupon has no contact, so that column was blank for every
+         one of them. Both rendered `05XXXXXXXX`. */
+      get: (r) => normalizePhone(r.contact?.phone ?? r.customer_phone ?? '') || '',
     },
     {
       key: 'brand',
@@ -445,7 +470,9 @@ export function AllCompensationPage() {
     {
       key: 'order',
       label: t('compensationAll.order', { defaultValue: 'Order' }),
-      get: (r) => r.ticket?.order_id ?? '',
+      /* The ticket's order first — `couponOrderId` prefers it, and the two are
+         never both set — then the row's own. */
+      get: (r) => r.ticket?.order_id ?? r.order_id ?? '',
     },
     {
       key: 'item',
