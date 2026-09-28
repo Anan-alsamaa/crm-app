@@ -123,7 +123,7 @@
      `bg-warning/20` under a WHITE `--warning-foreground`, which is how a status
      badge ended up unreadable (owner: "the text is not properly visible and
      this looks odd"). A yellow this light can only carry dark text. */
-  --highlight: 0.944 0.196 105;
+  --highlight: 0.9485 0.2019 108.49;
   --highlight-foreground: 0.24 0.02 105;
 
   /* Hairlines: barely there. Hierarchy comes from space, weight and surface —
