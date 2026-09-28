@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { createItem } from '@directus/sdk';
 import {
   Button,
@@ -25,12 +26,14 @@ import {
 import {
   LATE_ORDER_COMPLAINT_TYPE,
   businessDay,
+  normalizePhone,
   serviceMinutes,
   type LateOrderKind,
   type LateOrderRow,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { directus } from '../../lib/directus.js';
+import { commerce } from '../../lib/commerce-client.js';
 import { useVendors } from '../tickets/api.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { LateOrderDetail } from './OrderDetail.js';
@@ -193,6 +196,24 @@ export function LateOrdersPage() {
    */
   const currentBusinessDay = businessDay(queue.data?.builtAt ?? new Date().toISOString());
   const soleVendorId = vendors.data?.length === 1 ? vendors.data[0]!.id : null;
+
+  /*
+   * The ORDER'S LINES, for the coupon form's Item field.
+   *
+   * The ticket path passes these; this one never did, so the Item dropdown on
+   * a late-order coupon was always empty and the coupon could not name what it
+   * was compensating (owner, 2026-09-28).
+   *
+   * Same query key as the Cart & tracking panel, so opening the coupon form on
+   * a row whose cart has already been looked at costs nothing at all.
+   */
+  const couponCart = useQuery({
+    queryKey: ['order-cart', coupon?.row.orderId],
+    enabled: !!coupon?.row.orderId,
+    queryFn: () => commerce.getOrderCart(coupon!.row.orderId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
 
   /*
    * What is still OPEN.
@@ -861,7 +882,26 @@ export function LateOrdersPage() {
           ticketId={null}
           orderId={coupon.row.orderId}
           contactId={coupon.contactId}
-          customerPhone={coupon.row.customerPhone ?? null}
+          /* NORMALISED, not Yiji's wire format. Yiji sends `+9665XXXXXXXX`;
+             every phone this CRM stores and displays is `05XXXXXXXX` (owner's
+             call, 2026-08-24). The ticket path already passes a normalised
+             contact phone — this one passed the raw value straight through, so
+             a late-order coupon reached the approvals queue titled
+             `+966545808075` (owner, 2026-09-28). */
+          customerPhone={normalizePhone(coupon.row.customerPhone) || null}
+          /* Price rides along so picking an item can fill the coupon with what
+             that item actually cost.
+             
+             NO SKU: `GetOrderCart` returns a display shape (name, qty, price,
+             modifiers) and carries no item id at all. The ticket path gets one
+             from the ORDER payload, which this queue does not fetch. Passing
+             null is the honest answer — inventing a key from the name is
+             exactly what `item_sku` exists to avoid. */
+          orderItems={(couponCart.data?.lines ?? []).map((l) => ({
+            name: l.name,
+            price: l.price ?? null,
+            sku: null,
+          }))}
           description={coupon.reason}
           brandId={null}
           restaurantId={coupon.row.restaurantId ?? null}

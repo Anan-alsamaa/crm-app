@@ -627,7 +627,13 @@
     "deliveryExcluded": "لم يُرسل إلى يجي — {{why}}",
     "deliveryExcludedDefault": "محدَّد بعدم الإرسال",
     "approveNoOrder": "لا يوجد رقم طلب في هذا الطلب، لذا لا يمكن تسليم القسيمة. اسأل الموظف عن الطلب المقصود.",
-    "approveOrderHint": "لا توجد تذكرة — سيذهب الكوبون إلى الطلب {{order}} مباشرة."
+    "approveOrderHint": "لا توجد تذكرة — سيذهب الكوبون إلى الطلب {{order}} مباشرة.",
+    "approveAll": "اعتماد الكل ({{count}})",
+    "approveAllTitle": "اعتماد {{count}} كوبون؟",
+    "approveAllBody": "سيتم اعتماد كل طلب ظاهر ضمن عوامل التصفية الحالية وإرساله إلى العميل. لا يمكن التراجع عن هذا.",
+    "approveAllSkipped": "تم تجاهل {{count}} لأن شروطها غير صالحة — قرّر بشأنها واحدًا تلو الآخر.",
+    "approvedAll": "تم اعتماد {{count}} كوبون.",
+    "approvedAllPartial": "تم اعتماد {{count}} ثم توقفت العملية — الباقي لم يُمس."
   },
   "couponReport": {
     "noDecisions": "لم يُحسم شيء بعد",

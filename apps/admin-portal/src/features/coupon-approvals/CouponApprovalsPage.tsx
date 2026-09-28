@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
+  ConfirmDialog,
   ChevronDownIcon,
   cn,
   DateField,
@@ -433,7 +434,13 @@ function Row({
             <Button
               type="button"
               size="sm"
-              disabled={busy || !row.ticket?.id || termsProblems.length > 0}
+              /* Same rule as the expanded card: approval is gated on the
+                 TERMS, not on a ticket. A late-order coupon has no ticket by
+                 design and is still perfectly deliverable — this second copy
+                 of the button kept the old guard when the expanded one was
+                 fixed, so the row could be approved only by opening it first
+                 (owner, 2026-09-28). */
+              disabled={busy || termsProblems.length > 0}
               title={termsProblems[0]?.message}
               onClick={() => onDecide(true, note)}
             >
@@ -1117,6 +1124,80 @@ export function CouponApprovalsPage() {
     });
   }, [all, query, from, to]);
 
+  /*
+   * APPROVE ALL — everything currently on screen, after the filters.
+   *
+   * Scope is what the supervisor can SEE (owner, 2026-09-28): the status tab
+   * and the search/date filters already narrow the list, so filtering to one
+   * branch or one day and pressing this approves exactly that. A button that
+   * silently reached rows off screen is how somebody grants more money than
+   * they meant to.
+   *
+   * SKIPS INVALID TERMS. A request whose numbers fail `couponTermsProblems`
+   * has its own Approve disabled — 0 SAR, or a percentage over the cap — and
+   * forcing it through here would approve terms our own rules reject. They are
+   * counted and reported rather than silently dropped.
+   *
+   * A coupon with no ORDER is NOT skipped: it cannot be delivered in the app,
+   * but approving still records a real decision the branch honours in person,
+   * which is the same rule the individual button follows.
+   */
+  const approvable = useMemo(
+    () =>
+      rows.filter(
+        (r) =>
+          r.status === 'pending' &&
+          couponTermsProblems({
+            discount_category: r.discount_category,
+            coupon_value: r.coupon_value,
+            coupon_percent: r.coupon_percent,
+            max_discount: r.max_discount,
+          }).length === 0,
+      ),
+    [rows],
+  );
+  const skipped = rows.filter((r) => r.status === 'pending').length - approvable.length;
+  const [confirmAll, setConfirmAll] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const approveAll = async () => {
+    setBulkBusy(true);
+    let done = 0;
+    try {
+      /* SEQUENTIAL. Each approval writes the coupon and queues its delivery;
+         a parallel burst against Yiji's production API is not something to
+         start, and on a partial failure nobody could say which coupons had
+         been granted. One at a time means the count reported is the count
+         actually approved. */
+      for (const r of approvable) {
+        await decide.mutateAsync({
+          row: r,
+          approve: true,
+          note: '',
+          supervisorId: user?.id ?? null,
+        });
+        done += 1;
+      }
+      toast.success(
+        t('couponApprovals.approvedAll', {
+          count: done,
+          defaultValue: '{{count}} coupons approved.',
+        }),
+      );
+    } catch {
+      toast.error(
+        done > 0
+          ? t('couponApprovals.approvedAllPartial', {
+              count: done,
+              defaultValue: 'Approved {{count}}, then stopped — the rest are untouched.',
+            })
+          : t('errors.updateFailed', { ns: 'common' }),
+      );
+    }
+    setBulkBusy(false);
+    setConfirmAll(false);
+  };
+
   const onDecide = (
     row: CouponApprovalRow,
     approve: boolean,
@@ -1169,6 +1250,24 @@ export function CouponApprovalsPage() {
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
           {t('nav.couponApprovals', { defaultValue: 'Coupon approvals' })}
         </h1>
+        {/* Only when there is something it would actually do. A permanently
+            visible bulk action on an empty queue invites a click that grants
+            nothing and teaches nothing. */}
+        {approvable.length > 0 && (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="ms-auto"
+            disabled={bulkBusy}
+            onClick={() => setConfirmAll(true)}
+          >
+            {t('couponApprovals.approveAll', {
+              count: approvable.length,
+              defaultValue: 'Approve all ({{count}})',
+            })}
+          </Button>
+        )}
       </Toolbar>
 
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
@@ -1298,6 +1397,43 @@ export function CouponApprovalsPage() {
           )}
         </div>
       </div>
+
+      {/*
+        A COUPON GRANT IS IRREVERSIBLE from our side — deleting the CRM row does
+        not revoke it on Yiji. So this states the count, the total money, and
+        what it will NOT touch, rather than asking "are you sure".
+      */}
+      <ConfirmDialog
+        open={confirmAll}
+        title={t('couponApprovals.approveAllTitle', {
+          count: approvable.length,
+          defaultValue: 'Approve {{count}} coupons?',
+        })}
+        description={
+          <div className="space-y-2">
+            <p>
+              {t('couponApprovals.approveAllBody', {
+                defaultValue:
+                  'Every request shown by the current filters is approved and sent to the customer. This cannot be undone.',
+              })}
+            </p>
+            {skipped > 0 && (
+              <p className="text-muted-foreground">
+                {t('couponApprovals.approveAllSkipped', {
+                  count: skipped,
+                  defaultValue:
+                    '{{count}} are left alone because their terms are invalid — decide those one at a time.',
+                })}
+              </p>
+            )}
+          </div>
+        }
+        confirmLabel={t('couponApprovals.approve', { defaultValue: 'Approve' })}
+        cancelLabel={t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+        loading={bulkBusy}
+        onConfirm={() => void approveAll()}
+        onCancel={() => setConfirmAll(false)}
+      />
     </div>
   );
 }
