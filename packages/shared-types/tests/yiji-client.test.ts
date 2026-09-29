@@ -83,6 +83,40 @@ describe('HttpYijiClient', () => {
     global.fetch = fetchOriginal;
   });
 
+  /*
+   * YIJI'S SHAPE MUST NOT REACH THE SCREEN.
+   *
+   * Yiji sends `9665XXXXXXXX` / `+9665XXXXXXXX`; this CRM shows and stores
+   * `05XXXXXXXX` and nothing else (owner, 2026-08-24). The inbox was rendering
+   * `order.customerPhone` straight from the payload, so a `966...` number
+   * reached an agent (owner, 2026-09-29).
+   *
+   * Converted HERE, at the boundary, rather than at each display site — a new
+   * one of those would have to remember, and this one did not.
+   */
+  it('normalises the order phone to 05XXXXXXXX', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id: 7, customerPhoneNumber: '+966545808075', orderDetails: [] }),
+        { status: 200 },
+      ),
+    );
+    const client = new HttpYijiClient({ baseUrl: 'https://api.example.com' });
+    const o = await client.getOrder('v1', '7');
+    expect(o?.customerPhone).toBe('0545808075');
+  });
+
+  it('leaves an already-canonical order phone alone', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 8, customerPhoneNumber: '0545808075', orderDetails: [] }), {
+        status: 200,
+      }),
+    );
+    const client = new HttpYijiClient({ baseUrl: 'https://api.example.com' });
+    const o = await client.getOrder('v1', '8');
+    expect(o?.customerPhone).toBe('0545808075');
+  });
+
   it('getCustomer derives the customer from the Yiji user order list', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(

@@ -276,6 +276,14 @@ export function LateOrdersPage() {
     actionTaken: string;
     kind: LateOrderKind;
     ticketId: string | null;
+    /**
+     * Raises the ticket, LATER — only if the coupon request is actually made.
+     *
+     * Held as a function rather than an id because the ticket must not exist
+     * until then: opening this form and closing it used to leave one behind
+     * with no decision and no coupon (order 1323291 collected four).
+     */
+    raiseTicket?: () => Promise<string | null>;
     /* Resolved before the form opens, so the request names the customer it is
        for rather than an anonymous row. */
     contactId: string | null;
@@ -463,7 +471,6 @@ export function LateOrdersPage() {
     const kind = kindOf(draft.row);
     setBusy(true);
     try {
-      let ticketId: string | null = null;
       /* The CONTACT, per the owner's spec. Without it the branch gets a
          complaint with nobody attached, the ticket cannot be found by
          searching the number that raised it, and the coupon request names
@@ -482,15 +489,34 @@ export function LateOrdersPage() {
        * where the link was recorded, so this cannot pick up a ticket somebody
        * raised by hand for the same order from the tickets page.
        */
-      const priorTicketId = decisions.data?.get(draft.row.orderId)?.ticket ?? null;
-      const plan = planTicket(kind, priorTicketId);
-      if (plan.mode === 'reuse') {
-        // Already filed. The decision below records against the same ticket.
-        ticketId = plan.id;
-      } else if (plan.mode === 'raise') {
+      /*
+       * THE TICKET IS RAISED ONLY WHEN SOMETHING IS ACTUALLY DECIDED.
+       *
+       * It used to be raised HERE, before the coupon form opened — so an agent
+       * who opened the form and closed it left a ticket behind with no decision
+       * and no coupon. Order 1323291 collected FOUR of them that way (owner,
+       * 2026-09-28), and none of the four had a decision or a coupon behind it.
+       *
+       * The comment above already recorded this lesson for the DECISION: "an
+       * agent who opens the form and closes it leaves a permanent row claiming
+       * the customer was compensated when nothing was ever sent." The ticket is
+       * the same kind of row and needed the same treatment.
+       *
+       * So it is a function now, called on IGNORE immediately (the decision is
+       * the whole act) and on COMPENSATE only once the coupon request exists.
+       * Returns `null` when there is nothing to raise, and throws when it
+       * cannot be raised honestly — the caller stops rather than half-finishing.
+       */
+      const raiseTicketIfNeeded = async (): Promise<string | null> => {
+        const priorTicketId = decisions.data?.get(draft.row.orderId)?.ticket ?? null;
+        const plan = planTicket(kind, priorTicketId);
+        if (plan.mode === 'none') return null;
+        // Already filed for this order: reuse it rather than stacking another.
+        if (plan.mode === 'reuse') return plan.id;
+
         /* The branch, resolved from the store master. Without it the ticket has
-           no `restaurantName` and the operations report — which shows COMPLETE
-           rows only — hides it silently. */
+           no `restaurantName`, and a ticket nobody can attribute is worse than
+           none — see below. */
         const storeMatch = matchStore(storeIndex, {
           restaurantId: draft.row.restaurantId,
           restaurantName: draft.row.restaurantName,
@@ -499,26 +525,20 @@ export function LateOrdersPage() {
         /*
          * NO BRANCH, NO TICKET (owner, 2026-09-28).
          *
-         * This is the exact path that produced the complaint: order 1280043
-         * raised ticket bc7dac2d with `store: null`, which existed in the
-         * database and never appeared in the breakdown. Creating it anyway is
-         * worse than refusing — the agent believes it is filed and nobody can
-         * find it. Failing here also leaves NOTHING half-done, because the
-         * ticket is deliberately raised before the decision is recorded.
-         *
-         * The message names the branch the order came from, so whoever sees it
-         * can fix the store master rather than guess what is missing.
+         * Order 1280043 raised ticket bc7dac2d with `store: null`, which
+         * existed in the database and never appeared in the breakdown. Creating
+         * it anyway is worse than refusing: the agent believes it is filed and
+         * nobody can find it. The message names the branch the order came from,
+         * so whoever sees it can fix the store master rather than guess.
          */
         if (!storeMatch?.store?.id) {
-          toast.error(
+          throw new Error(
             t('lateOrders.noBranchForTicket', {
               branch: draft.row.restaurantName || draft.row.restaurantId || '?',
               defaultValue:
                 'No branch in the store master matches "{{branch}}", so this ticket would be hidden from reports. Add it first.',
             }),
           );
-          setBusy(false);
-          return;
         }
         const created = (await directus.request(
           createItem(
@@ -534,21 +554,24 @@ export function LateOrdersPage() {
             }) as never,
           ),
         )) as { id: string };
-        ticketId = created?.id ?? null;
-      }
+        return created?.id ?? null;
+      };
       /* ONE source for which branch this takes — `decisionOutcome` is exported
          and tested, so the four cases cannot drift apart. */
       const outcome = decisionOutcome(draft, editingDecisionId);
       if (outcome === 'coupon') {
-        // Nothing is recorded yet — see the note above. The coupon form writes
-        // the decision itself, once a request actually exists.
+        /* NOTHING IS RECORDED YET — not the decision, and now not the ticket
+           either. Both are written by the coupon form's own success path, once
+           a request actually exists. Opening this form and closing it must
+           leave the order exactly as it was. */
         setCoupon({
           row: draft.row,
           reason: text,
           actionTaken,
           kind,
-          ticketId,
+          ticketId: null,
           contactId,
+          raiseTicket: raiseTicketIfNeeded,
         });
       } else if (outcome === 'update') {
         /* Editing an existing decision: only the wording changes. The decision
@@ -581,6 +604,11 @@ export function LateOrdersPage() {
           }),
         );
       } else {
+        /* IGNORE IS THE WHOLE ACT, so the ticket is raised now — there is no
+           second step to abandon. Raised BEFORE the decision is recorded, so a
+           failure here leaves nothing half-done: no ticket, no decision, and
+           the order still in the queue for somebody to work. */
+        const ignoredTicketId = await raiseTicketIfNeeded();
         await record.mutateAsync({
           row: draft.row,
           kind,
@@ -588,7 +616,7 @@ export function LateOrdersPage() {
           reason: text,
           actionTaken,
           agentId: user?.id ?? null,
-          ticketId,
+          ticketId: ignoredTicketId,
         });
         toast.success(
           t('lateOrders.ignored', { defaultValue: 'Ignored, and the reason recorded.' }),
@@ -598,9 +626,15 @@ export function LateOrdersPage() {
       setReason('');
       setActionTaken('');
       setEditingDecisionId(null);
-    } catch {
+    } catch (err) {
+      /* The SPECIFIC message when there is one — `raiseTicketIfNeeded` throws a
+         named error for a branch the store master does not have, and telling
+         the agent "could not record that decision" instead would hide the one
+         thing they can act on. */
       toast.error(
-        t('lateOrders.decisionFailed', { defaultValue: 'Could not record that decision.' }),
+        err instanceof Error && err.message
+          ? err.message
+          : t('lateOrders.decisionFailed', { defaultValue: 'Could not record that decision.' }),
       );
     } finally {
       setBusy(false);
@@ -1271,28 +1305,48 @@ export function LateOrdersPage() {
           onCreated={() => {
             /*
              * The coupon EXISTS now, so the decision is true and can be
-             * written. If this fails the order stays in the queue with a
-             * coupon already requested — visible and fixable, unlike a
-             * register that claims a compensation nobody sent.
+             * written — and only now is the ticket raised. If this fails the
+             * order stays in the queue with a coupon already requested —
+             * visible and fixable, unlike a register that claims a
+             * compensation nobody sent.
+             *
+             * The TICKET FIRST, then the decision that points at it: a decision
+             * naming a ticket that was never created would be worse than one
+             * naming none. A ticket that cannot be raised (no branch in the
+             * store master) is reported and the decision is still recorded —
+             * the coupon is real either way, and losing the record of it to a
+             * store-master gap would be the wrong trade.
              */
-            void record
-              .mutateAsync({
+            void (async () => {
+              let ticketId: string | null = null;
+              try {
+                ticketId = (await coupon.raiseTicket?.()) ?? null;
+              } catch (err) {
+                toast.warning(
+                  err instanceof Error
+                    ? err.message
+                    : t('lateOrders.ticketFailed', {
+                        defaultValue: 'The coupon was requested, but no ticket could be raised.',
+                      }),
+                );
+              }
+              return record.mutateAsync({
                 row: coupon.row,
                 kind: coupon.kind,
                 action: 'compensated',
                 reason: coupon.reason,
                 actionTaken: coupon.actionTaken,
                 agentId: user?.id ?? null,
-                ticketId: coupon.ticketId,
-              })
-              .catch(() =>
-                toast.error(
-                  t('lateOrders.recordFailed', {
-                    defaultValue:
-                      'The coupon was requested, but this order could not be marked handled.',
-                  }),
-                ),
-              );
+                ticketId,
+              });
+            })().catch(() =>
+              toast.error(
+                t('lateOrders.recordFailed', {
+                  defaultValue:
+                    'The coupon was requested, but this order could not be marked handled.',
+                }),
+              ),
+            );
             setCoupon(null);
           }}
         />

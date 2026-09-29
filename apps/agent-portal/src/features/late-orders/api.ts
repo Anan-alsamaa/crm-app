@@ -375,7 +375,24 @@ export function lateOrderTicket(opts: {
     store_snapshot: opts.storeMatch
       ? toStoreSnapshot(opts.storeMatch, new Date().toISOString())
       : null,
-    status: 'open',
+    /*
+     * SOLVED ON ARRIVAL (owner, 2026-09-29).
+     *
+     * This ticket is not work waiting to be done: by the time it exists the
+     * agent has already classified the delay and either compensated or ignored
+     * it. Filed as `open` it sat in every agent's queue as an outstanding job
+     * nobody could action, and the real work was over before it was written.
+     *
+     * `solved`, not "closed" — the vocabulary here is open / pending / solved
+     * and inventing a fourth value would break every status filter, chart and
+     * export that reads it.
+     *
+     * WHAT MARKS IT AS A LATE ORDER is `complaint_type`, carried above and used
+     * as the subject too: "Late order" or "Instore preparation late order".
+     * Both are existing values in the live option lists, so the reports group
+     * them without any new vocabulary.
+     */
+    status: 'solved',
   };
 }
 

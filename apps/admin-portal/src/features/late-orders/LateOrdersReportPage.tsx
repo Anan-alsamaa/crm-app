@@ -434,36 +434,52 @@ export function LateOrdersReportPage() {
                   </Button>
                 )}
               </div>
-              <Table>
-                <thead>
-                  <Tr>
-                    <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
-                    <Th>{t('lateOrdersReport.col.handled', { defaultValue: 'Handled' })}</Th>
-                    <Th>
-                      {t('lateOrdersReport.col.compensated', { defaultValue: 'Compensated' })}
-                    </Th>
-                    <Th>{t('lateOrdersReport.col.ignored', { defaultValue: 'Ignored' })}</Th>
-                    <Th>
-                      {t('lateOrdersReport.col.preparation', { defaultValue: 'Preparation' })}
-                    </Th>
-                    <Th>{t('lateOrdersReport.col.delivery', { defaultValue: 'Delivery' })}</Th>
-                    <Th>{t('lateOrdersReport.col.avg', { defaultValue: 'Avg. minutes' })}</Th>
-                  </Tr>
-                </thead>
-                <tbody>
-                  {stats.map((s) => (
-                    <Tr key={s.agent}>
-                      <Td className="whitespace-nowrap font-medium">{s.agent}</Td>
-                      <Td className="tabular-nums">{s.handled}</Td>
-                      <Td className="tabular-nums">{s.compensated}</Td>
-                      <Td className="tabular-nums">{s.ignored}</Td>
-                      <Td className="tabular-nums">{s.latePreparation}</Td>
-                      <Td className="tabular-nums">{s.lateDelivery}</Td>
-                      <Td className="tabular-nums">{s.avgMinutes ?? '-'}</Td>
+              {/*
+              THE TABLE SCROLLS, NOT THE PAGE (owner, 2026-09-29).
+              
+              On a laptop these columns run past the viewport, and the page
+              itself was the thing that moved — so reaching the last column
+              meant dragging the WHOLE report sideways, filters and headings
+              included, and the scrollbar sat at the very foot of the window
+              rather than under the table it belonged to.
+              
+              Same treatment the other reports already use: the card owns a
+              horizontal scroller with a VISIBLE thumb. The app's global
+              scrollbar is deliberately faint, which is right for a page and
+              wrong for the one control that reaches half a report's columns.
+            */}
+              <div className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] overflow-x-auto">
+                <Table>
+                  <thead>
+                    <Tr>
+                      <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
+                      <Th>{t('lateOrdersReport.col.handled', { defaultValue: 'Handled' })}</Th>
+                      <Th>
+                        {t('lateOrdersReport.col.compensated', { defaultValue: 'Compensated' })}
+                      </Th>
+                      <Th>{t('lateOrdersReport.col.ignored', { defaultValue: 'Ignored' })}</Th>
+                      <Th>
+                        {t('lateOrdersReport.col.preparation', { defaultValue: 'Preparation' })}
+                      </Th>
+                      <Th>{t('lateOrdersReport.col.delivery', { defaultValue: 'Delivery' })}</Th>
+                      <Th>{t('lateOrdersReport.col.avg', { defaultValue: 'Avg. minutes' })}</Th>
                     </Tr>
-                  ))}
-                </tbody>
-              </Table>
+                  </thead>
+                  <tbody>
+                    {stats.map((s) => (
+                      <Tr key={s.agent}>
+                        <Td className="whitespace-nowrap font-medium">{s.agent}</Td>
+                        <Td className="tabular-nums">{s.handled}</Td>
+                        <Td className="tabular-nums">{s.compensated}</Td>
+                        <Td className="tabular-nums">{s.ignored}</Td>
+                        <Td className="tabular-nums">{s.latePreparation}</Td>
+                        <Td className="tabular-nums">{s.lateDelivery}</Td>
+                        <Td className="tabular-nums">{s.avgMinutes ?? '-'}</Td>
+                      </Tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
             </Card>
           )}
 
@@ -486,29 +502,46 @@ export function LateOrdersReportPage() {
                   </Button>
                 )}
               </div>
-              <Table>
-                <thead>
-                  <Tr>
-                    <Th>{t('lateOrdersReport.col.when', { defaultValue: 'When' })}</Th>
-                    <Th>
-                      {t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' })}
-                    </Th>
-                    <Th>{t('lateOrdersReport.col.order', { defaultValue: 'Order' })}</Th>
-                    <Th>{t('lateOrdersReport.col.brand', { defaultValue: 'Brand / branch' })}</Th>
-                    <Th>{t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' })}</Th>
-                    <Th>{t('lateOrdersReport.col.decision', { defaultValue: 'Decision' })}</Th>
-                    <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
-                    <Th>{t('lateOrdersReport.col.reason', { defaultValue: 'Reason' })}</Th>
-                    <Th>{t('lateOrdersReport.col.action', { defaultValue: 'Action taken' })}</Th>
-                  </Tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <Tr key={r.id}>
-                      <Td className="whitespace-nowrap text-muted-foreground">
-                        {r.date_created ? formatDateTime(r.date_created) : '-'}
-                      </Td>
-                      {/*
+              {/*
+              THE TABLE SCROLLS, NOT THE PAGE (owner, 2026-09-29).
+              
+              On a laptop these columns run past the viewport, and the page
+              itself was the thing that moved — so reaching the last column
+              meant dragging the WHOLE report sideways, filters and headings
+              included, and the scrollbar sat at the very foot of the window
+              rather than under the table it belonged to.
+              
+              Same treatment the other reports already use: the card owns a
+              horizontal scroller with a VISIBLE thumb. The app's global
+              scrollbar is deliberately faint, which is right for a page and
+              wrong for the one control that reaches half a report's columns.
+            */}
+              <div className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] overflow-x-auto">
+                <Table>
+                  <thead>
+                    <Tr>
+                      <Th>{t('lateOrdersReport.col.when', { defaultValue: 'When' })}</Th>
+                      <Th>
+                        {t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' })}
+                      </Th>
+                      <Th>{t('lateOrdersReport.col.order', { defaultValue: 'Order' })}</Th>
+                      <Th>{t('lateOrdersReport.col.brand', { defaultValue: 'Brand / branch' })}</Th>
+                      <Th>
+                        {t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' })}
+                      </Th>
+                      <Th>{t('lateOrdersReport.col.decision', { defaultValue: 'Decision' })}</Th>
+                      <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
+                      <Th>{t('lateOrdersReport.col.reason', { defaultValue: 'Reason' })}</Th>
+                      <Th>{t('lateOrdersReport.col.action', { defaultValue: 'Action taken' })}</Th>
+                    </Tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <Tr key={r.id}>
+                        <Td className="whitespace-nowrap text-muted-foreground">
+                          {r.date_created ? formatDateTime(r.date_created) : '-'}
+                        </Td>
+                        {/*
                       THE BUSINESS DAY, 10:00 to 04:00, named after the day it
                       started. Trading runs past midnight, so the calendar date
                       splits one night's work across two rows: 23:50 and 00:10
@@ -516,46 +549,47 @@ export function LateOrdersReportPage() {
                       Derived, never stored — the rule is one function and the
                       report must not hold a second, older copy of it.
                     */}
-                      <Td className="whitespace-nowrap tabular-nums">
-                        {(() => {
-                          const day = businessDay(r.date_created);
-                          return day ? formatDate(day) : '-';
-                        })()}
-                      </Td>
-                      <Td className="whitespace-nowrap tabular-nums">{r.order_id ?? '-'}</Td>
-                      <Td className="max-w-[14rem] truncate">
-                        {[r.brand_name, r.restaurant_name].filter(Boolean).join(' - ') || '-'}
-                      </Td>
-                      <Td className="whitespace-nowrap">
-                        {r.kind ? t(`lateOrders.kind.${r.kind}`, { defaultValue: r.kind }) : '-'}
-                      </Td>
-                      <Td>
-                        <Pill tone={r.action === 'compensated' ? 'success' : 'neutral'} size="sm">
-                          {r.action
-                            ? t(`lateOrdersReport.action.${r.action}`, { defaultValue: r.action })
-                            : '-'}
-                        </Pill>
-                      </Td>
-                      <Td className="whitespace-nowrap">{agentName(r, unknown)}</Td>
-                      <Td className="max-w-[22rem]">
-                        <span className="line-clamp-2 block leading-snug" title={r.reason ?? ''}>
-                          {r.reason ?? '-'}
-                        </span>
-                      </Td>
-                      {/* What the agent DID about it, beside why it happened.
+                        <Td className="whitespace-nowrap tabular-nums">
+                          {(() => {
+                            const day = businessDay(r.date_created);
+                            return day ? formatDate(day) : '-';
+                          })()}
+                        </Td>
+                        <Td className="whitespace-nowrap tabular-nums">{r.order_id ?? '-'}</Td>
+                        <Td className="max-w-[14rem] truncate">
+                          {[r.brand_name, r.restaurant_name].filter(Boolean).join(' - ') || '-'}
+                        </Td>
+                        <Td className="whitespace-nowrap">
+                          {r.kind ? t(`lateOrders.kind.${r.kind}`, { defaultValue: r.kind }) : '-'}
+                        </Td>
+                        <Td>
+                          <Pill tone={r.action === 'compensated' ? 'success' : 'neutral'} size="sm">
+                            {r.action
+                              ? t(`lateOrdersReport.action.${r.action}`, { defaultValue: r.action })
+                              : '-'}
+                          </Pill>
+                        </Td>
+                        <Td className="whitespace-nowrap">{agentName(r, unknown)}</Td>
+                        <Td className="max-w-[22rem]">
+                          <span className="line-clamp-2 block leading-snug" title={r.reason ?? ''}>
+                            {r.reason ?? '-'}
+                          </span>
+                        </Td>
+                        {/* What the agent DID about it, beside why it happened.
                         `title` carries the full text, since the cell clamps. */}
-                      <Td className="max-w-[22rem]">
-                        <span
-                          className="line-clamp-2 block leading-snug"
-                          title={r.action_taken ?? ''}
-                        >
-                          {r.action_taken ?? '-'}
-                        </span>
-                      </Td>
-                    </Tr>
-                  ))}
-                </tbody>
-              </Table>
+                        <Td className="max-w-[22rem]">
+                          <span
+                            className="line-clamp-2 block leading-snug"
+                            title={r.action_taken ?? ''}
+                          >
+                            {r.action_taken ?? '-'}
+                          </span>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
             </Card>
           )}
         </>

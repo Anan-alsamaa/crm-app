@@ -6,6 +6,16 @@ import {
   type LateOrderQueryOptions,
   type LateOrderRow,
 } from './late-delivery.js';
+/*
+ * EVERY PHONE THAT CROSSES THIS BOUNDARY IS NORMALISED.
+ *
+ * Yiji sends `9665XXXXXXXX` / `+9665XXXXXXXX`; this CRM shows and stores
+ * `05XXXXXXXX` and nothing else (owner, 2026-08-24). Converting at each
+ * DISPLAY site means every new one has to remember; converting here means the
+ * rest of the app never sees Yiji's shape at all. The inbox was showing a
+ * `966...` number straight from the order payload (owner, 2026-09-29).
+ */
+import { normalizePhone } from './phone.js';
 import type {
   YijiCartLine,
   YijiOrderCart,
@@ -289,7 +299,7 @@ export class MockYijiClient implements YijiClient {
           brandName: o.brandName,
           restaurantName: o.restaurantName,
           restaurantId: o.restaurantId,
-          customerPhone: o.customerPhone,
+          customerPhone: normalizePhone(o.customerPhone) || o.customerPhone,
           total: o.total,
           externalCustomerId,
         });
@@ -497,7 +507,8 @@ function mapYijiOrder(raw: RawYijiOrder): YijiOrder {
       raw.paymentMode != null
         ? (YIJI_PAYMENT_MODE[raw.paymentMode] ?? `mode_${raw.paymentMode}`)
         : undefined,
-    customerPhone: raw.customerPhoneNumber ?? undefined,
+    customerPhone:
+      normalizePhone(raw.customerPhoneNumber) || (raw.customerPhoneNumber ?? undefined),
     totalPointAmount: raw.totalPoints ?? undefined,
     totalCouponAmount: raw.totalCoupons ?? undefined,
     totalDiscount: raw.discount ?? undefined,
@@ -932,7 +943,7 @@ export class HttpYijiClient implements YijiClient {
       typeof v === 'string' && v.trim() ? v.trim() : undefined;
     return {
       userId: str(raw.userId),
-      customerPhone: str(raw.customerPhoneNumber),
+      customerPhone: normalizePhone(str(raw.customerPhoneNumber)) || str(raw.customerPhoneNumber),
       customerName: str(raw.customerName),
       restaurantId: num(raw.restaurantId),
       brandId: num(raw.brandId),
@@ -1163,7 +1174,11 @@ export class HttpYijiClient implements YijiClient {
         restaurantName: row.restaurantName?.trim() || order.restaurantName?.trim() || undefined,
         restaurantId: order.restaurantId != null ? String(order.restaurantId) : undefined,
         customerName: row.firstName?.trim() || row.userName?.trim() || undefined,
-        customerPhone: row.phoneNumber?.trim() || order.customerPhoneNumber?.trim() || undefined,
+        customerPhone:
+          normalizePhone(row.phoneNumber || order.customerPhoneNumber) ||
+          row.phoneNumber?.trim() ||
+          order.customerPhoneNumber?.trim() ||
+          undefined,
         /*
          * The NESTED order's total, not the outer one.
          *
