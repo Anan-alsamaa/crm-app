@@ -5,11 +5,14 @@ import {
   toStoreSnapshot,
   type StoreMatch,
   DEFAULT_LATE_DELIVERY_MINUTES,
-  LATE_ORDER_COMPLAINT_TYPE,
+  lateOrderComplaintType,
   DEFAULT_COMPLAINT_SOURCE,
   type LateOrderKind,
   type LateOrderQueue,
   type LateOrderRow,
+  DEFAULT_LATE_ORDER_CAUSES,
+  LATE_ORDER_CAUSE_LIST,
+  type LateOrderGroup,
 } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
 import { directus } from '../../lib/directus.js';
@@ -251,6 +254,50 @@ export async function resolveLateOrderContact(
   }
 }
 
+/**
+ * The causes an agent may choose, WITH the group that decides the pipeline.
+ *
+ * Its own hook rather than `useOptionLists`, which flattens every list to bare
+ * values — the group is the whole point here, and a shared hook that dropped it
+ * would make the pipeline unknowable at the call site.
+ *
+ * FALLS BACK to the two seeded causes when the list cannot be read. An empty
+ * dropdown would leave an agent unable to decide anything at all, and these two
+ * are what the code shipped with.
+ */
+export interface LateOrderCause {
+  value: string;
+  group: LateOrderGroup;
+}
+
+export function useLateOrderCauses() {
+  return useQuery({
+    queryKey: ['late-order-causes'],
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<LateOrderCause[]> => {
+      const rows = (await directus.request(
+        readItems(
+          'option_lists' as never,
+          {
+            limit: -1,
+            filter: { list: { _eq: LATE_ORDER_CAUSE_LIST }, active: { _eq: true } },
+            sort: ['sort', 'value'],
+            fields: ['value', 'group'],
+          } as never,
+        ),
+      )) as unknown as Array<{ value: string; group: string | null }>;
+      if (rows.length === 0) return [...DEFAULT_LATE_ORDER_CAUSES];
+      return rows.map((r) => ({
+        value: r.value,
+        /* `wecare` for anything unrecognised — the quieter outcome. A row with a
+           missing or mistyped group must not start filing complaints against
+           branches on its own. */
+        group: r.group === 'operations' ? 'operations' : 'wecare',
+      }));
+    },
+  });
+}
+
 export interface RecordLateDecisionInput {
   row: LateOrderRow;
   kind: LateOrderKind;
@@ -339,7 +386,7 @@ export function lateOrderTicket(opts: {
    */
   storeMatch?: StoreMatch | null;
 }): Record<string, unknown> {
-  const complaintType = LATE_ORDER_COMPLAINT_TYPE[opts.kind];
+  const complaintType = lateOrderComplaintType(opts.kind);
   return {
     subject: complaintType,
     description: opts.reason.trim(),

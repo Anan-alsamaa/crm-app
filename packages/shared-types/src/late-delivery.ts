@@ -121,6 +121,56 @@ export const LateOrderKind = z.enum(['late_delivery', 'late_preparation']);
 export type LateOrderKind = z.infer<typeof LateOrderKind>;
 
 /**
+ * WHO OWNS THE CAUSE, and therefore what the decision produces.
+ *
+ * The pipeline used to be decided by the VALUE — `late_preparation` raised a
+ * ticket, `late_delivery` did not — which meant a third cause could not be
+ * added without editing code (owner, 2026-09-29).
+ *
+ *   wecare      a compensation only. The delay is WeCare's to answer, and no
+ *               complaint is filed against a branch.
+ *   operations  a compensation AND a ticket, so the branch it names sees it in
+ *               the breakdown report and owns the fix.
+ *
+ * This is why the split matters beyond bookkeeping: an `operations` cause
+ * SHARES the case with that department, and a `wecare` one deliberately does
+ * not (owner, 2026-09-29 — late delivery must stay inside WeCare).
+ */
+export const LateOrderGroup = z.enum(['wecare', 'operations']);
+export type LateOrderGroup = z.infer<typeof LateOrderGroup>;
+
+/** The list in `option_lists` that holds the causes. */
+export const LATE_ORDER_CAUSE_LIST = 'late_order_cause';
+
+/**
+ * The two causes that existed before the list was made editable.
+ *
+ * Kept as the SEEDED rows, with their stored keys unchanged: every decision
+ * and every report row already carries `late_delivery` / `late_preparation`,
+ * and renaming them would orphan all of it.
+ */
+export const DEFAULT_LATE_ORDER_CAUSES: ReadonlyArray<{
+  value: LateOrderKind;
+  group: LateOrderGroup;
+}> = [
+  // No ticket: WeCare answers a late delivery themselves.
+  { value: 'late_delivery', group: 'wecare' },
+  // A ticket as well: the branch prepared it late and has to see it.
+  { value: 'late_preparation', group: 'operations' },
+];
+
+/**
+ * Does this cause raise a ticket?
+ *
+ * The ONE place that answers it. Defaults to `wecare` — the quieter outcome —
+ * for a cause whose group cannot be read, so a misconfigured row cannot start
+ * filing complaints against branches on its own.
+ */
+export function causeRaisesTicket(group: string | null | undefined): boolean {
+  return group === 'operations';
+}
+
+/**
  * The ticket type raised for each kind.
  *
  * Both are EXISTING values in the live `option_lists` (verified against
@@ -130,10 +180,26 @@ export type LateOrderKind = z.infer<typeof LateOrderKind>;
  * map, and correcting the stored value here would split the category in two
  * across old and new rows.
  */
-export const LATE_ORDER_COMPLAINT_TYPE: Record<LateOrderKind, string> = {
+export const LATE_ORDER_COMPLAINT_TYPE: Record<string, string> = {
   late_delivery: 'Late order',
   late_preparation: 'Instore preparation late order',
 };
+
+/**
+ * The complaint type a cause files under.
+ *
+ * The map above covers the two causes that shipped in code. A cause ADDED to
+ * the list has no entry, and falling back to `undefined` would write a ticket
+ * with no `complaint_type` — which the breakdown report counts as incomplete
+ * and flags, exactly the silent gap this codebase keeps producing.
+ *
+ * So a new cause files under its own stored name. Operations see the value they
+ * typed rather than a blank, and can add it to `complaint_type` themselves if
+ * they want it grouped with an existing category.
+ */
+export function lateOrderComplaintType(cause: string): string {
+  return LATE_ORDER_COMPLAINT_TYPE[cause] ?? cause;
+}
 
 /** What the agent did with a late order. */
 export const LateOrderAction = z.enum(['ignored', 'compensated']);

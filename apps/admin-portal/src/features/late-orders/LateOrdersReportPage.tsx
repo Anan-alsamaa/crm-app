@@ -21,7 +21,7 @@ import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { exportFileName } from '@yiji/shared-config';
 import { useRememberedRange } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
-import { agentLateStats, agentName, useLateOrderDecisions } from './api.js';
+import { agentLateStats, agentName, useLateOrderDecisions, useLateOrderThreshold } from './api.js';
 
 /**
  * Late orders - the agent measure.
@@ -144,7 +144,13 @@ export function LateOrdersReportPage() {
     return [...seen].sort().reverse();
   }, [all]);
 
-  const stats = useMemo(() => agentLateStats(rows, unknown), [rows, unknown]);
+  /* The LIVE threshold, because the waiting figure is `elapsed - threshold`
+     and the threshold is an editable setting. */
+  const threshold = useLateOrderThreshold();
+  const stats = useMemo(
+    () => agentLateStats(rows, unknown, threshold.data),
+    [rows, unknown, threshold.data],
+  );
 
   /*
    * EXPORT, ONE BUTTON PER TABLE (owner, 2026-09-28).
@@ -181,7 +187,7 @@ export function LateOrdersReportPage() {
       t('lateOrdersReport.col.ignored', { defaultValue: 'Ignored' }),
       t('lateOrdersReport.col.preparation', { defaultValue: 'Preparation' }),
       t('lateOrdersReport.col.delivery', { defaultValue: 'Delivery' }),
-      t('lateOrdersReport.col.avg', { defaultValue: 'Avg. minutes' }),
+      t('lateOrdersReport.col.avg', { defaultValue: 'Avg. minutes waiting' }),
     ];
     const body = stats.map((r) => [
       r.agent,
@@ -496,7 +502,18 @@ export function LateOrdersReportPage() {
                         {t('lateOrdersReport.col.preparation', { defaultValue: 'Preparation' })}
                       </Th>
                       <Th>{t('lateOrdersReport.col.delivery', { defaultValue: 'Delivery' })}</Th>
-                      <Th>{t('lateOrdersReport.col.avg', { defaultValue: 'Avg. minutes' })}</Th>
+                      {/* NAMED for what it measures. "Avg. minutes" said
+                          nothing about from when, and the old reading — time
+                          since the customer ordered — described the kitchen
+                          rather than the agent. */}
+                      <Th>
+                        {t('lateOrdersReport.col.avg', { defaultValue: 'Avg. minutes waiting' })}
+                        <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+                          {t('lateOrdersReport.col.avgHint', {
+                            defaultValue: 'on the queue before deciding',
+                          })}
+                        </span>
+                      </Th>
                     </Tr>
                   </thead>
                   <tbody>

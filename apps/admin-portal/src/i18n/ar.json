@@ -855,7 +855,13 @@
     "deleteShort": "حذف",
     "deleteTitle": "حذف «{{value}}»؟",
     "editTitle": "إعادة تسمية هذه القيمة؟",
-    "editLabel": "القيمة"
+    "editLabel": "القيمة",
+    "lateOrderCause": "الطلبات المتأخرة: سبب التأخير",
+    "group": "الجهة المالكة",
+    "groupWecare": "وي كير — قسيمة فقط",
+    "groupOperations": "العمليات — قسيمة وتذكرة",
+    "groupWecareShort": "وي كير",
+    "groupOperationsShort": "العمليات"
   },
   "login": {
     "title": "تسجيل الدخول إلى بوابة الإدارة",
@@ -1620,7 +1626,7 @@
       "ignored": "تم التجاهل",
       "preparation": "التحضير",
       "delivery": "التوصيل",
-      "avg": "متوسط الدقائق",
+      "avg": "متوسط دقائق الانتظار",
       "when": "التاريخ",
       "order": "الطلب",
       "brand": "العلامة / الفرع",
@@ -1628,7 +1634,8 @@
       "decision": "القرار",
       "reason": "التفسير",
       "action": "الإجراء المتخذ",
-      "businessDay": "يوم العمل"
+      "businessDay": "يوم العمل",
+      "avgHint": "في القائمة قبل القرار"
     },
     "filter": {
       "search": "الطلب أو الفرع",

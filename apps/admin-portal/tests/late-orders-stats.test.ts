@@ -62,7 +62,10 @@ describe('agentLateStats', () => {
       ignored: 1,
       latePreparation: 2,
       lateDelivery: 1,
-      avgMinutes: 80,
+      /* WAITING time, not order age: 60/80/100 elapsed against a 60 threshold
+         is 0/20/40 on the queue, so 20. The old reading averaged the elapsed
+         values themselves and returned 80. */
+      avgMinutes: 20,
     });
   });
 
@@ -88,7 +91,8 @@ describe('agentLateStats', () => {
       [row({ minutes_elapsed: 90 }), row({ minutes_elapsed: null })],
       UNKNOWN,
     );
-    expect(s!.avgMinutes).toBe(90);
+    // 90 elapsed - 60 threshold = 30 minutes on the queue.
+    expect(s!.avgMinutes).toBe(30);
     expect(s!.handled).toBe(2);
   });
 
@@ -99,5 +103,51 @@ describe('agentLateStats', () => {
 
   it('has nothing to say about an empty window', () => {
     expect(agentLateStats([], UNKNOWN)).toEqual([]);
+  });
+});
+
+/*
+ * WAITING TIME, MEASURED FROM WHEN THE ORDER APPEARED (owner, 2026-09-29).
+ *
+ * An order only reaches the late-orders page once it passes the threshold, so
+ * "how long did the agent leave it" is `minutes_elapsed - threshold`. The old
+ * figure was time since the customer ordered, which described the kitchen and
+ * the driver rather than the agent: on production every value sat just above
+ * 60 (63, 62, 65, 75) and moved barely at all. Subtracting the threshold turns
+ * the same rows into 3, 2, 5, 15.
+ */
+describe('avgMinutes is time spent waiting on the queue', () => {
+  it('subtracts the threshold it was given', () => {
+    const [s] = agentLateStats([row({ minutes_elapsed: 75 })], UNKNOWN, 60);
+    expect(s!.avgMinutes).toBe(15);
+  });
+
+  /* The threshold is an EDITABLE setting, so the figure has to follow it.
+     Hardcoding 60 would misreport every row the day operations change it. */
+  it('follows a changed threshold', () => {
+    const [s] = agentLateStats([row({ minutes_elapsed: 75 })], UNKNOWN, 45);
+    expect(s!.avgMinutes).toBe(30);
+  });
+
+  it('defaults to 60 when no threshold is passed', () => {
+    const [s] = agentLateStats([row({ minutes_elapsed: 75 })], UNKNOWN);
+    expect(s!.avgMinutes).toBe(15);
+  });
+
+  /* Never negative: a clock disagreement between Yiji and us must not produce
+     an agent who answered before the order was there to answer. */
+  it('clamps at zero rather than reporting a negative wait', () => {
+    const [s] = agentLateStats([row({ minutes_elapsed: 40 })], UNKNOWN, 60);
+    expect(s!.avgMinutes).toBe(0);
+  });
+
+  it('averages the waits, not the elapsed values', () => {
+    const [s] = agentLateStats(
+      [row({ minutes_elapsed: 63 }), row({ minutes_elapsed: 75 })],
+      UNKNOWN,
+      60,
+    );
+    // (3 + 15) / 2 = 9 — the old reading would have said 69.
+    expect(s!.avgMinutes).toBe(9);
   });
 });

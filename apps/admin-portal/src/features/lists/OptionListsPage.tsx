@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createItem, deleteItem, readItems, updateItem } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
+import { LATE_ORDER_CAUSE_LIST } from '@yiji/shared-types';
 import {
   Button,
   ChevronDownIcon,
@@ -60,6 +61,19 @@ const LIST_KEYS = [
    * means "all of them", because a panel with no buttons reads as broken.
    */
   'ai_action',
+  /**
+   * LATE ORDERS — SOURCE OF DELAY, and who owns each cause.
+   *
+   * The two causes used to live in code, and the PIPELINE was decided by the
+   * value: `late_preparation` raised a ticket, `late_delivery` did not. Adding
+   * a third meant a deploy (owner, 2026-09-29).
+   *
+   * Now each row carries a GROUP. `operations` raises a coupon AND a ticket, so
+   * the branch sees it in the breakdown; `wecare` raises only the coupon and
+   * the case stays inside WeCare. This is the one list where the group is
+   * load-bearing rather than decorative — see `causeRaisesTicket`.
+   */
+  LATE_ORDER_CAUSE_LIST,
 ] as const;
 type ListKey = (typeof LIST_KEYS)[number];
 
@@ -81,6 +95,14 @@ interface OptionRow {
   value: string;
   sort: number | null;
   active: boolean;
+  /**
+   * Which department owns this value.
+   *
+   * Only meaningful on the late-order causes today, where it decides whether a
+   * decision also files a ticket. Null everywhere else, and the editor only
+   * offers it on that list.
+   */
+  group: string | null;
 }
 
 function useOptionRows() {
@@ -93,7 +115,7 @@ function useOptionRows() {
           {
             limit: -1,
             sort: ['list', 'sort', 'value'],
-            fields: ['id', 'list', 'value', 'sort', 'active'],
+            fields: ['id', 'list', 'value', 'sort', 'active', 'group'],
           } as never,
         ),
       )) as unknown as OptionRow[],
@@ -110,6 +132,16 @@ export function OptionListsPage() {
   // something valid while their UI is not rendered.
   const listKey: ListKey = page === QUICK_REPLIES ? 'complaint_type' : page;
   const [draft, setDraft] = useState('');
+  /*
+   * The group for a NEW cause. Only the late-order list uses it.
+   *
+   * Defaults to `wecare` — the quieter outcome. Somebody adding a cause and not
+   * thinking about the group should not start filing complaints against
+   * branches by accident; choosing `operations` is the deliberate act.
+   */
+  const [draftGroup, setDraftGroup] = useState<'wecare' | 'operations'>('wecare');
+  /** Only this list carries a meaningful group — see `OptionRow.group`. */
+  const groupedList = listKey === LATE_ORDER_CAUSE_LIST;
   /** The value currently being dragged, so the row it left can dim. */
   const [dragId, setDragId] = useState<string | null>(null);
   /**
@@ -147,7 +179,7 @@ export function OptionListsPage() {
     toast.error(t('lists.saveError', { defaultValue: 'Could not save that change' }));
 
   const add = useMutation({
-    mutationFn: (value: string) =>
+    mutationFn: ({ value, group }: { value: string; group: string | null }) =>
       directus.request(
         createItem(
           'option_lists' as never,
@@ -156,6 +188,9 @@ export function OptionListsPage() {
             value,
             sort: current.length,
             active: true,
+            // Null on every other list, so nothing reads a group that has no
+            // meaning there.
+            group,
           } as never,
         ),
       ),
@@ -190,6 +225,9 @@ export function OptionListsPage() {
     coupon_type: t('lists.couponType', { defaultValue: 'Coupon type' }),
     discount_category: t('lists.discountCategory', { defaultValue: 'Discount category' }),
     ai_action: t('lists.aiAction', { defaultValue: 'Inbox: AI assistance' }),
+    [LATE_ORDER_CAUSE_LIST]: t('lists.lateOrderCause', {
+      defaultValue: 'Late orders: source of delay',
+    }),
   };
 
   const submit = () => {
@@ -200,7 +238,7 @@ export function OptionListsPage() {
       toast.error(t('lists.duplicate', { defaultValue: 'That value is already on this list.' }));
       return;
     }
-    add.mutate(value);
+    add.mutate({ value, group: groupedList ? draftGroup : null });
     setDraft('');
   };
 
@@ -318,6 +356,31 @@ export function OptionListsPage() {
                     })}
                     aria-label={t('lists.addLabel', { defaultValue: 'New value' })}
                   />
+                  {/* WHO OWNS IT, chosen alongside the value — on this list the
+                      group decides whether the decision also files a ticket, so
+                      asking afterwards would mean a cause existing briefly with
+                      the wrong pipeline. */}
+                  {groupedList && (
+                    <SelectMenu
+                      value={draftGroup}
+                      onChange={(v) => setDraftGroup(v as 'wecare' | 'operations')}
+                      aria-label={t('lists.group', { defaultValue: 'Owner' })}
+                      options={[
+                        {
+                          value: 'wecare',
+                          label: t('lists.groupWecare', { defaultValue: 'WeCare — coupon only' }),
+                          dot: 'oklch(var(--sky))',
+                        },
+                        {
+                          value: 'operations',
+                          label: t('lists.groupOperations', {
+                            defaultValue: 'Operations — coupon + ticket',
+                          }),
+                          dot: 'oklch(var(--warning))',
+                        },
+                      ]}
+                    />
+                  )}
                   <Button onClick={submit} disabled={!draft.trim() || add.isPending}>
                     {t('lists.add', { defaultValue: 'Add' })}
                   </Button>
@@ -372,6 +435,33 @@ export function OptionListsPage() {
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                           {row.value}
                         </span>
+                        {/* THE OWNER, editable in place. It decides whether this
+                            cause files a ticket, so it has to be visible on the
+                            row rather than hidden behind an edit dialog — and
+                            changeable without deleting and re-adding, which
+                            would lose the cause's position and its history. */}
+                        {groupedList && (
+                          <SelectMenu
+                            value={row.group === 'operations' ? 'operations' : 'wecare'}
+                            size="sm"
+                            onChange={(v) => patch.mutate({ id: row.id, body: { group: v } })}
+                            aria-label={t('lists.group', { defaultValue: 'Owner' })}
+                            options={[
+                              {
+                                value: 'wecare',
+                                label: t('lists.groupWecareShort', { defaultValue: 'WeCare' }),
+                                dot: 'oklch(var(--sky))',
+                              },
+                              {
+                                value: 'operations',
+                                label: t('lists.groupOperationsShort', {
+                                  defaultValue: 'Operations',
+                                }),
+                                dot: 'oklch(var(--warning))',
+                              },
+                            ]}
+                          />
+                        )}
                         {!row.active && (
                           <Pill tone="neutral" size="sm">
                             {t('lists.retired', { defaultValue: 'Retired' })}

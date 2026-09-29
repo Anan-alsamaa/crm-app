@@ -24,7 +24,7 @@ import {
   toast,
 } from '@yiji/ui';
 import {
-  LATE_ORDER_COMPLAINT_TYPE,
+  lateOrderComplaintType,
   businessDay,
   businessDayRange,
   matchStore,
@@ -32,6 +32,9 @@ import {
   serviceMinutes,
   type LateOrderKind,
   type LateOrderRow,
+  causeRaisesTicket,
+  DEFAULT_LATE_ORDER_CAUSES,
+  type LateOrderGroup,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { directus } from '../../lib/directus.js';
@@ -44,6 +47,7 @@ import {
   resolveLateOrderContact,
   useHandledLateOrders,
   useLateOrders,
+  useLateOrderCauses,
   useLateOrderDecisions,
   useRecordLateDecision,
   useServiceTimes,
@@ -142,10 +146,11 @@ export function isNotesView(
  * EXPORTED and used by the component, so the tests exercise the real rule
  * rather than a restatement of it that passes whatever the page does.
  *
- * - `none`    a late DELIVERY. The owner's call (2026-09-28): delivery
- *             lateness is not a complaint in its own right, so no ticket is
- *             filed and the coupon stands on its own.
- * - `reuse`   a late PREPARATION on an order whose earlier decision already
+ * - `none`    a WECARE cause. The owner's call (2026-09-28, reaffirmed
+ *             2026-09-29): WeCare answers it themselves, no complaint is filed
+ *             against a branch, and the case is NOT shared with operations.
+ *             Late delivery is the seeded example.
+ * - `reuse`   an OPERATIONS cause on an order whose earlier decision already
  *             raised one. Order 1323291 grew FOUR tickets from four decisions
  *             minutes apart, and the breakdown counted one complaint four
  *             times.
@@ -154,10 +159,17 @@ export function isNotesView(
 export type TicketPlan = { mode: 'none' } | { mode: 'reuse'; id: string } | { mode: 'raise' };
 
 export function planTicket(
-  kind: LateOrderKind,
+  /**
+   * THE GROUP decides, not the value (owner, 2026-09-29).
+   *
+   * It used to be `kind !== 'late_preparation'`, so a third cause could not be
+   * added without editing this line. Now `operations` raises a ticket and
+   * `wecare` does not, and a new cause is a row in `option_lists`.
+   */
+  group: LateOrderGroup | string | null | undefined,
   priorTicketId: string | null | undefined,
 ): TicketPlan {
-  if (kind !== 'late_preparation') return { mode: 'none' };
+  if (!causeRaisesTicket(group)) return { mode: 'none' };
   const prior = priorTicketId?.trim();
   return prior ? { mode: 'reuse', id: prior } : { mode: 'raise' };
 }
@@ -423,6 +435,25 @@ export function LateOrdersPage() {
   const serviceTimes = useServiceTimes(rows.map((r) => r.orderId));
   /* What has already been decided, so Comments opens populated. */
   const decisions = useLateOrderDecisions();
+  /*
+   * THE CAUSES, from the editable list (owner, 2026-09-29).
+   *
+   * Operations add and retire these in the admin portal; the GROUP on each row
+   * is what decides whether the decision also files a ticket.
+   */
+  const causes = useLateOrderCauses();
+  const causeOptions = useMemo(() => {
+    const list = causes.data?.length ? causes.data : [...DEFAULT_LATE_ORDER_CAUSES];
+    return list.map((c) => ({
+      value: c.value,
+      /* The seeded two keep their translations; anything operations add shows
+         the value they typed, which is the only honest label for it. */
+      label: t(`lateOrders.kind.${c.value}`, { defaultValue: c.value }),
+      /* The dot carries the OWNER at a glance — amber for a cause that files a
+         complaint against a branch, blue for one WeCare answers alone. */
+      dot: c.group === 'operations' ? 'oklch(var(--warning))' : 'oklch(var(--sky))',
+    }));
+  }, [causes.data, t]);
   const updateDecision = useUpdateLateDecision();
   const nowMs = queue.dataUpdatedAt || Date.now();
 
@@ -509,7 +540,13 @@ export function LateOrdersPage() {
        */
       const raiseTicketIfNeeded = async (): Promise<string | null> => {
         const priorTicketId = decisions.data?.get(draft.row.orderId)?.ticket ?? null;
-        const plan = planTicket(kind, priorTicketId);
+        /* The GROUP of the chosen cause, from the editable list. Falls back to
+           the seeded default so a list that cannot be read still behaves as the
+           code always did rather than filing nothing. */
+        const group =
+          causes.data?.find((c) => c.value === kind)?.group ??
+          DEFAULT_LATE_ORDER_CAUSES.find((c) => c.value === kind)?.group;
+        const plan = planTicket(group, priorTicketId);
         if (plan.mode === 'none') return null;
         // Already filed for this order: reuse it rather than stacking another.
         if (plan.mode === 'reuse') return plan.id;
@@ -999,22 +1036,7 @@ export function LateOrdersPage() {
                         onChange={(v) =>
                           setKinds((cur) => ({ ...cur, [row.orderId]: v as LateOrderKind }))
                         }
-                        options={[
-                          {
-                            value: 'late_delivery',
-                            label: t('lateOrders.kind.late_delivery', {
-                              defaultValue: 'Late delivery',
-                            }),
-                            dot: 'oklch(var(--sky))',
-                          },
-                          {
-                            value: 'late_preparation',
-                            label: t('lateOrders.kind.late_preparation', {
-                              defaultValue: 'Late preparation',
-                            }),
-                            dot: 'oklch(var(--warning))',
-                          },
-                        ]}
+                        options={causeOptions}
                       />
                     </Td>
                     {/*
@@ -1196,10 +1218,17 @@ export function LateOrdersPage() {
                   />
                 </label>
               )}
-              {kindOf(draft.row) === 'late_preparation' && (
+              {/* Said BEFORE deciding, because filing a complaint against a
+                  branch is not something to discover afterwards. Driven by the
+                  cause's GROUP, so a cause operations add tomorrow announces
+                  itself without anyone editing this. */}
+              {causeRaisesTicket(
+                causes.data?.find((c) => c.value === kindOf(draft.row))?.group ??
+                  DEFAULT_LATE_ORDER_CAUSES.find((c) => c.value === kindOf(draft.row))?.group,
+              ) && (
                 <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs leading-relaxed">
                   {t('lateOrders.willRaiseTicket', {
-                    type: LATE_ORDER_COMPLAINT_TYPE.late_preparation,
+                    type: lateOrderComplaintType(kindOf(draft.row)),
                     defaultValue: 'A "{{type}}" ticket will be raised for this order.',
                   })}
                 </p>

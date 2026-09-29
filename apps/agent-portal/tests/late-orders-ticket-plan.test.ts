@@ -22,21 +22,33 @@ import { planTicket } from '../src/features/late-orders/LateOrdersPage.js';
  * never silently adopted.
  */
 describe('planTicket', () => {
+  /*
+   * KEYED ON THE GROUP, not the value (owner, 2026-09-29). It used to test
+   * `late_preparation` / `late_delivery` directly, which is exactly why a third
+   * cause could not be added without editing code. The seeded causes map to
+   * `operations` and `wecare`, so these cases are unchanged in meaning.
+   */
+  it('files nothing for an unknown group, rather than guessing', () => {
+    expect(planTicket(undefined, null)).toEqual({ mode: 'none' });
+    expect(planTicket('', null)).toEqual({ mode: 'none' });
+    expect(planTicket('typo', null)).toEqual({ mode: 'none' });
+  });
+
   it('raises a ticket for the first late-preparation decision', () => {
-    expect(planTicket('late_preparation', null)).toEqual({ mode: 'raise' });
+    expect(planTicket('operations', null)).toEqual({ mode: 'raise' });
   });
 
   it('REUSES the ticket a previous decision on the same order raised', () => {
-    expect(planTicket('late_preparation', 'tkt-1')).toEqual({ mode: 'reuse', id: 'tkt-1' });
+    expect(planTicket('operations', 'tkt-1')).toEqual({ mode: 'reuse', id: 'tkt-1' });
   });
 
   /* A late delivery never files one, decided or not — the owner's call. */
   it('raises nothing for a late delivery', () => {
-    expect(planTicket('late_delivery', null)).toEqual({ mode: 'none' });
+    expect(planTicket('wecare', null)).toEqual({ mode: 'none' });
   });
 
   it('raises nothing for a late delivery even when a ticket somehow exists', () => {
-    expect(planTicket('late_delivery', 'tkt-1')).toEqual({ mode: 'none' });
+    expect(planTicket('wecare', 'tkt-1')).toEqual({ mode: 'none' });
   });
 
   /*
@@ -49,10 +61,10 @@ describe('planTicket', () => {
     ['empty string', ''],
     ['whitespace', '   '],
   ])('treats a %s prior ticket as none at all, and raises', (_label, prior) => {
-    expect(planTicket('late_preparation', prior)).toEqual({ mode: 'raise' });
+    expect(planTicket('operations', prior)).toEqual({ mode: 'raise' });
   });
 
   it('trims the id it reuses', () => {
-    expect(planTicket('late_preparation', '  tkt-2  ')).toEqual({ mode: 'reuse', id: 'tkt-2' });
+    expect(planTicket('operations', '  tkt-2  ')).toEqual({ mode: 'reuse', id: 'tkt-2' });
   });
 });
